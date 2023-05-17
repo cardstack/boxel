@@ -35,6 +35,14 @@ export async function createRoom(
   await page.locator('[data-test-create-room-btn]').click();
 }
 
+export async function joinRoom(page: Page, roomName: string) {
+  await page.locator(`[data-test-join-room-btn="${roomName}"]`).click();
+}
+
+export async function leaveRoom(page: Page, roomName: string) {
+  await page.locator(`[data-test-leave-room-btn="${roomName}"]`).click();
+}
+
 export async function openRoom(page: Page, roomName: string) {
   await page.locator(`[data-test-enter-room="${roomName}"]`).click();
 }
@@ -42,6 +50,22 @@ export async function openRoom(page: Page, roomName: string) {
 export async function sendMessage(page: Page, message: string) {
   await page.locator('[data-test-message-field]').fill(message);
   await page.locator('[data-test-send-message-btn]').click();
+}
+
+export async function inviteToRoom(page: Page, invites: string[]) {
+  await page.locator(`[data-test-invite-mode-btn]`).click();
+  await page.locator('[data-test-room-invite-field]').fill(invites.join(', '));
+  await page.locator('[data-test-room-invite-btn]').click();
+}
+
+export async function scrollToTopOfMessages(page: Page) {
+  await page.evaluate(() => {
+    let messages = document.querySelector('.room__messages-wrapper');
+    if (!messages) {
+      throw new Error(`Can't find messages element`);
+    }
+    messages.scrollTop = 0;
+  });
 }
 
 export async function assertMessages(

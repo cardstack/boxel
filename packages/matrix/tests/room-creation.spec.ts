@@ -19,7 +19,7 @@ test.describe('Room creation', () => {
     await synapseStop(synapse.synapseId);
   });
 
-  test('it can create a room', async ({ page }) => {
+  test('it can create an unencrypted room', async ({ page }) => {
     await login(page, 'user1', 'pass');
     await expect(
       page.locator('[data-test-joined-room]'),
@@ -63,6 +63,15 @@ test.describe('Room creation', () => {
     await logout(page);
     await login(page, 'user2', 'pass');
     await assertRooms(page, {});
+  });
+
+  test('it can create an encrypted room', async ({ page }) => {
+    await login(page, 'user1', 'pass');
+    await createRoom(page, { name: 'Room 1', encrypted: true });
+
+    await assertRooms(page, {
+      joinedRooms: [{ name: 'Room 1', encrypted: true }],
+    });
   });
 
   test('it can cancel a room creation', async ({ page }) => {

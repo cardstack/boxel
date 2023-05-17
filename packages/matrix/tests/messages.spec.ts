@@ -17,7 +17,7 @@ import {
   leaveRoom,
 } from '../helpers';
 
-test.describe('Encrypted Room messages', () => {
+test.describe('Room messages', () => {
   let synapse: SynapseInstance;
   test.beforeEach(async () => {
     synapse = await synapseStart();
@@ -31,8 +31,8 @@ test.describe('Encrypted Room messages', () => {
 
   test(`it can send a message in a room`, async ({ page }) => {
     await login(page, 'user1', 'pass');
-    await createRoom(page, { name: 'Room 1', encrypted: true });
-    await createRoom(page, { name: 'Room 2', encrypted: true });
+    await createRoom(page, { name: 'Room 1' });
+    await createRoom(page, { name: 'Room 2' });
     await openRoom(page, 'Room 1');
 
     await expect(page.locator('[data-test-timeline-start]')).toHaveCount(1);
@@ -69,7 +69,6 @@ test.describe('Encrypted Room messages', () => {
     await createRoom(page, {
       name: 'Room 1',
       invites: ['user2'],
-      encrypted: true,
     });
     await openRoom(page, 'Room 1');
     await sendMessage(page, 'first message');
@@ -112,7 +111,6 @@ test.describe('Encrypted Room messages', () => {
     await createRoom(page, {
       name: 'Room 1',
       invites: ['user2'],
-      encrypted: true,
     });
     await openRoom(page, 'Room 1');
 
@@ -155,7 +153,6 @@ test.describe('Encrypted Room messages', () => {
     await login(page, 'user1', 'pass');
     await createRoom(page, {
       name: 'Room 1',
-      encrypted: true,
     });
     await openRoom(page, 'Room 1');
     await sendMessage(page, 'message with _style_');
@@ -172,8 +169,8 @@ test.describe('Encrypted Room messages', () => {
 
   test(`it can create a room specific pending message`, async ({ page }) => {
     await login(page, 'user1', 'pass');
-    await createRoom(page, { name: 'Room 1', encrypted: true });
-    await createRoom(page, { name: 'Room 2', encrypted: true });
+    await createRoom(page, { name: 'Room 1' });
+    await createRoom(page, { name: 'Room 2' });
     await openRoom(page, 'Room 1');
 
     await page.locator('[data-test-message-field]').fill('room 1 message');
@@ -195,7 +192,6 @@ test.describe('Encrypted Room messages', () => {
     await createRoom(page, {
       name: 'Room 1',
       invites: ['user2'],
-      encrypted: true,
     });
     await logout(page);
 

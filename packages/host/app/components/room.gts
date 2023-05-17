@@ -66,11 +66,11 @@ export default class Room extends Component<RoomArgs> {
           />
         </FieldContainer>
         <Button
-          data-test-create-room-cancel-btn
+          data-test-room-invite-cancel-btn
           {{on 'click' this.cancelInvite}}
         >Cancel</Button>
         <Button
-          data-test-create-room-btn
+          data-test-room-invite-btn
           @kind='primary'
           @disabled={{not this.membersToInvite}}
           {{on 'click' this.invite}}
