@@ -18,12 +18,12 @@ import {
   Deferred,
   type Actions,
   type CardRef,
+  cardTypeDisplayName,
 } from '@cardstack/runtime-common';
 import type LoaderService from '../services/loader-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { TrackedArray } from 'tracked-built-ins';
-import { cardTypeDisplayName } from '@cardstack/host/helpers/card-type-display-name';
 import OperatorModeOverlays from '@cardstack/host/components/operator-mode-overlays';
 import LinksToCardComponentModifier from '@cardstack/host/modifiers/links-to-card-component-modifier';
 import { schedule } from '@ember/runloop';

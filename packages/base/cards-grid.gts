@@ -9,6 +9,7 @@ import {
   catalogEntryRef,
   getCards,
   baseRealm,
+  cardTypeDisplayName,
 } from '@cardstack/runtime-common';
 import { type CatalogEntry } from './catalog-entry';
 
@@ -23,7 +24,7 @@ class Isolated extends Component<typeof CardsGrid> {
                 <div
                   class='grid-card__thumbnail-text'
                   data-test-cards-grid-item-thumbnail-text
-                >{{card.constructor.displayName}}</div>
+                >{{cardTypeDisplayName card}}</div>
               </div>
               <h3
                 class='grid-card__title'
@@ -32,7 +33,7 @@ class Isolated extends Component<typeof CardsGrid> {
               <h4
                 class='grid-card__display-name'
                 data-test-cards-grid-item-display-name
-              >{{card.constructor.displayName}}</h4>
+              >{{cardTypeDisplayName card}}</h4>
             </CardContainer>
           </li>
         {{else}}
