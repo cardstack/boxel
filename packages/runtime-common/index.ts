@@ -118,16 +118,16 @@ export async function chooseCard<T extends Card>(
 }
 
 export interface CardSearch {
-  runSearch(query: Query): {
+  getCards(query: Query): {
     instances: Card[];
     isLoading: boolean;
   };
 }
 
-export async function runSearch(query: Query) {
+export async function getCards(query: Query) {
   let here = globalThis as any;
   let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder.runSearch(query);
+  return finder.getCards(query);
 }
 
 export interface CardCreator {

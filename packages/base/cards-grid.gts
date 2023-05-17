@@ -7,7 +7,7 @@ import { CardContainer, IconButton } from '@cardstack/boxel-ui';
 import {
   chooseCard,
   catalogEntryRef,
-  runSearch,
+  getCards,
 } from '@cardstack/runtime-common';
 import { type CatalogEntry } from './catalog-entry';
 
@@ -38,7 +38,7 @@ class Isolated extends Component<typeof CardsGrid> {
         {{/each}}
       </ul>
 
-      {{#if @actions.createCard}}
+      {{#if @context.actions.createCard}}
         <IconButton
           @icon='icon-plus-circle'
           @width='40px'
@@ -64,7 +64,7 @@ class Isolated extends Component<typeof CardsGrid> {
   }
 
   private getRealmCards = restartableTask(async () => {
-    this.request = await runSearch({
+    this.request = await getCards({
       filter: {
         not: {
           type: catalogEntryRef,

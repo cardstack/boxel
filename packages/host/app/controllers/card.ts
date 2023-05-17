@@ -17,10 +17,9 @@ export default class CardController extends Controller {
   @service declare router: RouterService;
   @tracked operatorModeEnabled = false;
   @tracked model: Model | undefined;
-  @tracked results: Search | undefined;
 
-  constructor() {
-    super(...arguments);
+  constructor(args: any) {
+    super(args);
     (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
     registerDestructor(this, () => {
       delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
@@ -35,8 +34,7 @@ export default class CardController extends Controller {
     return null;
   }
 
-  @action
-  runSearch(query: Query): Search {
+  getCards(query: Query): Search {
     return getSearchResults(this, () => query);
   }
 
