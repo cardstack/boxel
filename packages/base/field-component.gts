@@ -11,6 +11,7 @@ import { defaultComponent } from './default-card-component';
 import { getField } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui';
+import Modifier from 'ember-modifier';
 
 const componentCache = new WeakMap<
   Box<CardBase>,
@@ -39,27 +40,22 @@ export function getBoxComponent(
     context
   );
 
+  // cardComponentModifier, when provided, is used for the host environment to get access to card's rendered elements
+  let cardComponentModifier =
+    context.cardComponentModifier ||
+    class NoOpModifier extends Modifier<any> {
+      modify() {}
+    };
+
   let component: ComponentLike<{ Args: {}; Blocks: {} }> = <template>
-    {{! cardComponentModifier is used for the host environment to get access to card's rendered elements }}
-    {{#if context.cardComponentModifier}}
-      <Implementation
-        @model={{model.value}}
-        @fields={{internalFields}}
-        @set={{model.set}}
-        @fieldName={{model.name}}
-        @context={{context}}
-        {{! @glint-ignore: Argument of type 'ClassBasedModifier<DefaultSignature>' is not assignable to parameter of type 'DirectInvokable<AnyFunction>'.}}
-        {{context.cardComponentModifier model.value context}}
-      />
-    {{else}}
-      <Implementation
-        @model={{model.value}}
-        @fields={{internalFields}}
-        @set={{model.set}}
-        @fieldName={{model.name}}
-        @context={{context}}
-      />
-    {{/if}}
+    <Implementation
+      @model={{model.value}}
+      @fields={{internalFields}}
+      @set={{model.set}}
+      @fieldName={{model.name}}
+      @context={{context}}
+      {{cardComponentModifier model.value context}}
+    />
   </template>;
 
   // when viewed from *outside*, our component is both an invokable component
