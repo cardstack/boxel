@@ -27,28 +27,7 @@ test.describe('Encrypted Room messages', () => {
     await synapseStop(synapse.synapseId);
   });
 
-  test(`it can send a message in a room`, async ({ page }) => {
-    await login(page, 'user1', 'pass');
-    await createRoom(page, { name: 'Room 1', encrypted: true });
-    await createRoom(page, { name: 'Room 2', encrypted: true });
-    await openRoom(page, 'Room 1');
-
-    await assertMessages(page, []);
-    await sendMessage(page, 'Message 1');
-
-    await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
-
-    await page.reload();
-    await openRoom(page, 'Room 1');
-    await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
-
-    await logout(page);
-    await login(page, 'user1', 'pass');
-    await openRoom(page, 'Room 1');
-    await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
-  });
-
-  test(`it lets multiple users send messages in a room`, async ({ page }) => {
+  test(`it users can send encrypted messages in a room`, async ({ page }) => {
     await login(page, 'user1', 'pass');
     await createRoom(page, {
       name: 'Room 1',
