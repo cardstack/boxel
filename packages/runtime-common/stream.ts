@@ -1,7 +1,6 @@
 import { isNode, executableExtensions } from './index';
 import type { FileRef } from './realm';
 import type { LocalPath } from './paths';
-import { Deferred } from './deferred';
 
 export async function webStreamToText(
   stream: ReadableStream<Uint8Array>

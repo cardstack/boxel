@@ -12,7 +12,7 @@ import type { Query, Filter, Sort, EqFilter, RangeFilter } from './query';
 import { CardError, type SerializedError } from './error';
 import { URLMap } from './url-map';
 import flatMap from 'lodash/flatMap';
-import ignore, { type Ignore } from 'ignore';
+import { type Ignore } from 'ignore';
 import type { CardBase, Field } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { type CardRef, getField, identifyCard, loadCard } from './card-ref';
