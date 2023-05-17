@@ -62,7 +62,6 @@ export type {
   Kind,
   RealmAdapter,
   FileRef,
-  FastBootInstance,
   ResponseWithNodeStream,
 } from './realm';
 
