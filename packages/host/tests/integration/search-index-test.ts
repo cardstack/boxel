@@ -2399,6 +2399,7 @@ module('Integration | search-index', function (hooks) {
         '@glimmer/component',
         'ember-concurrency',
         'ember-concurrency/-private/async-arrow-runtime',
+        'ember-modifier',
         'http://localhost:4201/base/card-api',
         'http://localhost:4201/base/contains-many-component',
         'http://localhost:4201/base/default-card-component',
