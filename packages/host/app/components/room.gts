@@ -248,13 +248,13 @@ export default class Room extends Component<RoomArgs> {
   }
 
   private doSendMessage = restartableTask(async (message: string) => {
+    this.messages.set(this.args.roomId, undefined);
     let html = sanitize(marked(message));
     await this.matrixService.client.sendHtmlMessage(
       this.args.roomId,
       message,
       html
     );
-    this.messages.set(this.args.roomId, undefined);
   });
 
   private doRoomScrollBack = restartableTask(async () => {

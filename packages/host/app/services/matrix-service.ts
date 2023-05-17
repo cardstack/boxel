@@ -148,6 +148,7 @@ export default class MatrixService extends Service {
         throw e;
       }
 
+      this.client.setGlobalErrorOnUnknownDevices(false);
       saveAuth(auth);
       this.bindEventListeners();
 

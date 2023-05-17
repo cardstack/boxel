@@ -37,6 +37,7 @@ test.describe('Encrypted Room messages', () => {
 
     await expect(page.locator('[data-test-timeline-start]')).toHaveCount(1);
     await expect(page.locator('[data-test-no-messages]')).toHaveCount(1);
+    await expect(page.locator('[data-test-message-field]')).toHaveValue('');
     await assertMessages(page, []);
 
     await expect(page.locator('[data-test-send-message-btn]')).toBeDisabled();
@@ -44,6 +45,7 @@ test.describe('Encrypted Room messages', () => {
     await expect(page.locator('[data-test-send-message-btn]')).toBeEnabled();
     await page.locator('[data-test-send-message-btn]').click();
 
+    await expect(page.locator('[data-test-message-field]')).toHaveValue('');
     await expect(page.locator('[data-test-no-messages]')).toHaveCount(0);
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
 
