@@ -10,7 +10,7 @@ class Isolated extends Component<typeof CardsGrid> {
   <template>
     <CardContainer class='demo-card cards-grid' @displayBoundaries={{true}}>
       This cards-grid instance should become even better.
-      {{#if @actions.createCard}}
+      {{#if @context.actions.createCard}}
         <IconButton
           @icon='icon-plus-circle'
           @width='40px'
@@ -41,7 +41,7 @@ class Isolated extends Component<typeof CardsGrid> {
       return;
     }
 
-    await this.args.actions?.createCard?.(
+    await this.args.context?.actions?.createCard?.(
       card.ref,
       this.args.model[relativeTo]
     );

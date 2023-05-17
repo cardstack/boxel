@@ -25,7 +25,12 @@ export class Pet extends Card {
   });
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer class='demo-card' @displayBoundaries={{true}}>
+      <CardContainer
+        class='demo-card'
+        @displayBoundaries={{true}}
+        {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
+        ...attributes
+      >
         <h3><@fields.firstName /></h3>
         <div><@fields.sleepsOnTheCouch /></div>
       </CardContainer>
