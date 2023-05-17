@@ -170,9 +170,8 @@ export default class Room extends Component<RoomArgs> {
   }
 
   get roomName() {
-    let isEncrypted = this.matrixService.rooms.get(this.args.roomId)?.encrypted;
     return `${this.matrixService.rooms.get(this.args.roomId)?.name}${
-      isEncrypted ? ' (encrypted)' : ''
+      this.isEncrypted ? ' (encrypted)' : ''
     }`;
   }
 

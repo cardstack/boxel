@@ -148,6 +148,9 @@ export default class MatrixService extends Service {
         throw e;
       }
 
+      // this let's us send messages to element clients (useful for testing).
+      // probably we wanna verify these unknown devices (when in an encrypted
+      // room). need to research how to do that as its undocumented API
       this.client.setGlobalErrorOnUnknownDevices(false);
       saveAuth(auth);
       this.bindEventListeners();
