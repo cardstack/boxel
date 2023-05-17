@@ -3,12 +3,9 @@ import { service } from '@ember/service';
 import { file, FileResource } from '../resources/file';
 import LoaderService from '../services/loader-service';
 import type RouterService from '@ember/routing/router-service';
-import type LocalRealm from '../services/local-realm';
 import type CardService from '../services/card-service';
 import { RealmPaths, logger } from '@cardstack/runtime-common';
-import ENV from '@cardstack/host/config/environment';
 
-const { isLocalRealm } = ENV;
 const log = logger('route:code');
 
 interface Model {
@@ -31,7 +28,6 @@ export default class Code extends Route<Model> {
   @service declare router: RouterService;
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
-  @service declare localRealm: LocalRealm;
   @service declare fastboot: { isFastBoot: boolean };
 
   async model(args: {
@@ -44,11 +40,6 @@ export default class Code extends Route<Model> {
 
     let openFile: FileResource | undefined;
     if (!path) {
-      return { path, openFile, openDirs, isFastBoot };
-    }
-
-    await this.localRealm.startedUp;
-    if (!this.localRealm.isAvailable && isLocalRealm) {
       return { path, openFile, openDirs, isFastBoot };
     }
 

@@ -11,7 +11,7 @@ import { renderComponent } from '../../helpers/render-component';
 import {
   testRealmURL,
   setupCardLogs,
-  setupMockLocalRealm,
+  setupLocalIndexing,
   TestRealmAdapter,
   TestRealm,
 } from '../../helpers';
@@ -25,7 +25,7 @@ module('Integration | operator-mode', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
   setupRenderingTest(hooks);
-  setupMockLocalRealm(hooks);
+  setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
     async () => await Loader.import(`${baseRealm.url}card-api`)

@@ -127,8 +127,8 @@ export default class OperatorMode extends Component<Signature> {
     await this.saveCardFieldValues(card);
     let updatedCard = await this.write.perform(card);
 
-    if (updatedCard && request) {
-      request.fulfill(updatedCard);
+    if (updatedCard) {
+      request?.fulfill(updatedCard);
       let index = this.stack.indexOf(item);
       this.stack[index] = {
         card: updatedCard,

@@ -357,6 +357,7 @@ class ContainsMany<FieldT extends CardBaseConstructor>
     // Need to replace the WatchedArray proxy with an actual array because the
     // WatchedArray proxy is not structuredClone-able, and hence cannot be
     // communicated over the postMessage boundary between worker and DOM.
+    // TODO: can this be simplified since we don't have the worker anymore?
     return [...instances].map((instance) => {
       return this.card[queryableValue](instance, stack);
     });
@@ -990,6 +991,7 @@ class LinksToMany<FieldT extends CardConstructor>
     // Need to replace the WatchedArray proxy with an actual array because the
     // WatchedArray proxy is not structuredClone-able, and hence cannot be
     // communicated over the postMessage boundary between worker and DOM.
+    // TODO: can this be simplified since we don't have the worker anymore?
     return [...instances].map((instance) => {
       if (primitive in instance) {
         throw new Error(
