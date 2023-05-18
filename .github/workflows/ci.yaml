@@ -22,18 +22,23 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
       - name: Lint Boxel Motion
+        if: always()
         run: pnpm run lint
         working-directory: packages/boxel-motion
       - name: Lint Boxel Motion Test App
+        if: always()
         run: pnpm run lint
         working-directory: packages/boxel-motion-test-app
       - name: Lint Boxel Motion Demo App
+        if: always()
         run: pnpm run lint
         working-directory: packages/boxel-motion-demo-app
       - name: Lint Host
+        if: always()
         run: pnpm run lint
         working-directory: packages/host
       - name: Lint Realm Server
+        if: always()
         run: pnpm run lint
         working-directory: packages/realm-server
   boxel-motion-test:
