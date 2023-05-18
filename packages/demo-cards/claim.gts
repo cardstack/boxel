@@ -8,7 +8,6 @@ import {
   Component,
 } from 'https://cardstack.com/base/card-api';
 import { Button, CardContainer, FieldContainer } from '@cardstack/boxel-ui';
-import BooleanCard from 'https://cardstack.com/base/boolean';
 
 declare global {
   interface Window {
@@ -35,20 +34,24 @@ export class Claim extends Card {
       return `Claim for ${this.safeAddress}`;
     },
   });
-  @field connected = contains(BooleanCard, {
-    computeVia: async function (this: Claim) {
+  get connected() {
+    return (async () => {
       let metamaskChainId = await this.getChainId();
       let isChainEqual = this.chain?.chainId == metamaskChainId;
-      return (await this.isMetamaskConnected()) && isChainEqual;
-    },
-  });
+      console.log('===');
+      console.log(this.chain.chainId);
+      console.log(metamaskChainId);
+      let isConnected = await this.isMetamaskConnected();
+      console.log('===');
+      return isConnected && isChainEqual;
+    })();
+  }
 
   //=======
   //metamask api
 
-  async isMetamaskInstalled() {
+  isMetamaskInstalled() {
     let isInstalled = window.ethereum !== 'undefined';
-    console.log(`MetaMask is installed: ${isInstalled}`);
     return isInstalled;
   }
 
@@ -76,11 +79,15 @@ export class Claim extends Card {
 
   // chainId and networkId are not the same. You can get networkId using the metamask api.
   async getChainId() {
-    if (!this.isMetamaskInstalled()) {
+    try {
+      if (!this.isMetamaskInstalled()) {
+        return -1;
+      }
+      let hexChainId = await window.ethereum.request({ method: 'eth_chainId' });
+      return parseInt(hexChainId, 16);
+    } catch (e) {
       return -1;
     }
-    let hexChainId = await window.ethereum.request({ method: 'eth_chainId' });
-    return parseInt(hexChainId, 16);
   }
 
   //=======
@@ -91,8 +98,6 @@ export class Claim extends Card {
         <FieldContainer @label='Explanation'><@fields.explanation
           /></FieldContainer>
         <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
-        <FieldContainer @label='Connected'><@fields.connected
-          /></FieldContainer>
         <Button>
           Look at Claim
         </Button>
@@ -109,9 +114,7 @@ export class Claim extends Card {
         <FieldContainer @label='Explanation'><@fields.explanation
           /></FieldContainer>
         <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
-        <FieldContainer @label='Connected'><@fields.connected
-          /></FieldContainer>
-        {{#if @model.connected}}
+        {{#if this.connected}}
           <Button>
             Claim
           </Button>
@@ -119,9 +122,18 @@ export class Claim extends Card {
           <Button>
             Connect
           </Button>
-
         {{/if}}
       </CardContainer>
     </template>
+
+    @tracked connected: any;
+    constructor(owner: unknown, args: any) {
+      super(owner, args);
+      this.initialize();
+    }
+
+    async initialize() {
+      this.connected = await this.args.model.connected;
+    }
   };
 }
