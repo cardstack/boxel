@@ -15,7 +15,6 @@ export async function login(page: Page, username: string, password: string) {
 }
 
 export async function logout(page: Page) {
-  await page.goto(`/chat`);
   await page.locator('[data-test-logout-btn]').click();
 }
 
