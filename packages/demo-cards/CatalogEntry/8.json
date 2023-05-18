@@ -2,10 +2,10 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "PublishingPacket from http://localhost:4200/publishing-packet",
-      "description": "Catalog entry for PublishingPacket from http://localhost:4200/publishing-packet",
+      "title": "PublishingPacket from ../publishing-packet",
+      "description": "Catalog entry for PublishingPacket from ../publishing-packet",
       "ref": {
-        "module": "http://localhost:4200/publishing-packet",
+        "module": "../publishing-packet",
         "name": "PublishingPacket"
       },
       "demo": {
@@ -15,7 +15,7 @@
     "relationships": {
       "demo.blogPost": {
         "links": {
-          "self": "http://localhost:4200/BlogPost/1"
+          "self": "../BlogPost/1"
         }
       }
     },
@@ -23,7 +23,7 @@
       "fields": {
         "demo": {
           "adoptsFrom": {
-            "module": "http://localhost:4200/publishing-packet",
+            "module": "../publishing-packet",
             "name": "PublishingPacket"
           }
         }
