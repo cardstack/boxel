@@ -38,11 +38,7 @@ export class Claim extends Card {
     return (async () => {
       let metamaskChainId = await this.getChainId();
       let isChainEqual = this.chain?.chainId == metamaskChainId;
-      console.log('===');
-      console.log(this.chain.chainId);
-      console.log(metamaskChainId);
       let isConnected = await this.isMetamaskConnected();
-      console.log('===');
       return isConnected && isChainEqual;
     })();
   }
