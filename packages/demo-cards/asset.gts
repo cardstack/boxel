@@ -54,10 +54,12 @@ class Asset extends Card {
 
 // For fiat money
 export class Currency extends Asset {
+  static displayName = 'Currency Card Type With Very Very Long Display Name';
   @field sign = contains(StringCard); // $, €, £, ¥, ₽, ₿ etc.
 }
 
 // For crypto
 export class Token extends Asset {
+  static displayName = 'Token';
   @field address = contains(StringCard);
 }

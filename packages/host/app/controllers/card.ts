@@ -7,6 +7,9 @@ import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { ComponentLike } from '@glint/template';
 import { Model } from '@cardstack/host/routes/card';
+import { registerDestructor } from '@ember/destroyable';
+import type { Query } from '@cardstack/runtime-common/query';
+import { getSearchResults, type Search } from '../resources/search';
 
 export default class CardController extends Controller {
   isolatedCardComponent: ComponentLike | undefined;
@@ -15,12 +18,24 @@ export default class CardController extends Controller {
   @tracked operatorModeEnabled = false;
   @tracked model: Model | undefined;
 
+  constructor(args: any) {
+    super(args);
+    (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
+    registerDestructor(this, () => {
+      delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
+    });
+  }
+
   get getIsolatedComponent() {
     if (this.model) {
       return this.model.constructor.getComponent(this.model, 'isolated');
     }
 
     return null;
+  }
+
+  getCards(query: Query): Search {
+    return getSearchResults(this, () => query);
   }
 
   @action

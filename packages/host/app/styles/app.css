@@ -1,6 +1,8 @@
 :root {
   --search-sheet-closed-height: 59px;
   --operator-mode-bg-color: #686283;
+  --grid-card-text-thumbnail-height: 6.25rem;
+  --grid-card-label-color: #919191;
 }
 
 /* Go template */
@@ -369,13 +371,67 @@ nav>.directory-level {
 
 /* CardsGrid Card */
 .cards-grid {
+  --grid-card-width: 10.125rem;
+  --grid-card-height: 15.125rem;
+
   position: relative;
-  padding-bottom: var(--boxel-sp-xxxl);
+  max-width: 70rem;
+  padding: var(--boxel-sp-xxxl) var(--boxel-sp-xl);
+  margin: 0 auto;
+}
+.cards-grid__cards {
+  list-style-type: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(var(--grid-card-width), 1fr));
+  gap: var(--boxel-sp);
+  justify-items: center;
 }
 .cards-grid__add-button {
   position: absolute;
   right: var(--boxel-sp);
   bottom: var(--boxel-sp);
+}
+.grid-card {
+  width: var(--grid-card-width);
+  height: var(--grid-card-height);
+  padding: var(--boxel-sp-xs);
+}
+.grid-card > *,
+.grid-card__thumbnail-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.grid-card__thumbnail {
+  display: flex;
+  align-items: center;
+  height: var(--grid-card-text-thumbnail-height);
+  background-color: var(--boxel-teal);
+  color: var(--boxel-light);
+  padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
+  border-radius: var(--boxel-border-radius);
+  font: 700 var(--boxel-font);
+  letter-spacing: var(--boxel-lsp);
+}
+.grid-card__title {
+  margin: 0;
+  font: 500 var(--boxel-font-sm);
+  text-align: center;
+}
+.grid-card__display-name {
+  margin: 0;
+  font: 500 var(--boxel-font-xs);
+  text-align: center;
+  color: var(--grid-card-label-color);
+}
+.grid-card__thumbnail + * {
+  margin-top: var(--boxel-sp-lg);
+}
+.grid-card__title + .grid-card__display-name {
+  margin-top: 0.2em;
 }
 
 /* Add Button */
@@ -427,11 +483,11 @@ nav>.directory-level {
 }
 
 .operator-mode-card-stack__card__item > .boxel-card-container {
-  padding-top: 42px;
+  padding-top: var(--boxel-sp-xxxl);
 }
 
 .operator-mode-card-stack__card__item_edit > .boxel-card-container {
-  padding-bottom: 62px;
+  padding-bottom: var(--boxel-sp-xxxl);
 }
 
 .operator-mode-card-stack__card__footer {

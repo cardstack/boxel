@@ -18,17 +18,19 @@ import {
   Deferred,
   type Actions,
   type CardRef,
+  cardTypeDisplayName,
 } from '@cardstack/runtime-common';
 import type LoaderService from '../services/loader-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-
 import { TrackedArray } from 'tracked-built-ins';
-import { cardTypeDisplayName } from '@cardstack/host/helpers/card-type-display-name';
 import OperatorModeOverlays from '@cardstack/host/components/operator-mode-overlays';
 import LinksToCardComponentModifier from '@cardstack/host/modifiers/links-to-card-component-modifier';
 import { schedule } from '@ember/runloop';
 import { htmlSafe } from '@ember/template';
+import { registerDestructor } from '@ember/destroyable';
+import type { Query } from '@cardstack/runtime-common/query';
+import { getSearchResults, type Search } from '../resources/search';
 
 interface Signature {
   Args: {
@@ -64,12 +66,23 @@ export default class OperatorMode extends Component<Signature> {
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
+
+    (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
+    registerDestructor(this, () => {
+      delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
+    });
+
     this.stack = new TrackedArray([
       {
         card: this.args.firstCardInStack,
         format: 'isolated',
       },
     ]);
+  }
+
+  @action
+  getCards(query: Query): Search {
+    return getSearchResults(this, () => query);
   }
 
   @action onFocusSearchInput() {

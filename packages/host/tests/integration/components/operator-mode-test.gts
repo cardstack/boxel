@@ -71,6 +71,7 @@ module('Integration | operator-mode', function (hooks) {
         import StringCard from "https://cardstack.com/base/string";
 
         export class Pet extends Card {
+          static displayName = 'Pet';
           @field name = contains(StringCard);
           static embedded = class Embedded extends Component<typeof this> {
             <template>
@@ -89,6 +90,7 @@ module('Integration | operator-mode', function (hooks) {
         import { FieldContainer } from '@cardstack/boxel-ui';
 
         export class Address extends Card {
+          static displayName = 'Address';
           @field city = contains(StringCard);
           @field country = contains(StringCard);
           static embedded = class Embedded extends Component<typeof this> {
@@ -269,6 +271,7 @@ module('Integration | operator-mode', function (hooks) {
         import { Author } from './author';
 
         export class BlogPost extends Card {
+          static displayName = 'Blog Post';
           @field title = contains(StringCard);
           @field slug = contains(StringCard);
           @field body = contains(TextAreaCard);
@@ -297,6 +300,7 @@ module('Integration | operator-mode', function (hooks) {
         } from 'https://cardstack.com/base/card-api';
 
         export class Author extends Card {
+          static displayName = 'Author';
           @field firstName = contains(StringCard);
           @field lastName = contains(StringCard);
           static embedded = class Embedded extends Component<typeof this> {
@@ -319,6 +323,7 @@ module('Integration | operator-mode', function (hooks) {
         import { BlogPost } from './blog-post';
 
         export class PublishingPacket extends Card {
+          static displayName = 'Publishing Packet';
           @field blogPost = linksTo(BlogPost);
           @field socialBlurb = contains(TextAreaCard);
         }
@@ -544,6 +549,37 @@ module('Integration | operator-mode', function (hooks) {
       { timeout: 3000 }
     );
     assert.dom('[data-test-person]').isNotVisible();
+  });
+
+  test('displays cards on cards-grid', async function (assert) {
+    let card = await loadCard(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    assert.dom(`[data-test-stack-card-index="0"]`).exists();
+    assert.dom(`[data-test-cards-grid-item`).exists({ count: 9 });
+    assert
+      .dom(
+        `[data-test-cards-grid-item="${testRealmURL}BlogPost/1"] [data-test-cards-grid-item-thumbnail-text]`
+      )
+      .hasText('Blog Post');
+    assert
+      .dom(
+        `[data-test-cards-grid-item="${testRealmURL}BlogPost/1"] [data-test-cards-grid-item-title]`
+      )
+      .hasText('Outer Space Journey');
+    assert
+      .dom(
+        `[data-test-cards-grid-item="${testRealmURL}BlogPost/1"] [data-test-cards-grid-item-display-name]`
+      )
+      .hasText('Blog Post');
   });
 
   test('can create a card using the cards-grid', async function (assert) {
