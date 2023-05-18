@@ -306,6 +306,7 @@ class Message extends Component<MessageArgs> {
         boxel-message-margin-left=messageStyle.boxelMessageMarginLeft
       }}
     >
+      {{! template-lint-disable no-triple-curlies }}
       {{{this.content}}}
     </BoxelMessage>
   </template>
