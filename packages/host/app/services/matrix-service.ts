@@ -15,7 +15,12 @@ import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
 import debounce from 'lodash/debounce';
 import RouterService from '@ember/routing/router-service';
+import { marked } from 'marked';
+import { sanitize } from 'dompurify';
+import type CardService from '../services/card-service';
+import { type Card } from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
+import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 const { matrixURL } = ENV;
 export const eventDebounceMs = 300;
@@ -39,6 +44,7 @@ export type Event = Partial<IEvent>;
 
 export default class MatrixService extends Service {
   @service private declare router: RouterService;
+  @service declare cardService: CardService;
   @tracked
   client = createClient({ baseUrl: matrixURL });
   invites: TrackedMap<string, RoomInvite> = new TrackedMap();
@@ -195,6 +201,34 @@ export default class MatrixService extends Service {
         this.client.invite(roomId, `@${localName}:${homeserver.hostname}`)
       )
     );
+  }
+
+  async sendMessage(
+    roomId: string,
+    body: string | undefined,
+    card?: Card
+  ): Promise<void> {
+    let html = body != null ? sanitize(marked(body)) : '';
+    let serializedCard: LooseSingleCardDocument | undefined;
+    if (card) {
+      serializedCard = await this.cardService.serializeCard(card);
+      body = `${body} (Card: ${card.title}, ${card.id})`;
+    }
+    if (card) {
+      await this.client.sendEvent(roomId, 'm.room.message', {
+        msgtype: 'org.boxel.card',
+        body,
+        formatted_body: html,
+        instance: serializedCard,
+      });
+    } else {
+      await this.client.sendHtmlMessage(roomId, body ?? '', html);
+    }
+  }
+
+  async sendMarkdownMessage(roomId: string, markdown: string): Promise<void> {
+    let html = sanitize(marked(markdown));
+    await this.client.sendHtmlMessage(roomId, markdown, html);
   }
 
   private resetState() {

@@ -1717,7 +1717,7 @@ async function getDeserializedValue<CardT extends CardBaseConstructor>({
   return result;
 }
 
-interface SerializeOpts {
+export interface SerializeOpts {
   includeComputeds?: boolean;
   includeUnrenderedFields?: boolean;
 }

@@ -741,7 +741,7 @@ nav>.directory-level {
 .room__messages-wrapper {
   overflow-y: auto;
   max-height: 30vh;
-  padding: 0 var(--boxel-sp);
+  padding: var(--boxel-sp);
   margin: var(--boxel-sp) 0;
 }
 
@@ -760,6 +760,30 @@ nav>.directory-level {
   flex-wrap: wrap;
   row-gap: var(--boxel-sp-sm);
   margin: 0 var(--boxel-sp);
+}
+
+.room__send-message button,
+.room__send-message .room__selected-card {
+  margin-left: var(--boxel-sp-sm);
+}
+
+.room__selected-card {
+  margin: var(--boxel-sp);
+  float: right;
+}
+.room__selected-card::after {
+  content:'';
+  clear: both;
+}
+
+.room__selected-card__field {
+  font-weight: bold;
+}
+
+.room__selected-card__card-wrapper {
+  padding: var(--boxel-sp);
+  border: var(--boxel-border);
+  border-radius: var(--boxel-border-radius);
 }
 
 .room__members {
