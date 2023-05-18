@@ -1,7 +1,7 @@
 'use strict';
 
 module.exports = function (environment) {
-  const ENV = {
+  let ENV = {
     modulePrefix: 'boxel-motion-demo-app',
     environment,
     rootURL: '/',
