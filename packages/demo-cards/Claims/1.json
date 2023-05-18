@@ -4,12 +4,12 @@
     "relationships": {
       "claims.0": {
         "links": {
-          "self": "http://localhost:4200/Claim/1"
+          "self": "../Claim/1"
         }
       },
       "claims.1": {
         "links": {
-          "self": "http://localhost:4200/Claim/2"
+          "self": "../Claim/2"
         }
       }
     },
@@ -18,7 +18,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "http://localhost:4200/claims",
+        "module": "../claims",
         "name": "Claims"
       }
     }

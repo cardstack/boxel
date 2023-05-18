@@ -11,13 +11,13 @@
     "relationships": {
       "chain": {
         "links": {
-          "self": "http://localhost:4200/Chain/2"
+          "self": "../Chain/2"
         }
       }
     },
     "meta": {
       "adoptsFrom": {
-        "module": "http://localhost:4200/claim",
+        "module": "../claim",
         "name": "Claim"
       }
     }
