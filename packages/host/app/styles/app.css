@@ -666,6 +666,39 @@ nav>.directory-level {
   outline: none;
 }
 
+.operator-mode__add-card {
+  height: calc(100% - var(--search-sheet-closed-height));
+  width: 100%;
+  max-width: 50rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.operator-mode__add-card__title {
+  color: var(--boxel-light);
+  font: var(--boxel-font-lg);
+}
+
+.operator-mode__add-card__button {
+  height: 350px;
+  width: 200px;
+  vertical-align: middle;
+  
+  background: var(--boxel-teal);
+  border: none;
+  border-radius: var(--boxel-border-radius);
+}
+
+.operator-mode__add-card__button:hover {
+  background: var(--boxel-dark);
+}
+
+.operator-mode__add-card__button .icon-button{
+  width: 100%;
+}
+
 /* stacked cards */
 .operator-mode-card-stack {
   position: relative;
