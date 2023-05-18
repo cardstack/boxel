@@ -4,8 +4,7 @@ import { modifier } from 'ember-modifier';
 const registerContentModifier = modifier(
   (element: HTMLElement, [component]: [AnimationContextComponent]) => {
     component.didInsertEl(element);
-  },
-  { eager: false }
+  }
 );
 
 export default registerContentModifier;
