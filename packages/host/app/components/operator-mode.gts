@@ -227,6 +227,9 @@ export default class OperatorMode extends Component<Signature> {
       cardComponentModifier: LinksToCardComponentModifier,
       optional: {
         stack: this.stack, // Not used currently, but eventually there will be more than one stack and we will need to know which one we are in.
+        addToStack: (card: Card) => {
+          return this.addToStack({ card, format: 'isolated' });
+        },
       },
       actions: this.publicAPI,
     };

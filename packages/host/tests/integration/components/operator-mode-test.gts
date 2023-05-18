@@ -617,6 +617,31 @@ module('Integration | operator-mode', function (hooks) {
       .exists();
   });
 
+  test('can open a card from the cards-grid and close it', async function (assert) {
+    let card = await loadCard(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    assert.dom(`[data-test-stack-card-index="0"]`).exists();
+
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
+
+    assert.dom(`[data-test-stack-card-index="1"]`).exists(); // Opens card on the stack
+    assert
+      .dom(`[data-test-stack-card-index="1"] [data-type-display-name]`)
+      .includesText('Person');
+
+    await click('[data-test-stack-card-index="1"] [data-test-close-button]');
+    assert.dom(`[data-test-stack-card-index="1"]`).doesNotExist();
+  });
+
   test('create new card editor opens in the stack at each nesting level', async function (assert) {
     let card = await loadCard(`${testRealmURL}grid`);
     await renderComponent(
