@@ -296,7 +296,7 @@ class Message extends Component<MessageArgs> {
   <template>
     <BoxelMessage
       {{ScrollIntoView}}
-      data-test-message-idx={{this.args.index}}
+      data-test-message-idx={{@index}}
       @name={{this.sender.member.name}}
       @datetime={{formatRFC3339 this.timestamp}}
       style={{cssVar
