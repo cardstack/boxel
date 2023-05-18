@@ -3,7 +3,7 @@ lockfileVersion: 5.4
 overrides:
   '@types/eslint': 8.4.1
   jsesc: ^3.0.0
-  ember-concurrency: github:machty/ember-concurrency#master
+  ember-concurrency: github:machty/ember-concurrency#c6ed562
   ember-modifier: ^4.1.0
 
 patchedDependencies:
@@ -81,7 +81,7 @@ importers:
       '@types/flat': ^5.0.2
       '@types/lodash': ^4.14.182
       ember-cli-htmlbars: ^6.2.0
-      ember-concurrency: github:machty/ember-concurrency#master
+      ember-concurrency: github:machty/ember-concurrency#c6ed562
       ember-modifier: ^4.1.0
       tracked-built-ins: ^2.0.1
     devDependencies:
@@ -94,7 +94,7 @@ importers:
       '@types/flat': 5.0.2
       '@types/lodash': 4.14.189
       ember-cli-htmlbars: 6.2.0
-      ember-concurrency: github.com/machty/ember-concurrency/c6ed562083c8eaae4aa0a5ab643447d7901cb29c_@babel+core@7.20.2
+      ember-concurrency: github.com/machty/ember-concurrency/c6ed562_@babel+core@7.20.2
       ember-modifier: 4.1.0
       tracked-built-ins: 2.0.1
     dependenciesMeta:
@@ -117,7 +117,7 @@ importers:
       ember-cli-babel: ^7.26.11
       ember-cli-htmlbars: ^6.2.0
       ember-cli-typescript: ^5.2.1
-      ember-concurrency: github:machty/ember-concurrency#master
+      ember-concurrency: github:machty/ember-concurrency#c6ed562
       ember-modifier: ^4.1.0
       ember-template-imports: ^3.0.1
       ember-template-lint: ^4.3.0
@@ -139,7 +139,7 @@ importers:
       ember-cli-babel: 7.26.11
       ember-cli-htmlbars: 6.2.0
       ember-cli-typescript: 5.2.1
-      ember-concurrency: github.com/machty/ember-concurrency/c6ed562083c8eaae4aa0a5ab643447d7901cb29c_@babel+core@7.20.2
+      ember-concurrency: github.com/machty/ember-concurrency/c6ed562_@babel+core@7.20.2
       ember-modifier: 4.1.0
       macro-decorators: 0.1.2
       style-value-types: 5.1.2
@@ -197,7 +197,7 @@ importers:
       ember-cli-terser: ^4.0.2
       ember-cli-typescript: ^5.2.1
       ember-cli-typescript-blueprints: ^3.0.0
-      ember-concurrency: github:machty/ember-concurrency#master
+      ember-concurrency: github:machty/ember-concurrency#c6ed562
       ember-css-modules: ^2.0.1
       ember-export-application-global: ^2.0.1
       ember-fetch: ^8.1.2
@@ -260,7 +260,7 @@ importers:
       ember-cli-terser: 4.0.2
       ember-cli-typescript: 5.2.1
       ember-cli-typescript-blueprints: 3.0.0
-      ember-concurrency: github.com/machty/ember-concurrency/c6ed562083c8eaae4aa0a5ab643447d7901cb29c_3uhobp43bmewta43if4ax5vgwq
+      ember-concurrency: github.com/machty/ember-concurrency/c6ed562_3uhobp43bmewta43if4ax5vgwq
       ember-css-modules: 2.0.1
       ember-export-application-global: 2.0.1
       ember-fetch: 8.1.2
@@ -607,7 +607,7 @@ importers:
       ember-cli-sri: ^2.1.1
       ember-cli-terser: ^4.0.2
       ember-cli-typescript-blueprints: ^3.0.0
-      ember-concurrency: github:machty/ember-concurrency#master
+      ember-concurrency: github:machty/ember-concurrency#c6ed562
       ember-focus-trap: ^1.0.1
       ember-freestyle: ^0.17.0
       ember-functions-as-helper-polyfill: ^2.0.1
@@ -705,7 +705,7 @@ importers:
       ember-cli-sri: 2.1.1
       ember-cli-terser: 4.0.2
       ember-cli-typescript-blueprints: 3.0.0
-      ember-concurrency: github.com/machty/ember-concurrency/c6ed562083c8eaae4aa0a5ab643447d7901cb29c_3uhobp43bmewta43if4ax5vgwq
+      ember-concurrency: github.com/machty/ember-concurrency/c6ed562_3uhobp43bmewta43if4ax5vgwq
       ember-focus-trap: 1.0.1
       ember-freestyle: 0.17.0_hyb35ykxf4ngfa5gr2c32swp4e
       ember-functions-as-helper-polyfill: 2.1.1_ember-source@4.12.0
@@ -12122,7 +12122,7 @@ packages:
       '@embroider/addon-shim': 1.8.3
       '@embroider/macros': 1.10.0
       '@glimmer/tracking': 1.1.2
-      ember-concurrency: github.com/machty/ember-concurrency/c6ed562083c8eaae4aa0a5ab643447d7901cb29c_3uhobp43bmewta43if4ax5vgwq
+      ember-concurrency: github.com/machty/ember-concurrency/c6ed562_3uhobp43bmewta43if4ax5vgwq
       ember-source: 4.12.0_3pbogmdper3j567aoi62iitzry
     transitivePeerDependencies:
       - supports-color
@@ -23012,9 +23012,9 @@ packages:
     transitivePeerDependencies:
       - supports-color
 
-  github.com/machty/ember-concurrency/c6ed562083c8eaae4aa0a5ab643447d7901cb29c_3uhobp43bmewta43if4ax5vgwq:
-    resolution: {tarball: https://codeload.github.com/machty/ember-concurrency/tar.gz/c6ed562083c8eaae4aa0a5ab643447d7901cb29c}
-    id: github.com/machty/ember-concurrency/c6ed562083c8eaae4aa0a5ab643447d7901cb29c
+  github.com/machty/ember-concurrency/c6ed562_3uhobp43bmewta43if4ax5vgwq:
+    resolution: {tarball: https://codeload.github.com/machty/ember-concurrency/tar.gz/c6ed562}
+    id: github.com/machty/ember-concurrency/c6ed562
     name: ember-concurrency
     version: 3.0.0
     engines: {node: 16.* || >= 18}
@@ -23035,9 +23035,9 @@ packages:
       - supports-color
     dev: true
 
-  github.com/machty/ember-concurrency/c6ed562083c8eaae4aa0a5ab643447d7901cb29c_@babel+core@7.20.2:
-    resolution: {tarball: https://codeload.github.com/machty/ember-concurrency/tar.gz/c6ed562083c8eaae4aa0a5ab643447d7901cb29c}
-    id: github.com/machty/ember-concurrency/c6ed562083c8eaae4aa0a5ab643447d7901cb29c
+  github.com/machty/ember-concurrency/c6ed562_@babel+core@7.20.2:
+    resolution: {tarball: https://codeload.github.com/machty/ember-concurrency/tar.gz/c6ed562}
+    id: github.com/machty/ember-concurrency/c6ed562
     name: ember-concurrency
     version: 3.0.0
     engines: {node: 16.* || >= 18}

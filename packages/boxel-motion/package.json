@@ -32,7 +32,7 @@
     "ember-cli-babel": "^7.26.11",
     "ember-cli-htmlbars": "^6.2.0",
     "ember-cli-typescript": "^5.2.1",
-    "ember-concurrency": "^3.0.0",
+    "ember-concurrency": "github:machty/ember-concurrency#c6ed562",
     "ember-modifier": "^3.2.7",
     "macro-decorators": "^0.1.2",
     "style-value-types": "^5.1.2"

@@ -16,7 +16,7 @@
     "overrides": {
       "@types/eslint": "8.4.1",
       "jsesc": "^3.0.0",
-      "ember-concurrency": "github:machty/ember-concurrency#master",
+      "ember-concurrency": "github:machty/ember-concurrency#c6ed562",
       "ember-modifier": "^4.1.0"
     },
     "peerDependencyRules": {
