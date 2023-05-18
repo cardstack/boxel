@@ -132,6 +132,14 @@ nav>.directory-level {
   color: var(--boxel-error-100);
 }
 
+.link {
+  color: var(--boxel-highlight);
+  text-decoration:underline
+}
+.link:hover {
+  color: var(--boxel-highlight-hover);
+}
+
 /* Catalog Entry */
 .catalog-entry {
   padding: calc(2 * var(--boxel-sp-sm)) var(--boxel-sp-sm);
@@ -687,3 +695,75 @@ nav>.directory-level {
   box-shadow:0 15px 30px 0 rgb(0 0 0 / 35%);
 }
 
+/* matrix spike */
+.user-profile__wrapper {
+  padding: 0 var(--boxel-sp);
+  margin: var(--boxel-sp) 0;
+}
+
+.user-profile__wrapper label{
+  margin-top: var(--boxel-sp-sm);
+}
+
+.room-manager__room-list {
+  padding: 0 var(--boxel-sp);
+  margin: var(--boxel-sp) 0;
+}
+
+.room-manager__room {
+  margin-top: var(--boxel-sp-sm);
+}
+
+.room-manager__room__item {
+  display: inline-block;
+  min-width: 30rem;
+}
+
+.room-manager__room button {
+  margin-left: var(--boxel-sp-xs);
+}
+.room-manager__checkbox-field {
+  font-weight: bold;
+  display: block;
+  margin-bottom: var(--boxel-sp);
+}
+
+.room__header .boxel-header__content {
+  display: block;
+}
+
+.room__header__invite-btn {
+  display: block;
+  float: right;
+  margin-bottom: var(--boxel-sp-sm);
+}
+
+.room__messages-wrapper {
+  overflow-y: auto;
+  max-height: 30vh;
+  padding: 0 var(--boxel-sp);
+  margin: var(--boxel-sp) 0;
+}
+
+.room__messages__timeline-start {
+  padding-bottom: var(--boxel-sp);
+}
+
+.room__messages__notices {
+  display: flex;
+  justify-content: center;
+}
+
+.room__send-message {
+  display: flex;
+  justify-content: right;
+  flex-wrap: wrap;
+  row-gap: var(--boxel-sp-sm);
+  margin: 0 var(--boxel-sp);
+}
+
+.room__members {
+  clear: both;
+  font-size: var(--boxel-font-size-sm);
+  font-weight: initial;
+}

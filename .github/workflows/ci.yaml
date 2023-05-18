@@ -33,6 +33,9 @@ jobs:
       - name: Lint Host
         run: pnpm run lint
         working-directory: packages/host
+      - name: Lint Matrix
+        run: pnpm run lint
+        working-directory: packages/matrix
       - name: Lint Realm Server
         run: pnpm run lint
         working-directory: packages/realm-server

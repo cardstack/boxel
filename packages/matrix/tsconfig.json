@@ -21,7 +21,12 @@
     "module": "CommonJS",
     "esModuleInterop": true,
     "experimentalDecorators": true,
-    "strict": true
+    "strict": true,
+    "paths": {
+      "https://cardstack.com/base/*": ["../base/*"],
+      "@cardstack/boxel-ui": ["../boxel-ui/addon"],
+      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"]
+    }
   },
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"],
