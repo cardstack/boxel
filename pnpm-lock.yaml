@@ -83,7 +83,6 @@ importers:
       ember-cli-htmlbars: ^6.2.0
       ember-concurrency: github:machty/ember-concurrency#c6ed562
       ember-modifier: ^4.1.0
-      ember-source: ~4.12.0
       tracked-built-ins: ^2.0.1
     devDependencies:
       '@babel/core': 7.20.2
@@ -95,9 +94,8 @@ importers:
       '@types/flat': 5.0.2
       '@types/lodash': 4.14.189
       ember-cli-htmlbars: 6.2.0
-      ember-concurrency: github.com/machty/ember-concurrency/c6ed562_3uhobp43bmewta43if4ax5vgwq
-      ember-modifier: 4.1.0_ember-source@4.12.0
-      ember-source: 4.12.0_e62wfu5f7mvuxez4wez2cx3ose
+      ember-concurrency: github.com/machty/ember-concurrency/c6ed562_@babel+core@7.20.2
+      ember-modifier: 4.1.0
       tracked-built-ins: 2.0.1
     dependenciesMeta:
       '@cardstack/runtime-common':
@@ -652,7 +650,7 @@ importers:
       '@babel/plugin-syntax-class-properties': 7.12.13_@babel+core@7.20.2
       '@babel/plugin-syntax-decorators': 7.19.0_@babel+core@7.20.2
       '@babel/plugin-syntax-typescript': 7.20.0_@babel+core@7.20.2
-      '@cardstack/base': file:packages/base
+      '@cardstack/base': file:packages/base_ember-source@4.12.0
       '@cardstack/boxel-ui': link:../boxel-ui
       '@cardstack/requirejs-monaco-ember-polyfill': 0.0.1
       '@cardstack/runtime-common': file:packages/runtime-common_bjemlxzxufzpzwha4ql5dtmira
@@ -11957,7 +11955,6 @@ packages:
       ember-cli-string-utils: 1.1.0
     transitivePeerDependencies:
       - supports-color
-    dev: false
 
   /ember-modifier/4.1.0_ember-source@4.12.0:
     resolution: {integrity: sha512-YFCNpEYj6jdyy3EjslRb2ehNiDvaOrXTilR9+ngq+iUqSHYto2zKV0rleiA1XJQ27ELM1q8RihT29U6Lq5EyqQ==}
@@ -11970,7 +11967,7 @@ packages:
       '@embroider/addon-shim': 1.8.4
       ember-cli-normalize-entity-name: 1.0.0
       ember-cli-string-utils: 1.1.0
-      ember-source: 4.12.0_e62wfu5f7mvuxez4wez2cx3ose
+      ember-source: 4.12.0_3pbogmdper3j567aoi62iitzry
     transitivePeerDependencies:
       - supports-color
     dev: true
@@ -22877,10 +22874,15 @@ packages:
       readable-stream: 2.3.7
     dev: true
 
-  file:packages/base:
+  file:packages/base_ember-source@4.12.0:
     resolution: {directory: packages/base, type: directory}
+    id: file:packages/base
     name: '@cardstack/base'
     version: 1.0.0
+    peerDependencies:
+      ember-source: ~4.12.0
+    dependencies:
+      ember-source: 4.12.0_3pbogmdper3j567aoi62iitzry
     dev: true
 
   file:packages/runtime-common_6fxwnzuaonxvozu5ltkuzjc5ra:
@@ -23026,7 +23028,7 @@ packages:
       ember-cli-htmlbars: 6.2.0
       ember-compatibility-helpers: 1.2.6_@babel+core@7.20.2
       ember-destroyable-polyfill: 2.0.3_@babel+core@7.20.2
-      ember-source: 4.12.0_e62wfu5f7mvuxez4wez2cx3ose
+      ember-source: 4.12.0_3pbogmdper3j567aoi62iitzry
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
@@ -23052,4 +23054,3 @@ packages:
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
-    dev: false
