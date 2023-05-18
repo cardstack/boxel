@@ -5,6 +5,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 import { not, eq } from '../helpers/truth-helpers';
+import { Input } from '@ember/component';
 import { restartableTask, timeout } from 'ember-concurrency';
 import {
   BoxelHeader,
@@ -15,7 +16,9 @@ import {
   FieldContainer,
 } from '@cardstack/boxel-ui';
 import { isMatrixError } from '../lib/matrix-utils';
+import { LinkTo } from '@ember/routing';
 import { eventDebounceMs } from '../services/matrix-service';
+import RouterService from '@ember/routing/router-service';
 import type MatrixService from '../services/matrix-service';
 
 const TRUE = true;
@@ -54,26 +57,37 @@ export default class RoomsManager extends Component {
               @onInput={{this.setNewRoomInvite}}
             />
           </FieldContainer>
+          <label class='room-manager__checkbox-field'>Encrypted:
+            <Input
+              data-test-encrypted-field
+              @type='checkbox'
+              @checked={{this.isNewRoomEncrypted}}
+            />
+          </label>
           <Button
             data-test-create-room-cancel-btn
             {{on 'click' this.cancelCreateRoom}}
           >Cancel</Button>
           <Button
             data-test-create-room-btn
+            @kind='primary'
             @disabled={{not this.newRoomName}}
             {{on 'click' this.createRoom}}
           >Create</Button>
         </fieldset>
       {{/if}}
     {{/if}}
-    <div data-test-invites-list>
+    <div class='room-manager__room-list' data-test-invites-list>
       <h3>Invites</h3>
       {{#each this.sortedInvites as |invite|}}
-        <div data-test-invited-room={{invite.name}}>{{invite.name}}
-          (from:
-          <span
-            data-test-invite-sender={{invite.sender}}
-          >{{invite.sender}})</span>
+        <div class='room-manager__room' data-test-invited-room={{invite.name}}>
+          <span class='room-manager__room__item'>
+            {{invite.name}}
+            (from:
+            <span
+              data-test-invite-sender={{invite.sender}}
+            >{{invite.sender}})</span>
+          </span>
           <Button
             data-test-decline-room-btn={{invite.name}}
             {{on 'click' (fn this.leaveRoom invite.roomId)}}
@@ -86,12 +100,27 @@ export default class RoomsManager extends Component {
             <LoadingIndicator />
           {{/if}}
         </div>
+      {{else}}
+        (No invites)
       {{/each}}
     </div>
-    <div data-test-rooms-list>
+    <div class='room-manager__room-list' data-test-rooms-list>
       <h3>Rooms</h3>
       {{#each this.sortedJoinedRooms as |room|}}
-        <div data-test-joined-room={{room.name}}>{{room.name}}
+        <div class='room-manager__room' data-test-joined-room={{room.name}}>
+          <span class='room-manager__room__item'>
+            <LinkTo
+              class='link'
+              data-test-enter-room={{room.name}}
+              @route='chat.room'
+              @model={{room.roomId}}
+            >
+              {{room.name}}
+              {{#if room.encrypted}}
+                <span data-test-encrypted-room>(encrypted)</span>
+              {{/if}}
+            </LinkTo>
+          </span>
           <Button
             data-test-leave-room-btn={{room.name}}
             {{on 'click' (fn this.leaveRoom room.roomId)}}
@@ -100,13 +129,17 @@ export default class RoomsManager extends Component {
             <LoadingIndicator />
           {{/if}}
         </div>
+      {{else}}
+        (No rooms)
       {{/each}}
     </div>
   </template>
 
   @service private declare matrixService: MatrixService;
+  @service private declare router: RouterService;
   @tracked private isCreateRoomMode = false;
   @tracked private newRoomName: string | undefined;
+  @tracked private isNewRoomEncrypted = false;
   @tracked private newRoomInvite: string[] = [];
   @tracked private roomNameError: string | undefined;
   @tracked private roomIdForCurrentAction: string | undefined;
@@ -178,7 +211,11 @@ export default class RoomsManager extends Component {
       );
     }
     try {
-      await this.matrixService.createRoom(this.newRoomName, this.newRoomInvite);
+      await this.matrixService.createRoom(
+        this.newRoomName,
+        this.newRoomInvite,
+        this.isNewRoomEncrypted
+      );
     } catch (e) {
       if (isMatrixError(e) && e.data.errcode === 'M_ROOM_IN_USE') {
         this.roomNameError = 'Room already exists';
@@ -194,6 +231,12 @@ export default class RoomsManager extends Component {
     await this.matrixService.client.leave(roomId);
     await timeout(eventDebounceMs); // this makes it feel a bit more responsive
     this.roomIdForCurrentAction = undefined;
+    if (
+      this.router.currentRoute.name === 'chat.room' &&
+      this.router.currentRoute.params.id === roomId
+    ) {
+      this.router.transitionTo('chat');
+    }
   });
 
   private doJoinRoom = restartableTask(async (roomId: string) => {
@@ -207,6 +250,7 @@ export default class RoomsManager extends Component {
     this.newRoomName = undefined;
     this.newRoomInvite = [];
     this.isCreateRoomMode = false;
+    this.isNewRoomEncrypted = false;
   }
 }
 

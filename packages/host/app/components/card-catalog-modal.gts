@@ -6,13 +6,12 @@ import { action } from '@ember/object';
 import { htmlSafe } from '@ember/template';
 import { registerDestructor } from '@ember/destroyable';
 import { enqueueTask } from 'ember-concurrency';
-import type { CardBase } from 'https://cardstack.com/base/card-api';
+import type {
+  CardBase,
+  CardContext,
+} from 'https://cardstack.com/base/card-api';
 import type { Query } from '@cardstack/runtime-common/query';
-import {
-  type Actions,
-  createNewCard,
-  type CardRef,
-} from '@cardstack/runtime-common';
+import { createNewCard, type CardRef } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { getSearchResults, Search } from '../resources/search';
 import Preview from './preview';
@@ -20,7 +19,7 @@ import { Modal, CardContainer, Header, Button } from '@cardstack/boxel-ui';
 
 interface Signature {
   Args: {
-    actions?: Actions;
+    context?: CardContext;
   };
 }
 
@@ -61,7 +60,7 @@ export default class CardCatalogModal extends Component<Signature> {
                     <Preview
                       @card={{card}}
                       @format='embedded'
-                      @actions={{@actions}}
+                      @context={{@context}}
                     />
                     <button
                       {{on 'click' (fn this.pick card)}}

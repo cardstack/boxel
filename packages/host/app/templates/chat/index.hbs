@@ -1,11 +1,7 @@
-{{! template-lint-disable no-inline-styles }}
-{{#if this.isLoggedIn}}
-  <UserProfile/>
-  <RoomsManager/>
-{{else}}
+{{#unless this.isLoggedIn}}
   <Login />
   <LinkTo
     @route="chat.register"
-    style='color:#6638ff;text-decoration:underline'
+    class="link"
   >Register new user</LinkTo>
-{{/if}}
+{{/unless}}

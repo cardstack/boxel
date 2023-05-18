@@ -15,6 +15,7 @@ Router.map(function () {
   this.route('acceptance-test-setup');
   this.route('chat', function () {
     this.route('register');
+    this.route('room', { path: '/room/:id' });
   });
   if (!path || hostsOwnAssets) {
     this.route('index-card', { path: '/' });

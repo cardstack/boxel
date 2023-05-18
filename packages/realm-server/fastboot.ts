@@ -1,6 +1,6 @@
 //@ts-expect-error no types for fastboot
 import FastBoot from 'fastboot';
-import { type FastBootInstance } from '@cardstack/runtime-common';
+import { type FastBootInstance } from './fastboot-from-deployed';
 import { instantiateFastBoot } from './fastboot-from-deployed';
 import {
   type IndexRunner,

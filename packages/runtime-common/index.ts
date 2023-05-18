@@ -46,6 +46,7 @@ export { makeLogDefinitions, logger } from './log';
 export { RealmPaths };
 export { NotLoaded, isNotLoadedError } from './not-loaded';
 export { NotReady, isNotReadyError } from './not-ready';
+export { cardTypeDisplayName } from './helpers/card-type-display-name';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';
@@ -62,7 +63,6 @@ export type {
   Kind,
   RealmAdapter,
   FileRef,
-  FastBootInstance,
   ResponseWithNodeStream,
 } from './realm';
 
@@ -115,6 +115,19 @@ export async function chooseCard<T extends Card>(
   let chooser: CardChooser = here._CARDSTACK_CARD_CHOOSER;
 
   return await chooser.chooseCard<T>(query, opts);
+}
+
+export interface CardSearch {
+  getCards(query: Query): {
+    instances: Card[];
+    isLoading: boolean;
+  };
+}
+
+export async function getCards(query: Query) {
+  let here = globalThis as any;
+  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
+  return finder?.getCards(query);
 }
 
 export interface CardCreator {

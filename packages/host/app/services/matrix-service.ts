@@ -1,4 +1,4 @@
-import Service from '@ember/service';
+import Service, { service } from '@ember/service';
 import { createClient } from 'matrix-js-sdk';
 import {
   type IAuthData,
@@ -6,6 +6,7 @@ import {
   type MatrixEvent,
   type RoomMember,
   type EmittedEvents,
+  type IEvent,
   Preset,
   RoomMemberEvent,
   RoomEvent,
@@ -13,15 +14,15 @@ import {
 import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
 import debounce from 'lodash/debounce';
+import RouterService from '@ember/routing/router-service';
 import ENV from '@cardstack/host/config/environment';
 
 const { matrixURL } = ENV;
 export const eventDebounceMs = 300;
 
-interface Room {
+interface Room extends RoomMeta {
   eventId: string;
   roomId: string;
-  name?: string;
   timestamp: number;
 }
 
@@ -29,13 +30,27 @@ interface RoomInvite extends Room {
   sender: string;
 }
 
+interface RoomMeta {
+  name?: string;
+  encrypted?: boolean;
+}
+
+export type Event = Partial<IEvent>;
+
 export default class MatrixService extends Service {
+  @service private declare router: RouterService;
   @tracked
   client = createClient({ baseUrl: matrixURL });
-  invites: TrackedMap<string, RoomInvite>;
-  joinedRooms: TrackedMap<string, Room>;
+  invites: TrackedMap<string, RoomInvite> = new TrackedMap();
+  joinedRooms: TrackedMap<string, Room> = new TrackedMap();
+  roomMembers: TrackedMap<
+    string,
+    TrackedMap<string, { member: RoomMember; status: 'join' | 'invite' }>
+  > = new TrackedMap();
+  rooms: Map<string, RoomMeta> = new Map();
+  timelines: TrackedMap<string, TrackedMap<string, Event>> = new TrackedMap();
+  flushTimeline: Promise<void> | undefined;
   private eventBindings: [EmittedEvents, (...arg: any[]) => void][];
-  private roomNames: Map<string, string> = new Map();
   // we process the matrix events in batched queues so that we can collapse the
   // interstitial state between events to prevent unnecessary flashing on the
   // screen, i.e. user was invited to a room and then declined the invite should
@@ -46,18 +61,17 @@ export default class MatrixService extends Service {
     | (Room & { type: 'join' })
     | { type: 'leave'; roomId: string }
   )[] = [];
+  private timelineQueue: MatrixEvent[] = [];
 
   constructor(properties: object) {
     super(properties);
-    this.invites = new TrackedMap();
-    this.joinedRooms = new TrackedMap();
-
     // building the event bindings like this so that we can consistently bind
     // and unbind these events programmatically--this way if we add a new event
     // we won't forget to unbind it.
     this.eventBindings = [
       [RoomMemberEvent.Membership, this.onMembership],
       [RoomEvent.Name, this.onRoomName],
+      [RoomEvent.Timeline, this.onTimeline],
     ];
   }
 
@@ -75,6 +89,7 @@ export default class MatrixService extends Service {
     await this.client.stopClient();
     await this.client.logout();
     this.resetState();
+    this.router.transitionTo('chat');
   }
 
   async start(auth?: IAuthData) {
@@ -124,6 +139,7 @@ export default class MatrixService extends Service {
       deviceId,
     });
     if (this.isLoggedIn) {
+      this.router.transitionTo('chat.index');
       try {
         await this.client.initCrypto();
       } catch (e) {
@@ -132,6 +148,10 @@ export default class MatrixService extends Service {
         throw e;
       }
 
+      // this let's us send messages to element clients (useful for testing).
+      // probably we wanna verify these unknown devices (when in an encrypted
+      // room). need to research how to do that as its undocumented API
+      this.client.setGlobalErrorOnUnknownDevices(false);
       saveAuth(auth);
       this.bindEventListeners();
 
@@ -142,6 +162,7 @@ export default class MatrixService extends Service {
   async createRoom(
     name: string,
     localInvite: string[], // these are just local names--assume no federation, all users live on the same homeserver
+    encrypted: boolean,
     topic?: string
   ): Promise<string> {
     let homeserver = new URL(this.client.getHomeserverUrl());
@@ -152,13 +173,38 @@ export default class MatrixService extends Service {
       name,
       topic,
       room_alias_name: encodeURIComponent(name),
+      ...(encrypted
+        ? {
+            initial_state: [
+              {
+                content: { algorithm: 'm.megolm.v1.aes-sha2' },
+                type: 'm.room.encryption',
+              },
+            ],
+          }
+        : {}),
     });
     return roomId;
+  }
+
+  // these are just local names--assume no federation, all users live on the same homeserver
+  async invite(roomId: string, localInvites: string[]) {
+    let homeserver = new URL(this.client.getHomeserverUrl());
+    await Promise.all(
+      localInvites.map((localName) =>
+        this.client.invite(roomId, `@${localName}:${homeserver.hostname}`)
+      )
+    );
   }
 
   private resetState() {
     this.invites = new TrackedMap();
     this.joinedRooms = new TrackedMap();
+    this.roomMembers = new TrackedMap();
+    this.rooms = new Map();
+    this.timelines = new TrackedMap();
+    this.roomMembershipQueue = [];
+    this.unbindEventListeners();
     this.client = createClient({ baseUrl: matrixURL });
   }
 
@@ -173,8 +219,100 @@ export default class MatrixService extends Service {
     }
   }
 
+  private onTimeline = (e: MatrixEvent) => {
+    let { event } = e;
+    if (
+      event.type === 'm.room.encryption' &&
+      // this is the only algorithm that matrix supports for room encryption
+      event.content?.algorithm === 'm.megolm.v1.aes-sha2'
+    ) {
+      let { room_id: roomId } = event;
+      if (!roomId) {
+        throw new Error(
+          `bug: roomId is undefined for message event ${JSON.stringify(
+            event,
+            null,
+            2
+          )}`
+        );
+      }
+      this.setRoomMeta(roomId, { encrypted: true });
+    } else {
+      this.timelineQueue.push(e);
+      this.debouncedTimelineDrain();
+    }
+  };
+
+  private debouncedTimelineDrain = debounce(() => {
+    this.drainTimeline();
+  }, eventDebounceMs);
+
+  private async drainTimeline() {
+    await this.flushTimeline;
+
+    let eventsDrained: () => void;
+    this.flushTimeline = new Promise((res) => (eventsDrained = res));
+    let events = [...this.timelineQueue];
+    this.timelineQueue = [];
+    for (let event of events) {
+      await this.client.decryptEventIfNeeded(event);
+      this.processDecryptedEvent({
+        ...event.event,
+        content: event.getContent() || undefined,
+      });
+    }
+    eventsDrained!();
+  }
+
+  private processDecryptedEvent(event: Event) {
+    let { event_id: eventId, room_id: roomId } = event;
+    if (!eventId) {
+      throw new Error(
+        `bug: event ID is undefined for event ${JSON.stringify(event, null, 2)}`
+      );
+    }
+    if (event.type === 'm.room.message' || event.type === 'm.room.encrypted') {
+      if (!roomId) {
+        throw new Error(
+          `bug: roomId is undefined for message event ${JSON.stringify(
+            event,
+            null,
+            2
+          )}`
+        );
+      }
+      let timeline = this.timelines.get(roomId);
+      if (!timeline) {
+        timeline = new TrackedMap<string, Event>();
+        this.timelines.set(roomId, timeline);
+      }
+      // we use a map for the timeline to de-dupe events
+      timeline.set(eventId, event);
+    }
+  }
+
   private onMembership = (e: MatrixEvent, member: RoomMember) => {
     let { event } = e;
+    let { roomId, userId } = member;
+    let members = this.roomMembers.get(roomId);
+    if (!members) {
+      members = new TrackedMap();
+      this.roomMembers.set(roomId, members);
+    }
+    switch (member.membership) {
+      case 'leave':
+        members.delete(userId);
+        break;
+      case 'invite':
+      case 'join':
+        members.set(userId, { member, status: member.membership });
+        break;
+      default:
+        throw new Error(
+          `don't know how to handle membership status of '${member.membership}`
+        );
+    }
+
     if (member.userId === this.client.getUserId()) {
       let {
         event_id: eventId,
@@ -247,14 +385,17 @@ export default class MatrixService extends Service {
       switch (membership.type) {
         case 'invite': {
           let { type: _remove, ...invite } = membership;
-          let name = this.roomNames.get(roomId) ?? invite.name;
+          let name = this.rooms.get(roomId)?.name ?? invite.name;
+          // note that we can't see room encryption events for rooms we haven't joined
           invites.set(roomId, { ...invite, name });
           break;
         }
         case 'join': {
           let { type: _remove, ...joinedRoom } = membership;
-          let name = this.roomNames.get(roomId) ?? joinedRoom.name;
-          joinedRooms.set(roomId, { ...joinedRoom, name });
+          let name = this.rooms.get(roomId)?.name ?? joinedRoom.name;
+          let encrypted =
+            this.rooms.get(roomId)?.encrypted ?? joinedRoom.encrypted;
+          joinedRooms.set(roomId, { ...joinedRoom, ...{ name, encrypted } });
           // once we join a room we remove any invites for this room that are
           // part of this flush as well as historical invites for this room
           invites.delete(roomId);
@@ -301,16 +442,28 @@ export default class MatrixService extends Service {
       return;
     }
 
-    this.roomNames.set(roomId, name);
+    this.setRoomMeta(roomId, { name });
+  };
+
+  private setRoomMeta(roomId: string, meta: RoomMeta) {
+    let roomMeta = this.rooms.get(roomId);
+    if (!roomMeta) {
+      roomMeta = {};
+      this.rooms.set(roomId, roomMeta);
+    }
+    if (meta.name !== undefined) {
+      roomMeta.name = meta.name;
+    }
+    roomMeta.encrypted = roomMeta.encrypted ?? meta.encrypted;
     let invite = this.invites.get(roomId);
     if (invite) {
-      this.invites.set(roomId, { ...invite, name });
+      this.invites.set(roomId, { ...invite, ...roomMeta });
     }
     let joinedRoom = this.joinedRooms.get(roomId);
     if (joinedRoom) {
-      this.joinedRooms.set(roomId, { ...joinedRoom, name });
+      this.joinedRooms.set(roomId, { ...joinedRoom, ...roomMeta });
     }
-  };
+  }
 }
 
 function saveAuth(auth: IAuthData) {

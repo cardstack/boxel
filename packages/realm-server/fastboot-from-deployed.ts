@@ -4,7 +4,29 @@ import { dirSync as tmpDirSync } from 'tmp';
 import { ensureFileSync, writeFileSync, writeJSONSync } from 'fs-extra';
 import { join } from 'path';
 import { JSDOM } from 'jsdom';
-import { type FastBootInstance } from '@cardstack/runtime-common';
+
+interface FastBootOptions {
+  resilient?: boolean;
+  request?: {
+    headers?: {
+      host?: string;
+    };
+  };
+}
+
+type DOMContents = () => {
+  head: string;
+  body: string;
+};
+
+interface FastBootVisitResult {
+  html(): string;
+  domContents(): DOMContents;
+}
+
+export interface FastBootInstance {
+  visit(url: string, opts?: FastBootOptions): Promise<FastBootVisitResult>;
+}
 
 // This is mostly cribbed from
 // https://github.com/ember-fastboot/ember-cli-fastboot/blob/master/packages/fastboot/src/html-entrypoint.js

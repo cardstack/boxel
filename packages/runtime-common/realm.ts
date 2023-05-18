@@ -76,29 +76,6 @@ export interface ResponseWithNodeStream extends Response {
   nodeStream?: Readable;
 }
 
-interface FastBootOptions {
-  resilient?: boolean;
-  request?: {
-    headers?: {
-      host?: string;
-    };
-  };
-}
-
-type DOMContents = () => {
-  head: string;
-  body: string;
-};
-
-interface FastBootVisitResult {
-  html(): string;
-  domContents(): DOMContents;
-}
-
-export interface FastBootInstance {
-  visit(url: string, opts?: FastBootOptions): Promise<FastBootVisitResult>;
-}
-
 export interface RealmAdapter {
   readdir(
     path: LocalPath,
