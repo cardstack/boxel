@@ -124,9 +124,6 @@ export default class OperatorMode extends Component<Signature> {
     await this.rollbackCardFieldValues(item.card);
     let index = this.stack.indexOf(item);
     this.stack.splice(index);
-    if (this.stack.length === 0) {
-      this.args.onClose();
-    }
   }
 
   @action async cancel(item: StackItem) {
