@@ -8,7 +8,7 @@ import {
 } from '@cardstack/runtime-common';
 import { createRealm, testRealm, setupCardLogs } from './helpers';
 import isEqual from 'lodash/isEqual';
-import { shimExternals } from '@cardstack/runtime-common/externals-global';
+import { shimExternals } from '../lib/externals';
 
 function cleanWhiteSpace(text: string) {
   return text.replace(/\s+/g, ' ').trim();

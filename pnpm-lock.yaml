@@ -971,6 +971,7 @@ importers:
 
   packages/realm-server:
     specifiers:
+      '@cardstack/boxel-ui': workspace:*
       '@cardstack/runtime-common': workspace:*
       '@koa/cors': ^4.0.0
       '@koa/router': ^12.0.0
@@ -992,6 +993,7 @@ importers:
       '@types/yargs': ^17.0.10
       eventsource: ^2.0.2
       fastboot: ^4.1.0
+      flat: ^5.0.2
       fs-extra: ^10.1.0
       http-server: ^14.1.1
       jsdom: ^21.1.1
@@ -1016,6 +1018,7 @@ importers:
       typescript-memoize: ^1.1.1
       yargs: ^17.5.1
     devDependencies:
+      '@cardstack/boxel-ui': link:../boxel-ui
       '@cardstack/runtime-common': link:../runtime-common
       '@koa/cors': 4.0.0
       '@koa/router': 12.0.0
@@ -1037,6 +1040,7 @@ importers:
       '@types/yargs': 17.0.13
       eventsource: 2.0.2
       fastboot: 4.1.0_kizxbxhfcldguz4jcwonfduu2y
+      flat: 5.0.2
       fs-extra: 10.1.0
       http-server: 14.1.1
       jsdom: 21.1.1
@@ -5345,7 +5349,7 @@ packages:
   /@types/ember__controller/4.0.3:
     resolution: {integrity: sha512-7+Lpgcsa/gjGZtUN0JfQoLzUStCT68p8o6t1e4LBXyC+a5DHg2NJYFZ0U3f8F8TgQJcgtFoUAuv8p77XY6FxwQ==}
     dependencies:
-      '@types/ember__object': 4.0.5_@babel+core@7.20.2
+      '@types/ember__object': 4.0.5
     dev: true
 
   /@types/ember__controller/4.0.3_@babel+core@7.20.2:
@@ -7089,7 +7093,7 @@ packages:
       '@babel/core': ^7.0.0
       webpack: '>=2'
     dependencies:
-      '@babel/core': 7.20.2_supports-color@8.1.1
+      '@babel/core': 7.20.2
       find-cache-dir: 3.3.2
       loader-utils: 2.0.4
       make-dir: 3.1.0
@@ -8923,7 +8927,7 @@ packages:
       mississippi: 3.0.0
       mkdirp: 0.5.6
       move-concurrently: 1.0.1
-      promise-inflight: 1.0.1_bluebird@3.7.2
+      promise-inflight: 1.0.1
       rimraf: 2.7.1
       ssri: 6.0.2
       unique-filename: 1.1.1
@@ -12484,7 +12488,7 @@ packages:
       '@ember/test-helpers':
         optional: true
     dependencies:
-      '@ember/test-helpers': 2.8.1_c3ll764h35tb7zumth7bce2v2e
+      '@ember/test-helpers': 2.8.1_mjl3znqfqz4o673rlet2hb3jru
       '@embroider/addon-shim': 1.8.3
       ember-destroyable-polyfill: 2.0.3_@babel+core@7.20.2
       ember-modifier: 3.2.7_@babel+core@7.20.2
@@ -14472,16 +14476,6 @@ packages:
     dependencies:
       tabbable: 5.3.3
 
-  /follow-redirects/1.15.2:
-    resolution: {integrity: sha512-VQLG33o04KaQ8uYi2tVNbdrWp1QWxNNea+nmIB4EVM28v0hmP17z7aG1+wAkNzVq4KeXTq3221ye5qTJP91JwA==}
-    engines: {node: '>=4.0'}
-    peerDependencies:
-      debug: '*'
-    peerDependenciesMeta:
-      debug:
-        optional: true
-    dev: true
-
   /follow-redirects/1.15.2_debug@4.3.2:
     resolution: {integrity: sha512-VQLG33o04KaQ8uYi2tVNbdrWp1QWxNNea+nmIB4EVM28v0hmP17z7aG1+wAkNzVq4KeXTq3221ye5qTJP91JwA==}
     engines: {node: '>=4.0'}
@@ -15504,7 +15498,7 @@ packages:
     engines: {node: '>=8.0.0'}
     dependencies:
       eventemitter3: 4.0.7
-      follow-redirects: 1.15.2
+      follow-redirects: 1.15.2_debug@4.3.2
       requires-port: 1.0.0
     transitivePeerDependencies:
       - debug
@@ -18829,17 +18823,6 @@ packages:
     peerDependenciesMeta:
       bluebird:
         optional: true
-    dev: true
-
-  /promise-inflight/1.0.1_bluebird@3.7.2:
-    resolution: {integrity: sha512-6zWPyEOFaQBJYcGMHBKTKJ3u6TBsnMFOIZSa6ce1e/ZrrsOlnHRHbabMjLiBYKp+n44X9eUI6VUPaukCXHuG4g==}
-    peerDependencies:
-      bluebird: '*'
-    peerDependenciesMeta:
-      bluebird:
-        optional: true
-    dependencies:
-      bluebird: 3.7.2
     dev: true
 
   /promise-map-series/0.2.3:
