@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
-import { not, and } from '../helpers/truth-helpers';
+import { not } from '../helpers/truth-helpers';
 import { ScrollIntoView } from '../modifiers/scrollers';
 import { BoxelMessage, LoadingIndicator } from '@cardstack/boxel-ui';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
@@ -56,7 +56,7 @@ export default class Message extends Component<MessageArgs> {
       {{{this.content}}}
 
       {{#if this.hasCard}}
-        {{#if (and this.hasCard (not this.card))}}
+        {{#if (not this.card)}}
           <LoadingIndicator />
         {{/if}}
         <this.cardComponent />

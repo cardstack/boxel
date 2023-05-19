@@ -354,7 +354,7 @@ export default class Room extends Component<RoomArgs> {
 
   // we are working around the loader bug that deadlocks when loading cyclic dependencies
   // concurrently. When loading cards we use the enqueue task to load one card at a time
-  // in the room. When this bug is fixed we should move this loader into the Message component
+  // in the room. When this bug is fixed we should move this method into the Message component
   // so cards can load concurrently.
   private loadCard = enqueueTask(
     async (doc: LooseSingleCardDocument, onComplete: (card: Card) => void) => {
