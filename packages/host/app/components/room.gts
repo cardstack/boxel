@@ -255,9 +255,9 @@ export default class Room extends Component<RoomArgs> {
 
   @action
   private sendMessage() {
-    if (!this.message) {
+    if (this.message == null && !this.card) {
       throw new Error(
-        `bug: should never get here, send button is disabled when there is no message`
+        `bug: should never get here, send button is disabled when there is no message nor card`
       );
     }
     this.doSendMessage.perform(this.message, this.card);
@@ -322,7 +322,7 @@ export default class Room extends Component<RoomArgs> {
   }, eventDebounceMs);
 
   private doSendMessage = restartableTask(
-    async (message: string, card?: Card) => {
+    async (message: string | undefined, card?: Card) => {
       this.messages.set(this.args.roomId, undefined);
       this.cards.set(this.args.roomId, undefined);
       await this.matrixService.sendMessage(this.args.roomId, message, card);

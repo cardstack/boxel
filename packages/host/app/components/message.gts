@@ -43,6 +43,7 @@ export default class Message extends Component<MessageArgs> {
     <BoxelMessage
       {{ScrollIntoView register=this.register}}
       data-test-message-idx={{this.args.index}}
+      data-test-message-card={{this.card.id}}
       @name={{this.sender.member.name}}
       @datetime={{formatRFC3339 this.timestamp}}
       style={{cssVar

@@ -49,8 +49,23 @@ export async function openRoom(page: Page, roomName: string) {
   await page.locator(`[data-test-enter-room="${roomName}"]`).click();
 }
 
-export async function sendMessage(page: Page, message: string) {
-  await page.locator('[data-test-message-field]').fill(message);
+export async function sendMessage(
+  page: Page,
+  message: string | undefined,
+  cardId?: string
+) {
+  if (message == null && cardId == null) {
+    throw new Error(
+      `sendMessage requires at least a message or a card ID be specified`
+    );
+  }
+  if (message != null) {
+    await page.locator('[data-test-message-field]').fill(message);
+  }
+  if (cardId != null) {
+    await page.locator('[data-test-choose-card-btn]').click();
+    await page.locator(`[data-test-select="${cardId}"]`).click();
+  }
   await page.locator('[data-test-send-message-btn]').click();
 }
 
@@ -72,7 +87,11 @@ export async function scrollToTopOfMessages(page: Page) {
 
 export async function assertMessages(
   page: Page,
-  messages: { from: string; message: string }[]
+  messages: {
+    from: string;
+    message?: string;
+    card?: { id: string; text?: string };
+  }[]
 ) {
   const limit = 5;
   if (messages.length > limit) {
@@ -83,15 +102,44 @@ export async function assertMessages(
   await expect(page.locator('[data-test-message-idx]')).toHaveCount(
     messages.length
   );
-  for (let [index, { from, message }] of messages.entries()) {
+  for (let [index, { from, message, card }] of messages.entries()) {
     await expect(
       page.locator(
         `[data-test-message-idx="${index}"] [data-test-boxel-message-name]`
       )
     ).toContainText(from);
-    await expect(
-      page.locator(`[data-test-message-idx="${index}"] .boxel-message__content`)
-    ).toContainText(message);
+    if (message != null) {
+      await expect(
+        page.locator(
+          `[data-test-message-idx="${index}"] .boxel-message__content`
+        )
+      ).toContainText(message);
+    }
+    if (card) {
+      await expect(
+        page.locator(
+          `[data-test-message-idx="${index}"][data-test-message-card="${card.id}"]`
+        )
+      ).toHaveCount(1);
+      if (card.text) {
+        if (message != null && card.text.includes(message)) {
+          throw new Error(
+            `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.text}'`
+          );
+        }
+        await expect(
+          page.locator(
+            `[data-test-message-idx="${index}"][data-test-message-card="${card.id}"]`
+          )
+        ).toContainText(card.text);
+      }
+    } else {
+      await expect(
+        page.locator(
+          `[data-test-message-idx="${index}"][data-test-message-card]`
+        )
+      ).toHaveCount(0);
+    }
   }
 }
 
