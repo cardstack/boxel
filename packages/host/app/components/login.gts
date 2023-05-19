@@ -45,6 +45,7 @@ export default class Login extends Component {
         </FieldContainer>
         <Button
           data-test-login-btn
+          @kind='primary'
           @disabled={{this.isLoginButtonDisabled}}
           {{on 'click' this.login}}
         >Login</Button>

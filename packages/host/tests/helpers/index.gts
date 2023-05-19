@@ -23,10 +23,7 @@ import {
   type EntrySetter,
   type SearchEntryWithErrors,
 } from '@cardstack/runtime-common/search-index';
-import {
-  WebMessageStream,
-  messageCloseHandler,
-} from '@cardstack/runtime-common/stream';
+import { WebMessageStream, messageCloseHandler } from './stream';
 import { file, FileResource } from '@cardstack/host/resources/file';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
@@ -444,4 +441,36 @@ export async function getFileResource(
     lastModified: ref.lastModified,
     content,
   }));
+}
+
+function changedEntry(
+  listings: { path: string; lastModified?: number }[],
+  entry: { path: string; lastModified?: number }
+) {
+  return listings.some(
+    (item) =>
+      item.path === entry.path && item.lastModified != entry.lastModified
+  );
+}
+
+function hasEntry(
+  listings: { path: string; lastModified?: number }[],
+  entry: { path: string; lastModified?: number }
+) {
+  return listings.some((item) => item.path === entry.path);
+}
+
+export function diff(
+  prevEntries: { path: string; lastModified?: number }[],
+  currEntries: { path: string; lastModified?: number }[]
+) {
+  let changed = prevEntries.filter((entry) => changedEntry(currEntries, entry));
+  let added = currEntries.filter((entry) => !hasEntry(prevEntries, entry));
+  let removed = prevEntries.filter((entry) => !hasEntry(currEntries, entry));
+
+  return {
+    added: added.map((e) => e.path),
+    removed: removed.map((e) => e.path),
+    changed: changed.map((e) => e.path),
+  };
 }

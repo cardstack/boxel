@@ -22,18 +22,27 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
       - name: Lint Boxel Motion
+        # This addition to each step causes the job to proceed even if one lint job fails so we can see all errors
+        if: always()
         run: pnpm run lint
         working-directory: packages/boxel-motion
       - name: Lint Boxel Motion Test App
+        if: always()
         run: pnpm run lint
         working-directory: packages/boxel-motion-test-app
       - name: Lint Boxel Motion Demo App
+        if: always()
         run: pnpm run lint
         working-directory: packages/boxel-motion-demo-app
       - name: Lint Host
+        if: always()
         run: pnpm run lint
         working-directory: packages/host
+      - name: Lint Matrix
+        run: pnpm run lint
+        working-directory: packages/matrix
       - name: Lint Realm Server
+        if: always()
         run: pnpm run lint
         working-directory: packages/realm-server
   boxel-motion-test:
