@@ -328,43 +328,6 @@ module('Integration | operator-mode', function (hooks) {
           @field socialBlurb = contains(TextAreaCard);
         }
       `,
-      'Author/1.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Alien',
-            lastName: 'Bob',
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../author',
-              name: 'Author',
-            },
-          },
-        },
-      },
-      'BlogPost/1.json': {
-        data: {
-          type: 'card',
-          attributes: {
-            title: 'Outer Space Journey',
-            body: 'Hello world',
-          },
-          relationships: {
-            authorBio: {
-              links: {
-                self: '../Author/1',
-              },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../blog-post',
-              name: 'BlogPost',
-            },
-          },
-        },
-      },
       'CatalogEntry/publishing-packet.json': {
         data: {
           type: 'card',
@@ -402,6 +365,28 @@ module('Integration | operator-mode', function (hooks) {
           },
         },
       },
+      'BlogPost/1.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Outer Space Journey',
+            body: 'Hello world',
+          },
+          relationships: {
+            authorBio: {
+              links: {
+                self: '../Author/1',
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../blog-post',
+              name: 'BlogPost',
+            },
+          },
+        },
+      },
       'BlogPost/2.json': {
         data: {
           type: 'card',
@@ -419,6 +404,21 @@ module('Integration | operator-mode', function (hooks) {
             adoptsFrom: {
               module: '../blog-post',
               name: 'BlogPost',
+            },
+          },
+        },
+      },
+      'Author/1.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Alien',
+            lastName: 'Bob',
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../author',
+              name: 'Author',
             },
           },
         },

@@ -2212,10 +2212,10 @@ export async function getIfReady<T extends CardBase, K extends keyof T>(
       let card = Reflect.getPrototypeOf(instance)!
         .constructor as typeof CardBase;
       let field: Field = getField(card, fieldName as string)!;
-      return (await field.handleNotLoadedError(instance, e, {
-        loadFields: true,
-        ...opts,
-      })) as T[K] | T[K][] | undefined;
+      return (await field.handleNotLoadedError(instance, e, opts)) as
+        | T[K]
+        | T[K][]
+        | undefined;
     } else if (isNotReadyError(e)) {
       let { instance: depModel, computeVia, fieldName: depField } = e;
       let nestedCompute =

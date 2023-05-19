@@ -81,7 +81,10 @@ export default class CardService extends Service {
     // being able to inform us of which fields are used or not at this point.
     // (this is something that the card compiler could optimize for us in the
     // future)
-    await this.api.recompute(card, { recomputeAllFields: true });
+    await this.api.recompute(card, {
+      recomputeAllFields: true,
+      loadFields: true,
+    });
     return card as Card;
   }
 
