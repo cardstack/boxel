@@ -13,9 +13,9 @@ Router.map(function () {
   this.route('freestyle', { path: '/_freestyle' });
   this.route('indexer', { path: '/indexer/:id' });
   this.route('acceptance-test-setup');
-  this.route('chat', function () {
+  this.route('chat', { path: `${path}/chat` }, function () {
     this.route('register');
-    this.route('room', { path: '/room/:id' });
+    this.route('room', { path: `${path}/room/:id` });
   });
   if (!path || hostsOwnAssets) {
     this.route('index-card', { path: '/' });

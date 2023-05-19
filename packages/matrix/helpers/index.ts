@@ -1,6 +1,8 @@
 import { expect, type Page } from '@playwright/test';
 
-export const testHost = 'http://127.0.0.1:4200';
+export const testHost = 'http://localhost:4202/test';
+export const rootPath =
+  new URL(testHost).pathname === '/' ? '' : new URL(testHost).pathname;
 
 interface ProfileAssertions {
   userId?: string;
@@ -8,7 +10,7 @@ interface ProfileAssertions {
 }
 
 export async function login(page: Page, username: string, password: string) {
-  await page.goto(`/chat`);
+  await page.goto(`${rootPath}/chat`);
   await page.locator('[data-test-username-field]').fill(username);
   await page.locator('[data-test-password-field]').fill(password);
   await page.locator('[data-test-login-btn]').click();
