@@ -15,9 +15,10 @@
     "start:synapse": "mkdir -p ./synapse-data/db && SYNAPSE_DATA_DIR=./synapse-data ts-node --transpileOnly ./scripts/synapse.ts start",
     "stop:synapse": "ts-node --transpileOnly ./scripts/synapse.ts stop",
     "start:admin": "docker start synapse-admin",
-    "start:host": "cd ../host && RESOLVED_BASE_REALM_URL=https://realm-demo-staging.stack.cards/base/ pnpm start",
+    "start:host": "cd ../host && pnpm start",
     "stop:admin": "docker stop synapse-admin",
-    "test": "start-server-and-test 'pnpm run start:host' 'http://127.0.0.1:4200' 'pnpm playwright test'",
+    "test": "start-server-and-test 'pnpm run start:host' 'http://127.0.0.1:4200' 'pnpm run wait' 'http-get://localhost:4202/test/hassan?acceptHeader=application%2Fvnd.card%2Bjson' 'pnpm playwright test'",
+    "wait": "sleep 10000000",
     "lint": "glint"
   },
   "dependenciesMeta": {
