@@ -55,7 +55,7 @@ test.describe('Login', () => {
     await assertLoggedIn(page);
 
     await logout(page);
-    assertLoggedOut(page);
+    await assertLoggedOut(page);
 
     // reload to page to show that the logout state persists
     await page.reload();
