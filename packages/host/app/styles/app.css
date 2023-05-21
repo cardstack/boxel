@@ -388,6 +388,9 @@ nav>.directory-level {
   gap: var(--boxel-sp);
   justify-items: center;
 }
+.operator-mode .cards-grid__cards > li {
+  cursor: pointer;
+}
 .cards-grid__add-button {
   position: absolute;
   right: var(--boxel-sp);

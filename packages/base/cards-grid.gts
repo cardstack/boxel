@@ -12,13 +12,17 @@ import {
   cardTypeDisplayName,
 } from '@cardstack/runtime-common';
 import { type CatalogEntry } from './catalog-entry';
+import { fn } from '@ember/helper';
 
 class Isolated extends Component<typeof CardsGrid> {
   <template>
     <CardContainer class='cards-grid'>
       <ul class='cards-grid__cards'>
         {{#each this.request.instances as |card|}}
-          <li data-test-cards-grid-item={{card.id}}>
+          <li
+            data-test-cards-grid-item={{card.id}}
+            {{on 'click' (fn this.openCard card)}}
+          >
             <CardContainer class='grid-card'>
               <div class='grid-card__thumbnail'>
                 <div
@@ -91,6 +95,10 @@ class Isolated extends Component<typeof CardsGrid> {
   @action
   createNew() {
     this.createCard.perform();
+  }
+
+  @action openCard(card: Card) {
+    this.args.context?.optional?.openCard(card);
   }
 
   private createCard = restartableTask(async () => {
