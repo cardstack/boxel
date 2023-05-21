@@ -9,7 +9,6 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { Claim } from './claim';
 
-// perhaps cards-grid??
 export class Claims extends Card {
   static displayName = 'Claims';
   @field claims = linksToMany(Claim);

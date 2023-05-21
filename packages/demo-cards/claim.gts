@@ -44,7 +44,7 @@ class Isolated extends Component<typeof Claim> {
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
-    this.initialize.perform(); //calls await function
+    this.initialize.perform();
   }
   private initialize = restartableTask(async () => {
     let metamaskChainId = await this.getChainId();
