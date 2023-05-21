@@ -9,6 +9,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { Button, CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 import { tracked } from '@glimmer/tracking';
+// @ts-ignore
 import { restartableTask } from 'ember-concurrency';
 
 declare global {
