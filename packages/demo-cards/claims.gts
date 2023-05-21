@@ -7,32 +7,28 @@ import {
   linksToMany,
   StringCard,
 } from 'https://cardstack.com/base/card-api';
-import IntegerCard from 'https://cardstack.com/base/integer';
 import { Claim } from './claim';
 
 // perhaps cards-grid??
 export class Claims extends Card {
   static displayName = 'Claims';
-  @field claims = linksToMany(() => Claim);
-  @field count = contains(IntegerCard, {
-    computeVia(this: Claims) {
-      return this.claims.length;
-    },
-  });
+  @field claims = linksToMany(Claim);
   @field title = contains(StringCard);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <CardContainer class='demo-card' @displayBoundaries={{true}}>
-        <FieldContainer @label='Number of claims.'><@fields.count
-          /></FieldContainer>
+        <FieldContainer
+          @label='Number of claims.'
+        >{{@model.claims.length}}</FieldContainer>
       </CardContainer>
     </template>
   };
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <CardContainer class='demo-card' @displayBoundaries={{true}}>
-        <FieldContainer @label='Number of claims.'><@fields.count
-          /></FieldContainer>
+        <FieldContainer
+          @label='Number of claims'
+        >{{@model.claims.length}}</FieldContainer>
         <@fields.claims />
 
       </CardContainer>
