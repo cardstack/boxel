@@ -21,7 +21,7 @@ class Isolated extends Component<typeof CardsGrid> {
         {{#each this.request.instances as |card|}}
           <li
             data-test-cards-grid-item={{card.id}}
-            {{on 'click' (fn this.addToStack card)}}
+            {{on 'click' (fn this.openCard card)}}
           >
             <CardContainer class='grid-card'>
               <div class='grid-card__thumbnail'>
@@ -97,8 +97,8 @@ class Isolated extends Component<typeof CardsGrid> {
     this.createCard.perform();
   }
 
-  @action addToStack(card: Card) {
-    this.args.context?.optional?.addToStack(card);
+  @action openCard(card: Card) {
+    this.args.context?.optional?.openCard(card);
   }
 
   private createCard = restartableTask(async () => {
