@@ -47,15 +47,11 @@ class Isolated extends Component<typeof Claim> {
     this.initialize.perform(); //calls await function
   }
   private initialize = restartableTask(async () => {
-    this.connected = await this.isConnected();
-  });
-
-  async isConnected() {
     let metamaskChainId = await this.getChainId();
     let isChainEqual = this.args.model.chain?.chainId == metamaskChainId;
     let isConnected = await this.isMetamaskConnected();
-    return isConnected && isChainEqual;
-  }
+    this.connected = isConnected && isChainEqual;
+  });
 
   isMetamaskInstalled() {
     let isInstalled = window.ethereum !== 'undefined';
