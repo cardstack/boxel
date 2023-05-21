@@ -9,6 +9,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { Button, CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 import { tracked } from '@glimmer/tracking';
+import { restartableTask } from 'ember-concurrency';
 
 declare global {
   interface Window {
@@ -16,36 +17,44 @@ declare global {
   }
 }
 
-export class Claim extends Card {
-  static displayName = 'Claim';
-  @field
-  moduleAddress = contains(StringCard);
-  @field
-  safeAddress = contains(StringCard);
-  @field
-  explanation = contains(StringCard);
-  @field
-  signature = contains(StringCard);
-  @field
-  encoding = contains(StringCard);
-  @field
-  chain = linksTo(() => Chain);
-  @field title = contains(StringCard, {
-    computeVia: function (this: Claim) {
-      return `Claim for ${this.safeAddress}`;
-    },
-  });
-  get connected() {
-    return (async () => {
-      let metamaskChainId = await this.getChainId();
-      let isChainEqual = this.chain?.chainId == metamaskChainId;
-      let isConnected = await this.isMetamaskConnected();
-      return isConnected && isChainEqual;
-    })();
-  }
+class Isolated extends Component<typeof Claim> {
+  @tracked connected: any;
 
-  //=======
-  //metamask api
+  <template>
+    <CardContainer class='demo-card' @displayBoundaries={{true}}>
+      <FieldContainer @label='Module Address.'><@fields.moduleAddress
+        /></FieldContainer>
+      <FieldContainer @label='Safe Address'><@fields.safeAddress
+        /></FieldContainer>
+      <FieldContainer @label='Explanation'><@fields.explanation
+        /></FieldContainer>
+      <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
+      {{#if this.connected}}
+        <Button>
+          Claim
+        </Button>
+      {{else}}
+        <Button>
+          Connect
+        </Button>
+      {{/if}}
+    </CardContainer>
+  </template>
+
+  constructor(owner: unknown, args: any) {
+    super(owner, args);
+    this.initialize.perform(); //calls await function
+  }
+  private initialize = restartableTask(async () => {
+    this.connected = await this.isConnected();
+  });
+
+  async isConnected() {
+    let metamaskChainId = await this.getChainId();
+    let isChainEqual = this.args.model.chain?.chainId == metamaskChainId;
+    let isConnected = await this.isMetamaskConnected();
+    return isConnected && isChainEqual;
+  }
 
   isMetamaskInstalled() {
     let isInstalled = window.ethereum !== 'undefined';
@@ -86,8 +95,28 @@ export class Claim extends Card {
       return -1;
     }
   }
+}
 
-  //=======
+export class Claim extends Card {
+  static displayName = 'Claim';
+  @field
+  moduleAddress = contains(StringCard);
+  @field
+  safeAddress = contains(StringCard);
+  @field
+  explanation = contains(StringCard);
+  @field
+  signature = contains(StringCard);
+  @field
+  encoding = contains(StringCard);
+  @field
+  chain = linksTo(() => Chain);
+  @field title = contains(StringCard, {
+    computeVia: function (this: Claim) {
+      return `Claim for ${this.safeAddress}`;
+    },
+  });
+
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <CardContainer class='demo-card' @displayBoundaries={{true}}>
@@ -101,36 +130,5 @@ export class Claim extends Card {
       </CardContainer>
     </template>
   };
-  static isolated = class Isolated extends Component<typeof this> {
-    <template>
-      <CardContainer class='demo-card' @displayBoundaries={{true}}>
-        <FieldContainer @label='Module Address.'><@fields.moduleAddress
-          /></FieldContainer>
-        <FieldContainer @label='Safe Address'><@fields.safeAddress
-          /></FieldContainer>
-        <FieldContainer @label='Explanation'><@fields.explanation
-          /></FieldContainer>
-        <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
-        {{#if this.connected}}
-          <Button>
-            Claim
-          </Button>
-        {{else}}
-          <Button>
-            Connect
-          </Button>
-        {{/if}}
-      </CardContainer>
-    </template>
-
-    @tracked connected: any;
-    constructor(owner: unknown, args: any) {
-      super(owner, args);
-      this.initialize();
-    }
-
-    async initialize() {
-      this.connected = await this.args.model.connected;
-    }
-  };
+  static isolated = Isolated;
 }
