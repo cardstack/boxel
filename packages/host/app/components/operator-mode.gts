@@ -13,7 +13,7 @@ import { IconButton, Modal } from '@cardstack/boxel-ui';
 import SearchSheet, {
   SearchSheetMode,
 } from '@cardstack/host/components/search-sheet';
-import { restartableTask, type EncapsulatedTaskDescriptor as Descriptor } from 'ember-concurrency';
+import { restartableTask } from 'ember-concurrency';
 import {
   Deferred,
   identifyCard,
