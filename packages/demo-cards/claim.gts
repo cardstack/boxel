@@ -4,7 +4,6 @@ import {
   contains,
   field,
   StringCard,
-  linksTo,
   Component,
 } from 'https://cardstack.com/base/card-api';
 import { Button, CardContainer, FieldContainer } from '@cardstack/boxel-ui';
