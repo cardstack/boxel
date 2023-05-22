@@ -46,6 +46,10 @@ class Isolated extends Component<typeof Claim> {
   constructor(owner: unknown, args: any) {
     super(owner, args);
     this.initialize.perform();
+    if (window.ethereum) {
+      window.ethereum.on('chainChanged', () => this.initialize.perform());
+    }
+    //TODO: event listener still there if compoonent deleted
   }
   private initialize = restartableTask(async () => {
     let isSameNetwork = await this.isSameNetwork();
