@@ -96,18 +96,12 @@ class Isolated extends Component<typeof Claim> {
 
 export class Claim extends Card {
   static displayName = 'Claim';
-  @field
-  moduleAddress = contains(StringCard);
-  @field
-  safeAddress = contains(StringCard);
-  @field
-  explanation = contains(StringCard);
-  @field
-  signature = contains(StringCard);
-  @field
-  encoding = contains(StringCard);
-  @field
-  chain = linksTo(() => Chain);
+  @field moduleAddress = contains(StringCard);
+  @field safeAddress = contains(StringCard);
+  @field explanation = contains(StringCard);
+  @field signature = contains(StringCard);
+  @field encoding = contains(StringCard);
+  @field chain = contains(Chain);
   @field title = contains(StringCard, {
     computeVia: function (this: Claim) {
       return `Claim for ${this.safeAddress}`;

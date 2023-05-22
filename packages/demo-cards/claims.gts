@@ -11,7 +11,7 @@ import { Claim } from './claim';
 
 export class Claims extends Card {
   static displayName = 'Claims';
-  @field claims = linksToMany(Claim);
+  @field claims = linksToMany(() => Claim);
   @field title = contains(StringCard);
   static embedded = class Embedded extends Component<typeof this> {
     <template>

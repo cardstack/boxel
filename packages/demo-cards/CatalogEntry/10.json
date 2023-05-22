@@ -2,25 +2,20 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Claims from ../claims",
-      "description": "Catalog entry for Claims from ../claims",
+      "title": "Claims from http://localhost:4204/claims",
+      "description": "Catalog entry for Claims from http://localhost:4204/claims",
       "ref": {
-        "module": "../claims",
+        "module": "http://localhost:4204/claims",
         "name": "Claims"
       },
       "demo": {
-        "title": "List of Claims"
+        "title": null
       }
     },
     "relationships": {
-      "demo.claims.0": {
+      "demo.claims": {
         "links": {
-          "self": "../Claim/1"
-        }
-      },
-      "demo.claims.1": {
-        "links": {
-          "self": "../Claim/2"
+          "self": null
         }
       }
     },
@@ -28,7 +23,7 @@
       "fields": {
         "demo": {
           "adoptsFrom": {
-            "module": "../claims",
+            "module": "http://localhost:4204/claims",
             "name": "Claims"
           }
         }
