@@ -35,6 +35,7 @@ import { registerDestructor } from '@ember/destroyable';
 import type { Query } from '@cardstack/runtime-common/query';
 import { getSearchResults, type Search } from '../resources/search';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import perform from 'ember-concurrency/helpers/perform';
 
 interface Signature {
   Args: {
@@ -272,11 +273,7 @@ export default class OperatorMode extends Component<Signature> {
       `);
   }
 
-  @action async performAddCard() {
-    (this.addCard as unknown as Descriptor<any, any[]>).perform();
-  };
-
-  private addCard = restartableTask(async () => {
+  addCard = restartableTask(async () => {
     let type = identifyCard(this.args.firstCardInStack.constructor) ?? baseCardRef;
     let chosenCard: Card | undefined = await chooseCard({
       filter: { type }
@@ -306,7 +303,7 @@ export default class OperatorMode extends Component<Signature> {
           <p class='operator-mode__no-cards__add-card-title'>Add a card to get started</p>
           {{!-- Cannot find an svg icon with plus in the box 
           that we can fill the color of the plus and the box. --}}
-          <button class='operator-mode__no-cards__add-card-button icon-button' {{on 'click' this.performAddCard}} data-test-add-card-button>
+          <button class='operator-mode__no-cards__add-card-button icon-button' {{on 'click' (fn (perform this.addCard))}} data-test-add-card-button>
             {{svgJar
               'icon-plus'
               width='50px'
