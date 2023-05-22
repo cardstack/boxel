@@ -674,7 +674,7 @@ nav>.directory-level {
   outline: none;
 }
 
-.operator-mode__add-card {
+.operator-mode__no-cards {
   height: calc(100% - var(--search-sheet-closed-height));
   width: 100%;
   max-width: 50rem;
@@ -684,12 +684,12 @@ nav>.directory-level {
   align-items: center;
 }
 
-.operator-mode__add-card__title {
+.operator-mode__no-cards__add-card-title {
   color: var(--boxel-light);
   font: var(--boxel-font-lg);
 }
 
-.operator-mode__add-card__button {
+.operator-mode__no-cards__add-card-button {
   height: 350px;
   width: 200px;
   vertical-align: middle;
@@ -699,11 +699,11 @@ nav>.directory-level {
   border-radius: var(--boxel-border-radius);
 }
 
-.operator-mode__add-card__button:hover {
+.operator-mode__no-cards__add-card-button:hover {
   background: var(--boxel-dark);
 }
 
-.operator-mode__add-card__button .icon-button{
+.operator-mode__no-cards__add-card-button .icon-button{
   width: 100%;
 }
 

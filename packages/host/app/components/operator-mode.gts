@@ -34,6 +34,7 @@ import { htmlSafe } from '@ember/template';
 import { registerDestructor } from '@ember/destroyable';
 import type { Query } from '@cardstack/runtime-common/query';
 import { getSearchResults, type Search } from '../resources/search';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
 interface Signature {
   Args: {
@@ -271,7 +272,7 @@ export default class OperatorMode extends Component<Signature> {
       `);
   }
 
-  @action async add() {
+  @action async performAddCard() {
     (this.addCard as unknown as Descriptor<any, any[]>).perform();
   };
 
@@ -301,19 +302,16 @@ export default class OperatorMode extends Component<Signature> {
       <CardCatalogModal />
 
       {{#if (eq this.stack.length 0)}}
-        <div class='operator-mode__add-card'>
-          <p class='operator-mode__add-card__title'>Add a card to get started</p>
+        <div class='operator-mode__no-cards'>
+          <p class='operator-mode__no-cards__add-card-title'>Add a card to get started</p>
           {{!-- Cannot find an svg icon with plus in the box 
           that we can fill the color of the plus and the box. --}}
-          <button class='operator-mode__add-card__button' {{on 'click' this.add}}>
-            <IconButton
-              @icon='icon-plus'
-              @width='50px'
-              @height='50px'
-              class='icon-button'
-              aria-label='Add card button'
-              data-test-add-card-button
-            />
+          <button class='operator-mode__no-cards__add-card-button icon-button' {{on 'click' this.performAddCard}} data-test-add-card-button>
+            {{svgJar
+              'icon-plus'
+              width='50px'
+              height='50px'
+            }}
           </button>
         </div>
       {{else}}
