@@ -32,7 +32,7 @@ class Isolated extends Component<typeof Claim> {
         /></FieldContainer>
       <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
       {{#if this.connected}}
-        <Button>
+        <Button {{on 'click' this.claim}}>
           Claim
         </Button>
       {{else}}
@@ -119,6 +119,10 @@ class Isolated extends Component<typeof Claim> {
       return -1;
     }
   }
+  claim = async () => {
+    console.log('claiming');
+    console.log(this.args.model.card);
+  };
 }
 
 export class Claim extends Card {
