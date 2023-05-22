@@ -1,7 +1,7 @@
 import Modifier from 'ember-modifier';
 import { registerDestructor } from '@ember/destroyable';
 
-interface Signature {
+interface PaginateSignature {
   Args: {
     Named: {
       onScrollTop: () => void;
@@ -9,13 +9,14 @@ interface Signature {
     };
   };
 }
-export class ScrollPaginate extends Modifier<Signature> {
+
+export class ScrollPaginate extends Modifier<PaginateSignature> {
   private interval: number | undefined;
 
   modify(
     element: HTMLElement,
     _positional: [],
-    { onScrollTop, isDisabled }: Signature['Args']['Named']
+    { onScrollTop, isDisabled }: PaginateSignature['Args']['Named']
   ) {
     this.interval = setInterval(() => {
       if (element.scrollTop === 0 && !isDisabled()) {
@@ -28,8 +29,20 @@ export class ScrollPaginate extends Modifier<Signature> {
   }
 }
 
-export class ScrollIntoView extends Modifier {
-  modify(element: HTMLElement) {
+interface ScrollSignature {
+  Args: {
+    Named: {
+      register: (scrollIntoView: () => void) => void;
+    };
+  };
+}
+export class ScrollIntoView extends Modifier<ScrollSignature> {
+  modify(
+    element: HTMLElement,
+    _positional: [],
+    { register }: ScrollSignature['Args']['Named']
+  ) {
     element.scrollIntoView();
+    register(() => element.scrollIntoView());
   }
 }

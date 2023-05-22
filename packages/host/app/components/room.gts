@@ -3,25 +3,29 @@ import { service } from '@ember/service';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
-import { not, or } from '../helpers/truth-helpers';
-import { ScrollIntoView, ScrollPaginate } from '../modifiers/scrollers';
-import { restartableTask } from 'ember-concurrency';
+import debounce from 'lodash/debounce';
+import { not, or, and } from '../helpers/truth-helpers';
+import { ScrollPaginate } from '../modifiers/scrollers';
+import { restartableTask, enqueueTask } from 'ember-concurrency';
 import {
   BoxelHeader,
-  BoxelMessage,
   BoxelInput,
   LoadingIndicator,
   FieldContainer,
   Button,
 } from '@cardstack/boxel-ui';
-import { type RoomMember } from 'matrix-js-sdk';
-import cssVar from '@cardstack/boxel-ui/helpers/css-var';
-import { formatRFC3339 } from 'date-fns';
-import { marked } from 'marked';
-import { sanitize } from 'dompurify';
-import type MatrixService from '../services/matrix-service';
 import { TrackedMap } from 'tracked-built-ins';
-import { type Event } from '../services/matrix-service';
+import {
+  type LooseSingleCardDocument,
+  chooseCard,
+  baseCardRef,
+} from '@cardstack/runtime-common';
+import Message from './message';
+import { type RoomMember } from 'matrix-js-sdk';
+import type MatrixService from '../services/matrix-service';
+import { eventDebounceMs } from '../services/matrix-service';
+import { type Card } from 'https://cardstack.com/base/card-api';
+import type CardService from '../services/card-service';
 
 const TRUE = true;
 
@@ -106,6 +110,9 @@ export default class Room extends Component<RoomArgs> {
             @event={{event}}
             @members={{this.members}}
             @index={{index}}
+            @loadCard={{this.loadCard}}
+            @register={{this.registerMessage}}
+            @resetScroll={{this.resetScroll}}
           />
         {{else}}
           <div data-test-no-messages>
@@ -125,21 +132,45 @@ export default class Room extends Component<RoomArgs> {
         rows='4'
         cols='20'
       />
+      {{#if this.card}}
+        <Button data-test-remove-card-btn {{on 'click' this.removeCard}}>Remove
+          Card</Button>
+      {{else}}
+        <Button
+          data-test-choose-card-btn
+          @disabled={{this.doChooseCard.isRunning}}
+          {{on 'click' this.chooseCard}}
+        >Choose Card</Button>
+      {{/if}}
       <Button
         data-test-send-message-btn
-        @disabled={{not this.message}}
+        @disabled={{and (not this.message) (not this.card)}}
         @loading={{this.doSendMessage.isRunning}}
         @kind='primary'
         {{on 'click' this.sendMessage}}
       >Send</Button>
     </div>
+    {{#if this.card}}
+      <div class='room__selected-card'>
+        <div class='room__selected-card__field'>Selected Card:</div>
+        <div
+          class='room__selected-card__card-wrapper'
+          data-test-selected-card={{this.card.id}}
+        >
+          <this.cardComponent />
+        </div>
+      </div>
+    {{/if}}
   </template>
 
   @service private declare matrixService: MatrixService;
+  @service declare cardService: CardService;
   @tracked private paginationTime: number | undefined;
   @tracked private isInviteMode = false;
   @tracked private membersToInvite: string[] = [];
   private messages: TrackedMap<string, string | undefined> = new TrackedMap();
+  private cards: TrackedMap<string, Card | undefined> = new TrackedMap();
+  private messageScrollers: Map<string, Map<string, () => void>> = new Map();
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -197,6 +228,17 @@ export default class Room extends Component<RoomArgs> {
     return this.messages.get(this.args.roomId);
   }
 
+  get card() {
+    return this.cards.get(this.args.roomId);
+  }
+
+  get cardComponent() {
+    if (this.card) {
+      return this.card.constructor.getComponent(this.card, 'embedded');
+    }
+    return;
+  }
+
   get membersToInviteFormatted() {
     return this.membersToInvite.join(', ');
   }
@@ -213,12 +255,12 @@ export default class Room extends Component<RoomArgs> {
 
   @action
   private sendMessage() {
-    if (!this.message) {
+    if (this.message == null && !this.card) {
       throw new Error(
-        `bug: should never get here, send button is disabled when there is no message`
+        `bug: should never get here, send button is disabled when there is no message nor card`
       );
     }
-    this.doSendMessage.perform(this.message);
+    this.doSendMessage.perform(this.message, this.card);
   }
 
   @action
@@ -246,15 +288,46 @@ export default class Room extends Component<RoomArgs> {
     this.doInvite.perform();
   }
 
-  private doSendMessage = restartableTask(async (message: string) => {
-    this.messages.set(this.args.roomId, undefined);
-    let html = sanitize(marked(message));
-    await this.matrixService.client.sendHtmlMessage(
-      this.args.roomId,
-      message,
-      html
-    );
-  });
+  @action
+  private chooseCard() {
+    this.doChooseCard.perform();
+  }
+
+  @action
+  private removeCard() {
+    this.cards.set(this.args.roomId, undefined);
+  }
+
+  @action
+  registerMessage(id: string, scrollIntoView: () => void) {
+    let room = this.messageScrollers.get(this.args.roomId);
+    if (!room) {
+      room = new Map();
+      this.messageScrollers.set(this.args.roomId, room);
+    }
+    room.set(id, scrollIntoView);
+  }
+
+  // tell the last message to scroll into view
+  private resetScroll = debounce(() => {
+    let room = this.messageScrollers.get(this.args.roomId);
+    if (!room) {
+      return;
+    }
+    let lastEvent = [...this.timelineEvents.values()].pop();
+    let scrollTo = room.get(lastEvent?.event_id!);
+    if (scrollTo) {
+      scrollTo();
+    }
+  }, eventDebounceMs);
+
+  private doSendMessage = restartableTask(
+    async (message: string | undefined, card?: Card) => {
+      this.messages.set(this.args.roomId, undefined);
+      this.cards.set(this.args.roomId, undefined);
+      await this.matrixService.sendMessage(this.args.roomId, message, card);
+    }
+  );
 
   private doRoomScrollBack = restartableTask(async () => {
     await this.matrixService.client.scrollback(this.room!);
@@ -270,78 +343,37 @@ export default class Room extends Component<RoomArgs> {
     await this.matrixService.flushTimeline;
   });
 
+  private doChooseCard = restartableTask(async () => {
+    let chosenCard: Card | undefined = await chooseCard({
+      filter: { type: baseCardRef },
+    });
+    if (chosenCard) {
+      this.cards.set(this.args.roomId, chosenCard);
+    }
+  });
+
+  // we are working around the loader bug that deadlocks when loading cyclic dependencies
+  // concurrently. When loading cards we use the enqueue task to load one card at a time
+  // in the room. When this bug is fixed we should move this method into the Message component
+  // so cards can load concurrently.
+  private loadCard = enqueueTask(
+    async (doc: LooseSingleCardDocument, onComplete: (card: Card) => void) => {
+      let id = doc.data.id;
+      if (!id) {
+        throw new Error(`Cannot render unsaved card`);
+      }
+      let card = await this.cardService.createFromSerialized(
+        doc.data,
+        doc,
+        new URL(id)
+      );
+      onComplete(card);
+    }
+  );
+
   private resetInvite() {
     this.membersToInvite = [];
     this.isInviteMode = false;
-  }
-}
-
-interface MessageArgs {
-  Args: {
-    event: Event;
-    index: number;
-    members: { member: RoomMember }[];
-  };
-}
-
-const messageStyle = {
-  boxelMessageAvatarSize: '2.5rem',
-  boxelMessageMetaHeight: '1.25rem',
-  boxelMessageGap: 'var(--boxel-sp)',
-  boxelMessageMarginLeft:
-    'calc( var(--boxel-message-avatar-size) + var(--boxel-message-gap) )',
-};
-
-class Message extends Component<MessageArgs> {
-  <template>
-    <BoxelMessage
-      {{ScrollIntoView}}
-      data-test-message-idx={{this.args.index}}
-      @name={{this.sender.member.name}}
-      @datetime={{formatRFC3339 this.timestamp}}
-      style={{cssVar
-        boxel-message-avatar-size=messageStyle.boxelMessageAvatarSize
-        boxel-message-meta-height=messageStyle.boxelMessageMetaHeight
-        boxel-message-gap=messageStyle.boxelMessageGap
-        boxel-message-margin-left=messageStyle.boxelMessageMarginLeft
-      }}
-    >
-      {{{this.content}}}
-    </BoxelMessage>
-  </template>
-
-  @service private declare matrixService: MatrixService;
-
-  get sender() {
-    let member = this.args.members.find(
-      (m) => m.member.userId === this.args.event.sender
-    );
-    if (!member) {
-      let user = this.matrixService.client.getUser(this.args.event.sender!);
-      return {
-        member: {
-          name: `${user?.displayName ?? this.args.event.sender} (left room)`,
-        },
-      };
-    }
-    return member;
-  }
-
-  get content() {
-    return this.htmlContent ?? this.rawContent;
-  }
-
-  get htmlContent() {
-    // We have sanitized this using DOMPurify
-    return this.args.event.content?.formatted_body;
-  }
-
-  get rawContent() {
-    return this.args.event.content?.body;
-  }
-
-  get timestamp() {
-    return this.args.event.origin_server_ts!;
   }
 }
 
