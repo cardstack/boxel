@@ -9,7 +9,7 @@ import type CardService from '../services/card-service';
 // import getValueFromWeakMap from '../helpers/get-value-from-weakmap';
 import { eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import cn from '@cardstack/boxel-ui/helpers/cn';
-import { IconButton, Modal } from '@cardstack/boxel-ui';
+import { IconButton, Modal, Header, CardContainer } from '@cardstack/boxel-ui';
 import SearchSheet, {
   SearchSheetMode,
 } from '@cardstack/host/components/search-sheet';
@@ -299,7 +299,7 @@ export default class OperatorMode extends Component<Signature> {
             data-test-stack-card={{item.card.id}}
             style={{this.styleForStackedCard this.stack i}}
           >
-            <div
+            <CardContainer
               class={{cn
                 'operator-mode-card-stack__card__item'
                 operator-mode-card-stack__card__item_edit=(eq
@@ -307,38 +307,39 @@ export default class OperatorMode extends Component<Signature> {
                 )
               }}
             >
+              <Header
+                @title={{cardTypeDisplayName item.card}}
+                class='operator-mode-card-stack__card__header'
+              >
+                <:actions>
+                  {{#if (not (eq item.format 'edit'))}}
+                    <IconButton
+                      @icon='icon-horizontal-three-dots'
+                      @width='20px'
+                      @height='20px'
+                      class='icon-button'
+                      aria-label='Edit'
+                      {{on 'click' (fn this.edit item i)}}
+                      data-test-edit-button
+                    />
+                  {{/if}}
+                  <IconButton
+                    @icon='icon-x'
+                    @width='20px'
+                    @height='20px'
+                    class='icon-button'
+                    aria-label='Close'
+                    {{on 'click' (fn this.close item)}}
+                    data-test-close-button
+                  />
+                </:actions>
+              </Header>
               <Preview
                 @card={{item.card}}
                 @format={{item.format}}
                 @context={{this.context}}
               />
-            </div>
-            <div class='operator-mode-card-stack__card__header'>
-              <div
-                class='operator-mode-card-stack__card__header__type'
-                data-type-display-name
-              >{{cardTypeDisplayName item.card}}</div>
-              {{#if (not (eq item.format 'edit'))}}
-                <IconButton
-                  @icon='icon-horizontal-three-dots'
-                  @width='20px'
-                  @height='20px'
-                  class='icon-button'
-                  aria-label='Edit'
-                  {{on 'click' (fn this.edit item i)}}
-                  data-test-edit-button
-                />
-              {{/if}}
-              <IconButton
-                @icon='icon-x'
-                @width='20px'
-                @height='20px'
-                class='icon-button'
-                aria-label='Close'
-                {{on 'click' (fn this.close item)}}
-                data-test-close-button
-              />
-            </div>
+            </CardContainer>
             {{#if (eq item.format 'edit')}}
               <div class='operator-mode-card-stack__card__footer'>
                 <button

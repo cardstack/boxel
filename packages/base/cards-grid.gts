@@ -16,7 +16,7 @@ import { fn } from '@ember/helper';
 
 class Isolated extends Component<typeof CardsGrid> {
   <template>
-    <CardContainer class='cards-grid'>
+    <div class='cards-grid'>
       <ul class='cards-grid__cards'>
         {{#each this.request.instances as |card|}}
           <li
@@ -61,7 +61,7 @@ class Isolated extends Component<typeof CardsGrid> {
           data-test-create-new-card-button
         />
       {{/if}}
-    </CardContainer>
+    </div>
   </template>
 
   @tracked request?: {

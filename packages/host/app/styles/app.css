@@ -376,7 +376,7 @@ nav>.directory-level {
 
   position: relative;
   max-width: 70rem;
-  padding: var(--boxel-sp-xxxl) var(--boxel-sp-xl);
+  padding: var(--boxel-sp-xl);
   margin: 0 auto;
 }
 .cards-grid__cards {
@@ -458,27 +458,6 @@ nav>.directory-level {
 
 .operator-mode-card-stack__card {
   position: relative;
-}
-
-.operator-mode-card-stack__card__header {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  padding: var(--boxel-sp-xs);
-
-  display: flex;
-  flex-direction: row;
-}
-
-.operator-mode-card-stack__card__header__type {
-  flex-grow: 1;
-  font: var(--boxel-font-lg);
-}
-
-.operator-mode-card-stack__card__header-item {
-  cursor: pointer;
-  margin-right: 10px;
 }
 
 .operator-mode-card-stack__card__item {
