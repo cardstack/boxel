@@ -49,7 +49,6 @@ class Isolated extends Component<typeof Claim> {
     if (window.ethereum) {
       window.ethereum.on('chainChanged', () => this.initialize.perform());
     }
-    //TODO: event listener still there if compoonent deleted
   }
   private initialize = restartableTask(async () => {
     let isSameNetwork = await this.isSameNetwork();
@@ -109,7 +108,6 @@ class Isolated extends Component<typeof Claim> {
     }
   };
 
-  // chainId and networkId are not the same. You can get networkId using the metamask api.
   async getChainId() {
     try {
       if (!this.isMetamaskInstalled()) {
