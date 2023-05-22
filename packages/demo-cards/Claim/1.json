@@ -13,7 +13,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "http://localhost:4204/claim",
+        "module": "../claim",
         "name": "Claim"
       }
     }

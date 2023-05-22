@@ -2,10 +2,10 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Claim from http://localhost:4204/claim",
-      "description": "Catalog entry for Claim from http://localhost:4204/claim",
+      "title": "Claim from ../claim",
+      "description": "Catalog entry for Claim from ../claim",
       "ref": {
-        "module": "http://localhost:4204/claim",
+        "module": "../claim",
         "name": "Claim"
       },
       "demo": {
@@ -23,7 +23,7 @@
       "fields": {
         "demo": {
           "adoptsFrom": {
-            "module": "http://localhost:4204/claim",
+            "module": "../claim",
             "name": "Claim"
           }
         }
