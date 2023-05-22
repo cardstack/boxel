@@ -20,7 +20,7 @@ import { stringify } from 'qs';
 import { Query } from '@cardstack/runtime-common/query';
 import { setupCardLogs, createRealm } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-import { shimExternals } from '@cardstack/runtime-common/externals-global';
+import { shimExternals } from '../lib/externals';
 import eventSource from 'eventsource';
 
 setGracefulCleanup();

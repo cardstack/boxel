@@ -3,7 +3,7 @@ import { Loader } from '@cardstack/runtime-common';
 import { dirSync, setGracefulCleanup } from 'tmp';
 import { createRealm } from './helpers';
 import { baseRealm } from '@cardstack/runtime-common';
-import { shimExternals } from '@cardstack/runtime-common/externals-global';
+import { shimExternals } from '../lib/externals';
 
 setGracefulCleanup();
 
