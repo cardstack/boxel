@@ -271,12 +271,12 @@ export default class OperatorMode extends Component<Signature> {
     let invertedIndex = stack.length - index - 1;
 
     let widthReductionPercent = 5; // Every new card on the stack is 5% wider than the previous one
-    let offsetPx = 65; // Every new card on the stack is 65px lower than the previous one
+    let offsetPx = 40; // Every new card on the stack is 40px lower than the previous one
 
     return htmlSafe(`
       width: ${100 - invertedIndex * widthReductionPercent}%;
       z-index: ${stack.length - invertedIndex};
-      margin-top: calc(${offsetPx}px * ${index + 1});
+      padding-top: calc(${offsetPx}px * ${index});
       `);
   }
 
@@ -300,17 +300,15 @@ export default class OperatorMode extends Component<Signature> {
 
         {{#each this.stack as |item i|}}
           <div
-            class='operator-mode-card-stack__card'
+            class='operator-mode-card-stack__item'
             data-test-stack-card-index={{i}}
             data-test-stack-card={{item.card.id}}
             style={{this.styleForStackedCard this.stack i}}
           >
             <CardContainer
               class={{cn
-                'operator-mode-card-stack__card__item'
-                operator-mode-card-stack__card__item_edit=(eq
-                  item.format 'edit'
-                )
+                'operator-mode-card-stack__card'
+                operator-mode-card-stack__card--edit=(eq item.format 'edit')
               }}
             >
               <Header
@@ -340,11 +338,13 @@ export default class OperatorMode extends Component<Signature> {
                   />
                 </:actions>
               </Header>
-              <Preview
-                @card={{item.card}}
-                @format={{item.format}}
-                @context={{this.context}}
-              />
+              <div class='operator-mode-card-stack__card__content'>
+                <Preview
+                  @card={{item.card}}
+                  @format={{item.format}}
+                  @context={{this.context}}
+                />
+              </div>
               {{#if (eq item.format 'edit')}}
                 <footer class='operator-mode-card-stack__card__footer'>
                   <Button
