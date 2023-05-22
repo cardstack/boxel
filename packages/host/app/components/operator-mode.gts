@@ -9,7 +9,13 @@ import type CardService from '../services/card-service';
 // import getValueFromWeakMap from '../helpers/get-value-from-weakmap';
 import { eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import cn from '@cardstack/boxel-ui/helpers/cn';
-import { IconButton, Modal, Header, CardContainer } from '@cardstack/boxel-ui';
+import {
+  IconButton,
+  Modal,
+  Header,
+  CardContainer,
+  Button,
+} from '@cardstack/boxel-ui';
 import SearchSheet, {
   SearchSheetMode,
 } from '@cardstack/host/components/search-sheet';
@@ -339,27 +345,31 @@ export default class OperatorMode extends Component<Signature> {
                 @format={{item.format}}
                 @context={{this.context}}
               />
+              {{#if (eq item.format 'edit')}}
+                <footer class='operator-mode-card-stack__card__footer'>
+                  <Button
+                    @kind='secondary-light'
+                    @size='tall'
+                    class='operator-mode-card-stack__card__footer-button'
+                    {{on 'click' (fn this.cancel item)}}
+                    aria-label='Cancel'
+                    data-test-cancel-button
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    @kind='primary'
+                    @size='tall'
+                    class='operator-mode-card-stack__card__footer-button'
+                    {{on 'click' (fn this.save item)}}
+                    aria-label='Save'
+                    data-test-save-button
+                  >
+                    Save
+                  </Button>
+                </footer>
+              {{/if}}
             </CardContainer>
-            {{#if (eq item.format 'edit')}}
-              <div class='operator-mode-card-stack__card__footer'>
-                <button
-                  class='operator-mode-card-stack__card__footer-button light-button'
-                  {{on 'click' (fn this.cancel item)}}
-                  aria-label='Cancel'
-                  data-test-cancel-button
-                >
-                  Cancel
-                </button>
-                <button
-                  class='operator-mode-card-stack__card__footer-button'
-                  {{on 'click' (fn this.save item)}}
-                  aria-label='Save'
-                  data-test-save-button
-                >
-                  Save
-                </button>
-              </div>
-            {{/if}}
           </div>
         {{/each}}
       </div>

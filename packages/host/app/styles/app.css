@@ -473,44 +473,13 @@ nav>.directory-level {
 }
 
 .operator-mode-card-stack__card__footer {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  padding: 12px;
-
   display: flex;
-  flex-direction: row;
-
-  z-index: 99;
+  justify-content: flex-end;
+  padding: var(--boxel-sp-xl);
 }
 
-.operator-mode-card-stack__card__footer-button {
-  --button-bg: var(--boxel-teal);
-  --text-color: var(--boxel-light);
-
-  cursor: pointer;
-  width: 95px;
-  margin-right: 10px;
-  padding: var(--boxel-sp-xxxs);
-
-  background-color: var(--button-bg);
-  color: var(--text-color);
-  font-size: var(--boxel-font-size-sm);
-  font-weight: 500;
-
-  border: none;
-  border-radius: var(--boxel-border-radius-lg);
-}
-
-.light-button {
-  --button-bg: var(--boxel-light);
-  --text-color: var(--boxel-dark);
-
-  border: var(--boxel-border)
-}
-
-.operator-mode-card-stack__card__footer-button:hover {
-  --button-bg: var(--boxel-purple-300);
+.operator-mode-card-stack__card__footer-button + .operator-mode-card-stack__card__footer-button {
+  margin-left: var(--boxel-sp-xs);
 }
 
 .operator-mode-overlayed-button {
