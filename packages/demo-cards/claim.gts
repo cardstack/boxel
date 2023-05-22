@@ -121,7 +121,6 @@ class Isolated extends Component<typeof Claim> {
   }
   claim = async () => {
     console.log('claiming');
-    console.log(this.args.model.card);
   };
 }
 
