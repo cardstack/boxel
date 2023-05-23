@@ -9,7 +9,13 @@ import type CardService from '../services/card-service';
 // import getValueFromWeakMap from '../helpers/get-value-from-weakmap';
 import { eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import cn from '@cardstack/boxel-ui/helpers/cn';
-import { IconButton, Modal } from '@cardstack/boxel-ui';
+import {
+  IconButton,
+  Modal,
+  Header,
+  CardContainer,
+  Button,
+} from '@cardstack/boxel-ui';
 import SearchSheet, {
   SearchSheetMode,
 } from '@cardstack/host/components/search-sheet';
@@ -265,12 +271,12 @@ export default class OperatorMode extends Component<Signature> {
     let invertedIndex = stack.length - index - 1;
 
     let widthReductionPercent = 5; // Every new card on the stack is 5% wider than the previous one
-    let offsetPx = 65; // Every new card on the stack is 65px lower than the previous one
+    let offsetPx = 40; // Every new card on the stack is 40px lower than the previous one
 
     return htmlSafe(`
       width: ${100 - invertedIndex * widthReductionPercent}%;
       z-index: ${stack.length - invertedIndex};
-      margin-top: calc(${offsetPx}px * ${index + 1});
+      padding-top: calc(${offsetPx}px * ${index});
       `);
   }
 
@@ -294,71 +300,76 @@ export default class OperatorMode extends Component<Signature> {
 
         {{#each this.stack as |item i|}}
           <div
-            class='operator-mode-card-stack__card'
+            class='operator-mode-card-stack__item'
             data-test-stack-card-index={{i}}
             data-test-stack-card={{item.card.id}}
             style={{this.styleForStackedCard this.stack i}}
           >
-            <div
+            <CardContainer
               class={{cn
-                'operator-mode-card-stack__card__item'
-                operator-mode-card-stack__card__item_edit=(eq
-                  item.format 'edit'
-                )
+                'operator-mode-card-stack__card'
+                operator-mode-card-stack__card--edit=(eq item.format 'edit')
               }}
             >
-              <Preview
-                @card={{item.card}}
-                @format={{item.format}}
-                @context={{this.context}}
-              />
-            </div>
-            <div class='operator-mode-card-stack__card__header'>
-              <div
-                class='operator-mode-card-stack__card__header__type'
-                data-type-display-name
-              >{{cardTypeDisplayName item.card}}</div>
-              {{#if (not (eq item.format 'edit'))}}
-                <IconButton
-                  @icon='icon-horizontal-three-dots'
-                  @width='20px'
-                  @height='20px'
-                  class='icon-button'
-                  aria-label='Edit'
-                  {{on 'click' (fn this.edit item i)}}
-                  data-test-edit-button
+              <Header
+                @title={{cardTypeDisplayName item.card}}
+                class='operator-mode-card-stack__card__header'
+              >
+                <:actions>
+                  {{#if (not (eq item.format 'edit'))}}
+                    <IconButton
+                      @icon='icon-horizontal-three-dots'
+                      @width='20px'
+                      @height='20px'
+                      class='icon-button'
+                      aria-label='Edit'
+                      {{on 'click' (fn this.edit item i)}}
+                      data-test-edit-button
+                    />
+                  {{/if}}
+                  <IconButton
+                    @icon='icon-x'
+                    @width='20px'
+                    @height='20px'
+                    class='icon-button'
+                    aria-label='Close'
+                    {{on 'click' (fn this.close item)}}
+                    data-test-close-button
+                  />
+                </:actions>
+              </Header>
+              <div class='operator-mode-card-stack__card__content'>
+                <Preview
+                  @card={{item.card}}
+                  @format={{item.format}}
+                  @context={{this.context}}
                 />
-              {{/if}}
-              <IconButton
-                @icon='icon-x'
-                @width='20px'
-                @height='20px'
-                class='icon-button'
-                aria-label='Close'
-                {{on 'click' (fn this.close item)}}
-                data-test-close-button
-              />
-            </div>
-            {{#if (eq item.format 'edit')}}
-              <div class='operator-mode-card-stack__card__footer'>
-                <button
-                  class='operator-mode-card-stack__card__footer-button light-button'
-                  {{on 'click' (fn this.cancel item)}}
-                  aria-label='Cancel'
-                  data-test-cancel-button
-                >
-                  Cancel
-                </button>
-                <button
-                  class='operator-mode-card-stack__card__footer-button'
-                  {{on 'click' (fn this.save item)}}
-                  aria-label='Save'
-                  data-test-save-button
-                >
-                  Save
-                </button>
               </div>
-            {{/if}}
+              {{#if (eq item.format 'edit')}}
+                <footer class='operator-mode-card-stack__card__footer'>
+                  <Button
+                    @kind='secondary-light'
+                    @size='tall'
+                    class='operator-mode-card-stack__card__footer-button'
+                    {{on 'click' (fn this.cancel item)}}
+                    aria-label='Cancel'
+                    data-test-cancel-button
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    @kind='primary'
+                    @size='tall'
+                    class='operator-mode-card-stack__card__footer-button'
+                    {{on 'click' (fn this.save item)}}
+                    aria-label='Save'
+                    data-test-save-button
+                  >
+                    Save
+                  </Button>
+                </footer>
+              {{/if}}
+            </CardContainer>
           </div>
         {{/each}}
       </div>

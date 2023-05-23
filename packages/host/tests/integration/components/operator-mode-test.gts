@@ -455,18 +455,16 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await waitFor('[data-test-person]');
-    assert.dom('[data-type-display-name]').hasText('Person');
+    assert.dom('[data-test-boxel-header-title]').hasText('Person');
     assert.dom('[data-test-person]').hasText('Fadhlan');
     assert.dom('[data-test-first-letter-of-the-name]').hasText('F');
     assert.dom('[data-test-city]').hasText('Bandung');
     assert.dom('[data-test-country]').hasText('Indonesia');
-    assert.dom('.operator-mode-card-stack__card').exists({ count: 1 });
+    assert.dom('[data-test-stack-card]').exists({ count: 1 });
     await waitFor('[data-test-cardstack-operator-mode-overlay-button]');
     await click('[data-test-cardstack-operator-mode-overlay-button]');
-    assert.dom('.operator-mode-card-stack__card').exists({ count: 2 });
-    assert
-      .dom('.operator-mode-card-stack__card:nth-of-type(2)')
-      .includesText('Mango');
+    assert.dom('[data-test-stack-card]').exists({ count: 2 });
+    assert.dom('[data-test-stack-card-index="1"]').includesText('Mango');
   });
 
   test("it doesn't change the field value if user clicks cancel in edit view", async function (assert) {
@@ -635,7 +633,7 @@ module('Integration | operator-mode', function (hooks) {
 
     assert.dom(`[data-test-stack-card-index="1"]`).exists(); // Opens card on the stack
     assert
-      .dom(`[data-test-stack-card-index="1"] [data-type-display-name]`)
+      .dom(`[data-test-stack-card-index="1"] [data-test-boxel-header-title]`)
       .includesText('Person');
 
     await click('[data-test-stack-card-index="1"] [data-test-close-button]');
