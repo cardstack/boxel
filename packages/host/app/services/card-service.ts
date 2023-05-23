@@ -16,6 +16,7 @@ import type {
   Card,
   CardBase,
   Field,
+  SerializeOpts,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
@@ -104,9 +105,17 @@ export default class CardService extends Service {
     );
   }
 
+  async serializeCard(
+    card: Card,
+    opts?: SerializeOpts
+  ): Promise<LooseSingleCardDocument> {
+    await this.apiModule.loaded;
+    return this.api.serializeCard(card, opts);
+  }
+
   async saveModel(card: Card): Promise<Card> {
     await this.apiModule.loaded;
-    let doc = this.api.serializeCard(card, { includeComputeds: true });
+    let doc = await this.serializeCard(card, { includeComputeds: true });
     let isSaved = this.api.isSaved(card);
     let relativeTo = isSaved ? new URL(card.id) : this.defaultURL;
     let json = await this.saveCardDocument(

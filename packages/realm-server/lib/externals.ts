@@ -1,14 +1,6 @@
-/* eslint-disable @typescript-eslint/no-empty-function */
+import { Loader } from '@cardstack/runtime-common/loader';
 
-import { Loader } from './loader';
-
-// Note: even though cards are only run in the host context (via fastboot), we
-// still use these stubs because we deserialize cards in the server which means
-// that the card module is imported, and these externals are seen by the
-// card-api that the card modules depend on. Might be worth auditing all the
-// places where server deserialization happens to see if its really necessary.
-
-import * as runtime from './index';
+import * as runtime from '@cardstack/runtime-common';
 import * as boxelUI from '@cardstack/boxel-ui';
 import * as flat from 'flat';
 import * as lodash from 'lodash';

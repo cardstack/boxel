@@ -30,7 +30,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
     ...attributes
   >
     {{#if (or @label @title)}}
-      <div>
+      <div data-test-boxel-header-title>
         {{#if @label}}<Label
             data-test-boxel-header-label
           >{{@label}}</Label>{{/if}}

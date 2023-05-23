@@ -4,7 +4,12 @@ import {
   synapseStop,
   type SynapseInstance,
 } from '../docker/synapse';
-import { testHost, assertLoggedIn, assertLoggedOut } from '../helpers';
+import {
+  testHost,
+  assertLoggedIn,
+  assertLoggedOut,
+  rootPath,
+} from '../helpers';
 
 test.describe('User Registration w/o Token', () => {
   let synapse: SynapseInstance;
@@ -22,7 +27,7 @@ test.describe('User Registration w/o Token', () => {
   test('it can register a user without a registration token', async ({
     page,
   }) => {
-    await page.goto(`/chat`);
+    await page.goto(`${rootPath}/chat`);
     await assertLoggedOut(page);
     await page.getByRole('link', { name: 'Register new user' }).click();
     await expect(page.url()).toBe(`${testHost}/chat/register`);
