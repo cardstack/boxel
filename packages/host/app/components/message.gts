@@ -42,7 +42,7 @@ export default class Message extends Component<MessageArgs> {
   <template>
     <BoxelMessage
       {{ScrollIntoView register=this.register}}
-      data-test-message-idx={{this.args.index}}
+      data-test-message-idx={{@index}}
       data-test-message-card={{this.card.id}}
       @name={{this.sender.member.name}}
       @datetime={{formatRFC3339 this.timestamp}}
@@ -53,6 +53,7 @@ export default class Message extends Component<MessageArgs> {
         boxel-message-margin-left=messageStyle.boxelMessageMarginLeft
       }}
     >
+      {{! template-lint-disable no-triple-curlies }}
       {{{this.content}}}
 
       {{#if this.hasCard}}
