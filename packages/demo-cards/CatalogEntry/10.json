@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Claims from ../claims",
+      "description": "Catalog entry for Claims from ../claims",
+      "ref": {
+        "module": "../claims",
+        "name": "Claims"
+      },
+      "demo": {
+        "title": null
+      }
+    },
+    "relationships": {
+      "demo.claims": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "fields": {
+        "demo": {
+          "adoptsFrom": {
+            "module": "../claims",
+            "name": "Claims"
+          }
+        }
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}
