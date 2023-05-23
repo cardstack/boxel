@@ -244,6 +244,9 @@ export async function createPrivateRoom(
   return json.room_id;
 }
 
+// this is a client derived value. the API docs suggest a monotonically
+// increasing integer, where the scope of the txn ID is a client session (e.g. a
+// specific access token and including any token refreshes).
 let txnId = 0;
 
 export async function sendMessage(
@@ -254,7 +257,7 @@ export async function sendMessage(
 ): Promise<string> {
   let html = body != null ? sanitize(marked(body)) : '';
   let response = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/rooms/${roomId}/send/m.room.messsage/txn${txnId}`,
+    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/rooms/${roomId}/send/m.room.messsage/txn${++txnId}`,
     {
       method: 'PUT',
       headers: {
