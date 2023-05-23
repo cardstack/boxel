@@ -212,7 +212,7 @@ export default class MatrixService extends Service {
     let serializedCard: LooseSingleCardDocument | undefined;
     if (card) {
       serializedCard = await this.cardService.serializeCard(card);
-      body = `${body} (Card: ${card.title}, ${card.id})`;
+      body = `${body} (Card: ${card.title ?? 'Untitled'}, ${card.id})`.trim();
     }
     if (card) {
       await this.client.sendEvent(roomId, 'm.room.message', {

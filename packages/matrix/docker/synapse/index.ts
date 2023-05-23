@@ -1,3 +1,5 @@
+import { marked } from 'marked';
+import { sanitize } from 'dompurify';
 import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
@@ -10,6 +12,7 @@ import {
   dockerRun,
   dockerStop,
 } from '../index';
+import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 export const SYNAPSE_IP_ADDRESS = '172.20.0.5';
 export const SYNAPSE_PORT = 8008;
@@ -217,12 +220,74 @@ export async function registerUser(
   };
 }
 
+// currently this creates unencrypted rooms only
+export async function createPrivateRoom(
+  accessToken: string,
+  name: string,
+  invite?: string[]
+): Promise<string> {
+  let response = await fetch(
+    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/createRoom`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        name,
+        preset: 'trusted_private_chat',
+        ...(invite ? { invite: invite.map((i) => `@${i}:localhost`) } : {}),
+      }),
+    }
+  );
+  let json = await response.json();
+  return json.room_id;
+}
+
+let txnId = 0;
+
+export async function sendMessage(
+  accessToken: string,
+  roomId: string,
+  body: string | undefined,
+  cardJSON?: LooseSingleCardDocument
+): Promise<string> {
+  let html = body != null ? sanitize(marked(body)) : '';
+  let response = await fetch(
+    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/rooms/${roomId}/send/m.room.messsage/txn${txnId}`,
+    {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        formatted_body: html,
+        ...(cardJSON
+          ? {
+              msgtype: 'org.boxel.card',
+              body: `${body ?? ''} (Card: ${
+                cardJSON.data.attributes?.title ?? 'Untitled'
+              }, ${cardJSON.data.id})`.trim(),
+              instance: cardJSON,
+            }
+          : {
+              msgtype: 'm.text',
+              format: 'org.matrix.custom.html',
+              body,
+            }),
+      }),
+    }
+  );
+  let json = await response.json();
+  return json.event_id;
+}
+
 export async function createRegistrationToken(
   adminAccessToken: string,
   registrationToken: string,
   usesAllowed = 1000
 ) {
-  let res = await fetch(
+  let response = await fetch(
     `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v1/registration_tokens/new`,
     {
       method: 'POST',
@@ -235,9 +300,11 @@ export async function createRegistrationToken(
       }),
     }
   );
-  if (!res.ok) {
+  if (!response.ok) {
     throw new Error(
-      `could not create registration token: ${res.status} - ${await res.text()}`
+      `could not create registration token: ${
+        response.status
+      } - ${await response.text()}`
     );
   }
 }

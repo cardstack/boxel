@@ -115,7 +115,35 @@ interface IndexHTMLOptions {
   realmsServed?: string[];
 }
 
-export class Realm {
+export interface RealmInterface {
+  url: string;
+  searchIndex: SearchIndex;
+  ready: Promise<void>;
+  start(): Promise<void>;
+  write(path: LocalPath, contents: string): Promise<{ lastModified: number }>;
+  getIndexHTML(opts?: IndexHTMLOptions): Promise<string>;
+
+  // note that append only does not support
+  // delete()
+
+  // common handler supports:
+  // GET /_info
+  // GET /_search
+  // GET /_message
+  // GET * accept: application/vnd.card+json
+  // GET * accept: application/vnd.card+source
+  // GET * accept: text/html
+  // POST * accept: application/vnd.card+source
+  // GET */ accept: application/vnd.json+api (directory listing)
+
+  // note that append only does not support
+  //  PATCH * accept: application/vnd.card+json
+  //  DELETE * accept: application/vnd.card+json
+  //  DELETE * accept: application/vnd.card+source
+  handle(request: MaybeLocalRequest): Promise<ResponseWithNodeStream>;
+}
+
+export class Realm implements RealmInterface {
   #startedUp = new Deferred<void>();
   #searchIndex: SearchIndex;
   #adapter: RealmAdapter;
