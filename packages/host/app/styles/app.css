@@ -524,11 +524,16 @@ nav>.directory-level {
   --button-bg: var(--boxel-light);
   --text-color: var(--boxel-dark);
 
-  border: var(--boxel-border)
+  border: var(--boxel-border);
 }
 
 .operator-mode-card-stack__card__footer-button:hover {
-  --button-bg: var(--boxel-purple-300);
+  --button-bg: var(--boxel-dark-teal);
+}
+
+.light-button:hover {
+  --button-bg: var(--boxel-light);
+  border: 1px solid var(--boxel-dark);
 }
 
 .operator-mode-overlayed-button {
@@ -700,7 +705,7 @@ nav>.directory-level {
 }
 
 .operator-mode__no-cards__add-card-button:hover {
-  background: var(--boxel-dark);
+  background: var(--boxel-dark-teal);
 }
 
 .operator-mode__no-cards__add-card-button .icon-button{
