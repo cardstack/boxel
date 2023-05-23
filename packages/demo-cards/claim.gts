@@ -12,6 +12,8 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 // @ts-ignore
 import { on } from '@ember/modifier';
+// @ts-ignore
+import { action } from '@ember/object';
 
 declare global {
   interface Window {
@@ -78,8 +80,7 @@ class Isolated extends Component<typeof Claim> {
     }
   }
 
-  // this was not bound properly here so need to use an arrow function
-  connectMetamask = async () => {
+  private doConnectMetamask = restartableTask(async () => {
     try {
       let isSameNetwork = await this.isSameNetwork();
       if (isSameNetwork) {
@@ -106,7 +107,12 @@ class Isolated extends Component<typeof Claim> {
     } catch (e) {
       return false;
     }
-  };
+  });
+
+  @action
+  private connectMetamask() {
+    this.doConnectMetamask.perform();
+  }
 
   async getChainId() {
     try {
@@ -119,9 +125,11 @@ class Isolated extends Component<typeof Claim> {
       return -1;
     }
   }
-  claim = async () => {
+
+  @action
+  private claim() {
     console.log('claiming');
-  };
+  }
 }
 
 export class Claim extends Card {
