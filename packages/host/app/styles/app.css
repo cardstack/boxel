@@ -708,10 +708,6 @@ nav>.directory-level {
   background: var(--boxel-dark-teal);
 }
 
-.operator-mode__no-cards__add-card-button .icon-button{
-  width: 100%;
-}
-
 /* stacked cards */
 .operator-mode-card-stack {
   position: relative;
