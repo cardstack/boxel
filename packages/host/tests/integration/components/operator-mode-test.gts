@@ -694,8 +694,6 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await click('[data-test-stack-card-index="3"] [data-test-save-button]');
-    await waitFor(`[data-test-stack-card="${testRealmURL}Author/3"]`);
-    await click('[data-test-stack-card-index="3"] [data-test-close-button]');
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="3"]')
     );
@@ -709,8 +707,6 @@ module('Integration | operator-mode', function (hooks) {
       'Mad As a Hatter'
     );
     await click('[data-test-stack-card-index="2"] [data-test-save-button]');
-    await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/3"]`);
-    await click('[data-test-stack-card-index="2"] [data-test-close-button]');
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="2"]')
     );
@@ -825,8 +821,6 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await click('[data-test-stack-card-index="1"] [data-test-save-button]');
-    await waitFor(`[data-test-stack-card="${testRealmURL}Author/3"]`);
-    await click('[data-test-stack-card-index="1"] [data-test-close-button]');
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="1"]')
     );
@@ -966,9 +960,6 @@ module('Integration | operator-mode', function (hooks) {
       'Woodster'
     );
     await click('[data-test-stack-card-index="1"] [data-test-save-button]');
-    await waitFor(`[data-test-stack-card="${testRealmURL}Pet/1"]`);
-    await click('[data-test-stack-card-index="1"] [data-test-close-button]');
-
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="1"]')
     );
@@ -999,9 +990,6 @@ module('Integration | operator-mode', function (hooks) {
       'Woodster'
     );
     await click('[data-test-stack-card-index="1"] [data-test-save-button]');
-    await waitFor(`[data-test-stack-card="${testRealmURL}Pet/1"]`);
-    await click('[data-test-stack-card-index="1"] [data-test-close-button]');
-
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="1"]')
     );
