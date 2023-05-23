@@ -49,6 +49,7 @@ export type StackItem = {
   card: Card;
   format: Format;
   request?: Deferred<Card>;
+  isLinkedCard?: boolean;
 };
 
 export interface RenderedLinksToCard {
@@ -142,17 +143,21 @@ export default class OperatorMode extends Component<Signature> {
   }
 
   @action async save(item: StackItem) {
-    let { card, request } = item;
+    let { card, request, isLinkedCard } = item;
     await this.saveCardFieldValues(card);
     let updatedCard = await this.write.perform(card);
 
     if (updatedCard) {
       request?.fulfill(updatedCard);
       let index = this.stack.indexOf(item);
-      this.stack[index] = {
-        card: updatedCard,
-        format: 'isolated',
-      };
+      if (isLinkedCard) {
+        this.stack.splice(index); // closes the 'create new card' editor for linked card fields
+      } else {
+        this.stack[index] = {
+          card: updatedCard,
+          format: 'isolated',
+        };
+      }
     }
   }
 
@@ -186,7 +191,10 @@ export default class OperatorMode extends Component<Signature> {
   private publicAPI: Actions = {
     createCard: async (
       ref: CardRef,
-      relativeTo: URL | undefined
+      relativeTo: URL | undefined,
+      opts?: {
+        isLinkedCard?: boolean;
+      }
     ): Promise<Card | undefined> => {
       let doc = { data: { meta: { adoptsFrom: ref } } };
       let newCard = await this.cardService.createFromSerialized(
@@ -199,6 +207,7 @@ export default class OperatorMode extends Component<Signature> {
         card: newCard,
         format: 'edit',
         request: new Deferred(),
+        isLinkedCard: opts?.isLinkedCard,
       };
       this.addToStack(newItem);
       return await newItem.request?.promise;
