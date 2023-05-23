@@ -8,6 +8,7 @@ import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import type CardService from '../services/card-service';
 // import getValueFromWeakMap from '../helpers/get-value-from-weakmap';
 import { eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import optional from '@cardstack/boxel-ui/helpers/optional';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import {
   IconButton,
@@ -276,8 +277,21 @@ export default class OperatorMode extends Component<Signature> {
     return htmlSafe(`
       width: ${100 - invertedIndex * widthReductionPercent}%;
       z-index: ${stack.length - invertedIndex};
-      padding-top: calc(${offsetPx}px * ${index});
+      margin-top: calc(${offsetPx}px * ${index});
       `);
+  }
+
+  @action
+  isBuried(stackIndex: number) {
+    return stackIndex + 1 < this.stack.length;
+  }
+
+  @action
+  dismissStackedCardsAbove(stackIndex: number) {
+    for (let i = this.stack.length - 1; i > stackIndex; i--) {
+      let stackItem = this.stack[i];
+      this.close(stackItem);
+    }
   }
 
   <template>
@@ -300,7 +314,10 @@ export default class OperatorMode extends Component<Signature> {
 
         {{#each this.stack as |item i|}}
           <div
-            class='operator-mode-card-stack__item'
+            class={{cn
+              'operator-mode-card-stack__item'
+              operator-mode-card-stack__buried=(this.isBuried i)
+            }}
             data-test-stack-card-index={{i}}
             data-test-stack-card={{item.card.id}}
             style={{this.styleForStackedCard this.stack i}}
@@ -314,6 +331,12 @@ export default class OperatorMode extends Component<Signature> {
               <Header
                 @title={{cardTypeDisplayName item.card}}
                 class='operator-mode-card-stack__card__header'
+                {{on
+                  'click'
+                  (optional
+                    (if (this.isBuried i) (fn this.dismissStackedCardsAbove i))
+                  )
+                }}
               >
                 <:actions>
                   {{#if (not (eq item.format 'edit'))}}
