@@ -35,11 +35,19 @@ class Isolated extends Component<typeof Claim> {
       <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
       {{#if this.connected}}
         <Button {{on 'click' this.claim}}>
-          Claim
+          {{#if this.doClaim.isRunning}}
+            Claiming...
+          {{else}}
+            Claim
+          {{/if}}
         </Button>
       {{else}}
         <Button {{on 'click' this.connectMetamask}}>
-          Connect
+          {{#if this.doConnectMetamask.isRunning}}
+            Connecting...
+          {{else}}
+            Connect
+          {{/if}}
         </Button>
       {{/if}}
     </CardContainer>
@@ -49,7 +57,11 @@ class Isolated extends Component<typeof Claim> {
     super(owner, args);
     this.initialize.perform();
     if (this.isMetamaskInstalled) {
-      window.ethereum.on('chainChanged', () => window.location.reload());
+      window.ethereum.on('chainChanged', (chainId: string) => {
+        this.connected =
+          parseInt(chainId, 16) == this.args.model.chain?.chainId;
+        window.location.reload(); // metamask recommends to reload page
+      });
     }
   }
   private initialize = enqueueTask(async () => {
@@ -96,11 +108,6 @@ class Isolated extends Component<typeof Claim> {
           method: 'wallet_switchEthereumChain',
           params: [{ chainId: hexChainId }],
         });
-        // it is sufficient to assume a wallet is connected after checking it is same network
-        let isSameNetwork = await this.isSameNetwork();
-        if (isSameNetwork) {
-          this.connected = true;
-        }
       }
       return true;
     } catch (e) {
@@ -125,9 +132,14 @@ class Isolated extends Component<typeof Claim> {
     }
   }
 
+  private doClaim = restartableTask(async () => {
+    console.log('claiming');
+    return true;
+  });
+
   @action
   private claim() {
-    console.log('claiming');
+    this.doClaim.perform();
   }
 }
 
