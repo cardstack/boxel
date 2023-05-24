@@ -1,0 +1,120 @@
+sequenceDiagram
+  participant Speaker Sam
+  participant Button
+  participant ActionManager
+  participant MatrixClient
+  participant SubmitProposalAction
+  participant Speaker Sam
+  participant Ollie Organizer
+  participant AcceptProposalAction
+  participant ActionContext
+  participant Timeline
+  participant Overview
+  Speaker Sam->>Button: Clicks "Submit Proposal" Button<br />shown on SessionProposal card<br />by card's guide
+  Button->>ActionManager: Initiate SubmitProposal action<br />w/ this card
+  ActionManager->>SubmitProposalAction: Process TargetFlow to determine room to host action
+  opt if no room for this action/card combo exists
+    SubmitProposalAction->>ActionManager: result: create room titled "Submit Proposal to FooConf"
+    ActionManager->>MatrixClient: Create room
+    MatrixClient->>ActionManager: Room created!
+    ActionManager->>MatrixClient: quietly write Particpants card to room
+    Note right of Timeline: System: The SubmitProposal action added<br/>a Participants card to the room
+    ActionManager->>MatrixClient: quietly write Overview card<br />with link to Participants card
+    Note right of Timeline: System: The SubmitProposal action added<br/>an Overview card to the room
+    Note right of Overview: Participants card appears
+  end
+  ActionManager->>Button: Here's the room for this action
+  Note right of Button: Button ui reflects objective progress
+  ActionManager->>MatrixClient: send card to room as message
+  Note right of Timeline: User: [Rendered card]
+  ActionManager->>MatrixClient: fire event "Action started: SubmitProposal"
+  ActionManager->>SubmitProposalAction: sets up ActionContext and invokes Action
+  activate SubmitProposalAction
+  SubmitProposalAction->>ActionContext: write Objective card to room quietly
+  Note right of Timeline: System: The SubmitProposal action added<br/>an Objective card to the room
+  SubmitProposalAction->>ActionContext: quietly updates Overview card to prepend Objective card
+  Note right of Timeline: System: The SubmitProposal action pinned<br/>the Objective card to the sidebar
+  Note right of Overview: Objective card appears
+  ActionManager->>MatrixClient: fire event "Action finished: SubmitProposal"
+  activate Ollie Organizer
+  alt Ollie Organizer is in the room
+    SubmitProposalAction->>ActionContext: suggestAction(ollie@fooconf, AcceptProposalAction w/ SessionProposal card)
+    Note right of Timeline: System: The SubmitProposal action added<br/>a SuggestedActions card to the room
+    Note right of Timeline: System: The SubmitProposal action pinned<br/>the SuggestedActions card to the sidebar
+  else
+    SubmitProposalAction->>ActionContext: inviteParticipant(ollie@fooconf, AcceptProposalAction w/ SessionProposal card)
+    Ollie Organizer->>MatrixClient: accepts invite and joins room
+    Note right of Timeline: System: Ollie has joined
+    Note right of Overview: Participant card updates to include Ollie
+    Note right of Button: Button updates to show Ollie's avatar
+  end
+  activate AcceptProposalAction
+  Note right of Overview: SuggestedActions card shows "Accept Proposal" for Ollie Organier
+  Ollie Organizer->>Overview: clicks Accept Proposal action
+  Overview->>ActionManager: Initiate AcceptProposal action w/ the  card
+  ActionManager->>MatrixClient: fire event "Action started: SubmitProposal"
+  ActionManager->>AcceptProposalAction: Process TargetFlow to determine room to host action
+  AcceptProposalAction->>ActionManager: result: use current room
+  ActionManager->>AcceptProposalAction: sets up ActionContext and invokes Action
+  opt If default guide is not applied to the target card
+    AcceptProposalAction->>ActionContext: addGuide(defaultGuide)
+  end
+  AcceptProposalAction->>ActionContext: checkGuide(defaultGuide) (run static checks)
+  opt If the static checks fail
+    AcceptProposalAction->>ActionContext: addGuide() (suggests the SubmitProposal action when all guide checks pass)
+    AcceptProposalAction->>ActionContext: postActionMessage(...), with the card attached
+    Note right of Timeline: Action Message: Message from Accept Proposal action:<br />A problem was detected with your proposal.<br />Choose Edit below for details.
+    AcceptProposalAction->>ActionContext: suggestAction(sam@speakersrus, EditCard w/ SessionProposal card)
+    ActionManager->>MatrixClient: fire event "Action finished: AcceptProposal"
+    Speaker Sam->>Timeline: Clicks "Edit"
+    ActionManager->>OperatorMode: copy card to scratch space, open it in plane that only Sam can see, in edit mode
+    Speaker Sam->>OperatorMode: makes changes to card, clicks SubmitProposal button that is visible once guide check passes (GOTO top)
+  end
+  opt If static checks succeed
+    AcceptProposalAction->>ActionContext: quietly write StaticChecksResult card with reference to checked proposal card and state: true. 
+    Note right of Timeline: System: The Accept Proposal action has added a StaticChecksResult card to the room
+    Note right of Overview: first milestone of Objective<br />now shows as complete
+  end
+  AcceptProposalAction->>ExternalService: Run some dynamic checks such as checking whether<br />the proposer has already submitted more than the<br />maximum number of proposals
+  ExternalService->>AcceptProposalAction: return result
+  opt If the dynamic checks fail
+    AcceptProposalAction->>ActionContext: addGuide() (shows errors from dynamic check result, and adds suggested action for ollie organizer of AcceptProposal and AcceptProposalWithoutChecks
+    AcceptProposalAction->>ActionContext: postActionMessage(...), with the card attached
+    Note right of Timeline: Action Message: Message from Accept Proposal action:<br />A problem was detected with your proposal.<br />You have submitted too many proposals.
+    AcceptProposalAction->>ActionContext: suggestAction(ollie@fooconf, OpenCard, [url of proposal submission policy]
+    ActionManager->>MatrixClient: fire event "Action finished: AcceptProposal"
+    Note right of AcceptProposalAction: how exactly the submitter and organizer<br />resolve the dynamic check failure is left open.<br />It may be that back and forth in the Flow<br />chat lets the organizer arrive at a solution<br />in accordance with the conf policy<br />and then resubmit via suggested action.
+  end
+  opt If the dynamic check succeeds
+    AcceptProposalAction->>ActionContext: quietly writeCard for a DynamicChecksResult with reference to checked proposal card and state: true
+    Note right of Timeline: System: The Accept Proposal action has added a DynamicChecksResult card to the room
+    Note right of Overview: second milestone of Objective<br />now shows as complete
+    AcceptProposalAction->>AcceptProposalAction: prepare SubmissionPacket
+    AcceptProposalAction->>ActionContext: call postMessage(SubmissionContext)
+    AcceptProposalAction->>ActionContext: copyCardToRealm(SubmissionPacket card to the ConfOrganizersRealm
+    Note right of AcceptProposalAction: Proposal card is copied along with it
+    ActionManager->>MatrixClient: fire event "Action finished: AcceptProposal"
+  end
+
+# Note: Action started/Acition finished events don't render on timeline
+# Note: there may be a system feature that results in the suggestion to the submitter to copy this packet to their personal realm.
+# Note: later, once the sessions have been selected, the conf organizers will trigger an action that write a SubmissionResult card to the Flow and posts a message @mention’ing the submitter to the Flow. TODO: document these actions
+# suggested action in overview
+# Note: The submit proposal action sets up the suggested-actions.json card instance (maybe called strategy.json):
+    # AcceptPropposal
+        # card === targetCard
+        # cardOfTypeNotPresent(SubmissionPacket)
+        # canRepresent(fooconf)
+        # !hasErrorGuides(targetCard)
+        # actionNotRunning(ApproveProposal)
+        # actionNotRunning(ApproveProposalWihoutChecks)
+    # AcceptPropposalWithoutChecks
+        # card === targetCard
+        # cardOfTypeNotPresent(SubmissionPacket)
+        # canRepresent(fooconf)
+        # actionNotRunning(ApproveProposal)
+        # actionNotRunning(ApproveProposalWihoutChecks)
+    # EditProposal
+        # card === targetCard
+        # cardOfTypeNotPresent(SubmissionPacket)
+        # !hasErrorGuides(targetCard)
