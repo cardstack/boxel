@@ -376,7 +376,6 @@ nav>.directory-level {
 
   position: relative;
   max-width: 70rem;
-  padding: var(--boxel-sp-xxxl) var(--boxel-sp-xl);
   margin: 0 auto;
 }
 .cards-grid__cards {
@@ -388,10 +387,13 @@ nav>.directory-level {
   gap: var(--boxel-sp);
   justify-items: center;
 }
+.operator-mode .cards-grid__cards > li {
+  cursor: pointer;
+}
 .cards-grid__add-button {
-  position: absolute;
-  right: var(--boxel-sp);
-  bottom: var(--boxel-sp);
+  position: sticky;
+  left: 100%;
+  bottom: 5px;
 }
 .grid-card {
   width: var(--grid-card-width);
@@ -453,53 +455,66 @@ nav>.directory-level {
   align-items: flex-start;
 }
 
+.operator-mode-card-stack {
+  position: relative;
+  height: calc(100% - var(--search-sheet-closed-height));
+  width: 100%;
+  max-width: 50rem;
+  padding-top: var(--boxel-sp-xxl);
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.operator-mode-card-stack__item {
+  justify-self: center;
+  position: absolute;
+  width: 89%;
+  height: inherit;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.operator-mode-card-stack__buried .operator-mode-card-stack__card {
+  background-color: var(--boxel-200);
+  grid-template-rows: 40px auto;
+}
+
+.operator-mode-card-stack__buried .operator-mode-card-stack__card__header .icon-button {
+  display: none;
+}
+
+.operator-mode-card-stack__buried .operator-mode-card-stack__card__header {
+  cursor: pointer;
+  font: 500 var(--boxel-font-sm);
+  padding: 0 var(--boxel-sp-xs);
+}
+
 .operator-mode-card-stack__card {
   position: relative;
+  height: 100%;
+  display: grid;
+  grid-template-rows: 7.5rem auto;
+  box-shadow:0 15px 30px 0 rgb(0 0 0 / 35%);
 }
 
-.operator-mode-card-stack__card__header {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  padding: var(--boxel-sp-xs);
-
-  display: flex;
-  flex-direction: row;
+.operator-mode-card-stack__card__content {
+  padding: var(--boxel-sp);
+  overflow: auto;
 }
 
-.operator-mode-card-stack__card__header__type {
-  flex-grow: 1;
-  font: var(--boxel-font-lg);
-}
-
-.operator-mode-card-stack__card__header-item {
-  cursor: pointer;
-  margin-right: 10px;
-}
-
-.operator-mode-card-stack__card__item {
-  position: relative;
-}
-
-.operator-mode-card-stack__card__item > .boxel-card-container {
-  padding-top: var(--boxel-sp-xxxl);
-}
-
-.operator-mode-card-stack__card__item_edit > .boxel-card-container {
-  padding-bottom: var(--boxel-sp-xxxl);
+.operator-mode-card-stack__card--edit .operator-mode-card-stack__card__content {
+  padding-bottom: 5rem; /* footer height */
 }
 
 .operator-mode-card-stack__card__footer {
   position: absolute;
   bottom: 0;
   right: 0;
-  padding: 12px;
-
   display: flex;
-  flex-direction: row;
-
-  z-index: 99;
+  justify-content: flex-end;
+  padding: var(--boxel-sp);
 }
 
 .operator-mode-card-stack__card__footer-button {
@@ -775,7 +790,7 @@ nav>.directory-level {
 .room__messages-wrapper {
   overflow-y: auto;
   max-height: 30vh;
-  padding: 0 var(--boxel-sp);
+  padding: var(--boxel-sp);
   margin: var(--boxel-sp) 0;
 }
 
@@ -794,6 +809,30 @@ nav>.directory-level {
   flex-wrap: wrap;
   row-gap: var(--boxel-sp-sm);
   margin: 0 var(--boxel-sp);
+}
+
+.room__send-message button,
+.room__send-message .room__selected-card {
+  margin-left: var(--boxel-sp-sm);
+}
+
+.room__selected-card {
+  margin: var(--boxel-sp);
+  float: right;
+}
+.room__selected-card::after {
+  content:'';
+  clear: both;
+}
+
+.room__selected-card__field {
+  font-weight: bold;
+}
+
+.room__selected-card__card-wrapper {
+  padding: var(--boxel-sp);
+  border: var(--boxel-border);
+  border-radius: var(--boxel-border-radius);
 }
 
 .room__members {

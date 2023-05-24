@@ -10,3 +10,6 @@ export function not(a: any): boolean {
 export function or(a: boolean, b: boolean): boolean {
   return a || b;
 }
+export function and(a: boolean, b: boolean): boolean {
+  return a && b;
+}

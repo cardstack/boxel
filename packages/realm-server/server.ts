@@ -22,7 +22,7 @@ import {
 } from './middleware';
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp';
 import { monacoMiddleware } from './middleware/monaco';
-import '@cardstack/runtime-common/externals-global';
+import './lib/externals';
 import { nodeStreamToText } from './stream';
 import mime from 'mime-types';
 

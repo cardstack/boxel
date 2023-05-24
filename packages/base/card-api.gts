@@ -865,9 +865,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     e: NotLoaded,
     opts?: RecomputeOptions
   ): Promise<CardInstanceType<CardT> | undefined> {
-    let result: CardInstanceType<CardT> | undefined;
     let deserialized = getDataBucket(instance as CardBase);
-
     let identityContext =
       identityContexts.get(instance as CardBase) ?? new IdentityContext();
     // taking advantage of the identityMap regardless of whether loadFields is set
@@ -879,17 +877,17 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     }
 
     if (opts?.loadFields) {
-      let fieldValue = await this.loadMissingField(
+      fieldValue = await this.loadMissingField(
         instance,
         e,
         identityContext,
         instance[relativeTo]
       );
       deserialized.set(this.name, fieldValue);
-      result = fieldValue as CardInstanceType<CardT>;
+      return fieldValue as CardInstanceType<CardT>;
     }
 
-    return result;
+    return;
   }
 
   private async loadMissingField(
@@ -1717,7 +1715,7 @@ async function getDeserializedValue<CardT extends CardBaseConstructor>({
   return result;
 }
 
-interface SerializeOpts {
+export interface SerializeOpts {
   includeComputeds?: boolean;
   includeUnrenderedFields?: boolean;
 }
@@ -2214,7 +2212,7 @@ export async function getIfReady<T extends CardBase, K extends keyof T>(
       let card = Reflect.getPrototypeOf(instance)!
         .constructor as typeof CardBase;
       let field: Field = getField(card, fieldName as string)!;
-      return field.handleNotLoadedError(instance, e, opts) as
+      return (await field.handleNotLoadedError(instance, e, opts)) as
         | T[K]
         | T[K][]
         | undefined;
