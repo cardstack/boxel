@@ -1,6 +1,6 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
-import { Card, Format } from 'https://cardstack.com/base/card-api';
+import { Card, CardContext, Format } from 'https://cardstack.com/base/card-api';
 import Preview from './preview';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
@@ -9,7 +9,13 @@ import type CardService from '../services/card-service';
 // import getValueFromWeakMap from '../helpers/get-value-from-weakmap';
 import { eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import cn from '@cardstack/boxel-ui/helpers/cn';
-import { IconButton, Modal } from '@cardstack/boxel-ui';
+import {
+  IconButton,
+  Modal,
+  Header,
+  CardContainer,
+  Button,
+} from '@cardstack/boxel-ui';
 import SearchSheet, {
   SearchSheetMode,
 } from '@cardstack/host/components/search-sheet';
@@ -18,13 +24,19 @@ import {
   Deferred,
   type Actions,
   type CardRef,
+  cardTypeDisplayName,
 } from '@cardstack/runtime-common';
 import type LoaderService from '../services/loader-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-
 import { TrackedArray } from 'tracked-built-ins';
-import { cardTypeDisplayName } from '@cardstack/host/helpers/card-type-display-name';
+import OperatorModeOverlays from '@cardstack/host/components/operator-mode-overlays';
+import LinksToCardComponentModifier from '@cardstack/host/modifiers/links-to-card-component-modifier';
+import { schedule } from '@ember/runloop';
+import { htmlSafe } from '@ember/template';
+import { registerDestructor } from '@ember/destroyable';
+import type { Query } from '@cardstack/runtime-common/query';
+import { getSearchResults, type Search } from '../resources/search';
 
 interface Signature {
   Args: {
@@ -33,11 +45,18 @@ interface Signature {
   };
 }
 
-type StackItem = {
+export type StackItem = {
   card: Card;
   format: Format;
   request?: Deferred<Card>;
 };
+
+export interface RenderedLinksToCard {
+  element: HTMLElement;
+  card: Card;
+  context: CardContext;
+  stackedAtIndex: number;
+}
 
 export default class OperatorMode extends Component<Signature> {
   stack: TrackedArray<StackItem>;
@@ -53,12 +72,23 @@ export default class OperatorMode extends Component<Signature> {
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
+
+    (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
+    registerDestructor(this, () => {
+      delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
+    });
+
     this.stack = new TrackedArray([
       {
         card: this.args.firstCardInStack,
         format: 'isolated',
       },
     ]);
+  }
+
+  @action
+  getCards(query: Query): Search {
+    return getSearchResults(this, () => query);
   }
 
   @action onFocusSearchInput() {
@@ -116,8 +146,8 @@ export default class OperatorMode extends Component<Signature> {
     await this.saveCardFieldValues(card);
     let updatedCard = await this.write.perform(card);
 
-    if (updatedCard && request) {
-      request.fulfill(updatedCard);
+    if (updatedCard) {
+      request?.fulfill(updatedCard);
       let index = this.stack.indexOf(item);
       this.stack[index] = {
         card: updatedCard,
@@ -197,9 +227,57 @@ export default class OperatorMode extends Component<Signature> {
     }
   }
 
-  cardOrderFromTop(count: number, i: number) {
-    // 0 is the topmost card, 1 is the one behind it, and so on...
-    return count - (i + 1);
+  get context() {
+    return {
+      renderedIn: this as Component<any>,
+      cardComponentModifier: LinksToCardComponentModifier,
+      optional: {
+        stack: this.stack, // Not used currently, but eventually there will be more than one stack and we will need to know which one we are in.
+        openCard: (card: Card) => {
+          return this.addToStack({ card, format: 'isolated' });
+        },
+      },
+      actions: this.publicAPI,
+    };
+  }
+
+  @tracked renderedLinksToCards = new TrackedArray<RenderedLinksToCard>([]);
+  registerLinkedCardElement(
+    linksToCardElement: HTMLElement,
+    linksToCard: Card,
+    context: CardContext
+  ) {
+    // Without scheduling this after render, this produces the "attempted to update value, but it had already been used previously in the same computation" type error
+    schedule('afterRender', () => {
+      this.renderedLinksToCards.push({
+        element: linksToCardElement,
+        card: linksToCard,
+        stackedAtIndex: this.stack.length,
+        context,
+      });
+    });
+  }
+
+  unregisterLinkedCardElement(card: Card) {
+    let index = this.renderedLinksToCards.findIndex(
+      (renderedLinksToCard) => renderedLinksToCard.card === card
+    );
+    if (index !== -1) {
+      this.renderedLinksToCards.splice(index, 1);
+    }
+  }
+
+  styleForStackedCard(stack: StackItem[], index: number) {
+    let invertedIndex = stack.length - index - 1;
+
+    let widthReductionPercent = 5; // Every new card on the stack is 5% wider than the previous one
+    let offsetPx = 40; // Every new card on the stack is 40px lower than the previous one
+
+    return htmlSafe(`
+      width: ${100 - invertedIndex * widthReductionPercent}%;
+      z-index: ${stack.length - invertedIndex};
+      padding-top: calc(${offsetPx}px * ${index});
+      `);
   }
 
   <template>
@@ -210,77 +288,88 @@ export default class OperatorMode extends Component<Signature> {
       @isOverlayDismissalDisabled={{true}}
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
     >
+
       <CardCatalogModal />
-      <div class='stack'>
+
+      <div class='operator-mode-card-stack'>
+        {{! z-index and offset calculation in the OperatorModeOverlays operates under assumption that it is nested under element with class operator-mode-card-stack }}
+        <OperatorModeOverlays
+          @renderedLinksToCards={{this.renderedLinksToCards}}
+          @addToStack={{this.addToStack}}
+        />
+
         {{#each this.stack as |item i|}}
           <div
-            class='stack-card stack-card--{{this.cardOrderFromTop
-                this.stack.length
-                i
-              }}'
+            class='operator-mode-card-stack__item'
             data-test-stack-card-index={{i}}
             data-test-stack-card={{item.card.id}}
+            style={{this.styleForStackedCard this.stack i}}
           >
-            <div
+            <CardContainer
               class={{cn
-                'operator-mode-card-stack__card__item'
-                operator-mode-card-stack__card__item_edit=(eq
-                  item.format 'edit'
-                )
+                'operator-mode-card-stack__card'
+                operator-mode-card-stack__card--edit=(eq item.format 'edit')
               }}
             >
-              <Preview
-                @card={{item.card}}
-                @format={{item.format}}
-                @actions={{this.publicAPI}}
-              />
-            </div>
-            <div class='operator-mode-card-stack__card__header'>
-              <div
-                class='operator-mode-card-stack__card__header__type'
-                data-type-display-name
-              >{{cardTypeDisplayName item.card}}</div>
-              {{#if (not (eq item.format 'edit'))}}
-                <IconButton
-                  @icon='icon-horizontal-three-dots'
-                  @width='20px'
-                  @height='20px'
-                  class='icon-button'
-                  aria-label='Edit'
-                  {{on 'click' (fn this.edit item i)}}
-                  data-test-edit-button
+              <Header
+                @title={{cardTypeDisplayName item.card}}
+                class='operator-mode-card-stack__card__header'
+              >
+                <:actions>
+                  {{#if (not (eq item.format 'edit'))}}
+                    <IconButton
+                      @icon='icon-horizontal-three-dots'
+                      @width='20px'
+                      @height='20px'
+                      class='icon-button'
+                      aria-label='Edit'
+                      {{on 'click' (fn this.edit item i)}}
+                      data-test-edit-button
+                    />
+                  {{/if}}
+                  <IconButton
+                    @icon='icon-x'
+                    @width='20px'
+                    @height='20px'
+                    class='icon-button'
+                    aria-label='Close'
+                    {{on 'click' (fn this.close item)}}
+                    data-test-close-button
+                  />
+                </:actions>
+              </Header>
+              <div class='operator-mode-card-stack__card__content'>
+                <Preview
+                  @card={{item.card}}
+                  @format={{item.format}}
+                  @context={{this.context}}
                 />
-              {{/if}}
-              <IconButton
-                @icon='icon-x'
-                @width='20px'
-                @height='20px'
-                class='icon-button'
-                aria-label='Close'
-                {{on 'click' (fn this.close item)}}
-                data-test-close-button
-              />
-            </div>
-            {{#if (eq item.format 'edit')}}
-              <div class='operator-mode-card-stack__card__footer'>
-                <button
-                  class='operator-mode-card-stack__card__footer-button light-button'
-                  {{on 'click' (fn this.cancel item)}}
-                  aria-label='Cancel'
-                  data-test-cancel-button
-                >
-                  Cancel
-                </button>
-                <button
-                  class='operator-mode-card-stack__card__footer-button'
-                  {{on 'click' (fn this.save item)}}
-                  aria-label='Save'
-                  data-test-save-button
-                >
-                  Save
-                </button>
               </div>
-            {{/if}}
+              {{#if (eq item.format 'edit')}}
+                <footer class='operator-mode-card-stack__card__footer'>
+                  <Button
+                    @kind='secondary-light'
+                    @size='tall'
+                    class='operator-mode-card-stack__card__footer-button'
+                    {{on 'click' (fn this.cancel item)}}
+                    aria-label='Cancel'
+                    data-test-cancel-button
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    @kind='primary'
+                    @size='tall'
+                    class='operator-mode-card-stack__card__footer-button'
+                    {{on 'click' (fn this.save item)}}
+                    aria-label='Save'
+                    data-test-save-button
+                  >
+                    Save
+                  </Button>
+                </footer>
+              {{/if}}
+            </CardContainer>
           </div>
         {{/each}}
       </div>

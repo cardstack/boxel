@@ -13,9 +13,7 @@
 
 `packages/host` is the card runtime host application
 
-`packages/worker` is a separate build for the service worker that serves a realm
-
-`packages/realm-server` is a node app that serves the realm as an HTTP server, as well as, it can also host the runtime application for its own realm and optionally the local-realm.
+`packages/realm-server` is a node app that serves the realm as an HTTP server, as well as, it can also host the runtime application for its own realm.
 
 `packages/boxel-motion` is the animation primitives ember addon.
 
@@ -27,17 +25,16 @@
 
 ## Running the Host App
 
-There exists a "dev" mode in which we can use ember-cli to host the card runtime host application which includes live reloads. Additionally, you can also use the realm server to host the app. 
+There exists a "dev" mode in which we can use ember-cli to host the card runtime host application which includes live reloads. Additionally, you can also use the realm server to host the app, which is how it will be served in production. 
 
 ### ember-cli Hosted App
 In order to run the ember-cli hosted app:
 
-1. `pnpm start` in the worker/ workspace to build the service worker (you can omit this step if you do not want service worker re-builds)
-2. `pnpm start` in the host/ workspace to serve the ember app. Note that this script includes the environment variable `REALM_BASED_HOSTING_DISABLED=true` which enables this type of build for the host app.
-3. `pnpm start:base` in the realm-server/ to serve the base realm (alternatively you can use `pnpm start:all` which also serves the base realm--this is convenient if you wish to switch between the app and the tests without having to restart servers)
-4. `pnpm start:synapse` in the matrix/ workspace to run the matrix server.
+1. `pnpm start` in the host/ workspace to serve the ember app. Note that this script includes the environment variable `OWN_REALM_URL=http://localhost:4204/` which configures the host to point to the demo cards realm by default.
+2. `pnpm start:all` in the realm-server/ to serve the base realm and demo realms -- this will also allow you to switch between the app and the tests without having to restart servers)
+3. `pnpm start:synapse` in the matrix/ workspace to run the matrix server.
 
-The app is available at http://localhost:4200. Click on the button to connect to your Local Realm, and then select the "packages/demo-cards" folder within this project. Click "Allow" on the popups that ask for the ability to read and write to the local file system.
+The app is available at http://localhost:4200. Open the demo cards workspace by entering https:://localhost:4204/ in the search pane. 
 
 When you are done running the app you can stop the synapse server by running the following from the `packages/matrix` workspace:
 ```
@@ -47,12 +44,11 @@ pnpm stop:synapse
 ### Realm server Hosted App
 In order to run the realm server hosted app:
 
-1. `pnpm start` in the worker/ workspace to build the service worker (you can omit this step if you do not want service worker re-builds).
-2. `pnpm start:build` in the host/ workspace to re-build the host app (this step can be omitted if you do not want host app re-builds)
-3. `pnpm start:base` in the realm-server/ to serve the base realm
-4. `pnpm start:synapse` in the matrix/ workspace to run the matrix server.
+1. `pnpm start:build` in the host/ workspace to re-build the host app (this step can be omitted if you do not want host app re-builds)
+2. `pnpm start:all` in the realm-server/ to serve the base and demo realms
+3. `pnpm start:synapse` in the matrix/ workspace to run the matrix server.
 
-You can visit the URL of each realm server to view that realm's app. So for instance, the base realm's app is available at `http://localhost:4201/base`. Additionally, we have enabled the server that hosts the base realm to also be able to host the local-realm app. To use the local realm visit: `http://localhost:4201/local`.
+You can visit the URL of each realm server to view that realm's app. So for instance, the base realm's app is available at `http://localhost:4201/base` and the demo realm's app is at `https://localhost:4204/`.
 
 Live reloads are not available in this mode, but you can just refresh the page to grab the latest code changes if you are running rebuilds (step #1 and #2 above).
 
@@ -60,13 +56,13 @@ Live reloads are not available in this mode, but you can just refresh the page t
 
 Instead of running `start:base`, you can alternatively use `pnpm start:all` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. Here's what is spun up with `start:all`:
 
-| Port | What runs there with `start:all`                      |
-| ---- | ------------------------------------------------------|
-|:4201 | `/base` base realm, `/local` local realm              |
-|:4202 | `/test` host test realm, `/node-test` node test realm |
-|:4203 | `root (/)` base realm                                 |
-|:4204 | `root (/)` demo realm                                 |
-|:4205 | qunit server mounting realms in iframes for testing   |
+| Port | Description                                           | Running `start:all` | Running `start:base` |
+| ---- | ------------------------------------------------------|---------------------|----------------------|
+|:4201 | `/base` base realm                                    |          ✅         |          ✅          |
+|:4202 | `/test` host test realm, `/node-test` node test realm |          ✅         |          🚫          |
+|:4203 | `root (/)` base realm                                 |          ✅         |          🚫          |
+|:4204 | `root (/)` demo realm                                 |          ✅         |          🚫          |
+|:4205 | qunit server mounting realms in iframes for testing   |          ✅         |          🚫          |
 
 ### Card Pre-rendering
 
@@ -140,7 +136,10 @@ There are currently 5 test suites:
 
 ### Host
 
-To run the `packages/host/` workspace tests start the following servers: 2. `pnpm start:all` in the `packages/realm-server/` to serve _both_ the base realm and the realm that serves the test cards 3. `pnpm start` in the `packages/host/` workspace to serve ember
+To run the `packages/host/` workspace tests start the following servers:
+
+1. `pnpm start:all` in the `packages/realm-server/` to serve _both_ the base realm and the realm that serves the test cards
+2. `pnpm start` in the `packages/host/` workspace to serve ember
 
 The tests are available at `http://localhost:4200/tests`
 
@@ -152,8 +151,7 @@ First make sure to generate the host app's `dist/` output in order to support ca
 To run the `packages/realm-server/` workspace tests start:
 
 1. `pnpm start:all` in the `packages/realm-server/` to serve _both_ the base realm and the realm that serves the test cards for node.
-
-Run `pnpm test` in the `packages/realm-server/` workspace to run the realm node tests
+2. Run `pnpm test` in the `packages/realm-server/` workspace to run the realm node tests
 
 ### Realm Server DOM tests
 This test suite contains acceptance tests for asserting that the Realm server is capable of hosting its own app. To run these tests in the browser execute the following in the `packages/realm-server` workspace:

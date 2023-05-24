@@ -3,6 +3,7 @@ import type { CardRef } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
+import { htmlSafe } from '@ember/template';
 import { tracked } from '@glimmer/tracking';
 import { registerDestructor } from '@ember/destroyable';
 import { Deferred } from '@cardstack/runtime-common/deferred';
@@ -21,6 +22,7 @@ export default class CreateCardModal extends Component {
           @size='large'
           @isOpen={{true}}
           @onClose={{fn this.save undefined}}
+          style={{this.styleString}}
           data-test-create-new-card={{card.constructor.name}}
         >
           <CardContainer class='dialog-box' @displayBoundaries={{true}}>
@@ -46,6 +48,7 @@ export default class CreateCardModal extends Component {
         deferred: Deferred<Card | undefined>;
       }
     | undefined = undefined;
+  @tracked zIndex = 20;
 
   constructor(owner: unknown, args: {}) {
     super(owner, args);
@@ -55,10 +58,15 @@ export default class CreateCardModal extends Component {
     });
   }
 
+  get styleString() {
+    return htmlSafe(`z-index: ${this.zIndex}`);
+  }
+
   async create<T extends Card>(
     ref: CardRef,
     relativeTo: URL | undefined
   ): Promise<undefined | T> {
+    this.zIndex++;
     return (await this._create.perform(ref, relativeTo)) as T | undefined;
   }
 

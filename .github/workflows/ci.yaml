@@ -22,23 +22,29 @@ jobs:
       - name: Install Dependencies
         run: pnpm install --frozen-lockfile
       - name: Lint Boxel Motion
+        # This addition to each step causes the job to proceed even if one lint job fails so we can see all errors
+        if: always()
         run: pnpm run lint
         working-directory: packages/boxel-motion
       - name: Lint Boxel Motion Test App
+        if: always()
         run: pnpm run lint
         working-directory: packages/boxel-motion-test-app
       - name: Lint Boxel Motion Demo App
+        if: always()
         run: pnpm run lint
         working-directory: packages/boxel-motion-demo-app
       - name: Lint Host
+        if: always()
         run: pnpm run lint
         working-directory: packages/host
+      - name: Lint Matrix
+        run: pnpm run lint
+        working-directory: packages/matrix
       - name: Lint Realm Server
+        if: always()
         run: pnpm run lint
         working-directory: packages/realm-server
-      - name: Lint Worker
-        run: pnpm run lint
-        working-directory: packages/worker
   boxel-motion-test:
     name: Boxel Motion Tests
     runs-on: ubuntu-latest
@@ -89,6 +95,12 @@ jobs:
       - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps
         working-directory: packages/matrix
+      - name: Build host dist/ for fastboot
+        run: pnpm build
+        working-directory: packages/host
+      - name: Start realm servers
+        run: pnpm start:all &
+        working-directory: packages/realm-server
       - name: Run Playwright tests
         run: pnpm test
         working-directory: packages/matrix
@@ -138,7 +150,6 @@ jobs:
               - 'packages/base/**'
               - 'packages/boxel-ui/**'
               - 'packages/runtime-common/**'
-              - 'packages/worker/**'
               - '.github/workflows/ci.yaml'
               - '.github/actions/deploy-boxel-host/**'
               - '.github/actions/deploy-ember-preview/**'

@@ -8,7 +8,6 @@
 # compiled output
 /dist/
 /tmp/
-/public/worker.js
 *.d.ts
 
 # dependencies

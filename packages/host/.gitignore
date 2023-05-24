@@ -3,7 +3,6 @@
 # compiled output
 /dist/
 /tmp/
-/public/worker.js
 
 # dependencies
 /bower_components/
@@ -28,3 +27,6 @@
 /package.json.ember-try
 /package-lock.json.ember-try
 /yarn.lock.ember-try
+
+# broccoli-debug
+/DEBUG/

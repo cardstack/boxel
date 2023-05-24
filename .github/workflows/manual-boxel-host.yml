@@ -8,6 +8,9 @@ on:
         required: false
         default: staging
 
+env:
+  VOLTA_FEATURE_PNPM: 1
+
 permissions:
   contents: read
   id-token: write

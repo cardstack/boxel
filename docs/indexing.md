@@ -1,7 +1,7 @@
 # Indexing
 When cards are created or updated we index their data. The indexing that is performed is driven by the HTML rendering of the card. The idea is that the actual HTML render of the card will indicate to us the fields that are actually used in the card as well as to define the indexing boundary for a card. Consider a social graph that contains a "Person" card which in turn has a "friends" field that links to Person cards that are the friends of a particular person. When indexing a particular instance of a Person card, the rendered HTML can help us to know how deep to traverse the friends of a Person card when assembling an index for a particular person. Without any kind of guidance a particular index for a person might include the entire network of people that exist in a social graph. However, using the HTML render for a card, the isolated card for a person could contain all the friends for a particular person, but the embedded card for a Person (which is the way a card appears when it is included in the context of another card) might only display the persons's avatar and their name--the 2nd order friends, thereby are not rendered. Using this HTML rendering of a Person instance, then, would only display the direct friends of a person and provide a natural way in which to prevent over indexing a person instance.
 
-Using an HTML render driven indexing requires a different approach depending on the environment the indexing is performed: node vs service worker. In the node environment we use Fastboot to perform the indexing. In the service worker environment we leverage postMessage to communicate with the host application which in turn performs in the indexing off screen. In both cases we are relying on the host application to perform the indexing. In both cases the indexing is kicked off from the `SearchIndex` class in the [`packages/runtime-common/search-index.ts`](../packages/runtime-common/search-index.ts) module via the `SearchIndex.run()` method and the `SearchIndex.update()` method.
+Using an HTML render-driven indexing means that we use Fastboot to perform the indexing in a node environment. The indexing is kicked off from the `SearchIndex` class in the [`packages/runtime-common/search-index.ts`](../packages/runtime-common/search-index.ts) module via the `SearchIndex.run()` method and the `SearchIndex.update()` method.
 
 At the time of this writing, the `CardPrerender` component in the [`packages/host/components/card-prerender.gts`](../packages/host/app/components/card-prerender.gts) module is the primary module for driving the indexing from the host application. There is a registration process that binds the host application's `CardPrerender.fromScratch()` and `CardPrerender.incremental()` methods to the runtime-common's `SearchIndex.#fromScratch` and `SearchIndex.#incremental` private properties that both environments use to perform indexing.
 
@@ -49,48 +49,7 @@ RenderService->>FastBoot: fullfull deferred rendering
 deactivate FastBoot
 CardPrerender-->>SearchIndex: indexing complete - returns updated index state
 deactivate CardPrerender
-
 ```
-
-## Service Worker Environment
-In the service worker environment we take advantage of the host app running the DOM perform indexing by coordinating via postMessage between the service worker and the host app running in the DOM. In the `getRunner` callback that is passed to the `Realm` constructor for the service worker (from [packages/worker/src/main.ts](../packages/worker/src/main.ts)), we use the service worker's `MessageHandler.setupIndexRuner()` instance in [../packages/worker/src/message-handler.ts](../packages/worker/src/message-handler.ts). This method uses the `registerRunner` callback that is passed in as a parameter to wire it's own `MessageHandler.fromScratch()` and `MessageHandler.incremental()` methods to the outer closure's `SearchIndex.#fromScratch` and `SearchIndex.#incremental` private properties. The `MessageHandler.fromScratch()` and `incremental()` instances perform a postMessage call to the host application running in DOM. These messages to perform indexing are received by the [`LocalRealm` service](../packages/host/app/services/local-realm.ts) running in the host app. The [`CardPrerender` component](../packages/host/app/components/card-prerender.gts) in the host app is rendered in the [application template](../packages/host/app/templates/application.hbs). Within the `CardPrerender` constructor we set the `CardPrerender.fromScratch()` and `CardPrerender.incremental()` methods as properties on the `LocalRealm` service. This means that when the `LocalRealm` service receives a postMessage to perform indexing it can call the `CardPrerender.fromScratch()` or `CardPrerender.incremental()` methods that were bound to it, and then return the resulting index state as a postMessage response to the received indexing messages.
-
-```mermaid
-sequenceDiagram
-participant SearchIndex
-participant RunnerOptionsManager
-participant MessageHandler
-participant LocalRealm service
-participant application route
-participant CardPrerender
-participant CurrentRun
-application route->>CardPrerender: render component
-CardPrerender->>LocalRealm service: setupIndexing(CardPrerender.fromScratch, CardPrerender.incremental)
-Note right of LocalRealm service: this binds the CardPrerender.fromScratch() method as a property of LocalRealm
-SearchIndex->>SearchIndex: run()
-SearchIndex->>RunnerOptionsManager: setOptions() - create new RunnerOpts state w/ ID
-SearchIndex->>MessageHandler: invoke getRunner() callback with RunnerOpts state ID
-MessageHandler->>RunnerOptionsManager: getRunnerOpts (which includes registerRunner callback) for optsId
-MessageHandler->>SearchIndex: registerRunner(MessageHandler.fromScratch, MessageHandler.incremental)
-Note right of SearchIndex: this wires together SearchIndex.fromScratch to MessageHandler.fromScratch
-SearchIndex->>MessageHandler:fromScratch() - start full indexing
-MessageHandler->>LocalRealm service: postMessage({ type: 'startFromScratch'c})
-LocalRealm service->>CardPrerender: fromScratch()
-activate CardPrerender
-CardPrerender->>CurrentRun: fromScratch()
-activate CurrentRun
-CurrentRun->>RenderService: isolated render card 1
-CurrentRun->>RenderService: isolated render card 2
-CurrentRun->>RenderService: isolated render card n
-CurrentRun-->>CardPrerender: indexing complete
-deactivate CurrentRun
-CardPrerender-->>LocalRealm service: indexing complete - returns updated index state
-LocalRealm service->>MessageHandler: postMessage({ type: 'fromScratchCompleted', state: serializedIndexState })
-MessageHandler->>SearchIndex: indexing complete - returns deserialized index state
-deactivate CardPrerender
-
-```
-
 
 ## Indexing process
 Once the environment has initiated the indexing, the host [`CardPrerender` component](../packages/host/app/components/card-prerender.gts) utilizes the [`CurrentRun` module](../packages/host/app/lib/current-run.ts) to perform the indexing. There are 2 flavors of indexing:

@@ -1,4 +1,5 @@
 import { registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
 import { inject as service } from '@ember/service';
 import Modifier, { ArgsFor, NamedArgs, PositionalArgs } from 'ember-modifier';
 
@@ -30,7 +31,7 @@ export default class SpriteModifier extends Modifier<SpriteModifierSignature> {
 
   @service declare animations: AnimationsService;
 
-  constructor(owner: unknown, args: ArgsFor<SpriteModifierSignature>) {
+  constructor(owner: Owner, args: ArgsFor<SpriteModifierSignature>) {
     super(owner, args);
     registerDestructor(this, cleanup);
   }

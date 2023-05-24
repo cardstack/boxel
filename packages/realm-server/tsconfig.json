@@ -21,11 +21,13 @@
     "module": "CommonJS",
     "esModuleInterop": true,
     "experimentalDecorators": true,
+    "skipLibCheck": true,
     "strict": true,
     "paths": {
       "https://cardstack.com/base/*": ["../base/*"],
       "@cardstack/boxel-ui": ["../boxel-ui/addon"],
-      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"]
+      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"],
+      "*": ["types/*"]
     }
   },
   "glint": {

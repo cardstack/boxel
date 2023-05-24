@@ -5,7 +5,7 @@ import {
   testRealmURL,
   cleanWhiteSpace,
   setupCardLogs,
-  setupMockLocalRealm,
+  setupLocalIndexing,
   type CardDocFiles,
 } from '../helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
@@ -25,7 +25,7 @@ const testModuleRealm = 'http://localhost:4202/test/';
 
 module('Integration | search-index', function (hooks) {
   setupRenderingTest(hooks);
-  setupMockLocalRealm(hooks);
+  setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
     async () => await Loader.import(`${baseRealm.url}card-api`)
@@ -2399,6 +2399,7 @@ module('Integration | search-index', function (hooks) {
         '@glimmer/component',
         'ember-concurrency',
         'ember-concurrency/-private/async-arrow-runtime',
+        'ember-modifier',
         'http://localhost:4201/base/card-api',
         'http://localhost:4201/base/contains-many-component',
         'http://localhost:4201/base/default-card-component',

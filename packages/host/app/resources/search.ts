@@ -23,10 +23,6 @@ export class Search extends Resource<Args> {
     this.search.perform(query);
   }
 
-  get isSearching() {
-    return this.search.isRunning;
-  }
-
   private search = restartableTask(async (query: Query) => {
     // until we have realm index rollup, search all the realms as separate
     // queries that we merge together

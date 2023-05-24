@@ -23,12 +23,10 @@ import {
   type EntrySetter,
   type SearchEntryWithErrors,
 } from '@cardstack/runtime-common/search-index';
-import {
-  WebMessageStream,
-  messageCloseHandler,
-} from '@cardstack/runtime-common/stream';
+import { WebMessageStream, messageCloseHandler } from './stream';
 import { file, FileResource } from '@cardstack/host/resources/file';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
+import Owner from '@ember/owner';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
@@ -58,12 +56,12 @@ interface Options {
 }
 
 // We use a rendered component to facilitate our indexing (this emulates
-// the work that the service worker renderer is doing), which means that the
+// the work that the Fastboot renderer is doing), which means that the
 // `setupRenderingTest(hooks)` from ember-qunit must be used in your tests.
 export const TestRealm = {
   async create(
     flatFiles: Record<string, string | LooseSingleCardDocument | CardDocFiles>,
-    owner: TestContext['owner'],
+    owner: Owner,
     opts?: Options
   ): Promise<Realm> {
     if (opts?.isAcceptanceTest) {
@@ -76,7 +74,7 @@ export const TestRealm = {
 
   async createWithAdapter(
     adapter: RealmAdapter,
-    owner: TestContext['owner'],
+    owner: Owner,
     opts?: Options
   ): Promise<Realm> {
     if (opts?.isAcceptanceTest) {
@@ -99,10 +97,7 @@ async function makeRenderer() {
   );
 }
 
-// This marries together the 2 sides of the message channel,
-// LocalRealm and MessageHandler, which glosses over the postMessage calls
-class MockLocalRealm extends Service {
-  isAvailable = true;
+class MockLocalIndexer extends Service {
   url = new URL(testRealmURL);
   #adapter: RealmAdapter | undefined;
   #entrySetter: EntrySetter | undefined;
@@ -114,7 +109,7 @@ class MockLocalRealm extends Service {
         operation: 'update' | 'delete'
       ) => Promise<RunState>)
     | undefined;
-  setupIndexing(
+  setup(
     fromScratch: (realmURL: URL) => Promise<RunState>,
     incremental: (
       prev: RunState,
@@ -125,14 +120,14 @@ class MockLocalRealm extends Service {
     this.#fromScratch = fromScratch;
     this.#incremental = incremental;
   }
-  async setupIndexRunner(
+  async configureRunner(
     registerRunner: RunnerRegistration,
     entrySetter: EntrySetter,
     adapter: RealmAdapter
   ) {
     if (!this.#fromScratch || !this.#incremental) {
       throw new Error(
-        `fromScratch/incremental not registered with MockLocalRealm`
+        `fromScratch/incremental not registered with MockLocalIndexer`
       );
     }
     this.#entrySetter = entrySetter;
@@ -144,24 +139,21 @@ class MockLocalRealm extends Service {
   }
   async setEntry(url: URL, entry: SearchEntryWithErrors) {
     if (!this.#entrySetter) {
-      throw new Error(`entrySetter not registered with MockLocalRealm`);
+      throw new Error(`entrySetter not registered with MockLocalIndexer`);
     }
     this.#entrySetter(url, entry);
   }
   get adapter() {
     if (!this.#adapter) {
-      throw new Error(`adapter has not been set on MockLocalRealm`);
+      throw new Error(`adapter has not been set on MockLocalIndexer`);
     }
     return this.#adapter;
   }
-  waitForReadiness() {
-    return Promise.resolve();
-  }
 }
 
-export function setupMockLocalRealm(hooks: NestedHooks) {
+export function setupLocalIndexing(hooks: NestedHooks) {
   hooks.beforeEach(function () {
-    this.owner.register('service:local-realm', MockLocalRealm);
+    this.owner.register('service:local-indexer', MockLocalIndexer);
   });
 }
 
@@ -180,16 +172,18 @@ export function setupMockMessageService(hooks: NestedHooks) {
 let runnerOptsMgr = new RunnerOptionsManager();
 function makeRealm(
   adapter: RealmAdapter,
-  owner: TestContext['owner'],
+  owner: Owner,
   realmURL = testRealmURL
 ) {
-  let localRealm = owner.lookup('service:local-realm') as MockLocalRealm;
+  let localIndexer = owner.lookup(
+    'service:local-indexer'
+  ) as unknown as MockLocalIndexer;
   return new Realm(
     realmURL,
     adapter,
     async (optsId) => {
       let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
-      await localRealm.setupIndexRunner(registerRunner, entrySetter, adapter);
+      await localIndexer.configureRunner(registerRunner, entrySetter, adapter);
     },
     runnerOptsMgr,
     async () =>
@@ -450,4 +444,36 @@ export async function getFileResource(
     lastModified: ref.lastModified,
     content,
   }));
+}
+
+function changedEntry(
+  listings: { path: string; lastModified?: number }[],
+  entry: { path: string; lastModified?: number }
+) {
+  return listings.some(
+    (item) =>
+      item.path === entry.path && item.lastModified != entry.lastModified
+  );
+}
+
+function hasEntry(
+  listings: { path: string; lastModified?: number }[],
+  entry: { path: string; lastModified?: number }
+) {
+  return listings.some((item) => item.path === entry.path);
+}
+
+export function diff(
+  prevEntries: { path: string; lastModified?: number }[],
+  currEntries: { path: string; lastModified?: number }[]
+) {
+  let changed = prevEntries.filter((entry) => changedEntry(currEntries, entry));
+  let added = currEntries.filter((entry) => !hasEntry(prevEntries, entry));
+  let removed = prevEntries.filter((entry) => !hasEntry(currEntries, entry));
+
+  return {
+    added: added.map((e) => e.path),
+    removed: removed.map((e) => e.path),
+    changed: changed.map((e) => e.path),
+  };
 }
