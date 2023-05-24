@@ -93,6 +93,7 @@ export {
 import type { Card, CardBase } from 'https://cardstack.com/base/card-api';
 
 export const maxLinkDepth = 5;
+export const eventDebounceMs = 300;
 export const assetsDir = '__boxel/';
 
 export interface CardChooser {

@@ -9,15 +9,13 @@ export * as Membership from './membership';
 export * as Timeline from './timeline';
 export * as Room from './room';
 
-export const eventDebounceMs = 300;
-
-export interface Room extends RoomMeta {
+export interface RoomEvent extends RoomMeta {
   eventId: string;
   roomId: string;
   timestamp: number;
 }
 
-export interface RoomInvite extends Room {
+export interface RoomInvite extends RoomEvent {
   sender: string;
 }
 
@@ -34,7 +32,7 @@ export interface Context {
     Map<string, { member: RoomMember; status: 'join' | 'invite' }>
   >;
   invites: Map<string, RoomInvite>;
-  joinedRooms: Map<string, Room>;
+  joinedRooms: Map<string, RoomEvent>;
   rooms: Map<string, RoomMeta>;
   timelines: Map<string, Map<string, Event>>;
   flushTimeline: Promise<void> | undefined;
@@ -45,7 +43,7 @@ export interface Context {
   // in the invite list and then immediately disappearing.
   roomMembershipQueue: (
     | (RoomInvite & { type: 'invite' })
-    | (Room & { type: 'join' })
+    | (RoomEvent & { type: 'join' })
     | { type: 'leave'; roomId: string }
   )[];
   timelineQueue: MatrixEvent[];
@@ -56,8 +54,8 @@ export interface Context {
     event: Event,
     roomId: string
   ) => Promise<void>;
-  didReceiveMessages: () => void;
-  didReceiveRooms: () => void;
+  didReceiveMessages?: () => void;
+  didReceiveRooms?: () => void;
 }
 
 export function setRoomMeta(context: Context, roomId: string, meta: RoomMeta) {

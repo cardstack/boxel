@@ -1,6 +1,7 @@
 import debounce from 'lodash/debounce';
 import { type MatrixEvent, type RoomMember } from 'matrix-js-sdk';
-import { eventDebounceMs, Context, RoomInvite, Room } from './index';
+import { Context, RoomInvite, RoomEvent } from './index';
+import { eventDebounceMs } from '../index';
 
 export function onMembership(context: Context) {
   return (e: MatrixEvent, member: RoomMember) => {
@@ -85,7 +86,7 @@ export function onMembership(context: Context) {
 
 const flushMembershipQueue = debounce((context: Context) => {
   let invites: Map<string, RoomInvite> = new Map();
-  let joinedRooms: Map<string, Room> = new Map();
+  let joinedRooms: Map<string, RoomEvent> = new Map();
   let removals: Set<
     { type: 'join'; roomId: string } | { type: 'invite'; roomId: string }
   > = new Set();
@@ -144,7 +145,9 @@ const flushMembershipQueue = debounce((context: Context) => {
   for (let joinedRoom of joinedRooms.values()) {
     context.joinedRooms.set(joinedRoom.roomId, { ...joinedRoom });
   }
-  context.didReceiveRooms();
+  if (context.didReceiveRooms) {
+    context.didReceiveRooms();
+  }
 }, eventDebounceMs);
 
 function assertNever(value: never) {

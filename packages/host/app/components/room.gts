@@ -19,11 +19,11 @@ import {
   type LooseSingleCardDocument,
   chooseCard,
   baseCardRef,
+  eventDebounceMs,
 } from '@cardstack/runtime-common';
 import Message from './message';
 import { type RoomMember } from 'matrix-js-sdk';
 import type MatrixService from '../services/matrix-service';
-import { eventDebounceMs } from '../services/matrix-service';
 import { type Card } from 'https://cardstack.com/base/card-api';
 import type CardService from '../services/card-service';
 

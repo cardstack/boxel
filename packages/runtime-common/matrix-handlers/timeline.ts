@@ -1,6 +1,7 @@
 import debounce from 'lodash/debounce';
 import { type MatrixEvent } from 'matrix-js-sdk';
-import { eventDebounceMs, Context, setRoomMeta, Event } from './index';
+import { Context, setRoomMeta, Event } from './index';
+import { eventDebounceMs } from '../index';
 
 export function onTimeline(context: Context) {
   return (e: MatrixEvent) => {
@@ -74,7 +75,9 @@ async function processDecryptedEvent(context: Context, event: Event) {
     // we use a map for the timeline to de-dupe events
     let performCallback = !timeline.has(eventId);
     timeline.set(eventId, event);
-    context.didReceiveMessages();
+    if (context.didReceiveMessages) {
+      context.didReceiveMessages();
+    }
     if (performCallback && context.handleMessage) {
       await context.handleMessage(context, event, roomId);
     }
