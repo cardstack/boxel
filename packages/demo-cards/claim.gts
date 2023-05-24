@@ -9,7 +9,7 @@ import {
 import { Button, CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 import { tracked } from '@glimmer/tracking';
 // @ts-ignore
-import { restartableTask } from 'ember-concurrency';
+import { enqueueTask, restartableTask } from 'ember-concurrency';
 // @ts-ignore
 import { on } from '@ember/modifier';
 // @ts-ignore
@@ -48,24 +48,23 @@ class Isolated extends Component<typeof Claim> {
   constructor(owner: unknown, args: any) {
     super(owner, args);
     this.initialize.perform();
-    if (window.ethereum) {
-      window.ethereum.on('chainChanged', () => this.initialize.perform());
+    if (this.isMetamaskInstalled) {
+      window.ethereum.on('chainChanged', () => window.location.reload());
     }
   }
-  private initialize = restartableTask(async () => {
-    let isSameNetwork = await this.isSameNetwork();
+  private initialize = enqueueTask(async () => {
+    let isSameNetwork = this.isSameNetwork();
     let isConnected = await this.isMetamaskConnected();
     this.connected = isConnected && isSameNetwork;
   });
 
-  async isSameNetwork() {
-    let metamaskChainId = await this.getChainId();
+  isSameNetwork() {
+    let metamaskChainId = this.getChainId();
     return this.args.model.chain?.chainId == metamaskChainId;
   }
 
   isMetamaskInstalled() {
-    let isInstalled = window.ethereum !== 'undefined';
-    return isInstalled;
+    return window.ethereum !== 'undefined';
   }
 
   async isMetamaskConnected() {
@@ -82,7 +81,7 @@ class Isolated extends Component<typeof Claim> {
 
   private doConnectMetamask = restartableTask(async () => {
     try {
-      let isSameNetwork = await this.isSameNetwork();
+      let isSameNetwork = this.isSameNetwork();
       if (isSameNetwork) {
         const accounts = await window.ethereum.request({
           method: 'eth_requestAccounts',
@@ -114,12 +113,12 @@ class Isolated extends Component<typeof Claim> {
     this.doConnectMetamask.perform();
   }
 
-  async getChainId() {
+  getChainId() {
     try {
       if (!this.isMetamaskInstalled()) {
         return -1;
       }
-      let hexChainId = await window.ethereum.request({ method: 'eth_chainId' });
+      let hexChainId = window.ethereum.chainId;
       return parseInt(hexChainId, 16);
     } catch (e) {
       return -1;
