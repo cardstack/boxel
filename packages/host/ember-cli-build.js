@@ -52,6 +52,11 @@ module.exports = function (defaults) {
               path: require.resolve('path-browserify'),
               crypto: require.resolve('crypto-browserify'),
               stream: require.resolve('stream-browserify'),
+              // cardpay-sdk polyfills
+              http: require.resolve('stream-http'),
+              https: require.resolve('https-browserify'),
+              os: require.resolve('os-browserify/browser'),
+              //
               process: false,
             },
           },
