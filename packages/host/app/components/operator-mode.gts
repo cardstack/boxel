@@ -279,8 +279,8 @@ export default class OperatorMode extends Component<Signature> {
     return htmlSafe(`
       width: ${100 - invertedIndex * widthReductionPercent}%;
       z-index: ${stack.length - invertedIndex};
-      margin-top: calc(${offsetPx}px * ${index});
-      `);
+      padding-top: calc(${offsetPx}px * ${index});
+    `);
   }
 
   addCard = restartableTask(async () => {
