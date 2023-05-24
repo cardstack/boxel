@@ -1044,4 +1044,21 @@ module('Integration | operator-mode', function (hooks) {
 
   skip('can create a specialized a new card to populate a linksTo field');
   skip('can create a specialized a new card to populate a linksToMany field');
+
+  test('can close cards by clicking the header of a card deeper in the stack', async function (assert) {
+    let card = await loadCard(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
+    assert.dom(`[data-test-stack-card-index="1"]`).exists();
+    await click('[data-test-stack-card-index="0"] [data-test-boxel-header]');
+    assert.dom(`[data-test-stack-card-index="1"]`).doesNotExist();
+  });
 });
