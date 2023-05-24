@@ -517,8 +517,38 @@ nav>.directory-level {
   padding: var(--boxel-sp);
 }
 
-.operator-mode-card-stack__card__footer-button + .operator-mode-card-stack__card__footer-button {
-  margin-left: var(--boxel-sp-xs);
+.operator-mode-card-stack__card__footer-button {
+  --button-bg: var(--boxel-teal);
+  --text-color: var(--boxel-light);
+
+  cursor: pointer;
+  width: 95px;
+  margin-right: 10px;
+  padding: var(--boxel-sp-xxxs);
+
+  background-color: var(--button-bg);
+  color: var(--text-color);
+  font-size: var(--boxel-font-size-sm);
+  font-weight: 500;
+
+  border: none;
+  border-radius: var(--boxel-border-radius-lg);
+}
+
+.light-button {
+  --button-bg: var(--boxel-light);
+  --text-color: var(--boxel-dark);
+
+  border: var(--boxel-border);
+}
+
+.operator-mode-card-stack__card__footer-button:hover {
+  --button-bg: var(--boxel-dark-teal);
+}
+
+.light-button:hover {
+  --button-bg: var(--boxel-light);
+  border: 1px solid var(--boxel-dark);
 }
 
 .operator-mode-overlayed-button {
@@ -662,6 +692,56 @@ nav>.directory-level {
 
 .search-input__input:focus {
   outline: none;
+}
+
+.operator-mode__no-cards {
+  height: calc(100% - var(--search-sheet-closed-height));
+  width: 100%;
+  max-width: 50rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.operator-mode__no-cards__add-card-title {
+  color: var(--boxel-light);
+  font: var(--boxel-font-lg);
+}
+
+.operator-mode__no-cards__add-card-button {
+  height: 350px;
+  width: 200px;
+  vertical-align: middle;
+  
+  background: var(--boxel-teal);
+  border: none;
+  border-radius: var(--boxel-border-radius);
+}
+
+.operator-mode__no-cards__add-card-button:hover {
+  background: var(--boxel-dark-teal);
+}
+
+/* stacked cards */
+.operator-mode-card-stack {
+  position: relative;
+  height: calc(100% - var(--search-sheet-closed-height));
+  width: 100%;
+  max-width: 50rem;
+  display: flex;
+  justify-content: center;
+  overflow: auto;
+  z-index: 0;
+}
+
+.operator-mode-card-stack__card {
+  justify-self: center;
+  position: absolute;
+  width: 89%;
+  z-index: 0;
+  overflow: hidden;
+  box-shadow:0 15px 30px 0 rgb(0 0 0 / 35%);
 }
 
 /* matrix spike */

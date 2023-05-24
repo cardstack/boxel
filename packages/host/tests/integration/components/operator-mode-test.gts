@@ -526,7 +526,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-country]').hasText('EditedCountry');
   });
 
-  test('no card if user closes the only card in the stack', async function (assert) {
+  test('displays add card button if user closes the only card in the stack and opens a card from card chooser', async function (assert) {
     let card = await loadCard(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -547,6 +547,14 @@ module('Integration | operator-mode', function (hooks) {
       { timeout: 3000 }
     );
     assert.dom('[data-test-person]').isNotVisible();
+    assert.dom('[data-test-add-card-button]').isVisible();
+    
+    await click('[data-test-add-card-button]');
+    assert.dom('[data-test-card-catalog-modal]').isVisible();
+
+    await waitFor(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
+    await click(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
+    assert.dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`).isVisible();
   });
 
   test('displays cards on cards-grid', async function (assert) {
