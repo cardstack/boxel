@@ -199,7 +199,18 @@ nav>.directory-level {
   margin: 0 0 var(--boxel-sp);
 }
 
-.contains-many-editor ul>li+li {
+.contains-many-editor ul > li + li {
+  margin-top: var(--boxel-sp);
+}
+
+/* Plural Field */
+.plural-field {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.plural-field > li + li {
   margin-top: var(--boxel-sp);
 }
 
