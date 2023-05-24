@@ -60,7 +60,6 @@ class Isolated extends Component<typeof Claim> {
       window.ethereum.on('chainChanged', (chainId: string) => {
         this.connected =
           parseInt(chainId, 16) == this.args.model.chain?.chainId;
-        window.location.reload(); // metamask recommends to reload page
       });
     }
   }
