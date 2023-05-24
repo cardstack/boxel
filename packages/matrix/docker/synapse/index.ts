@@ -1,5 +1,4 @@
 import { marked } from 'marked';
-import { sanitize } from 'dompurify';
 import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
@@ -255,9 +254,9 @@ export async function sendMessage(
   body: string | undefined,
   cardJSON?: LooseSingleCardDocument
 ): Promise<string> {
-  let html = body != null ? sanitize(marked(body)) : '';
+  let html = body != null ? marked(body, { mangle: false }) : '';
   let response = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/rooms/${roomId}/send/m.room.messsage/txn${++txnId}`,
+    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/rooms/${roomId}/send/m.room.message/txn${++txnId}`,
     {
       method: 'PUT',
       headers: {

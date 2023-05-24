@@ -1,5 +1,6 @@
 import './e2ee';
 import { Deferred } from '@cardstack/runtime-common';
+import { MatrixSearchIndex } from './matrix-search-index';
 import { type MatrixClient, createClient } from 'matrix-js-sdk';
 
 interface Params {
@@ -10,8 +11,6 @@ interface Params {
   deferStartUp?: true;
 }
 
-// For now the only kind of append only realm is a matrix realm so this class
-// will directly consume matrix SDK for the time being
 export class MatrixRealm {
   #startedUp = new Deferred<void>();
   #deferStartup: boolean;
@@ -20,6 +19,7 @@ export class MatrixRealm {
   #accessToken: string;
   #deviceId: string;
   #userId: string;
+  #searchIndex: MatrixSearchIndex;
 
   constructor({
     matrixServerURL,
@@ -33,6 +33,7 @@ export class MatrixRealm {
     this.#deviceId = deviceId;
     this.#userId = userId;
     this.#client = createClient({ baseUrl: matrixServerURL });
+    this.#searchIndex = new MatrixSearchIndex(() => this.#client);
 
     this.#deferStartup = deferStartUp ?? false;
     if (!deferStartUp) {
@@ -54,6 +55,17 @@ export class MatrixRealm {
       this.#startedUp.fulfill((() => this.#startup())());
     }
     await this.ready;
+  }
+
+  // primarily a test utility to await for message events to be indexed
+  async flushMessages() {
+    await this.#searchIndex.flushMessages();
+  }
+
+  // primarily a test utility to await for initial room/membership events to be
+  // indexed
+  async flushRooms() {
+    await this.#searchIndex.flushRooms();
   }
 
   shutdown() {
@@ -86,10 +98,11 @@ export class MatrixRealm {
       throw e;
     }
 
-    // this let's us send messages to element clients (useful for testing).
+    // this lets us send messages to element clients (useful for testing).
     // probably we wanna verify these unknown devices (when in an encrypted
     // room). need to research how to do that as its undocumented API
     this.#client.setGlobalErrorOnUnknownDevices(false);
+    this.#searchIndex.start();
     await this.#client.startClient();
 
     // TODO need to handle token refresh as our session is very long-lived
