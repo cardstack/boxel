@@ -53,7 +53,7 @@ export function render(
     for (let i = 0; i < stackSize; i++) {
       vm.commitCacheGroup();
     }
-
+    debugger;
     let error = new CardError(
       `Encountered error rendering HTML for card: ${err.message}`
     );

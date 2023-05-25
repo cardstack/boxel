@@ -353,6 +353,7 @@ export class CurrentRun {
           loader: this.#loader as unknown as LoaderType,
         }
       );
+      log.debug(`rendering card ${card.id}`);
       html = await this.#renderCard({
         card,
         format: 'isolated',

@@ -699,6 +699,12 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
   }
 
   getter(instance: Card): CardInstanceType<CardT> {
+    if (instance.id == 'http://localhost:4202/Claim/1') {
+      debugger;
+    }
+    if (instance.id == 'http://localhost:4202/Chain/1') {
+      debugger;
+    }
     let deserialized = getDataBucket(instance);
     // this establishes that our field should rerender when cardTracking for this card changes
     cardTracking.get(instance);

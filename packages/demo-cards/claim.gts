@@ -2,6 +2,7 @@ import { Chain } from './chain';
 import {
   Card,
   contains,
+  linksTo,
   field,
   StringCard,
   Component,
@@ -9,7 +10,7 @@ import {
 import { Button, CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 import { tracked } from '@glimmer/tracking';
 // @ts-ignore
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
 
 declare global {
   interface Window {
@@ -100,7 +101,7 @@ export class Claim extends Card {
   @field explanation = contains(StringCard);
   @field signature = contains(StringCard);
   @field encoding = contains(StringCard);
-  @field chain = contains(Chain);
+  @field chain = linksTo(Chain);
   @field title = contains(StringCard, {
     computeVia: function (this: Claim) {
       return `Claim for ${this.safeAddress}`;
