@@ -82,7 +82,7 @@
   },
   "peerDependencies": {
     "@glint/environment-ember-loose": "^1.0.0-beta.4",
-    "ember-source@": "^3.8 || 4"
+    "ember-source": "^3.8 || 4"
   },
   "engines": {
     "node": "12.* || 14.* || >= 16"
