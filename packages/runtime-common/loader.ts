@@ -24,46 +24,72 @@ function makeResolvedURL(unresolvedURL: URL | string): ResolvedURL {
   return resolvedURL;
 }
 
+type FetchingModule = {
+  state: 'fetching';
+  deferred: Deferred<void>;
+};
+
 type RegisteredModule = {
   state: 'registered';
-  dependencyList: string[];
+  dependencyList: UnregisteredDep[];
   implementation: Function;
+};
+
+type RegisteredWithDepsModule = {
+  state: 'registered-with-deps';
+  dependencies: RegisteredDep[];
+  implementation: Function;
+};
+
+type PreparingModule = {
+  // this state represents the *synchronous* window of time where this
+  // module's dependencies are moving from registered to preparing to
+  // evaluated. Because this is synchronous, you can rely on the fact that
+  // encountering a load for a module that is in "preparing" means you have a
+  // cycle.
+  state: 'preparing';
+  implementation: Function;
+  moduleInstance: object;
   consumedModules: Set<string>;
 };
 
-// a module is in this state until its own code *and the code for all its deps*
-// have been loaded. Modules move from fetching to registered depth-first.
-type FetchingModule = {
-  state: 'fetching';
-  // if you encounter a module in this state, you should wait for the deferred
-  // and then retry load where you're guarantee to see a new state
-  deferred: Deferred<Module>;
+type EvaluatedModule = {
+  state: 'evaluated';
+  moduleInstance: object;
+  consumedModules: Set<string>;
+};
+
+type BrokenModule = {
+  state: 'broken';
+  exception: any;
+  consumedModules: Set<string>;
 };
 
 type Module =
   | FetchingModule
   | RegisteredModule
-  | {
-      // this state represents the *synchronous* window of time where this
-      // module's dependencies are moving from registered to preparing to
-      // evaluated. Because this is synchronous, you can rely on the fact that
-      // encountering a load for a module that is in "preparing" means you have a
-      // cycle.
-      state: 'preparing';
-      implementation: Function;
-      moduleInstance: object;
-      consumedModules: Set<string>;
-    }
-  | {
-      state: 'evaluated';
-      moduleInstance: object;
-      consumedModules: Set<string>;
-    }
-  | {
-      state: 'broken';
-      exception: any;
-      consumedModules: Set<string>;
-    };
+  | RegisteredWithDepsModule
+  | PreparingModule
+  | EvaluatedModule
+  | BrokenModule;
+
+type EvaluatableModule =
+  | RegisteredWithDepsModule
+  | PreparingModule
+  | EvaluatedModule
+  | BrokenModule;
+
+type UnregisteredDep =
+  | { type: 'dep'; moduleURL: ResolvedURL }
+  | { type: 'shim-dep'; moduleId: string }
+  | { type: '__import_meta__' }
+  | { type: 'exports' };
+
+type RegisteredDep =
+  | { type: 'dep'; moduleURL: ResolvedURL; module: EvaluatableModule }
+  | { type: 'shim-dep'; moduleId: string; module: EvaluatableModule }
+  | { type: '__import_meta__' }
+  | { type: 'exports' };
 
 export interface MaybeLocalRequest extends Request {
   isLocal?: true;
@@ -223,11 +249,6 @@ export class Loader {
         );
       }
     }
-    if (module?.state === 'fetching') {
-      throw new Error(
-        `bug: could not determine the consumed modules for ${moduleIdentifier} because it is still in "fetching" state`
-      );
-    }
     if (module) {
       let cached = this.consumptionCache.get(module);
       if (cached) {
@@ -280,21 +301,90 @@ export class Loader {
     if (shimmed) {
       return shimmed as T;
     }
-
-    let module = await this.fetchModule(resolvedModule);
-    switch (module.state) {
-      case 'fetching':
-        await module.deferred.promise;
-        return this.evaluateModule(resolvedModuleIdentifier);
-      case 'preparing':
+    await this.advanceToState(resolvedModule, 'evaluated');
+    let module = this.getModule(resolvedModuleIdentifier);
+    switch (module?.state) {
       case 'evaluated':
+      case 'preparing':
         return module.moduleInstance as T;
       case 'broken':
         throw module.exception;
-      case 'registered':
-        return this.evaluateModule(resolvedModuleIdentifier);
       default:
-        throw assertNever(module);
+        throw new Error(
+          `bug: advanceToState('${moduleIdentifier}', 'evaluated') resulted in state ${module?.state}`
+        );
+    }
+  }
+
+  private async advanceToState(
+    resolvedURL: ResolvedURL,
+    targetState: 'registered-with-deps' | 'evaluated'
+  ): Promise<void> {
+    for (;;) {
+      let module = this.getModule(resolvedURL.href);
+
+      outer_switch: switch (module?.state) {
+        case undefined:
+          await this.fetchModule(resolvedURL);
+          break;
+        case 'fetching':
+          await module.deferred.promise;
+          break;
+        case 'registered': {
+          let readyDeps: RegisteredDep[] = [];
+          for (let entry of module.dependencyList) {
+            if (entry.type === '__import_meta__' || entry.type === 'exports') {
+              readyDeps.push(entry);
+            } else {
+              let depModule = this.getModule(resolvedURL.href);
+              if (entry.type === 'shim-dep') {
+                readyDeps.push({
+                  type: 'shim-dep',
+                  moduleId: entry.moduleId,
+                  module: depModule as EvaluatableModule, // safe because shims always start evaluated
+                });
+              } else {
+                if (!isEvaluatable(depModule)) {
+                  // we always only await the first dep that actually needs work and
+                  // then break bacak to the top-level state machine, so that we'll
+                  // be working from the latest state.
+                  await this.advanceToState(
+                    entry.moduleURL,
+                    'registered-with-deps'
+                  );
+                  break outer_switch;
+                }
+
+                readyDeps.push({
+                  type: 'dep',
+                  moduleURL: entry.moduleURL,
+                  module: depModule,
+                });
+              }
+            }
+          }
+          this.setModule(resolvedURL.href, {
+            state: 'registered-with-deps',
+            implementation: module.implementation,
+            consumedModules: module.consumedModules,
+            dependencies: readyDeps,
+          });
+          break;
+        }
+        case 'registered-with-deps':
+          if (targetState === 'registered-with-deps') {
+            return;
+          }
+          this.evaluate(resolvedURL.href, module);
+          break;
+        case 'broken':
+          return;
+        case 'evaluated':
+        case 'preparing':
+          return;
+        default:
+          throw assertNever(module);
+      }
     }
   }
 
@@ -420,60 +510,16 @@ export class Loader {
     });
   }
 
-  private async fetchModule(
-    moduleURL: ResolvedURL | string,
-    stack: string[] = []
-  ): Promise<Module> {
-    let start = Date.now();
+  private async fetchModule(moduleURL: ResolvedURL): Promise<void> {
     let moduleIdentifier =
       typeof moduleURL === 'string' ? moduleURL : moduleURL.href;
-    let module = this.getModule(moduleIdentifier);
-    let trimmedIdentifier = trimModuleIdentifier(moduleIdentifier);
-    if (module) {
-      // in the event of a cycle, we have already evaluated the
-      // define() since we recurse into our deps after the evaluation of the
-      // define, so just return ourselves
-      if (stack.includes(trimmedIdentifier)) {
-        return module;
-      }
 
-      // this closes an otherwise leaky async when there are simultaneous
-      // imports for modules that share a common dep, e.g. where you request
-      // module a and b simultaneously for the following consumption pattern
-      // (also included in our tests):
-      //   a -> b -> c
-      //
-      // In that case both of the imports will try to fetch c, one of them will
-      // start the actual fetch, and the other will short circuit and just
-      // return the cached module in a fetching state. the consumer of the short
-      // circuited module will assume that the dep has already been registered
-      // and immediately proceed to evaluation--when in fact the dep is still
-      // being loaded. to make sure that the consumer will wait until the dep
-      // has actually completed loading we need to return the deferred promise
-      // of the cached module.
-      if (module.state === 'fetching') {
-        return module.deferred.promise;
-      }
-      return module;
-    }
-    if (typeof moduleURL === 'string') {
-      let exception = new Error(
-        `the module '${moduleURL}' appears to be an npm package without a shim. We only support shimmed npm packages, otherwise provide a full URL to the module (e.g. unpkg url for module)`
-      );
-      this.setModule(moduleIdentifier, {
-        state: 'broken',
-        exception,
-        consumedModules: new Set(),
-      });
-      throw exception;
-    }
     this.log.debug(
       `loader cache miss for ${moduleURL.href}, fetching this module...`
     );
-    module = {
-      state: 'fetching',
-      deferred: new Deferred<Module>(),
-      // stacks: [stack],
+    let module = {
+      state: 'fetching' as const,
+      deferred: new Deferred<void>(),
     };
     this.setModule(moduleIdentifier, module);
 
@@ -502,7 +548,7 @@ export class Loader {
       throw new Error(`bug: should never get here`);
     }
 
-    let dependencyList: string[];
+    let dependencyList: UnregisteredDep[];
     let implementation: Function;
 
     // this local is here for the evals to see
@@ -511,13 +557,16 @@ export class Loader {
     let define = (_mid: string, depList: string[], impl: Function) => {
       dependencyList = depList.map((depId) => {
         if (depId === 'exports') {
-          return 'exports';
+          return { type: 'exports' };
         } else if (depId === '__import_meta__') {
-          return '__import_meta__';
+          return { type: '__import_meta__' };
         } else if (isUrlLike(depId)) {
-          return this.resolve(depId, new URL(moduleIdentifier)).href;
+          return {
+            type: 'dep',
+            moduleURL: this.resolve(depId, new URL(moduleIdentifier)),
+          };
         } else {
-          return depId; // for npm imports
+          return { type: 'shim-dep', moduleId: depId }; // for npm imports
         }
       });
       implementation = impl;
@@ -534,71 +583,34 @@ export class Loader {
       throw exception;
     }
 
-    await Promise.all(
-      dependencyList!.map(async (depId) => {
-        if (depId !== 'exports' && depId !== '__import_meta__') {
-          return await this.fetchModule(
-            isUrlLike(depId) ? makeResolvedURL(depId) : depId,
-            [
-              ...stack,
-              isUrlLike(moduleIdentifier)
-                ? trimExecutableExtension(new URL(moduleIdentifier)).href
-                : moduleIdentifier,
-            ]
-          );
-        }
-        return undefined;
-      })
-    );
+    // for (let depId of dependencyList!) {
+    //   if (depId !== 'exports' && depId !== '__import_meta__') {
+    //     // this kicks off the work but doesn't await it, because that could lead
+    //     // to deadlocks. The promises are not lost though! Each of these will
+    //     // cause a FetchingModule with its own deferred to be tracked in
+    //     // this.modules.
+    //     this.fetchModule(isUrlLike(depId) ? makeResolvedURL(depId) : depId);
+    //   }
+    // }
 
     let registeredModule: RegisteredModule = {
       state: 'registered',
       dependencyList: dependencyList!,
       implementation: implementation!,
-      consumedModules: new Set(
-        dependencyList!.filter(
-          (d) => !['exports', '__import_meta__'].includes(d)
-        )
-      ),
     };
 
     this.setModule(moduleIdentifier, registeredModule);
-    module.deferred.fulfill(registeredModule);
-    if (stack.length === 0) {
-      this.log.debug(
-        `loader fetch for ${moduleURL} (including deps) took ${
-          Date.now() - start
-        }ms`
-      );
-    }
-    return registeredModule;
+    module.deferred.fulfill();
   }
 
-  private evaluateModule<T extends object>(moduleIdentifier: string): T {
-    let module = this.getModule(moduleIdentifier);
-    if (!module) {
-      throw new Error(
-        `bug in module loader: can't find module. ${moduleIdentifier} should have been registered before entering evaluateModule`
-      );
+  private evaluate<T>(moduleIdentifier: string, module: EvaluatableModule): T {
+    if (module.state === 'broken') {
+      throw module.exception;
     }
-    switch (module.state) {
-      case 'fetching':
-        throw new Error(
-          `bug in module loader: module still in fetching state. ${moduleIdentifier} should have been registered before entering evaluateModule`
-        );
-      case 'preparing':
-      case 'evaluated':
-        return module.moduleInstance as T;
-      case 'broken':
-        throw module.exception;
-      case 'registered':
-        return this.evaluate(moduleIdentifier, module);
-      default:
-        throw assertNever(module);
+    if (module.state === 'evaluated' || module.state === 'preparing') {
+      return module.moduleInstance as T;
     }
-  }
 
-  private evaluate<T>(moduleIdentifier: string, module: RegisteredModule): T {
     let privateModuleInstance = Object.create(null);
     let moduleInstance = this.createModuleProxy(
       privateModuleInstance,
@@ -612,13 +624,16 @@ export class Loader {
     });
 
     try {
-      let dependencies = module.dependencyList.map((dependencyIdentifier) => {
-        if (dependencyIdentifier === 'exports') {
-          return privateModuleInstance;
-        } else if (dependencyIdentifier === '__import_meta__') {
-          return { url: moduleIdentifier, loader: this };
-        } else {
-          return this.evaluateModule(dependencyIdentifier);
+      let dependencies = module.dependencies.map((entry) => {
+        switch (entry.type) {
+          case 'exports':
+            return privateModuleInstance;
+          case '__import_meta__':
+            return { url: moduleIdentifier, loader: this };
+          case 'dep':
+            return this.evaluate(entry.moduleURL, entry.module);
+          default:
+            throw assertNever(entry);
         }
       });
 
@@ -690,4 +705,15 @@ function trimModuleIdentifier(moduleIdentifier: string): string {
   return isUrlLike(moduleIdentifier)
     ? trimExecutableExtension(new URL(moduleIdentifier)).href
     : moduleIdentifier;
+}
+
+function isEvaluatable(
+  module: Module | undefined
+): module is EvaluatableModule {
+  if (!module) {
+    return false;
+  }
+  return ['registered-with-deps', 'preparing', 'evaluated', 'broken'].includes(
+    module.state
+  );
 }
