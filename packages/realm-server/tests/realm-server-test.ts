@@ -1,6 +1,5 @@
 import { module, test } from 'qunit';
 import supertest, { Test, SuperTest } from 'supertest';
-import { RealmServer } from '../server';
 import { join, resolve } from 'path';
 import { Server } from 'http';
 import { dirSync, setGracefulCleanup, DirResult } from 'tmp';
@@ -18,20 +17,22 @@ import {
 } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
 import { Query } from '@cardstack/runtime-common/query';
-import { setupCardLogs, createRealm } from './helpers';
+import { setupCardLogs, runBaseRealmServer, runTestRealmServer } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-import { shimExternals } from '../lib/externals';
 import eventSource from 'eventsource';
 
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
+const testRealm2URL = new URL('http://127.0.0.1:4445');
 const testRealmHref = testRealmURL.href;
-const testRealm2Href = 'http://localhost:4202/node-test/';
+const testRealm2Href = testRealm2URL.href;
 const distDir = resolve(join(__dirname, '..', '..', 'host', 'dist'));
 console.log(`using host dist dir: ${distDir}`);
 
 module('Realm Server', function (hooks) {
-  let server: Server;
+  let testRealmServer: Server;
+  let testRealmServer2: Server;
+  let baseRealmServer: Server;
   let request: SuperTest<Test>;
   let dir: DirResult;
   setupCardLogs(
@@ -65,25 +66,27 @@ module('Realm Server', function (hooks) {
     return result;
   }
 
-  hooks.beforeEach(async function () {
-    Loader.destroy();
-    shimExternals();
-    Loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
-    dir = dirSync();
-    copySync(join(__dirname, 'cards'), dir.name);
-
-    let testRealm = await createRealm(dir.name, undefined, testRealmHref);
-    await testRealm.ready;
-    let realmServer = new RealmServer([testRealm]);
-    server = realmServer.listen(parseInt(testRealmURL.port));
-    request = supertest(server);
+  hooks.before(async function () {
+    baseRealmServer = await runBaseRealmServer();
   });
 
+  hooks.after(function () {
+    baseRealmServer.close();
+  });
+
+  hooks.beforeEach(async function () {
+    dir = dirSync();
+    copySync(join(__dirname, 'cards'), dir.name);
+    
+    testRealmServer = await runTestRealmServer(dir.name, undefined, testRealmURL);
+    request = supertest(testRealmServer);
+
+    testRealmServer2 = await runTestRealmServer(dir.name, undefined, testRealm2URL);
+  });
+  
   hooks.afterEach(function () {
-    server.close();
+    testRealmServer.close();
+    testRealmServer2.close();
   });
 
   test('serves a card GET request', async function (assert) {
@@ -493,7 +496,8 @@ module('Realm Server', function (hooks) {
 });
 
 module('Realm Server serving from root', function (hooks) {
-  let server: Server;
+  let baseRealmServer: Server;
+  let testRealmServer: Server;
   let request: SuperTest<Test>;
   let dir: DirResult;
   setupCardLogs(
@@ -501,29 +505,24 @@ module('Realm Server serving from root', function (hooks) {
     async () => await Loader.import(`${baseRealm.url}card-api`)
   );
 
+  hooks.before(async function () {
+    baseRealmServer = await runBaseRealmServer();
+  });
+
+  hooks.after(function () {
+    baseRealmServer.close();
+  });
+
   hooks.beforeEach(async function () {
-    Loader.destroy();
-    shimExternals();
-    Loader.addURLMapping(
-      new URL(baseRealm.url),
-      // Note that in order to really support a base realm that is served from
-      // the server's origin this will require an update of the host app's
-      // ember-cli-build.js, as that has been updated so that the chunk.js files
-      // are served from the base realm's /base path.
-      new URL('http://localhost:4203/')
-    );
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
 
-    let testRealm = await createRealm(dir.name, undefined, testRealmHref);
-    await testRealm.ready;
-    let realmServer = new RealmServer([testRealm]);
-    server = realmServer.listen(parseInt(testRealmURL.port));
-    request = supertest(server);
+    testRealmServer = await runTestRealmServer(dir.name, undefined, testRealmURL);
+    request = supertest(testRealmServer);
   });
 
   hooks.afterEach(function () {
-    server.close();
+    testRealmServer.close();
   });
 
   test('serves a root directory GET request', async function (assert) {
