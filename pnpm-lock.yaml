@@ -10,9 +10,6 @@ patchedDependencies:
   '@types/eventsource@1.1.11':
     hash: itunl7o524papufrlp7tcpsoiu
     path: patches/@types__eventsource@1.1.11.patch
-  ember-a11y-testing@5.2.0:
-    hash: w75y5k3kmtavdreepy5kywuure
-    path: patches/ember-a11y-testing@5.2.0.patch
   fastboot@4.1.0:
     hash: kizxbxhfcldguz4jcwonfduu2y
     path: patches/fastboot@4.1.0.patch
@@ -430,7 +427,7 @@ importers:
       classnames: ^2.3.2
       concurrently: ^8.0.1
       dayjs: ^1.11.7
-      ember-a11y-testing: ^5.2.0
+      ember-a11y-testing: ^5.2.1
       ember-auto-import: ^2.6.3
       ember-cli: ^4.12.1
       ember-cli-babel: ^7.26.11
@@ -510,7 +507,7 @@ importers:
       '@typescript-eslint/parser': 5.43.0_milcigd5nbl4h2ql2dp666vhsi
       broccoli-asset-rev: 3.0.0
       concurrently: 8.0.1
-      ember-a11y-testing: 5.2.0_w75y5k3kmtavdreepy5kywuure_7nhpqvd77t7nf65dhqmrxo3pyu
+      ember-a11y-testing: 5.2.1_7nhpqvd77t7nf65dhqmrxo3pyu
       ember-cli: 4.12.1_lodash@4.17.21
       ember-cli-dependency-checker: 3.3.1_ember-cli@4.12.1
       ember-cli-inject-live-reload: 2.1.0
@@ -10600,8 +10597,8 @@ packages:
       minimalistic-crypto-utils: 1.0.1
     dev: true
 
-  /ember-a11y-testing/5.2.0_w75y5k3kmtavdreepy5kywuure_7nhpqvd77t7nf65dhqmrxo3pyu:
-    resolution: {integrity: sha512-dWU3+ADTL7gnm+zxFL238OZJpGvLGRGEy07Zxgd64mNIdfNYYPeXOVZ6wjKUIuDXlKzvEnrwHV9D/pcj2rq9UA==}
+  /ember-a11y-testing/5.2.1_7nhpqvd77t7nf65dhqmrxo3pyu:
+    resolution: {integrity: sha512-gYIqSwCw43hRxQtwauln0hChRHyelkVTtmWVYgyvkX0+YKJXz2x+IGmC1MkO62SHOjz4A9wXyNSH13jwOIbJ9A==}
     engines: {node: 12.* || 14.* || >= 16}
     peerDependencies:
       '@ember/test-helpers': ^2.0.0
@@ -10629,7 +10626,6 @@ packages:
       - supports-color
       - webpack
     dev: true
-    patched: true
 
   /ember-auto-import/1.12.2:
     resolution: {integrity: sha512-gLqML2k77AuUiXxWNon1FSzuG1DV7PEPpCLCU5aJvf6fdL6rmFfElsZRh+8ELEB/qP9dT+LHjNEunVzd2dYc8A==}
