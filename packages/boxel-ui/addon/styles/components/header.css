@@ -2,6 +2,7 @@
 in the gts template when css-encapsulation is enabled */
 
 .boxel-header {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -29,6 +30,9 @@ in the gts template when css-encapsulation is enabled */
   background-color: var(--boxel-highlight);
 }
 .boxel-header__content {
+  position: absolute;
+  top: 0;
+  right: 0;
   display: flex;
   align-items: center;
 }

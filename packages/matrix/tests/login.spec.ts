@@ -5,7 +5,13 @@ import {
   registerUser,
   type SynapseInstance,
 } from '../docker/synapse';
-import { assertLoggedIn, assertLoggedOut, login, logout } from '../helpers';
+import {
+  assertLoggedIn,
+  assertLoggedOut,
+  login,
+  logout,
+  rootPath,
+} from '../helpers';
 
 test.describe('Login', () => {
   let synapse: SynapseInstance;
@@ -19,7 +25,7 @@ test.describe('Login', () => {
   });
 
   test('it can login', async ({ page }) => {
-    await page.goto(`/chat`);
+    await page.goto(`${rootPath}/chat`);
 
     await assertLoggedOut(page);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
@@ -49,7 +55,7 @@ test.describe('Login', () => {
     await assertLoggedIn(page);
 
     await logout(page);
-    assertLoggedOut(page);
+    await assertLoggedOut(page);
 
     // reload to page to show that the logout state persists
     await page.reload();

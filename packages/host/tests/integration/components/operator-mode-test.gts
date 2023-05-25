@@ -455,18 +455,16 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await waitFor('[data-test-person]');
-    assert.dom('[data-type-display-name]').hasText('Person');
+    assert.dom('[data-test-boxel-header-title]').hasText('Person');
     assert.dom('[data-test-person]').hasText('Fadhlan');
     assert.dom('[data-test-first-letter-of-the-name]').hasText('F');
     assert.dom('[data-test-city]').hasText('Bandung');
     assert.dom('[data-test-country]').hasText('Indonesia');
-    assert.dom('.operator-mode-card-stack__card').exists({ count: 1 });
+    assert.dom('[data-test-stack-card]').exists({ count: 1 });
     await waitFor('[data-test-cardstack-operator-mode-overlay-button]');
     await click('[data-test-cardstack-operator-mode-overlay-button]');
-    assert.dom('.operator-mode-card-stack__card').exists({ count: 2 });
-    assert
-      .dom('.operator-mode-card-stack__card:nth-of-type(2)')
-      .includesText('Mango');
+    assert.dom('[data-test-stack-card]').exists({ count: 2 });
+    assert.dom('[data-test-stack-card-index="1"]').includesText('Mango');
   });
 
   test("it doesn't change the field value if user clicks cancel in edit view", async function (assert) {
@@ -528,7 +526,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-country]').hasText('EditedCountry');
   });
 
-  test('no card if user closes the only card in the stack', async function (assert) {
+  test('displays add card button if user closes the only card in the stack and opens a card from card chooser', async function (assert) {
     let card = await loadCard(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -549,6 +547,14 @@ module('Integration | operator-mode', function (hooks) {
       { timeout: 3000 }
     );
     assert.dom('[data-test-person]').isNotVisible();
+    assert.dom('[data-test-add-card-button]').isVisible();
+    
+    await click('[data-test-add-card-button]');
+    assert.dom('[data-test-card-catalog-modal]').isVisible();
+
+    await waitFor(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
+    await click(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
+    assert.dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`).isVisible();
   });
 
   test('displays cards on cards-grid', async function (assert) {
@@ -615,6 +621,31 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`)
       .exists();
+  });
+
+  test('can open a card from the cards-grid and close it', async function (assert) {
+    let card = await loadCard(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    assert.dom(`[data-test-stack-card-index="0"]`).exists();
+
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
+
+    assert.dom(`[data-test-stack-card-index="1"]`).exists(); // Opens card on the stack
+    assert
+      .dom(`[data-test-stack-card-index="1"] [data-test-boxel-header-title]`)
+      .includesText('Person');
+
+    await click('[data-test-stack-card-index="1"] [data-test-close-button]');
+    assert.dom(`[data-test-stack-card-index="1"]`).doesNotExist();
   });
 
   test('create new card editor opens in the stack at each nesting level', async function (assert) {
@@ -1021,4 +1052,21 @@ module('Integration | operator-mode', function (hooks) {
 
   skip('can create a specialized a new card to populate a linksTo field');
   skip('can create a specialized a new card to populate a linksToMany field');
+
+  test('can close cards by clicking the header of a card deeper in the stack', async function (assert) {
+    let card = await loadCard(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
+    assert.dom(`[data-test-stack-card-index="1"]`).exists();
+    await click('[data-test-stack-card-index="0"] [data-test-boxel-header]');
+    assert.dom(`[data-test-stack-card-index="1"]`).doesNotExist();
+  });
 });
