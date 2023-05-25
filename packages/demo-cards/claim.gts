@@ -10,7 +10,7 @@ import {
 import { Button, CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 import { tracked } from '@glimmer/tracking';
 // @ts-ignore
-import { restartableTask, task } from 'ember-concurrency';
+import { restartableTask, enqueueTask } from 'ember-concurrency';
 
 declare global {
   interface Window {
@@ -46,7 +46,7 @@ class Isolated extends Component<typeof Claim> {
     super(owner, args);
     this.initialize.perform();
   }
-  private initialize = restartableTask(async () => {
+  private initialize = enqueueTask(async () => {
     let metamaskChainId = await this.getChainId();
     let isChainEqual = this.args.model.chain?.chainId == metamaskChainId;
     let isConnected = await this.isMetamaskConnected();
