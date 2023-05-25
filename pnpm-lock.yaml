@@ -568,6 +568,7 @@ importers:
       ember-qunit: ^5.1.5
       ember-resolver: ^8.0.3
       ember-resources: ^4.4.0
+      ember-set-body-class: ^1.0.2
       ember-source: ^4.6.0
       ember-source-channel-url: ^3.0.0
       ember-svg-jar: ^2.4.2
@@ -600,6 +601,7 @@ importers:
       ember-composable-helpers: 5.0.0
       ember-focus-trap: 1.0.1
       ember-load-initializers: 2.1.2_@babel+core@7.20.2
+      ember-set-body-class: 1.0.2
       ember-svg-jar: 2.4.2
       ember-template-imports: 3.4.0_ember-cli-htmlbars@6.1.1
       file-loader: 6.2.0_webpack@5.75.0
@@ -1395,7 +1397,6 @@ packages:
       semver: 6.3.0
     transitivePeerDependencies:
       - supports-color
-    dev: true
 
   /@babel/core/7.21.0:
     resolution: {integrity: sha512-PuxUbxcW6ZYe656yL3EAhpy7qXKq0DmYsrJLpbB8XrsCP9Nm+XCg9XFMb5vIDliPD7+U/+M+QJlH17XOcB7eXA==}
@@ -1658,7 +1659,6 @@ packages:
       '@babel/types': 7.21.2
     transitivePeerDependencies:
       - supports-color
-    dev: true
 
   /@babel/helper-module-transforms/7.21.2:
     resolution: {integrity: sha512-79yj2AR4U/Oqq/WOV7Lx6hUjau1Zfo4cI+JLAVYeMV5XIlbOhmjEk5ulbTc9fMpmlojzZHkUUxAiK+UKn+hNQQ==}
@@ -1786,7 +1786,6 @@ packages:
       '@babel/types': 7.21.2
     transitivePeerDependencies:
       - supports-color
-    dev: true
 
   /@babel/helpers/7.21.0:
     resolution: {integrity: sha512-XXve0CBtOW0pd7MRzzmoyuSj0e3SEzj8pgyFxnTT1NJZL38BD1MK7yYrm8yefRPIDvNNe14xR4FdbHwpInD4rA==}
@@ -2048,7 +2047,7 @@ packages:
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
-      '@babel/core': 7.20.2
+      '@babel/core': 7.20.2_supports-color@8.1.1
       '@babel/helper-plugin-utils': 7.20.2
       '@babel/plugin-syntax-nullish-coalescing-operator': 7.8.3_@babel+core@7.20.2
 
@@ -2138,7 +2137,7 @@ packages:
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
-      '@babel/core': 7.20.2
+      '@babel/core': 7.20.2_supports-color@8.1.1
       '@babel/helper-plugin-utils': 7.20.2
       '@babel/helper-skip-transparent-expression-wrappers': 7.20.0
       '@babel/plugin-syntax-optional-chaining': 7.8.3_@babel+core@7.20.2
@@ -2384,7 +2383,7 @@ packages:
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
-      '@babel/core': 7.20.2
+      '@babel/core': 7.20.2_supports-color@8.1.1
       '@babel/helper-plugin-utils': 7.20.2
 
   /@babel/plugin-syntax-nullish-coalescing-operator/7.8.3_@babel+core@7.21.0:
@@ -2452,7 +2451,7 @@ packages:
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
-      '@babel/core': 7.20.2
+      '@babel/core': 7.20.2_supports-color@8.1.1
       '@babel/helper-plugin-utils': 7.20.2
 
   /@babel/plugin-syntax-optional-chaining/7.8.3_@babel+core@7.21.0:
@@ -3522,7 +3521,6 @@ packages:
       globals: 11.12.0
     transitivePeerDependencies:
       - supports-color
-    dev: true
 
   /@babel/traverse/7.21.2:
     resolution: {integrity: sha512-ts5FFU/dSUPS13tv8XiEObDu9K+iagEKME9kAbaP7r0Y9KtZJZ+NGndDvWoRAYNpeWafbpFeki3q9QoMD6gxyw==}
@@ -5300,15 +5298,15 @@ packages:
       '@types/ember__application': 4.0.4_@babel+core@7.20.2
       '@types/ember__array': 4.0.3_@babel+core@7.20.2
       '@types/ember__component': 4.0.11_@babel+core@7.20.2
-      '@types/ember__controller': 4.0.3_@babel+core@7.20.2
-      '@types/ember__debug': 4.0.3_@babel+core@7.20.2
-      '@types/ember__engine': 4.0.4_@babel+core@7.20.2
+      '@types/ember__controller': 4.0.3
+      '@types/ember__debug': 4.0.3
+      '@types/ember__engine': 4.0.4
       '@types/ember__error': 4.0.1
-      '@types/ember__object': 4.0.5_@babel+core@7.20.2
+      '@types/ember__object': 4.0.5
       '@types/ember__polyfills': 4.0.1
       '@types/ember__routing': 4.0.12_@babel+core@7.20.2
       '@types/ember__runloop': 4.0.2_@babel+core@7.20.2
-      '@types/ember__service': 4.0.1_@babel+core@7.20.2
+      '@types/ember__service': 4.0.1
       '@types/ember__string': 3.0.10
       '@types/ember__template': 4.0.1
       '@types/ember__test': 4.0.1_@babel+core@7.20.2
@@ -5325,8 +5323,8 @@ packages:
     dependencies:
       '@glimmer/component': 1.1.2_@babel+core@7.20.2
       '@types/ember': 4.0.2_@babel+core@7.20.2
-      '@types/ember__engine': 4.0.4_@babel+core@7.20.2
-      '@types/ember__object': 4.0.5_@babel+core@7.20.2
+      '@types/ember__engine': 4.0.4
+      '@types/ember__object': 4.0.5
       '@types/ember__owner': 4.0.2
       '@types/ember__routing': 4.0.12_@babel+core@7.20.2
     transitivePeerDependencies:
@@ -5338,7 +5336,7 @@ packages:
     resolution: {integrity: sha512-G6kbLaS3ke4QspHkgLlGY0t1v0G22hGavyphezZucj7LLk1N+r11w913CYkBg3cJsJD+TG2Wo4eVbgRcotvuvQ==}
     dependencies:
       '@types/ember': 4.0.2_@babel+core@7.20.2
-      '@types/ember__object': 4.0.5_@babel+core@7.20.2
+      '@types/ember__object': 4.0.5
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
@@ -5348,7 +5346,7 @@ packages:
     resolution: {integrity: sha512-iwFf+qYBsGp9SycIb0lxGkdZPYpKxMcBoV5kCJbWyC6azuX2xPDXHx8n2lm8O9GrEFVJXfYC5bSXf33rdpy5Sw==}
     dependencies:
       '@types/ember': 4.0.2_@babel+core@7.20.2
-      '@types/ember__object': 4.0.5_@babel+core@7.20.2
+      '@types/ember__object': 4.0.5
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
@@ -5369,6 +5367,13 @@ packages:
       - supports-color
     dev: true
 
+  /@types/ember__debug/4.0.3:
+    resolution: {integrity: sha512-LvSLFgNlzpbsdb479ohS2szCFwkAsaqPnTjyPML7xFF3r3VGFMQjVNTXQpFYQCKTMAC1FYRX1N6hw/8lpXWHKA==}
+    dependencies:
+      '@types/ember__object': 4.0.5
+      '@types/ember__owner': 4.0.2
+    dev: true
+
   /@types/ember__debug/4.0.3_@babel+core@7.20.2:
     resolution: {integrity: sha512-LvSLFgNlzpbsdb479ohS2szCFwkAsaqPnTjyPML7xFF3r3VGFMQjVNTXQpFYQCKTMAC1FYRX1N6hw/8lpXWHKA==}
     dependencies:
@@ -5381,6 +5386,13 @@ packages:
 
   /@types/ember__destroyable/4.0.1:
     resolution: {integrity: sha512-U497H5zW2bfdwmX1rktaSe+IsOrcqLn7jtrHI2dNnf9le38e1Wcnes8amA9PCv4lOhH+Mc3nkNIdQx38DwflXA==}
+    dev: true
+
+  /@types/ember__engine/4.0.4:
+    resolution: {integrity: sha512-dxQf3ESRjTJtCHbd42/ReUpQUAUsn/VtI6+S07jrsgCbAQEr8Qkh/dJpd9Cta8N+DpbY1CUH58D4HxdOC4Ip3A==}
+    dependencies:
+      '@types/ember__object': 4.0.5
+      '@types/ember__owner': 4.0.2
     dev: true
 
   /@types/ember__engine/4.0.4_@babel+core@7.20.2:
@@ -7101,7 +7113,7 @@ packages:
       '@babel/core': ^7.0.0
       webpack: '>=2'
     dependencies:
-      '@babel/core': 7.20.2
+      '@babel/core': 7.20.2_supports-color@8.1.1
       find-cache-dir: 3.3.2
       loader-utils: 2.0.4
       make-dir: 3.1.0
@@ -8935,7 +8947,7 @@ packages:
       mississippi: 3.0.0
       mkdirp: 0.5.6
       move-concurrently: 1.0.1
-      promise-inflight: 1.0.1
+      promise-inflight: 1.0.1_bluebird@3.7.2
       rimraf: 2.7.1
       ssri: 6.0.2
       unique-filename: 1.1.1
@@ -10410,7 +10422,6 @@ packages:
     dependencies:
       ms: 2.1.2
       supports-color: 8.1.1
-    dev: true
 
   /decamelize/1.2.0:
     resolution: {integrity: sha512-z2S+W9X73hAUUki+N+9Za2lBlun89zigOyGrsax+KUQ6wKW4ZoWpEYBkGhQjwAjjDCkWxhY0VKEhk8wzY7F5cA==}
@@ -11058,7 +11069,7 @@ packages:
       ember-cli: ^3.2.0 || ^4.0.0
     dependencies:
       chalk: 2.4.2
-      ember-cli: 4.6.0
+      ember-cli: 4.6.0_lodash@4.17.21
       find-yarn-workspace-root: 1.2.1
       is-git-url: 1.0.0
       resolve: 1.22.1
@@ -12813,6 +12824,15 @@ packages:
       recast: 0.18.10
     transitivePeerDependencies:
       - supports-color
+
+  /ember-set-body-class/1.0.2:
+    resolution: {integrity: sha512-SEsTwFp9SHTg4LgebhkUuLgYWg1VZD7I1QcrV2sTY583wu216OThoSs5szvS/KgSc1xD1Z22TFvOb848t2hGfw==}
+    engines: {node: 10.* || 12.* || >= 14.*}
+    dependencies:
+      ember-cli-babel: 7.26.11
+    transitivePeerDependencies:
+      - supports-color
+    dev: false
 
   /ember-source-channel-url/1.2.0:
     resolution: {integrity: sha512-CLClcHzVf+8GoFk4176R16nwXoel70bd7DKVAY6D8M0m5fJJhbTrAPYpDA0lY8A60HZo9j/s8A8LWiGh1YmdZg==}
@@ -18846,6 +18866,17 @@ packages:
     peerDependenciesMeta:
       bluebird:
         optional: true
+    dev: true
+
+  /promise-inflight/1.0.1_bluebird@3.7.2:
+    resolution: {integrity: sha512-6zWPyEOFaQBJYcGMHBKTKJ3u6TBsnMFOIZSa6ce1e/ZrrsOlnHRHbabMjLiBYKp+n44X9eUI6VUPaukCXHuG4g==}
+    peerDependencies:
+      bluebird: '*'
+    peerDependenciesMeta:
+      bluebird:
+        optional: true
+    dependencies:
+      bluebird: 3.7.2
     dev: true
 
   /promise-map-series/0.2.3:
