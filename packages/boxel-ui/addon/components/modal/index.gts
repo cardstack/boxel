@@ -3,7 +3,6 @@ import { on } from '@ember/modifier';
 import { eq } from '../../helpers/truth-helpers';
 import cssVar from '../../helpers/css-var';
 import cn from '../../helpers/cn';
-// @ts-ignore no types available
 import setBodyClass from 'ember-set-body-class/helpers/set-body-class';
 
 interface Signature {
