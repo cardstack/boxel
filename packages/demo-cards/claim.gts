@@ -44,6 +44,7 @@ class Isolated extends Component<typeof Claim> {
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
+    // to fix: this.args.model.chain
     this.initialize.perform();
   }
   private initialize = enqueueTask(async () => {
