@@ -450,6 +450,7 @@ importers:
       ember-qunit: ^6.2.0
       ember-resolver: ^10.0.0
       ember-resources: ^4.4.0
+      ember-set-body-class: ^1.0.2
       ember-source: ^4.12.0
       ember-source-channel-url: ^3.0.0
       ember-svg-jar: ^2.4.2
@@ -481,6 +482,7 @@ importers:
       ember-composable-helpers: 5.0.0
       ember-focus-trap: 1.0.1
       ember-load-initializers: 2.1.2_@babel+core@7.20.2
+      ember-set-body-class: 1.0.2
       ember-svg-jar: 2.4.2
       ember-template-imports: 3.4.0_ember-cli-htmlbars@6.2.0
       file-loader: 6.2.0_webpack@5.82.1
@@ -8577,7 +8579,7 @@ packages:
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
     hasBin: true
     dependencies:
-      caniuse-lite: 1.0.30001431
+      caniuse-lite: 1.0.30001489
       electron-to-chromium: 1.4.284
       node-releases: 2.0.6
       update-browserslist-db: 1.0.10_browserslist@4.21.4
@@ -8827,6 +8829,10 @@ packages:
 
   /caniuse-lite/1.0.30001431:
     resolution: {integrity: sha512-zBUoFU0ZcxpvSt9IU66dXVT/3ctO1cy4y9cscs1szkPlcWb6pasYM144GqrUygUbT+k7cmUCW61cvskjcv0enQ==}
+    dev: true
+
+  /caniuse-lite/1.0.30001489:
+    resolution: {integrity: sha512-x1mgZEXK8jHIfAxm+xgdpHpk50IN3z3q3zP261/WS+uvePxW8izXuCu6AHz0lkuYTlATDehiZ/tNyYBdSQsOUQ==}
 
   /capture-exit/2.0.0:
     resolution: {integrity: sha512-PiT/hQmTonHhl/HFGN+Lx3JJUznrVYJ3+AQsnthneZbvW7x+f08Tk7yLJTLEOUvBTbduLeeBkxEaYXUOUrRq6g==}
@@ -12190,6 +12196,15 @@ packages:
       recast: 0.18.10
     transitivePeerDependencies:
       - supports-color
+
+  /ember-set-body-class/1.0.2:
+    resolution: {integrity: sha512-SEsTwFp9SHTg4LgebhkUuLgYWg1VZD7I1QcrV2sTY583wu216OThoSs5szvS/KgSc1xD1Z22TFvOb848t2hGfw==}
+    engines: {node: 10.* || 12.* || >= 14.*}
+    dependencies:
+      ember-cli-babel: 7.26.11
+    transitivePeerDependencies:
+      - supports-color
+    dev: false
 
   /ember-source-channel-url/1.2.0:
     resolution: {integrity: sha512-CLClcHzVf+8GoFk4176R16nwXoel70bd7DKVAY6D8M0m5fJJhbTrAPYpDA0lY8A60HZo9j/s8A8LWiGh1YmdZg==}

@@ -476,6 +476,21 @@ nav > .directory-level {
   overflow: hidden;
 }
 
+.operator-mode-card-stack__buried .operator-mode-card-stack__card {
+  background-color: var(--boxel-200);
+  grid-template-rows: 40px auto;
+}
+
+.operator-mode-card-stack__buried .operator-mode-card-stack__card__header .icon-button {
+  display: none;
+}
+
+.operator-mode-card-stack__buried .operator-mode-card-stack__card__header {
+  cursor: pointer;
+  font: 500 var(--boxel-font-sm);
+  padding: 0 var(--boxel-sp-xs);
+}
+
 .operator-mode-card-stack__card {
   position: relative;
   height: 100%;
@@ -647,6 +662,34 @@ nav > .directory-level {
 
 .search-input__input:focus {
   outline: none;
+}
+
+.operator-mode__no-cards {
+  height: calc(100% - var(--search-sheet-closed-height));
+  width: 100%;
+  max-width: 50rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.operator-mode__no-cards__add-card-title {
+  color: var(--boxel-light);
+  font: var(--boxel-font-lg);
+}
+
+.operator-mode__no-cards__add-card-button {
+  height: 350px;
+  width: 200px;
+  vertical-align: middle;
+  background: var(--boxel-teal);
+  border: none;
+  border-radius: var(--boxel-border-radius);
+}
+
+.operator-mode__no-cards__add-card-button:hover {
+  background: var(--boxel-dark-teal);
 }
 
 /* matrix spike */
