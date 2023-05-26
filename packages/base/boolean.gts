@@ -17,7 +17,7 @@ let groupNumber = 0;
 
 class View extends Component<typeof BooleanCard> {
   <template>
-    {{this.fieldName}}: {{@model}}
+    {{@model}}
   </template>
 
   get fieldName() {
