@@ -56,7 +56,7 @@ class Isolated extends Component<typeof Claim> {
   constructor(owner: unknown, args: any) {
     super(owner, args);
     this.initialize.perform();
-    if (this.isMetamaskInstalled()) {
+    if (window.ethereum) {
       window.ethereum.on('chainChanged', (chainId: string) => {
         this.connected =
           parseInt(chainId, 16) == this.args.model.chain?.chainId;
