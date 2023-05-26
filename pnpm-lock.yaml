@@ -782,6 +782,9 @@ importers:
       ember-load-initializers:
         specifier: ^2.1.2
         version: 2.1.2(@babel/core@7.20.2)
+      ember-set-body-class:
+        specifier: ^1.0.2
+        version: 1.0.2
       ember-svg-jar:
         specifier: ^2.4.2
         version: 2.4.2
@@ -12369,6 +12372,15 @@ packages:
     transitivePeerDependencies:
       - supports-color
 
+  /ember-set-body-class@1.0.2:
+    resolution: {integrity: sha512-SEsTwFp9SHTg4LgebhkUuLgYWg1VZD7I1QcrV2sTY583wu216OThoSs5szvS/KgSc1xD1Z22TFvOb848t2hGfw==}
+    engines: {node: 10.* || 12.* || >= 14.*}
+    dependencies:
+      ember-cli-babel: 7.26.11
+    transitivePeerDependencies:
+      - supports-color
+    dev: false
+
   /ember-source-channel-url@1.2.0:
     resolution: {integrity: sha512-CLClcHzVf+8GoFk4176R16nwXoel70bd7DKVAY6D8M0m5fJJhbTrAPYpDA0lY8A60HZo9j/s8A8LWiGh1YmdZg==}
     engines: {node: 6.* || 8.* || >= 10.*}
@@ -20657,7 +20669,7 @@ packages:
     resolution: {integrity: sha512-15Ih7phfcdP5YxqiB+iDtLoaTz4Nd35+IiAv0kQ5FNKHzXgdWqPoTIqEDDJmXceQt4JZk6lVPT8lnDlPpGDppw==}
     engines: {node: '>=8'}
     dependencies:
-      punycode: 2.1.1
+      punycode: 2.3.0
     dev: true
 
   /tr46@3.0.0:
