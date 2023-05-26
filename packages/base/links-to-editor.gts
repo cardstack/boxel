@@ -101,9 +101,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
   private createCard = restartableTask(async () => {
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
     let newCard: Card | undefined =
-      await this.args.context?.actions?.createCard(type, undefined, {
-        isLinkedCard: true,
-      });
+      await this.args.context?.actions?.createCard(type, undefined);
     if (newCard) {
       this.args.model.value = newCard;
     }
