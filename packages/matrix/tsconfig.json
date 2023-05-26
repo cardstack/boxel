@@ -25,15 +25,16 @@
     "paths": {
       "https://cardstack.com/base/*": ["../base/*"],
       "@cardstack/boxel-ui": ["../boxel-ui/addon"],
-      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"]
+      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"],
+      "*": ["types/*"]
     }
   },
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"],
     "transform": {
-      "include": ["../base/**", "./**", "../boxel-ui/addon/**"]
+      "include": ["./**"]
     }
   },
-  "include": ["../base/**/*", "./**/*"],
+  "include": ["./**/*"],
   "exclude": ["../base/__boxel/**/*"]
 }

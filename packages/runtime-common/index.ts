@@ -157,6 +157,7 @@ export interface Actions {
     ref: CardRef,
     relativeTo: URL | undefined
   ) => Promise<Card | undefined>;
+  viewCard: (card: Card) => void;
   // more CRUD ops to come...
 }
 
