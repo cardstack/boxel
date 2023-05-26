@@ -49,7 +49,6 @@ module.exports = function (defaults) {
       resolveLoader: {
         alias: {
           'glimmer-scoped-css/virtual-loader': require.resolve(
-            // eslint-disable-next-line node/no-missing-require
             'glimmer-scoped-css/virtual-loader'
           ),
         },

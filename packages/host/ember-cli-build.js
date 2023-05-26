@@ -45,6 +45,7 @@ module.exports = function (defaults) {
               // 'en' is built into moment and cannot be removed. This strips the others.
               localesToKeep: [],
             }),
+            new GlimmerScopedCSSWebpackPlugin(),
           ],
           resolve: {
             fallback: {
@@ -53,6 +54,13 @@ module.exports = function (defaults) {
               crypto: require.resolve('crypto-browserify'),
               stream: require.resolve('stream-browserify'),
               process: false,
+            },
+            resolveLoader: {
+              alias: {
+                'glimmer-scoped-css/virtual-loader': require.resolve(
+                  'glimmer-scoped-css/virtual-loader'
+                ),
+              },
             },
           },
           node: {
