@@ -155,9 +155,9 @@ export async function createNewCard<T extends Card>(
 export interface Actions {
   createCard: (
     ref: CardRef,
-    relativeTo: URL | undefined,
-    opts?: { isLinkedCard?: boolean }
+    relativeTo: URL | undefined
   ) => Promise<Card | undefined>;
+  viewCard: (card: Card) => void;
   // more CRUD ops to come...
 }
 

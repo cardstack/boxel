@@ -98,7 +98,7 @@ class Isolated extends Component<typeof CardsGrid> {
   }
 
   @action openCard(card: Card) {
-    this.args.context?.optional?.openCard(card);
+    this.args.context?.actions?.viewCard(card);
   }
 
   private createCard = restartableTask(async () => {
@@ -112,10 +112,14 @@ class Isolated extends Component<typeof CardsGrid> {
       return;
     }
 
-    await this.args.context?.actions?.createCard?.(
+    let newCard = await this.args.context?.actions?.createCard?.(
       card.ref,
       this.args.model[relativeTo]
     );
+
+    if (newCard) {
+      this.openCard(newCard);
+    }
   });
 }
 

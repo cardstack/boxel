@@ -55,7 +55,6 @@ export type StackItem = {
   card: Card;
   format: Format;
   request?: Deferred<Card>;
-  isLinkedCard?: boolean;
 };
 
 export interface RenderedLinksToCard {
@@ -114,20 +113,31 @@ export default class OperatorMode extends Component<Signature> {
 
   @action async edit(item: StackItem) {
     await this.saveCardFieldValues(item.card);
-    this.setFormat(item, 'edit');
+    let newItem = this.setItem(item, 'edit', new Deferred());
     this.stack = this.stack;
+
+    let updatedCard = await newItem.request?.promise;
+    if (updatedCard) {
+      this.addToStack({
+        card: updatedCard,
+        format: 'isolated',
+      });
+    }
   }
 
-  @action setFormat(item: StackItem, format: Format) {
-    let index = this.stack.indexOf(item);
-    if (index === -1) {
+  @action setItem(item: StackItem, format: Format, request?: Deferred<Card>) {
+    let el = this.stack.find((stackItem) => stackItem.card.id === item.card.id);
+    if (!el) {
       throw new Error(`${item.card} was not found in stack`);
     }
+    let index = this.stack.indexOf(el);
     let newItem = {
       card: item.card,
       format,
+      request,
     };
     this.stack[index] = newItem;
+    return newItem;
   }
 
   @action async close(item: StackItem) {
@@ -137,30 +147,18 @@ export default class OperatorMode extends Component<Signature> {
   }
 
   @action async cancel(item: StackItem) {
-    if (item.request) {
-      // clicking cancel closes the 'create new card' editor
-      this.close(item);
-    }
     await this.rollbackCardFieldValues(item.card);
-    this.setFormat(item, 'isolated');
+    this.setItem(item, 'isolated');
   }
 
   @action async save(item: StackItem) {
-    let { card, request, isLinkedCard } = item;
+    let { card, request } = item;
     await this.saveCardFieldValues(card);
     let updatedCard = await this.write.perform(card);
 
     if (updatedCard) {
       request?.fulfill(updatedCard);
-      let index = this.stack.indexOf(item);
-      if (isLinkedCard) {
-        this.stack.splice(index); // closes the 'create new card' editor for linked card fields
-      } else {
-        this.stack[index] = {
-          card: updatedCard,
-          format: 'isolated',
-        };
-      }
+      this.stack.splice(this.stack.indexOf(item));
     }
   }
 
@@ -194,10 +192,7 @@ export default class OperatorMode extends Component<Signature> {
   private publicAPI: Actions = {
     createCard: async (
       ref: CardRef,
-      relativeTo: URL | undefined,
-      opts?: {
-        isLinkedCard?: boolean;
-      }
+      relativeTo: URL | undefined
     ): Promise<Card | undefined> => {
       let doc = { data: { meta: { adoptsFrom: ref } } };
       let newCard = await this.cardService.createFromSerialized(
@@ -210,12 +205,13 @@ export default class OperatorMode extends Component<Signature> {
         card: newCard,
         format: 'edit',
         request: new Deferred(),
-        isLinkedCard: opts?.isLinkedCard,
       };
       this.addToStack(newItem);
       return await newItem.request?.promise;
     },
-    // more CRUD ops to come...
+    viewCard: (card: Card) => {
+      return this.addToStack({ card, format: 'isolated' });
+    },
   };
 
   private async rollbackCardFieldValues(card: Card) {
@@ -245,9 +241,6 @@ export default class OperatorMode extends Component<Signature> {
       cardComponentModifier: LinksToCardComponentModifier,
       optional: {
         stack: this.stack, // Not used currently, but eventually there will be more than one stack and we will need to know which one we are in.
-        openCard: (card: Card) => {
-          return this.addToStack({ card, format: 'isolated' });
-        },
       },
       actions: this.publicAPI,
     };
@@ -293,9 +286,10 @@ export default class OperatorMode extends Component<Signature> {
   }
 
   addCard = restartableTask(async () => {
-    let type = identifyCard(this.args.firstCardInStack.constructor) ?? baseCardRef;
+    let type =
+      identifyCard(this.args.firstCardInStack.constructor) ?? baseCardRef;
     let chosenCard: Card | undefined = await chooseCard({
-      filter: { type }
+      filter: { type },
     });
     if (chosenCard) {
       let newItem: StackItem = {
@@ -332,15 +326,16 @@ export default class OperatorMode extends Component<Signature> {
 
       {{#if (eq this.stack.length 0)}}
         <div class='operator-mode__no-cards'>
-          <p class='operator-mode__no-cards__add-card-title'>Add a card to get started</p>
-          {{!-- Cannot find an svg icon with plus in the box 
-          that we can fill the color of the plus and the box. --}}
-          <button class='operator-mode__no-cards__add-card-button icon-button' {{on 'click' (fn (perform this.addCard))}} data-test-add-card-button>
-            {{svgJar
-              'icon-plus'
-              width='50px'
-              height='50px'
-            }}
+          <p class='operator-mode__no-cards__add-card-title'>Add a card to get
+            started</p>
+          {{! Cannot find an svg icon with plus in the box
+          that we can fill the color of the plus and the box. }}
+          <button
+            class='operator-mode__no-cards__add-card-button icon-button'
+            {{on 'click' (fn (perform this.addCard))}}
+            data-test-add-card-button
+          >
+            {{svgJar 'icon-plus' width='50px' height='50px'}}
           </button>
         </div>
       {{else}}
@@ -373,7 +368,9 @@ export default class OperatorMode extends Component<Signature> {
                   {{on
                     'click'
                     (optional
-                      (if (this.isBuried i) (fn this.dismissStackedCardsAbove i))
+                      (if
+                        (this.isBuried i) (fn this.dismissStackedCardsAbove i)
+                      )
                     )
                   }}
                 >
