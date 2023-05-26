@@ -55,10 +55,10 @@
     "typescript": "^4.6.3"
   },
   "engines": {
-    "pnpm": "^7"
+    "pnpm": "^8"
   },
   "volta": {
     "node": "18.6.0",
-    "pnpm": "7.28.0"
+    "pnpm": "8.5.1"
   }
 }
