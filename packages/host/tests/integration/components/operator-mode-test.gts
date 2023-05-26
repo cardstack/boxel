@@ -526,7 +526,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-country]').hasText('EditedCountry');
   });
 
-  test('no card if user closes the only card in the stack', async function (assert) {
+  test('displays add card button if user closes the only card in the stack and opens a card from card chooser', async function (assert) {
     let card = await loadCard(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -547,6 +547,14 @@ module('Integration | operator-mode', function (hooks) {
       { timeout: 3000 }
     );
     assert.dom('[data-test-person]').isNotVisible();
+    assert.dom('[data-test-add-card-button]').isVisible();
+    
+    await click('[data-test-add-card-button]');
+    assert.dom('[data-test-card-catalog-modal]').isVisible();
+
+    await waitFor(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
+    await click(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
+    assert.dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`).isVisible();
   });
 
   test('displays cards on cards-grid', async function (assert) {
@@ -694,8 +702,6 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await click('[data-test-stack-card-index="3"] [data-test-save-button]');
-    await waitFor(`[data-test-stack-card="${testRealmURL}Author/3"]`);
-    await click('[data-test-stack-card-index="3"] [data-test-close-button]');
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="3"]')
     );
@@ -709,8 +715,6 @@ module('Integration | operator-mode', function (hooks) {
       'Mad As a Hatter'
     );
     await click('[data-test-stack-card-index="2"] [data-test-save-button]');
-    await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/3"]`);
-    await click('[data-test-stack-card-index="2"] [data-test-close-button]');
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="2"]')
     );
@@ -825,8 +829,6 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await click('[data-test-stack-card-index="1"] [data-test-save-button]');
-    await waitFor(`[data-test-stack-card="${testRealmURL}Author/3"]`);
-    await click('[data-test-stack-card-index="1"] [data-test-close-button]');
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="1"]')
     );
@@ -966,9 +968,6 @@ module('Integration | operator-mode', function (hooks) {
       'Woodster'
     );
     await click('[data-test-stack-card-index="1"] [data-test-save-button]');
-    await waitFor(`[data-test-stack-card="${testRealmURL}Pet/1"]`);
-    await click('[data-test-stack-card-index="1"] [data-test-close-button]');
-
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="1"]')
     );
@@ -999,9 +998,6 @@ module('Integration | operator-mode', function (hooks) {
       'Woodster'
     );
     await click('[data-test-stack-card-index="1"] [data-test-save-button]');
-    await waitFor(`[data-test-stack-card="${testRealmURL}Pet/1"]`);
-    await click('[data-test-stack-card-index="1"] [data-test-close-button]');
-
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="1"]')
     );
@@ -1044,4 +1040,21 @@ module('Integration | operator-mode', function (hooks) {
 
   skip('can create a specialized a new card to populate a linksTo field');
   skip('can create a specialized a new card to populate a linksToMany field');
+
+  test('can close cards by clicking the header of a card deeper in the stack', async function (assert) {
+    let card = await loadCard(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
+    assert.dom(`[data-test-stack-card-index="1"]`).exists();
+    await click('[data-test-stack-card-index="0"] [data-test-boxel-header]');
+    assert.dom(`[data-test-stack-card-index="1"]`).doesNotExist();
+  });
 });
