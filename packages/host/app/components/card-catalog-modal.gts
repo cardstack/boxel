@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
+import { htmlSafe } from '@ember/template';
 import { registerDestructor } from '@ember/destroyable';
 import { enqueueTask } from 'ember-concurrency';
 import type {
@@ -29,7 +30,7 @@ export default class CardCatalogModal extends Component<Signature> {
         @size='large'
         @isOpen={{true}}
         @onClose={{fn this.pick undefined}}
-        style='z-index:{{this.zIndex}}'
+        style={{this.styleString}}
         data-test-card-catalog-modal
       >
         <CardContainer class='dialog-box' @displayBoundaries={{true}}>
@@ -94,6 +95,10 @@ export default class CardCatalogModal extends Component<Signature> {
     registerDestructor(this, () => {
       delete (globalThis as any)._CARDSTACK_CARD_CHOOSER;
     });
+  }
+
+  get styleString() {
+    return htmlSafe(`z-index: ${this.zIndex}`);
   }
 
   async chooseCard<T extends CardBase>(

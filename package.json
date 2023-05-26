@@ -16,7 +16,8 @@
     "overrides": {
       "@types/eslint": "8.4.1",
       "jsesc": "^3.0.0",
-      "ember-concurrency": "^2.3.4"
+      "ember-concurrency": "github:machty/ember-concurrency#c6ed562",
+      "ember-modifier": "^4.1.0"
     },
     "peerDependencyRules": {
       "allowedVersions": {
@@ -35,14 +36,14 @@
     "@babel/core": "^7.17.8",
     "@glimmer/component": "^1.1.2",
     "@glimmer/tracking": "^1.0.4",
-    "@glint/core": "^1.0.0-beta.4",
-    "@glint/environment-ember-loose": "^1.0.0-beta.4",
-    "@glint/environment-ember-template-imports": "^1.0.0-beta.4",
+    "@glint/core": "^1.0.0",
+    "@glint/environment-ember-loose": "^1.0.0",
+    "@glint/environment-ember-template-imports": "^1.0.0",
     "@typescript-eslint/eslint-plugin": "^5.17.0",
     "@typescript-eslint/parser": "^5.17.0",
-    "ember-cli-htmlbars": "^6.1.0",
+    "ember-cli-htmlbars": "^6.2.0",
     "ember-resources": "^4.4.0",
-    "ember-source": "~4.2.0",
+    "ember-source": "~4.12.0",
     "ember-template-imports": "^3.0.1",
     "eslint": "^7.32.0",
     "eslint-config-prettier": "^8.4.0",
