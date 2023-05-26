@@ -632,6 +632,7 @@ importers:
       eslint-plugin-qunit: ^7.3.4
       fast-json-stable-stringify: ^2.1.0
       flat: ^5.0.2
+      glimmer-scoped-css: ^0.1.2
       ignore: ^5.2.0
       loader.js: ^4.7.0
       lodash: ^4.17.21
@@ -734,6 +735,7 @@ importers:
       eslint-plugin-qunit: 7.3.4_eslint@8.41.0
       fast-json-stable-stringify: 2.1.0
       flat: 5.0.2
+      glimmer-scoped-css: 0.1.2
       ignore: 5.2.0
       loader.js: 4.7.0
       lodash: 4.17.21
@@ -3726,7 +3728,6 @@ packages:
       semver: 7.3.8
     transitivePeerDependencies:
       - supports-color
-    dev: false
 
   /@embroider/addon-shim/1.8.5:
     resolution: {integrity: sha512-pDgpdTsC9i/+5hHziygK5VIZc64OG8bupiqL0OxJp+bnINURalHMbu5B3Gikq/a0QIvMPzDFWzKxIZCBpeiHkg==}
@@ -3964,7 +3965,6 @@ packages:
       resolve-package-path: 4.0.3
       semver: 7.3.8
       typescript-memoize: 1.1.1
-    dev: false
 
   /@embroider/shared-internals/2.1.0:
     resolution: {integrity: sha512-9hKbMxW7wDWt1BqdpnLZ5W6ETrmAg9HnfBwf1IDkT+8he5nOdTD0PNtruMjm7V0Tb9p9hI7O+UXSa8ZnX1BQXg==}
@@ -14489,7 +14489,6 @@ packages:
       super-fast-md5: 1.0.1
     transitivePeerDependencies:
       - supports-color
-    dev: false
 
   /glob-parent/3.1.0:
     resolution: {integrity: sha512-E8Ak/2+dZY6fnzlR7+ueWvhsH1SjHr4jjss4YS/h4py44jY9MhK/VFdaZJAWDz6BbL21KeteKxFSFpq8OS5gVA==}
