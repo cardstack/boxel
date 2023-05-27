@@ -4,9 +4,12 @@ import { Deferred } from './deferred';
 import { trimExecutableExtension, logger } from './index';
 import { RealmPaths } from './paths';
 import { CardError } from './error';
+import flatMap from 'lodash/flatMap';
 import { type RunnerOpts } from './search-index';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
+// TODO remove this!
+let nonce = 0;
 
 // this represents a URL that has already been resolved to aid in documenting
 // when resolution has already been performed
@@ -35,9 +38,15 @@ type RegisteredModule = {
   implementation: Function;
 };
 
-type RegisteredWithDepsModule = {
+type RegisteredWorkingOnDepsModule = {
+  state: 'registered-working-on-deps';
+  dependencies: MaybeEvaluatableDep[];
+  implementation: Function;
+};
+
+type RegisteredCompletedDepsModule = {
   state: 'registered-with-deps';
-  dependencies: RegisteredDep[];
+  dependencies: EvaluatableDep[];
   implementation: Function;
 };
 
@@ -68,13 +77,14 @@ type BrokenModule = {
 type Module =
   | FetchingModule
   | RegisteredModule
-  | RegisteredWithDepsModule
+  | RegisteredWorkingOnDepsModule
+  | RegisteredCompletedDepsModule
   | PreparingModule
   | EvaluatedModule
   | BrokenModule;
 
 type EvaluatableModule =
-  | RegisteredWithDepsModule
+  | RegisteredCompletedDepsModule
   | PreparingModule
   | EvaluatedModule
   | BrokenModule;
@@ -85,7 +95,21 @@ type UnregisteredDep =
   | { type: '__import_meta__' }
   | { type: 'exports' };
 
-type RegisteredDep =
+type MaybeEvaluatableDep =
+  | {
+      type: 'dep';
+      moduleURL: ResolvedURL;
+      module: EvaluatableModule;
+    }
+  | {
+      type: 'working-on-dep';
+      moduleURL: ResolvedURL;
+      module: RegisteredModule | RegisteredWorkingOnDepsModule;
+    }
+  | { type: 'shim-dep'; moduleId: string; module: EvaluatableModule }
+  | { type: '__import_meta__' }
+  | { type: 'exports' };
+type EvaluatableDep =
   | { type: 'dep'; moduleURL: ResolvedURL; module: EvaluatableModule }
   | { type: 'shim-dep'; moduleId: string; module: EvaluatableModule }
   | { type: '__import_meta__' }
@@ -96,6 +120,7 @@ export interface MaybeLocalRequest extends Request {
 }
 
 export class Loader {
+  nonce = nonce++;
   private log = logger('loader');
   private modules = new Map<string, Module>();
   private urlHandlers = new Map<string, (req: Request) => Promise<Response>>();
@@ -128,8 +153,18 @@ export class Loader {
   static createLoaderFromGlobal(): Loader {
     let globalLoader = Loader.getLoader();
     let loader = new Loader();
-    loader.urlHandlers = globalLoader.urlHandlers;
-    loader.urlMappings = globalLoader.urlMappings;
+    loader.urlHandlers = new Map([
+      ...(typeof (globalThis as any).getUrlHandlers === 'function'
+        ? (globalThis as any).getUrlHandlers()
+        : []),
+      ...globalLoader.urlHandlers,
+    ]);
+    loader.urlMappings = [
+      ...(typeof (globalThis as any).getUrlMappings === 'function'
+        ? (globalThis as any).getUrlMappings()
+        : []),
+      ...globalLoader.urlMappings,
+    ];
     for (let [moduleIdentifier, module] of globalLoader.moduleShims) {
       loader.shimModule(moduleIdentifier, module);
     }
@@ -189,6 +224,10 @@ export class Loader {
     this.urlMappings.push([from.href, to.href]);
   }
 
+  getURLMappings() {
+    return [...this.urlMappings];
+  }
+
   static registerURLHandler(
     url: URL,
     handler: (req: Request) => Promise<Response>
@@ -199,6 +238,10 @@ export class Loader {
 
   registerURLHandler(url: URL, handler: (req: Request) => Promise<Response>) {
     this.urlHandlers.set(url.href, handler);
+  }
+
+  getURLHandlers() {
+    return [...this.urlHandlers];
   }
 
   static shimModule(moduleIdentifier: string, module: Record<string, any>) {
@@ -249,7 +292,7 @@ export class Loader {
         );
       }
     }
-    if (module) {
+    if (module?.state === 'evaluated' || module?.state === 'broken') {
       let cached = this.consumptionCache.get(module);
       if (cached) {
         return cached;
@@ -296,7 +339,6 @@ export class Loader {
   async import<T extends object>(moduleIdentifier: string): Promise<T> {
     let resolvedModule = this.resolve(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
-
     let shimmed = this.moduleShims.get(moduleIdentifier);
     if (shimmed) {
       return shimmed as T;
@@ -318,10 +360,23 @@ export class Loader {
 
   private async advanceToState(
     resolvedURL: ResolvedURL,
-    targetState: 'registered-with-deps' | 'evaluated'
+    targetState:
+      | 'registered-working-on-deps'
+      | 'registered-with-deps'
+      | 'evaluated',
+    stack: {
+      'registered-working-on-deps': string[];
+      'registered-with-deps': string[];
+    } = {
+      'registered-working-on-deps': [],
+      'registered-with-deps': [],
+    }
   ): Promise<void> {
     for (;;) {
       let module = this.getModule(resolvedURL.href);
+      this.log.trace(
+        `advance ${resolvedURL.href} to '${targetState}' current state is '${module?.state}'`
+      );
 
       outer_switch: switch (module?.state) {
         case undefined:
@@ -331,42 +386,152 @@ export class Loader {
           await module.deferred.promise;
           break;
         case 'registered': {
-          let readyDeps: RegisteredDep[] = [];
+          let maybeReadyDeps: MaybeEvaluatableDep[] = [];
           for (let entry of module.dependencyList) {
+            if (entry.type === '__import_meta__' || entry.type === 'exports') {
+              maybeReadyDeps.push(entry);
+            } else {
+              let depModule = this.getModule(
+                entry.type === 'dep' ? entry.moduleURL.href : entry.moduleId
+              );
+              if (entry.type === 'shim-dep') {
+                maybeReadyDeps.push({
+                  type: 'shim-dep',
+                  moduleId: entry.moduleId,
+                  module: depModule as EvaluatableModule, // safe because shims always start evaluated
+                });
+              } else {
+                if (!isRegisteredWorkingOnDeps(depModule)) {
+                  // we always only await the first dep that actually needs work and
+                  // then break back to the top-level state machine, so that we'll
+                  // be working from the latest state.
+                  if (
+                    !stack['registered-working-on-deps'].includes(
+                      entry.moduleURL.href
+                    )
+                  ) {
+                    await this.advanceToState(
+                      entry.moduleURL,
+                      'registered-working-on-deps',
+                      {
+                        ...stack,
+                        ...{
+                          'registered-working-on-deps': [
+                            ...stack['registered-working-on-deps'],
+                            resolvedURL.href,
+                          ],
+                        },
+                      }
+                    );
+                    break outer_switch;
+                    // TODO these if/elses make my head hurt, can we make this easier to read?
+                  } else if (isRegistered(depModule)) {
+                    maybeReadyDeps.push({
+                      type: 'working-on-dep',
+                      moduleURL: entry.moduleURL,
+                      module: depModule,
+                    });
+                  }
+                } else if (depModule.state === 'registered-working-on-deps') {
+                  maybeReadyDeps.push({
+                    type: 'working-on-dep',
+                    moduleURL: entry.moduleURL,
+                    module: depModule,
+                  });
+                } else {
+                  maybeReadyDeps.push({
+                    type: 'dep',
+                    moduleURL: entry.moduleURL,
+                    module: depModule,
+                  });
+                }
+              }
+            }
+          }
+          this.setModule(resolvedURL.href, {
+            state: 'registered-working-on-deps',
+            implementation: module.implementation,
+            dependencies: maybeReadyDeps,
+          });
+          break;
+        }
+
+        // TODO this pattern is very similar to registered case--is there simplification we can do here?
+        case 'registered-working-on-deps': {
+          if (targetState === 'registered-working-on-deps') {
+            return;
+          }
+          // at this point everything is ready, we just need to transition the
+          // module states
+          let readyDeps: EvaluatableDep[] = [];
+          for (let entry of module.dependencies) {
             if (entry.type === '__import_meta__' || entry.type === 'exports') {
               readyDeps.push(entry);
             } else {
-              let depModule = this.getModule(resolvedURL.href);
+              // TODO can we simplify this?
+              let depModuleId =
+                entry.type === 'dep' || entry.type === 'working-on-dep'
+                  ? entry.moduleURL.href
+                  : entry.moduleId;
+              let depModule = this.getModule(depModuleId);
               if (entry.type === 'shim-dep') {
                 readyDeps.push({
                   type: 'shim-dep',
                   moduleId: entry.moduleId,
                   module: depModule as EvaluatableModule, // safe because shims always start evaluated
                 });
-              } else {
+              } else if (entry.type === 'working-on-dep') {
                 if (!isEvaluatable(depModule)) {
-                  // we always only await the first dep that actually needs work and
-                  // then break bacak to the top-level state machine, so that we'll
-                  // be working from the latest state.
-                  await this.advanceToState(
-                    entry.moduleURL,
-                    'registered-with-deps'
-                  );
-                  break outer_switch;
+                  if (depModule?.state !== 'registered-working-on-deps') {
+                    throw new Error(
+                      `expected ${entry.moduleURL.href} to be 'registered-working-on-deps' but was '${depModule?.state}'`
+                    );
+                  }
+                  // TODO do we still need the stack here?
+                  if (
+                    !stack['registered-with-deps'].includes(
+                      entry.moduleURL.href
+                    )
+                  ) {
+                    await this.advanceToState(
+                      entry.moduleURL,
+                      'registered-with-deps',
+                      {
+                        ...stack,
+                        ...{
+                          'registered-with-deps': [
+                            ...stack['registered-with-deps'],
+                            resolvedURL.href,
+                          ],
+                        },
+                      }
+                    );
+                    break outer_switch;
+                  }
+                } else {
+                  // TODO these if/elses make my head hurt, can we make this easier to read?
+                  readyDeps.push({
+                    type: 'dep',
+                    moduleURL: entry.moduleURL,
+                    module: depModule,
+                  });
                 }
-
-                readyDeps.push({
-                  type: 'dep',
-                  moduleURL: entry.moduleURL,
-                  module: depModule,
-                });
+              } else {
+                if (isEvaluatable(depModule)) {
+                  readyDeps.push({
+                    type: 'dep',
+                    moduleURL: entry.moduleURL,
+                    module: depModule,
+                  });
+                } else {
+                  throw new Error(`bug: should never be here`);
+                }
               }
             }
           }
           this.setModule(resolvedURL.href, {
             state: 'registered-with-deps',
             implementation: module.implementation,
-            consumedModules: module.consumedModules,
             dependencies: readyDeps,
           });
           break;
@@ -583,16 +748,6 @@ export class Loader {
       throw exception;
     }
 
-    // for (let depId of dependencyList!) {
-    //   if (depId !== 'exports' && depId !== '__import_meta__') {
-    //     // this kicks off the work but doesn't await it, because that could lead
-    //     // to deadlocks. The promises are not lost though! Each of these will
-    //     // cause a FetchingModule with its own deferred to be tracked in
-    //     // this.modules.
-    //     this.fetchModule(isUrlLike(depId) ? makeResolvedURL(depId) : depId);
-    //   }
-    // }
-
     let registeredModule: RegisteredModule = {
       state: 'registered',
       dependencyList: dependencyList!,
@@ -616,11 +771,21 @@ export class Loader {
       privateModuleInstance,
       moduleIdentifier
     );
+    let consumedModules = new Set(
+      flatMap(module.dependencies, (dep) =>
+        dep.type === 'dep'
+          ? [dep.moduleURL.href]
+          : dep.type === 'shim-dep'
+          ? [dep.moduleId]
+          : []
+      )
+    );
+
     this.setModule(moduleIdentifier, {
       state: 'preparing',
       implementation: module.implementation,
       moduleInstance,
-      consumedModules: module.consumedModules,
+      consumedModules,
     });
 
     try {
@@ -631,7 +796,16 @@ export class Loader {
           case '__import_meta__':
             return { url: moduleIdentifier, loader: this };
           case 'dep':
-            return this.evaluate(entry.moduleURL, entry.module);
+            return this.evaluate(entry.moduleURL.href, entry.module);
+          case 'shim-dep': {
+            let shimModule = this.getModule(entry.moduleId);
+            if (shimModule?.state !== 'evaluated') {
+              throw new Error(
+                `bug: shimmed modules should always be in an 'evaluated' state, but ${entry.moduleId} was in '${module.state}' state`
+              );
+            }
+            return shimModule.moduleInstance;
+          }
           default:
             throw assertNever(entry);
         }
@@ -641,14 +815,14 @@ export class Loader {
       this.setModule(moduleIdentifier, {
         state: 'evaluated',
         moduleInstance,
-        consumedModules: module.consumedModules,
+        consumedModules,
       });
       return moduleInstance;
     } catch (exception) {
       this.setModule(moduleIdentifier, {
         state: 'broken',
         exception,
-        consumedModules: module.consumedModules,
+        consumedModules,
       });
       throw exception;
     }
@@ -705,6 +879,41 @@ function trimModuleIdentifier(moduleIdentifier: string): string {
   return isUrlLike(moduleIdentifier)
     ? trimExecutableExtension(new URL(moduleIdentifier)).href
     : moduleIdentifier;
+}
+
+// TODO we can simplify these assertions? seems annoying to maintain if states change...
+function isRegistered(
+  module: Module | undefined
+): module is
+  | EvaluatableModule
+  | RegisteredWorkingOnDepsModule
+  | RegisteredModule {
+  if (!module) {
+    return false;
+  }
+  return [
+    'registered',
+    'registered-working-on-deps',
+    'registered-with-deps',
+    'preparing',
+    'evaluated',
+    'broken',
+  ].includes(module.state);
+}
+
+function isRegisteredWorkingOnDeps(
+  module: Module | undefined
+): module is EvaluatableModule | RegisteredWorkingOnDepsModule {
+  if (!module) {
+    return false;
+  }
+  return [
+    'registered-working-on-deps',
+    'registered-with-deps',
+    'preparing',
+    'evaluated',
+    'broken',
+  ].includes(module.state);
 }
 
 function isEvaluatable(

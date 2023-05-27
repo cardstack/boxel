@@ -6,6 +6,7 @@ import {
   type IndexRunner,
   type RunnerOpts,
 } from '@cardstack/runtime-common/search-index';
+import { Loader } from '@cardstack/runtime-common';
 
 const appName = '@cardstack/host';
 export async function makeFastBootIndexRunner(
@@ -14,6 +15,8 @@ export async function makeFastBootIndexRunner(
 ): Promise<{ getRunner: IndexRunner; distPath: string }> {
   let fastboot: FastBootInstance;
   let distPath: string;
+
+  // TODO can we get rid of the duplicate globals code?
   if (typeof dist === 'string') {
     distPath = dist;
     fastboot = new FastBoot({
@@ -27,6 +30,8 @@ export async function makeFastBootIndexRunner(
           btoa,
           getRunnerOpts,
           _logDefinitions: (globalThis as any)._logDefinitions,
+          getUrlMappings: () => Loader.getLoader().getURLMappings(),
+          getUrlHandlers: () => Loader.getLoader().getURLHandlers(),
         });
       },
     }) as FastBootInstance;
@@ -42,6 +47,8 @@ export async function makeFastBootIndexRunner(
           btoa,
           getRunnerOpts,
           _logDefinitions: (globalThis as any)._logDefinitions,
+          getUrlMappings: () => Loader.getLoader().getURLMappings(),
+          getUrlHandlers: () => Loader.getLoader().getURLHandlers(),
         });
       }
     ));
