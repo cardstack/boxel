@@ -9,7 +9,11 @@ import {
 import { Button, CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 import { tracked } from '@glimmer/tracking';
 // @ts-ignore
-import { restartableTask } from 'ember-concurrency';
+import { enqueueTask, restartableTask } from 'ember-concurrency';
+// @ts-ignore
+import { on } from '@ember/modifier';
+// @ts-ignore
+import { action } from '@ember/object';
 
 declare global {
   interface Window {
@@ -30,12 +34,20 @@ class Isolated extends Component<typeof Claim> {
         /></FieldContainer>
       <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
       {{#if this.connected}}
-        <Button>
-          Claim
+        <Button {{on 'click' this.claim}}>
+          {{#if this.doClaim.isRunning}}
+            Claiming...
+          {{else}}
+            Claim
+          {{/if}}
         </Button>
       {{else}}
-        <Button>
-          Connect
+        <Button {{on 'click' this.connectMetamask}}>
+          {{#if this.doConnectMetamask.isRunning}}
+            Connecting...
+          {{else}}
+            Connect
+          {{/if}}
         </Button>
       {{/if}}
     </CardContainer>
@@ -44,17 +56,26 @@ class Isolated extends Component<typeof Claim> {
   constructor(owner: unknown, args: any) {
     super(owner, args);
     this.initialize.perform();
+    if (window.ethereum) {
+      window.ethereum.on('chainChanged', (chainId: string) => {
+        this.connected =
+          parseInt(chainId, 16) == this.args.model.chain?.chainId;
+      });
+    }
   }
-  private initialize = restartableTask(async () => {
-    let metamaskChainId = await this.getChainId();
-    let isChainEqual = this.args.model.chain?.chainId == metamaskChainId;
+  private initialize = enqueueTask(async () => {
+    let isSameNetwork = this.isSameNetwork();
     let isConnected = await this.isMetamaskConnected();
-    this.connected = isConnected && isChainEqual;
+    this.connected = isConnected && isSameNetwork;
   });
 
+  isSameNetwork() {
+    let metamaskChainId = this.getChainId();
+    return this.args.model.chain?.chainId == metamaskChainId;
+  }
+
   isMetamaskInstalled() {
-    let isInstalled = window.ethereum !== 'undefined';
-    return isInstalled;
+    return window.ethereum !== 'undefined';
   }
 
   async isMetamaskConnected() {
@@ -69,27 +90,55 @@ class Isolated extends Component<typeof Claim> {
     }
   }
 
-  async connectMetamask() {
+  private doConnectMetamask = restartableTask(async () => {
     try {
-      return await window.ethereum.request({
-        method: 'eth_requestAccounts',
-      });
+      let isSameNetwork = this.isSameNetwork();
+      if (isSameNetwork) {
+        const accounts = await window.ethereum.request({
+          method: 'eth_requestAccounts',
+        });
+        if (accounts.length > 0) {
+          this.connected = true;
+        }
+        //TODO: if user closes it says already processing eth account
+      } else {
+        let hexChainId = '0x' + this.args.model.chain?.chainId.toString(16);
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: hexChainId }],
+        });
+      }
+      return true;
     } catch (e) {
       return false;
     }
+  });
+
+  @action
+  private connectMetamask() {
+    this.doConnectMetamask.perform();
   }
 
-  // chainId and networkId are not the same. You can get networkId using the metamask api.
-  async getChainId() {
+  getChainId() {
     try {
       if (!this.isMetamaskInstalled()) {
         return -1;
       }
-      let hexChainId = await window.ethereum.request({ method: 'eth_chainId' });
+      let hexChainId = window.ethereum.chainId;
       return parseInt(hexChainId, 16);
     } catch (e) {
       return -1;
     }
+  }
+
+  private doClaim = restartableTask(async () => {
+    console.log('claiming');
+    return true;
+  });
+
+  @action
+  private claim() {
+    this.doClaim.perform();
   }
 }
 
