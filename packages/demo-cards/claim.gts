@@ -5,6 +5,7 @@ import {
   field,
   StringCard,
   Component,
+  linksTo,
 } from 'https://cardstack.com/base/card-api';
 import { Button, CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 import { tracked } from '@glimmer/tracking';
@@ -22,7 +23,7 @@ declare global {
 }
 
 class Isolated extends Component<typeof Claim> {
-  @tracked connected: any;
+  @tracked _connection = { connected: false };
 
   <template>
     <CardContainer class='demo-card' @displayBoundaries={{true}}>
@@ -53,20 +54,17 @@ class Isolated extends Component<typeof Claim> {
     </CardContainer>
   </template>
 
-  constructor(owner: unknown, args: any) {
-    super(owner, args);
-    this.initialize.perform();
-    if (window.ethereum) {
-      window.ethereum.on('chainChanged', (chainId: string) => {
-        this.connected =
-          parseInt(chainId, 16) == this.args.model.chain?.chainId;
-      });
+  get connected(): boolean | undefined {
+    if (!this._connection) {
+      this.initializeConnection.perform();
     }
+    return this._connection?.connected;
   }
-  private initialize = enqueueTask(async () => {
+
+  private initializeConnection = enqueueTask(async () => {
     let isSameNetwork = this.isSameNetwork();
     let isConnected = await this.isMetamaskConnected();
-    this.connected = isConnected && isSameNetwork;
+    this._connection = { connected: isConnected && isSameNetwork };
   });
 
   isSameNetwork() {
@@ -98,7 +96,7 @@ class Isolated extends Component<typeof Claim> {
           method: 'eth_requestAccounts',
         });
         if (accounts.length > 0) {
-          this.connected = true;
+          this._connection = { connected: true };
         }
         //TODO: if user closes it says already processing eth account
       } else {
@@ -149,7 +147,7 @@ export class Claim extends Card {
   @field explanation = contains(StringCard);
   @field signature = contains(StringCard);
   @field encoding = contains(StringCard);
-  @field chain = contains(Chain);
+  @field chain = linksTo(() => Chain);
   @field title = contains(StringCard, {
     computeVia: function (this: Claim) {
       return `Claim for ${this.safeAddress}`;
