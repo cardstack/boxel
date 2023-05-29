@@ -13,6 +13,8 @@ export default class MarkdownCard extends CardBase {
     </template>
 
     get html() {
+      //if card is rendered on server-side (using fastboot)
+      //then jsdom is used to instatiate DOMPurify
       let jsdom = (globalThis as any).jsdom;
       let purify = jsdom ? DOMPurify(jsdom.window) : DOMPurify;
       return this.args.model ? purify.sanitize(marked(this.args.model)) : '';
@@ -25,6 +27,8 @@ export default class MarkdownCard extends CardBase {
     </template>
 
     get html() {
+      //if card is rendered on server-side (using fastboot)
+      //then jsdom is used to instatiate DOMPurify
       let jsdom = (globalThis as any).jsdom;
       let purify = jsdom ? DOMPurify(jsdom.window) : DOMPurify;
       return this.args.model ? purify.sanitize(marked(this.args.model)) : '';

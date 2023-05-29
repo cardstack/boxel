@@ -1,5 +1,5 @@
 import StringCard from 'https://cardstack.com/base/string';
-import TextAreaCard from 'https://cardstack.com/base/text-area';
+import MarkdownCard from 'https://cardstack.com/base/markdown';
 import {
   Card,
   field,
@@ -13,7 +13,7 @@ export class BlogPost extends Card {
   static displayName = 'Blog Post';
   @field title = contains(StringCard);
   @field slug = contains(StringCard);
-  @field body = contains(TextAreaCard); // TODO: rich text
+  @field body = contains(MarkdownCard);
   @field authorBio = linksTo(Author);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
