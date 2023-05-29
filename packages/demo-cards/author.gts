@@ -1,4 +1,5 @@
 import StringCard from 'https://cardstack.com/base/string';
+import TextAreaCard from 'https://cardstack.com/base/text-area';
 import {
   Component,
   Card,
@@ -7,7 +8,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 
 export class Author extends Card {
-  static displayName = 'Author';
+  static displayName = 'Author Bio';
   @field firstName = contains(StringCard);
   @field lastName = contains(StringCard);
   @field title = contains(StringCard, {
@@ -15,7 +16,9 @@ export class Author extends Card {
       return [this.firstName, this.lastName].filter(Boolean).join(' ');
     },
   });
-  // @field profilePicture = contains(StringCard); // TODO: image card
+  @field photo = contains(StringCard); // TODO: image card
+  @field body = contains(TextAreaCard); // TODO: markdown card
+
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <@fields.firstName /> <@fields.lastName />

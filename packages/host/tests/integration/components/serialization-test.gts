@@ -15,7 +15,7 @@ import {
   NotLoaded,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-import { fillIn } from '@ember/test-helpers';
+import { fillIn, RenderingTestContext } from '@ember/test-helpers';
 import { shimExternals } from '@cardstack/host/lib/externals';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -1879,7 +1879,7 @@ module('Integration | serialization', function (hooks) {
     );
   });
 
-  test("can deserialize a containsMany's nested field", async function (assert) {
+  test("can deserialize a containsMany's nested field", async function (this: RenderingTestContext, assert) {
     let {
       field,
       contains,

@@ -24,7 +24,13 @@ const rules: LanguageDefinition = {
   tokenizer: {
     root: [
       [
-        /<template\s*>/,
+        // The unnecessary square brackets here are tricking
+        // ember-template-imports into not accidentally treating this as a
+        // template tag. Which is only relevant during ember-template-lint,
+        // since during the actual build ember-template-imports does not look at
+        // .ts files.
+        // https://github.com/ember-template-imports/ember-template-imports/pull/155
+        /<[t]emplate\s*>/,
         {
           token: 'tag',
           bracket: '@open',
@@ -66,7 +72,7 @@ export async function extendMonacoLanguage({
     .find((lang) => lang.id === baseId);
 
   // @ts-ignore-next-line
-  let { conf, language } = await baseLanguage?.loader();
+  let { conf, language } = await baseLanguage.loader();
 
   let extendedConfig = extendConfig(conf);
   let extendedDef = extendDefinition(language, rules);

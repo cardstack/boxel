@@ -175,16 +175,20 @@ export function getPluralViewComponent(
   );
   let defaultComponent = class PluralView extends GlimmerComponent {
     <template>
-      {{#each model.children as |child i|}}
-        {{#let
-          (getBoxComponent (cardTypeFor field child) format child)
-          as |Item|
-        }}
-          <CardContainer data-test-plural-view-item={{i}}>
-            <Item />
-          </CardContainer>
-        {{/let}}
-      {{/each}}
+      <ul class='plural-field'>
+        {{#each model.children as |child i|}}
+          {{#let
+            (getBoxComponent (cardTypeFor field child) format child)
+            as |Item|
+          }}
+            <li>
+              <CardContainer data-test-plural-view-item={{i}}>
+                <Item />
+              </CardContainer>
+            </li>
+          {{/let}}
+        {{/each}}
+      </ul>
     </template>
   };
   return new Proxy(defaultComponent, {

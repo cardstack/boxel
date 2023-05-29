@@ -1,7 +1,7 @@
 import { module, test, skip } from 'qunit';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from 'ember-qunit';
-import { waitUntil, fillIn } from '@ember/test-helpers';
+import { waitUntil, fillIn, RenderingTestContext } from '@ember/test-helpers';
 import {
   cleanWhiteSpace,
   testRealmURL,
@@ -372,7 +372,7 @@ module('Integration | computeds', function (hooks) {
     );
   });
 
-  test('can render a containsMany computed composite field', async function (assert) {
+  test('can render a containsMany computed composite field', async function (this: RenderingTestContext, assert) {
     let { field, contains, containsMany, Card, Component } = cardApi;
     let { default: StringCard } = string;
     class Person extends Card {

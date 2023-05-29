@@ -15,12 +15,12 @@ interface Signature {
 
 export default class Module extends Component<Signature> {
   <template>
-    <ImportModule @url={{this.args.file.url}}>
+    <ImportModule @url={{@file.url}}>
       <:ready as |module|>
         {{#each (cardsFromModule module) as |card|}}
           <Schema
             @card={{card}}
-            @file={{this.args.file}}
+            @file={{@file}}
             @moduleSyntax={{this.moduleSyntax}}
           />
         {{/each}}

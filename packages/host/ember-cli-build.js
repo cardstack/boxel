@@ -8,7 +8,7 @@ const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
 const MomentLocalesPlugin = require('moment-locales-webpack-plugin');
 
 module.exports = function (defaults) {
-  let app = new EmberApp(defaults, {
+  const app = new EmberApp(defaults, {
     'ember-cli-babel': {
       enableTypeScriptTransform: true,
     },
