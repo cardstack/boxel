@@ -8,7 +8,9 @@ import {
   linksTo,
 } from 'https://cardstack.com/base/card-api';
 import { Button, CardContainer, FieldContainer } from '@cardstack/boxel-ui';
-import { tracked } from '@glimmer/tracking';
+// import { tracked } from '@glimmer/tracking';
+// @ts-ignore
+import MetamaskResource from 'metamask-resource';
 // @ts-ignore
 import { enqueueTask, restartableTask } from 'ember-concurrency';
 // @ts-ignore
@@ -16,15 +18,7 @@ import { on } from '@ember/modifier';
 // @ts-ignore
 import { action } from '@ember/object';
 
-declare global {
-  interface Window {
-    ethereum: any;
-  }
-}
-
 class Isolated extends Component<typeof Claim> {
-  @tracked _connection = { connected: false };
-
   <template>
     <CardContainer class='demo-card' @displayBoundaries={{true}}>
       <FieldContainer @label='Module Address.'><@fields.moduleAddress
@@ -36,7 +30,7 @@ class Isolated extends Component<typeof Claim> {
       <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
       {{#if this.connected}}
         <Button {{on 'click' this.claim}}>
-          {{#if this.doClaim.isRunning}}
+          {{#if this.metamask.doClaim.isRunning}}
             Claiming...
           {{else}}
             Claim
@@ -44,7 +38,7 @@ class Isolated extends Component<typeof Claim> {
         </Button>
       {{else}}
         <Button {{on 'click' this.connectMetamask}}>
-          {{#if this.doConnectMetamask.isRunning}}
+          {{#if this.metamask.doConnectMetamask.isRunning}}
             Connecting...
           {{else}}
             Connect
@@ -54,86 +48,22 @@ class Isolated extends Component<typeof Claim> {
     </CardContainer>
   </template>
 
-  get connected(): boolean | undefined {
-    if (!this._connection) {
-      this.initializeConnection.perform();
-    }
-    return this._connection?.connected;
+  metamask = new MetamaskResource(this.args.model.chain?.chainId).setup();
+
+  get connected() {
+    return this.metamask.ready({
+      named: { chainId: this.args.model.chain?.chainId },
+    });
   }
-
-  private initializeConnection = enqueueTask(async () => {
-    let isSameNetwork = this.isSameNetwork();
-    let isMetamaskConnected = await this.isMetamaskConnected();
-    this._connection = { connected: isMetamaskConnected && isSameNetwork };
-  });
-
-  isSameNetwork() {
-    let metamaskChainId = this.getChainId();
-    return this.args.model.chain?.chainId == metamaskChainId;
-  }
-
-  isMetamaskInstalled() {
-    return window.ethereum !== 'undefined';
-  }
-
-  async isMetamaskConnected() {
-    try {
-      if (!this.isMetamaskInstalled()) {
-        return false;
-      }
-      let accounts = await window.ethereum.request({
-        method: 'eth_requestAccounts',
-      });
-      return accounts.length > 0;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  private doConnectMetamask = restartableTask(async () => {
-    try {
-      let isSameNetwork = this.isSameNetwork();
-      if (!isSameNetwork) {
-        let hexChainId = '0x' + this.args.model.chain?.chainId.toString(16);
-        await window.ethereum.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: hexChainId }],
-        });
-      }
-      const isMetamaskConnected = await this.isMetamaskConnected();
-      if (isMetamaskConnected) {
-        this._connection = { connected: true };
-      }
-    } catch (e) {
-      console.log(e);
-    }
-  });
-
-  @action
-  private connectMetamask() {
-    this.doConnectMetamask.perform();
-  }
-
-  getChainId(): number {
-    try {
-      if (!this.isMetamaskInstalled()) {
-        return -1;
-      }
-      let hexChainId = window.ethereum.chainId;
-      return parseInt(hexChainId, 16);
-    } catch (e) {
-      return -1;
-    }
-  }
-
-  private doClaim = restartableTask(async () => {
-    console.log('claiming');
-    return true;
-  });
 
   @action
   private claim() {
-    this.doClaim.perform();
+    this.metamask.doClaim.perform();
+  }
+
+  @action
+  private connectMetamask() {
+    this.metamask.doConnectMetamask.perform(this.args.model.chain?.chainId);
   }
 }
 
