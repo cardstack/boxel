@@ -31,7 +31,8 @@
       "//cdn.skypack.dev/lodash": ["node_modules/@types/lodash"],
       "@cardstack/boxel-ui": ["../boxel-ui/addon"],
       "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"]
-    }
+    },
+    "typeRoots": ["../boxel-ui/types"]
   },
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"],

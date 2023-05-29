@@ -4,24 +4,7 @@ import type { CardBase } from './card-api';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 
-class DefaultIsolated extends GlimmerComponent<{
-  Args: {
-    model: CardBase;
-    fields: Record<string, new () => GlimmerComponent>;
-  };
-}> {
-  <template>
-    <CardContainer class='isolated-card' @displayBoundaries={{true}}>
-      {{#each-in @fields as |key Field|}}
-        {{#unless (eq key 'id')}}
-          <Field />
-        {{/unless}}
-      {{/each-in}}
-    </CardContainer>
-  </template>
-}
-
-class DefaultEdit extends GlimmerComponent<{
+class DefaultTemplate extends GlimmerComponent<{
   Args: {
     model: CardBase;
     fields: Record<string, new () => GlimmerComponent>;
@@ -48,6 +31,6 @@ export const defaultComponent = {
   embedded: <template>
     <!-- Inherited from base card embedded view. Did your card forget to specify its embedded component? -->
   </template>,
-  isolated: DefaultIsolated,
-  edit: DefaultEdit,
+  isolated: DefaultTemplate,
+  edit: DefaultTemplate,
 };

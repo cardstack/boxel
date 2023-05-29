@@ -26,7 +26,6 @@
     "test:ember": "ember test"
   },
   "dependencies": {
-    "@embroider/macros": "^1.11.0",
     "classnames": "^2.3.2",
     "dayjs": "^1.11.7",
     "ember-auto-import": "^2.6.3",
@@ -40,7 +39,6 @@
     "ember-svg-jar": "^2.4.2",
     "ember-template-imports": "^3.1.2",
     "file-loader": "^6.2.0",
-    "glimmer-scoped-css": "^0.1.2",
     "lodash": "^4.17.21"
   },
   "devDependencies": {
@@ -48,12 +46,11 @@
     "@babel/eslint-parser": "^7.21.3",
     "@babel/plugin-proposal-decorators": "^7.21.0",
     "@ember/optional-features": "^2.0.0",
+    "@ember/string": "^3.0.1",
     "@ember/test-helpers": "^2.9.3",
     "@embroider/compat": "^3.0.0",
-    "@embroider/core": "^3.0.0",
-    "@embroider/webpack": "^3.0.0",
-    "@ember/string": "^3.0.1",
     "@embroider/macros": "^1.11.0",
+    "@embroider/webpack": "^3.0.0",
     "@glimmer/component": "^1.1.2",
     "@glimmer/tracking": "^1.1.2",
     "@glint/core": "^1.0.0",
@@ -67,7 +64,7 @@
     "@typescript-eslint/parser": "^5.21.0",
     "broccoli-asset-rev": "^3.0.0",
     "concurrently": "^8.0.1",
-    "ember-a11y-testing": "^5.2.0",
+    "ember-a11y-testing": "^5.2.1",
     "ember-cli": "^4.12.1",
     "ember-cli-dependency-checker": "^3.3.1",
     "ember-cli-inject-live-reload": "^2.1.0",

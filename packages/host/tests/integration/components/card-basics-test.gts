@@ -1036,7 +1036,7 @@ module('Integration | card-basics', function (hooks) {
     let root = await renderCard(mango, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
-      'Mango isCool: true Mango'
+      'First Name Mango Is Cool true Title Mango'
     );
   });
 

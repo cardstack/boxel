@@ -37,8 +37,8 @@ export class Person extends Card {
       <CardContainer class='demo-card' @displayBoundaries={{true}}>
         <h2><@fields.firstName /> <@fields.lastName /></h2>
         <div>
-          <div><@fields.isCool /></div>
-          <div><@fields.isHuman /></div>
+          <div>Is Cool: <@fields.isCool /></div>
+          <div>Is Human: <@fields.isHuman /></div>
         </div>
         {{#if @model.pet}}<@fields.pet />{{/if}}
       </CardContainer>

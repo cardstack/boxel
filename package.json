@@ -15,6 +15,7 @@
   "pnpm": {
     "overrides": {
       "@types/eslint": "8.4.1",
+      "@embroider/util": "1.11.0",
       "jsesc": "^3.0.0",
       "ember-concurrency": "github:machty/ember-concurrency#c6ed562",
       "ember-modifier": "^4.1.0"
@@ -27,8 +28,7 @@
     "patchedDependencies": {
       "magic-string@0.25.9": "patches/magic-string@0.25.9.patch",
       "fastboot@4.1.0": "patches/fastboot@4.1.0.patch",
-      "@types/eventsource@1.1.11": "patches/@types__eventsource@1.1.11.patch",
-      "ember-a11y-testing@5.2.0": "patches/ember-a11y-testing@5.2.0.patch"
+      "@types/eventsource@1.1.11": "patches/@types__eventsource@1.1.11.patch"
     }
   },
   "devDependencies": {
