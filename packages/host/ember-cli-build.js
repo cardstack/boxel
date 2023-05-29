@@ -44,6 +44,9 @@ module.exports = function (defaults) {
               // workaround for https://github.com/embroider-build/ember-auto-import/issues/578
               resourceRegExp: /moment-timezone/,
             }),
+            new webpack.IgnorePlugin({
+              resourceRegExp: /^https:\/\/cardstack\.com\/base/,
+            }),
             new MomentLocalesPlugin({
               // 'en' is built into moment and cannot be removed. This strips the others.
               localesToKeep: [],
