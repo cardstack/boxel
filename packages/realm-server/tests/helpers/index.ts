@@ -6,8 +6,8 @@ import { makeFastBootIndexRunner } from '../../fastboot';
 import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { type IndexRunner } from '@cardstack/runtime-common/search-index';
-import { shimExternals } from '../../lib/externals';
 import { RealmServer } from '../../server';
+import { Server } from 'http';
 
 export const testRealm = 'http://test-realm/';
 export const localBaseRealm = 'http://localhost:4441/';
@@ -44,9 +44,18 @@ export async function createRealm(
   );
 }
 
+export function setupBaseRealmServer(hooks: NestedHooks) {
+  let baseRealmServer: Server;
+  hooks.before(async function () {
+    baseRealmServer = await runBaseRealmServer();
+  });
+
+  hooks.after(function () {
+    baseRealmServer.close();
+  });
+}
+
 export async function runBaseRealmServer() {
-  Loader.destroy();
-  shimExternals();
   let localBaseRealmURL = new URL(localBaseRealm);
   Loader.addURLMapping(new URL(baseRealm.url), localBaseRealmURL)
 

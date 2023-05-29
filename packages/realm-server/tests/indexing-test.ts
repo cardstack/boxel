@@ -6,9 +6,8 @@ import {
   LooseSingleCardDocument,
   Realm,
 } from '@cardstack/runtime-common';
-import { createRealm, testRealm, setupCardLogs, runBaseRealmServer } from './helpers';
+import { createRealm, testRealm, setupCardLogs, setupBaseRealmServer } from './helpers';
 import isEqual from 'lodash/isEqual';
-import { Server } from 'http';
 
 function cleanWhiteSpace(text: string) {
   return text.replace(/\s+/g, ' ').trim();
@@ -27,15 +26,8 @@ module('indexing', function (hooks) {
 
   let dir: string;
   let realm: Realm;
-  let baseRealmServer: Server;
   
-  hooks.before(async function () {
-    baseRealmServer = await runBaseRealmServer();
-  });
-
-  hooks.after(function () {
-    baseRealmServer.close();
-  });
+  setupBaseRealmServer(hooks);
 
   hooks.beforeEach(async function () {
     dir = dirSync().name;

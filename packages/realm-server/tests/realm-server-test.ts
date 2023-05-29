@@ -17,7 +17,7 @@ import {
 } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
 import { Query } from '@cardstack/runtime-common/query';
-import { setupCardLogs, runBaseRealmServer, runTestRealmServer } from './helpers';
+import { setupCardLogs, setupBaseRealmServer, runTestRealmServer } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
 
@@ -32,7 +32,6 @@ console.log(`using host dist dir: ${distDir}`);
 module('Realm Server', function (hooks) {
   let testRealmServer: Server;
   let testRealmServer2: Server;
-  let baseRealmServer: Server;
   let request: SuperTest<Test>;
   let dir: DirResult;
   setupCardLogs(
@@ -66,13 +65,7 @@ module('Realm Server', function (hooks) {
     return result;
   }
 
-  hooks.before(async function () {
-    baseRealmServer = await runBaseRealmServer();
-  });
-
-  hooks.after(function () {
-    baseRealmServer.close();
-  });
+  setupBaseRealmServer(hooks);
 
   hooks.beforeEach(async function () {
     dir = dirSync();
@@ -496,7 +489,6 @@ module('Realm Server', function (hooks) {
 });
 
 module('Realm Server serving from root', function (hooks) {
-  let baseRealmServer: Server;
   let testRealmServer: Server;
   let request: SuperTest<Test>;
   let dir: DirResult;
@@ -505,13 +497,7 @@ module('Realm Server serving from root', function (hooks) {
     async () => await Loader.import(`${baseRealm.url}card-api`)
   );
 
-  hooks.before(async function () {
-    baseRealmServer = await runBaseRealmServer();
-  });
-
-  hooks.after(function () {
-    baseRealmServer.close();
-  });
+  setupBaseRealmServer(hooks);
 
   hooks.beforeEach(async function () {
     dir = dirSync();

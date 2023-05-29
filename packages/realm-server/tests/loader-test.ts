@@ -1,7 +1,7 @@
 import { module, test, skip } from 'qunit';
 import { Loader } from '@cardstack/runtime-common';
 import { dirSync, setGracefulCleanup, DirResult } from 'tmp';
-import { createRealm, runBaseRealmServer, localBaseRealm, runTestRealmServer } from './helpers';
+import { createRealm, setupBaseRealmServer, localBaseRealm, runTestRealmServer } from './helpers';
 import { copySync } from 'fs-extra';
 import { baseRealm } from '@cardstack/runtime-common';
 import { shimExternals } from '../lib/externals';
@@ -16,16 +16,9 @@ const testRealmHref = testRealmURL.href;
 
 module('loader', function (hooks) {
   let dir: DirResult;
-  let baseRealmServer: Server;
   let testRealmServer: Server;
 
-  hooks.before(async function () {
-    baseRealmServer = await runBaseRealmServer();
-  });
-
-  hooks.after(function () {
-    baseRealmServer.close();
-  });
+  setupBaseRealmServer(hooks);
 
   hooks.beforeEach(async function () {
     dir = dirSync();
