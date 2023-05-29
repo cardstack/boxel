@@ -63,8 +63,8 @@ class Isolated extends Component<typeof Claim> {
 
   private initializeConnection = enqueueTask(async () => {
     let isSameNetwork = this.isSameNetwork();
-    let isConnected = await this.isMetamaskConnected();
-    this._connection = { connected: isConnected && isSameNetwork };
+    let isMetamaskConnected = await this.isMetamaskConnected();
+    this._connection = { connected: isMetamaskConnected && isSameNetwork };
   });
 
   isSameNetwork() {
@@ -81,7 +81,9 @@ class Isolated extends Component<typeof Claim> {
       if (!this.isMetamaskInstalled()) {
         return false;
       }
-      let accounts = await window.ethereum.request({ method: 'eth_accounts' });
+      let accounts = await window.ethereum.request({
+        method: 'eth_requestAccounts',
+      });
       return accounts.length > 0;
     } catch (e) {
       return false;
@@ -91,24 +93,19 @@ class Isolated extends Component<typeof Claim> {
   private doConnectMetamask = restartableTask(async () => {
     try {
       let isSameNetwork = this.isSameNetwork();
-      if (isSameNetwork) {
-        const accounts = await window.ethereum.request({
-          method: 'eth_requestAccounts',
-        });
-        if (accounts.length > 0) {
-          this._connection = { connected: true };
-        }
-        //TODO: if user closes it says already processing eth account
-      } else {
+      if (!isSameNetwork) {
         let hexChainId = '0x' + this.args.model.chain?.chainId.toString(16);
         await window.ethereum.request({
           method: 'wallet_switchEthereumChain',
           params: [{ chainId: hexChainId }],
         });
       }
-      return true;
+      const isMetamaskConnected = await this.isMetamaskConnected();
+      if (isMetamaskConnected) {
+        this._connection = { connected: true };
+      }
     } catch (e) {
-      return false;
+      console.log(e);
     }
   });
 
@@ -117,7 +114,7 @@ class Isolated extends Component<typeof Claim> {
     this.doConnectMetamask.perform();
   }
 
-  getChainId() {
+  getChainId(): number {
     try {
       if (!this.isMetamaskInstalled()) {
         return -1;
