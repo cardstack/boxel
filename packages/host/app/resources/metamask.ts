@@ -11,18 +11,19 @@ declare global {
 
 interface CardArgs {
   named: {
-    chainId: number | undefined;
+    chainId: number | undefined; // the chain id of the card
   };
 }
 
 class MetaMaskResource extends Resource<CardArgs> {
-  @tracked state = {
-    connected: false,
-    chainId: -1,
-  };
+  @tracked connected = false;
+  @tracked chainId = -1; // the chain id of the metamask connection (not the card)
 
   setup() {
     this.doInitialize.perform();
+    if (this.isMetamaskInstalled()) {
+      window.ethereum.on('chainChanged', this.handleChainChanged.bind(this));
+    }
     return this;
   }
 
@@ -30,16 +31,13 @@ class MetaMaskResource extends Resource<CardArgs> {
     if (this.isMetamaskInstalled()) {
       let chainId = this.getChainId();
       let connected = await this.isMetamaskConnected();
-      this.state = { chainId, connected };
+      this.chainId = chainId;
+      this.connected = connected;
     }
   });
 
   teardown() {
     this.doInitialize.cancelAll();
-  }
-
-  ready(cardArgs: CardArgs) {
-    return cardArgs.named.chainId == this.state.chainId && this.state.connected;
   }
 
   isMetamaskInstalled() {
@@ -77,6 +75,10 @@ class MetaMaskResource extends Resource<CardArgs> {
     return chainId == metamaskChainId;
   }
 
+  handleChainChanged(hexChainId: string) {
+    this.chainId = parseInt(hexChainId, 16);
+  }
+
   doConnectMetamask = restartableTask(async (chainId: number) => {
     try {
       let isSameNetwork = this.isSameNetwork(chainId);
@@ -86,10 +88,10 @@ class MetaMaskResource extends Resource<CardArgs> {
           method: 'wallet_switchEthereumChain',
           params: [{ chainId: hexChainId }],
         });
-        this.state.chainId = chainId;
+        this.chainId = chainId;
       }
       const isMetamaskConnected = await this.isMetamaskConnected();
-      this.state.connected = isMetamaskConnected;
+      this.connected = isMetamaskConnected;
     } catch (e) {
       console.log(e);
     }

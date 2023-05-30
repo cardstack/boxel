@@ -8,7 +8,7 @@ import {
   linksTo,
 } from 'https://cardstack.com/base/card-api';
 import { Button, CardContainer, FieldContainer } from '@cardstack/boxel-ui';
-// import { tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 // @ts-ignore
 import MetamaskResource from 'metamask-resource';
 // @ts-ignore
@@ -19,6 +19,8 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
 class Isolated extends Component<typeof Claim> {
+  @tracked chainId = -1;
+  metamask;
   <template>
     <CardContainer class='demo-card' @displayBoundaries={{true}}>
       <FieldContainer @label='Module Address.'><@fields.moduleAddress
@@ -48,12 +50,16 @@ class Isolated extends Component<typeof Claim> {
     </CardContainer>
   </template>
 
-  metamask = new MetamaskResource(this.args.model.chain?.chainId).setup();
+  constructor(owner: unknown, args: any) {
+    super(owner, args);
+    this.chainId = this.args.model.chain?.chainId ?? -1;
+    this.metamask = new MetamaskResource({
+      named: { chainId: this.chainId },
+    }).setup();
+  }
 
   get connected() {
-    return this.metamask.ready({
-      named: { chainId: this.args.model.chain?.chainId },
-    });
+    return this.chainId == this.metamask.chainId && this.metamask.connected;
   }
 
   @action
@@ -63,7 +69,7 @@ class Isolated extends Component<typeof Claim> {
 
   @action
   private connectMetamask() {
-    this.metamask.doConnectMetamask.perform(this.args.model.chain?.chainId);
+    this.metamask.doConnectMetamask.perform(this.chainId);
   }
 }
 
