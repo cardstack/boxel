@@ -9,13 +9,7 @@ declare global {
   }
 }
 
-interface CardArgs {
-  named: {
-    chainId: number | undefined; // the chain id of the card
-  };
-}
-
-class MetaMaskResource extends Resource<CardArgs> {
+class MetaMaskResource extends Resource {
   @tracked connected = false;
   @tracked chainId = -1; // the chain id of the metamask connection (not the card)
 
