@@ -18,8 +18,7 @@ module.exports = function (defaults) {
     staticAddonTestSupportTrees: true,
     staticHelpers: true,
 
-    // needed to disable this to get embroider's resolver happy with gjs
-    staticComponents: false,
+    staticComponents: true,
 
     staticModifiers: true,
     staticAppPaths: ['lib'],
@@ -40,6 +39,13 @@ module.exports = function (defaults) {
             new MonacoWebpackPlugin(),
             new webpack.ProvidePlugin({
               process: 'process',
+            }),
+            new webpack.IgnorePlugin({
+              // workaround for https://github.com/embroider-build/ember-auto-import/issues/578
+              resourceRegExp: /moment-timezone/,
+            }),
+            new webpack.IgnorePlugin({
+              resourceRegExp: /^https:\/\/cardstack\.com\/base/,
             }),
             new MomentLocalesPlugin({
               // 'en' is built into moment and cannot be removed. This strips the others.
