@@ -37,7 +37,11 @@ export default class MarkdownCard extends CardBase {
 
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <BoxelInput @value={{@model}} @onInput={{@set}} />
+      <BoxelInput 
+        class='boxel-text-area' 
+        @multiline={{true}} 
+        @value={{@model}} 
+        @onInput={{@set}} />
     </template>
   };
 }
