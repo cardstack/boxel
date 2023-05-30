@@ -1,4 +1,4 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import { Loader } from '@cardstack/runtime-common';
 import { dirSync, setGracefulCleanup } from 'tmp';
 import { createRealm } from './helpers';
@@ -40,7 +40,7 @@ module('loader', function (hooks) {
     assert.strictEqual(bModule.b(), 'bc', 'module executed successfully');
   });
 
-  skip('can resolve a import deadlock', async function (assert) {
+  test('can resolve a import deadlock', async function (assert) {
     let loader = new Loader();
     loader.addURLMapping(
       new URL(baseRealm.url),
