@@ -36,7 +36,7 @@ app "realm-base" {
 
       alb {
         subnets     = ["subnet-099d721ad678d073a", "subnet-0d1196fa815f3d057"]
-        certificate = "arn:aws:acm:us-east-1:680542703984:certificate/11ae7191-23fc-4101-a8ad-aab2e4cb520e"
+        certificate = "arn:aws:acm:us-east-1:680542703984:certificate/739f0700-d97e-495d-9947-6b497eb578c6"
       }
     }
 
@@ -96,7 +96,7 @@ app "realm-demo" {
 
       alb {
         subnets     = ["subnet-099d721ad678d073a", "subnet-0d1196fa815f3d057"]
-        certificate = "arn:aws:acm:us-east-1:680542703984:certificate/4eccc35e-049b-4bbd-b007-575ffa3cb752"
+        certificate = "arn:aws:acm:us-east-1:680542703984:certificate/739f0700-d97e-495d-9947-6b497eb578c6"
       }
     }
 
