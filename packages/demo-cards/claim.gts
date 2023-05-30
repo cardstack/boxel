@@ -30,7 +30,7 @@ class Isolated extends Component<typeof Claim> {
       <FieldContainer @label='Explanation'><@fields.explanation
         /></FieldContainer>
       <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
-      {{#if this.connected}}
+      {{#if this.connectedAndSameChain}}
         <Button {{on 'click' this.claim}}>
           {{#if this.metamask.doClaim.isRunning}}
             Claiming...
@@ -58,7 +58,7 @@ class Isolated extends Component<typeof Claim> {
     }).setup();
   }
 
-  get connected() {
+  get connectedAndSameChain() {
     return this.chainId == this.metamask.chainId && this.metamask.connected;
   }
 
