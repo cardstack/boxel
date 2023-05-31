@@ -73,6 +73,11 @@ module('Integration | operator-mode', function (hooks) {
         export class Pet extends Card {
           static displayName = 'Pet';
           @field name = contains(StringCard);
+          @field title = contains(StringCard, {
+            computeVia: function (this: Pet) {
+              return this.name;
+            },
+          });
           static embedded = class Embedded extends Component<typeof this> {
             <template>
               <div ...attributes>
@@ -130,6 +135,11 @@ module('Integration | operator-mode', function (hooks) {
           @field firstLetterOfTheName = contains(StringCard, {
             computeVia: function (this: Chain) {
               return this.firstName[0];
+            },
+          });
+          @field title = contains(StringCard, {
+            computeVia: function (this: Person) {
+              return this.firstName;
             },
           });
           @field address = contains(Address);
@@ -303,6 +313,11 @@ module('Integration | operator-mode', function (hooks) {
           static displayName = 'Author';
           @field firstName = contains(StringCard);
           @field lastName = contains(StringCard);
+          @field title = contains(StringCard, {
+            computeVia: function (this: Author) {
+              return [this.firstName, this.lastName].filter(Boolean).join(' ');
+            },
+          });
           static embedded = class Embedded extends Component<typeof this> {
             <template>
               <span data-test-author="{{@model.firstName}}">
