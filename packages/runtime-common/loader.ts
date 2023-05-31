@@ -8,8 +8,6 @@ import flatMap from 'lodash/flatMap';
 import { type RunnerOpts } from './search-index';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
-// TODO remove this!
-let nonce = 0;
 
 // this represents a URL that has already been resolved to aid in documenting
 // when resolution has already been performed
@@ -117,7 +115,6 @@ export interface MaybeLocalRequest extends Request {
 }
 
 export class Loader {
-  nonce = nonce++;
   private log = logger('loader');
   private modules = new Map<string, Module>();
   private urlHandlers = new Map<string, (req: Request) => Promise<Response>>();
@@ -150,18 +147,8 @@ export class Loader {
   static createLoaderFromGlobal(): Loader {
     let globalLoader = Loader.getLoader();
     let loader = new Loader();
-    loader.urlHandlers = new Map([
-      ...(typeof (globalThis as any).getUrlHandlers === 'function'
-        ? (globalThis as any).getUrlHandlers()
-        : []),
-      ...globalLoader.urlHandlers,
-    ]);
-    loader.urlMappings = [
-      ...(typeof (globalThis as any).getUrlMappings === 'function'
-        ? (globalThis as any).getUrlMappings()
-        : []),
-      ...globalLoader.urlMappings,
-    ];
+    loader.urlHandlers = globalLoader.urlHandlers;
+    loader.urlMappings = globalLoader.urlMappings;
     for (let [moduleIdentifier, module] of globalLoader.moduleShims) {
       loader.shimModule(moduleIdentifier, module);
     }
@@ -221,10 +208,6 @@ export class Loader {
     this.urlMappings.push([from.href, to.href]);
   }
 
-  getURLMappings() {
-    return [...this.urlMappings];
-  }
-
   static registerURLHandler(
     url: URL,
     handler: (req: Request) => Promise<Response>
@@ -235,10 +218,6 @@ export class Loader {
 
   registerURLHandler(url: URL, handler: (req: Request) => Promise<Response>) {
     this.urlHandlers.set(url.href, handler);
-  }
-
-  getURLHandlers() {
-    return [...this.urlHandlers];
   }
 
   static shimModule(moduleIdentifier: string, module: Record<string, any>) {
