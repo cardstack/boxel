@@ -100,11 +100,9 @@ class MetaMaskResource extends Resource {
       if (e.code === METAMASK_ERROR_CODES.user_rejected) {
         return;
       } else if (e.code === METAMASK_ERROR_CODES.unknown_chain) {
-        console.log(
-          `Unknown chain id ${chainId}. Need to add chain to metamask`
-        );
+        throw `Unknown chain id ${chainId}. Need to add chain to metamask`;
       } else {
-        console.log(e);
+        throw e;
       }
     }
   });
