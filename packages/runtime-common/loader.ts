@@ -366,58 +366,57 @@ export class Loader {
           for (let entry of module.dependencyList) {
             if (entry.type === '__import_meta__' || entry.type === 'exports') {
               maybeReadyDeps.push(entry);
-            } else {
-              let depModule = this.getModule(
-                entry.type === 'dep' ? entry.moduleURL.href : entry.moduleId
-              );
-              if (entry.type === 'shim-dep') {
-                maybeReadyDeps.push({
-                  type: 'shim-dep',
-                  moduleId: entry.moduleId,
-                });
-              } else {
-                if (!isEvaluatable(depModule)) {
-                  // we always only await the first dep that actually needs work and
-                  // then break back to the top-level state machine, so that we'll
-                  // be working from the latest state.
-                  if (
-                    !stack['registered-completing-deps'].includes(
-                      entry.moduleURL.href
-                    )
-                  ) {
-                    await this.advanceToState(
-                      entry.moduleURL,
-                      'registered-completing-deps',
-                      {
-                        ...stack,
-                        ...{
-                          'registered-completing-deps': [
-                            ...stack['registered-completing-deps'],
-                            resolvedURL.href,
-                          ],
-                        },
-                      }
-                    );
-                    break outer_switch;
-                    // TODO these if/elses make my head hurt, can we make this easier to read?
-                  } else if (isRegistered(depModule)) {
-                    maybeReadyDeps.push({
-                      type: 'completing-dep',
-                      moduleURL: entry.moduleURL,
-                    });
+              continue;
+            }
+            let depModule = this.getModule(
+              entry.type === 'dep' ? entry.moduleURL.href : entry.moduleId
+            );
+            if (entry.type === 'shim-dep') {
+              maybeReadyDeps.push({
+                type: 'shim-dep',
+                moduleId: entry.moduleId,
+              });
+              continue;
+            }
+            if (!isEvaluatable(depModule)) {
+              // we always only await the first dep that actually needs work and
+              // then break back to the top-level state machine, so that we'll
+              // be working from the latest state.
+              if (
+                !stack['registered-completing-deps'].includes(
+                  entry.moduleURL.href
+                )
+              ) {
+                await this.advanceToState(
+                  entry.moduleURL,
+                  'registered-completing-deps',
+                  {
+                    ...stack,
+                    ...{
+                      'registered-completing-deps': [
+                        ...stack['registered-completing-deps'],
+                        resolvedURL.href,
+                      ],
+                    },
                   }
-                } else if (depModule.state === 'registered-completing-deps') {
-                  maybeReadyDeps.push({
-                    type: 'completing-dep',
-                    moduleURL: entry.moduleURL,
-                  });
-                } else {
-                  maybeReadyDeps.push({
-                    type: 'dep',
-                    moduleURL: entry.moduleURL,
-                  });
-                }
+                );
+                break outer_switch;
+              } else if (isRegistered(depModule)) {
+                maybeReadyDeps.push({
+                  type: 'completing-dep',
+                  moduleURL: entry.moduleURL,
+                });
               }
+            } else if (depModule.state === 'registered-completing-deps') {
+              maybeReadyDeps.push({
+                type: 'completing-dep',
+                moduleURL: entry.moduleURL,
+              });
+            } else {
+              maybeReadyDeps.push({
+                type: 'dep',
+                moduleURL: entry.moduleURL,
+              });
             }
           }
           this.setModule(resolvedURL.href, {
@@ -438,68 +437,68 @@ export class Loader {
           for (let entry of module.dependencies) {
             if (entry.type === '__import_meta__' || entry.type === 'exports') {
               readyDeps.push(entry);
-            } else {
-              let depModuleId =
-                entry.type === 'dep' || entry.type === 'completing-dep'
-                  ? entry.moduleURL.href
-                  : entry.moduleId;
-              let depModule = this.getModule(depModuleId);
-              if (entry.type === 'shim-dep') {
-                readyDeps.push({
-                  type: 'shim-dep',
-                  moduleId: entry.moduleId,
-                });
-              } else if (entry.type === 'dep') {
+              continue;
+            }
+            let depModuleId =
+              entry.type === 'dep' || entry.type === 'completing-dep'
+                ? entry.moduleURL.href
+                : entry.moduleId;
+            let depModule = this.getModule(depModuleId);
+            if (entry.type === 'shim-dep') {
+              readyDeps.push({
+                type: 'shim-dep',
+                moduleId: entry.moduleId,
+              });
+              continue;
+            }
+            if (entry.type === 'dep') {
+              readyDeps.push({
+                type: 'dep',
+                moduleURL: entry.moduleURL,
+              });
+              continue;
+            }
+            switch (depModule?.state) {
+              case undefined:
+              case 'fetching':
+              case 'registered':
+                throw new Error(
+                  `expected ${entry.moduleURL.href} to be 'registered-completing-deps' but was '${depModule?.state}'`
+                );
+              case 'registered-completing-deps': {
+                if (
+                  !stack['registered-with-deps'].includes(entry.moduleURL.href)
+                ) {
+                  await this.advanceToState(
+                    entry.moduleURL,
+                    'registered-with-deps',
+                    {
+                      ...stack,
+                      ...{
+                        'registered-with-deps': [
+                          ...stack['registered-with-deps'],
+                          resolvedURL.href,
+                        ],
+                      },
+                    }
+                  );
+                  break outer_switch;
+                } else {
+                  // the dep module is actually evaluatable now--we only got
+                  // here because we were already in the process of trying to
+                  // move the state of the dep to 'registered-with-deps'
+                  readyDeps.push({
+                    type: 'dep',
+                    moduleURL: entry.moduleURL,
+                  });
+                }
+                break;
+              }
+              default:
                 readyDeps.push({
                   type: 'dep',
                   moduleURL: entry.moduleURL,
                 });
-              } else if (entry.type === 'completing-dep') {
-                switch (depModule?.state) {
-                  case undefined:
-                  case 'fetching':
-                  case 'registered':
-                    throw new Error(
-                      `expected ${entry.moduleURL.href} to be 'registered-completing-deps' but was '${depModule?.state}'`
-                    );
-                  case 'registered-completing-deps': {
-                    if (
-                      !stack['registered-with-deps'].includes(
-                        entry.moduleURL.href
-                      )
-                    ) {
-                      await this.advanceToState(
-                        entry.moduleURL,
-                        'registered-with-deps',
-                        {
-                          ...stack,
-                          ...{
-                            'registered-with-deps': [
-                              ...stack['registered-with-deps'],
-                              resolvedURL.href,
-                            ],
-                          },
-                        }
-                      );
-                      break outer_switch;
-                    } else {
-                      // the dep module is actually evaluatable now--we only got
-                      // here because we were already in the process of trying to
-                      // move the state of the dep to 'registered-with-deps'
-                      readyDeps.push({
-                        type: 'dep',
-                        moduleURL: entry.moduleURL,
-                      });
-                    }
-                    break;
-                  }
-                  default:
-                    readyDeps.push({
-                      type: 'dep',
-                      moduleURL: entry.moduleURL,
-                    });
-                }
-              }
             }
           }
           this.setModule(resolvedURL.href, {
