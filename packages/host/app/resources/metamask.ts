@@ -53,7 +53,7 @@ class MetaMaskResource extends Resource {
         method: 'eth_requestAccounts',
       });
       return accounts.length > 0;
-    } catch (e) {
+    } catch (e: any) {
       if (e.code === METAMASK_ERROR_CODES.user_rejected) {
         return false;
       } else {
@@ -96,7 +96,7 @@ class MetaMaskResource extends Resource {
       }
       const isMetamaskConnected = await this.isMetamaskConnected();
       this.connected = isMetamaskConnected;
-    } catch (e) {
+    } catch (e: any) {
       if (e.code === METAMASK_ERROR_CODES.user_rejected) {
         return;
       } else if (e.code === METAMASK_ERROR_CODES.unknown_chain) {
