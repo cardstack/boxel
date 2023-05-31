@@ -28,13 +28,17 @@ export default class MarkdownCard extends CardBase {
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      {{{toHtml @model}}}
+      <div>
+        {{{toHtml @model}}}
+      </div>
     </template>
   }
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      {{{toHtml @model}}}
+      <div>
+        {{{toHtml @model}}}
+      </div>
     </template>
   };
 
