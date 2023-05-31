@@ -32,6 +32,7 @@ class MetaMaskResource extends Resource {
 
   teardown() {
     this.doInitialize.cancelAll();
+    this.doConnectMetamask.cancelAll();
   }
 
   isMetamaskInstalled() {
