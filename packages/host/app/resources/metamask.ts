@@ -49,7 +49,11 @@ class MetaMaskResource extends Resource {
       });
       return accounts.length > 0;
     } catch (e) {
-      return false;
+      if (e.code === 4001) {
+        return false;
+      } else {
+        throw e;
+      }
     }
   }
 
