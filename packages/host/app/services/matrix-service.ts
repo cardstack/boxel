@@ -16,7 +16,7 @@ import { TrackedMap } from 'tracked-built-ins';
 import debounce from 'lodash/debounce';
 import RouterService from '@ember/routing/router-service';
 import { marked } from 'marked';
-import { sanitize } from 'dompurify';
+import { sanitize } from '../utils/dompurify';
 import type CardService from '../services/card-service';
 import { type Card } from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
