@@ -9,6 +9,11 @@ declare global {
   }
 }
 
+const METAMASK_ERROR_CODES = {
+  user_rejected: 4001,
+  unknown_chain: 4902,
+};
+
 class MetaMaskResource extends Resource {
   @tracked connected = false;
   @tracked chainId = -1; // the chain id of the metamask connection (not the card)
@@ -49,7 +54,7 @@ class MetaMaskResource extends Resource {
       });
       return accounts.length > 0;
     } catch (e) {
-      if (e.code === 4001) {
+      if (e.code === METAMASK_ERROR_CODES.user_rejected) {
         return false;
       } else {
         throw e;
@@ -92,7 +97,15 @@ class MetaMaskResource extends Resource {
       const isMetamaskConnected = await this.isMetamaskConnected();
       this.connected = isMetamaskConnected;
     } catch (e) {
-      console.log(e);
+      if (e.code === METAMASK_ERROR_CODES.user_rejected) {
+        return;
+      } else if (e.code === METAMASK_ERROR_CODES.unknown_chain) {
+        console.log(
+          `Unknown chain id ${chainId}. Need to add chain to metamask`
+        );
+      } else {
+        console.log(e);
+      }
     }
   });
 }
