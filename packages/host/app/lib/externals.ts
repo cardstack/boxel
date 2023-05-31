@@ -1,6 +1,7 @@
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import * as runtime from '@cardstack/runtime-common';
+import * as boxelMotion from '@cardstack/boxel-motion';
 import * as boxelUI from '@cardstack/boxel-ui';
 import * as boxelSvgJar from '@cardstack/boxel-ui/helpers/svg-jar';
 import * as boxelPickHelper from '@cardstack/boxel-ui/helpers/pick';
@@ -30,6 +31,7 @@ import * as marked from 'marked';
 
 export function shimExternals(loader: Loader = Loader.getLoader()) {
   loader.shimModule('@cardstack/runtime-common', runtime);
+  loader.shimModule('@cardstack/boxel-motion', boxelMotion);
   loader.shimModule('@cardstack/boxel-ui', boxelUI);
   loader.shimModule('@cardstack/boxel-ui/helpers/svg-jar', boxelSvgJar);
   loader.shimModule('@cardstack/boxel-ui/helpers/pick', boxelPickHelper);

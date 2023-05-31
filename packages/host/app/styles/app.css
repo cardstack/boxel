@@ -801,3 +801,12 @@ nav > .directory-level {
   font-size: var(--boxel-font-size-sm);
   font-weight: initial;
 }
+
+.animation-context {
+  border: 1px dashed blue;
+  width: 100%;
+  height: 100%;
+}
+.sprite {
+  border: 1px dotted green;
+}

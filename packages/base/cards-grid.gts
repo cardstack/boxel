@@ -13,6 +13,7 @@ import {
 } from '@cardstack/runtime-common';
 import { type CatalogEntry } from './catalog-entry';
 import { fn } from '@ember/helper';
+import { sprite } from '@cardstack/boxel-motion';
 
 class Isolated extends Component<typeof CardsGrid> {
   <template>
@@ -23,7 +24,7 @@ class Isolated extends Component<typeof CardsGrid> {
             data-test-cards-grid-item={{card.id}}
             {{on 'click' (fn this.openCard card)}}
           >
-            <CardContainer class='grid-card'>
+            <CardContainer class='grid-card' {{sprite role='card' id=card.id}}>
               <div class='grid-card__thumbnail'>
                 <div
                   class='grid-card__thumbnail-text'

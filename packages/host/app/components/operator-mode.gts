@@ -44,6 +44,18 @@ import { getSearchResults, type Search } from '../resources/search';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import perform from 'ember-concurrency/helpers/perform';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import {
+  easeInAndOut,
+  sprite,
+  AnimationContext,
+  type AnimationDefinition,
+  Changeset,
+  Sprite,
+  SpriteType,
+  StaticBehavior,
+  TweenBehavior,
+  WaitBehavior,
+} from '@cardstack/boxel-motion';
 
 interface Signature {
   Args: {
@@ -333,6 +345,161 @@ export default class OperatorMode extends Component<Signature> {
     }
   }
 
+  transition(changeset: Changeset): AnimationDefinition {
+    let fadeDuration = 300;
+    let resizeAndMoveDuration = 500;
+
+    let cardSprites: Set<Sprite> = changeset.spritesFor({
+      role: 'card',
+      type: SpriteType.Kept,
+    });
+
+    let nonAnimatingCardSprites = Array.from(cardSprites).filter(
+      (s) =>
+        !(
+          s.boundsDelta &&
+          (s.boundsDelta.width !== 0 ||
+            s.boundsDelta.height !== 0 ||
+            s.boundsDelta.x !== 0 ||
+            s.boundsDelta.y !== 0)
+        )
+    );
+
+    let removedCardSprites = changeset.spritesFor({
+      role: 'card',
+      type: SpriteType.Removed,
+    });
+
+    let removedCardContentSprites = changeset.spritesFor({
+      role: 'card-content',
+      type: SpriteType.Removed,
+    });
+
+    let cardContentSprites = changeset.spritesFor({
+      role: 'card-content',
+      type: SpriteType.Inserted,
+    });
+
+    let fadeOutClosingCardContent = {
+      sprites: removedCardContentSprites,
+      properties: {
+        opacity: { to: 0 },
+      },
+      timing: {
+        behavior: new TweenBehavior(),
+        duration: fadeDuration,
+      },
+    };
+
+    let moveClosingCardContentToForeground = {
+      sprites: removedCardContentSprites,
+      properties: {
+        zIndex: 2,
+      },
+      timing: {
+        behavior: new StaticBehavior(),
+        duration: fadeDuration,
+      },
+    };
+
+    let keepClosingCardContentHidden = {
+      sprites: removedCardContentSprites,
+      properties: {
+        opacity: 0,
+      },
+      timing: {
+        behavior: new StaticBehavior(),
+        duration: resizeAndMoveDuration,
+      },
+    };
+
+    let moveAllCardsToMidground = {
+      sprites: cardSprites,
+      properties: {
+        zIndex: 1,
+      },
+      timing: {
+        behavior: new StaticBehavior(),
+        duration: fadeDuration,
+      },
+    };
+
+    let moveNonAnimatingCardsToBackground = {
+      sprites: new Set(nonAnimatingCardSprites),
+      properties: {
+        zIndex: 0,
+      },
+      timing: {
+        behavior: new StaticBehavior(),
+        duration: resizeAndMoveDuration,
+      },
+    };
+
+    let resizeAnimatingCard = {
+      sprites: cardSprites,
+      properties: {
+        translateX: {},
+        translateY: {},
+        width: {},
+        height: {},
+      },
+      timing: {
+        // TODO convert to SpringBehavior when its duration can be referenced by other animations
+        behavior: new TweenBehavior({
+          easing: easeInAndOut,
+        }),
+        duration: resizeAndMoveDuration,
+      },
+    };
+
+    let keepCardsBeingRemovedUntilOpeningCompletes = {
+      sprites: removedCardSprites,
+      properties: {},
+      timing: {
+        behavior: new WaitBehavior(),
+        duration: fadeDuration,
+      },
+    };
+
+    let fadeInOpeningCardContent = {
+      sprites: cardContentSprites,
+      properties: {
+        opacity: { from: 0 },
+      },
+      timing: {
+        behavior: new TweenBehavior(),
+        duration: fadeDuration,
+      },
+    };
+
+    return {
+      timeline: {
+        type: 'sequence',
+        animations: [
+          {
+            type: 'parallel',
+            animations: [
+              moveAllCardsToMidground,
+              moveClosingCardContentToForeground,
+              fadeOutClosingCardContent,
+            ],
+          },
+          {
+            type: 'parallel',
+            animations: [
+              keepClosingCardContentHidden,
+              moveAllCardsToMidground,
+              moveNonAnimatingCardsToBackground,
+              resizeAnimatingCard,
+              keepCardsBeingRemovedUntilOpeningCompletes,
+            ],
+          },
+          fadeInOpeningCardContent,
+        ],
+      },
+    };
+  }
+
   <template>
     <Modal
       class='operator-mode'
@@ -341,123 +508,125 @@ export default class OperatorMode extends Component<Signature> {
       @isOverlayDismissalDisabled={{true}}
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
     >
+      <AnimationContext @use={{this.transition}}>
+        <CardCatalogModal />
 
-      <CardCatalogModal />
-
-      {{#if (eq this.stack.length 0)}}
-        <div class='operator-mode__no-cards'>
-          <p class='operator-mode__no-cards__add-card-title'>Add a card to get
-            started</p>
-          {{! Cannot find an svg icon with plus in the box
-          that we can fill the color of the plus and the box. }}
-          <button
-            class='operator-mode__no-cards__add-card-button icon-button'
-            {{on 'click' (fn (perform this.addCard))}}
-            data-test-add-card-button
-          >
-            {{svgJar 'icon-plus' width='50px' height='50px'}}
-          </button>
-        </div>
-      {{else}}
-        <div class='operator-mode-card-stack'>
-          {{! z-index and offset calculation in the OperatorModeOverlays operates under assumption that it is nested under element with class operator-mode-card-stack }}
-          <OperatorModeOverlays
-            @renderedLinksToCards={{this.renderedLinksToCards}}
-            @addToStack={{this.addToStack}}
-          />
-
-          {{#each this.stack as |item i|}}
-            <div
-              class={{cn
-                'operator-mode-card-stack__item'
-                operator-mode-card-stack__buried=(this.isBuried i)
-              }}
-              data-test-stack-card-index={{i}}
-              data-test-stack-card={{item.card.id}}
-              style={{this.styleForStackedCard this.stack i}}
+        {{#if (eq this.stack.length 0)}}
+          <div class='operator-mode__no-cards'>
+            <p class='operator-mode__no-cards__add-card-title'>Add a card to get
+              started</p>
+            {{! Cannot find an svg icon with plus in the box
+            that we can fill the color of the plus and the box. }}
+            <button
+              class='operator-mode__no-cards__add-card-button icon-button'
+              {{on 'click' (fn (perform this.addCard))}}
+              data-test-add-card-button
             >
-              <CardContainer
+              {{svgJar 'icon-plus' width='50px' height='50px'}}
+            </button>
+          </div>
+        {{else}}
+          <div class='operator-mode-card-stack'>
+            {{! z-index and offset calculation in the OperatorModeOverlays operates under assumption that it is nested under element with class operator-mode-card-stack }}
+            {{!-- <OperatorModeOverlays
+              @renderedLinksToCards={{this.renderedLinksToCards}}
+              @addToStack={{this.addToStack}}
+            /> --}}
+
+            {{#each this.stack as |item i|}}
+              <div
                 class={{cn
-                  'operator-mode-card-stack__card'
-                  operator-mode-card-stack__card--edit=(eq item.format 'edit')
+                  'operator-mode-card-stack__item'
+                  operator-mode-card-stack__buried=(this.isBuried i)
                 }}
+                data-test-stack-card-index={{i}}
+                data-test-stack-card={{item.card.id}}
+                style={{this.styleForStackedCard this.stack i}}
               >
-                <Header
-                  @title={{cardTypeDisplayName item.card}}
-                  class='operator-mode-card-stack__card__header'
-                  {{on
-                    'click'
-                    (optional
-                      (if
-                        (this.isBuried i) (fn this.dismissStackedCardsAbove i)
-                      )
-                    )
+                <CardContainer
+                  class={{cn
+                    'operator-mode-card-stack__card'
+                    operator-mode-card-stack__card--edit=(eq item.format 'edit')
                   }}
+                  {{sprite role='card' id=item.card.id}}
                 >
-                  <:actions>
-                    {{#if (not (eq item.format 'edit'))}}
+                  <Header
+                    @title={{cardTypeDisplayName item.card}}
+                    class='operator-mode-card-stack__card__header'
+                    {{on
+                      'click'
+                      (optional
+                        (if
+                          (this.isBuried i) (fn this.dismissStackedCardsAbove i)
+                        )
+                      )
+                    }}
+                  >
+                    <:actions>
+                      {{#if (not (eq item.format 'edit'))}}
+                        <IconButton
+                          @icon='icon-horizontal-three-dots'
+                          @width='20px'
+                          @height='20px'
+                          class='icon-button'
+                          aria-label='Edit'
+                          {{on 'click' (fn this.edit item i)}}
+                          data-test-edit-button
+                        />
+                      {{/if}}
                       <IconButton
-                        @icon='icon-horizontal-three-dots'
+                        @icon='icon-x'
                         @width='20px'
                         @height='20px'
                         class='icon-button'
-                        aria-label='Edit'
-                        {{on 'click' (fn this.edit item i)}}
-                        data-test-edit-button
+                        aria-label='Close'
+                        {{on 'click' (fn this.close item)}}
+                        data-test-close-button
                       />
-                    {{/if}}
-                    <IconButton
-                      @icon='icon-x'
-                      @width='20px'
-                      @height='20px'
-                      class='icon-button'
-                      aria-label='Close'
-                      {{on 'click' (fn this.close item)}}
-                      data-test-close-button
+                    </:actions>
+                  </Header>
+                  <div class='operator-mode-card-stack__card__content'>
+                    <Preview
+                      @card={{item.card}}
+                      @format={{item.format}}
+                      @context={{this.context}}
                     />
-                  </:actions>
-                </Header>
-                <div class='operator-mode-card-stack__card__content'>
-                  <Preview
-                    @card={{item.card}}
-                    @format={{item.format}}
-                    @context={{this.context}}
-                  />
-                </div>
-                {{#if (eq item.format 'edit')}}
-                  <footer class='operator-mode-card-stack__card__footer'>
-                    <Button
-                      @kind='secondary-light'
-                      @size='tall'
-                      class='operator-mode-card-stack__card__footer-button'
-                      {{on 'click' (fn this.cancel item)}}
-                      aria-label='Cancel'
-                      data-test-cancel-button
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      @kind='primary'
-                      @size='tall'
-                      class='operator-mode-card-stack__card__footer-button'
-                      {{on 'click' (fn this.save item)}}
-                      aria-label='Save'
-                      data-test-save-button
-                    >
-                      Save
-                    </Button>
-                  </footer>
-                {{/if}}
-              </CardContainer>
-            </div>
-          {{/each}}
-        </div>
-      {{/if}}
-      <SearchSheet
-        @mode={{this.searchSheetMode}}
-        @onCancel={{this.onCancelSearchSheet}}
-        @onFocus={{this.onFocusSearchInput}}
-      />
+                  </div>
+                  {{#if (eq item.format 'edit')}}
+                    <footer class='operator-mode-card-stack__card__footer'>
+                      <Button
+                        @kind='secondary-light'
+                        @size='tall'
+                        class='operator-mode-card-stack__card__footer-button'
+                        {{on 'click' (fn this.cancel item)}}
+                        aria-label='Cancel'
+                        data-test-cancel-button
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        @kind='primary'
+                        @size='tall'
+                        class='operator-mode-card-stack__card__footer-button'
+                        {{on 'click' (fn this.save item)}}
+                        aria-label='Save'
+                        data-test-save-button
+                      >
+                        Save
+                      </Button>
+                    </footer>
+                  {{/if}}
+                </CardContainer>
+              </div>
+            {{/each}}
+          </div>
+        {{/if}}
+        <SearchSheet
+          @mode={{this.searchSheetMode}}
+          @onCancel={{this.onCancelSearchSheet}}
+          @onFocus={{this.onFocusSearchInput}}
+        />
+      </AnimationContext>
     </Modal>
   </template>
 }
