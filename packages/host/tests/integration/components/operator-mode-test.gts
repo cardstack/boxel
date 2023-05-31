@@ -15,7 +15,13 @@ import {
   TestRealmAdapter,
   TestRealm,
 } from '../../helpers';
-import { waitFor, waitUntil, click, fillIn } from '@ember/test-helpers';
+import {
+  waitFor,
+  waitUntil,
+  click,
+  fillIn,
+  settled,
+} from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
 
@@ -563,13 +569,15 @@ module('Integration | operator-mode', function (hooks) {
     );
     assert.dom('[data-test-person]').isNotVisible();
     assert.dom('[data-test-add-card-button]').isVisible();
-    
+
     await click('[data-test-add-card-button]');
     assert.dom('[data-test-card-catalog-modal]').isVisible();
 
     await waitFor(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
     await click(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
-    assert.dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`).isVisible();
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+      .isVisible();
   });
 
   test('displays cards on cards-grid', async function (assert) {
@@ -1067,9 +1075,21 @@ module('Integration | operator-mode', function (hooks) {
       }
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
+    await waitFor('[data-test-person]');
+    (window as any).test__refreshOverlayedButtons();
+    await waitFor('[data-test-cardstack-operator-mode-overlay-button]');
+    await click('[data-test-cardstack-operator-mode-overlay-button]');
+    assert.dom(`[data-test-stack-card-index="2"]`).exists();
     await click('[data-test-stack-card-index="0"] [data-test-boxel-header]');
+    assert.dom(`[data-test-stack-card-index="2"]`).doesNotExist();
     assert.dom(`[data-test-stack-card-index="1"]`).doesNotExist();
+    assert.dom(`[data-test-stack-card-index="0"]`).exists();
+    (window as any).test__refreshOverlayedButtons();
+    await settled();
+    assert
+      .dom(`[data-test-cardstack-operator-mode-overlay-button]`)
+      .doesNotExist();
   });
 });

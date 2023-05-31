@@ -326,10 +326,10 @@ export default class OperatorMode extends Component<Signature> {
   }
 
   @action
-  dismissStackedCardsAbove(stackIndex: number) {
+  async dismissStackedCardsAbove(stackIndex: number) {
     for (let i = this.stack.length - 1; i > stackIndex; i--) {
       let stackItem = this.stack[i];
-      this.close(stackItem);
+      await this.close(stackItem);
     }
   }
 
