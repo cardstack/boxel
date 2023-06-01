@@ -8,6 +8,9 @@ overrides:
   ember-modifier: ^4.1.0
 
 patchedDependencies:
+  '@cardstack/cardpay-sdk@1.0.52':
+    hash: 7ey44bgbi3fsbkovydnuvivoee
+    path: patches/@cardstack__cardpay-sdk@1.0.52.patch
   '@types/eventsource@1.1.11':
     hash: itunl7o524papufrlp7tcpsoiu
     path: patches/@types__eventsource@1.1.11.patch
@@ -834,7 +837,7 @@ importers:
         version: link:../boxel-ui
       '@cardstack/cardpay-sdk':
         specifier: ^1.0.52
-        version: 1.0.52(@babel/core@7.20.2)(typescript@4.9.3)
+        version: 1.0.52(patch_hash=7ey44bgbi3fsbkovydnuvivoee)(@babel/core@7.20.2)(typescript@4.9.3)
       '@cardstack/requirejs-monaco-ember-polyfill':
         specifier: ^0.0.1
         version: 0.0.1
@@ -1169,7 +1172,7 @@ importers:
         version: link:../boxel-ui
       '@cardstack/cardpay-sdk':
         specifier: ^1.0.52
-        version: 1.0.52(@babel/core@7.21.0)(typescript@4.9.3)
+        version: 1.0.52(patch_hash=7ey44bgbi3fsbkovydnuvivoee)(@babel/core@7.21.0)(typescript@4.9.3)
       '@cardstack/runtime-common':
         specifier: workspace:*
         version: link:../runtime-common
@@ -3951,7 +3954,7 @@ packages:
       '@babel/helper-validator-identifier': 7.19.1
       to-fast-properties: 2.0.0
 
-  /@cardstack/cardpay-sdk@1.0.52(@babel/core@7.20.2)(typescript@4.9.3):
+  /@cardstack/cardpay-sdk@1.0.52(patch_hash=7ey44bgbi3fsbkovydnuvivoee)(@babel/core@7.20.2)(typescript@4.9.3):
     resolution: {integrity: sha512-XO+/WUQ+WDMJEmlFZLhPcQSsGOQ5s1An8N6N1W8p6jHx3i2UhcxCdw8DYGuE4fjL1eLEoOpcRtDuu68CtquwTQ==}
     engines: {node: ^14.0.0 || ^18.0.0}
     requiresBuild: true
@@ -4000,8 +4003,9 @@ packages:
       - typescript
       - utf-8-validate
     dev: true
+    patched: true
 
-  /@cardstack/cardpay-sdk@1.0.52(@babel/core@7.21.0)(typescript@4.9.3):
+  /@cardstack/cardpay-sdk@1.0.52(patch_hash=7ey44bgbi3fsbkovydnuvivoee)(@babel/core@7.21.0)(typescript@4.9.3):
     resolution: {integrity: sha512-XO+/WUQ+WDMJEmlFZLhPcQSsGOQ5s1An8N6N1W8p6jHx3i2UhcxCdw8DYGuE4fjL1eLEoOpcRtDuu68CtquwTQ==}
     engines: {node: ^14.0.0 || ^18.0.0}
     requiresBuild: true
@@ -4050,6 +4054,7 @@ packages:
       - typescript
       - utf-8-validate
     dev: true
+    patched: true
 
   /@cardstack/did-resolver@1.0.52:
     resolution: {integrity: sha512-g0XUKMlG63pMObA+VR6gi7Bhcsi8hgjhUpn9h+qjJpWsAIbqGq0P5H50otlbzb9T/WbfLSNzaT9SU+SRzcFEbA==}
