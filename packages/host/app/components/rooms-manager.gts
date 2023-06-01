@@ -17,7 +17,7 @@ import {
 } from '@cardstack/boxel-ui';
 import { isMatrixError } from '../lib/matrix-utils';
 import { LinkTo } from '@ember/routing';
-import { eventDebounceMs } from '../services/matrix-service';
+import { eventDebounceMs } from '@cardstack/runtime-common';
 import RouterService from '@ember/routing/router-service';
 import type MatrixService from '../services/matrix-service';
 
