@@ -19,7 +19,6 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
 class Isolated extends Component<typeof Claim> {
-  @tracked chainId = -1;
   metamask;
   <template>
     <CardContainer class='demo-card' @displayBoundaries={{true}}>
@@ -52,7 +51,6 @@ class Isolated extends Component<typeof Claim> {
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
-    this.chainId = this.args.model.chain?.chainId ?? -1;
     this.metamask = new MetamaskResource({
       named: { chainId: this.chainId },
     }).setup();
@@ -75,6 +73,10 @@ class Isolated extends Component<typeof Claim> {
   @action
   willDestroy() {
     this.metamask.teardown();
+  }
+
+  get chainId() {
+    return this.args.model.chain?.chainId ?? -1;
   }
 }
 
