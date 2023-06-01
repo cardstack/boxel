@@ -1,8 +1,8 @@
 diff --git a/dist/magic-string.es.js b/dist/magic-string.es.js
-index f6b409a6736a506f18ca9b4e57d98bed8b843527..e58c20d90fadeea8ba09177af36dae60dc650083 100644
+index 56a22e466839b7b7920eecd7c55da51caa19232c..3bfdf2bb3eefc62d2907edb62ff55b9701a25edf 100644
 --- a/dist/magic-string.es.js
 +++ b/dist/magic-string.es.js
-@@ -168,8 +168,8 @@ Chunk.prototype.trimStart = function trimStart (rx) {
+@@ -170,8 +170,8 @@ Chunk.prototype.trimStart = function trimStart (rx) {
  var btoa = function () {
  	throw new Error('Unsupported environment: `window.btoa` or `Buffer` should be supported.');
  };

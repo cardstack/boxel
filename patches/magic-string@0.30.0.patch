@@ -1,0 +1,15 @@
+diff --git a/dist/magic-string.es.mjs b/dist/magic-string.es.mjs
+index 4f9703eef8145e2e788b7add2e9cd12397bc66bd..cdf7279b12c1feb32389d2877396b5e07608346a 100644
+--- a/dist/magic-string.es.mjs
++++ b/dist/magic-string.es.mjs
+@@ -169,8 +169,8 @@ class Chunk {
+ }
+ 
+ function getBtoa () {
+-	if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
+-		return (str) => window.btoa(unescape(encodeURIComponent(str)));
++	if (typeof globalThis !== 'undefined' && typeof globalThis.btoa === 'function') {
++		return (str) => globalThis.btoa(unescape(encodeURIComponent(str)));
+ 	} else if (typeof Buffer === 'function') {
+ 		return (str) => Buffer.from(str, 'utf-8').toString('base64');
+ 	} else {

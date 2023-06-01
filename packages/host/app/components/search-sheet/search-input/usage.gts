@@ -8,6 +8,7 @@ import { action } from '@ember/object';
 const validBottomTreatments = Object.values(SearchInputBottomTreatment);
 
 export default class SearchInputUsage extends Component {
+  defaultBottomTreatment = SearchInputBottomTreatment.Flat;
   @tracked bottomTreatment = SearchInputBottomTreatment.Flat;
   @tracked value = '';
   @action onFocus() {
@@ -38,7 +39,7 @@ export default class SearchInputUsage extends Component {
           @onInput={{fn (mut this.bottomTreatment)}}
           @options={{validBottomTreatments}}
           @value={{this.bottomTreatment}}
-          @defaultValue={{unbound this.bottomTreatment}}
+          @defaultValue={{this.defaultBottomTreatment}}
         />
         <Args.String
           @name='value'

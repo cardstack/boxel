@@ -26,6 +26,7 @@ import {
 import { WebMessageStream, messageCloseHandler } from './stream';
 import { file, FileResource } from '@cardstack/host/resources/file';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
+import Owner from '@ember/owner';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
@@ -60,7 +61,7 @@ interface Options {
 export const TestRealm = {
   async create(
     flatFiles: Record<string, string | LooseSingleCardDocument | CardDocFiles>,
-    owner: TestContext['owner'],
+    owner: Owner,
     opts?: Options
   ): Promise<Realm> {
     if (opts?.isAcceptanceTest) {
@@ -73,7 +74,7 @@ export const TestRealm = {
 
   async createWithAdapter(
     adapter: RealmAdapter,
-    owner: TestContext['owner'],
+    owner: Owner,
     opts?: Options
   ): Promise<Realm> {
     if (opts?.isAcceptanceTest) {
@@ -171,10 +172,12 @@ export function setupMockMessageService(hooks: NestedHooks) {
 let runnerOptsMgr = new RunnerOptionsManager();
 function makeRealm(
   adapter: RealmAdapter,
-  owner: TestContext['owner'],
+  owner: Owner,
   realmURL = testRealmURL
 ) {
-  let localIndexer = owner.lookup('service:local-indexer') as MockLocalIndexer;
+  let localIndexer = owner.lookup(
+    'service:local-indexer'
+  ) as unknown as MockLocalIndexer;
   return new Realm(
     realmURL,
     adapter,

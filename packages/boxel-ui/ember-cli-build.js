@@ -8,7 +8,7 @@ const EmberAddon = require('ember-cli/lib/broccoli/ember-addon');
 // return maybeEmbroider(app);
 
 module.exports = function (defaults) {
-  let app = new EmberAddon(defaults, {
+  const app = new EmberAddon(defaults, {
     vendorFiles: { 'jquery.js': null, 'app-shims.js': null },
   });
 

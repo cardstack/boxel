@@ -1,0 +1,15 @@
+diff --git a/dist/magic-string.es.js b/dist/magic-string.es.js
+index 51bb450e0dec9f9c435e3071df3b57a3fe90bd32..cfbe86eb5c706f75816a21e7e9fca616298315fe 100644
+--- a/dist/magic-string.es.js
++++ b/dist/magic-string.es.js
+@@ -158,8 +158,8 @@ Chunk.prototype.trimStart = function trimStart (rx) {
+ var btoa = function () {
+ 	throw new Error('Unsupported environment: `window.btoa` or `Buffer` should be supported.');
+ };
+-if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
+-	btoa = window.btoa;
++if (typeof globalThis !== 'undefined' && typeof globalThis.btoa === 'function') {
++	btoa = globalThis.btoa;
+ } else if (typeof Buffer === 'function') {
+ 	btoa = function (str) { return new Buffer(str).toString('base64'); };
+ }

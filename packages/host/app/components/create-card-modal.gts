@@ -3,6 +3,7 @@ import type { CardRef } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
+import { htmlSafe } from '@ember/template';
 import { tracked } from '@glimmer/tracking';
 import { registerDestructor } from '@ember/destroyable';
 import { Deferred } from '@cardstack/runtime-common/deferred';
@@ -21,7 +22,7 @@ export default class CreateCardModal extends Component {
           @size='large'
           @isOpen={{true}}
           @onClose={{fn this.save undefined}}
-          style='z-index:{{this.zIndex}}'
+          style={{this.styleString}}
           data-test-create-new-card={{card.constructor.name}}
         >
           <CardContainer class='dialog-box' @displayBoundaries={{true}}>
@@ -55,6 +56,10 @@ export default class CreateCardModal extends Component {
     registerDestructor(this, () => {
       delete (globalThis as any)._CARDSTACK_CREATE_NEW_CARD;
     });
+  }
+
+  get styleString() {
+    return htmlSafe(`z-index: ${this.zIndex}`);
   }
 
   async create<T extends Card>(
