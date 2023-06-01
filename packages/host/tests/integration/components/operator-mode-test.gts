@@ -548,13 +548,15 @@ module('Integration | operator-mode', function (hooks) {
     );
     assert.dom('[data-test-person]').isNotVisible();
     assert.dom('[data-test-add-card-button]').isVisible();
-    
+
     await click('[data-test-add-card-button]');
     assert.dom('[data-test-card-catalog-modal]').isVisible();
 
     await waitFor(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
     await click(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
-    assert.dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`).isVisible();
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+      .isVisible();
   });
 
   test('displays cards on cards-grid', async function (assert) {
@@ -766,7 +768,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
     await click(`[data-test-select="${testRealmURL}Author/2"]`);
 
-    await waitFor(`[data-test-author="R2-D2"]`);
+    await waitFor(`.operator-mode [data-test-author="R2-D2"]`);
     assert.dom('[data-test-field="authorBio"]').containsText('R2-D2');
   });
 
@@ -795,9 +797,11 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-field="authorBio"]').containsText('R2-D2');
 
     await click('[data-test-save-button]');
-    await waitFor('[data-test-blog-post-isolated]');
+    await waitFor('.operator-mode [data-test-blog-post-isolated]');
 
-    assert.dom('[data-test-blog-post-isolated]').hasText('Beginnings by R2-D2');
+    assert
+      .dom('.operator-mode [data-test-blog-post-isolated]')
+      .hasText('Beginnings by R2-D2');
   });
 
   test('can create a new card to populate a linksTo field', async function (assert) {
@@ -837,8 +841,12 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-field="authorBio"]').containsText('Alice');
 
     await click('[data-test-stack-card-index="0"] [data-test-save-button]');
-    await waitFor('[data-test-blog-post-isolated] [data-test-author="Alice"]');
-    assert.dom('[data-test-blog-post-isolated]').hasText('Beginnings by Alice');
+    await waitFor(
+      '.operator-mode [data-test-blog-post-isolated] [data-test-author="Alice"]'
+    );
+    assert
+      .dom('.operator-mode [data-test-blog-post-isolated]')
+      .hasText('Beginnings by Alice');
   });
 
   test('can remove the link for a linksTo field', async function (assert) {
@@ -859,9 +867,9 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-field="authorBio"] [data-test-remove-card]');
     await click('[data-test-save-button]');
 
-    await waitFor('[data-test-blog-post-isolated]');
+    await waitFor('.operator-mode [data-test-blog-post-isolated]');
     assert
-      .dom('[data-test-blog-post-isolated]')
+      .dom('.operator-mode [data-test-blog-post-isolated]')
       .hasText('Outer Space Journey by');
   });
 
