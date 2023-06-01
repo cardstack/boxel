@@ -71,6 +71,11 @@ class Isolated extends Component<typeof Claim> {
   private connectMetamask() {
     this.metamask.doConnectMetamask.perform(this.chainId);
   }
+
+  @action
+  willDestroy() {
+    this.metamask.teardown();
+  }
 }
 
 export class Claim extends Card {
