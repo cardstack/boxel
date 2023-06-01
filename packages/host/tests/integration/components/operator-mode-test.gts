@@ -15,7 +15,13 @@ import {
   TestRealmAdapter,
   TestRealm,
 } from '../../helpers';
-import { waitFor, waitUntil, click, fillIn } from '@ember/test-helpers';
+import {
+  waitFor,
+  waitUntil,
+  click,
+  fillIn,
+  settled,
+} from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
 
@@ -73,6 +79,11 @@ module('Integration | operator-mode', function (hooks) {
         export class Pet extends Card {
           static displayName = 'Pet';
           @field name = contains(StringCard);
+          @field title = contains(StringCard, {
+            computeVia: function (this: Pet) {
+              return this.name;
+            },
+          });
           static embedded = class Embedded extends Component<typeof this> {
             <template>
               <div ...attributes>
@@ -130,6 +141,11 @@ module('Integration | operator-mode', function (hooks) {
           @field firstLetterOfTheName = contains(StringCard, {
             computeVia: function (this: Chain) {
               return this.firstName[0];
+            },
+          });
+          @field title = contains(StringCard, {
+            computeVia: function (this: Person) {
+              return this.firstName;
             },
           });
           @field address = contains(Address);
@@ -303,6 +319,11 @@ module('Integration | operator-mode', function (hooks) {
           static displayName = 'Author';
           @field firstName = contains(StringCard);
           @field lastName = contains(StringCard);
+          @field title = contains(StringCard, {
+            computeVia: function (this: Author) {
+              return [this.firstName, this.lastName].filter(Boolean).join(' ');
+            },
+          });
           static embedded = class Embedded extends Component<typeof this> {
             <template>
               <span data-test-author="{{@model.firstName}}">
@@ -1060,9 +1081,21 @@ module('Integration | operator-mode', function (hooks) {
       }
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
+    await waitFor('[data-test-person]');
+    window.test__refreshOverlayedButtons();
+    await waitFor('[data-test-cardstack-operator-mode-overlay-button]');
+    await click('[data-test-cardstack-operator-mode-overlay-button]');
+    assert.dom(`[data-test-stack-card-index="2"]`).exists();
     await click('[data-test-stack-card-index="0"] [data-test-boxel-header]');
+    assert.dom(`[data-test-stack-card-index="2"]`).doesNotExist();
     assert.dom(`[data-test-stack-card-index="1"]`).doesNotExist();
+    assert.dom(`[data-test-stack-card-index="0"]`).exists();
+    window.test__refreshOverlayedButtons();
+    await settled();
+    assert
+      .dom(`[data-test-cardstack-operator-mode-overlay-button]`)
+      .doesNotExist();
   });
 });
