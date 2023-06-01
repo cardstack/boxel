@@ -26,14 +26,14 @@
       "request": "launch",
       "name": "start base realm",
       "skipFiles": ["<node_internals>/**"],
-      "program": "./node_modules/.bin/../../../../node_modules/.pnpm/ts-node@10.9.1_wup25etrarvlqkprac7h35hj7u/node_modules/ts-node/dist/bin.js",
+      "program": "./node_modules/.bin/../../../../node_modules/.pnpm/ts-node@10.9.1_@types+node@18.11.9_typescript@4.9.3/node_modules/ts-node/dist/bin.js",
       "args": [
         "--transpileOnly",
         "main",
         "--port=4201",
         "--path='../base'",
         "--fromUrl='https://cardstack.com/base/'",
-        "--toUrl='/base/'",
+        "--toUrl='/base/'"
       ],
       "cwd": "${workspaceFolder}/packages/realm-server",
       "outFiles": ["${workspaceFolder}/**/*.js"],
@@ -46,7 +46,7 @@
       "request": "launch",
       "name": "start host test realm",
       "skipFiles": ["<node_internals>/**"],
-      "program": "./node_modules/.bin/../../../../node_modules/.pnpm/ts-node@10.9.1_wup25etrarvlqkprac7h35hj7u/node_modules/ts-node/dist/bin.js",
+      "program": "./node_modules/.bin/../../../../node_modules/.pnpm/ts-node@10.9.1_@types+node@18.11.9_typescript@4.9.3/node_modules/ts-node/dist/bin.js",
       "args": [
         "--transpileOnly",
         "main",
@@ -69,7 +69,7 @@
       "request": "launch",
       "name": "start node test realm",
       "skipFiles": ["<node_internals>/**"],
-      "program": "./node_modules/.bin/../../../../node_modules/.pnpm/ts-node@10.9.1_wup25etrarvlqkprac7h35hj7u/node_modules/ts-node/dist/bin.js",
+      "program": "../../node_modules/.pnpm/ts-node@10.9.1_@types+node@18.11.9_typescript@4.9.3/node_modules/ts-node/dist/bin.js",
       "args": [
         "--transpileOnly",
         "main",
@@ -92,7 +92,7 @@
       "request": "launch",
       "name": "start demo realm",
       "skipFiles": ["<node_internals>/**"],
-      "program": "./node_modules/.bin/../../../../node_modules/.pnpm/ts-node@10.9.1_wup25etrarvlqkprac7h35hj7u/node_modules/ts-node/dist/bin.js",
+      "program": "../../node_modules/.pnpm/ts-node@10.9.1_@types+node@18.11.9_typescript@4.9.3/node_modules/ts-node/dist/bin.js",
       "args": [
         "--transpileOnly",
         "main",
