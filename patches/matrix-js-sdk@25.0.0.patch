@@ -1,43 +1,38 @@
 diff --git a/lib/crypto/index.js b/lib/crypto/index.js
-index d1579c21535a3c3bed0b42fb419c4e17e2fc8050..6f29b500c39fd75401528f61ecd0b1a494496cea 100644
+index d1579c21535a3c3bed0b42fb419c4e17e2fc8050..f7a6ba90b899262444d20be636a443697d1ab11b 100644
 --- a/lib/crypto/index.js
 +++ b/lib/crypto/index.js
-@@ -52,13 +52,13 @@ function _objectSpread(target) { for (var i = 1; i < arguments.length; i++) { va
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          Copyright 2017 Vector Creations Ltd
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          Copyright 2018-2019 New Vector Ltd
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          Copyright 2019-2021 The Matrix.org Foundation C.I.C.
--                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
-+
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          Licensed under the Apache License, Version 2.0 (the "License");
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          you may not use this file except in compliance with the License.
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          You may obtain a copy of the License at
--                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
-+
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              http://www.apache.org/licenses/LICENSE-2.0
--                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
-+
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          Unless required by applicable law or agreed to in writing, software
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          distributed under the License is distributed on an "AS IS" BASIS,
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-@@ -1710,7 +1710,7 @@ class Crypto extends _typedEventEmitter.TypedEventEmitter {
-       this.fallbackCleanup = setTimeout(() => {
+@@ -1707,10 +1707,14 @@ class Crypto extends _typedEventEmitter.TypedEventEmitter {
+     }
+     const res = await this.baseApis.uploadKeysRequest(requestBody);
+     if (fallbackJson) {
+-      this.fallbackCleanup = setTimeout(() => {
++      let timer = setTimeout(() => {
          delete this.fallbackCleanup;
          this.olmDevice.forgetOldFallbackKey();
--      }, 60 * 60 * 1000);
-+      }, 60 * 60 * 1000).unref();
+       }, 60 * 60 * 1000);
++      if (typeof timer.unref === 'function') {
++        timer.unref();
++      }
++      this.fallbackCleanup = timer;
      }
      await this.olmDevice.markKeysAsPublished();
      return res;
 diff --git a/lib/http-api/utils.js b/lib/http-api/utils.js
-index 9115598fd769bad15ed23293a68d617d5dbf21a5..26f131ccd0140f21978144477c9669c65786e307 100644
+index 9115598fd769bad15ed23293a68d617d5dbf21a5..95c28e59d8414dbc0837f5c85c98dd96a80446c8 100644
 --- a/lib/http-api/utils.js
 +++ b/lib/http-api/utils.js
-@@ -32,7 +32,7 @@ function timeoutSignal(ms) {
+@@ -30,9 +30,12 @@ limitations under the License.
+ // Ponyfill for https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/timeout
+ function timeoutSignal(ms) {
    const controller = new AbortController();
-   setTimeout(() => {
+-  setTimeout(() => {
++  let timer = setTimeout(() => {
      controller.abort();
--  }, ms);
-+  }, ms).unref();
+   }, ms);
++  if (typeof timer.unref === 'function') {
++    timer.unref();
++  }
    return controller.signal;
  }
  function anySignal(signals) {

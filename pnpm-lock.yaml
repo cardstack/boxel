@@ -18,7 +18,7 @@ patchedDependencies:
     hash: sbmabuxrk2m44agmppz3qozwvq
     path: patches/magic-string@0.25.9.patch
   matrix-js-sdk@25.0.0:
-    hash: ajy7cl7gyt43u7sa44oirjxixq
+    hash: vlqn3jrrd7zoh7xnqjj35ihq2i
     path: patches/matrix-js-sdk@25.0.0.patch
 
 importers:
@@ -1074,7 +1074,7 @@ importers:
         version: 5.0.2
       matrix-js-sdk:
         specifier: ^25.0.0
-        version: 25.0.0(patch_hash=ajy7cl7gyt43u7sa44oirjxixq)
+        version: 25.0.0(patch_hash=vlqn3jrrd7zoh7xnqjj35ihq2i)
       moment:
         specifier: ^2.29.4
         version: 2.29.4
@@ -1275,7 +1275,7 @@ importers:
         version: 1.8.1
       matrix-js-sdk:
         specifier: ^25.0.0
-        version: 25.0.0(patch_hash=ajy7cl7gyt43u7sa44oirjxixq)
+        version: 25.0.0(patch_hash=vlqn3jrrd7zoh7xnqjj35ihq2i)
       mime-types:
         specifier: ^2.1.35
         version: 2.1.35
@@ -1422,7 +1422,7 @@ importers:
         version: 1.8.1
       matrix-js-sdk:
         specifier: ^25.0.0
-        version: 25.0.0(patch_hash=ajy7cl7gyt43u7sa44oirjxixq)
+        version: 25.0.0(patch_hash=vlqn3jrrd7zoh7xnqjj35ihq2i)
       qs:
         specifier: ^6.10.5
         version: 6.11.0
@@ -2282,7 +2282,7 @@ packages:
       '@babel/core': ^7.0.0-0
     dependencies:
       '@babel/core': 7.21.0(supports-color@8.1.1)
-      '@babel/helper-create-class-features-plugin': 7.20.2(@babel/core@7.21.0)
+      '@babel/helper-create-class-features-plugin': 7.21.8(@babel/core@7.21.0)
       '@babel/helper-plugin-utils': 7.20.2
     transitivePeerDependencies:
       - supports-color
@@ -16684,7 +16684,7 @@ packages:
   /matrix-events-sdk@0.0.1:
     resolution: {integrity: sha512-1QEOsXO+bhyCroIe2/A5OwaxHvBm7EsSQ46DEDn8RBIfQwN5HWBpFvyWWR4QY0KHPPnnJdI99wgRiAl7Ad5qaA==}
 
-  /matrix-js-sdk@25.0.0(patch_hash=ajy7cl7gyt43u7sa44oirjxixq):
+  /matrix-js-sdk@25.0.0(patch_hash=vlqn3jrrd7zoh7xnqjj35ihq2i):
     resolution: {integrity: sha512-eI9v0JkIYrSfsjUVk6PeZrsR7c7Qh0tirsK2biMZ4jPQo9sx/iuBjlfAEPoVlwzQKTfakGryhit15FfPhucMnw==}
     engines: {node: '>=16.0.0'}
     dependencies:
@@ -22382,7 +22382,7 @@ packages:
       json-typescript: 1.1.2
       lodash: 4.17.21
       loglevel: 1.8.1
-      matrix-js-sdk: 25.0.0(patch_hash=ajy7cl7gyt43u7sa44oirjxixq)
+      matrix-js-sdk: 25.0.0(patch_hash=vlqn3jrrd7zoh7xnqjj35ihq2i)
       qs: 6.11.0
       qunit: 2.19.4
       super-fast-md5: 1.0.1
@@ -22437,7 +22437,7 @@ packages:
       json-typescript: 1.1.2
       lodash: 4.17.21
       loglevel: 1.8.1
-      matrix-js-sdk: 25.0.0(patch_hash=ajy7cl7gyt43u7sa44oirjxixq)
+      matrix-js-sdk: 25.0.0(patch_hash=vlqn3jrrd7zoh7xnqjj35ihq2i)
       qs: 6.11.0
       qunit: 2.19.4
       super-fast-md5: 1.0.1
