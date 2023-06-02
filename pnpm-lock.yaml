@@ -17,6 +17,9 @@ patchedDependencies:
   magic-string@0.25.9:
     hash: sbmabuxrk2m44agmppz3qozwvq
     path: patches/magic-string@0.25.9.patch
+  matrix-js-sdk@25.0.0:
+    hash: ajy7cl7gyt43u7sa44oirjxixq
+    path: patches/matrix-js-sdk@25.0.0.patch
 
 importers:
 
@@ -1071,7 +1074,7 @@ importers:
         version: 5.0.2
       matrix-js-sdk:
         specifier: ^25.0.0
-        version: 25.0.0
+        version: 25.0.0(patch_hash=ajy7cl7gyt43u7sa44oirjxixq)
       moment:
         specifier: ^2.29.4
         version: 2.29.4
@@ -1272,7 +1275,7 @@ importers:
         version: 1.8.1
       matrix-js-sdk:
         specifier: ^25.0.0
-        version: 25.0.0
+        version: 25.0.0(patch_hash=ajy7cl7gyt43u7sa44oirjxixq)
       mime-types:
         specifier: ^2.1.35
         version: 2.1.35
@@ -1419,7 +1422,7 @@ importers:
         version: 1.8.1
       matrix-js-sdk:
         specifier: ^25.0.0
-        version: 25.0.0
+        version: 25.0.0(patch_hash=ajy7cl7gyt43u7sa44oirjxixq)
       qs:
         specifier: ^6.10.5
         version: 6.11.0
@@ -16681,7 +16684,7 @@ packages:
   /matrix-events-sdk@0.0.1:
     resolution: {integrity: sha512-1QEOsXO+bhyCroIe2/A5OwaxHvBm7EsSQ46DEDn8RBIfQwN5HWBpFvyWWR4QY0KHPPnnJdI99wgRiAl7Ad5qaA==}
 
-  /matrix-js-sdk@25.0.0:
+  /matrix-js-sdk@25.0.0(patch_hash=ajy7cl7gyt43u7sa44oirjxixq):
     resolution: {integrity: sha512-eI9v0JkIYrSfsjUVk6PeZrsR7c7Qh0tirsK2biMZ4jPQo9sx/iuBjlfAEPoVlwzQKTfakGryhit15FfPhucMnw==}
     engines: {node: '>=16.0.0'}
     dependencies:
@@ -16697,6 +16700,7 @@ packages:
       sdp-transform: 2.14.1
       unhomoglyph: 1.0.6
       uuid: 9.0.0
+    patched: true
 
   /matrix-widget-api@1.3.1:
     resolution: {integrity: sha512-+rN6vGvnXm+fn0uq9r2KWSL/aPtehD6ObC50jYmUcEfgo8CUpf9eUurmjbRlwZkWq3XHXFuKQBUCI9UzqWg37Q==}
@@ -22378,7 +22382,7 @@ packages:
       json-typescript: 1.1.2
       lodash: 4.17.21
       loglevel: 1.8.1
-      matrix-js-sdk: 25.0.0
+      matrix-js-sdk: 25.0.0(patch_hash=ajy7cl7gyt43u7sa44oirjxixq)
       qs: 6.11.0
       qunit: 2.19.4
       super-fast-md5: 1.0.1
@@ -22433,7 +22437,7 @@ packages:
       json-typescript: 1.1.2
       lodash: 4.17.21
       loglevel: 1.8.1
-      matrix-js-sdk: 25.0.0
+      matrix-js-sdk: 25.0.0(patch_hash=ajy7cl7gyt43u7sa44oirjxixq)
       qs: 6.11.0
       qunit: 2.19.4
       super-fast-md5: 1.0.1
