@@ -10,7 +10,7 @@ import { formatRFC3339 } from 'date-fns';
 import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { type RoomMember } from 'matrix-js-sdk';
 import type MatrixService from '../services/matrix-service';
-import { type Event } from '../services/matrix-service';
+import { type Event } from '@cardstack/runtime-common/matrix-handlers';
 import { type Card } from 'https://cardstack.com/base/card-api';
 import type CardService from '../services/card-service';
 
