@@ -69,7 +69,7 @@ export class MatrixRealm {
   }
 
   shutdown() {
-    // note that it takes about 90 seconds to actually end the process after
+    // note that it takes up to an hour to actually end the process after
     // shutdown() is called due to this bug in the matrix-js-sdk
     // https://github.com/matrix-org/matrix-js-sdk/issues/2472 As a workaround,
     // I identified the problematic timers (there are 2 of them) and we are
