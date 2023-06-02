@@ -71,7 +71,10 @@ export class MatrixRealm {
   shutdown() {
     // note that it takes about 90 seconds to actually end the process after
     // shutdown() is called due to this bug in the matrix-js-sdk
-    // https://github.com/matrix-org/matrix-js-sdk/issues/2472
+    // https://github.com/matrix-org/matrix-js-sdk/issues/2472 As a workaround,
+    // I identified the problematic timers (there are 2 of them) and we are
+    // patching matrix-js-sdk and using `unref()` to tell node that it is ok to
+    // exit the process if the problematic timers are still running.
     this.#client.stopClient();
   }
 
