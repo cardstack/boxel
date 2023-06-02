@@ -6,6 +6,7 @@ import {
   type IndexRunner,
   type RunnerOpts,
 } from '@cardstack/runtime-common/search-index';
+import { JSDOM } from 'jsdom';
 
 const appName = '@cardstack/host';
 export async function makeFastBootIndexRunner(
@@ -27,6 +28,7 @@ export async function makeFastBootIndexRunner(
           btoa,
           getRunnerOpts,
           _logDefinitions: (globalThis as any)._logDefinitions,
+          jsdom: new JSDOM(''),
         });
       },
     }) as FastBootInstance;
@@ -42,6 +44,7 @@ export async function makeFastBootIndexRunner(
           btoa,
           getRunnerOpts,
           _logDefinitions: (globalThis as any)._logDefinitions,
+          jsdom: new JSDOM(''),
         });
       }
     ));

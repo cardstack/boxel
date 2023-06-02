@@ -119,6 +119,9 @@ importers:
       '@types/lodash':
         specifier: ^4.14.182
         version: 4.14.189
+      '@types/marked':
+        specifier: ^4.3.0
+        version: 4.3.0
       ember-cli-htmlbars:
         specifier: ^6.2.0
         version: 6.2.0
@@ -880,9 +883,6 @@ importers:
       '@simple-dom/void-map':
         specifier: ^1.4.0
         version: 1.4.0
-      '@types/dompurify':
-        specifier: ^3.0.2
-        version: 3.0.2
       '@types/flat':
         specifier: ^5.0.2
         version: 5.0.2
@@ -928,9 +928,6 @@ importers:
       date-fns:
         specifier: ^2.28.0
         version: 2.29.3
-      dompurify:
-        specifier: ^3.0.3
-        version: 3.0.3
       ember-auto-import:
         specifier: ^2.6.3
         version: 2.6.3(@glint/template@1.0.2)(webpack@5.82.1)
@@ -1188,6 +1185,9 @@ importers:
       '@types/lodash':
         specifier: ^4.14.182
         version: 4.14.189
+      '@types/marked':
+        specifier: ^4.3.0
+        version: 4.3.0
       '@types/mime-types':
         specifier: ^2.1.1
         version: 2.1.1
@@ -1405,9 +1405,15 @@ importers:
       '@babel/core':
         specifier: ^7.17.8
         version: 7.20.2
+      '@types/dompurify':
+        specifier: ^3.0.2
+        version: 3.0.2
       '@types/qunit':
         specifier: ^2.11.3
         version: 2.19.3
+      dompurify:
+        specifier: ^3.0.3
+        version: 3.0.3
       ember-cli-htmlbars:
         specifier: ^6.2.0
         version: 6.2.0
@@ -2248,7 +2254,7 @@ packages:
       '@babel/core': ^7.0.0-0
     dependencies:
       '@babel/core': 7.21.0(supports-color@8.1.1)
-      '@babel/helper-create-class-features-plugin': 7.21.8(@babel/core@7.21.0)
+      '@babel/helper-create-class-features-plugin': 7.20.2(@babel/core@7.21.0)
       '@babel/helper-plugin-utils': 7.20.2
     transitivePeerDependencies:
       - supports-color
