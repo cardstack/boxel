@@ -45,7 +45,7 @@ module('Matrix Realm Server', function (hooks) {
   });
 
   // remove this after we have more tests that show this is working
-  QUnit.only('it can index a matrix message', async function (assert) {
+  test('it can index a matrix message', async function (assert) {
     let roomId = await createPrivateRoom(admin.accessToken, 'Room 1');
     await sendMessage(admin.accessToken, roomId, 'Hello World');
     await realm.flushMessages();
