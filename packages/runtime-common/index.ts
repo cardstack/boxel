@@ -78,6 +78,7 @@ export type {
   CardDocument,
   CardFields,
   SingleCardDocument,
+  RealmInfo,
   Relationship,
   Meta,
 } from './card-document';

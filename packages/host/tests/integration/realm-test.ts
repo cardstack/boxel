@@ -127,6 +127,10 @@ module('Integration | realm', function (hooks) {
           lastModified: adapter.lastModified.get(
             `${testRealmURL}dir/empty.json`
           ),
+          realmInfo: {
+            name: "Unnamed Workspace"
+          },
+          realmURL: testRealmURL,
         },
         links: {
           self: `${testRealmURL}dir/empty`,
@@ -213,6 +217,10 @@ module('Integration | realm', function (hooks) {
           lastModified: adapter.lastModified.get(
             `${testRealmURL}dir/mango.json`
           ),
+          realmInfo: {
+            name: 'Unnamed Workspace',
+          },
+          realmURL: testRealmURL,
         },
         links: {
           self: `${testRealmURL}dir/mango`,
@@ -234,6 +242,10 @@ module('Integration | realm', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}dir/owner.json`
             ),
+            realmInfo: {
+              name: 'Unnamed Workspace',
+            },
+            realmURL: testRealmURL,
           },
           links: {
             self: `${testRealmURL}dir/owner`,
@@ -307,6 +319,10 @@ module('Integration | realm', function (hooks) {
           lastModified: adapter.lastModified.get(
             `${testRealmURL}dir/mango.json`
           ),
+          realmInfo: {
+            name: "Unnamed Workspace"
+          },
+          realmURL: testRealmURL,
         },
         links: {
           self: `${testRealmURL}dir/mango`,
@@ -325,6 +341,10 @@ module('Integration | realm', function (hooks) {
               module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
+            realmInfo: {
+              name: 'Test Workspace',
+            },
+            realmURL: 'http://localhost:4202/test/',
           },
           links: {
             self: `http://localhost:4202/test/hassan`,
@@ -603,6 +623,10 @@ module('Integration | realm', function (hooks) {
             name: 'Pet',
           },
           lastModified: adapter.lastModified.get(`${testRealmURL}Pet/1.json`),
+          realmInfo: {
+            name: "Unnamed Workspace"
+          },
+          realmURL: testRealmURL,
         },
         links: {
           self: `${testRealmURL}Pet/1`,
@@ -624,6 +648,10 @@ module('Integration | realm', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}dir/owner.json`
             ),
+            realmInfo: {
+              name: "Unnamed Workspace"
+            },
+            realmURL: testRealmURL,
           },
           links: {
             self: `${testRealmURL}dir/owner`,
@@ -880,6 +908,10 @@ module('Integration | realm', function (hooks) {
           lastModified: adapter.lastModified.get(
             `${testRealmURL}ski-trip.json`
           ),
+          realmInfo: {
+            name: "Unnamed Workspace"
+          },
+          realmURL: testRealmURL,
         },
       },
     });
@@ -1028,6 +1060,10 @@ module('Integration | realm', function (hooks) {
           lastModified: adapter.lastModified.get(
             `${testRealmURL}dir/mango.json`
           ),
+          realmInfo: {
+            name: "Unnamed Workspace"
+          },
+          realmURL: testRealmURL,
         },
         links: {
           self: `${testRealmURL}dir/mango`,
@@ -1049,6 +1085,10 @@ module('Integration | realm', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}dir/mariko.json`
             ),
+            realmInfo: {
+            name: "Unnamed Workspace"
+          },
+            realmURL: testRealmURL,
           },
           links: {
             self: `${testRealmURL}dir/mariko`,
@@ -1526,6 +1566,10 @@ module('Integration | realm', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}dir/mango.json`
             ),
+            realmInfo: {
+              name: "Unnamed Workspace"
+            },
+            realmURL: testRealmURL,
           },
           links: {
             self: `${testRealmURL}dir/mango`,
@@ -1546,6 +1590,10 @@ module('Integration | realm', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}dir/mariko.json`
             ),
+            realmInfo: {
+              name: "Unnamed Workspace"
+            },
+            realmURL: testRealmURL,
           },
           links: {
             self: `${testRealmURL}dir/mariko`,
@@ -1576,6 +1624,10 @@ module('Integration | realm', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}dir/vanGogh.json`
             ),
+            realmInfo: {
+              name: "Unnamed Workspace"
+            },
+            realmURL: testRealmURL,
           },
           links: {
             self: `${testRealmURL}dir/vanGogh`,
@@ -1595,6 +1647,8 @@ module('Integration | realm', function (hooks) {
               module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
+            realmInfo: { name: 'Test Workspace' },
+            realmURL: 'http://localhost:4202/test/',
           },
           links: {
             self: `http://localhost:4202/test/hassan`,

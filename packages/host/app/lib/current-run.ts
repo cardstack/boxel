@@ -8,7 +8,9 @@ import {
   internalKeyFor,
   trimExecutableExtension,
   hasExecutableExtension,
+  SupportedMimeType,
   type CardRef,
+  type RealmInfo,
 } from '@cardstack/runtime-common';
 import {
   loadCard,
@@ -71,6 +73,7 @@ export class CurrentRun {
   #entrySetter: EntrySetter;
   #renderCard: RenderCard;
   #realmURL: URL;
+  #realmInfo: RealmInfo;
   readonly stats: Stats = {
     instancesIndexed: 0,
     instanceErrors: 0,
@@ -165,7 +168,6 @@ export class CurrentRun {
       entrySetter,
       renderCard,
     });
-
     if (operation === 'update') {
       await current.visitFile(url);
     }
@@ -362,6 +364,13 @@ export class CurrentRun {
       });
       cardType = Reflect.getPrototypeOf(card)?.constructor as typeof Card;
       let data = api.serializeCard(card, { includeComputeds: true });
+
+      //Get realm info
+      if (!this.#realmInfo) {
+        let realmInfoResponse = await this.loader.fetch(`${this.realmURL}_info`, { headers: { Accept: SupportedMimeType.RealmInfo }});
+        this.#realmInfo = (await realmInfoResponse.json())?.data?.attributes;  
+      }
+      
       // prepare the document for index serialization
       Object.values(data.data.relationships ?? {}).forEach(
         (rel) => delete (rel as Relationship).data
@@ -369,7 +378,7 @@ export class CurrentRun {
       doc = merge(data, {
         data: {
           id: instanceURL.href,
-          meta: { lastModified: lastModified },
+          meta: { lastModified: lastModified, realmInfo: this.#realmInfo, realmURL: this.realmURL.href },
         },
       }) as SingleCardDocument;
       searchData = await api.searchDoc(card);
