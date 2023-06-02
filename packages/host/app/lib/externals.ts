@@ -25,7 +25,6 @@ import * as lodash from 'lodash';
 import * as tracked from 'tracked-built-ins';
 import * as dateFns from 'date-fns';
 import * as marked from 'marked';
-import * as DOMPurify from 'dompurify';
 
 export function shimExternals(loader: Loader = Loader.getLoader()) {
   loader.shimModule('@cardstack/runtime-common', runtime);
@@ -60,7 +59,6 @@ export function shimExternals(loader: Loader = Loader.getLoader()) {
   loader.shimModule('tracked-built-ins', tracked);
   loader.shimModule('date-fns', dateFns);
   loader.shimModule('marked', marked);
-  loader.shimModule('dompurify', DOMPurify);
 }
 
 shimExternals();

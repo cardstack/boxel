@@ -89,6 +89,9 @@ export {
   isCardCollectionDocument,
   isSingleCardDocument,
 } from './card-document';
+export {
+  sanitizeHtml
+} from './dompurify';
 
 import type { Card, CardBase } from 'https://cardstack.com/base/card-api';
 

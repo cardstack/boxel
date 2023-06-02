@@ -47,9 +47,6 @@ module.exports = function (defaults) {
             }),
           ],
           resolve: {
-            alias: {
-              dompurify: 'dompurify/dist/purify.es.js',
-            },
             fallback: {
               fs: false,
               path: require.resolve('path-browserify'),

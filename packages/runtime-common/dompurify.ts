@@ -4,6 +4,7 @@ let domPurify: DOMPurify.DOMPurifyI;
 
 function getDOMPurify() {
   if (!domPurify) {
+    debugger;
     let jsdom = (globalThis as any).jsdom;
     domPurify = jsdom ? DOMPurify(jsdom.window) : DOMPurify;
   }
@@ -11,7 +12,7 @@ function getDOMPurify() {
   return domPurify;
 }
 
-export function sanitize(markdown: string) {
+export function sanitizeHtml(markdown: string) {
   let domPurify = getDOMPurify();
   return domPurify.sanitize(markdown);
 }

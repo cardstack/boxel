@@ -1,30 +1,16 @@
 import { primitive, Component, CardBase, useIndexBasedKey } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui';
 import { marked } from 'marked';
-import DOMPurify from 'dompurify';
+import { sanitizeHtml } from '@cardstack/runtime-common';
 
-let domPurify: DOMPurify.DOMPurifyI;
-
-function toHtml(model: string | null) {
-  if (!domPurify) {
-    let jsdom = (globalThis as any).jsdom;
-    domPurify = jsdom ? DOMPurify(jsdom.window) : DOMPurify;
-  }
-
-  return model ? domPurify.sanitize(marked(model)) : '';
+function toHtml(markdown: string | null) {
+  debugger;
+  return markdown ? sanitizeHtml(marked(markdown)) : '';
 }
 
 export default class MarkdownCard extends CardBase {
   static [primitive]: string;
   static [useIndexBasedKey]: never;
-
-  toHtml(markdown: string) {
-    //if card is rendered on server-side (using fastboot)
-    //then jsdom is used to instatiate DOMPurify
-    let jsdom = (globalThis as any).jsdom;
-    let purify = jsdom ? DOMPurify(jsdom.window) : DOMPurify;
-    return String(markdown) ? purify.sanitize(marked(markdown)) : '';
-  }
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
