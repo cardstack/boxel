@@ -12,7 +12,7 @@ function getDOMPurify() {
   return domPurify;
 }
 
-export function sanitizeHtml(markdown: string) {
+export function sanitizeHtml(html: string) {
   let domPurify = getDOMPurify();
-  return domPurify.sanitize(markdown);
+  return domPurify.sanitize(html);
 }
