@@ -55,6 +55,9 @@ export default class OperatorModeOverlays extends Component<Signature> {
       // Allow a small time window for overlays to show up in operator mode component tests. After
       // that time passes we need to stop the refresh loop so that the tests don't hang
       this.refreshLoopTimeout = 100;
+      window.test__refreshOverlayedButtons = () => {
+        this.refreshOverlayedButtons.perform(true);
+      };
     }
 
     this.refreshLoopStartedAt = Date.now();
@@ -99,8 +102,9 @@ export default class OperatorModeOverlays extends Component<Signature> {
     };
   }
 
-  refreshOverlayedButtons = task(async () => {
+  refreshOverlayedButtons = task(async (force = false) => {
     if (
+      !force &&
       this.refreshLoopTimeout &&
       Date.now() - this.refreshLoopStartedAt! > this.refreshLoopTimeout!
     ) {

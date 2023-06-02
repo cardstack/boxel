@@ -111,7 +111,9 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     let cards = (this.args.model.value as any)[this.args.field.name];
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
     let newCard: Card | undefined =
-      await this.args.context?.actions?.createCard(type, undefined);
+      await this.args.context?.actions?.createCard(type, undefined, {
+        isLinkedCard: true,
+      });
     if (newCard) {
       cards = [...cards, newCard];
       (this.args.model.value as any)[this.args.field.name] = cards;

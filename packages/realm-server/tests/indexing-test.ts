@@ -6,9 +6,8 @@ import {
   LooseSingleCardDocument,
   Realm,
 } from '@cardstack/runtime-common';
-import { createRealm, testRealm, setupCardLogs } from './helpers';
+import { createRealm, testRealm, setupCardLogs, setupBaseRealmServer } from './helpers';
 import isEqual from 'lodash/isEqual';
-import { shimExternals } from '../lib/externals';
 
 function cleanWhiteSpace(text: string) {
   return text.replace(/\s+/g, ' ').trim();
@@ -27,16 +26,11 @@ module('indexing', function (hooks) {
 
   let dir: string;
   let realm: Realm;
+  
+  setupBaseRealmServer(hooks);
 
   hooks.beforeEach(async function () {
-    Loader.destroy();
-    shimExternals();
-    Loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
     dir = dirSync().name;
-
     realm = await createRealm(dir, {
       'person.gts': `
         import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";

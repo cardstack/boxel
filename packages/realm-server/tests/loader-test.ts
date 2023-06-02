@@ -1,28 +1,44 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import { Loader } from '@cardstack/runtime-common';
-import { dirSync, setGracefulCleanup } from 'tmp';
-import { createRealm } from './helpers';
+import { dirSync, setGracefulCleanup, DirResult } from 'tmp';
+import { createRealm, setupBaseRealmServer, localBaseRealm, runTestRealmServer } from './helpers';
+import { copySync } from 'fs-extra';
 import { baseRealm } from '@cardstack/runtime-common';
 import { shimExternals } from '../lib/externals';
+import { Server } from 'http';
+import { join } from 'path';
+
 
 setGracefulCleanup();
 
-const testRealm = 'http://localhost:4202/node-test/';
+const testRealmURL = new URL('http://127.0.0.1:4444/');
+const testRealmHref = testRealmURL.href;
 
 module('loader', function (hooks) {
-  let dir: string;
+  let dir: DirResult;
+  let testRealmServer: Server;
+
+  setupBaseRealmServer(hooks);
+
   hooks.beforeEach(async function () {
-    dir = dirSync().name;
+    dir = dirSync();
+    copySync(join(__dirname, 'cards'), dir.name);
+
+    testRealmServer = await runTestRealmServer(dir.name, undefined, testRealmURL);
+  });
+
+  hooks.afterEach(function () {
+    testRealmServer.close();
   });
 
   test('can dynamically load modules with cycles', async function (assert) {
     let loader = new Loader();
     loader.addURLMapping(
       new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
+      new URL(localBaseRealm)
     );
     let module = await loader.import<{ three(): number }>(
-      `${testRealm}cycle-two`
+      `${testRealmHref}cycle-two`
     );
     assert.strictEqual(module.three(), 3);
   });
@@ -31,24 +47,24 @@ module('loader', function (hooks) {
     let loader = new Loader();
     loader.addURLMapping(
       new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
+      new URL(localBaseRealm)
     );
-    let a = loader.import<{ a(): string }>(`${testRealm}a`);
-    let b = loader.import<{ b(): string }>(`${testRealm}b`);
+    let a = loader.import<{ a(): string }>(`${testRealmHref}a`);
+    let b = loader.import<{ b(): string }>(`${testRealmHref}b`);
     let [aModule, bModule] = await Promise.all([a, b]);
     assert.strictEqual(aModule.a(), 'abc', 'module executed successfully');
     assert.strictEqual(bModule.b(), 'bc', 'module executed successfully');
   });
 
-  skip('can resolve a import deadlock', async function (assert) {
+  test('can resolve a import deadlock', async function (assert) {
     let loader = new Loader();
     loader.addURLMapping(
       new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
+      new URL(localBaseRealm)
     );
-    let a = loader.import<{ a(): string }>(`${testRealm}deadlock/a`);
-    let b = loader.import<{ b(): string }>(`${testRealm}deadlock/b`);
-    let c = loader.import<{ c(): string }>(`${testRealm}deadlock/c`);
+    let a = loader.import<{ a(): string }>(`${testRealmHref}deadlock/a`);
+    let b = loader.import<{ b(): string }>(`${testRealmHref}deadlock/b`);
+    let c = loader.import<{ c(): string }>(`${testRealmHref}deadlock/c`);
     let [aModule, bModule, cModule] = await Promise.all([a, b, c]);
     assert.strictEqual(aModule.a(), 'abcd', 'module executed successfully');
     assert.strictEqual(bModule.b(), 'bcd', 'module executed successfully');
@@ -58,7 +74,7 @@ module('loader', function (hooks) {
   test('supports import.meta', async function (assert) {
     let loader = new Loader();
     let realm = await createRealm(
-      dir,
+      dir.name,
       {
         'foo.js': `
           export function checkImportMeta() { return import.meta.url; }
@@ -80,11 +96,11 @@ module('loader', function (hooks) {
 
   test('can determine consumed modules', async function (assert) {
     let loader = new Loader();
-    await loader.import<{ a(): string }>(`${testRealm}a`);
-    assert.deepEqual(await loader.getConsumedModules(`${testRealm}a`), [
-      `${testRealm}a`,
-      `${testRealm}b`,
-      `${testRealm}c`,
+    await loader.import<{ a(): string }>(`${testRealmHref}a`);
+    assert.deepEqual(await loader.getConsumedModules(`${testRealmHref}a`), [
+      `${testRealmHref}a`,
+      `${testRealmHref}b`,
+      `${testRealmHref}c`,
     ]);
   });
 
@@ -92,19 +108,19 @@ module('loader', function (hooks) {
     let loader = new Loader();
     loader.addURLMapping(
       new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
+      new URL(localBaseRealm)
     );
     try {
-      await loader.import<{ d(): string }>(`${testRealm}d`);
+      await loader.import<{ d(): string }>(`${testRealmHref}d`);
       throw new Error(`expected error was not thrown`);
     } catch (e: any) {
       assert.strictEqual(e.message, 'intentional error thrown');
-      assert.deepEqual(await loader.getConsumedModules(`${testRealm}d`), [
-        `${testRealm}d`,
-        `${testRealm}a`,
-        `${testRealm}b`,
-        `${testRealm}c`,
-        `${testRealm}e`,
+      assert.deepEqual(await loader.getConsumedModules(`${testRealmHref}d`), [
+        `${testRealmHref}d`,
+        `${testRealmHref}a`,
+        `${testRealmHref}b`,
+        `${testRealmHref}c`,
+        `${testRealmHref}e`,
       ]);
     }
   });
@@ -113,13 +129,13 @@ module('loader', function (hooks) {
     let loader = new Loader();
     loader.addURLMapping(
       new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
+      new URL(localBaseRealm)
     );
-    await loader.import<{ three(): number }>(`${testRealm}cycle-two`);
-    let modules = await loader.getConsumedModules(`${testRealm}cycle-two`);
+    await loader.import<{ three(): number }>(`${testRealmHref}cycle-two`);
+    let modules = await loader.getConsumedModules(`${testRealmHref}cycle-two`);
     assert.deepEqual(modules, [
-      `${testRealm}cycle-two`,
-      `${testRealm}cycle-one`,
+      `${testRealmHref}cycle-two`,
+      `${testRealmHref}cycle-one`,
     ]);
   });
 
@@ -128,18 +144,18 @@ module('loader', function (hooks) {
     shimExternals(loader);
     loader.addURLMapping(
       new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
+      new URL(localBaseRealm)
     );
     let { Person } = await loader.import<{ Person: unknown }>(
-      `${testRealm}person`
+      `${testRealmHref}person`
     );
     assert.deepEqual(loader.identify(Person), {
-      module: `${testRealm}person`,
+      module: `${testRealmHref}person`,
       name: 'Person',
     });
     // The loader knows which loader instance was used to import the card
     assert.deepEqual(Loader.identify(Person), {
-      module: `${testRealm}person`,
+      module: `${testRealmHref}person`,
       name: 'Person',
     });
   });
@@ -149,9 +165,9 @@ module('loader', function (hooks) {
     shimExternals(loader);
     loader.addURLMapping(
       new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
+      new URL(localBaseRealm)
     );
-    let module = await loader.import<{ Person: unknown }>(`${testRealm}person`);
+    let module = await loader.import<{ Person: unknown }>(`${testRealmHref}person`);
     assert.throws(() => {
       module.Person = 1;
     }, /modules are read only/);
@@ -162,9 +178,9 @@ module('loader', function (hooks) {
     shimExternals(loader);
     loader.addURLMapping(
       new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
+      new URL(localBaseRealm)
     );
-    let module = await loader.import<any>(`${testRealm}person`);
+    let module = await loader.import<any>(`${testRealmHref}person`);
     let card = module.Person;
     let testingLoader = Loader.getLoaderFor(card);
     assert.strictEqual(testingLoader, loader, 'the loaders are the same');
