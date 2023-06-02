@@ -4,7 +4,6 @@ import { marked } from 'marked';
 import { sanitizeHtml } from '@cardstack/runtime-common';
 
 function toHtml(markdown: string | null) {
-  debugger;
   return markdown ? sanitizeHtml(marked(markdown)) : '';
 }
 

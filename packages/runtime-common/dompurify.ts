@@ -4,7 +4,6 @@ let domPurify: DOMPurify.DOMPurifyI;
 
 function getDOMPurify() {
   if (!domPurify) {
-    debugger;
     let jsdom = (globalThis as any).jsdom;
     domPurify = jsdom ? DOMPurify(jsdom.window) : DOMPurify;
   }
