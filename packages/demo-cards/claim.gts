@@ -9,7 +9,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { Button, CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 // @ts-ignore
-import MetamaskResource from 'metamask-resource';
+import { MetamaskResource, DEFAULT_CHAIN_ID } from 'metamask-resource';
 // @ts-ignore
 import { enqueueTask, restartableTask } from 'ember-concurrency';
 // @ts-ignore
@@ -55,8 +55,9 @@ class Isolated extends Component<typeof Claim> {
     return this.chainId == this.metamask.chainId && this.metamask.connected;
   }
 
+  // the chain id data of the card itself
   get chainId() {
-    return this.args.model.chain?.chainId ?? -1;
+    return this.args.model.chain?.chainId ?? DEFAULT_CHAIN_ID;
   }
 
   @action

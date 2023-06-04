@@ -14,9 +14,11 @@ const METAMASK_ERROR_CODES = {
   unknown_chain: 4902,
 };
 
+export const DEFAULT_CHAIN_ID = -1; //not a valid chain id
+
 export class MetaMaskResource extends Resource {
   @tracked connected = false;
-  @tracked chainId = -1; // the chain id of the metamask connection (not the card)
+  @tracked chainId = DEFAULT_CHAIN_ID; // the chain id of the metamask connection (not the card)
 
   constructor(owner: unknown) {
     super(owner);
@@ -49,7 +51,7 @@ export class MetaMaskResource extends Resource {
       return accounts.length > 0;
     } catch (e: any) {
       if (e.code === METAMASK_ERROR_CODES.user_rejected) {
-        return false;
+        return [];
       } else {
         throw e;
       }
@@ -59,18 +61,17 @@ export class MetaMaskResource extends Resource {
   getChainId() {
     try {
       if (!this.isMetamaskInstalled()) {
-        return -1;
+        return DEFAULT_CHAIN_ID;
       }
       let hexChainId = window.ethereum.chainId;
       return parseInt(hexChainId, 16);
     } catch (e) {
-      return -1;
+      return DEFAULT_CHAIN_ID;
     }
   }
 
   isSameNetwork(chainId: number) {
-    let metamaskChainId = this.getChainId();
-    return chainId == metamaskChainId;
+    return chainId == this.getChainId();
   }
 
   handleChainChanged = (hexChainId: string) => {
@@ -79,9 +80,8 @@ export class MetaMaskResource extends Resource {
 
   private doInitialize = enqueueTask(async () => {
     if (this.isMetamaskInstalled()) {
-      let chainId = this.getChainId();
       let connected = await this.isMetamaskConnected();
-      this.chainId = chainId;
+      this.chainId = this.getChainId();
       this.connected = connected;
     }
   });
@@ -105,12 +105,12 @@ export class MetaMaskResource extends Resource {
       if (e.code === METAMASK_ERROR_CODES.user_rejected) {
         return;
       } else if (e.code === METAMASK_ERROR_CODES.unknown_chain) {
-        throw `Unknown chain id ${chainId}. Need to add chain to metamask`;
+        throw new Error(
+          `Unknown chain id ${chainId}. Need to add chain to metamask`
+        );
       } else {
         throw e;
       }
     }
   });
 }
-
-export default MetaMaskResource;
