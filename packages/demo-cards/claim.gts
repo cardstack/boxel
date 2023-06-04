@@ -18,7 +18,6 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
 class Isolated extends Component<typeof Claim> {
-  metamask;
   <template>
     <CardContainer class='demo-card' @displayBoundaries={{true}}>
       <FieldContainer @label='Module Address.'><@fields.moduleAddress
@@ -48,15 +47,16 @@ class Isolated extends Component<typeof Claim> {
     </CardContainer>
   </template>
 
-  constructor(owner: unknown, args: any) {
-    super(owner, args);
-    this.metamask = new MetamaskResource({
-      named: { chainId: this.chainId },
-    }).setup();
-  }
+  // chainId is not explicitly passed to resource
+  // but, the resource is recreated everytime this.chainId changes
+  metamask = MetamaskResource.from(this, { chainId: this.chainId });
 
   get connectedAndSameChain() {
     return this.chainId == this.metamask.chainId && this.metamask.connected;
+  }
+
+  get chainId() {
+    return this.args.model.chain?.chainId ?? -1;
   }
 
   @action
@@ -67,15 +67,6 @@ class Isolated extends Component<typeof Claim> {
   @action
   private connectMetamask() {
     this.metamask.doConnectMetamask.perform(this.chainId);
-  }
-
-  @action
-  willDestroy() {
-    this.metamask.teardown();
-  }
-
-  get chainId() {
-    return this.args.model.chain?.chainId ?? -1;
   }
 }
 

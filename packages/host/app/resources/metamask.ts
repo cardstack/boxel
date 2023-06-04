@@ -1,8 +1,8 @@
 import { tracked } from '@glimmer/tracking';
 import { Resource } from 'ember-resources/core';
 import { enqueueTask, restartableTask } from 'ember-concurrency';
+import { registerDestructor } from '@ember/destroyable';
 
-// window is a global object that is available in this resource
 declare global {
   interface Window {
     ethereum: any;
@@ -14,30 +14,24 @@ const METAMASK_ERROR_CODES = {
   unknown_chain: 4902,
 };
 
-class MetaMaskResource extends Resource {
+export class MetaMaskResource extends Resource {
   @tracked connected = false;
   @tracked chainId = -1; // the chain id of the metamask connection (not the card)
+
+  constructor(owner: unknown) {
+    super(owner);
+    this.setup();
+  }
 
   setup() {
     this.doInitialize.perform();
     if (this.isMetamaskInstalled()) {
-      window.ethereum.on('chainChanged', this.handleChainChanged.bind(this));
+      window.ethereum.on('chainChanged', this.handleChainChanged);
+      registerDestructor(this, () => {
+        window.ethereum.removeAllListeners();
+        this.doInitialize.cancelAll();
+      });
     }
-    return this;
-  }
-
-  private doInitialize = enqueueTask(async () => {
-    if (this.isMetamaskInstalled()) {
-      let chainId = this.getChainId();
-      let connected = await this.isMetamaskConnected();
-      this.chainId = chainId;
-      this.connected = connected;
-    }
-  });
-
-  teardown() {
-    this.doInitialize.cancelAll();
-    this.doConnectMetamask.cancelAll();
   }
 
   isMetamaskInstalled() {
@@ -79,11 +73,22 @@ class MetaMaskResource extends Resource {
     return chainId == metamaskChainId;
   }
 
-  handleChainChanged(hexChainId: string) {
+  handleChainChanged = (hexChainId: string) => {
     this.chainId = parseInt(hexChainId, 16);
-  }
+  };
+
+  private doInitialize = enqueueTask(async () => {
+    if (this.isMetamaskInstalled()) {
+      let chainId = this.getChainId();
+      let connected = await this.isMetamaskConnected();
+      this.chainId = chainId;
+      this.connected = connected;
+    }
+  });
 
   doConnectMetamask = restartableTask(async (chainId: number) => {
+    // intentionally, didn't teardown this task because
+    // it will be bad user experience if task is closed after chain id changed
     try {
       let isSameNetwork = this.isSameNetwork(chainId);
       if (!isSameNetwork) {
