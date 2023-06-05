@@ -35,6 +35,18 @@ function randB64Bytes(numBytes: number): string {
   return crypto.randomBytes(numBytes).toString('base64').replace(/=*$/, '');
 }
 
+function resolveMatrixURL(url: string) {
+  let unresolvedURL = new URL(url);
+  if (
+    unresolvedURL.host === SYNAPSE_IP_ADDRESS &&
+    unresolvedURL.port &&
+    parseInt(unresolvedURL.port) === SYNAPSE_PORT
+  ) {
+    return `http://localhost:${SYNAPSE_PORT}`;
+  }
+  return url;
+}
+
 async function cfgDirFromTemplate(
   template: string,
   dataDir?: string
@@ -181,13 +193,13 @@ export interface Credentials {
 }
 
 export async function registerUser(
-  synapse: SynapseInstance,
+  synapse: { baseUrl: string; registrationSecret: string },
   username: string,
   password: string,
   admin = false,
   displayName?: string
 ): Promise<Credentials> {
-  const url = `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v1/register`;
+  const url = `${resolveMatrixURL(synapse.baseUrl)}/_synapse/admin/v1/register`;
   const context = await request.newContext({ baseURL: url });
   const { nonce } = await (await context.get(url)).json();
   const mac = admin
@@ -221,12 +233,14 @@ export async function registerUser(
 
 // currently this creates unencrypted rooms only
 export async function createPrivateRoom(
+  synapse: { baseUrl: string },
   accessToken: string,
   name: string,
-  invite?: string[]
+  invite?: string[],
+  topic?: string
 ): Promise<string> {
   let response = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/createRoom`,
+    `${resolveMatrixURL(synapse.baseUrl)}/_matrix/client/v3/createRoom`,
     {
       method: 'POST',
       headers: {
@@ -235,7 +249,14 @@ export async function createPrivateRoom(
       body: JSON.stringify({
         name,
         preset: 'trusted_private_chat',
-        ...(invite ? { invite: invite.map((i) => `@${i}:localhost`) } : {}),
+        ...(invite
+          ? {
+              invite: invite.map((i) =>
+                i.startsWith('@') ? i : `@${i}:localhost`
+              ),
+            }
+          : {}),
+        ...(topic ? { topic } : {}),
       }),
     }
   );
@@ -249,6 +270,7 @@ export async function createPrivateRoom(
 let txnId = 0;
 
 export async function sendMessage(
+  synapse: { baseUrl: string },
   accessToken: string,
   roomId: string,
   body: string | undefined,
@@ -256,7 +278,9 @@ export async function sendMessage(
 ): Promise<string> {
   let html = body != null ? marked(body, { mangle: false }) : '';
   let response = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_matrix/client/v3/rooms/${roomId}/send/m.room.message/txn${++txnId}`,
+    `${resolveMatrixURL(
+      synapse.baseUrl
+    )}/_matrix/client/v3/rooms/${roomId}/send/m.room.message/txn${++txnId}`,
     {
       method: 'PUT',
       headers: {
@@ -285,12 +309,15 @@ export async function sendMessage(
 }
 
 export async function createRegistrationToken(
+  synapse: { baseUrl: string },
   adminAccessToken: string,
   registrationToken: string,
   usesAllowed = 1000
 ) {
   let response = await fetch(
-    `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v1/registration_tokens/new`,
+    `${resolveMatrixURL(
+      synapse.baseUrl
+    )}/_synapse/admin/v1/registration_tokens/new`,
     {
       method: 'POST',
       headers: {

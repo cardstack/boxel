@@ -38,6 +38,7 @@ export class MatrixSearchIndex {
     moduleErrors: 0,
   };
 
+  // TODO add room ID
   constructor(getClient: () => MatrixClient) {
     this.#getClient = getClient;
     let didReceiveMessages: () => void;

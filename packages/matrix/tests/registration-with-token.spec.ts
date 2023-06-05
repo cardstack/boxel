@@ -23,7 +23,11 @@ test.describe('User Registration w/ Token', () => {
   test.beforeEach(async () => {
     synapse = await synapseStart();
     admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await createRegistrationToken(admin.accessToken, REGISTRATION_TOKEN);
+    await createRegistrationToken(
+      synapse,
+      admin.accessToken,
+      REGISTRATION_TOKEN
+    );
   });
 
   test.afterEach(async () => {

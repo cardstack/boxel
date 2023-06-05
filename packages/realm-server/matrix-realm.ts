@@ -21,6 +21,7 @@ export class MatrixRealm {
   #userId: string;
   #searchIndex: MatrixSearchIndex;
 
+  // TODO add room ID
   constructor({
     matrixServerURL,
     accessToken,

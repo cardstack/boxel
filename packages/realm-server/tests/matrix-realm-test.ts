@@ -12,16 +12,16 @@ import { MatrixRealm } from '../matrix-realm';
 
 const matrixServerURL = 'http://localhost:8008';
 
-module('Matrix Realm Server', function (hooks) {
+module('Matrix Realm', function (hooks) {
   let synapse: SynapseInstance;
   let realm: MatrixRealm;
-  let admin: Credentials;
+  let user: Credentials;
 
   hooks.beforeEach(async () => {
     synapse = await synapseStart();
-    admin = await registerUser(synapse, 'admin', 'pass');
+    user = await registerUser(synapse, 'user', 'pass');
 
-    let { accessToken, deviceId, userId } = admin;
+    let { accessToken, deviceId, userId } = user;
     realm = new MatrixRealm({
       matrixServerURL,
       accessToken,
@@ -46,8 +46,8 @@ module('Matrix Realm Server', function (hooks) {
 
   // remove this after we have more tests that show this is working
   test('it can index a matrix message', async function (assert) {
-    let roomId = await createPrivateRoom(admin.accessToken, 'Room 1');
-    await sendMessage(admin.accessToken, roomId, 'Hello World');
+    let roomId = await createPrivateRoom(synapse, user.accessToken, 'Room 1');
+    await sendMessage(synapse, user.accessToken, roomId, 'Hello World');
     await realm.flushMessages();
     assert.ok(realm, "realm didn't blow up being instantiated");
 
