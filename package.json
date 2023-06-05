@@ -28,7 +28,8 @@
     "patchedDependencies": {
       "magic-string@0.25.9": "patches/magic-string@0.25.9.patch",
       "fastboot@4.1.0": "patches/fastboot@4.1.0.patch",
-      "@types/eventsource@1.1.11": "patches/@types__eventsource@1.1.11.patch"
+      "@types/eventsource@1.1.11": "patches/@types__eventsource@1.1.11.patch",
+      "glimmer-scoped-css@0.1.2": "patches/glimmer-scoped-css@0.1.2.patch"
     }
   },
   "devDependencies": {
