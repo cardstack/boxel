@@ -20,6 +20,7 @@ import { action } from '@ember/object';
 import { getSDK, Web3Provider } from '@cardstack/cardpay-sdk';
 
 class Isolated extends Component<typeof Claim> {
+  let claimSettlementModule: ClaimSettlementModule | undefined
   <template>
     <CardContainer class='demo-card' @displayBoundaries={{true}}>
       <FieldContainer @label='Module Address.'><@fields.moduleAddress
@@ -65,11 +66,7 @@ class Isolated extends Component<typeof Claim> {
   }
 
   private doClaim = restartableTask(async () => {
-    let ethersProvider = new Web3Provider(window.ethereum);
-    let claimSettlementModule = await getSDK(
-      'ClaimSettlementModule',
-      ethersProvider
-    );
+    let claimSettlementModule = this.getClaimSettlementModule()
     const r = await claimSettlementModule.executeSafe(
       this.args.model.moduleAddress,
       this.args.model.safeAddress,
@@ -89,6 +86,17 @@ class Isolated extends Component<typeof Claim> {
   @action
   private connectMetamask() {
     this.metamask.doConnectMetamask.perform(this.chainId);
+  }
+
+  async getClaimSettlementModule(): Promise<ClaimSettlementModule> {
+    if (!this.claimSettlementModule) {
+      let ethersProvider = new Web3Provider(window.ethereum);
+      this.claimSettlementModule = await getSDK(
+        'ClaimSettlementModule',
+        ethersProvider
+      );
+    }
+    return this.claimSettlementModule;
   }
 }
 
