@@ -24,6 +24,7 @@ class MetamaskResource extends Resource {
 
   constructor(owner: unknown) {
     super(owner);
+    this.promptMetamaskInstallation();
     this.setup();
   }
 
@@ -35,6 +36,14 @@ class MetamaskResource extends Resource {
         window.ethereum.removeAllListeners();
         this.doInitialize.cancelAll();
       });
+    }
+  }
+
+  promptMetamaskInstallation() {
+    if (!this.isMetamaskInstalled()) {
+      window.alert(
+        'Metamask is not installed. Please install it to use this resource'
+      );
     }
   }
 
@@ -101,8 +110,7 @@ class MetamaskResource extends Resource {
         });
         this.chainId = chainId;
       }
-      const isMetamaskConnected = await this.isMetamaskConnected();
-      this.connected = isMetamaskConnected;
+      this.connected = await this.isMetamaskConnected();
     } catch (e: any) {
       if (e.code === METAMASK_ERROR_CODES.user_rejected) {
         return;
