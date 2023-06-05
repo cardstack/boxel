@@ -5,4 +5,12 @@ module.exports = {
   rules: {
     'require-button-type': false,
   },
+  overrides: [
+    {
+      files: ['**/*.gjs', '**/*.gts'],
+      rules: {
+        'no-forbidden-elements': ['meta', 'html', 'script'],
+      },
+    },
+  ],
 };
