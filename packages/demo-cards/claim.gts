@@ -20,7 +20,6 @@ import { action } from '@ember/object';
 import { getSDK, Web3Provider } from '@cardstack/cardpay-sdk';
 
 class Isolated extends Component<typeof Claim> {
-  @tracked claimOutput: string = '';
   <template>
     <CardContainer class='demo-card' @displayBoundaries={{true}}>
       <FieldContainer @label='Module Address.'><@fields.moduleAddress
@@ -30,9 +29,6 @@ class Isolated extends Component<typeof Claim> {
       <FieldContainer @label='Explanation'><@fields.explanation
         /></FieldContainer>
       <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
-      <FieldContainer @label='Claim Result'>
-        {{this.claimOutput}}
-      </FieldContainer>
       {{#if this.connectedAndSameChain}}
         <Button {{on 'click' this.claim}}>
           {{#if this.doClaim.isRunning}}
@@ -82,7 +78,7 @@ class Isolated extends Component<typeof Claim> {
         encoded: this.args.model.encoding,
       }
     );
-    this.claimOutput = r;
+    console.log(r); //TODO: should be replaced with a transaction card being created
   });
 
   @action
