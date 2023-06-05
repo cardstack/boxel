@@ -73,7 +73,7 @@ export class CurrentRun {
   #entrySetter: EntrySetter;
   #renderCard: RenderCard;
   #realmURL: URL;
-  #realmInfo: RealmInfo;
+  #realmInfo?: RealmInfo;
   readonly stats: Stats = {
     instancesIndexed: 0,
     instanceErrors: 0,
