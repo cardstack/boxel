@@ -39,7 +39,7 @@ class MetamaskResource extends Resource {
 
   promptMetamaskInstallation() {
     if (!this.isMetamaskInstalled()) {
-      window.alert(
+      console.log(
         'Metamask is not installed. Please install it to use this resource'
       );
     }
