@@ -16,11 +16,9 @@ const METAMASK_ERROR_CODES = {
   unknown_chain: 4902,
 };
 
-export const DEFAULT_CHAIN_ID = -1; //not a valid chain id
-
 class MetamaskResource extends Resource {
   @tracked connected = false;
-  @tracked chainId = DEFAULT_CHAIN_ID; // the chain id of the metamask connection (not the card)
+  @tracked chainId: number | undefined; // the chain id of the metamask connection (not the card)
 
   constructor(owner: unknown) {
     super(owner);
@@ -72,17 +70,18 @@ class MetamaskResource extends Resource {
   getChainId() {
     try {
       if (!this.isMetamaskInstalled()) {
-        return DEFAULT_CHAIN_ID;
+        return;
       }
       let hexChainId = window.ethereum.chainId;
       return parseInt(hexChainId, 16);
     } catch (e) {
-      return DEFAULT_CHAIN_ID;
+      return;
     }
   }
 
   isSameNetwork(chainId: number) {
-    return chainId == this.getChainId();
+    let metamaskChainId = this.getChainId();
+    return metamaskChainId ? chainId == metamaskChainId : false;
   }
 
   handleChainChanged = (hexChainId: string) => {
