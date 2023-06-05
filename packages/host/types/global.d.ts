@@ -13,6 +13,9 @@ declare module '@cardstack/host/templates/*' {
 
 declare global {
   function showDirectoryPicker(): Promise<FileSystemDirectoryHandle>;
+  interface Window {
+    test__refreshOverlayedButtons: () => void;
+  }
 }
 
 declare module '@ember/component' {
