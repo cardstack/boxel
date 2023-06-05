@@ -7,6 +7,7 @@ import {
   type Box,
   type Format,
   type Field,
+  CardContext,
 } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
 import type { ComponentLike } from '@glint/template';
@@ -19,8 +20,6 @@ import {
   chooseCard,
   baseCardRef,
   identifyCard,
-  createNewCard,
-  type Actions,
 } from '@cardstack/runtime-common';
 
 interface Signature {
@@ -33,7 +32,7 @@ interface Signature {
       field: Field<typeof CardBase>,
       boxedElement: Box<CardBase>
     ): typeof CardBase;
-    actions?: Actions;
+    context?: CardContext;
   };
 }
 
@@ -76,9 +75,11 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       <Button @size='small' {{on 'click' this.add}} data-test-add-new>
         Choose
       </Button>
-      <Button @size='small' {{on 'click' this.create}} data-test-create-new>
-        Create New
-      </Button>
+      {{#if @context.actions.createCard}}
+        <Button @size='small' {{on 'click' this.create}} data-test-create-new>
+          Create New
+        </Button>
+      {{/if}}
     </div>
   </template>
 
@@ -96,11 +97,10 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       selectedCards?.map((card: any) => ({ not: { eq: { id: card.id } } })) ??
       [];
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let chosenCard: Card | undefined = await chooseCard({
-      filter: {
-        every: [{ type }, ...selectedCardsQuery],
-      },
-    });
+    let filter = { every: [{ type }, ...selectedCardsQuery] };
+    let chosenCard: Card | undefined = this.args.context?.actions?.createCard
+      ? await chooseCard({ filter })
+      : await chooseCard({ filter }, { offerToCreate: type });
     if (chosenCard) {
       selectedCards = [...selectedCards, chosenCard];
       (this.args.model.value as any)[this.args.field.name] = selectedCards;
@@ -111,8 +111,9 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     let cards = (this.args.model.value as any)[this.args.field.name];
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
     let newCard: Card | undefined =
-      (await this.args.actions?.createCard(type, undefined)) ??
-      (await createNewCard(type, undefined)); // remove this when no longer supporting `createCardModal`
+      await this.args.context?.actions?.createCard(type, undefined, {
+        isLinkedCard: true,
+      });
     if (newCard) {
       cards = [...cards, newCard];
       (this.args.model.value as any)[this.args.field.name] = cards;
@@ -132,7 +133,7 @@ export function getLinksToManyComponent({
   format,
   field,
   cardTypeFor,
-  actions,
+  context,
 }: {
   model: Box<Card>;
   arrayField: Box<Card[]>;
@@ -142,7 +143,7 @@ export function getLinksToManyComponent({
     field: Field<typeof CardBase>,
     boxedElement: Box<CardBase>
   ): typeof CardBase;
-  actions?: Actions;
+  context?: CardContext;
 }): ComponentLike<{ Args: {}; Blocks: {} }> {
   if (format === 'edit') {
     return class LinksToManyEditorTemplate extends GlimmerComponent {
@@ -153,7 +154,7 @@ export function getLinksToManyComponent({
           @field={{field}}
           @format={{format}}
           @cardTypeFor={{cardTypeFor}}
-          @actions={{actions}}
+          @context={{context}}
         />
       </template>
     };

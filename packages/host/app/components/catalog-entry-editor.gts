@@ -56,7 +56,7 @@ export default class CatalogEntryEditor extends Component<Signature> {
             />
           </div>
         </CardContainer>
-      {{else if this.catalogEntry.isSearching}}
+      {{else if this.catalogEntry.isLoading}}
         <div>Loading...</div>
       {{else}}
         <Button

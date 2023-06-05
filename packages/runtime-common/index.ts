@@ -46,6 +46,7 @@ export { makeLogDefinitions, logger } from './log';
 export { RealmPaths };
 export { NotLoaded, isNotLoadedError } from './not-loaded';
 export { NotReady, isNotReadyError } from './not-ready';
+export { cardTypeDisplayName } from './helpers/card-type-display-name';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';
@@ -62,7 +63,6 @@ export type {
   Kind,
   RealmAdapter,
   FileRef,
-  FastBootInstance,
   ResponseWithNodeStream,
 } from './realm';
 
@@ -89,6 +89,9 @@ export {
   isCardCollectionDocument,
   isSingleCardDocument,
 } from './card-document';
+export {
+  sanitizeHtml
+} from './dompurify';
 
 import type { Card, CardBase } from 'https://cardstack.com/base/card-api';
 
@@ -96,11 +99,15 @@ export const maxLinkDepth = 5;
 export const assetsDir = '__boxel/';
 
 export interface CardChooser {
-  chooseCard<T extends CardBase>(query: Query): Promise<undefined | T>;
+  chooseCard<T extends CardBase>(
+    query: Query,
+    opts?: { offerToCreate: CardRef }
+  ): Promise<undefined | T>;
 }
 
 export async function chooseCard<T extends Card>(
-  query: Query
+  query: Query,
+  opts?: { offerToCreate: CardRef }
 ): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CARD_CHOOSER) {
@@ -110,7 +117,20 @@ export async function chooseCard<T extends Card>(
   }
   let chooser: CardChooser = here._CARDSTACK_CARD_CHOOSER;
 
-  return await chooser.chooseCard<T>(query);
+  return await chooser.chooseCard<T>(query, opts);
+}
+
+export interface CardSearch {
+  getCards(query: Query): {
+    instances: Card[];
+    isLoading: boolean;
+  };
+}
+
+export async function getCards(query: Query) {
+  let here = globalThis as any;
+  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
+  return finder?.getCards(query);
 }
 
 export interface CardCreator {
@@ -138,8 +158,10 @@ export async function createNewCard<T extends Card>(
 export interface Actions {
   createCard: (
     ref: CardRef,
-    relativeTo: URL | undefined
+    relativeTo: URL | undefined,
+    opts?: { isLinkedCard?: boolean }
   ) => Promise<Card | undefined>;
+  viewCard: (card: Card) => void;
   // more CRUD ops to come...
 }
 

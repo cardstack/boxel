@@ -10,7 +10,7 @@ const { GlimmerScopedCSSWebpackPlugin } = require('glimmer-scoped-css/webpack');
 // return maybeEmbroider(app);
 
 module.exports = function (defaults) {
-  let app = new EmberAddon(defaults, {
+  const app = new EmberAddon(defaults, {
     vendorFiles: { 'jquery.js': null, 'app-shims.js': null },
   });
 

@@ -29,7 +29,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
     ...attributes
   >
     {{#if (or @label @title)}}
-      <div>
+      <div data-test-boxel-header-title>
         {{#if @label}}<Label
             data-test-boxel-header-label
           >{{@label}}</Label>{{/if}}
@@ -47,6 +47,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
   </header>
   <style>
     header {
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -74,6 +75,9 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       background-color: var(--boxel-highlight);
     }
     .content {
+      position: absolute;
+      top: 0;
+      right: 0;
       display: flex;
       align-items: center;
     }

@@ -11,11 +11,17 @@ import { renderComponent } from '../../helpers/render-component';
 import {
   testRealmURL,
   setupCardLogs,
-  setupMockLocalRealm,
+  setupLocalIndexing,
   TestRealmAdapter,
   TestRealm,
 } from '../../helpers';
-import { waitFor, waitUntil, click, fillIn } from '@ember/test-helpers';
+import {
+  waitFor,
+  waitUntil,
+  click,
+  fillIn,
+  settled,
+} from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
 
@@ -25,7 +31,7 @@ module('Integration | operator-mode', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
   setupRenderingTest(hooks);
-  setupMockLocalRealm(hooks);
+  setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
     async () => await Loader.import(`${baseRealm.url}card-api`)
@@ -46,7 +52,7 @@ module('Integration | operator-mode', function (hooks) {
     let card = await createFromSerialized<typeof Card>(
       result.doc.data,
       result.doc,
-      undefined,
+      new URL(url),
       {
         loader: Loader.getLoaderFor(createFromSerialized),
       }
@@ -71,12 +77,20 @@ module('Integration | operator-mode', function (hooks) {
         import StringCard from "https://cardstack.com/base/string";
 
         export class Pet extends Card {
+          static displayName = 'Pet';
           @field name = contains(StringCard);
+          @field title = contains(StringCard, {
+            computeVia: function (this: Pet) {
+              return this.name;
+            },
+          });
           static embedded = class Embedded extends Component<typeof this> {
             <template>
-              <h3 data-test-pet={{@model.name}}>
-                <@fields.name/>
-              </h3>
+              <div ...attributes>
+                <h3 data-test-pet={{@model.name}}>
+                  <@fields.name/>
+                </h3>
+              </div>
             </template>
           }
         }
@@ -87,6 +101,7 @@ module('Integration | operator-mode', function (hooks) {
         import { FieldContainer } from '@cardstack/boxel-ui';
 
         export class Address extends Card {
+          static displayName = 'Address';
           @field city = contains(StringCard);
           @field country = contains(StringCard);
           static embedded = class Embedded extends Component<typeof this> {
@@ -126,6 +141,11 @@ module('Integration | operator-mode', function (hooks) {
           @field firstLetterOfTheName = contains(StringCard, {
             computeVia: function (this: Chain) {
               return this.firstName[0];
+            },
+          });
+          @field title = contains(StringCard, {
+            computeVia: function (this: Person) {
+              return this.firstName;
             },
           });
           @field address = contains(Address);
@@ -267,6 +287,7 @@ module('Integration | operator-mode', function (hooks) {
         import { Author } from './author';
 
         export class BlogPost extends Card {
+          static displayName = 'Blog Post';
           @field title = contains(StringCard);
           @field slug = contains(StringCard);
           @field body = contains(TextAreaCard);
@@ -295,8 +316,14 @@ module('Integration | operator-mode', function (hooks) {
         } from 'https://cardstack.com/base/card-api';
 
         export class Author extends Card {
+          static displayName = 'Author';
           @field firstName = contains(StringCard);
           @field lastName = contains(StringCard);
+          @field title = contains(StringCard, {
+            computeVia: function (this: Author) {
+              return [this.firstName, this.lastName].filter(Boolean).join(' ');
+            },
+          });
           static embedded = class Embedded extends Component<typeof this> {
             <template>
               <span data-test-author="{{@model.firstName}}">
@@ -317,6 +344,7 @@ module('Integration | operator-mode', function (hooks) {
         import { BlogPost } from './blog-post';
 
         export class PublishingPacket extends Card {
+          static displayName = 'Publishing Packet';
           @field blogPost = linksTo(BlogPost);
           @field socialBlurb = contains(TextAreaCard);
         }
@@ -446,12 +474,18 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       }
     );
+
     await waitFor('[data-test-person]');
-    assert.dom('[data-type-display-name]').hasText('Person');
+    assert.dom('[data-test-boxel-header-title]').hasText('Person');
     assert.dom('[data-test-person]').hasText('Fadhlan');
     assert.dom('[data-test-first-letter-of-the-name]').hasText('F');
     assert.dom('[data-test-city]').hasText('Bandung');
     assert.dom('[data-test-country]').hasText('Indonesia');
+    assert.dom('[data-test-stack-card]').exists({ count: 1 });
+    await waitFor('[data-test-cardstack-operator-mode-overlay-button]');
+    await click('[data-test-cardstack-operator-mode-overlay-button]');
+    assert.dom('[data-test-stack-card]').exists({ count: 2 });
+    assert.dom('[data-test-stack-card-index="1"]').includesText('Mango');
   });
 
   test("it doesn't change the field value if user clicks cancel in edit view", async function (assert) {
@@ -513,7 +547,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-country]').hasText('EditedCountry');
   });
 
-  test('no card if user closes the only card in the stack', async function (assert) {
+  test('displays add card button if user closes the only card in the stack and opens a card from card chooser', async function (assert) {
     let card = await loadCard(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -534,6 +568,47 @@ module('Integration | operator-mode', function (hooks) {
       { timeout: 3000 }
     );
     assert.dom('[data-test-person]').isNotVisible();
+    assert.dom('[data-test-add-card-button]').isVisible();
+
+    await click('[data-test-add-card-button]');
+    assert.dom('[data-test-card-catalog-modal]').isVisible();
+
+    await waitFor(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
+    await click(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+      .isVisible();
+  });
+
+  test('displays cards on cards-grid', async function (assert) {
+    let card = await loadCard(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    assert.dom(`[data-test-stack-card-index="0"]`).exists();
+    assert.dom(`[data-test-cards-grid-item`).exists({ count: 9 });
+    assert
+      .dom(
+        `[data-test-cards-grid-item="${testRealmURL}BlogPost/1"] [data-test-cards-grid-item-thumbnail-text]`
+      )
+      .hasText('Blog Post');
+    assert
+      .dom(
+        `[data-test-cards-grid-item="${testRealmURL}BlogPost/1"] [data-test-cards-grid-item-title]`
+      )
+      .hasText('Outer Space Journey');
+    assert
+      .dom(
+        `[data-test-cards-grid-item="${testRealmURL}BlogPost/1"] [data-test-cards-grid-item-display-name]`
+      )
+      .hasText('Blog Post');
   });
 
   test('can create a card using the cards-grid', async function (assert) {
@@ -569,6 +644,31 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`)
       .exists();
+  });
+
+  test('can open a card from the cards-grid and close it', async function (assert) {
+    let card = await loadCard(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    assert.dom(`[data-test-stack-card-index="0"]`).exists();
+
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
+
+    assert.dom(`[data-test-stack-card-index="1"]`).exists(); // Opens card on the stack
+    assert
+      .dom(`[data-test-stack-card-index="1"] [data-test-boxel-header-title]`)
+      .includesText('Person');
+
+    await click('[data-test-stack-card-index="1"] [data-test-close-button]');
+    assert.dom(`[data-test-stack-card-index="1"]`).doesNotExist();
   });
 
   test('create new card editor opens in the stack at each nesting level', async function (assert) {
@@ -625,8 +725,6 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await click('[data-test-stack-card-index="3"] [data-test-save-button]');
-    await waitFor(`[data-test-stack-card="${testRealmURL}Author/3"]`);
-    await click('[data-test-stack-card-index="3"] [data-test-close-button]');
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="3"]')
     );
@@ -640,8 +738,6 @@ module('Integration | operator-mode', function (hooks) {
       'Mad As a Hatter'
     );
     await click('[data-test-stack-card-index="2"] [data-test-save-button]');
-    await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/3"]`);
-    await click('[data-test-stack-card-index="2"] [data-test-close-button]');
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="2"]')
     );
@@ -693,7 +789,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
     await click(`[data-test-select="${testRealmURL}Author/2"]`);
 
-    await waitFor(`[data-test-author="R2-D2"]`);
+    await waitFor(`.operator-mode [data-test-author="R2-D2"]`);
     assert.dom('[data-test-field="authorBio"]').containsText('R2-D2');
   });
 
@@ -722,9 +818,11 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-field="authorBio"]').containsText('R2-D2');
 
     await click('[data-test-save-button]');
-    await waitFor('[data-test-blog-post-isolated]');
+    await waitFor('.operator-mode [data-test-blog-post-isolated]');
 
-    assert.dom('[data-test-blog-post-isolated]').hasText('Beginnings by R2-D2');
+    assert
+      .dom('.operator-mode [data-test-blog-post-isolated]')
+      .hasText('Beginnings by R2-D2');
   });
 
   test('can create a new card to populate a linksTo field', async function (assert) {
@@ -756,8 +854,6 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await click('[data-test-stack-card-index="1"] [data-test-save-button]');
-    await waitFor(`[data-test-stack-card="${testRealmURL}Author/3"]`);
-    await click('[data-test-stack-card-index="1"] [data-test-close-button]');
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="1"]')
     );
@@ -766,8 +862,12 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-field="authorBio"]').containsText('Alice');
 
     await click('[data-test-stack-card-index="0"] [data-test-save-button]');
-    await waitFor('[data-test-blog-post-isolated] [data-test-author="Alice"]');
-    assert.dom('[data-test-blog-post-isolated]').hasText('Beginnings by Alice');
+    await waitFor(
+      '.operator-mode [data-test-blog-post-isolated] [data-test-author="Alice"]'
+    );
+    assert
+      .dom('.operator-mode [data-test-blog-post-isolated]')
+      .hasText('Beginnings by Alice');
   });
 
   test('can remove the link for a linksTo field', async function (assert) {
@@ -788,9 +888,9 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-field="authorBio"] [data-test-remove-card]');
     await click('[data-test-save-button]');
 
-    await waitFor('[data-test-blog-post-isolated]');
+    await waitFor('.operator-mode [data-test-blog-post-isolated]');
     assert
-      .dom('[data-test-blog-post-isolated]')
+      .dom('.operator-mode [data-test-blog-post-isolated]')
       .hasText('Outer Space Journey by');
   });
 
@@ -897,9 +997,6 @@ module('Integration | operator-mode', function (hooks) {
       'Woodster'
     );
     await click('[data-test-stack-card-index="1"] [data-test-save-button]');
-    await waitFor(`[data-test-stack-card="${testRealmURL}Pet/1"]`);
-    await click('[data-test-stack-card-index="1"] [data-test-close-button]');
-
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="1"]')
     );
@@ -930,9 +1027,6 @@ module('Integration | operator-mode', function (hooks) {
       'Woodster'
     );
     await click('[data-test-stack-card-index="1"] [data-test-save-button]');
-    await waitFor(`[data-test-stack-card="${testRealmURL}Pet/1"]`);
-    await click('[data-test-stack-card-index="1"] [data-test-close-button]');
-
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="1"]')
     );
@@ -975,4 +1069,33 @@ module('Integration | operator-mode', function (hooks) {
 
   skip('can create a specialized a new card to populate a linksTo field');
   skip('can create a specialized a new card to populate a linksToMany field');
+
+  test('can close cards by clicking the header of a card deeper in the stack', async function (assert) {
+    let card = await loadCard(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    assert.dom(`[data-test-stack-card-index="1"]`).exists();
+    await waitFor('[data-test-person]');
+    window.test__refreshOverlayedButtons();
+    await waitFor('[data-test-cardstack-operator-mode-overlay-button]');
+    await click('[data-test-cardstack-operator-mode-overlay-button]');
+    assert.dom(`[data-test-stack-card-index="2"]`).exists();
+    await click('[data-test-stack-card-index="0"] [data-test-boxel-header]');
+    assert.dom(`[data-test-stack-card-index="2"]`).doesNotExist();
+    assert.dom(`[data-test-stack-card-index="1"]`).doesNotExist();
+    assert.dom(`[data-test-stack-card-index="0"]`).exists();
+    window.test__refreshOverlayedButtons();
+    await settled();
+    assert
+      .dom(`[data-test-cardstack-operator-mode-overlay-button]`)
+      .doesNotExist();
+  });
 });

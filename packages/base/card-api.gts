@@ -1,3 +1,4 @@
+import Modifier from 'ember-modifier';
 import GlimmerComponent from '@glimmer/component';
 import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
@@ -82,6 +83,13 @@ interface Options {
 interface NotLoadedValue {
   type: 'not-loaded';
   reference: string;
+}
+
+export interface CardContext {
+  actions?: Actions;
+  cardComponentModifier?: typeof Modifier<any>;
+  renderedIn?: Component<any>;
+  optional?: any;
 }
 
 function isNotLoadedValue(val: any): val is NotLoadedValue {
@@ -223,7 +231,7 @@ export interface Field<
   component(
     model: Box<CardBase>,
     format: Format,
-    actions?: Actions
+    context?: CardContext
   ): ComponentLike<{ Args: {}; Blocks: {} }>;
   getter(instance: CardBase): CardInstanceType<CardT>;
   queryableValue(value: any, stack: CardBase[]): SearchT;
@@ -349,6 +357,7 @@ class ContainsMany<FieldT extends CardBaseConstructor>
     // Need to replace the WatchedArray proxy with an actual array because the
     // WatchedArray proxy is not structuredClone-able, and hence cannot be
     // communicated over the postMessage boundary between worker and DOM.
+    // TODO: can this be simplified since we don't have the worker anymore?
     return [...instances].map((instance) => {
       return this.card[queryableValue](instance, stack);
     });
@@ -670,9 +679,10 @@ class Contains<CardT extends CardBaseConstructor> implements Field<CardT, any> {
 
   component(
     model: Box<CardBase>,
-    format: Format
+    format: Format,
+    context?: CardContext
   ): ComponentLike<{ Args: {}; Blocks: {} }> {
-    return fieldComponent(this, model, format);
+    return fieldComponent(this, model, format, context);
   }
 }
 
@@ -855,9 +865,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     e: NotLoaded,
     opts?: RecomputeOptions
   ): Promise<CardInstanceType<CardT> | undefined> {
-    let result: CardInstanceType<CardT> | undefined;
     let deserialized = getDataBucket(instance as CardBase);
-
     let identityContext =
       identityContexts.get(instance as CardBase) ?? new IdentityContext();
     // taking advantage of the identityMap regardless of whether loadFields is set
@@ -869,17 +877,17 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     }
 
     if (opts?.loadFields) {
-      let fieldValue = await this.loadMissingField(
+      fieldValue = await this.loadMissingField(
         instance,
         e,
         identityContext,
         instance[relativeTo]
       );
       deserialized.set(this.name, fieldValue);
-      result = fieldValue as CardInstanceType<CardT>;
+      return fieldValue as CardInstanceType<CardT>;
     }
 
-    return result;
+    return;
   }
 
   private async loadMissingField(
@@ -912,25 +920,31 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
         )}`
       );
     }
-    let fieldInstance = await createFromSerialized(json.data, json, undefined, {
-      loader,
-      identityContext,
-    });
+
+    let fieldInstance = await createFromSerialized(
+      json.data,
+      json,
+      relativeTo,
+      {
+        loader,
+        identityContext,
+      }
+    );
     return fieldInstance;
   }
 
   component(
     model: Box<Card>,
     format: Format,
-    actions?: Actions
+    context?: CardContext
   ): ComponentLike<{ Args: {}; Blocks: {} }> {
     if (format === 'edit') {
       let innerModel = model.field(
         this.name as keyof CardBase
       ) as unknown as Box<Card | null>;
-      return getLinksToEditor(innerModel, this, actions);
+      return getLinksToEditor(innerModel, this, context);
     }
-    return fieldComponent(this, model, format);
+    return fieldComponent(this, model, format, context);
   }
 }
 
@@ -975,6 +989,7 @@ class LinksToMany<FieldT extends CardConstructor>
     // Need to replace the WatchedArray proxy with an actual array because the
     // WatchedArray proxy is not structuredClone-able, and hence cannot be
     // communicated over the postMessage boundary between worker and DOM.
+    // TODO: can this be simplified since we don't have the worker anymore?
     return [...instances].map((instance) => {
       if (primitive in instance) {
         throw new Error(
@@ -1247,7 +1262,7 @@ class LinksToMany<FieldT extends CardConstructor>
   component(
     model: Box<Card>,
     format: Format,
-    actions?: Actions
+    context?: CardContext
   ): ComponentLike<{ Args: {}; Blocks: {} }> {
     let fieldName = this.name as keyof CardBase;
     let arrayField = model.field(
@@ -1260,7 +1275,7 @@ class LinksToMany<FieldT extends CardConstructor>
       field: this,
       format,
       cardTypeFor,
-      actions,
+      context,
     });
   }
 }
@@ -1268,7 +1283,8 @@ class LinksToMany<FieldT extends CardConstructor>
 function fieldComponent(
   field: Field<typeof CardBase>,
   model: Box<CardBase>,
-  format: Format
+  format: Format,
+  context?: CardContext
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let fieldName = field.name as keyof CardBase;
   let card: typeof CardBase;
@@ -1279,7 +1295,11 @@ function fieldComponent(
       (model.value[fieldName]?.constructor as typeof CardBase) ?? field.card;
   }
   let innerModel = model.field(fieldName) as unknown as Box<CardBase>;
-  return getBoxComponent(card, format, innerModel);
+
+  return getBoxComponent(card, format, innerModel, {
+    ...context,
+    ...{ optional: { fieldType: field.fieldType } },
+  });
 }
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
@@ -1421,8 +1441,8 @@ export class CardBase {
     return _createFromSerialized(this, data, doc, relativeTo, identityContext);
   }
 
-  static getComponent(card: CardBase, format: Format, actions?: Actions) {
-    return getComponent(card, format, actions);
+  static getComponent(card: CardBase, format: Format, context?: CardContext) {
+    return getComponent(card, format, context);
   }
 
   constructor(data?: Record<string, any>) {
@@ -1695,7 +1715,7 @@ async function getDeserializedValue<CardT extends CardBaseConstructor>({
   return result;
 }
 
-interface SerializeOpts {
+export interface SerializeOpts {
   includeComputeds?: boolean;
   includeUnrenderedFields?: boolean;
 }
@@ -2051,21 +2071,21 @@ export type SignatureFor<CardT extends CardBaseConstructor> = {
     fields: FieldsTypeFor<InstanceType<CardT>>;
     set: Setter;
     fieldName: string | undefined;
-    actions?: Actions;
+    context?: CardContext;
   };
 };
 
 export function getComponent(
   model: CardBase,
   format: Format,
-  actions?: Actions
+  context?: CardContext
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let box = Box.create(model);
   let component = getBoxComponent(
     model.constructor as CardBaseConstructor,
     format,
     box,
-    actions
+    context
   );
   return component;
 }
@@ -2192,7 +2212,7 @@ export async function getIfReady<T extends CardBase, K extends keyof T>(
       let card = Reflect.getPrototypeOf(instance)!
         .constructor as typeof CardBase;
       let field: Field = getField(card, fieldName as string)!;
-      return field.handleNotLoadedError(instance, e, opts) as
+      return (await field.handleNotLoadedError(instance, e, opts)) as
         | T[K]
         | T[K][]
         | undefined;

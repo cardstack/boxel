@@ -1,13 +1,14 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import cssVar from '../../helpers/css-var';
 import { svgJar } from '../../helpers/svg-jar';
+import { type EmptyObject } from '@ember/component/helper';
 
 interface Signature {
   Element: HTMLDivElement;
   Args: {
     color?: string;
   };
-  Blocks: {};
+  Blocks: EmptyObject;
 }
 
 const LoadingIndicator: TemplateOnlyComponent<Signature> = <template>

@@ -11,7 +11,7 @@ import {
   testRealmURL,
   shimModule,
   setupCardLogs,
-  setupMockLocalRealm,
+  setupLocalIndexing,
   TestRealmAdapter,
   TestRealm,
   saveCard,
@@ -32,7 +32,7 @@ module('Integration | card-editor', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
   setupRenderingTest(hooks);
-  setupMockLocalRealm(hooks);
+  setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
     async () => await Loader.import(`${baseRealm.url}card-api`)
@@ -466,6 +466,8 @@ module('Integration | card-editor', function (hooks) {
       }
     );
 
+    await click('[data-test-choose-card]');
+    await waitFor('[data-test-create-new]');
     await click('[data-test-create-new]');
     await waitFor('[data-test-create-new-card="Pet"]');
 

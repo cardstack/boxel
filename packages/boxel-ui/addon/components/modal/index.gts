@@ -3,7 +3,7 @@ import { on } from '@ember/modifier';
 import { eq } from '../../helpers/truth-helpers';
 import cssVar from '../../helpers/css-var';
 import cn from '../../helpers/cn';
-// import setBodyClass from 'ember-set-body-class/helpers/set-body-class';
+import setBodyClass from 'ember-set-body-class/helpers/set-body-class';
 
 interface Signature {
   Element: HTMLDialogElement;
@@ -24,7 +24,7 @@ interface Signature {
 export default class Modal extends Component<Signature> {
   <template>
     {{#if @isOpen}}
-      {{!-- {{setBodyClass "has-modal"}} --}}
+      {{setBodyClass 'has-modal'}}
       <div
         style={{cssVar
           boxel-modal-z-index=(if

@@ -26,13 +26,13 @@
       "@cardstack/host/tests/*": ["tests/*"],
       "@cardstack/host/*": ["app/*"],
       "https://cardstack.com/base/*": ["../base/*"],
-      "//local-realm/*": ["../demo-cards/*"],
       "cards": ["../demo-cards/*"],
       "*": ["types/*"],
       "//cdn.skypack.dev/lodash": ["node_modules/@types/lodash"],
       "@cardstack/boxel-ui": ["../boxel-ui/addon"],
       "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"]
-    }
+    },
+    "typeRoots": ["../boxel-ui/types"]
   },
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"],

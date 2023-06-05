@@ -1,6 +1,8 @@
 import { expect, type Page } from '@playwright/test';
 
-export const testHost = 'http://127.0.0.1:4200';
+export const testHost = 'http://localhost:4202/test';
+export const rootPath =
+  new URL(testHost).pathname === '/' ? '' : new URL(testHost).pathname;
 
 interface ProfileAssertions {
   userId?: string;
@@ -8,23 +10,25 @@ interface ProfileAssertions {
 }
 
 export async function login(page: Page, username: string, password: string) {
-  await page.goto(`/chat`);
+  await page.goto(`${rootPath}/chat`);
   await page.locator('[data-test-username-field]').fill(username);
   await page.locator('[data-test-password-field]').fill(password);
   await page.locator('[data-test-login-btn]').click();
 }
 
 export async function logout(page: Page) {
-  await page.goto(`/chat`);
   await page.locator('[data-test-logout-btn]').click();
 }
 
 export async function createRoom(
   page: Page,
-  roomDetails: { name: string; invites?: string[] }
+  roomDetails: { name: string; invites?: string[]; encrypted?: true }
 ) {
   await page.locator('[data-test-create-room-mode-btn]').click();
   await page.locator('[data-test-room-name-field]').fill(roomDetails.name);
+  if (roomDetails.encrypted) {
+    await page.locator('[data-test-encrypted-field]').click();
+  }
   if (roomDetails.invites && roomDetails.invites.length > 0) {
     await page
       .locator('[data-test-room-invite-field]')
@@ -33,8 +37,114 @@ export async function createRoom(
   await page.locator('[data-test-create-room-btn]').click();
 }
 
+export async function joinRoom(page: Page, roomName: string) {
+  await page.locator(`[data-test-join-room-btn="${roomName}"]`).click();
+}
+
+export async function leaveRoom(page: Page, roomName: string) {
+  await page.locator(`[data-test-leave-room-btn="${roomName}"]`).click();
+}
+
+export async function openRoom(page: Page, roomName: string) {
+  await page.locator(`[data-test-enter-room="${roomName}"]`).click();
+}
+
+export async function sendMessage(
+  page: Page,
+  message: string | undefined,
+  cardId?: string
+) {
+  if (message == null && cardId == null) {
+    throw new Error(
+      `sendMessage requires at least a message or a card ID be specified`
+    );
+  }
+  if (message != null) {
+    await page.locator('[data-test-message-field]').fill(message);
+  }
+  if (cardId != null) {
+    await page.locator('[data-test-choose-card-btn]').click();
+    await page.locator(`[data-test-select="${cardId}"]`).click();
+  }
+  await page.locator('[data-test-send-message-btn]').click();
+}
+
+export async function inviteToRoom(page: Page, invites: string[]) {
+  await page.locator(`[data-test-invite-mode-btn]`).click();
+  await page.locator('[data-test-room-invite-field]').fill(invites.join(', '));
+  await page.locator('[data-test-room-invite-btn]').click();
+}
+
+export async function scrollToTopOfMessages(page: Page) {
+  await page.evaluate(() => {
+    let messages = document.querySelector('.room__messages-wrapper');
+    if (!messages) {
+      throw new Error(`Can't find messages element`);
+    }
+    messages.scrollTop = 0;
+  });
+}
+
+export async function assertMessages(
+  page: Page,
+  messages: {
+    from: string;
+    message?: string;
+    card?: { id: string; text?: string };
+  }[]
+) {
+  const limit = 5;
+  if (messages.length > limit) {
+    throw new Error(
+      `don't use assertMessages() for more than ${limit} messages as pagination may unnecessarily break the assertion`
+    );
+  }
+  await expect(page.locator('[data-test-message-idx]')).toHaveCount(
+    messages.length
+  );
+  for (let [index, { from, message, card }] of messages.entries()) {
+    await expect(
+      page.locator(
+        `[data-test-message-idx="${index}"] [data-test-boxel-message-name]`
+      )
+    ).toContainText(from);
+    if (message != null) {
+      await expect(
+        page.locator(
+          `[data-test-message-idx="${index}"] .boxel-message__content`
+        )
+      ).toContainText(message);
+    }
+    if (card) {
+      await expect(
+        page.locator(
+          `[data-test-message-idx="${index}"][data-test-message-card="${card.id}"]`
+        )
+      ).toHaveCount(1);
+      if (card.text) {
+        if (message != null && card.text.includes(message)) {
+          throw new Error(
+            `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.text}'`
+          );
+        }
+        await expect(
+          page.locator(
+            `[data-test-message-idx="${index}"][data-test-message-card="${card.id}"]`
+          )
+        ).toContainText(card.text);
+      }
+    } else {
+      await expect(
+        page.locator(
+          `[data-test-message-idx="${index}"][data-test-message-card]`
+        )
+      ).toHaveCount(0);
+    }
+  }
+}
+
 interface RoomAssertions {
-  joinedRooms?: string[];
+  joinedRooms?: { name: string; encrypted?: boolean }[];
   invitedRooms?: { name: string; sender: string }[];
 }
 
@@ -44,11 +154,24 @@ export async function assertRooms(page: Page, rooms: RoomAssertions) {
       page.locator('[data-test-joined-room]'),
       `${rooms.joinedRooms.length} joined room(s) are displayed`
     ).toHaveCount(rooms.joinedRooms.length);
-    for (let name of rooms.joinedRooms) {
+    for (let { name, encrypted } of rooms.joinedRooms) {
       await expect(
         page.locator(`[data-test-joined-room="${name}"]`),
         `the joined room '${name}' is displayed`
       ).toHaveCount(1);
+      if (encrypted) {
+        await expect(
+          page.locator(
+            `[data-test-joined-room="${name}"] [data-test-encrypted-room]`
+          )
+        ).toHaveCount(1);
+      } else {
+        await expect(
+          page.locator(
+            `[data-test-joined-room="${name}"] [data-test-encrypted-room]`
+          )
+        ).toHaveCount(0);
+      }
     }
   } else {
     await expect(

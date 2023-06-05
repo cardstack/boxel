@@ -8,7 +8,7 @@ import {
   TestRealmAdapter,
   TestRealm,
   cleanWhiteSpace,
-  setupMockLocalRealm,
+  setupLocalIndexing,
 } from '../helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { shimExternals } from '@cardstack/host/lib/externals';
@@ -17,7 +17,7 @@ module('Integration | card-prerender', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
   setupRenderingTest(hooks);
-  setupMockLocalRealm(hooks);
+  setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
     async () => await Loader.import(`${baseRealm.url}card-api`)

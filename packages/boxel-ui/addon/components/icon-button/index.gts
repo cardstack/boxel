@@ -53,7 +53,7 @@ const IconButton: TemplateOnlyComponent<Signature> = <template>
       padding: 0;
       background: none;
       border: 1px solid transparent;
-      z-index: 1;
+      z-index: 0;
     }
 
     button:hover {

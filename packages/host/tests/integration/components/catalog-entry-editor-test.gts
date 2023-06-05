@@ -10,7 +10,7 @@ import {
   TestRealm,
   TestRealmAdapter,
   testRealmURL,
-  setupMockLocalRealm,
+  setupLocalIndexing,
 } from '../../helpers';
 import { waitUntil, waitFor, fillIn, click } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -23,7 +23,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
   setupRenderingTest(hooks);
-  setupMockLocalRealm(hooks);
+  setupLocalIndexing(hooks);
 
   hooks.beforeEach(async function () {
     // this seeds the loader used during index which obtains url mappings
@@ -792,7 +792,11 @@ module('Integration | catalog-entry-editor', function (hooks) {
     await fillIn('[data-test-field="quantity"] input', '2');
     await fillIn('[data-test-field="price"] input', '150');
 
-    await click('[data-test-field="vendor"] [data-test-create-new]');
+    await click('[data-test-choose-card]');
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor('[data-test-card-catalog-modal] [data-test-create-new]');
+
+    await click('[data-test-card-catalog-modal] [data-test-create-new]');
     await waitFor('[data-test-create-new-card="Vendor"]');
     await fillIn('[data-test-field="company"] input', 'Big Tech');
 
