@@ -1,6 +1,8 @@
 import { tracked } from '@glimmer/tracking';
 import { Resource } from 'ember-resources/core';
+// @ts-ignore
 import { enqueueTask, restartableTask } from 'ember-concurrency';
+// @ts-ignore
 import { registerDestructor } from '@ember/destroyable';
 
 declare global {
@@ -16,7 +18,7 @@ const METAMASK_ERROR_CODES = {
 
 export const DEFAULT_CHAIN_ID = -1; //not a valid chain id
 
-export class MetaMaskResource extends Resource {
+class MetamaskResource extends Resource {
   @tracked connected = false;
   @tracked chainId = DEFAULT_CHAIN_ID; // the chain id of the metamask connection (not the card)
 
@@ -51,7 +53,7 @@ export class MetaMaskResource extends Resource {
       return accounts.length > 0;
     } catch (e: any) {
       if (e.code === METAMASK_ERROR_CODES.user_rejected) {
-        return [];
+        return false;
       } else {
         throw e;
       }
@@ -113,4 +115,8 @@ export class MetaMaskResource extends Resource {
       }
     }
   });
+}
+
+export function getMetamaskResource(parent: object, arrowFn: () => void) {
+  return MetamaskResource.from(parent, arrowFn) as MetamaskResource;
 }

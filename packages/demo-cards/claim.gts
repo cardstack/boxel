@@ -7,9 +7,11 @@ import {
   Component,
   linksTo,
 } from 'https://cardstack.com/base/card-api';
+import {
+  getMetamaskResource,
+  DEFAULT_CHAIN_ID,
+} from './utils/resources/metamask';
 import { Button, CardContainer, FieldContainer } from '@cardstack/boxel-ui';
-// @ts-ignore
-import { MetamaskResource, DEFAULT_CHAIN_ID } from 'metamask-resource';
 // @ts-ignore
 import { enqueueTask, restartableTask } from 'ember-concurrency';
 // @ts-ignore
@@ -29,7 +31,7 @@ class Isolated extends Component<typeof Claim> {
       <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
       {{#if this.connectedAndSameChain}}
         <Button {{on 'click' this.claim}}>
-          {{#if this.metamask.doClaim.isRunning}}
+          {{#if this.doClaim.isRunning}}
             Claiming...
           {{else}}
             Claim
@@ -49,7 +51,9 @@ class Isolated extends Component<typeof Claim> {
 
   // chainId is not explicitly passed to resource
   // but, the resource is recreated everytime this.chainId changes
-  metamask = MetamaskResource.from(this, { chainId: this.chainId });
+  metamask = getMetamaskResource(this, () => {
+    chainId: this.chainId;
+  });
 
   get connectedAndSameChain() {
     return this.chainId == this.metamask.chainId && this.metamask.connected;
@@ -60,9 +64,11 @@ class Isolated extends Component<typeof Claim> {
     return this.args.model.chain?.chainId ?? DEFAULT_CHAIN_ID;
   }
 
+  private doClaim = restartableTask(async () => {});
+
   @action
   private claim() {
-    this.metamask.doClaim.perform();
+    this.doClaim.perform();
   }
 
   @action

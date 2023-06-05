@@ -24,7 +24,8 @@ import * as flat from 'flat';
 import * as lodash from 'lodash';
 import * as tracked from 'tracked-built-ins';
 import * as dateFns from 'date-fns';
-import * as metamaskResource from '../resources/metamask';
+import * as emberResourcesCore from 'ember-resources/core';
+import * as emberDestroyable from '@ember/destroyable';
 
 export function shimExternals(loader: Loader = Loader.getLoader()) {
   loader.shimModule('@cardstack/runtime-common', runtime);
@@ -58,7 +59,8 @@ export function shimExternals(loader: Loader = Loader.getLoader()) {
   loader.shimModule('lodash', lodash);
   loader.shimModule('tracked-built-ins', tracked);
   loader.shimModule('date-fns', dateFns);
-  loader.shimModule('metamask-resource', metamaskResource);
+  loader.shimModule('ember-resources/core', emberResourcesCore);
+  loader.shimModule('@ember/destroyable', emberDestroyable);
 }
 
 shimExternals();
