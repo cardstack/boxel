@@ -109,9 +109,10 @@ class MetamaskResource extends Resource {
           params: [{ chainId: hexChainId }],
         });
         this.chainId = chainId;
-        this.connected = await this.isMetamaskConnected();
+        this.connected = true;
         return;
       }
+      this.connected = await this.isMetamaskConnected();
     } catch (e: any) {
       if (e.code === METAMASK_ERROR_CODES.user_rejected) {
         return;
