@@ -3,7 +3,6 @@
 
 const { Webpack } = require('@embroider/webpack');
 const EmberAddon = require('ember-cli/lib/broccoli/ember-addon');
-// eslint-disable-next-line node/no-missing-require
 const { GlimmerScopedCSSWebpackPlugin } = require('glimmer-scoped-css/webpack');
 
 // const { maybeEmbroider } = require('@embroider/test-setup');
@@ -49,7 +48,6 @@ module.exports = function (defaults) {
       resolveLoader: {
         alias: {
           'glimmer-scoped-css/virtual-loader': require.resolve(
-            // eslint-disable-next-line node/no-missing-require
             'glimmer-scoped-css/virtual-loader'
           ),
         },
