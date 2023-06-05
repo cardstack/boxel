@@ -5,9 +5,10 @@ import {
   field,
   StringCard,
   Component,
+  linksTo,
 } from 'https://cardstack.com/base/card-api';
+import { getMetamaskResource } from './utils/resources/metamask';
 import { Button, CardContainer, FieldContainer } from '@cardstack/boxel-ui';
-import { tracked } from '@glimmer/tracking';
 // @ts-ignore
 import { enqueueTask, restartableTask } from 'ember-concurrency';
 // @ts-ignore
@@ -15,15 +16,7 @@ import { on } from '@ember/modifier';
 // @ts-ignore
 import { action } from '@ember/object';
 
-declare global {
-  interface Window {
-    ethereum: any;
-  }
-}
-
 class Isolated extends Component<typeof Claim> {
-  @tracked connected: any;
-
   <template>
     <CardContainer class='demo-card' @displayBoundaries={{true}}>
       <FieldContainer @label='Module Address.'><@fields.moduleAddress
@@ -33,7 +26,7 @@ class Isolated extends Component<typeof Claim> {
       <FieldContainer @label='Explanation'><@fields.explanation
         /></FieldContainer>
       <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
-      {{#if this.connected}}
+      {{#if this.connectedAndSameChain}}
         <Button {{on 'click' this.claim}}>
           {{#if this.doClaim.isRunning}}
             Claiming...
@@ -43,7 +36,7 @@ class Isolated extends Component<typeof Claim> {
         </Button>
       {{else}}
         <Button {{on 'click' this.connectMetamask}}>
-          {{#if this.doConnectMetamask.isRunning}}
+          {{#if this.metamask.doConnectMetamask.isRunning}}
             Connecting...
           {{else}}
             Connect
@@ -53,92 +46,31 @@ class Isolated extends Component<typeof Claim> {
     </CardContainer>
   </template>
 
-  constructor(owner: unknown, args: any) {
-    super(owner, args);
-    this.initialize.perform();
-    if (window.ethereum) {
-      window.ethereum.on('chainChanged', (chainId: string) => {
-        this.connected =
-          parseInt(chainId, 16) == this.args.model.chain?.chainId;
-      });
-    }
-  }
-  private initialize = enqueueTask(async () => {
-    let isSameNetwork = this.isSameNetwork();
-    let isConnected = await this.isMetamaskConnected();
-    this.connected = isConnected && isSameNetwork;
+  // chainId is not explicitly passed to resource
+  // but, the resource is recreated everytime this.chainId changes
+  metamask = getMetamaskResource(this, () => {
+    this.chainId;
   });
 
-  isSameNetwork() {
-    let metamaskChainId = this.getChainId();
-    return this.args.model.chain?.chainId == metamaskChainId;
+  get connectedAndSameChain() {
+    return this.chainId == this.metamask.chainId && this.metamask.connected;
   }
 
-  isMetamaskInstalled() {
-    return window.ethereum !== 'undefined';
+  // the chain id data of the card itself
+  get chainId() {
+    return this.args.model.chain?.chainId;
   }
 
-  async isMetamaskConnected() {
-    try {
-      if (!this.isMetamaskInstalled()) {
-        return false;
-      }
-      let accounts = await window.ethereum.request({ method: 'eth_accounts' });
-      return accounts.length > 0;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  private doConnectMetamask = restartableTask(async () => {
-    try {
-      let isSameNetwork = this.isSameNetwork();
-      if (isSameNetwork) {
-        const accounts = await window.ethereum.request({
-          method: 'eth_requestAccounts',
-        });
-        if (accounts.length > 0) {
-          this.connected = true;
-        }
-        //TODO: if user closes it says already processing eth account
-      } else {
-        let hexChainId = '0x' + this.args.model.chain?.chainId.toString(16);
-        await window.ethereum.request({
-          method: 'wallet_switchEthereumChain',
-          params: [{ chainId: hexChainId }],
-        });
-      }
-      return true;
-    } catch (e) {
-      return false;
-    }
-  });
-
-  @action
-  private connectMetamask() {
-    this.doConnectMetamask.perform();
-  }
-
-  getChainId() {
-    try {
-      if (!this.isMetamaskInstalled()) {
-        return -1;
-      }
-      let hexChainId = window.ethereum.chainId;
-      return parseInt(hexChainId, 16);
-    } catch (e) {
-      return -1;
-    }
-  }
-
-  private doClaim = restartableTask(async () => {
-    console.log('claiming');
-    return true;
-  });
+  private doClaim = restartableTask(async () => {});
 
   @action
   private claim() {
     this.doClaim.perform();
+  }
+
+  @action
+  private connectMetamask() {
+    this.metamask.doConnectMetamask.perform(this.chainId);
   }
 }
 
@@ -149,7 +81,7 @@ export class Claim extends Card {
   @field explanation = contains(StringCard);
   @field signature = contains(StringCard);
   @field encoding = contains(StringCard);
-  @field chain = contains(Chain);
+  @field chain = linksTo(() => Chain);
   @field title = contains(StringCard, {
     computeVia: function (this: Claim) {
       return `Claim for ${this.safeAddress}`;
