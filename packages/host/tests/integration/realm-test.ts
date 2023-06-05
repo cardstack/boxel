@@ -128,7 +128,7 @@ module('Integration | realm', function (hooks) {
             `${testRealmURL}dir/empty.json`
           ),
           realmInfo: {
-            name: "Unnamed Workspace"
+            name: 'Unnamed Workspace',
           },
           realmURL: testRealmURL,
         },
@@ -320,7 +320,7 @@ module('Integration | realm', function (hooks) {
             `${testRealmURL}dir/mango.json`
           ),
           realmInfo: {
-            name: "Unnamed Workspace"
+            name: 'Unnamed Workspace',
           },
           realmURL: testRealmURL,
         },
@@ -624,7 +624,7 @@ module('Integration | realm', function (hooks) {
           },
           lastModified: adapter.lastModified.get(`${testRealmURL}Pet/1.json`),
           realmInfo: {
-            name: "Unnamed Workspace"
+            name: 'Unnamed Workspace',
           },
           realmURL: testRealmURL,
         },
@@ -649,7 +649,7 @@ module('Integration | realm', function (hooks) {
               `${testRealmURL}dir/owner.json`
             ),
             realmInfo: {
-              name: "Unnamed Workspace"
+              name: 'Unnamed Workspace',
             },
             realmURL: testRealmURL,
           },
@@ -909,7 +909,7 @@ module('Integration | realm', function (hooks) {
             `${testRealmURL}ski-trip.json`
           ),
           realmInfo: {
-            name: "Unnamed Workspace"
+            name: 'Unnamed Workspace',
           },
           realmURL: testRealmURL,
         },
@@ -1061,7 +1061,7 @@ module('Integration | realm', function (hooks) {
             `${testRealmURL}dir/mango.json`
           ),
           realmInfo: {
-            name: "Unnamed Workspace"
+            name: 'Unnamed Workspace',
           },
           realmURL: testRealmURL,
         },
@@ -1086,8 +1086,8 @@ module('Integration | realm', function (hooks) {
               `${testRealmURL}dir/mariko.json`
             ),
             realmInfo: {
-            name: "Unnamed Workspace"
-          },
+              name: 'Unnamed Workspace',
+            },
             realmURL: testRealmURL,
           },
           links: {
@@ -1567,7 +1567,7 @@ module('Integration | realm', function (hooks) {
               `${testRealmURL}dir/mango.json`
             ),
             realmInfo: {
-              name: "Unnamed Workspace"
+              name: 'Unnamed Workspace',
             },
             realmURL: testRealmURL,
           },
@@ -1591,7 +1591,7 @@ module('Integration | realm', function (hooks) {
               `${testRealmURL}dir/mariko.json`
             ),
             realmInfo: {
-              name: "Unnamed Workspace"
+              name: 'Unnamed Workspace',
             },
             realmURL: testRealmURL,
           },
@@ -1625,7 +1625,7 @@ module('Integration | realm', function (hooks) {
               `${testRealmURL}dir/vanGogh.json`
             ),
             realmInfo: {
-              name: "Unnamed Workspace"
+              name: 'Unnamed Workspace',
             },
             realmURL: testRealmURL,
           },

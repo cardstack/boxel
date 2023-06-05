@@ -367,10 +367,13 @@ export class CurrentRun {
 
       //Get realm info
       if (!this.#realmInfo) {
-        let realmInfoResponse = await this.loader.fetch(`${this.realmURL}_info`, { headers: { Accept: SupportedMimeType.RealmInfo }});
-        this.#realmInfo = (await realmInfoResponse.json())?.data?.attributes;  
+        let realmInfoResponse = await this.loader.fetch(
+          `${this.realmURL}_info`,
+          { headers: { Accept: SupportedMimeType.RealmInfo } }
+        );
+        this.#realmInfo = (await realmInfoResponse.json())?.data?.attributes;
       }
-      
+
       // prepare the document for index serialization
       Object.values(data.data.relationships ?? {}).forEach(
         (rel) => delete (rel as Relationship).data
@@ -378,7 +381,11 @@ export class CurrentRun {
       doc = merge(data, {
         data: {
           id: instanceURL.href,
-          meta: { lastModified: lastModified, realmInfo: this.#realmInfo, realmURL: this.realmURL.href },
+          meta: {
+            lastModified: lastModified,
+            realmInfo: this.#realmInfo,
+            realmURL: this.realmURL.href,
+          },
         },
       }) as SingleCardDocument;
       searchData = await api.searchDoc(card);
