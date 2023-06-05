@@ -39,6 +39,7 @@ jobs:
         run: pnpm run lint
         working-directory: packages/host
       - name: Lint Matrix
+        if: always()
         run: pnpm run lint
         working-directory: packages/matrix
       - name: Lint Realm Server

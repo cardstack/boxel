@@ -89,6 +89,9 @@ export {
   isCardCollectionDocument,
   isSingleCardDocument,
 } from './card-document';
+export {
+  sanitizeHtml
+} from './dompurify';
 
 import type { Card, CardBase } from 'https://cardstack.com/base/card-api';
 
@@ -155,7 +158,8 @@ export async function createNewCard<T extends Card>(
 export interface Actions {
   createCard: (
     ref: CardRef,
-    relativeTo: URL | undefined
+    relativeTo: URL | undefined,
+    opts?: { isLinkedCard?: boolean }
   ) => Promise<Card | undefined>;
   viewCard: (card: Card) => void;
   // more CRUD ops to come...

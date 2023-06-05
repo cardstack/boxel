@@ -15,6 +15,7 @@
   "pnpm": {
     "overrides": {
       "@types/eslint": "8.4.1",
+      "@embroider/util": "1.11.0",
       "jsesc": "^3.0.0",
       "ember-concurrency": "github:machty/ember-concurrency#c6ed562",
       "ember-modifier": "^4.1.0"

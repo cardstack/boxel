@@ -43,6 +43,7 @@ import type { Query } from '@cardstack/runtime-common/query';
 import { getSearchResults, type Search } from '../resources/search';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import perform from 'ember-concurrency/helpers/perform';
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 interface Signature {
   Args: {
@@ -51,10 +52,19 @@ interface Signature {
   };
 }
 
+export type OperatorModeState = {
+  stacks: Stack[];
+};
+
+export type Stack = {
+  items: StackItem[];
+};
+
 export type StackItem = {
   card: Card;
   format: Format;
   request?: Deferred<Card>;
+  isLinkedCard?: boolean;
 };
 
 export interface RenderedLinksToCard {
@@ -65,7 +75,6 @@ export interface RenderedLinksToCard {
 }
 
 export default class OperatorMode extends Component<Signature> {
-  stack: TrackedArray<StackItem>;
   //A variable to store value of card field
   //before in edit mode.
   cardFieldValues: WeakMap<Card, Map<string, any>> = new WeakMap<
@@ -74,6 +83,7 @@ export default class OperatorMode extends Component<Signature> {
   >();
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
+  @service declare operatorModeStateService: OperatorModeStateService;
   @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
 
   constructor(owner: unknown, args: any) {
@@ -82,14 +92,21 @@ export default class OperatorMode extends Component<Signature> {
     (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
     registerDestructor(this, () => {
       delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
+      this.operatorModeStateService.clearStack();
     });
 
-    this.stack = new TrackedArray([
-      {
+    // afterRender to prevent recomputation errors
+    schedule('afterRender', () => {
+      this.addToStack({
         card: this.args.firstCardInStack,
         format: 'isolated',
-      },
-    ]);
+      });
+    });
+  }
+
+  get stack() {
+    // We return the first one until we start supporting 2 stacks
+    return this.operatorModeStateService.state.stacks[0].items;
   }
 
   @action
@@ -108,57 +125,56 @@ export default class OperatorMode extends Component<Signature> {
   }
 
   @action addToStack(item: StackItem) {
-    this.stack.push(item);
+    this.operatorModeStateService.addItemToStack(item);
   }
 
   @action async edit(item: StackItem) {
     await this.saveCardFieldValues(item.card);
-    let newItem = this.setItem(item, 'edit', new Deferred());
-    this.stack = this.stack;
-
-    let updatedCard = await newItem.request?.promise;
-    if (updatedCard) {
-      this.addToStack({
-        card: updatedCard,
-        format: 'isolated',
-      });
-    }
+    this.updateItem(item, 'edit', new Deferred());
   }
 
-  @action setItem(item: StackItem, format: Format, request?: Deferred<Card>) {
-    let el = this.stack.find((stackItem) => stackItem.card.id === item.card.id);
-    if (!el) {
-      throw new Error(`${item.card} was not found in stack`);
-    }
-    let index = this.stack.indexOf(el);
+  @action updateItem(
+    item: StackItem,
+    format: Format,
+    request?: Deferred<Card>
+  ) {
     let newItem = {
       card: item.card,
       format,
       request,
     };
-    this.stack[index] = newItem;
+
+    this.operatorModeStateService.replaceItemInStack(item, newItem);
     return newItem;
   }
 
   @action async close(item: StackItem) {
     await this.rollbackCardFieldValues(item.card);
-    let index = this.stack.indexOf(item);
-    this.stack.splice(index);
+
+    this.operatorModeStateService.removeItemFromStack(item);
   }
 
   @action async cancel(item: StackItem) {
     await this.rollbackCardFieldValues(item.card);
-    this.setItem(item, 'isolated');
+    this.updateItem(item, 'isolated');
   }
 
   @action async save(item: StackItem) {
-    let { card, request } = item;
+    let { card, request, isLinkedCard } = item;
     await this.saveCardFieldValues(card);
     let updatedCard = await this.write.perform(card);
 
     if (updatedCard) {
       request?.fulfill(updatedCard);
-      this.stack.splice(this.stack.indexOf(item));
+
+      if (isLinkedCard) {
+        this.close(item); // closes the 'create new card' editor for linked card fields
+      } else {
+        this.operatorModeStateService.replaceItemInStack(item, {
+          card: updatedCard,
+          format: 'isolated',
+        });
+      }
     }
   }
 
@@ -192,7 +208,10 @@ export default class OperatorMode extends Component<Signature> {
   private publicAPI: Actions = {
     createCard: async (
       ref: CardRef,
-      relativeTo: URL | undefined
+      relativeTo: URL | undefined,
+      opts?: {
+        isLinkedCard?: boolean;
+      }
     ): Promise<Card | undefined> => {
       let doc = { data: { meta: { adoptsFrom: ref } } };
       let newCard = await this.cardService.createFromSerialized(
@@ -205,6 +224,7 @@ export default class OperatorMode extends Component<Signature> {
         card: newCard,
         format: 'edit',
         request: new Deferred(),
+        isLinkedCard: opts?.isLinkedCard,
       };
       this.addToStack(newItem);
       return await newItem.request?.promise;
@@ -306,10 +326,10 @@ export default class OperatorMode extends Component<Signature> {
   }
 
   @action
-  dismissStackedCardsAbove(stackIndex: number) {
+  async dismissStackedCardsAbove(stackIndex: number) {
     for (let i = this.stack.length - 1; i > stackIndex; i--) {
       let stackItem = this.stack[i];
-      this.close(stackItem);
+      await this.close(stackItem);
     }
   }
 

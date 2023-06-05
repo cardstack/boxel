@@ -16,11 +16,13 @@ import { TrackedMap } from 'tracked-built-ins';
 import debounce from 'lodash/debounce';
 import RouterService from '@ember/routing/router-service';
 import { marked } from 'marked';
-import { sanitize } from 'dompurify';
 import type CardService from '../services/card-service';
 import { type Card } from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
-import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
+import {
+  type LooseSingleCardDocument,
+  sanitizeHtml,
+} from '@cardstack/runtime-common';
 
 const { matrixURL } = ENV;
 export const eventDebounceMs = 300;
@@ -208,7 +210,7 @@ export default class MatrixService extends Service {
     body: string | undefined,
     card?: Card
   ): Promise<void> {
-    let html = body != null ? sanitize(marked(body)) : '';
+    let html = body != null ? sanitizeHtml(marked(body)) : '';
     let serializedCard: LooseSingleCardDocument | undefined;
     if (card) {
       serializedCard = await this.cardService.serializeCard(card);
@@ -227,7 +229,7 @@ export default class MatrixService extends Service {
   }
 
   async sendMarkdownMessage(roomId: string, markdown: string): Promise<void> {
-    let html = sanitize(marked(markdown));
+    let html = sanitizeHtml(marked(markdown));
     await this.client.sendHtmlMessage(roomId, markdown, html);
   }
 
