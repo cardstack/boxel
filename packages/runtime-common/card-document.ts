@@ -26,6 +26,10 @@ export type Relationship = {
   meta?: Record<string, any>;
 };
 
+export type RealmInfo = {
+  name: string;
+}
+
 export interface CardResource<Identity extends Unsaved = Saved> {
   id: Identity;
   type: 'card';
@@ -35,6 +39,8 @@ export interface CardResource<Identity extends Unsaved = Saved> {
   };
   meta: Meta & {
     lastModified?: number;
+    realmInfo?: RealmInfo;
+    realmURL?: string;
   };
   links?: {
     self?: string;

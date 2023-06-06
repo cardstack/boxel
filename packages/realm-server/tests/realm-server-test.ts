@@ -103,6 +103,10 @@ module('Realm Server', function (hooks) {
             module: `${testRealmURL}person`,
             name: 'Person',
           },
+          realmInfo: {
+            "name": "Test Realm"
+          },
+          realmURL: "http://127.0.0.1:4444/",
         },
         links: {
           self: `${testRealmHref}person-1`,

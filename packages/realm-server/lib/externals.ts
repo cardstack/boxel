@@ -5,7 +5,6 @@ import * as boxelUI from '@cardstack/boxel-ui';
 import * as flat from 'flat';
 import * as lodash from 'lodash';
 import * as dateFns from 'date-fns';
-import * as marked from 'marked';
 
 export function shimExternals(loader: Loader = Loader.getLoader()) {
   loader.shimModule('@cardstack/runtime-common', runtime);
@@ -88,9 +87,10 @@ export function shimExternals(loader: Loader = Loader.getLoader()) {
   });
   loader.shimModule('lodash', lodash);
   loader.shimModule('date-fns', dateFns);
+  loader.shimModule('@cardstack/cardpay-sdk', {});
   loader.shimModule('ember-resources/core', { Resource: class {} });
   loader.shimModule('@ember/destroyable', {});
-  loader.shimModule('marked', marked);
+  loader.shimModule('marked', { marked: () => {} });
 }
 
 shimExternals();
