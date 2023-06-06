@@ -345,7 +345,24 @@ export class CurrentRun {
       let api = await this.#loader.import<typeof CardAPI>(
         `${baseRealm.url}card-api`
       );
+      //Get realm info
+      if (!this.#realmInfo) {
+        let realmInfoResponse = await this.#loader.fetch(
+          `${this.realmURL}_info`,
+          { headers: { Accept: SupportedMimeType.RealmInfo } }
+        );
+        this.#realmInfo = (await realmInfoResponse.json())?.data?.attributes;
+      }
+
       let res = { ...resource, ...{ id: instanceURL.href } };
+      //Realm info may be used by a card to render field values.
+      //Example: catalog-etry-card
+      merge(res, {
+        meta: {
+          realmInfo: this.#realmInfo,
+          realmURL: this.realmURL,
+        },
+      });
       let card = await api.createFromSerialized<typeof Card>(
         res,
         { data: res },
@@ -364,16 +381,6 @@ export class CurrentRun {
       });
       cardType = Reflect.getPrototypeOf(card)?.constructor as typeof Card;
       let data = api.serializeCard(card, { includeComputeds: true });
-
-      //Get realm info
-      if (!this.#realmInfo) {
-        let realmInfoResponse = await this.loader.fetch(
-          `${this.realmURL}_info`,
-          { headers: { Accept: SupportedMimeType.RealmInfo } }
-        );
-        this.#realmInfo = (await realmInfoResponse.json())?.data?.attributes;
-      }
-
       // prepare the document for index serialization
       Object.values(data.data.relationships ?? {}).forEach(
         (rel) => delete (rel as Relationship).data
