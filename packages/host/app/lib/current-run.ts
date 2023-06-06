@@ -385,6 +385,8 @@ export class CurrentRun {
       Object.values(data.data.relationships ?? {}).forEach(
         (rel) => delete (rel as Relationship).data
       );
+      //Add again realm info and realm URL here
+      //since we won't get it from serializeCard.
       doc = merge(data, {
         data: {
           id: instanceURL.href,
