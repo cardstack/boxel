@@ -53,13 +53,14 @@ export default class OperatorModeStateService extends Service {
   }
 
   persist() {
-    let cardController = getOwner(this).lookup('controller:card') as any;
+    let cardController = getOwner(this)!.lookup('controller:card') as any;
     if (!cardController) {
       throw new Error(
         'OperatorModeStateService must be used in the context of a CardController'
       );
     }
 
+    // Setting this property will trigger a query param update on the controller, which will reload the route
     cardController.operatorModeState = this.serialize();
   }
 

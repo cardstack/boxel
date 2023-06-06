@@ -23,7 +23,6 @@ import SearchSheet, {
 import { restartableTask } from 'ember-concurrency';
 import {
   Deferred,
-  identifyCard,
   baseCardRef,
   chooseCard,
   type Actions,
