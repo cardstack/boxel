@@ -26,6 +26,7 @@ export class MatrixSearchIndex {
   // A card instance URL probably looks like:
   // http://matrix-realm-server/roomId/eventId
   #instances: URLMap<MatrixSearchEntryWithErrors> = new URLMap();
+  #roomId: string;
   #getClient: () => MatrixClient;
   #eventBindings: [EmittedEvents, (...arg: any[]) => void][];
   #modules: Map<string, ModuleWithErrors> = new Map();
@@ -38,8 +39,10 @@ export class MatrixSearchIndex {
     moduleErrors: 0,
   };
 
-  // TODO add room ID
-  constructor(getClient: () => MatrixClient) {
+  // we pass a function to get the matrix client instead of the client directly
+  // as the client might actually change as we handle token refresh
+  constructor(getClient: () => MatrixClient, roomId: string) {
+    this.#roomId = roomId;
     this.#getClient = getClient;
     let didReceiveMessages: () => void;
     this.#receivedMessages = new Promise<void>(
@@ -67,9 +70,12 @@ export class MatrixSearchIndex {
     // and unbind these events programmatically--this way if we add a new event
     // we won't forget to unbind it.
     this.#eventBindings = [
-      [RoomMemberEvent.Membership, Membership.onMembership(this.#context)],
-      [RoomEvent.Name, Room.onRoomName(this.#context)],
-      [RoomEvent.Timeline, Timeline.onTimeline(this.#context)],
+      [
+        RoomMemberEvent.Membership,
+        Membership.onMembership(this.#context, this.#roomId),
+      ],
+      [RoomEvent.Name, Room.onRoomName(this.#context, this.#roomId)],
+      [RoomEvent.Timeline, Timeline.onTimeline(this.#context, this.#roomId)],
     ];
   }
 

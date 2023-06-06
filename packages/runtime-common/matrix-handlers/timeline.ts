@@ -3,7 +3,7 @@ import { type MatrixEvent } from 'matrix-js-sdk';
 import { Context, setRoomMeta, Event } from './index';
 import { eventDebounceMs } from '../index';
 
-export function onTimeline(context: Context) {
+export function onTimeline(context: Context, onlyForRoomId?: string) {
   return (e: MatrixEvent) => {
     let { event } = e;
     if (
@@ -20,6 +20,9 @@ export function onTimeline(context: Context) {
             2
           )}`
         );
+      }
+      if (onlyForRoomId && roomId !== onlyForRoomId) {
+        return;
       }
       setRoomMeta(context, roomId, { encrypted: true });
     } else {

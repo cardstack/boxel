@@ -3,88 +3,69 @@ import {
   synapseStart,
   synapseStop,
   registerUser,
-  createPrivateRoom,
+  joinedRooms,
   sendMessage,
   type SynapseInstance,
   type Credentials,
 } from '@cardstack/matrix/docker/synapse';
-import { join } from 'path';
-import { removeSync, readJSONSync } from 'fs-extra';
 import { MatrixRealmManager } from '../matrix-realm-manager';
 
 const matrixServerURL = 'http://localhost:8008';
-const roomsFile = join(__dirname, 'data', 'rooms.json');
-process.env.INDEX_USER_SECRET = `shh! it's a secret`;
-process.env.ROOMS_FILE = roomsFile;
 
 module('Matrix Realm Manager', function (hooks) {
   let synapse: SynapseInstance;
+  let indexer: Credentials;
   let user: Credentials;
   let manager: MatrixRealmManager;
 
-  // TODO set rooms file to a test version and cleanup in between each test
   hooks.beforeEach(async () => {
-    removeSync(roomsFile);
     synapse = await synapseStart();
-    process.env.MATRIX_REGISTRATION_SECRET = synapse.registrationSecret;
+    indexer = await registerUser(synapse, 'indexer', 'pass');
+    process.env.MATRIX_INDEX_USERID = indexer.userId;
+    process.env.MATRIX_INDEX_PASSWORD = 'pass';
     user = await registerUser(synapse, 'user', 'pass');
   });
 
   hooks.afterEach(async () => {
-    manager?.shutdown();
+    await manager?.shutdown();
     await synapseStop(synapse.synapseId);
   });
 
   test('it can add a new room', async function (assert) {
     manager = new MatrixRealmManager(matrixServerURL);
-    await manager.ready;
+    await manager.ready();
 
-    let { roomId, realm, indexUserId } = await manager.createPrivateRoom(
-      user.accessToken,
-      'Room 1'
-    );
-    // TODO figure out better assertions
-    assert.ok(roomId, "it didn't blow up");
-    assert.ok(realm, "it didn't blow up");
+    let realm = await manager.createPrivateRoom(user.accessToken, 'Room 1');
+    let userRooms = await joinedRooms(synapse, user.accessToken);
+    let indexerRooms = await joinedRooms(synapse, indexer.accessToken);
+    assert.strictEqual(userRooms.length, 1);
+    assert.deepEqual(userRooms, indexerRooms);
+    assert.strictEqual(realm.roomId, indexerRooms[0]);
 
-    assert.deepEqual(readJSONSync(roomsFile), {
-      [roomId]: {
-        userId: indexUserId,
-      },
-    });
+    assert.strictEqual(manager.realms.size, 1);
+    assert.ok(manager.realms.has(indexerRooms[0]));
   });
 
-  // TODO: START HERE ON TUES need to backtrack a bit--this test shows that we can only have one
-  // matrix client sync per node process
-  QUnit.only('it can add a multiple rooms', async function (assert) {
+  test('it can add a multiple rooms', async function (assert) {
     manager = new MatrixRealmManager(matrixServerURL);
-    await manager.ready;
+    await manager.ready();
 
-    let {
-      roomId: room1Id,
-      realm: realm1,
-      indexUserId: room1UserId,
-    } = await manager.createPrivateRoom(user.accessToken, 'Room 1');
-    // TODO figure out better assertions
-    assert.ok(realm1, "it didn't blow up");
+    let realm1 = await manager.createPrivateRoom(user.accessToken, 'Room 1');
+    let realm2 = await manager.createPrivateRoom(user.accessToken, 'Room 2');
 
-    let {
-      roomId: room2Id,
-      realm: realm2,
-      indexUserId: room2UserId,
-    } = await manager.createPrivateRoom(user.accessToken, 'Room 2');
-    // TODO figure out better assertions
-    assert.ok(realm2, "it didn't blow up");
+    let userRooms = await joinedRooms(synapse, user.accessToken);
+    let indexerRooms = await joinedRooms(synapse, indexer.accessToken);
+    assert.strictEqual(userRooms.length, 2);
+    assert.deepEqual(userRooms, indexerRooms);
+    assert.strictEqual(realm1.roomId, indexerRooms[0]);
+    assert.strictEqual(realm2.roomId, indexerRooms[1]);
 
-    assert.deepEqual(readJSONSync(roomsFile), {
-      [room1Id]: {
-        userId: room1UserId,
-      },
-      [room2Id]: {
-        userId: room2UserId,
-      },
-    });
+    assert.strictEqual(manager.realms.size, 2);
+    assert.deepEqual([...manager.realms.keys()], indexerRooms);
   });
 
+  // TODO HASSAN START HERE ON WED
   QUnit.skip('it start indexing previously created rooms');
+  QUnit.skip('it can index a matrix message');
+  QUnit.skip('it can index thru a paginated series of message events'); // TODO we should include a ready promise for this too...
 });

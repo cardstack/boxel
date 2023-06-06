@@ -3,10 +3,13 @@ import { type MatrixEvent, type RoomMember } from 'matrix-js-sdk';
 import { Context, RoomInvite, RoomEvent } from './index';
 import { eventDebounceMs } from '../index';
 
-export function onMembership(context: Context) {
+export function onMembership(context: Context, onlyForRoomId?: string) {
   return (e: MatrixEvent, member: RoomMember) => {
     let { event } = e;
     let { roomId, userId } = member;
+    if (onlyForRoomId && roomId !== onlyForRoomId) {
+      return;
+    }
     let members = context.roomMembers.get(roomId);
     if (!members) {
       members = new context.mapClazz();

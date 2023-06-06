@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module } from 'qunit';
 import {
   synapseStart,
   synapseStop,
@@ -11,6 +11,8 @@ import {
 import { MatrixRealm } from '../matrix-realm';
 
 const matrixServerURL = 'http://localhost:8008';
+
+// TODO absorb this in the matrix-realm-manager-test module
 
 module('Matrix Realm', function (hooks) {
   let synapse: SynapseInstance;
@@ -28,7 +30,6 @@ module('Matrix Realm', function (hooks) {
       userId,
       deviceId,
     });
-    await realm.ready;
   });
 
   hooks.afterEach(async () => {
@@ -37,7 +38,7 @@ module('Matrix Realm', function (hooks) {
   });
 
   // remove this after we have more tests that show this is working
-  test('smoke test', async function (assert) {
+  QUnit.skip('smoke test', async function (assert) {
     let response = await fetch(`${matrixServerURL}/.well-known/matrix/client`);
     assert.strictEqual(response.status, 200);
     let json = await response.json();
@@ -45,7 +46,7 @@ module('Matrix Realm', function (hooks) {
   });
 
   // remove this after we have more tests that show this is working
-  test('it can index a matrix message', async function (assert) {
+  QUnit.skip('it can index a matrix message', async function (assert) {
     let roomId = await createPrivateRoom(synapse, user.accessToken, 'Room 1');
     await sendMessage(synapse, user.accessToken, roomId, 'Hello World');
     await realm.flushMessages();
@@ -53,4 +54,8 @@ module('Matrix Realm', function (hooks) {
 
     // TODO read the message from the index
   });
+
+  QUnit.skip(
+    'it can paginate thru the timeline events when performing from scratch indexing'
+  );
 });

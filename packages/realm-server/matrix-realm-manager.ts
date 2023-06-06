@@ -1,53 +1,50 @@
-import { createHash } from 'node:crypto';
+import './e2ee';
 import { Deferred } from '@cardstack/runtime-common';
-import {
-  existsSync,
-  ensureFileSync,
-  readJSONSync,
-  writeJSONSync,
-} from 'fs-extra';
-import { join } from 'path';
-import {
-  registerUser,
-  createPrivateRoom,
-  type Credentials,
-} from '@cardstack/matrix/docker/synapse';
+import { createPrivateRoom } from '@cardstack/matrix/docker/synapse';
 import { MatrixRealm } from './matrix-realm';
-import { createClient, type IAuthData } from 'matrix-js-sdk';
-
-// TODO this probably belongs in a DB. Note that we can't really use matrix to
-// discover all the rooms to index since we are leveraging private rooms whose
-// index usernames are based on the room name. matrix will not leak private room
-// names to requests whose access code does not correspond to a member of the
-// room--so we have to store the rooms we are interested indexing outside of
-// matrix.
-function getRoomsFile() {
-  return process.env.ROOMS_FILE ?? join(__dirname, 'data', 'rooms.json');
-}
+import {
+  createClient,
+  RoomEvent,
+  RoomMemberEvent,
+  type IAuthData,
+  type MatrixClient,
+  type MatrixEvent,
+  type RoomMember,
+  type EmittedEvents,
+  type Room as MatrixRoom,
+} from 'matrix-js-sdk';
 
 interface RoomOptions {
   invite?: string[];
   topic?: string;
 }
 
-interface Room {
-  roomId: string;
-  credentials: Credentials;
-  realm: MatrixRealm;
-}
-
 export class MatrixRealmManager {
+  #client: MatrixClient;
   #matrixServerURL;
-  #rooms: Room[] = [];
+  #realms: Map<string, MatrixRealm> = new Map();
   #startedUp = new Deferred<void>();
+  #eventBindings: [EmittedEvents, (...arg: any[]) => void][];
+  #inviteQueue: string[] = []; // roomId's
+  #flushInvites: Promise<void> | undefined;
+  #joinedRooms: string[] = [];
 
   constructor(matrixServerURL: string) {
     this.#matrixServerURL = matrixServerURL;
+    this.#client = createClient({ baseUrl: matrixServerURL });
+    this.#eventBindings = [
+      [RoomEvent.Name, this.#onRoom],
+      [RoomMemberEvent.Membership, this.#onInvite],
+    ];
 
     this.#startedUp.fulfill((() => this.#startup())());
   }
 
-  get ready(): Promise<void> {
+  get realms() {
+    return this.#realms;
+  }
+
+  ready(): Promise<void> {
     return this.#startedUp.promise;
   }
 
@@ -55,135 +52,163 @@ export class MatrixRealmManager {
     accessToken: string,
     name: string,
     opts?: RoomOptions
-  ): Promise<{ roomId: string; realm: MatrixRealm; indexUserId: string }> {
-    const indexUserSecret = process.env.INDEX_USER_SECRET;
-    if (indexUserSecret == null) {
-      throw new Error(`the env var INDEX_USER_SECRET is not set`);
+  ): Promise<MatrixRealm> {
+    let indexUserId = this.#client.getUserId();
+    if (!indexUserId) {
+      throw new Error(`bug: cannot determine userId from matrix client`);
     }
-    const registrationSecret = process.env.MATRIX_REGISTRATION_SECRET;
-    if (registrationSecret == null) {
-      throw new Error(`the env var MATRIX_REGISTRATION_SECRET is not set`);
-    }
-    let indexUsername = `realm_index__${encodeURIComponent(name)
-      .toLowerCase()
-      .replace(/%/g, '_')}`;
-    const sha256 = createHash('sha256');
-    let indexPassword = sha256
-      .update(indexUsername)
-      .update(indexUserSecret)
-      .digest('hex');
-    let credentials = await registerUser(
-      { baseUrl: this.#matrixServerURL, registrationSecret },
-      indexUsername,
-      indexPassword
-    );
-
     let roomId = await createPrivateRoom(
       { baseUrl: this.#matrixServerURL },
       accessToken,
       name,
-      [credentials.userId, ...(opts?.invite ?? [])],
+      [indexUserId, ...(opts?.invite ?? [])],
       opts?.topic
     );
-    let realm = new MatrixRealm({
-      matrixServerURL: this.#matrixServerURL,
-      ...credentials,
-    });
-    await realm.ready;
-    serializeNewRoom(roomId, credentials.userId);
-    this.#rooms.push({ roomId, credentials, realm });
-    return {
-      roomId,
-      realm,
-      indexUserId: credentials.userId, // used by tests
-    };
+    let realm = new MatrixRealm(roomId, () => this.#client);
+    this.#realms.set(roomId, realm);
+    await this.#waitUntilJoinedRoom(roomId);
+    return realm;
   }
 
-  shutdown() {
-    for (let { realm } of this.#rooms) {
+  async shutdown() {
+    await this.#flushInvites;
+    this.#unbindEventListeners();
+    for (let realm of this.#realms.values()) {
       realm.shutdown();
+    }
+
+    // note that it takes up to an hour to actually end the process after
+    // shutdown() is called due to this bug in the matrix-js-sdk
+    // https://github.com/matrix-org/matrix-js-sdk/issues/2472 As a workaround,
+    // I identified the problematic timers (there are 2 of them) and we are
+    // patching matrix-js-sdk and using `unref()` to tell node that it is ok to
+    // exit the process if the problematic timers are still running.
+    this.#client.stopClient();
+  }
+
+  // a test utility to await for message events to be indexed
+  async flushMessages() {
+    for (let realm of this.#realms.values()) {
+      await realm.flushMessages();
+    }
+  }
+
+  // a test utility to await for initial room/membership events to be indexed
+  async flushRooms() {
+    for (let realm of this.#realms.values()) {
+      await realm.flushRooms();
     }
   }
 
   async #startup() {
-    await Promise.resolve();
-    const indexUserSecret = process.env.INDEX_USER_SECRET;
-    if (indexUserSecret == null) {
-      throw new Error(`the env var INDEX_USER_SECRET is not set`);
+    let userId = process.env.MATRIX_INDEX_USERID;
+    let password = process.env.MATRIX_INDEX_PASSWORD;
+    if (!userId) {
+      throw new Error(`The env var MATRIX_INDEX_USERID has not been set`);
     }
-    let rooms = getSerializedRooms();
-    for (let [roomId, { userId }] of Object.entries(rooms)) {
-      let client = createClient({ baseUrl: this.#matrixServerURL });
-      const sha256 = createHash('sha256');
-      let password = sha256
-        .update(userId.slice(1, userId.indexOf(':')))
-        .update(indexUserSecret)
-        .digest('hex');
-      let auth: IAuthData | undefined = await client.loginWithPassword(
-        userId,
-        password
+    if (!password) {
+      throw new Error(`The env var MATRIX_INDEX_PASSWORD has not been set`);
+    }
+
+    let auth: IAuthData | undefined = await this.#client.loginWithPassword(
+      userId,
+      password
+    );
+    if (!auth || !this.#client.isLoggedIn()) {
+      throw new Error(`could not authenticate index username '${userId}'`);
+    }
+    if (!auth.access_token || !auth.device_id) {
+      throw new Error(
+        `bug: matrix returned auth data with missing access token/device ID`
       );
-      if (!auth || !client.isLoggedIn()) {
-        throw new Error(
-          `could not authenticate index user '${userId}' for room ${roomId}`
-        );
+    }
+    this.#client = createClient({
+      baseUrl: this.#matrixServerURL,
+      accessToken: auth.access_token,
+      userId: auth.user_id,
+      deviceId: auth.device_id,
+    });
+
+    try {
+      await this.#client.initCrypto();
+    } catch (e) {
+      // when there are problems, these exceptions are hard to see so logging them explicitly
+      console.error(`Error initializing crypto`, e);
+      throw e;
+    }
+
+    // this lets us send messages to element clients (useful for testing).
+    // probably we wanna verify these unknown devices (when in an encrypted
+    // room). need to research how to do that as its undocumented API
+    this.#client.setGlobalErrorOnUnknownDevices(false);
+
+    await this.#client.startClient();
+    this.#bindEventListeners();
+
+    // TODO need to handle token refresh as our session is very long-lived
+
+    // TODO ON WEDNESDAY: one idea that is probably not bad is to get a list of
+    // all the joined rooms from the API and then use this.#waitUntilJoinedRoom
+    // to wait for the indexer to get ready
+  }
+
+  #onRoom = (room: MatrixRoom) => {
+    let { roomId } = room;
+    if (room.getMyMembership() === 'join') {
+      this.#joinedRooms.push(roomId);
+    }
+    if (!this.#realms.has(roomId)) {
+      let realm = new MatrixRealm(roomId, () => this.#client);
+      this.#realms.set(roomId, realm);
+    }
+  };
+
+  #onInvite = (_e: MatrixEvent, member: RoomMember) => {
+    if (
+      member.membership === 'invite' &&
+      member.userId === process.env.MATRIX_INDEX_USERID
+    ) {
+      this.#inviteQueue.push(member.roomId);
+      this.#drainInviteQueue();
+    }
+  };
+
+  async #drainInviteQueue() {
+    await this.#flushInvites;
+
+    let invitesDrained: () => void;
+    this.#flushInvites = new Promise((res) => (invitesDrained = res));
+    let invites = [...this.#inviteQueue];
+    this.#inviteQueue = [];
+    for (let roomId of invites) {
+      await this.#client.joinRoom(roomId);
+      this.#joinedRooms.push(roomId);
+    }
+    invitesDrained!();
+  }
+
+  async #waitUntilJoinedRoom(roomId: string) {
+    const timeout = Date.now() + 30 * 1000;
+    for (;;) {
+      if (this.#joinedRooms.includes(roomId)) {
+        return;
       }
-      if (!auth.access_token || !auth.device_id) {
-        throw new Error(
-          `bug: matrix returned auth data with missing access token/device ID`
-        );
+      if (Date.now() > timeout) {
+        throw new Error(`Timed out waiting to join room ${roomId}`);
       }
-      let credentials: Credentials = {
-        accessToken: auth.access_token,
-        deviceId: auth.device_id,
-        userId,
-        homeServer: this.#matrixServerURL,
-      };
-      let realm = new MatrixRealm({
-        matrixServerURL: this.#matrixServerURL,
-        accessToken: credentials.accessToken,
-        userId,
-        deviceId: credentials.deviceId,
-      });
-      await realm.ready;
-      this.#rooms.push({
-        roomId,
-        credentials,
-        realm,
-      });
+      await new Promise((res) => setTimeout(res, 100));
     }
   }
-}
 
-interface RoomsSerialization {
-  rooms: {
-    [roomId: string]: {
-      userId: string;
-    };
-  };
-}
-
-// how do we remove a room from the serialized rooms file--would we ever want to
-// do that? (this would mean that we are no longer interested in maintaining an
-// index for a room)
-function serializeNewRoom(roomId: string, userId: string) {
-  let rooms = getSerializedRooms();
-  rooms[roomId] = {
-    userId,
-  };
-  writeJSONSync(getRoomsFile(), rooms, { spaces: 2 });
-}
-
-function getSerializedRooms() {
-  let roomsFile = getRoomsFile();
-  if (!existsSync(roomsFile)) {
-    ensureFileSync(roomsFile);
-    writeJSONSync(roomsFile, { rooms: {} } as RoomsSerialization);
+  #bindEventListeners() {
+    for (let [event, handler] of this.#eventBindings) {
+      this.#client.on(event, handler);
+    }
   }
-  let serialized: RoomsSerialization = readJSONSync(roomsFile);
-  if (!serialized) {
-    serialized = { rooms: {} };
-    writeJSONSync(roomsFile, serialized, { spaces: 2 });
+
+  #unbindEventListeners() {
+    for (let [event, handler] of this.#eventBindings) {
+      this.#client.off(event, handler);
+    }
   }
-  return serialized.rooms;
 }

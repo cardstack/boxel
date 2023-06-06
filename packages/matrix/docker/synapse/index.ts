@@ -337,3 +337,20 @@ export async function createRegistrationToken(
     );
   }
 }
+
+export async function joinedRooms(
+  synapse: { baseUrl: string },
+  accessToken: string
+): Promise<string[]> {
+  let response = await fetch(
+    `${resolveMatrixURL(synapse.baseUrl)}/_matrix/client/v3/joined_rooms`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+
+  let json = await response.json();
+  return json.joined_rooms;
+}
