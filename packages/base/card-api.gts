@@ -1863,7 +1863,7 @@ async function _createFromSerialized<T extends CardBaseConstructor>(
     instance = new card({ id: resource.id }) as CardInstanceType<T>;
     instance[relativeTo] = _relativeTo;
     instance[realmInfo] = data?.meta?.realmInfo;
-    instance[realmURL] = data?.meta?.realmURL;
+    instance[realmURL] = data?.meta?.realmURL ? new URL(data.meta.realmURL) : undefined;
   }
   identityContexts.set(instance, identityContext);
   return await _updateFromSerialized(instance, resource, doc, identityContext);
