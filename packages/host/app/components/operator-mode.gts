@@ -48,7 +48,6 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 interface Signature {
   Args: {
     onClose: () => void;
-    updateOperatorModeStateQueryParams: () => void;
   };
 }
 
@@ -93,7 +92,6 @@ export default class OperatorMode extends Component<Signature> {
     registerDestructor(this, () => {
       delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
       this.operatorModeStateService.clearStack();
-      this.args.updateOperatorModeStateQueryParams();
     });
   }
 
@@ -119,8 +117,6 @@ export default class OperatorMode extends Component<Signature> {
 
   @action addToStack(item: StackItem) {
     this.operatorModeStateService.addItemToStack(item);
-
-    this.args.updateOperatorModeStateQueryParams();
   }
 
   @action async edit(item: StackItem) {
@@ -148,7 +144,6 @@ export default class OperatorMode extends Component<Signature> {
     await this.rollbackCardFieldValues(item.card);
 
     this.operatorModeStateService.removeItemFromStack(item);
-    this.args.updateOperatorModeStateQueryParams();
   }
 
   @action async cancel(item: StackItem) {
@@ -177,7 +172,6 @@ export default class OperatorMode extends Component<Signature> {
 
   replaceItemInStack(item: StackItem, newItem: StackItem) {
     this.operatorModeStateService.replaceItemInStack(item, newItem);
-    this.args.updateOperatorModeStateQueryParams();
   }
 
   private write = restartableTask(async (card: Card) => {

@@ -72,8 +72,4 @@ export default class CardController extends Controller {
   closeOperatorMode() {
     this.operatorModeEnabled = false;
   }
-
-  @action updateOperatorModeStateQueryParams() {
-    this.operatorModeState = this.operatorModeStateService.serialize();
-  }
 }

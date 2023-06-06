@@ -9,8 +9,12 @@ import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 import { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
+import { getOwner } from '@ember/application';
 
-// Below types form a raw POJO representation of operator mode state
+// Below types form a raw POJO representation of operator mode state.
+// This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
+// This is because we don't have a way to serialize a stack configuration of linked cards that have not been saved yet.
+
 type SerializedItem = { card: { id: string }; format: 'isolated' | 'edit' };
 type SerializedStack = { items: SerializedItem[] };
 export type SerializedState = { stacks: SerializedStack[] };
@@ -22,26 +26,41 @@ export default class OperatorModeStateService extends Service {
 
   @service declare cardService: CardService;
 
-  async restore(rawState: any) {
+  async restore(rawState: SerializedState) {
     this.state = await this.deserialize(rawState);
   }
 
   addItemToStack(item: StackItem, stackIndex = 0) {
     this.state.stacks[stackIndex].items.push(item);
+    this.persist();
   }
 
   removeItemFromStack(item: StackItem, stackIndex = 0) {
     let itemIndex = this.state.stacks[stackIndex].items.indexOf(item);
     this.state.stacks[stackIndex].items.splice(itemIndex);
+    this.persist();
   }
 
   replaceItemInStack(item: StackItem, newItem: StackItem, stackIndex = 0) {
     let itemIndex = this.state.stacks[stackIndex].items.indexOf(item);
     this.state.stacks[stackIndex].items.splice(itemIndex, 1, newItem);
+    this.persist();
   }
 
   clearStack(stackIndex = 0) {
     this.state.stacks[stackIndex].items.splice(0);
+    this.persist();
+  }
+
+  persist() {
+    let cardController = getOwner(this).lookup('controller:card') as any;
+    if (!cardController) {
+      throw new Error(
+        'OperatorModeStateService must be used in the context of a CardController'
+      );
+    }
+
+    cardController.operatorModeState = this.serialize();
   }
 
   // Serialized POJO version of state, with only cards that have been saved.
@@ -73,7 +92,7 @@ export default class OperatorModeStateService extends Service {
     return state;
   }
 
-  // Stringified JSON version of state, with only cards that have been saved, used for URL query param
+  // Stringified JSON version of state, with only cards that have been saved, used for the query param
   serialize(): string {
     return JSON.stringify(this.rawStateWithSavedCardsOnly());
   }
