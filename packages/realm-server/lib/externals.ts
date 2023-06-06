@@ -87,6 +87,7 @@ export function shimExternals(loader: Loader = Loader.getLoader()) {
   });
   loader.shimModule('lodash', lodash);
   loader.shimModule('date-fns', dateFns);
+  loader.shimModule('@cardstack/cardpay-sdk', {});
   loader.shimModule('ember-resources/core', { Resource: class {} });
   loader.shimModule('@ember/destroyable', {});
   loader.shimModule('marked', { marked: () => {} });

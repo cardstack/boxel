@@ -6,9 +6,9 @@
   },
   "scripts": {
     "build:boxel-host": "cd packages/host && pnpm build:production",
-    "deploy:boxel-host": "cd packages/host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy",
-    "deploy:boxel-host:preview-staging": "cd packages/host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy s3-preview-staging --verbose",
-    "deploy:boxel-host:preview-production": "cd packages/host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy s3-preview-production --verbose",
+    "deploy:boxel-host": "cd packages/host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=6144' pnpm exec ember deploy",
+    "deploy:boxel-host:preview-staging": "cd packages/host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=6144' pnpm exec ember deploy s3-preview-staging --verbose",
+    "deploy:boxel-host:preview-production": "cd packages/host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=6144' pnpm exec ember deploy s3-preview-production --verbose",
     "lint": "pnpm run --filter './packages/**' --if-present -r lint",
     "lint:fix": "pnpm run --filter './packages/**' --if-present -r lint:fix"
   },
@@ -28,7 +28,8 @@
     "patchedDependencies": {
       "magic-string@0.25.9": "patches/magic-string@0.25.9.patch",
       "fastboot@4.1.0": "patches/fastboot@4.1.0.patch",
-      "@types/eventsource@1.1.11": "patches/@types__eventsource@1.1.11.patch"
+      "@types/eventsource@1.1.11": "patches/@types__eventsource@1.1.11.patch",
+      "@cardstack/cardpay-sdk@1.0.52": "patches/@cardstack__cardpay-sdk@1.0.52.patch"
     }
   },
   "devDependencies": {
@@ -50,9 +51,9 @@
     "eslint-config-prettier": "^8.4.0",
     "eslint-plugin-import": "^2.26.0",
     "eslint-plugin-prettier": "^4.0.0",
+    "hcl2-parser": "^1.0.3",
     "prettier": "^2.7.1",
     "prettier-plugin-ember-template-tag": "^0.3.2",
-    "hcl2-parser": "^1.0.3",
     "typescript": "^4.6.3"
   },
   "engines": {
