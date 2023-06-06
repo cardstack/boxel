@@ -51,9 +51,6 @@ module.exports = function (defaults) {
               // 'en' is built into moment and cannot be removed. This strips the others.
               localesToKeep: [],
             }),
-            new webpack.ProvidePlugin({
-              atob: 'atob', // cardpay-sdk: ethers base64
-            }),
           ],
           resolve: {
             fallback: {
@@ -62,10 +59,6 @@ module.exports = function (defaults) {
               crypto: require.resolve('crypto-browserify'),
               stream: require.resolve('stream-browserify'),
               process: false,
-              // cardpay-sdk polyfills
-              http: require.resolve('stream-http'),
-              https: require.resolve('https-browserify'),
-              os: require.resolve('os-browserify/browser'),
             },
           },
           node: {
