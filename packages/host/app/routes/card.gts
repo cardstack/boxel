@@ -15,7 +15,7 @@ export type Model = Card | null;
 export default class RenderCard extends Route<Model | null> {
   queryParams = {
     operatorModeState: {
-      refreshModel: false, // Since false is default, this isn't strictly necessary, but it's good to be explicit here: operatorModeState is just an output of the state in the url and is used to restore the state on app boot
+      refreshModel: true, // Enabled so that back-forward navigation works in operator mode
     },
     operatorModeEnabled: {
       refreshModel: true,
