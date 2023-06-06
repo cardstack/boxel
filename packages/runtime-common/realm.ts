@@ -594,6 +594,13 @@ export class Realm {
         return Array.isArray(sourceValue) ? sourceValue : undefined;
       }
     );
+
+    if (patch.data.relationships) {
+      // relationships should be overwritten instead of merged, otherwise we
+      // won't be able to remove items from linksToMany relationships
+      card.data.relationships = patch.data.relationships;
+    }
+
     delete (card as any).data.id; // don't write the ID to the file
     let path: LocalPath = `${localPath}.json`;
     let { lastModified } = await this.write(

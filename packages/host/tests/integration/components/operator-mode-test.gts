@@ -1035,8 +1035,7 @@ module('Integration | operator-mode', function (hooks) {
       .containsText('Jackie Woody Woodster');
   });
 
-  skip('can remove all items of a linksToMany field', async function (assert) {
-    // TODO: Pre-existing bug: removing items in linksToMany field
+  test('can remove all items of a linksToMany field', async function (assert) {
     let card = await loadCard(`${testRealmURL}Person/burcu`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
