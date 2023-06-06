@@ -106,9 +106,8 @@ export class CatalogEntry extends Card {
           Name:
           {{@model.ref.name}}
         </div>
-        <div data-test-realm-name>
-          Realm Name:
-          <@fields.realmName />
+        <div class='catalog-entry__realm-name' data-test-realm-name>
+          in <@fields.realmName />
         </div>
         {{#if @model.showDemo}}
           <div data-test-demo><@fields.demo /></div>
