@@ -70,6 +70,10 @@ module('Integration | search-index', function (hooks) {
             name: 'Card',
           },
           lastModified: adapter.lastModified.get(`${testRealmURL}empty.json`),
+          realmInfo: {
+            name: 'Unnamed Workspace',
+          },
+          realmURL: 'http://test-realm/test/',
         },
         links: {
           self: `${testRealmURL}empty`,
@@ -164,6 +168,10 @@ module('Integration | search-index', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}Pet/mango.json`
             ),
+            realmInfo: {
+              name: 'Unnamed Workspace',
+            },
+            realmURL: 'http://test-realm/test/',
           },
         });
       } else {
@@ -239,6 +247,10 @@ module('Integration | search-index', function (hooks) {
           lastModified: adapter.lastModified.get(
             `${testRealmURL}Pet/mango.json`
           ),
+          realmInfo: {
+            name: 'Unnamed Workspace',
+          },
+          realmURL: 'http://test-realm/test/',
         },
       });
     } else {
@@ -313,6 +325,10 @@ module('Integration | search-index', function (hooks) {
           lastModified: adapter.lastModified.get(
             `${testRealmURL}Pet/mango.json`
           ),
+          realmInfo: {
+            name: 'Unnamed Workspace',
+          },
+          realmURL: 'http://test-realm/test/',
         },
       });
     } else {
@@ -402,6 +418,10 @@ module('Integration | search-index', function (hooks) {
           lastModified: adapter.lastModified.get(
             `${testRealmURL}person-catalog-entry.json`
           ),
+          realmInfo: {
+            name: 'Unnamed Workspace',
+          },
+          realmURL: 'http://test-realm/test/',
         },
       });
     } else {
@@ -894,6 +914,10 @@ module('Integration | search-index', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}jackie.json`
             ),
+            realmInfo: {
+              name: 'Unnamed Workspace',
+            },
+            realmURL: 'http://test-realm/test/',
           },
           relationships: {
             'appointment.contact.pet': {
@@ -1038,6 +1062,10 @@ module('Integration | search-index', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}Vendor/vendor1.json`
             ),
+            realmInfo: {
+              name: 'Unnamed Workspace',
+            },
+            realmURL: 'http://test-realm/test/',
           },
         },
         included: [
@@ -1061,6 +1089,10 @@ module('Integration | search-index', function (hooks) {
               lastModified: adapter.lastModified.get(
                 `${testRealmURL}Chain/1.json`
               ),
+              realmInfo: {
+                name: 'Unnamed Workspace',
+              },
+              realmURL: 'http://test-realm/test/',
             },
           },
           {
@@ -1082,6 +1114,10 @@ module('Integration | search-index', function (hooks) {
               lastModified: adapter.lastModified.get(
                 `${testRealmURL}Chain/2.json`
               ),
+              realmInfo: {
+                name: 'Unnamed Workspace',
+              },
+              realmURL: 'http://test-realm/test/',
             },
           },
         ],
@@ -1326,6 +1362,10 @@ module('Integration | search-index', function (hooks) {
           lastModified: adapter.lastModified.get(
             `${testRealmURL}PetPerson/hassan.json`
           ),
+          realmInfo: {
+            name: 'Unnamed Workspace',
+          },
+          realmURL: 'http://test-realm/test/',
         },
       });
       assert.deepEqual(hassan.doc.included, [
@@ -1340,6 +1380,10 @@ module('Integration | search-index', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}Pet/mango.json`
             ),
+            realmInfo: {
+              name: 'Unnamed Workspace',
+            },
+            realmURL: 'http://test-realm/test/',
           },
         },
         {
@@ -1353,6 +1397,10 @@ module('Integration | search-index', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}Pet/vanGogh.json`
             ),
+            realmInfo: {
+              name: 'Unnamed Workspace',
+            },
+            realmURL: 'http://test-realm/test/',
           },
         },
       ]);
@@ -1427,6 +1475,10 @@ module('Integration | search-index', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}PetPerson/burcu.json`
             ),
+            realmInfo: {
+              name: 'Unnamed Workspace',
+            },
+            realmURL: 'http://test-realm/test/',
           },
         },
       });
@@ -1562,6 +1614,10 @@ module('Integration | search-index', function (hooks) {
           lastModified: adapter.lastModified.get(
             `${testRealmURL}pet-person-catalog-entry.json`
           ),
+          realmInfo: {
+            name: 'Unnamed Workspace',
+          },
+          realmURL: 'http://test-realm/test/',
         },
       });
 
@@ -1577,6 +1633,10 @@ module('Integration | search-index', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}Pet/mango.json`
             ),
+            realmInfo: {
+              name: 'Unnamed Workspace',
+            },
+            realmURL: 'http://test-realm/test/',
           },
         },
         {
@@ -1590,6 +1650,10 @@ module('Integration | search-index', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}Pet/vanGogh.json`
             ),
+            realmInfo: {
+              name: 'Unnamed Workspace',
+            },
+            realmURL: 'http://test-realm/test/',
           },
         },
       ]);
@@ -1732,6 +1796,10 @@ module('Integration | search-index', function (hooks) {
           lastModified: adapter.lastModified.get(
             `${testRealmURL}Friend/hassan.json`
           ),
+          realmInfo: {
+            name: 'Unnamed Workspace',
+          },
+          realmURL: 'http://test-realm/test/',
         },
       });
     } else {
@@ -1846,6 +1914,10 @@ module('Integration | search-index', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}Friend/hassan.json`
             ),
+            realmInfo: {
+              name: 'Unnamed Workspace',
+            },
+            realmURL: 'http://test-realm/test/',
           },
         },
         included: [
@@ -1876,6 +1948,10 @@ module('Integration | search-index', function (hooks) {
               lastModified: adapter.lastModified.get(
                 `${testRealmURL}Friend/mango.json`
               ),
+              realmInfo: {
+                name: 'Unnamed Workspace',
+              },
+              realmURL: 'http://test-realm/test/',
             },
           },
         ],
@@ -1940,6 +2016,10 @@ module('Integration | search-index', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}Friend/mango.json`
             ),
+            realmInfo: {
+              name: 'Unnamed Workspace',
+            },
+            realmURL: 'http://test-realm/test/',
           },
         },
         included: [
@@ -1970,6 +2050,10 @@ module('Integration | search-index', function (hooks) {
               lastModified: adapter.lastModified.get(
                 `${testRealmURL}Friend/hassan.json`
               ),
+              realmInfo: {
+                name: 'Unnamed Workspace',
+              },
+              realmURL: 'http://test-realm/test/',
             },
           },
         ],
@@ -2068,6 +2152,10 @@ module('Integration | search-index', function (hooks) {
           meta: {
             adoptsFrom: friendsRef,
             lastModified: adapter.lastModified.get(`${hassanID}.json`),
+            realmInfo: {
+              name: 'Unnamed Workspace',
+            },
+            realmURL: 'http://test-realm/test/',
           },
         },
         'hassan doc.data is correct'
@@ -2090,6 +2178,10 @@ module('Integration | search-index', function (hooks) {
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModified.get(`${mangoID}.json`),
+              realmInfo: {
+                name: 'Unnamed Workspace',
+              },
+              realmURL: 'http://test-realm/test/',
             },
           },
           {
@@ -2109,6 +2201,10 @@ module('Integration | search-index', function (hooks) {
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModified.get(`${vanGoghID}.json`),
+              realmInfo: {
+                name: 'Unnamed Workspace',
+              },
+              realmURL: 'http://test-realm/test/',
             },
           },
         ],
@@ -2167,6 +2263,10 @@ module('Integration | search-index', function (hooks) {
           meta: {
             adoptsFrom: friendsRef,
             lastModified: adapter.lastModified.get(`${mangoID}.json`),
+            realmInfo: {
+              name: 'Unnamed Workspace',
+            },
+            realmURL: 'http://test-realm/test/',
           },
         },
         'mango doc.data is correct'
@@ -2195,6 +2295,10 @@ module('Integration | search-index', function (hooks) {
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModified.get(`${hassanID}.json`),
+              realmInfo: {
+                name: 'Unnamed Workspace',
+              },
+              realmURL: 'http://test-realm/test/',
             },
           },
           {
@@ -2214,6 +2318,10 @@ module('Integration | search-index', function (hooks) {
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModified.get(`${vanGoghID}.json`),
+              realmInfo: {
+                name: 'Unnamed Workspace',
+              },
+              realmURL: 'http://test-realm/test/',
             },
           },
         ],
@@ -2273,6 +2381,10 @@ module('Integration | search-index', function (hooks) {
           meta: {
             adoptsFrom: friendsRef,
             lastModified: adapter.lastModified.get(`${vanGoghID}.json`),
+            realmInfo: {
+              name: 'Unnamed Workspace',
+            },
+            realmURL: 'http://test-realm/test/',
           },
         },
         'vanGogh doc.data is correct'
@@ -2301,6 +2413,10 @@ module('Integration | search-index', function (hooks) {
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModified.get(`${hassanID}.json`),
+              realmInfo: {
+                name: 'Unnamed Workspace',
+              },
+              realmURL: 'http://test-realm/test/',
             },
           },
           {
@@ -2320,6 +2436,10 @@ module('Integration | search-index', function (hooks) {
             meta: {
               adoptsFrom: friendsRef,
               lastModified: adapter.lastModified.get(`${mangoID}.json`),
+              realmInfo: {
+                name: 'Unnamed Workspace',
+              },
+              realmURL: 'http://test-realm/test/',
             },
           },
         ],

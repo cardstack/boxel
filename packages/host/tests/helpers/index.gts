@@ -45,6 +45,7 @@ export interface Dir {
 }
 
 export const testRealmURL = `http://test-realm/test/`;
+export const testRealmName = `Test Realm`;
 
 export interface CardDocFiles {
   [filename: string]: LooseSingleCardDocument;
