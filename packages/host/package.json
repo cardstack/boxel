@@ -11,8 +11,8 @@
     "test": "tests"
   },
   "scripts": {
-    "build": "NODE_OPTIONS='--max-old-space-size=6144' ember build",
-    "build:production": "NODE_OPTIONS='--max-old-space-size=6144' ember build --environment=production",
+    "build": "NODE_OPTIONS='--max-old-space-size=5000' ember build",
+    "build:production": "NODE_OPTIONS='--max-old-space-size=5000' ember build --environment=production",
     "lint": "concurrently \"npm:lint:*(!fix)\" --names \"lint:\"",
     "lint:css:fix": "concurrently \"npm:lint:css -- --fix\"",
     "lint:fix": "concurrently \"npm:lint:*:fix\" --names \"fix:\"",
