@@ -24,7 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         # We are not currently using the realm-base server. Rather the base realm
-        # and demo realm are both being hosted by the realm-demo server
+        # and demo realm are both being hosted by the realms server
         # app: [realm-base, realm-demo]
         app: [realm-demo]
     steps:
