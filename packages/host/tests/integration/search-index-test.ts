@@ -393,6 +393,7 @@ module('Integration | search-index', function (hooks) {
           title: 'Person Card',
           description: 'Catalog entry for Person card',
           moduleHref: `${testRealmURL}person`,
+          realmName: 'Unnamed Workspace',
           isPrimitive: false,
           ref: {
             module: `./person`,
@@ -1276,6 +1277,7 @@ module('Integration | search-index', function (hooks) {
       description: 'Catalog entry for Booking',
       isPrimitive: false,
       moduleHref: 'http://localhost:4202/test/booking',
+      realmName: 'Unnamed Workspace',
       ref: 'http://localhost:4202/test/booking/Booking',
       title: 'Booking',
     });
@@ -1587,6 +1589,7 @@ module('Integration | search-index', function (hooks) {
           demo: { firstName: 'Hassan' },
           isPrimitive: false,
           moduleHref: `${testModuleRealm}pet-person`,
+          realmName: 'Unnamed Workspace',
         },
         relationships: {
           'demo.pets.0': {
@@ -1691,6 +1694,7 @@ module('Integration | search-index', function (hooks) {
         },
         isPrimitive: false,
         moduleHref: `${testModuleRealm}pet-person`,
+        realmName: 'Unnamed Workspace',
       });
     } else {
       assert.ok(

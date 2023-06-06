@@ -446,7 +446,7 @@ module('Integration | schema', function (hooks) {
     await waitFor('[data-test-card-id]');
     await fillIn('[data-test-new-field-name]', 'author');
     await click('[data-test-add-field]');
-    await waitFor('[data-test-card-catalog] [data-test-ref]');
+    await waitFor('[data-test-card-catalog] [data-test-realm-name]');
 
     assert
       .dom(
@@ -491,7 +491,7 @@ module('Integration | schema', function (hooks) {
 
     assert
       .dom(
-        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"] [data-test-ref]`
+        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"] [data-test-realm-name]`
       )
       .exists();
 
@@ -559,7 +559,7 @@ module('Integration | schema', function (hooks) {
     await fillIn('[data-test-new-field-name]', 'aliases');
     await click('[data-test-new-field-containsMany]');
     await click('[data-test-add-field]');
-    await waitFor('[data-test-card-catalog-modal] [data-test-ref]');
+    await waitFor('[data-test-card-catalog-modal] [data-test-realm-name]');
 
     await click(`[data-test-select="${baseRealm.url}fields/string-field"]`);
     await waitFor('[data-test-field="aliases"]');
@@ -675,7 +675,7 @@ module('Integration | schema', function (hooks) {
     await click('[data-test-new-field-contains]');
 
     await click('[data-test-add-field]');
-    await waitFor('[data-test-card-catalog-modal] [data-test-ref]');
+    await waitFor('[data-test-card-catalog-modal] [data-test-realm-name]');
     assert.dom(`[data-test-select="${testRealmURL}appointment"]`).exists();
 
     await click(`[data-test-select="${testRealmURL}appointment"]`);
@@ -691,10 +691,10 @@ module('Integration | schema', function (hooks) {
 
     await waitFor('[data-test-save-card]');
     await click(`[data-test-save-card]`);
-    await waitFor(`[data-test-catalog-entry-editor] [data-test-ref]`);
+    await waitFor(`[data-test-catalog-entry-editor] [data-test-realm-name]`);
     assert
-      .dom(`[data-test-catalog-entry-editor] [data-test-ref]`)
-      .containsText(`${testRealmURL}pet`);
+      .dom(`[data-test-catalog-entry-editor] [data-test-realm-name]`)
+      .containsText(`in Unnamed Workspace`);
 
     let fileRef = await adapter.openFile('pet.gts');
     let src = fileRef?.content as string;
@@ -789,7 +789,7 @@ module('Integration | schema', function (hooks) {
     await click('[data-test-new-field-linksTo]');
 
     await click('[data-test-add-field]');
-    await waitFor('[data-test-card-catalog-modal] [data-test-ref]');
+    await waitFor('[data-test-card-catalog-modal] [data-test-realm-name]');
     assert.dom(`[data-test-select="${testRealmURL}pet"]`).exists();
     assert
       .dom('[data-test-select]')
@@ -885,7 +885,7 @@ module('Integration | schema', function (hooks) {
     await click('[data-test-new-field-linksTo]');
 
     await click('[data-test-add-field]');
-    await waitFor('[data-test-card-catalog-modal] [data-test-ref]');
+    await waitFor('[data-test-card-catalog-modal] [data-test-realm-name]');
     await click(`[data-test-select="${testRealmURL}person"]`);
     await waitFor('[data-test-field="friend"]');
     assert
@@ -1051,7 +1051,7 @@ module('Integration | schema', function (hooks) {
     await click('[data-test-new-field-linksToMany]');
 
     await click('[data-test-add-field]');
-    await waitFor('[data-test-card-catalog-modal] [data-test-ref]');
+    await waitFor('[data-test-card-catalog-modal] [data-test-realm-name]');
     assert.dom(`[data-test-select="${testRealmURL}pet"]`).exists();
     assert
       .dom('[data-test-select]')
@@ -1146,7 +1146,7 @@ module('Integration | schema', function (hooks) {
     await click('[data-test-new-field-linksToMany]');
 
     await click('[data-test-add-field]');
-    await waitFor('[data-test-card-catalog-modal] [data-test-ref]');
+    await waitFor('[data-test-card-catalog-modal] [data-test-realm-name]');
     assert.dom(`[data-test-select="${testRealmURL}person"]`).exists();
     assert
       .dom('[data-test-select]')

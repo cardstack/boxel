@@ -153,7 +153,8 @@ nav > .directory-level {
   text-overflow: ellipsis;
 }
 
-.catalog-entry__ref {
+.catalog-entry__realm-name {
+  color: var(--boxel-teal);
   font-size: var(--boxel-font-size-xs);
 }
 

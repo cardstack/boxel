@@ -36,6 +36,7 @@ import {
   type CardDocument,
   type CardResource,
   type Actions,
+  type RealmInfo,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 
@@ -47,6 +48,8 @@ export const fieldDecorator = Symbol('cardstack-field-decorator');
 export const fieldType = Symbol('cardstack-field-type');
 export const queryableValue = Symbol('cardstack-queryable-value');
 export const relativeTo = Symbol('cardstack-relative-to');
+export const realmInfo = Symbol('cardstack-realm-info');
+export const realmURL = Symbol('cardstack-realm-url');
 // intentionally not exporting this so that the outside world
 // cannot mark a card as being saved
 const isSavedInstance = Symbol('cardstack-is-saved-instance');
@@ -1375,6 +1378,8 @@ export class CardBase {
   [isBaseCard] = true;
   [isSavedInstance] = false;
   [relativeTo]: URL | undefined = undefined;
+  [realmInfo]: RealmInfo | undefined = undefined;
+  [realmURL]: URL | undefined = undefined;
   declare ['constructor']: CardBaseConstructor;
   static baseCard: undefined; // like isBaseCard, but for the class itself
   static data?: Record<string, any>;
@@ -1857,6 +1862,8 @@ async function _createFromSerialized<T extends CardBaseConstructor>(
   if (!instance) {
     instance = new card({ id: resource.id }) as CardInstanceType<T>;
     instance[relativeTo] = _relativeTo;
+    instance[realmInfo] = data?.meta?.realmInfo;
+    instance[realmURL] = data?.meta?.realmURL ? new URL(data.meta.realmURL) : undefined;
   }
   identityContexts.set(instance, identityContext);
   return await _updateFromSerialized(instance, resource, doc, identityContext);
