@@ -19,6 +19,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: testing free
+        shell: bash
+        run: |
+          echo `free -m`
       - uses: actions/checkout@v3
       - name: Deploy boxel-host
         uses: ./.github/actions/deploy-boxel-host
