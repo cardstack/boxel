@@ -6,6 +6,7 @@ import {
   CardBase,
   primitive,
   relativeTo,
+  realmInfo,
 } from './card-api';
 import StringCard from './string';
 import BooleanCard from './boolean';
@@ -38,6 +39,11 @@ export class CatalogEntry extends Card {
     },
   });
   @field demo = contains(Card);
+  @field realmName = contains(StringCard, {
+    computeVia: function (this: CatalogEntry) {
+      return this[realmInfo]?.name;
+    },
+  });
 
   get showDemo() {
     return !this.isPrimitive;
@@ -65,6 +71,9 @@ export class CatalogEntry extends Card {
         <FieldContainer @label='Ref' data-test-field='ref'>
           <@fields.ref />
         </FieldContainer>
+        <FieldContainer @label='RealmName' data-test-field='realmName'>
+          <@fields.realmName />
+        </FieldContainer>
         <FieldContainer @vertical={{true}} @label='Demo' data-test-field='demo'>
           <@fields.demo />
         </FieldContainer>
@@ -79,8 +88,8 @@ export class CatalogEntry extends Card {
         @displayBoundaries={{true}}
       >
         <header><@fields.title /></header>
-        <div class='catalog-entry__ref' data-test-ref>
-          <@fields.moduleHref />
+        <div class='catalog-entry__realm-name' data-test-realm-name>
+          in <@fields.realmName />
         </div>
       </CardContainer>
     </template>
@@ -96,6 +105,10 @@ export class CatalogEntry extends Card {
           <@fields.moduleHref />
           Name:
           {{@model.ref.name}}
+        </div>
+        <div data-test-realm-name>
+          Realm Name:
+          <@fields.realmName />
         </div>
         {{#if @model.showDemo}}
           <div data-test-demo><@fields.demo /></div>
