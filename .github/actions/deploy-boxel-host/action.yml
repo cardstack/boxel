@@ -41,7 +41,9 @@ runs:
     - uses: volta-cli/action@v4
     - name: Install Dependencies
       shell: bash
-      run: pnpm install --frozen-lockfile
+      run: |
+       echo `free -m`
+       pnpm install --frozen-lockfile
 
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v1
