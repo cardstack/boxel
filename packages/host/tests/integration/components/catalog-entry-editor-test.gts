@@ -103,6 +103,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
     // for some reason this takes long enough in CI that it seems
     // to trigger a timeout error using the default timeout
     await waitFor('[data-test-ref]', { timeout: 5000 });
+    await waitFor('[data-test-field="realmName"]', { timeout: 5000 });
 
     assert
       .dom('[data-test-catalog-entry-editor]')
@@ -122,6 +123,9 @@ module('Integration | catalog-entry-editor', function (hooks) {
     assert
       .dom('[data-test-ref]')
       .containsText(`Module: ${testRealmURL}pet Name: Pet`);
+    assert
+      .dom('[data-test-field="realmName"]')
+      .containsText(`Unnamed Workspace`);
     assert
       .dom('[data-test-field="demo"] [data-test-field="name"] input')
       .hasValue('', 'demo card name input field is correct');
@@ -256,6 +260,9 @@ module('Integration | catalog-entry-editor', function (hooks) {
       .dom('[data-test-ref]')
       .containsText(`Module: ${testRealmURL}pet Name: Pet`);
     assert
+      .dom('[data-test-field="realmName"]')
+      .containsText(`Unnamed Workspace`);
+    assert
       .dom('[data-test-field="demo"] [data-test-field="name"] input')
       .hasValue('Jackie', 'demo card name input field is correct');
     assert
@@ -278,6 +285,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
 
     assert.dom('[data-test-title]').hasText('test title');
     assert.dom('[data-test-description]').hasText('test description');
+    assert.dom('[data-test-realm-name]').hasText('in Unnamed Workspace');
     assert
       .dom('[data-test-demo] [data-test-pet-name]')
       .hasText('Jackie Wackie');

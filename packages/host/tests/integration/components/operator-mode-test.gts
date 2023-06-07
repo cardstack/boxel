@@ -541,6 +541,8 @@ module('Integration | operator-mode', function (hooks) {
     await click('[aria-label="Save"]');
 
     await waitFor('[data-test-person="EditedName"]');
+    await waitFor('[data-test-city="EditedCity"]');
+    await waitFor('[data-test-country="EditedCountry"]');
     assert.dom('[data-test-person]').hasText('EditedName');
     assert.dom('[data-test-first-letter-of-the-name]').hasText('E');
     assert.dom('[data-test-city]').hasText('EditedCity');
