@@ -22,13 +22,10 @@ export async function logout(page: Page) {
 
 export async function createRoom(
   page: Page,
-  roomDetails: { name: string; invites?: string[]; encrypted?: true }
+  roomDetails: { name: string; invites?: string[] }
 ) {
   await page.locator('[data-test-create-room-mode-btn]').click();
   await page.locator('[data-test-room-name-field]').fill(roomDetails.name);
-  if (roomDetails.encrypted) {
-    await page.locator('[data-test-encrypted-field]').click();
-  }
   if (roomDetails.invites && roomDetails.invites.length > 0) {
     await page
       .locator('[data-test-room-invite-field]')
@@ -144,7 +141,7 @@ export async function assertMessages(
 }
 
 interface RoomAssertions {
-  joinedRooms?: { name: string; encrypted?: boolean }[];
+  joinedRooms?: { name: string }[];
   invitedRooms?: { name: string; sender: string }[];
 }
 
@@ -154,24 +151,11 @@ export async function assertRooms(page: Page, rooms: RoomAssertions) {
       page.locator('[data-test-joined-room]'),
       `${rooms.joinedRooms.length} joined room(s) are displayed`
     ).toHaveCount(rooms.joinedRooms.length);
-    for (let { name, encrypted } of rooms.joinedRooms) {
+    for (let { name } of rooms.joinedRooms) {
       await expect(
         page.locator(`[data-test-joined-room="${name}"]`),
         `the joined room '${name}' is displayed`
       ).toHaveCount(1);
-      if (encrypted) {
-        await expect(
-          page.locator(
-            `[data-test-joined-room="${name}"] [data-test-encrypted-room]`
-          )
-        ).toHaveCount(1);
-      } else {
-        await expect(
-          page.locator(
-            `[data-test-joined-room="${name}"] [data-test-encrypted-room]`
-          )
-        ).toHaveCount(0);
-      }
     }
   } else {
     await expect(
