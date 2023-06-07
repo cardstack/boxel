@@ -1,0 +1,24 @@
+diff --git a/dist/runtime/injectStylesIntoStyleTag.js b/dist/runtime/injectStylesIntoStyleTag.js
+index 71b848c4b657871ed05449e75bb1d6eebd254d37..81c3c5d9f207df3e3049e8067354b81053693183 100644
+--- a/dist/runtime/injectStylesIntoStyleTag.js
++++ b/dist/runtime/injectStylesIntoStyleTag.js
+@@ -90,6 +90,9 @@ function modulesToDom(list, options) {
+ }
+ 
+ function insertStyleElement(options) {
++  if (!globalThis.document) {
++    return '/* Missing */';
++  }
+   var style = document.createElement('style');
+   var attributes = options.attributes || {};
+ 
+@@ -163,6 +166,9 @@ function applyToSingletonTag(style, index, remove, obj) {
+ }
+ 
+ function applyToTag(style, options, obj) {
++  if (!globalThis.document) {
++    return;
++  }
+   var css = obj.css;
+   var media = obj.media;
+   var sourceMap = obj.sourceMap;
