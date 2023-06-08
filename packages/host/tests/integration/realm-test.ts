@@ -989,6 +989,21 @@ module('Integration | realm', function (hooks) {
           },
         },
       },
+      'dir/friend.json': {
+        data: {
+          id: `${testRealmURL}dir/friend`,
+          attributes: {
+            firstName: 'Hassan',
+            lastName: 'Abdel-Rahman',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/person',
+              name: 'Person',
+            },
+          },
+        },
+      },
       'jackie.json': {
         data: {
           id: `${testRealmURL}jackie`,
@@ -1004,6 +1019,11 @@ module('Integration | realm', function (hooks) {
             'pets.1': {
               links: {
                 self: `${testRealmURL}dir/van-gogh`,
+              },
+            },
+            friend: {
+              links: {
+                self: `${testRealmURL}dir/friend`,
               },
             },
           },
@@ -1059,6 +1079,7 @@ module('Integration | realm', function (hooks) {
         },
         attributes: {
           firstName: 'Jackie',
+          title: 'Jackie Pet Person',
         },
         relationships: {
           'pets.0': {
@@ -1067,6 +1088,15 @@ module('Integration | realm', function (hooks) {
             },
             data: {
               id: `${testRealmURL}dir/van-gogh`,
+              type: 'card',
+            },
+          },
+          friend: {
+            links: {
+              self: `${testRealmURL}dir/friend`,
+            },
+            data: {
+              id: `${testRealmURL}dir/friend`,
               type: 'card',
             },
           },
@@ -1084,6 +1114,30 @@ module('Integration | realm', function (hooks) {
         },
       },
       included: [
+        {
+          type: 'card',
+          id: `${testRealmURL}dir/friend`,
+          links: {
+            self: `${testRealmURL}dir/friend`,
+          },
+          attributes: {
+            firstName: 'Hassan',
+            lastName: 'Abdel-Rahman',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/person',
+              name: 'Person',
+            },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}dir/friend.json`
+            ),
+            realmInfo: {
+              name: 'Unnamed Workspace',
+            },
+            realmURL: testRealmURL,
+          },
+        },
         {
           type: 'card',
           id: `${testRealmURL}dir/van-gogh`,
@@ -1134,6 +1188,11 @@ module('Integration | realm', function (hooks) {
                 self: `${testRealmURL}dir/van-gogh`,
               },
             },
+            friend: {
+              links: {
+                self: `${testRealmURL}dir/friend`,
+              },
+            },
           },
           meta: {
             adoptsFrom: {
@@ -1145,6 +1204,214 @@ module('Integration | realm', function (hooks) {
       },
       'file contents are correct'
     );
+  });
+
+  test('realm can serve PATCH requests that include linksToMany fields', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'dir/van-gogh.json': {
+        data: {
+          id: `${testRealmURL}dir/van-gogh`,
+          attributes: {
+            firstName: 'Van Gogh',
+          },
+          relationships: {
+            owner: { links: { self: null } },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `http://localhost:4202/test/pet`,
+              name: 'Pet',
+            },
+          },
+        },
+      },
+      'dir/friend.json': {
+        data: {
+          id: `${testRealmURL}dir/friend`,
+          attributes: {
+            firstName: 'Hassan',
+            lastName: 'Abdel-Rahman',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/person',
+              name: 'Person',
+            },
+          },
+        },
+      },
+      'dir/different-friend.json': {
+        data: {
+          id: `${testRealmURL}dir/friend`,
+          attributes: {
+            firstName: 'Burcu',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/person',
+              name: 'Person',
+            },
+          },
+        },
+      },
+      'jackie.json': {
+        data: {
+          id: `${testRealmURL}jackie`,
+          attributes: { firstName: 'Jackie' },
+          relationships: {
+            'pets.0': {
+              links: {
+                self: `${testRealmURL}dir/van-gogh`,
+              },
+            },
+            friend: {
+              links: {
+                self: `${testRealmURL}dir/friend`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `http://localhost:4202/test/pet-person`,
+              name: 'PetPerson',
+            },
+          },
+        },
+      },
+    });
+    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    await realm.ready;
+    let response = await realm.handle(
+      new Request(`${testRealmURL}jackie`, {
+        method: 'PATCH',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+        body: JSON.stringify(
+          {
+            data: {
+              type: 'card',
+              relationships: {
+                friend: {
+                  links: {
+                    self: `${testRealmURL}dir/different-friend`,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `http://localhost:4202/test/pet-person`,
+                  name: 'PetPerson',
+                },
+              },
+            },
+          },
+          null,
+          2
+        ),
+      })
+    );
+    assert.strictEqual(response.status, 200, 'successful http status');
+    let json = await response.json();
+    assert.deepEqual(json, {
+      data: {
+        type: 'card',
+        id: `${testRealmURL}jackie`,
+        links: {
+          self: `${testRealmURL}jackie`,
+        },
+        attributes: {
+          firstName: 'Jackie',
+          title: 'Jackie Pet Person',
+        },
+        relationships: {
+          'pets.0': {
+            links: {
+              self: `${testRealmURL}dir/van-gogh`,
+            },
+            data: {
+              id: `${testRealmURL}dir/van-gogh`,
+              type: 'card',
+            },
+          },
+          friend: {
+            links: {
+              self: `${testRealmURL}dir/different-friend`,
+            },
+            data: {
+              id: `${testRealmURL}dir/different-friend`,
+              type: 'card',
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: `http://localhost:4202/test/pet-person`,
+            name: 'PetPerson',
+          },
+          lastModified: adapter.lastModified.get(`${testRealmURL}jackie.json`),
+          realmInfo: {
+            name: 'Unnamed Workspace',
+          },
+          realmURL: testRealmURL,
+        },
+      },
+      included: [
+        {
+          type: 'card',
+          id: `${testRealmURL}dir/different-friend`,
+          links: {
+            self: `${testRealmURL}dir/different-friend`,
+          },
+          attributes: {
+            firstName: 'Burcu',
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4202/test/person',
+              name: 'Person',
+            },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}dir/different-friend.json`
+            ),
+            realmInfo: {
+              name: 'Unnamed Workspace',
+            },
+            realmURL: testRealmURL,
+          },
+        },
+        {
+          type: 'card',
+          id: `${testRealmURL}dir/van-gogh`,
+          links: {
+            self: `${testRealmURL}dir/van-gogh`,
+          },
+          attributes: {
+            firstName: 'Van Gogh',
+          },
+          relationships: {
+            owner: {
+              links: {
+                self: null,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `http://localhost:4202/test/pet`,
+              name: 'Pet',
+            },
+            lastModified: adapter.lastModified.get(
+              `${testRealmURL}dir/van-gogh.json`
+            ),
+            realmInfo: {
+              name: 'Unnamed Workspace',
+            },
+            realmURL: testRealmURL,
+          },
+        },
+      ],
+    });
   });
 
   test('realm can serve PATCH requests that include linksTo fields', async function (assert) {

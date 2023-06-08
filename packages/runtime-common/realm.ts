@@ -65,6 +65,7 @@ import { CardBase } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
+import { mergeRelationships } from './merge-relationships';
 
 export interface FileRef {
   path: LocalPath;
@@ -595,10 +596,15 @@ export class Realm {
       }
     );
 
-    if (patch.data.relationships) {
-      // relationships should be overwritten instead of merged, otherwise we
-      // won't be able to remove items from linksToMany relationships
-      card.data.relationships = patch.data.relationships;
+    if (card.data.relationships || patch.data.relationships) {
+      let merged = mergeRelationships(
+        card.data.relationships,
+        patch.data.relationships
+      );
+
+      if (merged && Object.keys(merged).length !== 0) {
+        card.data.relationships = merged;
+      }
     }
 
     delete (card as any).data.id; // don't write the ID to the file
