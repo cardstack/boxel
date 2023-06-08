@@ -35,6 +35,13 @@ class IsolatedRoomView extends Component<typeof MatrixRoomCard> {
   </template>
 }
 
+class MessageCard extends Card {
+  @field author = contains(StringCard);
+  @field message = contains(MarkdownCard);
+  @field created = contains(DateTimeCard);
+  @field attachedCard = contains(Card);
+}
+
 export class MatrixRoomCard extends Card {
   // the only writeable field for this card should be the "events" field.
   // All other fields should derive from the "events" field.
@@ -82,13 +89,6 @@ export class MatrixRoomCard extends Card {
   static isolated = class Isolated extends IsolatedRoomView {};
   // The edit template is meant to be read-only, this field card is not mutable
   static edit = class Edit extends IsolatedRoomView {};
-}
-
-class MessageCard extends Card {
-  @field author = contains(StringCard);
-  @field message = contains(MarkdownCard);
-  @field created = contains(DateTimeCard);
-  @field attachedCard = contains(Card);
 }
 
 interface BaseMatrixEvent {
