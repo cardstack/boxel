@@ -24,7 +24,7 @@ function _formatForMerge(
   for (let [key, value] of Object.entries(resource ?? {})) {
     if (key.split('.').length === 2 && key.split('.')[1].match(/^\d+$/)) {
       let name = key.split('.')[0];
-      data[name] = data[name] || [];
+      data[name] = Array.isArray(data[name]) ? data[name] : [];
       (data[name] as Relationship[]).push(value);
     } else {
       data[key] = value;
