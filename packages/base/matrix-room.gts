@@ -12,11 +12,29 @@ import DateTimeCard from './datetime';
 import MarkdownCard from './markdown';
 import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
+class EventView extends Component<typeof MatrixEventCard> {
+  <template>
+    <pre>{{this.json}}</pre>
+  </template>
+
+  get json() {
+    return JSON.stringify(this.args.model, null, 2);
+  }
+}
+
+class MatrixEventCard extends CardBase {
+  static [primitive]: MatrixEvent;
+  static embedded = class Isolated extends EventView {};
+  static isolated = class Isolated extends EventView {};
+  // The edit template is meant to be read-only, this field card is not mutable
+  static edit = class Edit extends EventView {};
+}
 class IsolatedRoomView extends Component<typeof MatrixRoomCard> {
   <template>
 
   </template>
 }
+
 export class MatrixRoomCard extends Card {
   // the only writeable field for this card should be the "events" field.
   // All other fields should derive from the "events" field.
@@ -183,21 +201,3 @@ type MatrixEvent =
   | InviteEvent
   | JoinEvent
   | LeaveEvent;
-
-class EventView extends Component<typeof MatrixEventCard> {
-  <template>
-    <pre>{{this.json}}</pre>
-  </template>
-
-  get json() {
-    return JSON.stringify(this.args.model, null, 2);
-  }
-}
-
-class MatrixEventCard extends CardBase {
-  static [primitive]: MatrixEvent;
-  static embedded = class Isolated extends EventView {};
-  static isolated = class Isolated extends EventView {};
-  // The edit template is meant to be read-only, this field card is not mutable
-  static edit = class Edit extends EventView {};
-}
