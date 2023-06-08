@@ -6,6 +6,7 @@ import {
   type FieldsTypeFor,
   type CardBase,
   CardContext,
+  isCard,
 } from './card-api';
 import { defaultComponent } from './default-card-component';
 import { getField } from '@cardstack/runtime-common';
@@ -48,14 +49,27 @@ export function getBoxComponent(
     };
 
   let component: ComponentLike<{ Args: {}; Blocks: {} }> = <template>
-    <Implementation
-      @model={{model.value}}
-      @fields={{internalFields}}
-      @set={{model.set}}
-      @fieldName={{model.name}}
-      @context={{context}}
-      {{cardComponentModifier model.value context}}
-    />
+    {{#if (isCard model.value)}}
+      <CardContainer class='boxel-card' @displayBoundaries={{true}}>
+        <Implementation
+          @model={{model.value}}
+          @fields={{internalFields}}
+          @set={{model.set}}
+          @fieldName={{model.name}}
+          @context={{context}}
+          {{cardComponentModifier model.value context}}
+        />
+      </CardContainer>
+    {{else}}
+      <Implementation
+        @model={{model.value}}
+        @fields={{internalFields}}
+        @set={{model.set}}
+        @fieldName={{model.name}}
+        @context={{context}}
+        {{cardComponentModifier model.value context}}
+      />
+    {{/if}}
   </template>;
 
   // when viewed from *outside*, our component is both an invokable component
@@ -181,10 +195,8 @@ export function getPluralViewComponent(
             (getBoxComponent (cardTypeFor field child) format child)
             as |Item|
           }}
-            <li>
-              <CardContainer data-test-plural-view-item={{i}}>
-                <Item />
-              </CardContainer>
+            <li data-test-plural-view-item={{i}}>
+              <Item />
             </li>
           {{/let}}
         {{/each}}

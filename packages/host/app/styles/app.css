@@ -142,7 +142,6 @@ nav > .directory-level {
 
 /* Catalog Entry */
 .catalog-entry {
-  padding: calc(2 * var(--boxel-sp-sm)) var(--boxel-sp-sm);
   display: grid;
   gap: var(--boxel-sp-xxxs);
 }
@@ -159,10 +158,13 @@ nav > .directory-level {
 }
 
 /* Default Card Component */
-.isolated-card {
-  padding: var(--boxel-sp);
+.default-card {
   display: grid;
   gap: var(--boxel-sp-lg);
+}
+
+.boxel-card {
+  padding: var(--boxel-sp);
 }
 
 /* LinksTo Editor */
@@ -175,12 +177,6 @@ nav > .directory-level {
 
 .links-to-editor--empty {
   display: block;
-}
-
-.links-to-editor__item {
-  padding: var(--boxel-sp);
-  border: var(--boxel-border);
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.16);
 }
 
 .icon-button {
@@ -230,7 +226,7 @@ nav > .directory-level {
 }
 
 .invoice {
-  padding: var(--boxel-sp-xl);
+  padding: var(--boxel-sp-lg);
   display: grid;
   gap: var(--boxel-sp-xxl) 0;
 }
@@ -294,7 +290,6 @@ nav > .directory-level {
 .notes,
 .history {
   --boxel-border-radius: 20px;
-  padding: var(--boxel-sp);
 }
 
 .notes > * + *,

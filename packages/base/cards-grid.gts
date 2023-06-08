@@ -3,7 +3,7 @@ import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { Component, Card, relativeTo } from './card-api';
-import { CardContainer, IconButton } from '@cardstack/boxel-ui';
+import { IconButton } from '@cardstack/boxel-ui';
 import {
   chooseCard,
   catalogEntryRef,
@@ -23,7 +23,7 @@ class Isolated extends Component<typeof CardsGrid> {
             data-test-cards-grid-item={{card.id}}
             {{on 'click' (fn this.openCard card)}}
           >
-            <CardContainer class='grid-card'>
+            <div class='grid-card'>
               <div class='grid-card__thumbnail'>
                 <div
                   class='grid-card__thumbnail-text'
@@ -38,7 +38,7 @@ class Isolated extends Component<typeof CardsGrid> {
                 class='grid-card__display-name'
                 data-test-cards-grid-item-display-name
               >{{cardTypeDisplayName card}}</h4>
-            </CardContainer>
+            </div>
           </li>
         {{else}}
           {{#if this.request.isLoading}}

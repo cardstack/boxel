@@ -2,7 +2,7 @@ import GlimmerComponent from '@glimmer/component';
 import { startCase } from 'lodash';
 import type { CardBase } from './card-api';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
+import { FieldContainer } from '@cardstack/boxel-ui';
 
 class DefaultTemplate extends GlimmerComponent<{
   Args: {
@@ -11,7 +11,7 @@ class DefaultTemplate extends GlimmerComponent<{
   };
 }> {
   <template>
-    <CardContainer class='isolated-card' @displayBoundaries={{true}}>
+    <div class='default-card'>
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
           <FieldContainer
@@ -23,7 +23,7 @@ class DefaultTemplate extends GlimmerComponent<{
           </FieldContainer>
         {{/unless}}
       {{/each-in}}
-    </CardContainer>
+    </div>
   </template>
 }
 
