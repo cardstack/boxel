@@ -25,6 +25,7 @@ import ENV from '@cardstack/host/config/environment';
 import {
   type LooseSingleCardDocument,
   sanitizeHtml,
+  baseRealm,
 } from '@cardstack/runtime-common';
 
 const { matrixURL } = ENV;
@@ -203,6 +204,18 @@ export default class MatrixService extends Service {
       name,
       topic,
       room_alias_name: encodeURIComponent(name),
+      initial_state: [
+        {
+          type: 'org.boxel.eventConsumer',
+          content: {
+            eventsField: 'events',
+            ref: {
+              name: 'MatrixRoomCard',
+              module: `${baseRealm}matrix-room`,
+            },
+          },
+        },
+      ],
     });
     return roomId;
   }
