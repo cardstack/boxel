@@ -39,7 +39,6 @@ interface RoomInvite extends Room {
 
 interface RoomMeta {
   name?: string;
-  encrypted?: boolean;
 }
 
 export type Event = Partial<IEvent>;
@@ -148,18 +147,6 @@ export default class MatrixService extends Service {
     });
     if (this.isLoggedIn) {
       this.router.transitionTo('chat.index');
-      try {
-        await this.client.initCrypto();
-      } catch (e) {
-        // when there are problems, these exceptions are hard to see so logging them explicitly
-        console.error(`Error initializing crypto`, e);
-        throw e;
-      }
-
-      // this let's us send messages to element clients (useful for testing).
-      // probably we wanna verify these unknown devices (when in an encrypted
-      // room). need to research how to do that as its undocumented API
-      this.client.setGlobalErrorOnUnknownDevices(false);
       saveAuth(auth);
       this.bindEventListeners();
 
@@ -170,7 +157,6 @@ export default class MatrixService extends Service {
   async createRoom(
     name: string,
     localInvite: string[], // these are just local names--assume no federation, all users live on the same homeserver
-    encrypted: boolean,
     topic?: string
   ): Promise<string> {
     let homeserver = new URL(this.client.getHomeserverUrl());
@@ -181,16 +167,6 @@ export default class MatrixService extends Service {
       name,
       topic,
       room_alias_name: encodeURIComponent(name),
-      ...(encrypted
-        ? {
-            initial_state: [
-              {
-                content: { algorithm: 'm.megolm.v1.aes-sha2' },
-                type: 'm.room.encryption',
-              },
-            ],
-          }
-        : {}),
     });
     return roomId;
   }
@@ -256,27 +232,8 @@ export default class MatrixService extends Service {
   }
 
   private onTimeline = (e: MatrixEvent) => {
-    let { event } = e;
-    if (
-      event.type === 'm.room.encryption' &&
-      // this is the only algorithm that matrix supports for room encryption
-      event.content?.algorithm === 'm.megolm.v1.aes-sha2'
-    ) {
-      let { room_id: roomId } = event;
-      if (!roomId) {
-        throw new Error(
-          `bug: roomId is undefined for message event ${JSON.stringify(
-            event,
-            null,
-            2
-          )}`
-        );
-      }
-      this.setRoomMeta(roomId, { encrypted: true });
-    } else {
-      this.timelineQueue.push(e);
-      this.debouncedTimelineDrain();
-    }
+    this.timelineQueue.push(e);
+    this.debouncedTimelineDrain();
   };
 
   private debouncedTimelineDrain = debounce(() => {
@@ -429,9 +386,7 @@ export default class MatrixService extends Service {
         case 'join': {
           let { type: _remove, ...joinedRoom } = membership;
           let name = this.rooms.get(roomId)?.name ?? joinedRoom.name;
-          let encrypted =
-            this.rooms.get(roomId)?.encrypted ?? joinedRoom.encrypted;
-          joinedRooms.set(roomId, { ...joinedRoom, ...{ name, encrypted } });
+          joinedRooms.set(roomId, { ...joinedRoom, ...{ name } });
           // once we join a room we remove any invites for this room that are
           // part of this flush as well as historical invites for this room
           invites.delete(roomId);
@@ -490,7 +445,6 @@ export default class MatrixService extends Service {
     if (meta.name !== undefined) {
       roomMeta.name = meta.name;
     }
-    roomMeta.encrypted = roomMeta.encrypted ?? meta.encrypted;
     let invite = this.invites.get(roomId);
     if (invite) {
       this.invites.set(roomId, { ...invite, ...roomMeta });

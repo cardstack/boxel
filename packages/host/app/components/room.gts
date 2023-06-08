@@ -201,13 +201,7 @@ export default class Room extends Component<RoomArgs> {
   }
 
   get roomName() {
-    return `${this.matrixService.rooms.get(this.args.roomId)?.name}${
-      this.isEncrypted ? ' (encrypted)' : ''
-    }`;
-  }
-
-  get isEncrypted() {
-    return this.matrixService.rooms.get(this.args.roomId)?.encrypted;
+    return this.matrixService.rooms.get(this.args.roomId)?.name;
   }
 
   get atBeginningOfTimeline() {
