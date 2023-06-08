@@ -313,5 +313,55 @@ module('Acceptance | basic tests', function (hooks) {
         })
       )}`
     );
+
+    // Click Edit on the top card
+    await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
+
+    // The edit format should be reflected in the URL
+    assert.strictEqual(
+      currentURL(),
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        JSON.stringify({
+          stacks: [
+            {
+              items: [
+                {
+                  card: { id: 'http://test-realm/test/Person/fadhlan' },
+                  format: 'isolated',
+                },
+                {
+                  card: { id: 'http://test-realm/test/Pet/mango' },
+                  format: 'edit',
+                },
+              ],
+            },
+          ],
+        })
+      )}`
+    );
+  });
+
+  test('restoring the stack from query param when card is in edit format', async function (assert) {
+    let operatorModeStateParam = JSON.stringify({
+      stacks: [
+        {
+          items: [
+            {
+              card: { id: 'http://test-realm/test/Person/fadhlan' },
+              format: 'edit',
+            },
+          ],
+        },
+      ],
+    });
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam
+      )}`
+    );
+
+    assert.dom('[data-test-field="firstName"] input').exists(); // Existence of an input field means it is in edit mode
+    assert.dom('[data-test-save-button]').exists(); // Existence of save button means it is in edit mode
   });
 });
