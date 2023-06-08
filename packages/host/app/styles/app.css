@@ -386,9 +386,17 @@ nav > .directory-level {
   --grid-card-width: 10.125rem;
   --grid-card-height: 15.125rem;
 
-  position: relative;
-  max-width: 70rem;
-  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.cards-grid__title {
+  color: var(--boxel-header-text-color, var(--boxel-dark));
+  font: 700 var(--boxel-font-lg);
+  letter-spacing: normal;
+  text-transform: none;
+  padding: var(--boxel-sp-xs);
+  margin-bottom: var(--boxel-sp);
 }
 .cards-grid__cards {
   list-style-type: none;
@@ -398,6 +406,19 @@ nav > .directory-level {
   grid-template-columns: repeat(auto-fit, minmax(var(--grid-card-width), 1fr));
   gap: var(--boxel-sp);
   justify-items: center;
+  height: 100%;
+
+  overflow: auto;
+}
+.cards-grid__cards::-webkit-scrollbar {
+  width: 8px;
+}
+.cards-grid__cards::-webkit-scrollbar-track {
+  background-color: transparent; /* Make the scrollbar track transparent */
+}
+.cards-grid__cards::-webkit-scrollbar-thumb {
+  background-color: var(--boxel-purple-200); /* Set the color of the scrollbar thumb */
+  border-radius: 5px; /* Add rounded corners to the scrollbar thumb */
 }
 .operator-mode .cards-grid__cards > li {
   cursor: pointer;
@@ -405,7 +426,7 @@ nav > .directory-level {
 .cards-grid__add-button {
   position: sticky;
   left: 100%;
-  bottom: 5px;
+  bottom: 20px;
 }
 .grid-card {
   width: var(--grid-card-width);
@@ -504,6 +525,20 @@ nav > .directory-level {
   padding: 0 var(--boxel-sp-xs);
 }
 
+.operator-mode-card-stack__buried .cards-grid__title {
+  cursor: pointer;
+  font: 500 var(--boxel-font-sm);
+  padding: 0 var(--boxel-sp-xs);
+
+  position: absolute;
+  top: 2px;
+  left: 0;
+}
+
+.operator-mode-card-stack__buried .cards-grid__cards, .operator-mode-card-stack__buried .cards-grid__add-button {
+  display: none;
+}
+
 .operator-mode-card-stack__card {
   position: relative;
   height: 100%;
@@ -513,9 +548,24 @@ nav > .directory-level {
   pointer-events: auto;
 }
 
+.operator-mode-card-stack__card--cards-grid {
+  display: flex !important;
+  flex-direction: column;
+  grid-template-rows: 0;
+}
+
 .operator-mode-card-stack__card__content {
   padding: var(--boxel-sp);
   overflow: auto;
+}
+
+.operator-mode-card-stack__card--cards-grid .operator-mode-card-stack__card__content {
+  padding: 0 var(--boxel-sp);
+  overflow: hidden;
+  
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .operator-mode-card-stack__card--edit .operator-mode-card-stack__card__content {
@@ -801,4 +851,8 @@ nav > .directory-level {
   clear: both;
   font-size: var(--boxel-font-size-sm);
   font-weight: initial;
+}
+
+.card-isolated-component {
+  padding: var(--boxel-sp-lg);
 }

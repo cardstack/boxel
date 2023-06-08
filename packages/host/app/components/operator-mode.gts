@@ -380,10 +380,11 @@ export default class OperatorMode extends Component<Signature> {
                 class={{cn
                   'operator-mode-card-stack__card'
                   operator-mode-card-stack__card--edit=(eq item.format 'edit')
+                  operator-mode-card-stack__card--cards-grid=(eq item.card.constructor.name 'CardsGrid')
                 }}
               >
                 <Header
-                  @title={{cardTypeDisplayName item.card}}
+                  @title={{(if (not (eq item.card.constructor.name 'CardsGrid')) (cardTypeDisplayName item.card))}}
                   class='operator-mode-card-stack__card__header'
                   {{on
                     'click'

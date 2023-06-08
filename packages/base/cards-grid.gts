@@ -2,7 +2,7 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
-import { Component, Card, relativeTo } from './card-api';
+import { contains, field, Component, Card, realmInfo, relativeTo } from './card-api';
 import { CardContainer, IconButton } from '@cardstack/boxel-ui';
 import {
   chooseCard,
@@ -13,10 +13,12 @@ import {
 } from '@cardstack/runtime-common';
 import { type CatalogEntry } from './catalog-entry';
 import { fn } from '@ember/helper';
+import StringCard from './string';
 
 class Isolated extends Component<typeof CardsGrid> {
   <template>
     <div class='cards-grid'>
+      <div class='cards-grid__title'>{{@fields.realmName}}</div>
       <ul class='cards-grid__cards'>
         {{#each this.request.instances as |card|}}
           <li
@@ -126,4 +128,9 @@ class Isolated extends Component<typeof CardsGrid> {
 export class CardsGrid extends Card {
   static displayName = 'Cards Grid';
   static isolated = Isolated;
+  @field realmName = contains(StringCard, {
+    computeVia: function (this: CatalogEntry) {
+      return this[realmInfo]?.name;
+    },
+  });
 }
