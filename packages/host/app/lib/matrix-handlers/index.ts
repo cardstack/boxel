@@ -5,8 +5,6 @@ import {
   type IEvent,
 } from 'matrix-js-sdk';
 
-export const eventDebounceMs = 300;
-
 export * as Membership from './membership';
 export * as Timeline from './timeline';
 export * as Room from './room';
@@ -49,7 +47,7 @@ export interface Context {
   )[];
   timelineQueue: MatrixEvent[];
   mapClazz: typeof Map;
-  getClient: () => MatrixClient;
+  client: MatrixClient;
   handleMessage?: (
     context: Context,
     event: Event,

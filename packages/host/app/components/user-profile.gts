@@ -30,38 +30,45 @@ export default class UserProfile extends Component {
       </:actions>
     </BoxelHeader>
 
-    <div class='user-profile__wrapper'>
-      <FieldContainer @label='User ID' @tag='label'>
-        <div class='user-profile__value' data-test-field-value='userId'>
-          {{this.userId}}
-        </div>
-      </FieldContainer>
-
-      <FieldContainer @label='Display Name' @tag='label'>
-        {{#if this.isEditMode}}
-          <BoxelInput
-            data-test-displayName-field
-            type='text'
-            @value={{this.displayName}}
-            @onInput={{this.setDisplayName}}
-          />
-        {{else}}
-          <div class='user-profile__value' data-test-field-value='displayName'>
-            {{#if this.showLoading}}
-              <LoadingIndicator />
-            {{else}}
-              {{this.displayName}}
-            {{/if}}
+    {{#if this.matrixService.isLoading}}
+      <LoadingIndicator />
+    {{else}}
+      <div class='user-profile__wrapper'>
+        <FieldContainer @label='User ID' @tag='label'>
+          <div class='user-profile__value' data-test-field-value='userId'>
+            {{this.userId}}
           </div>
-        {{/if}}
-      </FieldContainer>
-    </div>
-    {{#if this.isEditMode}}
-      <Button
-        data-test-profile-save-btn
-        @disabled={{not this.displayName}}
-        {{on 'click' this.save}}
-      >Save</Button>
+        </FieldContainer>
+
+        <FieldContainer @label='Display Name' @tag='label'>
+          {{#if this.isEditMode}}
+            <BoxelInput
+              data-test-displayName-field
+              type='text'
+              @value={{this.displayName}}
+              @onInput={{this.setDisplayName}}
+            />
+          {{else}}
+            <div
+              class='user-profile__value'
+              data-test-field-value='displayName'
+            >
+              {{#if this.showLoading}}
+                <LoadingIndicator />
+              {{else}}
+                {{this.displayName}}
+              {{/if}}
+            </div>
+          {{/if}}
+        </FieldContainer>
+      </div>
+      {{#if this.isEditMode}}
+        <Button
+          data-test-profile-save-btn
+          @disabled={{not this.displayName}}
+          {{on 'click' this.save}}
+        >Save</Button>
+      {{/if}}
     {{/if}}
   </template>
 

@@ -1,7 +1,7 @@
 import debounce from 'lodash/debounce';
 import { type MatrixEvent } from 'matrix-js-sdk';
 import { Context, Event } from './index';
-import { eventDebounceMs } from './index';
+import { eventDebounceMs } from '../matrix-utils';
 
 export function onTimeline(context: Context) {
   return (e: MatrixEvent) => {
@@ -22,7 +22,7 @@ async function drainTimeline(context: Context) {
   let events = [...context.timelineQueue];
   context.timelineQueue = [];
   for (let event of events) {
-    await context.getClient().decryptEventIfNeeded(event);
+    await context.client.decryptEventIfNeeded(event);
     await processDecryptedEvent(context, {
       ...event.event,
       content: event.getContent() || undefined,

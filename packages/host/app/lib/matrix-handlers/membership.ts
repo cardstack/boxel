@@ -1,7 +1,7 @@
 import debounce from 'lodash/debounce';
 import { type MatrixEvent, type RoomMember } from 'matrix-js-sdk';
 import { Context, RoomInvite, RoomEvent } from './index';
-import { eventDebounceMs } from './index';
+import { eventDebounceMs } from '../matrix-utils';
 
 export function onMembership(context: Context) {
   return (e: MatrixEvent, member: RoomMember) => {
@@ -26,7 +26,7 @@ export function onMembership(context: Context) {
         );
     }
 
-    if (member.userId === context.getClient().getUserId()) {
+    if (member.userId === context.client.getUserId()) {
       let {
         event_id: eventId,
         room_id: roomId,
