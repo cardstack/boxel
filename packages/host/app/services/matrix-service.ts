@@ -43,7 +43,6 @@ interface RoomInvite extends Room {
 
 interface RoomMeta {
   name?: string;
-  encrypted?: boolean;
 }
 
 export type Event = Partial<IEvent>;
@@ -157,18 +156,6 @@ export default class MatrixService extends Service {
     });
     if (this.isLoggedIn) {
       this.router.transitionTo('chat.index');
-      try {
-        await this.client.initCrypto();
-      } catch (e) {
-        // when there are problems, these exceptions are hard to see so logging them explicitly
-        console.error(`Error initializing crypto`, e);
-        throw e;
-      }
-
-      // this let's us send messages to element clients (useful for testing).
-      // probably we wanna verify these unknown devices (when in an encrypted
-      // room). need to research how to do that as its undocumented API
-      this.client.setGlobalErrorOnUnknownDevices(false);
       saveAuth(auth);
       this.bindEventListeners();
 
@@ -179,7 +166,6 @@ export default class MatrixService extends Service {
   async createRoom(
     name: string,
     localInvite: string[], // these are just local names--assume no federation, all users live on the same homeserver
-    encrypted: boolean,
     topic?: string
   ): Promise<string> {
     let homeserver = new URL(this.client.getHomeserverUrl());
@@ -190,16 +176,6 @@ export default class MatrixService extends Service {
       name,
       topic,
       room_alias_name: encodeURIComponent(name),
-      ...(encrypted
-        ? {
-            initial_state: [
-              {
-                content: { algorithm: 'm.megolm.v1.aes-sha2' },
-                type: 'm.room.encryption',
-              },
-            ],
-          }
-        : {}),
     });
     return roomId;
   }
