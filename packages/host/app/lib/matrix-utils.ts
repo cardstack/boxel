@@ -6,6 +6,7 @@ export interface MatrixError {
   httpStatus: number;
   errcode: string;
 }
+export const eventDebounceMs = 300;
 
 export function isMatrixError(err: any): err is MatrixError {
   return (

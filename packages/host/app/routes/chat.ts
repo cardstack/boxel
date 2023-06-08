@@ -6,6 +6,7 @@ export default class Chat extends Route<void> {
   @service declare matrixService: MatrixService;
 
   async model() {
+    await this.matrixService.ready;
     await this.matrixService.start();
   }
 }
