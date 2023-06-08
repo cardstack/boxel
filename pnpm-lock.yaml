@@ -21,7 +21,7 @@ patchedDependencies:
     hash: vlqn3jrrd7zoh7xnqjj35ihq2i
     path: patches/matrix-js-sdk@25.0.0.patch
   style-loader@2.0.0:
-    hash: utm6rzehxedn57d25nbihpq4pq
+    hash: xqjji5denmqrswdovljl2t3yv4
     path: patches/style-loader@2.0.0.patch
 
 importers:
@@ -2260,7 +2260,7 @@ packages:
       '@babel/core': ^7.0.0-0
     dependencies:
       '@babel/core': 7.21.0(supports-color@8.1.1)
-      '@babel/helper-create-class-features-plugin': 7.21.8(@babel/core@7.21.0)
+      '@babel/helper-create-class-features-plugin': 7.20.2(@babel/core@7.21.0)
       '@babel/helper-plugin-utils': 7.20.2
     transitivePeerDependencies:
       - supports-color
@@ -3903,7 +3903,7 @@ packages:
       '@babel/helper-hoist-variables': 7.18.6
       '@babel/helper-split-export-declaration': 7.18.6
       '@babel/parser': 7.20.3
-      '@babel/types': 7.20.2
+      '@babel/types': 7.21.5
       debug: 4.3.4(supports-color@8.1.1)
       globals: 11.12.0
     transitivePeerDependencies:
@@ -4442,7 +4442,7 @@ packages:
       mini-css-extract-plugin: 2.7.0(webpack@5.84.0)
       semver: 7.3.8
       source-map-url: 0.4.1
-      style-loader: 2.0.0(patch_hash=utm6rzehxedn57d25nbihpq4pq)(webpack@5.84.0)
+      style-loader: 2.0.0(patch_hash=xqjji5denmqrswdovljl2t3yv4)(webpack@5.84.0)
       supports-color: 8.1.1
       terser: 5.17.6
       thread-loader: 3.0.4(webpack@5.84.0)
@@ -6998,7 +6998,6 @@ packages:
       make-dir: 3.1.0
       schema-utils: 2.7.1
       webpack: 5.75.0
-    dev: false
 
   /babel-loader@8.3.0(@babel/core@7.21.0)(webpack@5.84.0):
     resolution: {integrity: sha512-H8SvsMF+m9t15HNLMipppzkC+Y2Yq+v3SonZyU70RBL/h1gxPkH08Ot8pEE9Z4Kd+czyWJClmFS8qzIP9OZ04Q==}
@@ -10429,7 +10428,7 @@ packages:
       resolve: 1.22.1
       resolve-package-path: 4.0.3
       semver: 7.3.8
-      style-loader: 2.0.0(patch_hash=utm6rzehxedn57d25nbihpq4pq)(webpack@5.75.0)
+      style-loader: 2.0.0(patch_hash=xqjji5denmqrswdovljl2t3yv4)(webpack@5.75.0)
       typescript-memoize: 1.1.1
       walk-sync: 3.0.0
     transitivePeerDependencies:
@@ -10469,14 +10468,13 @@ packages:
       resolve: 1.22.1
       resolve-package-path: 4.0.3
       semver: 7.3.8
-      style-loader: 2.0.0(patch_hash=utm6rzehxedn57d25nbihpq4pq)(webpack@5.75.0)
+      style-loader: 2.0.0(patch_hash=xqjji5denmqrswdovljl2t3yv4)(webpack@5.75.0)
       typescript-memoize: 1.1.1
       walk-sync: 3.0.0
     transitivePeerDependencies:
       - '@glint/template'
       - supports-color
       - webpack
-    dev: false
 
   /ember-auto-import@2.6.3(@glint/template@1.0.2)(webpack@5.84.0):
     resolution: {integrity: sha512-uLhrRDJYWCRvQ4JQ1e64XlSrqAKSd6PXaJ9ZsZI6Tlms9T4DtQFxNXasqji2ZRJBVrxEoLCRYX3RTldsQ0vNGQ==}
@@ -10510,7 +10508,7 @@ packages:
       resolve: 1.22.1
       resolve-package-path: 4.0.3
       semver: 7.3.8
-      style-loader: 2.0.0(patch_hash=utm6rzehxedn57d25nbihpq4pq)(webpack@5.84.0)
+      style-loader: 2.0.0(patch_hash=xqjji5denmqrswdovljl2t3yv4)(webpack@5.84.0)
       typescript-memoize: 1.1.1
       walk-sync: 3.0.0
     transitivePeerDependencies:
@@ -10952,7 +10950,7 @@ packages:
       ember-cli-babel-plugin-helpers: 1.1.1
       execa: 2.1.0
       fs-extra: 8.1.0
-      resolve: 1.22.1
+      resolve: 1.22.3
       rsvp: 4.8.5
       semver: 6.3.0
       stagehand: 1.0.0
@@ -11569,7 +11567,7 @@ packages:
       '@embroider/addon-shim': 1.8.5
       ember-cli-normalize-entity-name: 1.0.0
       ember-cli-string-utils: 1.1.0
-      ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0)
+      ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.75.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -11838,7 +11836,6 @@ packages:
       - '@glint/template'
       - supports-color
       - webpack
-    dev: false
 
   /ember-source@4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0):
     resolution: {integrity: sha512-h0lV902A4Mny2eiqXPy15uXXoCc7BnUegE4axLAy4IoxEkJ1o5h0aLJFiB4Tzb1htx8vgHjJz//Y5Jig7NSDTw==}
@@ -20052,7 +20049,7 @@ packages:
     engines: {node: '>=8'}
     dev: true
 
-  /style-loader@2.0.0(patch_hash=utm6rzehxedn57d25nbihpq4pq)(webpack@5.75.0):
+  /style-loader@2.0.0(patch_hash=xqjji5denmqrswdovljl2t3yv4)(webpack@5.75.0):
     resolution: {integrity: sha512-Z0gYUJmzZ6ZdRUqpg1r8GsaFKypE+3xAzuFeMuoHgjc9KZv3wMyCRjQIWEbhoFSq7+7yoHXySDJyyWQaPajeiQ==}
     engines: {node: '>= 10.13.0'}
     peerDependencies:
@@ -20063,7 +20060,7 @@ packages:
       webpack: 5.75.0
     patched: true
 
-  /style-loader@2.0.0(patch_hash=utm6rzehxedn57d25nbihpq4pq)(webpack@5.84.0):
+  /style-loader@2.0.0(patch_hash=xqjji5denmqrswdovljl2t3yv4)(webpack@5.84.0):
     resolution: {integrity: sha512-Z0gYUJmzZ6ZdRUqpg1r8GsaFKypE+3xAzuFeMuoHgjc9KZv3wMyCRjQIWEbhoFSq7+7yoHXySDJyyWQaPajeiQ==}
     engines: {node: '>= 10.13.0'}
     peerDependencies:
@@ -22323,7 +22320,7 @@ packages:
       ember-cli-htmlbars: 6.2.0
       ember-compatibility-helpers: 1.2.6(@babel/core@7.20.2)
       ember-destroyable-polyfill: 2.0.3(@babel/core@7.20.2)
-      ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0)
+      ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.75.0)
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
