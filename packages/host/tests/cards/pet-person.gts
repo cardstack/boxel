@@ -30,14 +30,4 @@ export class PetPerson extends Card {
       <@fields.friend />
     </template>
   };
-
-  static isolated = class Isolated extends Component<typeof this> {
-    <template>
-      <h2><@fields.firstName /></h2>
-      Pets:
-      <@fields.pets />
-      Friend:
-      <@fields.friend />
-    </template>
-  };
 }
