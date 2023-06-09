@@ -539,6 +539,8 @@ nav > .directory-level {
   position: absolute;
   border: none;
   width: auto;
+  margin-top: var(--boxel-sp);
+  margin-right: var(--boxel-sp);
 }
 
 .freestyle-search-sheet-example-container {
