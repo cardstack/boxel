@@ -3,6 +3,7 @@
   --operator-mode-bg-color: #686283;
   --grid-card-text-thumbnail-height: 6.25rem;
   --grid-card-label-color: #919191;
+  --stack-card-footer-height: 80px;
 }
 
 /* Go template */
@@ -519,7 +520,7 @@ nav > .directory-level {
 }
 
 .operator-mode-card-stack__card--edit .operator-mode-card-stack__card__content {
-  padding-bottom: 5rem; /* footer height */
+  margin-bottom: var(--stack-card-footer-height)
 }
 
 .operator-mode-card-stack__card__footer {
@@ -529,6 +530,12 @@ nav > .directory-level {
   display: flex;
   justify-content: flex-end;
   padding: var(--boxel-sp);
+  width: 100%;
+  background: white;
+  height: var(--stack-card-footer-height);
+  border-top: 1px solid var(--boxel-300);
+  border-bottom-left-radius: var(--boxel-border-radius);
+  border-bottom-right-radius: var(--boxel-border-radius);
 }
 
 .operator-mode-card-stack__card__footer-button + .operator-mode-card-stack__card__footer-button {
