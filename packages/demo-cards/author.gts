@@ -25,6 +25,7 @@ export class Author extends Card {
       <CardContainer
         class='demo-card'
         @displayBoundaries={{true}}
+        {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
         ...attributes
       >
         <@fields.firstName />
