@@ -65,6 +65,7 @@ import { CardBase } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
+import { mergeRelationships } from './merge-relationships';
 
 export interface FileRef {
   path: LocalPath;
@@ -594,6 +595,18 @@ export class Realm {
         return Array.isArray(sourceValue) ? sourceValue : undefined;
       }
     );
+
+    if (card.data.relationships || patch.data.relationships) {
+      let merged = mergeRelationships(
+        card.data.relationships,
+        patch.data.relationships
+      );
+
+      if (merged && Object.keys(merged).length !== 0) {
+        card.data.relationships = merged;
+      }
+    }
+
     delete (card as any).data.id; // don't write the ID to the file
     let path: LocalPath = `${localPath}.json`;
     let { lastModified } = await this.write(

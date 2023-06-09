@@ -546,6 +546,8 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-country="EditedCountry"]');
     assert.dom('[data-test-person]').hasText('EditedName');
     assert.dom('[data-test-first-letter-of-the-name]').hasText('E');
+
+    await waitFor('[data-test-city="EditedCity"]');
     assert.dom('[data-test-city]').hasText('EditedCity');
     assert.dom('[data-test-country]').hasText('EditedCountry');
   });
@@ -1040,8 +1042,7 @@ module('Integration | operator-mode', function (hooks) {
       .containsText('Jackie Woody Woodster');
   });
 
-  skip('can remove all items of a linksToMany field', async function (assert) {
-    // TODO: Pre-existing bug: removing items in linksToMany field
+  test('can remove all items of a linksToMany field', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
