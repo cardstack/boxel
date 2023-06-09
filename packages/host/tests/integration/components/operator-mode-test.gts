@@ -1,7 +1,7 @@
 import { module, test, skip } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, cardTypeDisplayName } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 import { Loader } from '@cardstack/runtime-common/loader';
 import OperatorMode from '@cardstack/host/components/operator-mode';
@@ -26,6 +26,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
+const realmName = "Operator Mode Workspace";
 
 module('Integration | operator-mode', function (hooks) {
   let adapter: TestRealmAdapter;
@@ -458,6 +459,7 @@ module('Integration | operator-mode', function (hooks) {
           },
         },
       },
+      '.realm.json': `{ "name": "${realmName}" }`
     });
     realm = await TestRealm.createWithAdapter(adapter, this.owner);
     loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
@@ -1099,5 +1101,27 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom(`[data-test-cardstack-operator-mode-overlay-button]`)
       .doesNotExist();
+  });
+
+  test(`displays realm name as cards grid card title and card's display name as other card titles`, async function (assert) {
+    let card = await loadCard(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    assert.dom(`[data-test-cards-grid-title]`).containsText(realmName);
+  
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    assert.dom(`[data-test-stack-card-index="1"]`).exists();
+    let personCard = await loadCard(`${testRealmURL}Person/fadhlan`);
+    assert.dom(`[data-test-boxel-header-title]`).containsText(cardTypeDisplayName(personCard));
+
+    assert.dom(`[data-test-cards-grid-cards]`).isNotVisible();
+    assert.dom(`[data-test-create-new-card-button]`).isNotVisible();
   });
 });

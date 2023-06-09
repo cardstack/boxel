@@ -18,8 +18,8 @@ import StringCard from './string';
 class Isolated extends Component<typeof CardsGrid> {
   <template>
     <div class='cards-grid'>
-      <div class='cards-grid__title'>{{@fields.realmName}}</div>
-      <ul class='cards-grid__cards'>
+      <div class='cards-grid__title' data-test-cards-grid-title>{{@fields.realmName}}</div>
+      <ul class='cards-grid__cards' data-test-cards-grid-cards>
         {{#each this.request.instances as |card|}}
           <li
             data-test-cards-grid-item={{card.id}}
