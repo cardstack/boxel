@@ -5,6 +5,7 @@ import { parse } from 'qs';
 import type CardService from '../services/card-service';
 import type RouterService from '@ember/routing/router-service';
 import { Card } from 'https://cardstack.com/base/card-api';
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 const { ownRealmURL } = ENV;
 const rootPath = new URL(ownRealmURL).pathname.replace(/^\//, '');
@@ -12,8 +13,18 @@ const rootPath = new URL(ownRealmURL).pathname.replace(/^\//, '');
 export type Model = Card | null;
 
 export default class RenderCard extends Route<Model | null> {
+  queryParams = {
+    operatorModeState: {
+      refreshModel: true, // Enabled so that back-forward navigation works in operator mode
+    },
+    operatorModeEnabled: {
+      refreshModel: true,
+    },
+  };
+
   @service declare cardService: CardService;
   @service declare router: RouterService;
+  @service declare operatorModeStateService: OperatorModeStateService;
 
   beforeModel(transition: any) {
     let queryParams = parse(
@@ -34,15 +45,27 @@ export default class RenderCard extends Route<Model | null> {
     }
   }
 
-  async model(params: { path: string }): Promise<Model> {
-    let { path } = params;
+  async model(params: {
+    path: string;
+    operatorModeState: string;
+    operatorModeEnabled: boolean;
+  }): Promise<Model> {
+    let { path, operatorModeState, operatorModeEnabled } = params;
     path = path || '';
     let url = path
       ? new URL(`/${path}`, ownRealmURL)
       : new URL('./', ownRealmURL);
 
     try {
-      return await this.cardService.loadModel(url);
+      let model = await this.cardService.loadModel(url);
+
+      if (operatorModeEnabled) {
+        let operatorModeStateObject = JSON.parse(operatorModeState);
+
+        await this.operatorModeStateService.restore(operatorModeStateObject);
+      }
+
+      return model;
     } catch (e) {
       (e as any).failureLoadingIndexCard = url.href === ownRealmURL;
       throw e;
