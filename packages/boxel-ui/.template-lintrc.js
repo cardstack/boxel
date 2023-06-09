@@ -5,4 +5,13 @@ module.exports = {
   rules: {
     'require-button-type': false,
   },
+  overrides: [
+    {
+      files: ['**/*.gjs', '**/*.gts'],
+      rules: {
+        // This is the default without style, as we use glimmer-scoped-css
+        'no-forbidden-elements': ['meta', 'html', 'script'],
+      },
+    },
+  ],
 };
