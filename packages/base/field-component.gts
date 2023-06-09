@@ -9,9 +9,10 @@ import {
   isCard,
 } from './card-api';
 import { defaultComponent } from './default-card-component';
-import { getField } from '@cardstack/runtime-common';
+import { getField, cardTypeDisplayName } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
-import { CardContainer } from '@cardstack/boxel-ui';
+import { CardContainer, Header } from '@cardstack/boxel-ui';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import Modifier from 'ember-modifier';
 
 const componentCache = new WeakMap<
@@ -50,15 +51,24 @@ export function getBoxComponent(
 
   let component: ComponentLike<{ Args: {}; Blocks: {} }> = <template>
     {{#if (isCard model.value)}}
-      <CardContainer class='boxel-card' @displayBoundaries={{true}}>
-        <Implementation
-          @model={{model.value}}
-          @fields={{internalFields}}
-          @set={{model.set}}
-          @fieldName={{model.name}}
-          @context={{context}}
-          {{cardComponentModifier model.value context}}
-        />
+      <CardContainer @displayBoundaries={{true}}>
+        {{#unless (eq format 'embedded')}}
+          <Header
+            @title='{{if (eq format "edit") "Edit "}} {{cardTypeDisplayName
+              model.value
+            }}'
+          />
+        {{/unless}}
+        <div class='boxel-card'>
+          <Implementation
+            @model={{model.value}}
+            @fields={{internalFields}}
+            @set={{model.set}}
+            @fieldName={{model.name}}
+            @context={{context}}
+            {{cardComponentModifier model.value context}}
+          />
+        </div>
       </CardContainer>
     {{else}}
       <Implementation

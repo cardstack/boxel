@@ -157,14 +157,15 @@ nav > .directory-level {
   font-size: var(--boxel-font-size-xs);
 }
 
-/* Default Card Component */
-.default-card {
-  display: grid;
-  gap: var(--boxel-sp-lg);
+/* For all cards */
+.boxel-card {
+  padding: var(--boxel-sp) var(--boxel-sp-xl);
 }
 
-.boxel-card {
-  padding: var(--boxel-sp);
+/* Default Card Component */
+.default-card-template {
+  display: grid;
+  gap: var(--boxel-sp-lg);
 }
 
 /* LinksTo Editor */

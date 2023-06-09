@@ -11,7 +11,7 @@ class DefaultTemplate extends GlimmerComponent<{
   };
 }> {
   <template>
-    <div class='default-card'>
+    <div class='default-card-template'>
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
           <FieldContainer
