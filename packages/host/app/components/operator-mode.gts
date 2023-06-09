@@ -23,7 +23,6 @@ import SearchSheet, {
 import { restartableTask } from 'ember-concurrency';
 import {
   Deferred,
-  identifyCard,
   baseCardRef,
   chooseCard,
   type Actions,
@@ -47,7 +46,6 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 
 interface Signature {
   Args: {
-    firstCardInStack: Card;
     onClose: () => void;
   };
 }
@@ -94,19 +92,11 @@ export default class OperatorMode extends Component<Signature> {
       delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
       this.operatorModeStateService.clearStack();
     });
-
-    // afterRender to prevent recomputation errors
-    schedule('afterRender', () => {
-      this.addToStack({
-        card: this.args.firstCardInStack,
-        format: 'isolated',
-      });
-    });
   }
 
   get stack() {
     // We return the first one until we start supporting 2 stacks
-    return this.operatorModeStateService.state.stacks[0].items;
+    return this.operatorModeStateService.state?.stacks[0]?.items;
   }
 
   @action
@@ -144,7 +134,8 @@ export default class OperatorMode extends Component<Signature> {
       request,
     };
 
-    this.operatorModeStateService.replaceItemInStack(item, newItem);
+    this.replaceItemInStack(item, newItem);
+
     return newItem;
   }
 
@@ -170,12 +161,16 @@ export default class OperatorMode extends Component<Signature> {
       if (isLinkedCard) {
         this.close(item); // closes the 'create new card' editor for linked card fields
       } else {
-        this.operatorModeStateService.replaceItemInStack(item, {
+        this.replaceItemInStack(item, {
           card: updatedCard,
           format: 'isolated',
         });
       }
     }
+  }
+
+  replaceItemInStack(item: StackItem, newItem: StackItem) {
+    this.operatorModeStateService.replaceItemInStack(item, newItem);
   }
 
   private write = restartableTask(async (card: Card) => {
@@ -306,11 +301,11 @@ export default class OperatorMode extends Component<Signature> {
   }
 
   addCard = restartableTask(async () => {
-    let type =
-      identifyCard(this.args.firstCardInStack.constructor) ?? baseCardRef;
+    let type = baseCardRef;
     let chosenCard: Card | undefined = await chooseCard({
       filter: { type },
     });
+
     if (chosenCard) {
       let newItem: StackItem = {
         card: chosenCard,

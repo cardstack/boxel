@@ -10,13 +10,20 @@ import { Model } from '@cardstack/host/routes/card';
 import { registerDestructor } from '@ember/destroyable';
 import type { Query } from '@cardstack/runtime-common/query';
 import { getSearchResults, type Search } from '../resources/search';
+import OperatorModeStateService, {
+  SerializedState as OperatorModeSerializedState,
+} from '@cardstack/host/services/operator-mode-state-service';
 
 export default class CardController extends Controller {
+  queryParams = ['operatorModeState', 'operatorModeEnabled'];
+
   isolatedCardComponent: ComponentLike | undefined;
   withPreventDefault = withPreventDefault;
   @service declare router: RouterService;
   @tracked operatorModeEnabled = false;
   @tracked model: Model | undefined;
+  @tracked operatorModeState: string | null = null;
+  @service declare operatorModeStateService: OperatorModeStateService;
 
   constructor(args: any) {
     super(args);
@@ -41,6 +48,24 @@ export default class CardController extends Controller {
   @action
   toggleOperatorMode() {
     this.operatorModeEnabled = !this.operatorModeEnabled;
+
+    if (this.operatorModeEnabled) {
+      // When entering operator mode, put the current card on the stack
+      this.operatorModeState = JSON.stringify({
+        stacks: [
+          {
+            items: [
+              {
+                card: { id: this.model!.id },
+                format: 'isolated',
+              },
+            ],
+          },
+        ],
+      } as OperatorModeSerializedState);
+    } else {
+      this.operatorModeState = null;
+    }
   }
 
   @action
