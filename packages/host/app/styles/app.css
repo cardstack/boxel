@@ -546,6 +546,10 @@ nav > .directory-level {
   grid-template-rows: 0;
 }
 
+.operator-mode-card-stack__card--cards-grid .operator-mode-card-stack__card__header {
+  z-index: 1;
+}
+
 .operator-mode-card-stack__card__content {
   padding: var(--boxel-sp);
   overflow: auto;
@@ -558,10 +562,6 @@ nav > .directory-level {
   display: flex;
   flex-direction: column;
   height: 100%;
-}
-
-.operator-mode-card-stack__card--edit .operator-mode-card-stack__card__content {
-  padding-bottom: 5rem; /* footer height */
 }
 
 .operator-mode-card-stack__card__footer {

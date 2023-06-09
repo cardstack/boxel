@@ -7,7 +7,7 @@ import { fn } from '@ember/helper';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import type CardService from '../services/card-service';
 // import getValueFromWeakMap from '../helpers/get-value-from-weakmap';
-import { eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { and, eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import optional from '@cardstack/boxel-ui/helpers/optional';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import {
@@ -320,6 +320,10 @@ export default class OperatorMode extends Component<Signature> {
     return stackIndex + 1 < this.stack.length;
   }
 
+  isUseCardDisplayName(item: StackItem) {
+    return item.card.constructor.name !== 'CardsGrid' || item.format === 'edit'
+  }
+
   @action
   async dismissStackedCardsAbove(stackIndex: number) {
     for (let i = this.stack.length - 1; i > stackIndex; i--) {
@@ -375,11 +379,11 @@ export default class OperatorMode extends Component<Signature> {
                 class={{cn
                   'operator-mode-card-stack__card'
                   operator-mode-card-stack__card--edit=(eq item.format 'edit')
-                  operator-mode-card-stack__card--cards-grid=(eq item.card.constructor.name 'CardsGrid')
+                  operator-mode-card-stack__card--cards-grid=(and (eq item.card.constructor.name 'CardsGrid') (not (eq item.format 'edit')))
                 }}
               >
                 <Header
-                  @title={{(if (not (eq item.card.constructor.name 'CardsGrid')) (cardTypeDisplayName item.card))}}
+                  @title={{(if (this.isUseCardDisplayName item) (cardTypeDisplayName item.card))}}
                   class='operator-mode-card-stack__card__header'
                   {{on
                     'click'
