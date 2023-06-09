@@ -18,30 +18,32 @@ import { action } from '@ember/object';
 
 class Isolated extends Component<typeof Claim> {
   <template>
-    <FieldContainer @label='Module Address.'><@fields.moduleAddress
-      /></FieldContainer>
-    <FieldContainer @label='Safe Address'><@fields.safeAddress
-      /></FieldContainer>
-    <FieldContainer @label='Explanation'><@fields.explanation
-      /></FieldContainer>
-    <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
-    {{#if this.connectedAndSameChain}}
-      <Button {{on 'click' this.claim}}>
-        {{#if this.doClaim.isRunning}}
-          Claiming...
-        {{else}}
-          Claim
-        {{/if}}
-      </Button>
-    {{else}}
-      <Button {{on 'click' this.connectMetamask}}>
-        {{#if this.metamask.doConnectMetamask.isRunning}}
-          Connecting...
-        {{else}}
-          Connect
-        {{/if}}
-      </Button>
-    {{/if}}
+    <div class='demo-card'>
+      <FieldContainer @label='Module Address.'><@fields.moduleAddress
+        /></FieldContainer>
+      <FieldContainer @label='Safe Address'><@fields.safeAddress
+        /></FieldContainer>
+      <FieldContainer @label='Explanation'><@fields.explanation
+        /></FieldContainer>
+      <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
+      {{#if this.connectedAndSameChain}}
+        <Button {{on 'click' this.claim}}>
+          {{#if this.doClaim.isRunning}}
+            Claiming...
+          {{else}}
+            Claim
+          {{/if}}
+        </Button>
+      {{else}}
+        <Button {{on 'click' this.connectMetamask}}>
+          {{#if this.metamask.doConnectMetamask.isRunning}}
+            Connecting...
+          {{else}}
+            Connect
+          {{/if}}
+        </Button>
+      {{/if}}
+    </div>
   </template>
 
   // chainId is not explicitly passed to resource
@@ -88,13 +90,15 @@ export class Claim extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <FieldContainer @label='Title'><@fields.title /></FieldContainer>
-      <FieldContainer @label='Explanation'><@fields.explanation
-        /></FieldContainer>
-      <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
-      <Button>
-        Look at Claim
-      </Button>
+      <div class='demo-card'>
+        <FieldContainer @label='Title'><@fields.title /></FieldContainer>
+        <FieldContainer @label='Explanation'><@fields.explanation
+          /></FieldContainer>
+        <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
+        <Button>
+          Look at Claim
+        </Button>
+      </div>
     </template>
   };
   static isolated = Isolated;

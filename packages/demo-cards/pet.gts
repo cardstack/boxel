@@ -25,6 +25,7 @@ export class Pet extends Card {
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <div
+        class='demo-card'
         {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
         ...attributes
       >
@@ -35,12 +36,14 @@ export class Pet extends Card {
   };
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <h2><@fields.firstName /></h2>
-      <div>
-        <div>Sleeps On the Couch: <@fields.sleepsOnTheCouch /></div>
-        <div>Favorite Toy: <@fields.favoriteToy /></div>
-        <div>Favorite Treat: <@fields.favoriteTreat /></div>
-        <div>Cuteness Rating: <@fields.cutenessRating /></div>
+      <div class='demo-card'>
+        <h2><@fields.firstName /></h2>
+        <div>
+          <div>Sleeps On the Couch: <@fields.sleepsOnTheCouch /></div>
+          <div>Favorite Toy: <@fields.favoriteToy /></div>
+          <div>Favorite Treat: <@fields.favoriteTreat /></div>
+          <div>Cuteness Rating: <@fields.cutenessRating /></div>
+        </div>
       </div>
     </template>
   };

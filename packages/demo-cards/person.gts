@@ -24,19 +24,23 @@ export class Person extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <h3><@fields.firstName /> <@fields.lastName /></h3>
-      {{#if @model.pet}}<div><@fields.pet /></div>{{/if}}
+      <div class='demo-card'>
+        <h3><@fields.firstName /> <@fields.lastName /></h3>
+        {{#if @model.pet}}<div><@fields.pet /></div>{{/if}}
+      </div>
     </template>
   };
 
   static isolated = class Isolated extends Component<typeof Person> {
     <template>
-      <h2><@fields.firstName /> <@fields.lastName /></h2>
-      <div>
-        <div>Is Cool: <@fields.isCool /></div>
-        <div>Is Human: <@fields.isHuman /></div>
+      <div class='demo-card'>
+        <h2><@fields.firstName /> <@fields.lastName /></h2>
+        <div>
+          <div>Is Cool: <@fields.isCool /></div>
+          <div>Is Human: <@fields.isHuman /></div>
+        </div>
+        {{#if @model.pet}}<@fields.pet />{{/if}}
       </div>
-      {{#if @model.pet}}<@fields.pet />{{/if}}
     </template>
   };
 }

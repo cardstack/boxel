@@ -18,7 +18,10 @@ export class Friends extends Card {
   });
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      Name: <@fields.firstName />
+      <div class='demo-card'>
+        Name:
+        <@fields.firstName />
+      </div>
     </template>
   };
 }

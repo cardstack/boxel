@@ -366,7 +366,6 @@ nav > .directory-level {
 }
 
 .demo-card {
-  padding: var(--boxel-sp);
   display: grid;
   gap: var(--boxel-sp);
 }
