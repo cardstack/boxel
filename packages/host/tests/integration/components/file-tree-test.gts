@@ -144,7 +144,7 @@ module('Integration | file-tree', function (hooks) {
       }
     );
     await click('[data-test-create-new-card-button]');
-    await waitFor('[data-test-card-catalog-modal] [data-test-ref]');
+    await waitFor('[data-test-card-catalog-modal] [data-test-realm-name]');
 
     assert
       .dom('[data-test-card-catalog] li')

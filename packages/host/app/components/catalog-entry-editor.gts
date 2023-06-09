@@ -3,6 +3,7 @@ import {
   catalogEntryRef,
   type CardRef,
   humanReadable,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -88,6 +89,9 @@ export default class CatalogEntryEditor extends Component<Signature> {
 
   @action
   async createEntry(): Promise<void> {
+    let loader = this.cardService.loaderService.loader;
+    let realmInfoResponse = await loader.fetch(`${this.cardService.defaultURL}_info`, { headers: {Accept: SupportedMimeType.RealmInfo}});
+
     let resource = {
       attributes: {
         title: humanReadable(this.args.ref),
@@ -97,6 +101,8 @@ export default class CatalogEntryEditor extends Component<Signature> {
       },
       meta: {
         adoptsFrom: this.catalogEntryRef,
+        realmInfo: (await realmInfoResponse.json())?.data?.attributes,
+        realmURL: this.cardService.defaultURL.href,
         fields: {
           demo: {
             adoptsFrom: this.args.ref,

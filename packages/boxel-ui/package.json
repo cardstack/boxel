@@ -26,6 +26,7 @@
     "test:ember": "ember test"
   },
   "dependencies": {
+    "@embroider/macros": "^1.10.0",
     "classnames": "^2.3.2",
     "dayjs": "^1.11.7",
     "ember-auto-import": "^2.6.3",
@@ -39,6 +40,7 @@
     "ember-svg-jar": "^2.4.2",
     "ember-template-imports": "^3.1.2",
     "file-loader": "^6.2.0",
+    "glimmer-scoped-css": "^0.2.0",
     "lodash": "^4.17.21"
   },
   "devDependencies": {
@@ -48,7 +50,7 @@
     "@ember/optional-features": "^2.0.0",
     "@ember/string": "^3.0.1",
     "@ember/test-helpers": "^2.9.3",
-    "@embroider/compat": "^3.0.0",
+    "@embroider/compat": "^3.0.1",
     "@embroider/macros": "^1.11.0",
     "@embroider/webpack": "^3.0.0",
     "@glimmer/component": "^1.1.2",

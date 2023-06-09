@@ -23,7 +23,7 @@ import {
 import Message from './message';
 import { type RoomMember } from 'matrix-js-sdk';
 import type MatrixService from '../services/matrix-service';
-import { eventDebounceMs } from '../services/matrix-service';
+import { eventDebounceMs } from '../lib/matrix-utils';
 import { type Card } from 'https://cardstack.com/base/card-api';
 import type CardService from '../services/card-service';
 
@@ -201,13 +201,7 @@ export default class Room extends Component<RoomArgs> {
   }
 
   get roomName() {
-    return `${this.matrixService.rooms.get(this.args.roomId)?.name}${
-      this.isEncrypted ? ' (encrypted)' : ''
-    }`;
-  }
-
-  get isEncrypted() {
-    return this.matrixService.rooms.get(this.args.roomId)?.encrypted;
+    return this.matrixService.rooms.get(this.args.roomId)?.name;
   }
 
   get atBeginningOfTimeline() {
@@ -356,6 +350,7 @@ export default class Room extends Component<RoomArgs> {
   // concurrently. When loading cards we use the enqueue task to load one card at a time
   // in the room. When this bug is fixed we should move this method into the Message component
   // so cards can load concurrently.
+  // TODO this bug has been solved so we can clean this up now
   private loadCard = enqueueTask(
     async (doc: LooseSingleCardDocument, onComplete: (card: Card) => void) => {
       let id = doc.data.id;

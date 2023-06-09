@@ -1,0 +1,26 @@
+diff --git a/dist/runtime/injectStylesIntoStyleTag.js b/dist/runtime/injectStylesIntoStyleTag.js
+index 71b848c4b657871ed05449e75bb1d6eebd254d37..48d07973a3c4ab6798a8905ac10f3b9dedd9d02c 100644
+--- a/dist/runtime/injectStylesIntoStyleTag.js
++++ b/dist/runtime/injectStylesIntoStyleTag.js
+@@ -90,6 +90,10 @@ function modulesToDom(list, options) {
+ }
+ 
+ function insertStyleElement(options) {
++  // Prevent this running in realm-server’s DOM-less embedded host
++  if (!globalThis.document) {
++    return '/* Missing */';
++  }
+   var style = document.createElement('style');
+   var attributes = options.attributes || {};
+ 
+@@ -163,6 +167,10 @@ function applyToSingletonTag(style, index, remove, obj) {
+ }
+ 
+ function applyToTag(style, options, obj) {
++  // Prevent this running in realm-server’s DOM-less embedded host
++  if (!globalThis.document) {
++    return;
++  }
+   var css = obj.css;
+   var media = obj.media;
+   var sourceMap = obj.sourceMap;

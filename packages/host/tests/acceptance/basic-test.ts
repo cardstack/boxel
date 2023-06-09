@@ -241,7 +241,7 @@ module('Acceptance | basic tests', function (hooks) {
   test('can create a new card', async function (assert) {
     await visit('/code');
     await click('[data-test-create-new-card-button]');
-    await waitFor('[data-test-card-catalog-modal] [data-test-ref]');
+    await waitFor('[data-test-card-catalog-modal] [data-test-realm-name]');
 
     await click(`[data-test-select="${testRealmURL}person-entry"]`);
     await waitFor(`[data-test-create-new-card="Person"]`);

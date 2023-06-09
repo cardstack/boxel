@@ -6,7 +6,6 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import { Loader } from '@cardstack/runtime-common/loader';
 import OperatorMode from '@cardstack/host/components/operator-mode';
 import CardPrerender from '@cardstack/host/components/card-prerender';
-import { Card } from 'https://cardstack.com/base/card-api';
 import { renderComponent } from '../../helpers/render-component';
 import {
   testRealmURL,
@@ -24,8 +23,9 @@ import {
 } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-let cardApi: typeof import('https://cardstack.com/base/card-api');
+let setCardInOperatorModeState: (card: string) => Promise<void>;
 
 module('Integration | operator-mode', function (hooks) {
   let adapter: TestRealmAdapter;
@@ -36,40 +36,18 @@ module('Integration | operator-mode', function (hooks) {
     hooks,
     async () => await Loader.import(`${baseRealm.url}card-api`)
   );
-
-  let onClose = () => {};
-
-  async function loadCard(url: string): Promise<Card> {
-    let { createFromSerialized, recompute } = cardApi;
-    let result = await realm.searchIndex.card(new URL(url));
-    if (!result || result.type === 'error') {
-      throw new Error(
-        `cannot get instance ${url} from the index: ${
-          result ? result.error.detail : 'not found'
-        }`
-      );
-    }
-    let card = await createFromSerialized<typeof Card>(
-      result.doc.data,
-      result.doc,
-      new URL(url),
-      {
-        loader: Loader.getLoaderFor(createFromSerialized),
-      }
-    );
-    await recompute(card, { loadFields: true });
-    return card;
-  }
+  let noop = () => {};
 
   hooks.beforeEach(async function () {
     Loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
+
     shimExternals();
+
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
 
     adapter = new TestRealmAdapter({
       'pet.gts': `
@@ -462,14 +440,35 @@ module('Integration | operator-mode', function (hooks) {
     realm = await TestRealm.createWithAdapter(adapter, this.owner);
     loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
     await realm.ready;
+
+    setCardInOperatorModeState = async (cardURL: string) => {
+      let operatorModeStateService = this.owner.lookup(
+        'service:operator-mode-state-service'
+      ) as OperatorModeStateService;
+
+      await operatorModeStateService.restore({
+        stacks: [
+          {
+            items: [
+              {
+                card: {
+                  id: cardURL,
+                },
+                format: 'isolated',
+              },
+            ],
+          },
+        ],
+      });
+    };
   });
 
   test('it loads a card and renders its isolated view', async function (assert) {
-    let card = await loadCard(`${testRealmURL}Person/fadhlan`);
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -489,11 +488,12 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test("it doesn't change the field value if user clicks cancel in edit view", async function (assert) {
-    let card = await loadCard(`${testRealmURL}Person/fadhlan`);
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -518,11 +518,12 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('it changes the field value if user clicks save in edit view', async function (assert) {
-    let card = await loadCard(`${testRealmURL}Person/fadhlan`);
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -541,6 +542,8 @@ module('Integration | operator-mode', function (hooks) {
     await click('[aria-label="Save"]');
 
     await waitFor('[data-test-person="EditedName"]');
+    await waitFor('[data-test-city="EditedCity"]');
+    await waitFor('[data-test-country="EditedCountry"]');
     assert.dom('[data-test-person]').hasText('EditedName');
     assert.dom('[data-test-first-letter-of-the-name]').hasText('E');
 
@@ -550,11 +553,12 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('displays add card button if user closes the only card in the stack and opens a card from card chooser', async function (assert) {
-    let card = await loadCard(`${testRealmURL}Person/fadhlan`);
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -583,11 +587,12 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('displays cards on cards-grid', async function (assert) {
-    let card = await loadCard(`${testRealmURL}grid`);
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -614,11 +619,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can create a card using the cards-grid', async function (assert) {
-    let card = await loadCard(`${testRealmURL}grid`);
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -649,11 +654,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can open a card from the cards-grid and close it', async function (assert) {
-    let card = await loadCard(`${testRealmURL}grid`);
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -674,11 +679,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('create new card editor opens in the stack at each nesting level', async function (assert) {
-    let card = await loadCard(`${testRealmURL}grid`);
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -766,11 +771,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can choose a card for a linksTo field that has an existing value', async function (assert) {
-    let card = await loadCard(`${testRealmURL}BlogPost/1`);
+    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -796,11 +801,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can choose a card for a linksTo field that has no existing value', async function (assert) {
-    let card = await loadCard(`${testRealmURL}BlogPost/2`);
+    await setCardInOperatorModeState(`${testRealmURL}BlogPost/2`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -828,11 +833,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can create a new card to populate a linksTo field', async function (assert) {
-    let card = await loadCard(`${testRealmURL}BlogPost/2`);
+    await setCardInOperatorModeState(`${testRealmURL}BlogPost/2`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -873,11 +878,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can remove the link for a linksTo field', async function (assert) {
-    let card = await loadCard(`${testRealmURL}BlogPost/1`);
+    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -897,11 +902,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can add a card to a linksToMany field with existing values', async function (assert) {
-    let card = await loadCard(`${testRealmURL}Person/burcu`);
+    await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -925,11 +930,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can add a card to linksToMany field that has no existing values', async function (assert) {
-    let card = await loadCard(`${testRealmURL}Person/fadhlan`);
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -948,11 +953,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can change the item selection in a linksToMany field', async function (assert) {
-    let card = await loadCard(`${testRealmURL}Person/burcu`);
+    await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -977,11 +982,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can create a new card to add to a linksToMany field with no existing value', async function (assert) {
-    let card = await loadCard(`${testRealmURL}Person/fadhlan`);
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -1006,11 +1011,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can create a new card to add to a linksToMany field with existing values', async function (assert) {
-    let card = await loadCard(`${testRealmURL}Person/burcu`);
+    await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -1038,11 +1043,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can remove all items of a linksToMany field', async function (assert) {
-    let card = await loadCard(`${testRealmURL}Person/burcu`);
+    await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -1072,11 +1077,11 @@ module('Integration | operator-mode', function (hooks) {
   skip('can create a specialized a new card to populate a linksToMany field');
 
   test('can close cards by clicking the header of a card deeper in the stack', async function (assert) {
-    let card = await loadCard(`${testRealmURL}grid`);
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }

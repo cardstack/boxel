@@ -35,7 +35,6 @@ test.describe('Room membership', () => {
     await createRoom(page, {
       name: 'Room 1',
       invites: ['user2'],
-      encrypted: true,
     });
     await logout(page);
     await login(page, 'user2', 'pass');
@@ -55,7 +54,6 @@ test.describe('Room membership', () => {
     await createRoom(page, {
       name: 'Room 1',
       invites: ['user2'],
-      encrypted: true,
     });
     await logout(page);
     await login(page, 'user2', 'pass');
@@ -65,21 +63,21 @@ test.describe('Room membership', () => {
     });
     await joinRoom(page, 'Room 1');
     await assertRooms(page, {
-      joinedRooms: [{ name: 'Room 1', encrypted: true }],
+      joinedRooms: [{ name: 'Room 1' }],
     });
 
     await page.reload();
     await assertRooms(page, {
-      joinedRooms: [{ name: 'Room 1', encrypted: true }],
+      joinedRooms: [{ name: 'Room 1' }],
     });
   });
 
   test('it can leave a joined room', async ({ page }) => {
     await login(page, 'user1', 'pass');
-    await createRoom(page, { name: 'Room 1', encrypted: true });
+    await createRoom(page, { name: 'Room 1' });
 
     await assertRooms(page, {
-      joinedRooms: [{ name: 'Room 1', encrypted: true }],
+      joinedRooms: [{ name: 'Room 1' }],
     });
     await leaveRoom(page, 'Room 1');
     await assertRooms(page, {});
@@ -93,7 +91,6 @@ test.describe('Room membership', () => {
     await createRoom(page, {
       name: 'Room 1',
       invites: ['user2', 'user3'],
-      encrypted: true,
     });
 
     await openRoom(page, 'Room 1');
@@ -129,7 +126,6 @@ test.describe('Room membership', () => {
     await login(page, 'user1', 'pass');
     await createRoom(page, {
       name: 'Room 1',
-      encrypted: true,
     });
     await openRoom(page, 'Room 1');
     await expect(page.locator('[data-test-room-members]')).toHaveText(
@@ -161,7 +157,6 @@ test.describe('Room membership', () => {
     await login(page, 'user1', 'pass');
     await createRoom(page, {
       name: 'Room 1',
-      encrypted: true,
     });
     await openRoom(page, 'Room 1');
     expect(
@@ -186,7 +181,6 @@ test.describe('Room membership', () => {
     await login(page, 'user1', 'pass');
     await createRoom(page, {
       name: 'Room 1',
-      encrypted: true,
     });
     await openRoom(page, 'Room 1');
     await expect(page.url()).toContain('/chat/room/');
