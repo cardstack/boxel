@@ -393,15 +393,12 @@ nav > .directory-level {
 .cards-grid__title {
   color: var(--boxel-header-text-color, var(--boxel-dark));
   font: 700 var(--boxel-font-lg);
-  letter-spacing: normal;
-  text-transform: none;
-  padding: var(--boxel-sp-xs);
-  margin-bottom: var(--boxel-sp);
+  padding: var(--boxel-sp-lg) var(--boxel-sp-xl) var(--boxel-sp-xl) var(--boxel-sp-xl);
 }
 .cards-grid__cards {
   list-style-type: none;
   margin: 0;
-  padding: 0;
+  padding: 0 var(--boxel-sp);
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(var(--grid-card-width), 1fr));
   gap: var(--boxel-sp);
@@ -410,23 +407,13 @@ nav > .directory-level {
 
   overflow: auto;
 }
-.cards-grid__cards::-webkit-scrollbar {
-  width: 8px;
-}
-.cards-grid__cards::-webkit-scrollbar-track {
-  background-color: transparent; /* Make the scrollbar track transparent */
-}
-.cards-grid__cards::-webkit-scrollbar-thumb {
-  background-color: var(--boxel-purple-200); /* Set the color of the scrollbar thumb */
-  border-radius: 5px; /* Add rounded corners to the scrollbar thumb */
-}
 .operator-mode .cards-grid__cards > li {
   cursor: pointer;
 }
 .cards-grid__add-button {
-  position: sticky;
-  left: 100%;
-  bottom: 20px;
+  position: absolute;
+  right: 30px;
+  bottom: 30px;
 }
 .grid-card {
   width: var(--grid-card-width);
@@ -560,7 +547,7 @@ nav > .directory-level {
 }
 
 .operator-mode-card-stack__card--cards-grid .operator-mode-card-stack__card__content {
-  padding: 0 var(--boxel-sp);
+  padding: 0;
   overflow: hidden;
   
   display: flex;
