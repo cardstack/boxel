@@ -555,6 +555,10 @@ nav > .directory-level {
   overflow: auto;
 }
 
+.operator-mode-card-stack__card--edit .operator-mode-card-stack__card__content {
+  padding-bottom: 5rem; /* footer height */
+}
+
 .operator-mode-card-stack__card--cards-grid .operator-mode-card-stack__card__content {
   padding: 0;
   overflow: hidden;
