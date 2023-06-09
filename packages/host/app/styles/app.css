@@ -159,6 +159,14 @@ nav > .directory-level {
 
 /* For all cards */
 .boxel-card {
+  padding: var(--boxel-sp);
+}
+
+.isolated-card {
+  padding: var(--boxel-sp) var(--boxel-sp-xl);
+}
+
+.edit-card.saved {
   padding: var(--boxel-sp) var(--boxel-sp-xl);
 }
 
