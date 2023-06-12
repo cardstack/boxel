@@ -110,6 +110,7 @@ class Isolated extends Component<typeof Claim> {
   private async loadCardpaySDK() {
     // we load this import dynamically from an unpkg url.
     // This will prevent SLOW load times and INCOMPATIBLE browser apis that fastboot will complain about (e.g. XMLHtppRequest)
+    // @ts-ignore
     const { getSDK, Web3Provider } = await import(
       'https://unpkg.com/@cardstack/cardpay-sdk@1.0.53/dist/browser.js'
     );
