@@ -58,6 +58,8 @@ export default class MatrixService extends Service {
   > = new TrackedMap();
   rooms: Map<string, RoomMeta> = new Map();
   timelines: TrackedMap<string, TrackedMap<string, Event>> = new TrackedMap();
+  roomEventConsumers: TrackedMap<string, { card: Card; eventsField: string }> =
+    new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   mapClazz = TrackedMap as unknown as typeof Map;
   #ready: Promise<void>;
@@ -101,7 +103,13 @@ export default class MatrixService extends Service {
         Membership.onMembership(this),
       ],
       [this.matrixSDK.RoomEvent.Name, Room.onRoomName(this)],
-      [this.matrixSDK.RoomEvent.Timeline, Timeline.onTimeline(this)],
+      [
+        this.matrixSDK.RoomEvent.Timeline,
+        Timeline.onTimeline(
+          this,
+          this.cardService.createFromSerialized.bind(this.cardService)
+        ),
+      ],
     ];
   });
 
@@ -206,12 +214,12 @@ export default class MatrixService extends Service {
       room_alias_name: encodeURIComponent(name),
       initial_state: [
         {
-          type: 'org.boxel.eventConsumer',
+          type: 'org.boxel.roomEventConsumer',
           content: {
             eventsField: 'events',
             ref: {
               name: 'MatrixRoomCard',
-              module: `${baseRealm}matrix-room`,
+              module: `${baseRealm.url}matrix-room`,
             },
           },
         },

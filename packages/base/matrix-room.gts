@@ -22,7 +22,7 @@ class EventView extends Component<typeof MatrixEventCard> {
   }
 }
 
-class MatrixEventCard extends CardBase {
+export class MatrixEventCard extends CardBase {
   static [primitive]: MatrixEvent;
   static embedded = class Isolated extends EventView {};
   static isolated = class Isolated extends EventView {};
@@ -31,7 +31,7 @@ class MatrixEventCard extends CardBase {
 }
 class IsolatedRoomView extends Component<typeof MatrixRoomCard> {
   <template>
-
+    <@fields.events />
   </template>
 }
 

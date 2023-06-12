@@ -82,6 +82,12 @@ export default class Room extends Component<RoomArgs> {
       </fieldset>
     {{/if}}
 
+    <div class='room__room-card'>
+      {{#if this.roomCard}}
+        <this.roomCardComponent />
+      {{/if}}
+    </div>
+
     <div
       class='room__messages-wrapper'
       {{ScrollPaginate
@@ -186,6 +192,21 @@ export default class Room extends Component<RoomArgs> {
       );
     }
     return room;
+  }
+
+  get roomCard() {
+    let entry = this.matrixService.roomEventConsumers.get(this.args.roomId);
+    if (entry) {
+      return entry.card;
+    }
+    return;
+  }
+
+  get roomCardComponent() {
+    if (!this.roomCard) {
+      return;
+    }
+    return this.roomCard.constructor.getComponent(this.roomCard, 'isolated');
   }
 
   get members() {

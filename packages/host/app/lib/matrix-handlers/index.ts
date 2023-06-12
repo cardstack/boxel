@@ -4,6 +4,7 @@ import {
   type MatrixClient,
   type IEvent,
 } from 'matrix-js-sdk';
+import type { Card } from 'https://cardstack.com/base/card-api';
 
 export * as Membership from './membership';
 export * as Timeline from './timeline';
@@ -34,6 +35,7 @@ export interface Context {
   joinedRooms: Map<string, RoomEvent>;
   rooms: Map<string, RoomMeta>;
   timelines: Map<string, Map<string, Event>>;
+  roomEventConsumers: Map<string, { card: Card; eventsField: string }>;
   flushTimeline: Promise<void> | undefined;
   // we process the matrix events in batched queues so that we can collapse the
   // interstitial state between events to prevent unnecessary flashing on the
