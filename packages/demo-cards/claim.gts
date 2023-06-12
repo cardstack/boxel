@@ -107,21 +107,21 @@ class Isolated extends Component<typeof Claim> {
     this.metamask.doConnectMetamask.perform(this.chainId);
   }
 
-  async initBrowserJs() {
+  private async loadCardpaySDK() {
+    // we load this import dynamically from an unpkg url.
+    // This will prevent SLOW load times and INCOMPATIBLE browser apis that fastboot will complain about (e.g. XMLHtppRequest)
     const { getSDK, Web3Provider } = await import(
       'https://unpkg.com/@cardstack/cardpay-sdk@1.0.53/dist/browser.js'
     );
-    // we load this import dynamically from an unpkg url.
-    // This will prevent SLOW load times and INCOMPATIBLE browser apis that fastboot will complain about (e.g. XMLHtppRequest)
     this.web3Provider = Web3Provider;
     this.getSDK = getSDK;
   }
 
-  async getClaimSettlementModule(): Promise<ClaimSettlementModule> {
+  private async getClaimSettlementModule() {
     if (!this.claimSettlementModule) {
-      await this.initBrowserJs();
+      await this.loadCardpaySDK();
       let ethersProvider = new this.web3Provider(window.ethereum);
-      this.claimSettlementModule = await getSDK(
+      this.claimSettlementModule = await this.getSDK(
         'ClaimSettlementModule',
         ethersProvider
       );
