@@ -16,18 +16,15 @@ import { enqueueTask, restartableTask } from 'ember-concurrency';
 import { on } from '@ember/modifier';
 // @ts-ignore
 import { action } from '@ember/object';
-import type {
-  getSDK,
-  Web3Provider,
-  ClaimSettlementModule,
-} from '@cardstack/cardpay-sdk';
+
+import type * as CardPaySDK from '@cardstack/cardpay-sdk';
 
 class Isolated extends Component<typeof Claim> {
   @tracked isClaimed = false;
   // these is no good way to load types from a URL
-  claimSettlementModule: ClaimSettlementModule | undefined;
-  web3Provider: typeof Web3Provider | undefined;
-  getSDK: typeof getSDK | undefined;
+  claimSettlementModule: CardPaySDK.ClaimSettlementModule | undefined;
+  web3Provider: CardPaySDK.Web3Provider | undefined;
+  getSDK: typeof CardPaySDK.getSDK | undefined;
   <template>
     <CardContainer class='demo-card' @displayBoundaries={{true}}>
       <FieldContainer @label='Module Address.'><@fields.moduleAddress
@@ -124,15 +121,15 @@ class Isolated extends Component<typeof Claim> {
   private async loadCardpaySDK() {
     // we load this import dynamically from an unpkg url.
     // This will prevent SLOW load times and INCOMPATIBLE browser apis that fastboot will complain about (e.g. XMLHtppRequest)
-    const { getSDK, Web3Provider } = await import(
+    const { getSDK, Web3Provider } = (await import(
       // @ts-ignore
       'https://unpkg.com/@cardstack/cardpay-sdk@1.0.53/dist/browser.js'
-    );
+    )) as typeof CardPaySDK;
     this.web3Provider = new Web3Provider(window.ethereum);
     this.getSDK = getSDK;
   }
 
-  private async getClaimSettlementModule(): Promise<ClaimSettlementModule> {
+  private async getClaimSettlementModule(): Promise<CardPaySDK.ClaimSettlementModule> {
     if (!this.claimSettlementModule) {
       await this.loadCardpaySDK();
       if (!this.getSDK || !this.web3Provider) {
