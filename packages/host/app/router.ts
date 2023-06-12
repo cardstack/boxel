@@ -13,6 +13,8 @@ Router.map(function () {
   this.route('freestyle', { path: '/_freestyle' });
   this.route('indexer', { path: '/indexer/:id' });
   this.route('acceptance-test-setup');
+  this.route('card', { path: '/*path' });
+
   if (!path || hostsOwnAssets) {
     this.route('chat', function () {
       this.route('register');
@@ -28,5 +30,4 @@ Router.map(function () {
     this.route('card', { path });
     this.route('code', { path: `${path}/code` });
   }
-  this.route('card', { path: '/*path' });
 });
