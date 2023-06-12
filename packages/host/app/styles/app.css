@@ -406,9 +406,10 @@ nav > .directory-level {
   cursor: pointer;
 }
 .cards-grid__add-button {
+  display: inline-block;
   position: sticky;
   left: 100%;
-  bottom: 5px;
+  bottom: var(--boxel-sp);
 }
 .grid-card {
   width: var(--grid-card-width);
