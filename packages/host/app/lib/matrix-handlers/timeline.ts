@@ -2,40 +2,21 @@ import debounce from 'lodash/debounce';
 import { type MatrixEvent } from 'matrix-js-sdk';
 import { Context, Event } from './index';
 import { eventDebounceMs } from '../matrix-utils';
-import type { Card } from 'https://cardstack.com/base/card-api';
-import {
-  type LooseCardResource,
-  type CardDocument,
-  type LooseSingleCardDocument,
-} from '@cardstack/runtime-common';
+import { type LooseCardResource } from '@cardstack/runtime-common';
+import { type Card } from 'https://cardstack.com/base/card-api';
 
-type createFromSerializedType = (
-  resource: LooseCardResource,
-  doc: LooseSingleCardDocument | CardDocument,
-  relativeTo: URL | undefined
-) => Promise<Card>;
-
-export function onTimeline(
-  context: Context,
-  createFromSerialized: createFromSerializedType
-) {
+export function onTimeline(context: Context) {
   return (e: MatrixEvent) => {
     context.timelineQueue.push(e);
-    debouncedTimelineDrain(context, createFromSerialized);
+    debouncedTimelineDrain(context);
   };
 }
 
-const debouncedTimelineDrain = debounce(
-  (context: Context, createFromSerialized: createFromSerializedType) => {
-    drainTimeline(context, createFromSerialized);
-  },
-  eventDebounceMs
-);
+const debouncedTimelineDrain = debounce((context: Context) => {
+  drainTimeline(context);
+}, eventDebounceMs);
 
-async function drainTimeline(
-  context: Context,
-  createFromSerialized: createFromSerializedType
-) {
+async function drainTimeline(context: Context) {
   await context.flushTimeline;
 
   let eventsDrained: () => void;
@@ -44,23 +25,15 @@ async function drainTimeline(
   context.timelineQueue = [];
   for (let event of events) {
     await context.client.decryptEventIfNeeded(event);
-    await processDecryptedEvent(
-      context,
-      {
-        ...event.event,
-        content: event.getContent() || undefined,
-      },
-      createFromSerialized
-    );
+    await processDecryptedEvent(context, {
+      ...event.event,
+      content: event.getContent() || undefined,
+    });
   }
   eventsDrained!();
 }
 
-async function processDecryptedEvent(
-  context: Context,
-  event: Event,
-  createFromSerialized: createFromSerializedType
-) {
+async function processDecryptedEvent(context: Context, event: Event) {
   let { event_id: eventId, room_id: roomId, content } = event;
   if (!eventId) {
     throw new Error(
@@ -86,11 +59,21 @@ async function processDecryptedEvent(
         adoptsFrom: content.ref as { module: string; name: string },
       },
     };
-    let card = await createFromSerialized(data, { data }, undefined);
+    let card = await context.cardAPI.createFromSerialized<typeof Card>(
+      data,
+      { data },
+      undefined
+    );
     context.roomEventConsumers.set(roomId, {
       card,
       eventsField: content.eventsField,
     });
+    // flush all the timeline events fired before this event was fired (sadly
+    // events are not always fired in chronological order)
+    let existingTimeline = context.timelines.get(roomId);
+    if (existingTimeline) {
+      (card as any)[content.eventsField] = [...[...existingTimeline.values()]];
+    }
   }
 
   let roomCardEntry = context.roomEventConsumers.get(roomId);
@@ -107,7 +90,7 @@ async function processDecryptedEvent(
     let existingEvents = (roomCard as any)[eventsField] as Event[];
     // duplicate events may be emitted from matrix
     if (!existingEvents.find((e) => e.event_id === eventId)) {
-      (roomCard as any)[eventsField].push(event);
+      (roomCard as any)[eventsField] = [...existingEvents, event];
     }
   }
 
@@ -125,6 +108,9 @@ async function processDecryptedEvent(
     if (!timeline) {
       timeline = new context.mapClazz<string, Event>();
       context.timelines.set(roomId, timeline);
+      // we need to scroll back to capture any room events fired before this one
+      // (most notably the org.boxel.roomConsumer event used to establish the room card)
+      await context.client.scrollback(context.client.getRoom(roomId)!);
     }
     // we use a map for the timeline to de-dupe events
     let performCallback = !timeline.has(eventId);

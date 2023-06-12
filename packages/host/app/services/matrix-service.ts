@@ -12,6 +12,7 @@ import { task } from 'ember-concurrency';
 import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
 import RouterService from '@ember/routing/router-service';
+import { importResource } from '../resources/import';
 import { marked } from 'marked';
 import {
   Timeline,
@@ -20,13 +21,15 @@ import {
   type RoomEvent as RoomEventInfo,
 } from '../lib/matrix-handlers';
 import type CardService from '../services/card-service';
-import { type Card } from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
 import {
   type LooseSingleCardDocument,
   sanitizeHtml,
   baseRealm,
 } from '@cardstack/runtime-common';
+import type LoaderService from './loader-service';
+import { type Card } from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 const { matrixURL } = ENV;
 
@@ -48,6 +51,7 @@ export type Event = Partial<IEvent>;
 
 export default class MatrixService extends Service {
   @service private declare router: RouterService;
+  @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @tracked private _client: MatrixClient | undefined;
   invites: TrackedMap<string, RoomInvite> = new TrackedMap();
@@ -90,7 +94,13 @@ export default class MatrixService extends Service {
     return this.loadSDK.isRunning;
   }
 
+  private cardAPIModule = importResource(
+    this,
+    () => 'https://cardstack.com/base/card-api'
+  );
+
   private loadSDK = task(async () => {
+    await this.cardAPIModule.loaded;
     // The matrix SDK is VERY big so we only load it when we need it
     this.#matrixSDK = await import('matrix-js-sdk');
     this._client = this.matrixSDK.createClient({ baseUrl: matrixURL });
@@ -103,13 +113,7 @@ export default class MatrixService extends Service {
         Membership.onMembership(this),
       ],
       [this.matrixSDK.RoomEvent.Name, Room.onRoomName(this)],
-      [
-        this.matrixSDK.RoomEvent.Timeline,
-        Timeline.onTimeline(
-          this,
-          this.cardService.createFromSerialized.bind(this.cardService)
-        ),
-      ],
+      [this.matrixSDK.RoomEvent.Timeline, Timeline.onTimeline(this)],
     ];
   });
 
@@ -126,6 +130,20 @@ export default class MatrixService extends Service {
       throw new Error(`cannot use matrix client before matrix SDK has loaded`);
     }
     return this._client;
+  }
+
+  get cardAPI() {
+    if (this.cardAPIModule.error) {
+      throw new Error(
+        `Error loading Card API: ${JSON.stringify(this.cardAPIModule.error)}`
+      );
+    }
+    if (!this.cardAPIModule.module) {
+      throw new Error(
+        `bug: Card API has not loaded yet--make sure to await this.loaded before using the api`
+      );
+    }
+    return this.cardAPIModule.module as typeof CardAPI;
   }
 
   private get matrixSDK() {
@@ -247,7 +265,9 @@ export default class MatrixService extends Service {
     let serializedCard: LooseSingleCardDocument | undefined;
     if (card) {
       serializedCard = await this.cardService.serializeCard(card);
-      body = `${body} (Card: ${card.title ?? 'Untitled'}, ${card.id})`.trim();
+      body = `${body ?? ''} (Card: ${card.title ?? 'Untitled'}, ${
+        card.id
+      })`.trim();
     }
     if (card) {
       await this.client.sendEvent(roomId, 'm.room.message', {

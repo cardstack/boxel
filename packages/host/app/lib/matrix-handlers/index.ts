@@ -5,6 +5,7 @@ import {
   type IEvent,
 } from 'matrix-js-sdk';
 import type { Card } from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 export * as Membership from './membership';
 export * as Timeline from './timeline';
@@ -49,6 +50,9 @@ export interface Context {
   )[];
   timelineQueue: MatrixEvent[];
   mapClazz: typeof Map;
+  // TODO remove this if we don't end up using the card API in our matrix
+  // handlers
+  cardAPI: typeof CardAPI;
   client: MatrixClient;
   handleMessage?: (
     context: Context,
