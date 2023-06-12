@@ -518,8 +518,15 @@ nav > .directory-level {
 }
 
 .operator-mode-card-stack__card__content {
-  padding: var(--boxel-sp);
   overflow: auto;
+}
+
+.operator-mode-card-stack__card__content > .boxel-card-container.boundaries {
+  box-shadow: none;
+}
+
+.operator-mode-card-stack__card__content > .boxel-card-container > header {
+  display: none;
 }
 
 .operator-mode-card-stack__card--edit .operator-mode-card-stack__card__content {
