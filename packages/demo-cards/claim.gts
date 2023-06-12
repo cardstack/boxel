@@ -16,13 +16,18 @@ import { enqueueTask, restartableTask } from 'ember-concurrency';
 import { on } from '@ember/modifier';
 // @ts-ignore
 import { action } from '@ember/object';
+import type {
+  getSDK,
+  Web3Provider,
+  ClaimSettlementModule,
+} from '@cardstack/cardpay-sdk';
 
 class Isolated extends Component<typeof Claim> {
   @tracked isClaimed = false;
   // these is no good way to load types from a URL
-  claimSettlementModule: any;
-  web3Provider: any;
-  getSDK: any;
+  claimSettlementModule: ClaimSettlementModule | undefined;
+  web3Provider: typeof Web3Provider | undefined;
+  getSDK: typeof getSDK | undefined;
   <template>
     <CardContainer class='demo-card' @displayBoundaries={{true}}>
       <FieldContainer @label='Module Address.'><@fields.moduleAddress
@@ -76,6 +81,15 @@ class Isolated extends Component<typeof Claim> {
   private doClaim = restartableTask(async () => {
     try {
       let claimSettlementModule = await this.getClaimSettlementModule();
+      if (
+        !this.args.model.moduleAddress ||
+        !this.args.model.signature ||
+        !this.args.model.safeAddress ||
+        !this.args.model.signature ||
+        !this.args.model.encoding
+      ) {
+        throw new Error('Claim fields not ready');
+      }
       const r = await claimSettlementModule.executeSafe(
         this.args.model.moduleAddress,
         this.args.model.safeAddress,
@@ -114,14 +128,17 @@ class Isolated extends Component<typeof Claim> {
       // @ts-ignore
       'https://unpkg.com/@cardstack/cardpay-sdk@1.0.53/dist/browser.js'
     );
-    this.web3Provider = Web3Provider;
+    this.web3Provider = new Web3Provider(window.ethereum);
     this.getSDK = getSDK;
   }
 
-  private async getClaimSettlementModule() {
+  private async getClaimSettlementModule(): Promise<ClaimSettlementModule> {
     if (!this.claimSettlementModule) {
       await this.loadCardpaySDK();
-      let ethersProvider = new this.web3Provider(window.ethereum);
+      if (!this.getSDK || !this.web3Provider) {
+        throw new Error('Claim Settlement Module not ready');
+      }
+      let ethersProvider = this.web3Provider;
       this.claimSettlementModule = await this.getSDK(
         'ClaimSettlementModule',
         ethersProvider
