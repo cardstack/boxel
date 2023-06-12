@@ -10,6 +10,8 @@
     "@glimmer/component": "^1.1.2",
     "@glimmer/tracking": "^1.0.4",
     "@glint/template": "^1.0.0",
+    "@types/ember__helper": "4.0.1",
+    "@types/ember__modifier": "4.0.3",
     "@types/lodash": "^4.14.182",
     "@types/marked": "^4.3.0",
     "@types/flat": "^5.0.2",
