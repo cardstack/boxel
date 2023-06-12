@@ -27,7 +27,7 @@ Router.map(function () {
       this.route('register');
       this.route('room', { path: `/room/:id` });
     });
-    this.route('card', { path });
+
     this.route('code', { path: `${path}/code` });
   }
 });
