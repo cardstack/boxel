@@ -37,11 +37,9 @@ export function cleanWhiteSpace(text: string) {
 }
 
 export function trimCardContainer(text: string) {
-  return cleanWhiteSpace(
-    cleanWhiteSpace(text).replace(
-      /<div .*? data-test-boxel-card-container> <!----> (.*?)<\/div>/,
-      '$1'
-    )
+  return cleanWhiteSpace(text).replace(
+    /<div .*? data-test-field-component-card> (.*?) <\/div> <\/div>/,
+    '$1'
   );
 }
 

@@ -159,7 +159,7 @@ nav > .directory-level {
 }
 
 /* For all cards */
-.boxel-card {
+.field-component-card {
   padding: var(--boxel-sp);
 }
 

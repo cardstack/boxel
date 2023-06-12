@@ -61,9 +61,10 @@ export function getBoxComponent(
           />
         {{/if}}
         <div
-          class='boxel-card
+          class='field-component-card
             {{format}}-card
             {{if (isSaved model.value) "saved" "not-saved"}}'
+          data-test-field-component-card
         >
           <Implementation
             @model={{model.value}}
