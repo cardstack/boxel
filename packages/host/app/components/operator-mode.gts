@@ -454,6 +454,22 @@ export default class OperatorMode extends Component<Signature> {
         @onFocus={{this.onFocusSearchInput}}
       />
     </Modal>
+    <style>
+      .operator-mode-card-stack__buried .operator-mode-card-stack__card {
+        background-color: var(--boxel-200);
+        grid-template-rows: 40px auto;
+      }
+
+      .operator-mode-card-stack__buried .operator-mode-card-stack__card__header .icon-button {
+        display: none;
+      }
+
+      .operator-mode-card-stack__buried .operator-mode-card-stack__card__header {
+        cursor: pointer;
+        font: 500 var(--boxel-font-sm);
+        padding: 0 var(--boxel-sp-xs);
+      }
+    </style>
   </template>
 }
 
