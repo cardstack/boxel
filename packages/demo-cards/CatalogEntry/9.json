@@ -5,7 +5,7 @@
       "title": "Claim from ../claim",
       "description": "Catalog entry for Claim from ../claim",
       "ref": {
-        "module": "http://localhost:4204/claim",
+        "module": "../claim",
         "name": "Claim"
       },
       "demo": {
@@ -19,7 +19,7 @@
     "relationships": {
       "demo.chain": {
         "links": {
-          "self": "http://localhost:4204/Chain/2"
+          "self": "../Chain/2"
         }
       }
     },
@@ -27,7 +27,7 @@
       "fields": {
         "demo": {
           "adoptsFrom": {
-            "module": "http://localhost:4204/claim",
+            "module": "../claim",
             "name": "Claim"
           }
         }
