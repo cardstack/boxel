@@ -379,7 +379,7 @@ export default class OperatorMode extends Component<Signature> {
                 class={{cn
                   'operator-mode-card-stack__card'
                   operator-mode-card-stack__card--edit=(eq item.format 'edit')
-                  operator-mode-card-stack__card--cards-grid=(and (eq item.card.constructor.name 'CardsGrid') (not (eq item.format 'edit')))
+                  operator-mode-card-stack__card--is-cards-grid=(and (eq item.card.constructor.name 'CardsGrid') (not (eq item.format 'edit')))
                 }}
               >
                 <Header

@@ -440,7 +440,7 @@ nav>.directory-level {
 }
 
 .cards-grid__add-button {
-  position: absolute;
+  position: absolute !important;
   right: 30px;
   bottom: 30px;
 }
@@ -557,13 +557,13 @@ nav>.directory-level {
   pointer-events: auto;
 }
 
-.operator-mode-card-stack__card--cards-grid {
+.operator-mode-card-stack__card--is-cards-grid {
   display: flex !important;
   flex-direction: column;
   grid-template-rows: 0;
 }
 
-.operator-mode-card-stack__card--cards-grid .operator-mode-card-stack__card__header {
+.operator-mode-card-stack__card--is-cards-grid .operator-mode-card-stack__card__header {
   z-index: 1;
 }
 
@@ -576,7 +576,7 @@ nav>.directory-level {
   margin-bottom: var(--stack-card-footer-height)
 }
 
-.operator-mode-card-stack__card--cards-grid .operator-mode-card-stack__card__content {
+.operator-mode-card-stack__card--is-cards-grid .operator-mode-card-stack__card__content {
   padding: 0;
   overflow: hidden;
 
