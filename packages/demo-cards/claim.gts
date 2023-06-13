@@ -115,7 +115,6 @@ class Isolated extends Component<typeof Claim> {
       if (r) {
         await this.createTransactionCard(r);
         console.log('You have succesfully claimed your reward!');
-        console.log(r); //TODO: should be replaced with a transaction card being created
         this.isClaimed = true;
       }
     } catch (e: any) {
