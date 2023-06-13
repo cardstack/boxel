@@ -9,6 +9,7 @@ import {
   Card,
   realmInfo,
   relativeTo,
+  type CardBase,
 } from './card-api';
 import { IconButton } from '@cardstack/boxel-ui';
 import {
@@ -25,10 +26,6 @@ import StringCard from './string';
 class Isolated extends Component<typeof CardsGrid> {
   <template>
     <div class='cards-grid'>
-      <div
-        class='cards-grid__title'
-        data-test-cards-grid-title
-      >{{@fields.realmName}}</div>
       <ul class='cards-grid__cards' data-test-cards-grid-cards>
         {{#each this.request.instances as |card|}}
           <li
@@ -145,4 +142,8 @@ export class CardsGrid extends Card {
       return this[realmInfo]?.name;
     },
   });
+
+  static getDisplayName(instance: CardBase) {
+    return instance[realmInfo]?.name ?? this.displayName;
+  }
 }

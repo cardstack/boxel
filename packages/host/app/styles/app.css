@@ -3,8 +3,8 @@
   --operator-mode-bg-color: #686283;
   --grid-card-text-thumbnail-height: 6.25rem;
   --grid-card-label-color: #919191;
-  --buried-operator-mode-header-height: 40px;
-  --stack-card-footer-height: 80px;
+  --stack-card-footer-height: 5rem;
+  --buried-operator-mode-header-height: 2.5rem;
 }
 
 /* Go template */
@@ -391,45 +391,19 @@ nav > .directory-level {
   --grid-card-width: 10.125rem;
   --grid-card-height: 15.125rem;
 
-  display: flex;
-  flex-direction: column;
-  height: 100%;
+  position: relative; /* Do not change this */
+  max-width: 70rem;
+  margin: 0 auto;
 }
-
-.operator-mode .cards-grid {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-}
-
-.cards-grid__title {
-  color: var(--boxel-header-text-color, var(--boxel-dark));
-  font: 700 var(--boxel-font-lg);
-  padding: var(--boxel-sp-xl);
-}
-
-.operator-mode-card-stack__buried .cards-grid__title {
-  cursor: pointer;
-  font: 500 var(--boxel-font-sm);
-  padding: 0 var(--boxel-sp-xs);
-
-  display: flex;
-  height: var(--buried-operator-mode-header-height);
-  align-items: center;
-}
-
 .cards-grid__cards {
   list-style-type: none;
   margin: 0;
-  padding: 0 var(--boxel-sp);
+  padding: 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(var(--grid-card-width), 1fr));
   gap: var(--boxel-sp);
   justify-items: center;
   height: 100%;
-
-  overflow: auto;
 }
 .operator-mode .cards-grid__cards > li {
   cursor: pointer;
@@ -535,16 +509,6 @@ nav > .directory-level {
   pointer-events: auto;
 }
 
-.operator-mode-card-stack__card--is-cards-grid {
-  display: flex !important;
-  flex-direction: column;
-  grid-template-rows: 0;
-}
-
-.operator-mode-card-stack__card--is-cards-grid .operator-mode-card-stack__card__header {
-  z-index: 1;
-}
-
 .operator-mode-card-stack__card__content {
   overflow: auto;
 }
@@ -559,15 +523,6 @@ nav > .directory-level {
 
 .operator-mode-card-stack__card--edit .operator-mode-card-stack__card__content {
   margin-bottom: var(--stack-card-footer-height)
-}
-
-.operator-mode-card-stack__card--is-cards-grid .operator-mode-card-stack__card__content {
-  padding: 0;
-  overflow: hidden;
-
-  display: flex;
-  flex-direction: column;
-  height: 100%;
 }
 
 .operator-mode-card-stack__card__footer {
