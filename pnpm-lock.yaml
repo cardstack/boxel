@@ -626,9 +626,6 @@ importers:
       ember-cli-htmlbars:
         specifier: ^6.2.0
         version: 6.2.0
-      ember-cli-typescript:
-        specifier: ^5.2.1
-        version: 5.2.1
       ember-composable-helpers:
         specifier: ^5.0.0
         version: 5.0.0
@@ -2263,7 +2260,7 @@ packages:
       '@babel/core': ^7.0.0-0
     dependencies:
       '@babel/core': 7.21.0(supports-color@8.1.1)
-      '@babel/helper-create-class-features-plugin': 7.20.2(@babel/core@7.21.0)
+      '@babel/helper-create-class-features-plugin': 7.21.8(@babel/core@7.21.0)
       '@babel/helper-plugin-utils': 7.20.2
     transitivePeerDependencies:
       - supports-color
