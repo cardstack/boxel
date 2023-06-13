@@ -19,6 +19,27 @@ const LoadingIndicator: TemplateOnlyComponent<Signature> = <template>
       role='presentation'
     }}
   </div>
+  <style>
+    /* zero specificity default sizing */
+    :where(.boxel-loading-indicator) {
+      width: var(--boxel-icon-sm);
+      height: var(--boxel-icon-sm);
+      flex-shrink: 0;
+    }
+
+    /*
+      Only animate if the user has not said that they want reduced motion
+    */
+    @media (prefers-reduced-motion: no-preference) {
+      .boxel-loading-indicator {
+        animation: spin 6000ms linear infinite;
+      }
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
 </template>;
 
 export default LoadingIndicator;

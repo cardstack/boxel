@@ -8,7 +8,6 @@ import { array, fn } from '@ember/helper';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { on } from '@ember/modifier';
-import './usage.css';
 
 export default class ButtonUsage extends Component {
   sizeVariants = ['extra-small', 'small', 'base', 'tall', 'touch'];
@@ -249,5 +248,37 @@ export default class ButtonUsage extends Component {
         </div>
       </:example>
     </FreestyleUsage>
+    <style>
+      .usage-button-container {
+        display: flex;
+        flex-wrap: wrap;
+      }
+
+      .usage-button-dark-mode-background {
+        background-color: var(--boxel-purple-600);
+        padding: 4px;
+      }
+
+      .usage-button-explanation {
+        border: 1px solid black;
+        border-collapse: collapse;
+        margin-top: 1rem;
+      }
+
+      .usage-button-explanation td {
+        border: 1px solid black;
+        padding: 0.25rem;
+      }
+
+      .usage-button-centers-component {
+        flex-basis: 0;
+        flex-grow: 99;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100%;
+        padding: 2rem;
+      }
+    </style>
   </template>
 }

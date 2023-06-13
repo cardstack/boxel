@@ -5,7 +5,6 @@ import BoxelInputValidationState, { InputValidationState } from './index';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { fn, array } from '@ember/helper';
-import './index.css';
 
 export default class BoxelInputValidationStateUsage extends Component {
   @tracked id = 'validation-input-usage-id';

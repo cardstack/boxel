@@ -1,8 +1,0 @@
-/* NOTE: Move these inside the scoped style element
-in the gts template when css-encapsulation is enabled */
-
-.boxel-label {
-  color: var(--boxel-label-color);
-  font: 700 var(--boxel-font-sm);
-  letter-spacing: var(--boxel-lsp-sm);
-}
