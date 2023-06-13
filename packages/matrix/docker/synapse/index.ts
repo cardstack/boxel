@@ -185,7 +185,7 @@ export async function registerUser(
   admin = false,
   displayName?: string
 ): Promise<Credentials> {
-  const url = `${synapse.baseUrl}/_synapse/admin/v1/register`;
+  const url = `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v1/register`;
   const context = await request.newContext({ baseURL: url });
   const { nonce } = await (await context.get(url)).json();
   const mac = admin
