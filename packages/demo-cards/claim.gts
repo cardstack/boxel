@@ -6,8 +6,10 @@ import {
   StringCard,
   Component,
   linksTo,
+  realmURL,
 } from 'https://cardstack.com/base/card-api';
 import { getMetamaskResource } from './utils/resources/metamask';
+import { TempCardService } from './utils/services/temp-card-service';
 import { tracked } from '@glimmer/tracking';
 import { Button, CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 // @ts-ignore
@@ -19,7 +21,23 @@ import { action } from '@ember/object';
 
 import type * as CardPaySDK from '@cardstack/cardpay-sdk';
 
+// a type which the sdk failed to export
+interface TransactionReceipt {
+  status: boolean;
+  transactionHash: string;
+  transactionIndex: number;
+  blockHash: string;
+  blockNumber: number;
+  from: string;
+  to: string;
+  contractAddress?: string;
+  cumulativeGasUsed: number;
+  gasUsed: number;
+  effectiveGasPrice: number;
+}
+
 class Isolated extends Component<typeof Claim> {
+  cardService = new TempCardService();
   @tracked isClaimed = false;
   claimSettlementModule: CardPaySDK.ClaimSettlementModule | undefined;
   web3Provider: CardPaySDK.Web3Provider | undefined;
@@ -86,7 +104,7 @@ class Isolated extends Component<typeof Claim> {
       ) {
         throw new Error('Claim fields not ready');
       }
-      const r = await claimSettlementModule.executeSafe(
+      const r: TransactionReceipt = await claimSettlementModule.executeSafe(
         this.args.model.moduleAddress,
         this.args.model.safeAddress,
         {
@@ -95,6 +113,7 @@ class Isolated extends Component<typeof Claim> {
         }
       );
       if (r) {
+        await this.createTransactionCard(r);
         console.log('You have succesfully claimed your reward!');
         console.log(r); //TODO: should be replaced with a transaction card being created
         this.isClaimed = true;
@@ -115,6 +134,38 @@ class Isolated extends Component<typeof Claim> {
   @action
   private connectMetamask() {
     this.metamask.doConnectMetamask.perform(this.chainId);
+  }
+  private async createTransactionCard(r: TransactionReceipt) {
+    let realmUrl = this.args.model[realmURL];
+    if (!realmUrl) {
+      throw new Error('Realm is undefined');
+    }
+    let cardData = {
+      data: {
+        type: 'card',
+        attributes: {
+          transactionHash: r.transactionHash,
+          status: r.status,
+          blockHash: r.blockHash,
+          blockNumber: r.blockNumber,
+          from: r.from,
+          to: r.to,
+          gasUsed: r.gasUsed,
+          effectiveGasPrice: r.effectiveGasPrice,
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${realmUrl.href}transaction`,
+            name: 'Transaction',
+          },
+        },
+      },
+    };
+    try {
+      await this.cardService.createCard(realmUrl, cardData);
+    } catch (e: any) {
+      throw e;
+    }
   }
 
   private async loadCardpaySDK() {
