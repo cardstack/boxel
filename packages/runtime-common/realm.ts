@@ -427,18 +427,7 @@ export class Realm {
         [typescriptPlugin, { allowDeclareFields: true }],
         [decoratorsProposalPlugin, { legacy: true }],
         classPropertiesProposalPlugin,
-        // this "as any" is because typescript is using the Node-specific types
-        // from babel-plugin-ember-template-compilation, but we're using the
-        // browser interface
-        isNode
-          ? [
-              makeEmberTemplatePlugin,
-              {
-                precompile: etc.precompile,
-              },
-            ]
-          : // TODO type this better
-            (makeEmberTemplatePlugin as any)(() => etc.precompile),
+        makeEmberTemplatePlugin,
         loaderPlugin,
       ],
     })?.code;
