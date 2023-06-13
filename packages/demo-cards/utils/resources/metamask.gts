@@ -8,6 +8,7 @@ import { registerDestructor } from '@ember/destroyable';
 declare global {
   interface Window {
     ethereum: any;
+    FastBoot?: any;
   }
 }
 
@@ -38,7 +39,8 @@ class MetamaskResource extends Resource {
   }
 
   promptMetamaskInstallation() {
-    if (!this.isMetamaskInstalled()) {
+    if (!window.FastBoot && !this.isMetamaskInstalled()) {
+      // Only log this when inside the browser
       console.log(
         'Metamask is not installed. Please install it to use this resource'
       );
