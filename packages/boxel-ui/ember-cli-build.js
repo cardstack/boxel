@@ -43,14 +43,7 @@ module.exports = function (defaults) {
             },
           ],
         },
-      },
-      plugins: [new GlimmerScopedCSSWebpackPlugin()],
-      resolveLoader: {
-        alias: {
-          'glimmer-scoped-css/virtual-loader': require.resolve(
-            'glimmer-scoped-css/virtual-loader'
-          ),
-        },
+        plugins: [new GlimmerScopedCSSWebpackPlugin()],
       },
       // publicAssetURL: '/boxel-ui/'
     },

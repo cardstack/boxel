@@ -14,6 +14,9 @@ patchedDependencies:
   fastboot@4.1.0:
     hash: kizxbxhfcldguz4jcwonfduu2y
     path: patches/fastboot@4.1.0.patch
+  glimmer-scoped-css@0.3.0:
+    hash: nhq6vyoprpjunprjjvchlvu2eq
+    path: patches/glimmer-scoped-css@0.3.0.patch
   magic-string@0.25.9:
     hash: sbmabuxrk2m44agmppz3qozwvq
     path: patches/magic-string@0.25.9.patch
@@ -651,8 +654,8 @@ importers:
         specifier: ^6.2.0
         version: 6.2.0(webpack@5.84.0)
       glimmer-scoped-css:
-        specifier: ^0.2.0
-        version: 0.2.0
+        specifier: ^0.3.0
+        version: 0.3.0(patch_hash=nhq6vyoprpjunprjjvchlvu2eq)
       lodash:
         specifier: ^4.17.21
         version: 4.17.21
@@ -1060,6 +1063,9 @@ importers:
       flat:
         specifier: ^5.0.2
         version: 5.0.2
+      glimmer-scoped-css:
+        specifier: ^0.3.0
+        version: 0.3.0(patch_hash=nhq6vyoprpjunprjjvchlvu2eq)
       ignore:
         specifier: ^5.2.0
         version: 5.2.0
@@ -6998,6 +7004,7 @@ packages:
       make-dir: 3.1.0
       schema-utils: 2.7.1
       webpack: 5.75.0
+    dev: false
 
   /babel-loader@8.3.0(@babel/core@7.21.0)(webpack@5.84.0):
     resolution: {integrity: sha512-H8SvsMF+m9t15HNLMipppzkC+Y2Yq+v3SonZyU70RBL/h1gxPkH08Ot8pEE9Z4Kd+czyWJClmFS8qzIP9OZ04Q==}
@@ -10475,6 +10482,7 @@ packages:
       - '@glint/template'
       - supports-color
       - webpack
+    dev: false
 
   /ember-auto-import@2.6.3(@glint/template@1.0.2)(webpack@5.84.0):
     resolution: {integrity: sha512-uLhrRDJYWCRvQ4JQ1e64XlSrqAKSd6PXaJ9ZsZI6Tlms9T4DtQFxNXasqji2ZRJBVrxEoLCRYX3RTldsQ0vNGQ==}
@@ -11567,7 +11575,7 @@ packages:
       '@embroider/addon-shim': 1.8.5
       ember-cli-normalize-entity-name: 1.0.0
       ember-cli-string-utils: 1.1.0
-      ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.75.0)
+      ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -11836,6 +11844,7 @@ packages:
       - '@glint/template'
       - supports-color
       - webpack
+    dev: false
 
   /ember-source@4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0):
     resolution: {integrity: sha512-h0lV902A4Mny2eiqXPy15uXXoCc7BnUegE4axLAy4IoxEkJ1o5h0aLJFiB4Tzb1htx8vgHjJz//Y5Jig7NSDTw==}
@@ -14057,8 +14066,8 @@ packages:
       through: 2.2.7
     dev: true
 
-  /glimmer-scoped-css@0.2.0:
-    resolution: {integrity: sha512-Qb+DwnQfXhFIsCzZXn/GBwj/jw9Oyciczd4QfFYK7zVFK0DeHec9bB0Lgaj6UuMlK65+ulnTIolSdkF4WO/aqw==}
+  /glimmer-scoped-css@0.3.0(patch_hash=nhq6vyoprpjunprjjvchlvu2eq):
+    resolution: {integrity: sha512-F4/pajghcn7uYS9Q3D4yzop9MPQu85iVnuSSU30hAZGcTmJ1SNNFlLttH1cVzUOa6PsrMNtz2VMvRHLc6eXNbg==}
     dependencies:
       '@embroider/addon-shim': 1.8.5
       js-string-escape: 1.0.1
@@ -14067,7 +14076,7 @@ packages:
       super-fast-md5: 1.0.1
     transitivePeerDependencies:
       - supports-color
-    dev: false
+    patched: true
 
   /glob-parent@3.1.0:
     resolution: {integrity: sha512-E8Ak/2+dZY6fnzlR7+ueWvhsH1SjHr4jjss4YS/h4py44jY9MhK/VFdaZJAWDz6BbL21KeteKxFSFpq8OS5gVA==}
@@ -22320,7 +22329,7 @@ packages:
       ember-cli-htmlbars: 6.2.0
       ember-compatibility-helpers: 1.2.6(@babel/core@7.20.2)
       ember-destroyable-polyfill: 2.0.3(@babel/core@7.20.2)
-      ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.75.0)
+      ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0)
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
