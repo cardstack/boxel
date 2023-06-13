@@ -81,6 +81,7 @@ type Setter = { setters: { [fieldName: string]: Setter } } & ((
 
 interface Options {
   computeVia?: string | (() => unknown);
+  usedInTemplate?: true; // this is scaffolding for the card compiler
 }
 
 interface NotLoadedValue {
@@ -214,6 +215,7 @@ export interface Field<
   name: string;
   fieldType: FieldType;
   computeVia: undefined | string | (() => unknown);
+  usedInTemplate?: undefined | true; // this is scaffolding for the card compiler
   serialize(
     value: any,
     doc: JSONAPISingleResourceDocument,
@@ -341,7 +343,8 @@ class ContainsMany<FieldT extends CardBaseConstructor>
   constructor(
     private cardThunk: () => FieldT,
     readonly computeVia: undefined | string | (() => unknown),
-    readonly name: string
+    readonly name: string,
+    readonly usedInTemplate: undefined | true
   ) {}
 
   get card(): FieldT {
@@ -541,7 +544,8 @@ class Contains<CardT extends CardBaseConstructor> implements Field<CardT, any> {
   constructor(
     private cardThunk: () => CardT,
     readonly computeVia: undefined | string | (() => unknown),
-    readonly name: string
+    readonly name: string,
+    readonly usedInTemplate: undefined | true
   ) {}
 
   get card(): CardT {
@@ -694,7 +698,8 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
   constructor(
     private cardThunk: () => CardT,
     readonly computeVia: undefined | string | (() => unknown),
-    readonly name: string
+    readonly name: string,
+    readonly usedInTemplate: undefined | true
   ) {}
 
   get card(): CardT {
@@ -958,7 +963,8 @@ class LinksToMany<FieldT extends CardConstructor>
   constructor(
     private cardThunk: () => FieldT,
     readonly computeVia: undefined | string | (() => unknown),
-    readonly name: string
+    readonly name: string,
+    readonly usedInTemplate: undefined | true
   ) {}
 
   get card(): FieldT {
@@ -1323,7 +1329,12 @@ export function containsMany<CardT extends CardBaseConstructor>(
   return {
     setupField(fieldName: string) {
       return makeDescriptor(
-        new ContainsMany(cardThunk(cardOrThunk), options?.computeVia, fieldName)
+        new ContainsMany(
+          cardThunk(cardOrThunk),
+          options?.computeVia,
+          fieldName,
+          options?.usedInTemplate
+        )
       );
     },
   } as any;
@@ -1337,7 +1348,12 @@ export function contains<CardT extends CardBaseConstructor>(
   return {
     setupField(fieldName: string) {
       return makeDescriptor(
-        new Contains(cardThunk(cardOrThunk), options?.computeVia, fieldName)
+        new Contains(
+          cardThunk(cardOrThunk),
+          options?.computeVia,
+          fieldName,
+          options?.usedInTemplate
+        )
       );
     },
   } as any;
@@ -1351,7 +1367,12 @@ export function linksTo<CardT extends CardConstructor>(
   return {
     setupField(fieldName: string) {
       return makeDescriptor(
-        new LinksTo(cardThunk(cardOrThunk), options?.computeVia, fieldName)
+        new LinksTo(
+          cardThunk(cardOrThunk),
+          options?.computeVia,
+          fieldName,
+          options?.usedInTemplate
+        )
       );
     },
   } as any;
@@ -1365,7 +1386,12 @@ export function linksToMany<CardT extends CardConstructor>(
   return {
     setupField(fieldName: string) {
       return makeDescriptor(
-        new LinksToMany(cardThunk(cardOrThunk), options?.computeVia, fieldName)
+        new LinksToMany(
+          cardThunk(cardOrThunk),
+          options?.computeVia,
+          fieldName,
+          options?.usedInTemplate
+        )
       );
     },
   } as any;
@@ -1863,7 +1889,9 @@ async function _createFromSerialized<T extends CardBaseConstructor>(
     instance = new card({ id: resource.id }) as CardInstanceType<T>;
     instance[relativeTo] = _relativeTo;
     instance[realmInfo] = data?.meta?.realmInfo;
-    instance[realmURL] = data?.meta?.realmURL ? new URL(data.meta.realmURL) : undefined;
+    instance[realmURL] = data?.meta?.realmURL
+      ? new URL(data.meta.realmURL)
+      : undefined;
   }
   identityContexts.set(instance, identityContext);
   return await _updateFromSerialized(instance, resource, doc, identityContext);
@@ -2270,15 +2298,19 @@ export function getFields(
     let descs = Object.getOwnPropertyDescriptors(obj);
     let currentFields = flatMap(Object.keys(descs), (maybeFieldName) => {
       if (maybeFieldName !== 'constructor') {
-        if (opts?.usedFieldsOnly && !usedFields.includes(maybeFieldName)) {
-          return [];
-        }
         let maybeField = getField(
           (isCard(cardInstanceOrClass)
             ? cardInstanceOrClass.constructor
             : cardInstanceOrClass) as typeof CardBase,
           maybeFieldName
         );
+        if (
+          opts?.usedFieldsOnly &&
+          !usedFields.includes(maybeFieldName) &&
+          !maybeField.usedInTemplate
+        ) {
+          return [];
+        }
         if (maybeField?.computeVia && !opts?.includeComputeds) {
           return [];
         }

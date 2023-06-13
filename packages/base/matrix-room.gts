@@ -6,6 +6,7 @@ import {
   Card,
   primitive,
   CardBase,
+  createFromSerialized,
 } from './card-api';
 import StringCard from './string';
 import DateTimeCard from './datetime';
@@ -30,25 +31,18 @@ class MatrixEventCard extends CardBase {
   static edit = class Edit extends JSONView {};
 }
 
-class SerializedCard extends CardBase {
-  static [primitive]: LooseSingleCardDocument;
-  static embedded = class Embedded extends JSONView {};
-  static isolated = class Isolated extends JSONView {};
-  // The edit template is meant to be read-only, this field card is not mutable
-  static edit = class Edit extends JSONView {};
-}
-
 class MessageCard extends Card {
   @field author = contains(StringCard);
   @field message = contains(MarkdownCard);
   @field created = contains(DateTimeCard);
-  @field serializedCard = contains(SerializedCard);
+  @field attachedCard = contains(Card);
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <@fields.created />
       <@fields.author />
       <@fields.message />
+      <@fields.attachedCard />
     </template>
   };
   // The edit template is meant to be read-only, this field card is not mutable
@@ -133,24 +127,32 @@ export class MatrixRoomCard extends Card {
   });
 
   @field messages = containsMany(MessageCard, {
-    computeVia: function (this: MatrixRoomCard) {
+    usedInTemplate: true,
+    computeVia: async function (this: MatrixRoomCard) {
       let events = this.events
         .filter((e) => e.type === 'm.room.message')
         .sort((a, b) => a.origin_server_ts - b.origin_server_ts) as
         | (MessageEvent | CardMessageEvent)[];
-      return events.map((e) => {
+      let messages: MessageCard[] = [];
+      for (let event of events) {
         let cardArgs = {
-          author: e.sender,
-          created: new Date(e.origin_server_ts),
-          message: e.content.body,
+          author: event.sender,
+          created: new Date(event.origin_server_ts),
+          message: event.content.body,
         };
-        if (e.content.msgtype === 'org.boxel.card') {
-          let attachedCard = e.content.instance.data;
-          return new MessageCard({ ...cardArgs, attachedCard });
+        if (event.content.msgtype === 'org.boxel.card') {
+          let cardDoc = event.content.instance;
+          let attachedCard = await createFromSerialized(
+            cardDoc.data,
+            cardDoc,
+            undefined
+          );
+          messages.push(new MessageCard({ ...cardArgs, attachedCard }));
         } else {
-          return new MessageCard(cardArgs);
+          messages.push(new MessageCard(cardArgs));
         }
-      });
+      }
+      return messages;
     },
   });
 
