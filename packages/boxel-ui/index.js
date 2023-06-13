@@ -11,9 +11,4 @@ module.exports = {
   isDevelopingAddon() {
     return true;
   },
-  setupPreprocessorRegistry(type, registry) {
-    if (type === 'self') {
-      installScopedCSS(registry);
-    }
-  },
 };
