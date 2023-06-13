@@ -6,11 +6,23 @@ import {
   LooseSingleCardDocument,
   Realm,
 } from '@cardstack/runtime-common';
-import { createRealm, testRealm, setupCardLogs, setupBaseRealmServer } from './helpers';
+import {
+  createRealm,
+  testRealm,
+  setupCardLogs,
+  setupBaseRealmServer,
+} from './helpers';
 import isEqual from 'lodash/isEqual';
 
 function cleanWhiteSpace(text: string) {
   return text.replace(/\s+/g, ' ').trim();
+}
+
+function trimCardContainer(text: string) {
+  return cleanWhiteSpace(text).replace(
+    /<div .*? data-test-field-component-card> (.*?) <\/div> <\/div>/,
+    '$1'
+  );
 }
 
 setGracefulCleanup();
@@ -26,7 +38,7 @@ module('indexing', function (hooks) {
 
   let dir: string;
   let realm: Realm;
-  
+
   setupBaseRealmServer(hooks);
 
   hooks.beforeEach(async function () {
@@ -182,7 +194,7 @@ module('indexing', function (hooks) {
       new URL(`${testRealm}mango`)
     );
     assert.strictEqual(
-      cleanWhiteSpace(entry!.html!),
+      trimCardContainer(entry!.html!),
       cleanWhiteSpace(`<h1> Mango </h1>`),
       'pre-rendered html is correct'
     );
@@ -210,7 +222,7 @@ module('indexing', function (hooks) {
             new URL(`${testRealm}vangogh`)
           )) ?? {};
         assert.strictEqual(
-          cleanWhiteSpace(html!),
+          trimCardContainer(html!),
           cleanWhiteSpace(`<h1> Van Gogh </h1>`)
         );
       } else {
