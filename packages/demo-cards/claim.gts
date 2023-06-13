@@ -21,7 +21,6 @@ import type * as CardPaySDK from '@cardstack/cardpay-sdk';
 
 class Isolated extends Component<typeof Claim> {
   @tracked isClaimed = false;
-  // these is no good way to load types from a URL
   claimSettlementModule: CardPaySDK.ClaimSettlementModule | undefined;
   web3Provider: CardPaySDK.Web3Provider | undefined;
   getSDK: typeof CardPaySDK.getSDK | undefined;
@@ -123,7 +122,7 @@ class Isolated extends Component<typeof Claim> {
     // This will prevent SLOW load times and INCOMPATIBLE browser apis that fastboot will complain about (e.g. XMLHtppRequest)
     const { getSDK, Web3Provider } = (await import(
       // @ts-ignore
-      'https://unpkg.com/@cardstack/cardpay-sdk@1.0.53/dist/browser.js'
+      'https://unpkg.com/@cardstack/cardpay-sdk@1.0.53/dist/browser.js' // access file directly to prevent needing to change package.json fields like browser since other apps are consuming the sdk too
     )) as typeof CardPaySDK;
     this.web3Provider = new Web3Provider(window.ethereum);
     this.getSDK = getSDK;
