@@ -10,6 +10,9 @@ const { GlimmerScopedCSSWebpackPlugin } = require('glimmer-scoped-css/webpack');
 
 module.exports = function (defaults) {
   const app = new EmberAddon(defaults, {
+    'ember-cli-babel': {
+      enableTypeScriptTransform: true,
+    },
     vendorFiles: { 'jquery.js': null, 'app-shims.js': null },
   });
 

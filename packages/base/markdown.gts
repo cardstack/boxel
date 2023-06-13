@@ -3,8 +3,13 @@ import { BoxelInput } from '@cardstack/boxel-ui';
 import { marked } from 'marked';
 import { sanitizeHtml } from '@cardstack/runtime-common';
 
+const markdownOpts = {
+  mangle: false,
+  headerIds: false,
+};
+
 function toHtml(markdown: string | null) {
-  return markdown ? sanitizeHtml(marked(markdown)) : '';
+  return markdown ? sanitizeHtml(marked(markdown, markdownOpts)) : '';
 }
 
 export default class MarkdownCard extends CardBase {
@@ -17,7 +22,7 @@ export default class MarkdownCard extends CardBase {
         {{{toHtml @model}}}
       </div>
     </template>
-  }
+  };
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
@@ -29,11 +34,12 @@ export default class MarkdownCard extends CardBase {
 
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <BoxelInput 
-        class='boxel-text-area' 
-        @multiline={{true}} 
-        @value={{@model}} 
-        @onInput={{@set}} />
+      <BoxelInput
+        class='boxel-text-area'
+        @multiline={{true}}
+        @value={{@model}}
+        @onInput={{@set}}
+      />
     </template>
   };
 }
