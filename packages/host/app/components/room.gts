@@ -92,7 +92,7 @@ export default class Room extends Component<RoomArgs> {
         data-test-message-field
         type='text'
         @multiline={{TRUE}}
-        @value={{this.message}}
+        @value={{this.messageToSend}}
         @onInput={{this.setMessage}}
         rows='4'
         cols='20'
@@ -109,7 +109,7 @@ export default class Room extends Component<RoomArgs> {
       {{/if}}
       <Button
         data-test-send-message-btn
-        @disabled={{and (not this.message) (not this.cardtoSend)}}
+        @disabled={{and (not this.messageToSend) (not this.cardtoSend)}}
         @loading={{this.doSendMessage.isRunning}}
         @kind='primary'
         {{on 'click' this.sendMessage}}
@@ -132,7 +132,8 @@ export default class Room extends Component<RoomArgs> {
   @service declare cardService: CardService;
   @tracked private isInviteMode = false;
   @tracked private membersToInvite: string[] = [];
-  private messages: TrackedMap<string, string | undefined> = new TrackedMap();
+  private messagesToSend: TrackedMap<string, string | undefined> =
+    new TrackedMap();
   private cardsToSend: TrackedMap<string, Card | undefined> = new TrackedMap();
 
   constructor(owner: unknown, args: any) {
@@ -166,8 +167,8 @@ export default class Room extends Component<RoomArgs> {
     return this.matrixService.rooms.get(this.args.roomId)?.name;
   }
 
-  get message() {
-    return this.messages.get(this.args.roomId);
+  get messageToSend() {
+    return this.messagesToSend.get(this.args.roomId);
   }
 
   get cardtoSend() {
@@ -190,17 +191,17 @@ export default class Room extends Component<RoomArgs> {
 
   @action
   private setMessage(message: string) {
-    this.messages.set(this.args.roomId, message);
+    this.messagesToSend.set(this.args.roomId, message);
   }
 
   @action
   private sendMessage() {
-    if (this.message == null && !this.cardtoSend) {
+    if (this.messageToSend == null && !this.cardtoSend) {
       throw new Error(
         `bug: should never get here, send button is disabled when there is no message nor card`
       );
     }
-    this.doSendMessage.perform(this.message, this.cardtoSend);
+    this.doSendMessage.perform(this.messageToSend, this.cardtoSend);
   }
 
   @action
@@ -235,7 +236,7 @@ export default class Room extends Component<RoomArgs> {
 
   private doSendMessage = restartableTask(
     async (message: string | undefined, card?: Card) => {
-      this.messages.set(this.args.roomId, undefined);
+      this.messagesToSend.set(this.args.roomId, undefined);
       this.cardsToSend.set(this.args.roomId, undefined);
       await this.matrixService.sendMessage(this.args.roomId, message, card);
     }
