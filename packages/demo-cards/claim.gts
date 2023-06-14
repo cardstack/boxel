@@ -9,7 +9,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { getMetamaskResource } from './utils/resources/metamask';
 import { tracked } from '@glimmer/tracking';
-import { Button, CardContainer, FieldContainer } from '@cardstack/boxel-ui';
+import { Button, FieldContainer } from '@cardstack/boxel-ui';
 // @ts-ignore
 import { enqueueTask, restartableTask } from 'ember-concurrency';
 // @ts-ignore
@@ -25,7 +25,7 @@ class Isolated extends Component<typeof Claim> {
   web3Provider: CardPaySDK.Web3Provider | undefined;
   getSDK: typeof CardPaySDK.getSDK | undefined;
   <template>
-    <CardContainer class='demo-card' @displayBoundaries={{true}}>
+    <div class='demo-card'>
       <FieldContainer @label='Module Address.'><@fields.moduleAddress
         /></FieldContainer>
       <FieldContainer @label='Safe Address'><@fields.safeAddress
@@ -52,7 +52,7 @@ class Isolated extends Component<typeof Claim> {
           {{/if}}
         </Button>
       {{/if}}
-    </CardContainer>
+    </div>
   </template>
 
   // chainId is not explicitly passed to resource
@@ -160,7 +160,7 @@ export class Claim extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer class='demo-card' @displayBoundaries={{true}}>
+      <div class='demo-card'>
         <FieldContainer @label='Title'><@fields.title /></FieldContainer>
         <FieldContainer @label='Explanation'><@fields.explanation
           /></FieldContainer>
@@ -168,7 +168,7 @@ export class Claim extends Card {
         <Button>
           Look at Claim
         </Button>
-      </CardContainer>
+      </div>
     </template>
   };
   static isolated = Isolated;

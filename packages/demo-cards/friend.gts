@@ -7,7 +7,6 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import IntegerCard from 'https://cardstack.com/base/integer';
 import StringCard from 'https://cardstack.com/base/string';
-import { CardContainer } from '@cardstack/boxel-ui';
 
 export class Friend extends Card {
   static displayName = 'Friend';
@@ -26,14 +25,13 @@ export class Friend extends Card {
   });
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer
+      <div
         class='demo-card'
-        @displayBoundaries={{true}}
         {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
         ...attributes
       >
         <@fields.firstName />
-      </CardContainer>
+      </div>
     </template>
   };
 }

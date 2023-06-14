@@ -8,6 +8,7 @@ import {
   TestRealmAdapter,
   TestRealm,
   cleanWhiteSpace,
+  trimCardContainer,
   setupLocalIndexing,
 } from '../helpers';
 import { setupRenderingTest } from 'ember-qunit';
@@ -84,7 +85,7 @@ module('Integration | card-prerender', function (hooks) {
         new URL(`${testRealmURL}Pet/mango`)
       );
       assert.strictEqual(
-        cleanWhiteSpace(entry!.html!),
+        trimCardContainer(entry!.html!),
         cleanWhiteSpace(`<h3> Mango </h3>`),
         'the pre-rendered HTML is correct'
       );
@@ -94,7 +95,7 @@ module('Integration | card-prerender', function (hooks) {
         new URL(`${testRealmURL}Pet/vangogh`)
       );
       assert.strictEqual(
-        cleanWhiteSpace(entry!.html!),
+        trimCardContainer(entry!.html!),
         cleanWhiteSpace(`<h3> Van Gogh </h3>`),
         'the pre-rendered HTML is correct'
       );

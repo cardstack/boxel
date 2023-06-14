@@ -2,8 +2,16 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
-import { contains, field, Component, Card, realmInfo, relativeTo } from './card-api';
-import { CardContainer, IconButton } from '@cardstack/boxel-ui';
+import {
+  contains,
+  field,
+  Component,
+  Card,
+  realmInfo,
+  relativeTo,
+  type CardBase,
+} from './card-api';
+import { IconButton } from '@cardstack/boxel-ui';
 import {
   chooseCard,
   catalogEntryRef,
@@ -18,14 +26,13 @@ import StringCard from './string';
 class Isolated extends Component<typeof CardsGrid> {
   <template>
     <div class='cards-grid'>
-      <div class='cards-grid__title' data-test-cards-grid-title>{{@fields.realmName}}</div>
       <ul class='cards-grid__cards' data-test-cards-grid-cards>
         {{#each this.request.instances as |card|}}
           <li
             data-test-cards-grid-item={{card.id}}
             {{on 'click' (fn this.openCard card)}}
           >
-            <CardContainer class='grid-card'>
+            <div class='grid-card'>
               <div class='grid-card__thumbnail'>
                 <div
                   class='grid-card__thumbnail-text'
@@ -40,7 +47,7 @@ class Isolated extends Component<typeof CardsGrid> {
                 class='grid-card__display-name'
                 data-test-cards-grid-item-display-name
               >{{cardTypeDisplayName card}}</h4>
-            </CardContainer>
+            </div>
           </li>
         {{else}}
           {{#if this.request.isLoading}}
@@ -52,16 +59,18 @@ class Isolated extends Component<typeof CardsGrid> {
       </ul>
 
       {{#if @context.actions.createCard}}
-        <IconButton
-          @icon='icon-plus-circle'
-          @width='40px'
-          @height='40px'
-          @tooltip='Add a new card to this collection'
-          @tooltipPosition='left'
-          class='add-button cards-grid__add-button'
-          {{on 'click' this.createNew}}
-          data-test-create-new-card-button
-        />
+        <div class='cards-grid__add-button'>
+          <IconButton
+            @icon='icon-plus-circle'
+            @width='40px'
+            @height='40px'
+            @tooltip='Add a new card to this collection'
+            @tooltipPosition='left'
+            class='add-button'
+            {{on 'click' this.createNew}}
+            data-test-create-new-card-button
+          />
+        </div>
       {{/if}}
     </div>
   </template>
@@ -133,4 +142,8 @@ export class CardsGrid extends Card {
       return this[realmInfo]?.name;
     },
   });
+
+  static getDisplayName(instance: CardBase) {
+    return instance[realmInfo]?.name ?? this.displayName;
+  }
 }
