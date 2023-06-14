@@ -13,11 +13,11 @@ import { fn } from '@ember/helper';
 
 // This little component helps to make glint understand when we have a MenuItem and when we have a MenuDivider
 class MenuItemRenderer extends Component<{
-  Args: { menuItem: MenuItem|MenuDivider };
+  Args: { menuItem: MenuItem | MenuDivider };
   Blocks: {
-    divider: []
-    item: [MenuItem],
-  }
+    divider: [];
+    item: [MenuItem];
+  };
 }> {
   get asMenuItem(): MenuItem {
     return this.args.menuItem as MenuItem;
@@ -36,18 +36,16 @@ interface Signature {
   Args: {
     class?: string;
     closeMenu?: () => void;
-    items: Array<MenuItem|MenuDivider>;
+    items: Array<MenuItem | MenuDivider>;
     itemClass?: string;
   };
   Blocks: EmptyObject;
 }
 
 export default class Menu extends Component<Signature> {
-  invokeMenuItemAction(actionOrLink: () => never, e: Event): void;
-  invokeMenuItemAction(actionOrLink: Link, e: Event): void;
   @action invokeMenuItemAction(actionOrLink: unknown, e: Event): void {
     e.preventDefault();
-    
+
     if (actionOrLink instanceof Link && actionOrLink.transitionTo) {
       actionOrLink.transitionTo();
     } else {

@@ -27,5 +27,5 @@ export {
   LoadingIndicator,
   Message,
   Modal,
-  BoxelDropdown
+  BoxelDropdown,
 };

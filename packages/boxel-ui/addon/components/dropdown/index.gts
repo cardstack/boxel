@@ -3,19 +3,27 @@ import { hash, concat } from '@ember/helper';
 import { type EmptyObject } from '@ember/component/helper';
 import cn from '../../helpers/cn';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
-import { modifier as createModifier, FunctionBasedModifier } from "ember-modifier";
-import BasicDropdown,{ Dropdown } from 'ember-basic-dropdown/components/basic-dropdown'
+import {
+  modifier as createModifier,
+  FunctionBasedModifier,
+} from 'ember-modifier';
+import BasicDropdown, {
+  Dropdown,
+} from 'ember-basic-dropdown/components/basic-dropdown';
 import { action } from '@ember/object';
 
+type DropdownTriggerElement = HTMLButtonElement | HTMLAnchorElement;
+type DropdownTriggerNamedArgs = {
+  dropdown: Dropdown;
+  eventType?: 'click' | 'mousedown';
+  stopPropagation?: boolean;
+  [named: string]: unknown;
+};
+
 interface DropdownTriggerSignature {
-  Element: HTMLButtonElement | HTMLAnchorElement;
+  Element: DropdownTriggerElement;
   Args: {
-    Named: {
-      dropdown: Dropdown;
-      eventType?: 'click' | 'mousedown';
-      stopPropagation?: boolean;
-      [named: string]: unknown;
-    };
+    Named: DropdownTriggerNamedArgs;
     Positional: unknown[];
   };
 }
@@ -26,19 +34,21 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     contentClass?: string;
-    registerAPI?: (publicAPI: Dropdown) => void
-    onClose?: () => void
+    registerAPI?: (publicAPI: Dropdown) => void;
+    onClose?: () => void;
   };
   Blocks: {
-    trigger: [FunctionBasedModifier<{
-      // note: should only be used with Button, but HTMLAnchorElement is included so that the
-      // trigger bindings can be applied to BoxelButton without glint error
-      Element: HTMLButtonElement | HTMLAnchorElement;
-      Args: {
-        Named: EmptyObject;
-        Positional: unknown[];
-      };
-    }>];
+    trigger: [
+      FunctionBasedModifier<{
+        // note: should only be used with Button, but HTMLAnchorElement is included so that the
+        // trigger bindings can be applied to BoxelButton without glint error
+        Element: HTMLButtonElement | HTMLAnchorElement;
+        Args: {
+          Named: EmptyObject;
+          Positional: unknown[];
+        };
+      }>
+    ];
     content: [{ close: () => void }];
   };
 }
@@ -60,6 +70,7 @@ class BoxelDropdown extends Component<Signature> {
       @onClose={{@onClose}}
       as |dd|
     >
+      {{!@glint-ignore}}
       {{yield (modifier
         this.dropdownModifier
         dropdown=dd
@@ -97,19 +108,26 @@ class BoxelDropdown extends Component<Signature> {
     </style>
   </template>
 
-  dropdownModifier = createModifier<DropdownTriggerSignature>(function(element, _positional, named){
+  dropdownModifier = createModifier<DropdownTriggerSignature>(function (
+    element: DropdownTriggerElement,
+    _positional: unknown[],
+    named: DropdownTriggerNamedArgs
+  ) {
     const { dropdown, eventType: desiredEventType, stopPropagation } = named;
 
     if (element.tagName.toUpperCase() !== 'BUTTON') {
       throw new Error('Only buttons should be used with the dropdown modifier');
     }
 
-    function updateAria(){
+    function updateAria() {
       element.setAttribute('aria-expanded', dropdown.isOpen ? 'true' : 'false');
-      element.setAttribute('aria-disabled', dropdown.disabled ? 'true' : 'false');
+      element.setAttribute(
+        'aria-disabled',
+        dropdown.disabled ? 'true' : 'false'
+      );
     }
 
-    function handleMouseEvent(e: MouseEvent){
+    function handleMouseEvent(e: MouseEvent) {
       if (typeof document === 'undefined') return;
 
       if (!dropdown || dropdown.disabled) return;
@@ -117,7 +135,7 @@ class BoxelDropdown extends Component<Signature> {
       const eventType = e.type;
       const notLeftClick = e.button !== 0;
       if (eventType !== desiredEventType || notLeftClick) return;
-      
+
       if (stopPropagation) e.stopPropagation();
 
       dropdown.actions.toggle(e);
@@ -149,8 +167,8 @@ class BoxelDropdown extends Component<Signature> {
     return function cleanup() {
       element.removeEventListener('click', handleMouseEvent);
       element.removeEventListener('keydown', handleKeyDown);
-    }
-  }, { eager: false });
+    };
+  });
 }
 
 declare module '@glint/environment-ember-loose/registry' {

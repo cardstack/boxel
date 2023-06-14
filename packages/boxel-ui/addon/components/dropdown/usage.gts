@@ -4,16 +4,15 @@ import { action } from '@ember/object';
 import { fn, array } from '@ember/helper';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import menuItem from '../../helpers/menu-item'
+import menuItem from '../../helpers/menu-item';
 
-import BoxelButton from '../button'
-import BoxelMenu from '../menu'
+import BoxelButton from '../button';
+import BoxelMenu from '../menu';
 
 import BoxelDropdown from './index';
 
-
 export default class BoxelDropdownUsage extends Component {
-   @action log(string: string): void {
+  @action log(string: string): void {
     console.log(string);
   }
 
@@ -46,7 +45,7 @@ export default class BoxelDropdownUsage extends Component {
           </:content>
         </BoxelDropdown>
 
-        <!-- Note: the shape of the PublicAPI object passed to the optional
+        {{!-- Note: the shape of the PublicAPI object passed to the optional
         registerAPI action is as follows:
 
           {
@@ -60,7 +59,7 @@ export default class BoxelDropdownUsage extends Component {
               reposition: (...args: any[]) => undefined | RepositionChanges;
             };
           }
-        -->
+        --}}
       </:example>
       <:api as |Args|>
         <Args.String

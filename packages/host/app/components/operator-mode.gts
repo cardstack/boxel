@@ -329,7 +329,7 @@ export default class OperatorMode extends Component<Signature> {
   }
 
   isUseCardDisplayName(item: StackItem) {
-    return item.card.constructor.name !== 'CardsGrid' || item.format === 'edit'
+    return item.card.constructor.name !== 'CardsGrid' || item.format === 'edit';
   }
 
   @action

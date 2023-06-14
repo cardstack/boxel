@@ -27,7 +27,7 @@ import { shimExternals } from '@cardstack/host/lib/externals';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
-const realmName = "Operator Mode Workspace";
+const realmName = 'Operator Mode Workspace';
 let setCardInOperatorModeState: (card: string) => Promise<void>;
 
 module('Integration | operator-mode', function (hooks) {
@@ -461,7 +461,7 @@ module('Integration | operator-mode', function (hooks) {
           },
         },
       },
-      '.realm.json': `{ "name": "${realmName}" }`
+      '.realm.json': `{ "name": "${realmName}" }`,
     });
     realm = await TestRealm.createWithAdapter(adapter, this.owner);
     loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
@@ -1154,11 +1154,13 @@ module('Integration | operator-mode', function (hooks) {
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     assert.dom(`[data-test-cards-grid-title]`).containsText(realmName);
-  
+
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
     let personCard = await loadCard(`${testRealmURL}Person/fadhlan`);
-    assert.dom(`[data-test-boxel-header-title]`).containsText(cardTypeDisplayName(personCard));
+    assert
+      .dom(`[data-test-boxel-header-title]`)
+      .containsText(cardTypeDisplayName(personCard));
 
     assert.dom(`[data-test-cards-grid-cards]`).isNotVisible();
     assert.dom(`[data-test-create-new-card-button]`).isNotVisible();

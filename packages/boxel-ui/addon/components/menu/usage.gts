@@ -1,8 +1,8 @@
 import Component from '@glimmer/component';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import BoxelMenu from './index';
-import menuItem from '../../helpers/menu-item'
-import menuDivider from '../../helpers/menu-divider'
+import menuItem from '../../helpers/menu-item';
+import menuDivider from '../../helpers/menu-divider';
 import { fn, array } from '@ember/helper';
 
 import { action } from '@ember/object';
