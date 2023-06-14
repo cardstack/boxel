@@ -11,7 +11,7 @@ import {
 } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
 import type { ComponentLike } from '@glint/template';
-import { CardContainer, Button, IconButton } from '@cardstack/boxel-ui';
+import { Button, IconButton } from '@cardstack/boxel-ui';
 import {
   restartableTask,
   type EncapsulatedTaskDescriptor as Descriptor,
@@ -54,9 +54,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
                 )
                 as |Item|
               }}
-                <CardContainer class='links-to-editor__item'>
-                  <Item />
-                </CardContainer>
+                <Item />
               {{/let}}
               <IconButton
                 @icon='icon-minus-circle'

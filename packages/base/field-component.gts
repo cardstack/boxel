@@ -6,11 +6,14 @@ import {
   type FieldsTypeFor,
   type CardBase,
   CardContext,
+  isCard,
+  isSaved,
 } from './card-api';
 import { defaultComponent } from './default-card-component';
-import { getField } from '@cardstack/runtime-common';
+import { getField, cardTypeDisplayName } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
-import { CardContainer } from '@cardstack/boxel-ui';
+import { CardContainer, Header } from '@cardstack/boxel-ui';
+import { eq, not, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import Modifier from 'ember-modifier';
 
 const componentCache = new WeakMap<
@@ -48,14 +51,41 @@ export function getBoxComponent(
     };
 
   let component: ComponentLike<{ Args: {}; Blocks: {} }> = <template>
-    <Implementation
-      @model={{model.value}}
-      @fields={{internalFields}}
-      @set={{model.set}}
-      @fieldName={{model.name}}
-      @context={{context}}
-      {{cardComponentModifier model.value context}}
-    />
+    {{#if (isCard model.value)}}
+      <CardContainer @displayBoundaries={{true}}>
+        {{#if (and (not (eq format 'embedded')) (isSaved model.value))}}
+          <Header
+            @title='{{if (eq format "edit") "Edit "}} {{cardTypeDisplayName
+              model.value
+            }}'
+          />
+        {{/if}}
+        <div
+          class='field-component-card
+            {{format}}-card
+            {{if (isSaved model.value) "saved" "not-saved"}}'
+          data-test-field-component-card
+        >
+          <Implementation
+            @model={{model.value}}
+            @fields={{internalFields}}
+            @set={{model.set}}
+            @fieldName={{model.name}}
+            @context={{context}}
+            {{cardComponentModifier model.value context}}
+          />
+        </div>
+      </CardContainer>
+    {{else}}
+      <Implementation
+        @model={{model.value}}
+        @fields={{internalFields}}
+        @set={{model.set}}
+        @fieldName={{model.name}}
+        @context={{context}}
+        {{cardComponentModifier model.value context}}
+      />
+    {{/if}}
   </template>;
 
   // when viewed from *outside*, our component is both an invokable component
@@ -181,10 +211,8 @@ export function getPluralViewComponent(
             (getBoxComponent (cardTypeFor field child) format child)
             as |Item|
           }}
-            <li>
-              <CardContainer data-test-plural-view-item={{i}}>
-                <Item />
-              </CardContainer>
+            <li data-test-plural-view-item={{i}}>
+              <Item />
             </li>
           {{/let}}
         {{/each}}

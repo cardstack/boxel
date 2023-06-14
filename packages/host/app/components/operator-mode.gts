@@ -7,7 +7,7 @@ import { fn, array } from '@ember/helper';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import type CardService from '../services/card-service';
 // import getValueFromWeakMap from '../helpers/get-value-from-weakmap';
-import { and, eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import optional from '@cardstack/boxel-ui/helpers/optional';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import {
@@ -328,10 +328,6 @@ export default class OperatorMode extends Component<Signature> {
     return stackIndex + 1 < this.stack.length;
   }
 
-  isUseCardDisplayName(item: StackItem) {
-    return item.card.constructor.name !== 'CardsGrid' || item.format === 'edit';
-  }
-
   @action
   async dismissStackedCardsAbove(stackIndex: number) {
     for (let i = this.stack.length - 1; i > stackIndex; i--) {
@@ -387,11 +383,10 @@ export default class OperatorMode extends Component<Signature> {
                 class={{cn
                   'operator-mode-card-stack__card'
                   operator-mode-card-stack__card--edit=(eq item.format 'edit')
-                  operator-mode-card-stack__card--is-cards-grid=(and (eq item.card.constructor.name 'CardsGrid') (not (eq item.format 'edit')))
                 }}
               >
                 <Header
-                  @title={{(if (this.isUseCardDisplayName item) (cardTypeDisplayName item.card))}}
+                  @title={{cardTypeDisplayName item.card}}
                   class='operator-mode-card-stack__card__header'
                   {{on
                     'click'
@@ -401,6 +396,7 @@ export default class OperatorMode extends Component<Signature> {
                       )
                     )
                   }}
+                  data-test-stack-card-header
                 >
                   <:actions>
                     <BoxelDropdown>
@@ -489,6 +485,22 @@ export default class OperatorMode extends Component<Signature> {
         @onFocus={{this.onFocusSearchInput}}
       />
     </Modal>
+    <style>
+      .operator-mode-card-stack__buried .operator-mode-card-stack__card {
+        background-color: var(--boxel-200);
+        grid-template-rows: var(--buried-operator-mode-header-height) auto;
+      }
+
+      .operator-mode-card-stack__buried .operator-mode-card-stack__card__header .icon-button {
+        display: none;
+      }
+
+      .operator-mode-card-stack__buried .operator-mode-card-stack__card__header {
+        cursor: pointer;
+        font: 500 var(--boxel-font-sm);
+        padding: 0 var(--boxel-sp-xs);
+      }
+    </style>
   </template>
 }
 

@@ -1153,13 +1153,15 @@ module('Integration | operator-mode', function (hooks) {
       }
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    assert.dom(`[data-test-cards-grid-title]`).containsText(realmName);
+    assert.dom(`[data-test-stack-card-header]`).containsText(realmName);
 
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
     let personCard = await loadCard(`${testRealmURL}Person/fadhlan`);
     assert
-      .dom(`[data-test-boxel-header-title]`)
+      .dom(
+        `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-boxel-header-title]`
+      )
       .containsText(cardTypeDisplayName(personCard));
 
     assert.dom(`[data-test-cards-grid-cards]`).isNotVisible();

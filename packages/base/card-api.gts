@@ -1385,6 +1385,10 @@ export class CardBase {
   static data?: Record<string, any>;
   static displayName = 'Card';
 
+  static getDisplayName(instance: CardBase) {
+    return instance.constructor.displayName;
+  }
+
   static [serialize](
     value: any,
     doc: JSONAPISingleResourceDocument,
@@ -1863,7 +1867,9 @@ async function _createFromSerialized<T extends CardBaseConstructor>(
     instance = new card({ id: resource.id }) as CardInstanceType<T>;
     instance[relativeTo] = _relativeTo;
     instance[realmInfo] = data?.meta?.realmInfo;
-    instance[realmURL] = data?.meta?.realmURL ? new URL(data.meta.realmURL) : undefined;
+    instance[realmURL] = data?.meta?.realmURL
+      ? new URL(data.meta.realmURL)
+      : undefined;
   }
   identityContexts.set(instance, identityContext);
   return await _updateFromSerialized(instance, resource, doc, identityContext);

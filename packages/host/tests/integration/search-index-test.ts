@@ -4,6 +4,7 @@ import {
   TestRealmAdapter,
   testRealmURL,
   cleanWhiteSpace,
+  trimCardContainer,
   setupCardLogs,
   setupLocalIndexing,
   type CardDocFiles,
@@ -512,7 +513,7 @@ module('Integration | search-index', function (hooks) {
             (await indexer.searchEntry(new URL(`${testRealmURL}vangogh`))) ??
             {};
           assert.strictEqual(
-            cleanWhiteSpace(html!),
+            trimCardContainer(html!),
             cleanWhiteSpace(`<h1> Van Gogh </h1>`)
           );
         } else {
@@ -565,7 +566,7 @@ module('Integration | search-index', function (hooks) {
             (await indexer.searchEntry(new URL(`${testRealmURL}vangogh`))) ??
             {};
           assert.strictEqual(
-            cleanWhiteSpace(html!),
+            trimCardContainer(html!),
             cleanWhiteSpace(`<h1> Van Gogh </h1>`)
           );
         } else {
@@ -684,7 +685,7 @@ module('Integration | search-index', function (hooks) {
             (await indexer.searchEntry(new URL(`${testRealmURL}vangogh`))) ??
             {};
           assert.strictEqual(
-            cleanWhiteSpace(html!),
+            trimCardContainer(html!),
             cleanWhiteSpace(`<h1> Van Gogh </h1>`)
           );
         } else {
@@ -807,7 +808,7 @@ module('Integration | search-index', function (hooks) {
             (await indexer.searchEntry(new URL(`${testRealmURL}vangogh`))) ??
             {};
           assert.strictEqual(
-            cleanWhiteSpace(html!),
+            trimCardContainer(html!),
             cleanWhiteSpace(`<h1> Van Gogh </h1>`)
           );
         } else {
