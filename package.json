@@ -63,6 +63,5 @@
   "volta": {
     "node": "18.6.0",
     "pnpm": "8.5.1"
-  },
-  "packageManager": "yarn@1.22.17"
+  }
 }
