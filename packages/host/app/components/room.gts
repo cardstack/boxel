@@ -77,8 +77,8 @@ export default class Room extends Component<RoomArgs> {
             - Beginning of conversation -
           </div>
         </div>
-        {{#each this.messageCardComponents as |message|}}
-          <message />
+        {{#each this.messageCardComponents as |Message|}}
+          <Message />
         {{else}}
           <div data-test-no-messages>
             (No messages)
