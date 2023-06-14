@@ -1,5 +1,9 @@
 lockfileVersion: '6.0'
 
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
 overrides:
   '@types/eslint': 8.4.1
   '@embroider/util': 1.11.1
@@ -14,9 +18,6 @@ patchedDependencies:
   fastboot@4.1.0:
     hash: kizxbxhfcldguz4jcwonfduu2y
     path: patches/fastboot@4.1.0.patch
-  glimmer-scoped-css@0.3.0:
-    hash: nhq6vyoprpjunprjjvchlvu2eq
-    path: patches/glimmer-scoped-css@0.3.0.patch
   magic-string@0.25.9:
     hash: sbmabuxrk2m44agmppz3qozwvq
     path: patches/magic-string@0.25.9.patch
@@ -651,8 +652,8 @@ importers:
         specifier: ^6.2.0
         version: 6.2.0(webpack@5.84.0)
       glimmer-scoped-css:
-        specifier: ^0.3.0
-        version: 0.3.0(patch_hash=nhq6vyoprpjunprjjvchlvu2eq)
+        specifier: ^0.3.1
+        version: 0.3.1
       lodash:
         specifier: ^4.17.21
         version: 4.17.21
@@ -1064,8 +1065,8 @@ importers:
         specifier: ^5.0.2
         version: 5.0.2
       glimmer-scoped-css:
-        specifier: ^0.3.0
-        version: 0.3.0(patch_hash=nhq6vyoprpjunprjjvchlvu2eq)
+        specifier: ^0.3.1
+        version: 0.3.1
       ignore:
         specifier: ^5.2.0
         version: 5.2.0
@@ -2266,7 +2267,7 @@ packages:
       '@babel/core': ^7.0.0-0
     dependencies:
       '@babel/core': 7.21.0(supports-color@8.1.1)
-      '@babel/helper-create-class-features-plugin': 7.21.8(@babel/core@7.21.0)
+      '@babel/helper-create-class-features-plugin': 7.20.2(@babel/core@7.21.0)
       '@babel/helper-plugin-utils': 7.20.2
     transitivePeerDependencies:
       - supports-color
@@ -15445,8 +15446,8 @@ packages:
       through: 2.2.7
     dev: true
 
-  /glimmer-scoped-css@0.3.0(patch_hash=nhq6vyoprpjunprjjvchlvu2eq):
-    resolution: {integrity: sha512-F4/pajghcn7uYS9Q3D4yzop9MPQu85iVnuSSU30hAZGcTmJ1SNNFlLttH1cVzUOa6PsrMNtz2VMvRHLc6eXNbg==}
+  /glimmer-scoped-css@0.3.1:
+    resolution: {integrity: sha512-dYQqZIIj5bFHAy6GVxy+hOAqy26KbrBjHmIGt2YIhXZgERzgXJKpf1YNd/SfzD1d4zgiiHDfCUnJ3MlQu1l23w==}
     dependencies:
       '@embroider/addon-shim': 1.8.5
       js-string-escape: 1.0.1
@@ -15455,7 +15456,6 @@ packages:
       super-fast-md5: 1.0.1
     transitivePeerDependencies:
       - supports-color
-    patched: true
 
   /glob-parent@3.1.0:
     resolution: {integrity: sha512-E8Ak/2+dZY6fnzlR7+ueWvhsH1SjHr4jjss4YS/h4py44jY9MhK/VFdaZJAWDz6BbL21KeteKxFSFpq8OS5gVA==}
