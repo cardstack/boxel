@@ -2269,7 +2269,7 @@ packages:
       '@babel/core': ^7.0.0-0
     dependencies:
       '@babel/core': 7.21.0(supports-color@8.1.1)
-      '@babel/helper-create-class-features-plugin': 7.21.8(@babel/core@7.21.0)
+      '@babel/helper-create-class-features-plugin': 7.20.2(@babel/core@7.21.0)
       '@babel/helper-plugin-utils': 7.20.2
     transitivePeerDependencies:
       - supports-color
@@ -25047,7 +25047,7 @@ packages:
     dev: true
 
   github.com/machty/ember-concurrency/c6ed562(@babel/core@7.20.2)(ember-source@4.12.0):
-    resolution: {commit: c6ed562, repo: git+ssh://git@github.com/machty/ember-concurrency.git, type: git}
+    resolution: {tarball: https://codeload.github.com/machty/ember-concurrency/tar.gz/c6ed562}
     id: github.com/machty/ember-concurrency/c6ed562
     name: ember-concurrency
     version: 3.0.0
