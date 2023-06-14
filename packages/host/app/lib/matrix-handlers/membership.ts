@@ -1,6 +1,5 @@
 import debounce from 'lodash/debounce';
 import { type MatrixEvent, type RoomMember } from 'matrix-js-sdk';
-import { TrackedMap } from 'tracked-built-ins';
 import {
   type Context,
   type RoomInvite,
@@ -39,27 +38,6 @@ async function drainMembership(context: Context) {
     event: { event },
     member,
   } of tasks) {
-    // TODO the room card does this--probably we can remove it...
-    let { roomId, userId } = member;
-    let members = context.roomMembers.get(roomId);
-    if (!members) {
-      members = new TrackedMap();
-      context.roomMembers.set(roomId, members);
-    }
-    switch (member.membership) {
-      case 'leave':
-        members.delete(userId);
-        break;
-      case 'invite':
-      case 'join':
-        members.set(userId, { member, status: member.membership });
-        break;
-      default:
-        throw new Error(
-          `don't know how to handle membership status of '${member.membership}`
-        );
-    }
-
     await addRoomEvent(context, event);
 
     if (member.userId === context.client.getUserId()) {

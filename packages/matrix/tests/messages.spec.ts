@@ -13,7 +13,6 @@ import {
   assertMessages,
   sendMessage,
   joinRoom,
-  scrollToTopOfMessages,
   leaveRoom,
   testHost,
 } from '../helpers';
@@ -104,7 +103,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test(`it can paginate back to beginning of timeline for timelines that truncated`, async ({
+  test(`it can load all events back to beginning of timeline for timelines that truncated`, async ({
     page,
   }) => {
     // generally the matrix server paginates after 10 messages
@@ -130,26 +129,7 @@ test.describe('Room messages', () => {
     let displayedMessageCount = await page
       .locator('[data-test-message-idx]')
       .count();
-    expect(displayedMessageCount).toBeGreaterThan(0);
-    expect(displayedMessageCount).toBeLessThan(totalMessageCount);
-    await expect(
-      page.locator('[data-test-timeline-start]'),
-      'the beginning of the timeline is not displayed'
-    ).toHaveCount(0);
-    await expect(
-      page.getByText(`message ${totalMessageCount}`),
-      'the most recent message is displayed'
-    ).toHaveCount(1);
-
-    await scrollToTopOfMessages(page);
-    await expect(page.locator('[data-test-message-idx]')).toHaveCount(
-      totalMessageCount
-    );
-    expect(displayedMessageCount).toBeLessThan(totalMessageCount);
-    await expect(
-      page.locator('[data-test-timeline-start]'),
-      'the beginning of the timeline is displayed'
-    ).toHaveCount(1);
+    expect(displayedMessageCount).toEqual(totalMessageCount);
   });
 
   test(`it can send a markdown message`, async ({ page }) => {

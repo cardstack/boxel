@@ -54,14 +54,10 @@ export default class MatrixService extends Service {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @tracked private _client: MatrixClient | undefined;
+
   invites: TrackedMap<string, RoomInvite> = new TrackedMap();
   joinedRooms: TrackedMap<string, RoomEventInfo> = new TrackedMap();
-  roomMembers: TrackedMap<
-    string,
-    TrackedMap<string, { member: RoomMember; status: 'join' | 'invite' }>
-  > = new TrackedMap();
   rooms: Map<string, RoomMeta> = new Map();
-  timelines: TrackedMap<string, TrackedMap<string, Event>> = new TrackedMap();
   roomEventConsumers: TrackedMap<string, MatrixRoomCard> = new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
@@ -144,6 +140,8 @@ export default class MatrixService extends Service {
   }
 
   async logout() {
+    await this.flushMembership;
+    await this.flushTimeline;
     clearAuth();
     this.unbindEventListeners();
     await this.client.stopClient();
@@ -267,10 +265,12 @@ export default class MatrixService extends Service {
   private resetState() {
     this.invites = new TrackedMap();
     this.joinedRooms = new TrackedMap();
-    this.roomMembers = new TrackedMap();
     this.rooms = new Map();
-    this.timelines = new TrackedMap();
+    this.roomEventConsumers = new TrackedMap();
     this.roomMembershipQueue = [];
+    this.timelineQueue = [];
+    this.flushMembership = undefined;
+    this.flushTimeline = undefined;
     this.unbindEventListeners();
     this._client = this.matrixSDK.createClient({ baseUrl: matrixURL });
   }

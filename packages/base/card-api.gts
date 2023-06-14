@@ -81,7 +81,7 @@ type Setter = { setters: { [fieldName: string]: Setter } } & ((
 
 interface Options {
   computeVia?: string | (() => unknown);
-  usedInTemplate?: true; // this is scaffolding for the card compiler
+  isUsed?: true; // TODO this is a workaround for a bug that needs researching
 }
 
 interface NotLoadedValue {
@@ -215,7 +215,7 @@ export interface Field<
   name: string;
   fieldType: FieldType;
   computeVia: undefined | string | (() => unknown);
-  usedInTemplate?: undefined | true; // this is scaffolding for the card compiler
+  isUsed?: undefined | true; // TODO this is a workaround for a bug that needs researching
   serialize(
     value: any,
     doc: JSONAPISingleResourceDocument,
@@ -344,7 +344,7 @@ class ContainsMany<FieldT extends CardBaseConstructor>
     private cardThunk: () => FieldT,
     readonly computeVia: undefined | string | (() => unknown),
     readonly name: string,
-    readonly usedInTemplate: undefined | true
+    readonly isUsed: undefined | true
   ) {}
 
   get card(): FieldT {
@@ -545,7 +545,7 @@ class Contains<CardT extends CardBaseConstructor> implements Field<CardT, any> {
     private cardThunk: () => CardT,
     readonly computeVia: undefined | string | (() => unknown),
     readonly name: string,
-    readonly usedInTemplate: undefined | true
+    readonly isUsed: undefined | true
   ) {}
 
   get card(): CardT {
@@ -699,7 +699,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     private cardThunk: () => CardT,
     readonly computeVia: undefined | string | (() => unknown),
     readonly name: string,
-    readonly usedInTemplate: undefined | true
+    readonly isUsed: undefined | true
   ) {}
 
   get card(): CardT {
@@ -964,7 +964,7 @@ class LinksToMany<FieldT extends CardConstructor>
     private cardThunk: () => FieldT,
     readonly computeVia: undefined | string | (() => unknown),
     readonly name: string,
-    readonly usedInTemplate: undefined | true
+    readonly isUsed: undefined | true
   ) {}
 
   get card(): FieldT {
@@ -1333,7 +1333,7 @@ export function containsMany<CardT extends CardBaseConstructor>(
           cardThunk(cardOrThunk),
           options?.computeVia,
           fieldName,
-          options?.usedInTemplate
+          options?.isUsed
         )
       );
     },
@@ -1352,7 +1352,7 @@ export function contains<CardT extends CardBaseConstructor>(
           cardThunk(cardOrThunk),
           options?.computeVia,
           fieldName,
-          options?.usedInTemplate
+          options?.isUsed
         )
       );
     },
@@ -1371,7 +1371,7 @@ export function linksTo<CardT extends CardConstructor>(
           cardThunk(cardOrThunk),
           options?.computeVia,
           fieldName,
-          options?.usedInTemplate
+          options?.isUsed
         )
       );
     },
@@ -1390,7 +1390,7 @@ export function linksToMany<CardT extends CardConstructor>(
           cardThunk(cardOrThunk),
           options?.computeVia,
           fieldName,
-          options?.usedInTemplate
+          options?.isUsed
         )
       );
     },
@@ -2307,7 +2307,7 @@ export function getFields(
         if (
           opts?.usedFieldsOnly &&
           !usedFields.includes(maybeFieldName) &&
-          !maybeField.usedInTemplate
+          !maybeField?.isUsed
         ) {
           return [];
         }

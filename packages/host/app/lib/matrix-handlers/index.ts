@@ -32,14 +32,9 @@ export interface RoomMeta {
 export type Event = Partial<IEvent>;
 
 export interface Context {
-  roomMembers: Map<
-    string,
-    Map<string, { member: RoomMember; status: 'join' | 'invite' }>
-  >;
   invites: Map<string, RoomInvite>;
   joinedRooms: Map<string, RoomEvent>;
   rooms: Map<string, RoomMeta>;
-  timelines: Map<string, Map<string, Event>>;
   roomEventConsumers: Map<string, MatrixRoomCard>;
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;

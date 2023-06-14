@@ -10,8 +10,34 @@ import {
 } from './card-api';
 import StringCard from './string';
 import DateTimeCard from './datetime';
+import IntegerCard from './integer';
 import MarkdownCard from './markdown';
+import { BoxelMessage } from '@cardstack/boxel-ui';
+import cssVar from '@cardstack/boxel-ui/helpers/css-var';
+import { formatRFC3339 } from 'date-fns';
+import Modifier from 'ember-modifier';
 import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
+
+const roomMembers = new Map<string, RoomMemberCard>();
+
+// this is so we can have triple equals equivalent room member cards
+function upsertRoomMember(
+  userId: string,
+  displayName?: string
+): RoomMemberCard {
+  let member = roomMembers.get(userId);
+  if (!member) {
+    member = new RoomMemberCard({ userId });
+    roomMembers.set(userId, member);
+  }
+
+  // patch in the display name in case we don't have one yet
+  if (displayName && member.displayName === undefined) {
+    member.displayName = displayName;
+  }
+
+  return member;
+}
 
 class JSONView extends Component<typeof MatrixEventCard> {
   <template>
@@ -31,58 +57,94 @@ class MatrixEventCard extends CardBase {
   static edit = class Edit extends JSONView {};
 }
 
+const messageStyle = {
+  boxelMessageAvatarSize: '2.5rem',
+  boxelMessageMetaHeight: '1.25rem',
+  boxelMessageGap: 'var(--boxel-sp)',
+  boxelMessageMarginLeft:
+    'calc( var(--boxel-message-avatar-size) + var(--boxel-message-gap) )',
+};
+
+class RoomMemberView extends Component<typeof RoomMemberCard> {
+  <template>
+    <div>
+      User ID:
+      {{@model.userId}}
+    </div>
+    <div>
+      Name:
+      {{@model.displayName}}
+    </div>
+  </template>
+}
+
+class RoomMemberCard extends Card {
+  @field userId = contains(StringCard);
+  @field displayName = contains(StringCard);
+  static embedded = class Embedded extends RoomMemberView {};
+  static isolated = class Isolated extends RoomMemberView {};
+  // The edit template is meant to be read-only, this field card is not mutable
+  static edit = class Edit extends RoomMemberView {};
+}
+
+class ScrollIntoView extends Modifier {
+  modify(element: HTMLElement) {
+    element.scrollIntoView();
+  }
+}
+
 class MessageCard extends Card {
-  @field author = contains(StringCard);
+  @field author = contains(RoomMemberCard);
   @field message = contains(MarkdownCard);
+  @field formattedMessage = contains(StringCard);
   @field created = contains(DateTimeCard);
   @field attachedCard = contains(Card);
+  @field index = contains(IntegerCard);
 
   static embedded = class Embedded extends Component<typeof this> {
+    // TODO need to add the message specific CSS here
     <template>
-      <@fields.created />
-      <@fields.author />
-      <@fields.message />
-      <@fields.attachedCard />
+      <BoxelMessage
+        {{ScrollIntoView}}
+        data-test-message-idx={{@model.index}}
+        data-test-message-card={{@model.attachedCard.id}}
+        @name={{@model.author.displayName}}
+        @datetime={{formatRFC3339 this.timestamp}}
+        style={{cssVar
+          boxel-message-avatar-size=messageStyle.boxelMessageAvatarSize
+          boxel-message-meta-height=messageStyle.boxelMessageMetaHeight
+          boxel-message-gap=messageStyle.boxelMessageGap
+          boxel-message-margin-left=messageStyle.boxelMessageMarginLeft
+        }}
+      >
+        {{! template-lint-disable no-triple-curlies }}
+        {{{@model.formattedMessage}}}
+
+        {{#if @model.attachedCard}}
+          <this.cardComponent />
+        {{/if}}
+      </BoxelMessage>
     </template>
+
+    get timestamp() {
+      if (!this.args.model.created) {
+        throw new Error(`message created time is undefined`);
+      }
+      return this.args.model.created.getTime();
+    }
+
+    get cardComponent() {
+      if (!this.args.model.attachedCard) {
+        return;
+      }
+      return this.args.model.attachedCard.constructor.getComponent(
+        this.args.model.attachedCard,
+        'isolated'
+      );
+    }
   };
   // The edit template is meant to be read-only, this field card is not mutable
   static edit = class Edit extends JSONView {};
-}
-
-class IsolatedRoomView extends Component<typeof MatrixRoomCard> {
-  <template>
-    <div>
-      ROOM CARD:
-    </div>
-    <div>
-      room ID:
-      <@fields.roomId />
-    </div>
-    <div>
-      name:
-      <@fields.name />
-    </div>
-    <div>
-      creator:
-      <@fields.creator />
-    </div>
-    <div>
-      created:
-      <@fields.created />
-    </div>
-    <div>
-      invited:
-      <@fields.invitedMembers />
-    </div>
-    <div>
-      joined:
-      <@fields.joinedMembers />
-    </div>
-    <div>
-      Messages:
-      <@fields.messages />
-    </div>
-  </template>
 }
 
 export class MatrixRoomCard extends Card {
@@ -109,13 +171,13 @@ export class MatrixRoomCard extends Card {
     },
   });
 
-  @field creator = contains(StringCard, {
+  @field creator = contains(RoomMemberCard, {
     computeVia: function (this: MatrixRoomCard) {
       let event = this.events.find((e) => e.type === 'm.room.create') as
         | RoomCreateEvent
         | undefined;
       if (event) {
-        return event.content.creator;
+        return upsertRoomMember(event.sender);
       }
       return; // this should never happen
     },
@@ -135,18 +197,21 @@ export class MatrixRoomCard extends Card {
   });
 
   @field messages = containsMany(MessageCard, {
-    usedInTemplate: true,
+    isUsed: true, // TODO we should not have to set this--need to research this issue
     computeVia: async function (this: MatrixRoomCard) {
       let events = this.events
         .filter((e) => e.type === 'm.room.message')
         .sort((a, b) => a.origin_server_ts - b.origin_server_ts) as
         | (MessageEvent | CardMessageEvent)[];
       let messages: MessageCard[] = [];
-      for (let event of events) {
+      for (let [index, event] of events.entries()) {
         let cardArgs = {
-          author: event.sender,
+          author: upsertRoomMember(event.sender),
           created: new Date(event.origin_server_ts),
           message: event.content.body,
+          formattedMessage: event.content.formatted_body,
+          index,
+          attachedCard: null,
         };
         if (event.content.msgtype === 'org.boxel.card') {
           let cardDoc = event.content.instance;
@@ -164,7 +229,7 @@ export class MatrixRoomCard extends Card {
     },
   });
 
-  @field joinedMembers = containsMany(StringCard, {
+  @field joinedMembers = containsMany(RoomMemberCard, {
     computeVia: function (this: MatrixRoomCard) {
       let events = this.events
         .filter((e) => e.type === 'm.room.member')
@@ -174,26 +239,29 @@ export class MatrixRoomCard extends Card {
         | LeaveEvent
       )[];
       let joined = events.reduce((accumulator, event) => {
+        let userId = event.state_key;
         switch (event.content.membership) {
           case 'invite':
             // no action here
             break;
-          case 'join':
-            accumulator.add(event.content.displayname);
+          case 'join': {
+            let member = upsertRoomMember(userId, event.content.displayname);
+            accumulator.set(userId, member);
             break;
+          }
           case 'leave':
-            accumulator.delete(event.content.displayname);
+            accumulator.delete(userId);
             break;
           default:
             assertNever(event.content);
         }
         return accumulator;
-      }, new Set<string>());
-      return [...joined];
+      }, new Map<string, RoomMemberCard>());
+      return [...joined.values()];
     },
   });
 
-  @field invitedMembers = containsMany(StringCard, {
+  @field invitedMembers = containsMany(RoomMemberCard, {
     computeVia: function (this: MatrixRoomCard) {
       let events = this.events
         .filter((e) => e.type === 'm.room.member')
@@ -203,26 +271,32 @@ export class MatrixRoomCard extends Card {
         | LeaveEvent
       )[];
       let invited = events.reduce((accumulator, event) => {
+        let userId = event.state_key;
         switch (event.content.membership) {
-          case 'invite':
-            accumulator.add(event.content.displayname);
+          case 'invite': {
+            let member = upsertRoomMember(userId, event.content.displayname);
+            accumulator.set(userId, member);
             break;
+          }
           case 'join':
           case 'leave':
-            accumulator.delete(event.content.displayname);
+            accumulator.delete(userId);
             break;
           default:
             assertNever(event.content);
         }
         return accumulator;
-      }, new Set<string>());
-      return [...invited];
+      }, new Map<string, RoomMemberCard>());
+      return [...invited.values()];
     },
   });
 
-  static isolated = class Isolated extends IsolatedRoomView {};
   // The edit template is meant to be read-only, this field card is not mutable
-  static edit = class Edit extends IsolatedRoomView {};
+  static edit = class Edit extends Component<typeof this> {
+    <template>
+      <div>Cannot edit room card</div>
+    </template>
+  };
 }
 
 interface BaseMatrixEvent {
