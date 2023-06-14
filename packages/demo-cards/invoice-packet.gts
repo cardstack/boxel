@@ -13,12 +13,7 @@ import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Vendor } from './vendor';
 import { formatUSD, balanceInCurrency } from './currency-format';
-import {
-  CardContainer,
-  FieldContainer,
-  Label,
-  Message,
-} from '@cardstack/boxel-ui';
+import { FieldContainer, Label, Message } from '@cardstack/boxel-ui';
 import { Token, Currency } from './asset';
 
 class Details extends Card {
@@ -35,7 +30,7 @@ class Details extends Card {
   });
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer class='details'>
+      <div class='details'>
         <div class='details__fields'>
           <FieldContainer @label='Invoice No.'><@fields.invoiceNo
             /></FieldContainer>
@@ -47,12 +42,12 @@ class Details extends Card {
             /></FieldContainer>
         </div>
         <FieldContainer @label='Memo'><@fields.memo /></FieldContainer>
-      </CardContainer>
+      </div>
     </template>
   };
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <CardContainer class='details details--edit' @displayBoundaries={{true}}>
+      <div class='details details--edit'>
         <div class='details__fields'>
           <FieldContainer @tag='label' @label='Invoice No.'><@fields.invoiceNo
             /></FieldContainer>
@@ -74,7 +69,7 @@ class Details extends Card {
           @vertical={{true}}
           @label='Memo'
         ><@fields.memo /></FieldContainer>
-      </CardContainer>
+      </div>
     </template>
   };
 }
@@ -87,7 +82,7 @@ class LineItem extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer class='line-item'>
+      <div class='line-item'>
         <div>
           <div><strong><@fields.name /></strong></div>
           <@fields.description />
@@ -96,13 +91,13 @@ class LineItem extends Card {
         <div class='line-item__amount'>
           <strong>{{formatUSD @model.amount}}</strong>
         </div>
-      </CardContainer>
+      </div>
     </template>
   };
 
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <CardContainer class='line-item--edit'>
+      <div class='line-item--edit'>
         <div class='line-item__row'>
           <FieldContainer
             class='line-item__field'
@@ -128,7 +123,7 @@ class LineItem extends Card {
           @label='Description'
           @vertical={{true}}
         ><@fields.description /></FieldContainer>
-      </CardContainer>
+      </div>
     </template>
   };
 }
@@ -158,11 +153,7 @@ class Note extends Card {
 
 class InvoiceTemplate extends Component<typeof InvoicePacket> {
   <template>
-    <CardContainer
-      class='invoice-template'
-      @displayBoundaries={{true}}
-      @title='Invoice'
-    >
+    <div class='invoice-template'>
       <section class='invoice'>
         <section>
           <h2>Vendor</h2>
@@ -237,23 +228,19 @@ class InvoiceTemplate extends Component<typeof InvoicePacket> {
         <section class='extras'>
           <section>
             <h2>Notes</h2>
-            <CardContainer class='notes'>
+            <div class='notes'>
               <@fields.notes />
-            </CardContainer>
+            </div>
           </section>
         </section>
       {{/if}}
-    </CardContainer>
+    </div>
   </template>
 }
 
 class EditTemplate extends Component<typeof InvoicePacket> {
   <template>
-    <CardContainer
-      @displayBoundaries={{true}}
-      @title='Edit Invoice'
-      class='invoice-template invoice-template--edit'
-    >
+    <div class='invoice-template invoice-template--edit'>
       <section class='invoice'>
         <section>
           <h2>Vendor</h2>
@@ -296,7 +283,7 @@ class EditTemplate extends Component<typeof InvoicePacket> {
           </span>
         </FieldContainer>
       </section>
-    </CardContainer>
+    </div>
   </template>
 }
 

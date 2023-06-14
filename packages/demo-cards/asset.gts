@@ -7,7 +7,6 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import IntegerCard from 'https://cardstack.com/base/integer';
-import { CardContainer } from '@cardstack/boxel-ui';
 
 let EXCHANGE_RATES: Record<string, number> = {
   USD: 1,
@@ -42,12 +41,12 @@ class Asset extends Card {
   });
   static embedded = class Embedded extends Component<typeof Asset> {
     <template>
-      <CardContainer class='asset-card'>
+      <div class='asset-card'>
         {{#if @model.logoURL}}
           <img src={{@model.logoHref}} width='20' height='20' />
         {{/if}}
         <div class='payment-method__currency'><@fields.symbol /></div>
-      </CardContainer>
+      </div>
     </template>
   };
 }
