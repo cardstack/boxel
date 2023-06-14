@@ -71,6 +71,14 @@ class IsolatedRoomView extends Component<typeof MatrixRoomCard> {
       <@fields.created />
     </div>
     <div>
+      invited:
+      <@fields.invitedMembers />
+    </div>
+    <div>
+      joined:
+      <@fields.joinedMembers />
+    </div>
+    <div>
       Messages:
       <@fields.messages />
     </div>
@@ -158,14 +166,57 @@ export class MatrixRoomCard extends Card {
 
   @field joinedMembers = containsMany(StringCard, {
     computeVia: function (this: MatrixRoomCard) {
-      // TODO use the member matrix handler for this logic
+      let events = this.events
+        .filter((e) => e.type === 'm.room.member')
+        .sort((a, b) => a.origin_server_ts - b.origin_server_ts) as (
+        | InviteEvent
+        | JoinEvent
+        | LeaveEvent
+      )[];
+      let joined = events.reduce((accumulator, event) => {
+        switch (event.content.membership) {
+          case 'invite':
+            // no action here
+            break;
+          case 'join':
+            accumulator.add(event.content.displayname);
+            break;
+          case 'leave':
+            accumulator.delete(event.content.displayname);
+            break;
+          default:
+            assertNever(event.content);
+        }
+        return accumulator;
+      }, new Set<string>());
+      return [...joined];
     },
   });
 
   @field invitedMembers = containsMany(StringCard, {
     computeVia: function (this: MatrixRoomCard) {
-      // TODO use the member matrix handler for this logic
-      // use reduce to deal with membership state transitions...
+      let events = this.events
+        .filter((e) => e.type === 'm.room.member')
+        .sort((a, b) => a.origin_server_ts - b.origin_server_ts) as (
+        | InviteEvent
+        | JoinEvent
+        | LeaveEvent
+      )[];
+      let invited = events.reduce((accumulator, event) => {
+        switch (event.content.membership) {
+          case 'invite':
+            accumulator.add(event.content.displayname);
+            break;
+          case 'join':
+          case 'leave':
+            accumulator.delete(event.content.displayname);
+            break;
+          default:
+            assertNever(event.content);
+        }
+        return accumulator;
+      }, new Set<string>());
+      return [...invited];
     },
   });
 
@@ -275,7 +326,7 @@ interface CardMessageEvent extends BaseMatrixEvent {
   };
 }
 
-type MatrixEvent =
+export type MatrixEvent =
   | RoomCreateEvent
   | MessageEvent
   | CardMessageEvent
@@ -284,3 +335,7 @@ type MatrixEvent =
   | InviteEvent
   | JoinEvent
   | LeaveEvent;
+
+function assertNever(value: never) {
+  throw new Error(`should never happen ${value}`);
+}

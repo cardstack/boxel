@@ -2,7 +2,8 @@ import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { tracked } from '@glimmer/tracking';
+//@ts-expect-error the types don't recognize the cached export
+import { tracked, cached } from '@glimmer/tracking';
 import debounce from 'lodash/debounce';
 import { not, or, and } from '../helpers/truth-helpers';
 import { ScrollPaginate } from '../modifiers/scrollers';
@@ -98,7 +99,9 @@ export default class Room extends Component<RoomArgs> {
       <div class='room__messages'>
         <div class='room__messages__notices'>
           {{#if
-            (or this.doRoomScrollBack.isRunning this.doTimelineFlush.isRunning)
+            (or
+              this.doRoomScrollBack.isRunning this.doMatrixEventFlush.isRunning
+            )
           }}
             <LoadingIndicator />
           {{/if}}
@@ -180,7 +183,7 @@ export default class Room extends Component<RoomArgs> {
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
-    this.doTimelineFlush.perform();
+    this.doMatrixEventFlush.perform();
   }
 
   get room() {
@@ -195,11 +198,7 @@ export default class Room extends Component<RoomArgs> {
   }
 
   get roomCard() {
-    let entry = this.matrixService.roomEventConsumers.get(this.args.roomId);
-    if (entry) {
-      return entry.card;
-    }
-    return;
+    return this.matrixService.roomEventConsumers.get(this.args.roomId);
   }
 
   get roomCardComponent() {
@@ -209,10 +208,12 @@ export default class Room extends Component<RoomArgs> {
     return this.roomCard.constructor.getComponent(this.roomCard, 'isolated');
   }
 
+  @cached
   get members() {
     return [...this.args.members.values()];
   }
 
+  @cached
   get memberNames() {
     return this.members
       .map(
@@ -229,6 +230,7 @@ export default class Room extends Component<RoomArgs> {
     return this.room.oldState.paginationToken === null;
   }
 
+  @cached
   get timelineEvents() {
     let roomTimeline = this.matrixService.timelines.get(this.args.roomId);
     if (!roomTimeline) {
@@ -354,7 +356,8 @@ export default class Room extends Component<RoomArgs> {
     this.resetInvite();
   });
 
-  private doTimelineFlush = restartableTask(async () => {
+  private doMatrixEventFlush = restartableTask(async () => {
+    await this.matrixService.flushMembership;
     await this.matrixService.flushTimeline;
   });
 

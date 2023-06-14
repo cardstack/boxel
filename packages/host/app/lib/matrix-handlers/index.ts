@@ -4,8 +4,12 @@ import {
   type MatrixClient,
   type IEvent,
 } from 'matrix-js-sdk';
-import type { Card } from 'https://cardstack.com/base/card-api';
+import type {
+  MatrixRoomCard,
+  MatrixEvent as DiscreteMatrixEvent,
+} from 'https://cardstack.com/base/matrix-room';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import { type LooseCardResource, baseRealm } from '@cardstack/runtime-common';
 
 export * as Membership from './membership';
 export * as Timeline from './timeline';
@@ -36,22 +40,11 @@ export interface Context {
   joinedRooms: Map<string, RoomEvent>;
   rooms: Map<string, RoomMeta>;
   timelines: Map<string, Map<string, Event>>;
-  roomEventConsumers: Map<string, { card: Card; eventsField: string }>;
+  roomEventConsumers: Map<string, MatrixRoomCard>;
   flushTimeline: Promise<void> | undefined;
-  // we process the matrix events in batched queues so that we can collapse the
-  // interstitial state between events to prevent unnecessary flashing on the
-  // screen, i.e. user was invited to a room and then declined the invite should
-  // result in nothing happening on the screen as opposed to an item appearing
-  // in the invite list and then immediately disappearing.
-  roomMembershipQueue: (
-    | (RoomInvite & { type: 'invite' })
-    | (RoomEvent & { type: 'join' })
-    | { type: 'leave'; roomId: string }
-  )[];
+  flushMembership: Promise<void> | undefined;
+  roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[];
   timelineQueue: MatrixEvent[];
-  mapClazz: typeof Map;
-  // TODO remove this if we don't end up using the card API in our matrix
-  // handlers
   cardAPI: typeof CardAPI;
   client: MatrixClient;
   handleMessage?: (
@@ -77,5 +70,41 @@ export function setRoomMeta(context: Context, roomId: string, meta: RoomMeta) {
   let joinedRoom = context.joinedRooms.get(roomId);
   if (joinedRoom) {
     context.joinedRooms.set(roomId, { ...joinedRoom, ...roomMeta });
+  }
+}
+
+export async function addRoomEvent(context: Context, event: Event) {
+  let { event_id: eventId, room_id: roomId } = event;
+  if (!eventId) {
+    throw new Error(
+      `bug: event ID is undefined for event ${JSON.stringify(event, null, 2)}`
+    );
+  }
+  if (!roomId) {
+    throw new Error(
+      `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`
+    );
+  }
+  let roomCard = context.roomEventConsumers.get(roomId);
+  if (!roomCard) {
+    let data: LooseCardResource = {
+      meta: {
+        adoptsFrom: {
+          name: 'MatrixRoomCard',
+          module: `${baseRealm.url}matrix-room`,
+        },
+      },
+    };
+    roomCard = await context.cardAPI.createFromSerialized<
+      typeof MatrixRoomCard
+    >(data, { data }, undefined);
+    context.roomEventConsumers.set(roomId, roomCard);
+  }
+  // duplicate events may be emitted from matrix
+  if (!roomCard.events.find((e) => e.event_id === eventId)) {
+    roomCard.events = [
+      ...(roomCard.events ?? []),
+      event as unknown as DiscreteMatrixEvent,
+    ];
   }
 }

@@ -3,7 +3,8 @@ import { service } from '@ember/service';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { tracked } from '@glimmer/tracking';
+//@ts-expect-error the types don't recognize the cached export
+import { tracked, cached } from '@glimmer/tracking';
 import { not, eq } from '../helpers/truth-helpers';
 import { restartableTask, timeout } from 'ember-concurrency';
 import {
@@ -69,59 +70,66 @@ export default class RoomsManager extends Component {
         </fieldset>
       {{/if}}
     {{/if}}
-    <div class='room-manager__room-list' data-test-invites-list>
-      <h3>Invites</h3>
-      {{#each this.sortedInvites as |invite|}}
-        <div class='room-manager__room' data-test-invited-room={{invite.name}}>
-          <span class='room-manager__room__item'>
-            {{invite.name}}
-            (from:
-            <span
-              data-test-invite-sender={{invite.sender}}
-            >{{invite.sender}})</span>
-          </span>
-          <Button
-            data-test-decline-room-btn={{invite.name}}
-            {{on 'click' (fn this.leaveRoom invite.roomId)}}
-          >Decline</Button>
-          <Button
-            data-test-join-room-btn={{invite.name}}
-            {{on 'click' (fn this.joinRoom invite.roomId)}}
-          >Join</Button>
-          {{#if (eq invite.roomId this.roomIdForCurrentAction)}}
-            <LoadingIndicator />
-          {{/if}}
-        </div>
-      {{else}}
-        (No invites)
-      {{/each}}
-    </div>
-    <div class='room-manager__room-list' data-test-rooms-list>
-      <h3>Rooms</h3>
-      {{#each this.sortedJoinedRooms as |room|}}
-        <div class='room-manager__room' data-test-joined-room={{room.name}}>
-          <span class='room-manager__room__item'>
-            <LinkTo
-              class='link'
-              data-test-enter-room={{room.name}}
-              @route='chat.room'
-              @model={{room.roomId}}
-            >
-              {{room.name}}
-            </LinkTo>
-          </span>
-          <Button
-            data-test-leave-room-btn={{room.name}}
-            {{on 'click' (fn this.leaveRoom room.roomId)}}
-          >Leave</Button>
-          {{#if (eq room.roomId this.roomIdForCurrentAction)}}
-            <LoadingIndicator />
-          {{/if}}
-        </div>
-      {{else}}
-        (No rooms)
-      {{/each}}
-    </div>
+    {{#if this.loadJoinedRooms.isRunning}}
+      <LoadingIndicator />
+    {{else}}
+      <div class='room-manager__room-list' data-test-invites-list>
+        <h3>Invites</h3>
+        {{#each this.sortedInvites as |invite|}}
+          <div
+            class='room-manager__room'
+            data-test-invited-room={{invite.name}}
+          >
+            <span class='room-manager__room__item'>
+              {{invite.name}}
+              (from:
+              <span
+                data-test-invite-sender={{invite.sender}}
+              >{{invite.sender}})</span>
+            </span>
+            <Button
+              data-test-decline-room-btn={{invite.name}}
+              {{on 'click' (fn this.leaveRoom invite.roomId)}}
+            >Decline</Button>
+            <Button
+              data-test-join-room-btn={{invite.name}}
+              {{on 'click' (fn this.joinRoom invite.roomId)}}
+            >Join</Button>
+            {{#if (eq invite.roomId this.roomIdForCurrentAction)}}
+              <LoadingIndicator />
+            {{/if}}
+          </div>
+        {{else}}
+          (No invites)
+        {{/each}}
+      </div>
+      <div class='room-manager__room-list' data-test-rooms-list>
+        <h3>Rooms</h3>
+        {{#each this.sortedJoinedRooms as |room|}}
+          <div class='room-manager__room' data-test-joined-room={{room.name}}>
+            <span class='room-manager__room__item'>
+              <LinkTo
+                class='link'
+                data-test-enter-room={{room.name}}
+                @route='chat.room'
+                @model={{room.roomId}}
+              >
+                {{room.name}}
+              </LinkTo>
+            </span>
+            <Button
+              data-test-leave-room-btn={{room.name}}
+              {{on 'click' (fn this.leaveRoom room.roomId)}}
+            >Leave</Button>
+            {{#if (eq room.roomId this.roomIdForCurrentAction)}}
+              <LoadingIndicator />
+            {{/if}}
+          </div>
+        {{else}}
+          (No rooms)
+        {{/each}}
+      </div>
+    {{/if}}
   </template>
 
   @service private declare matrixService: MatrixService;
@@ -132,12 +140,19 @@ export default class RoomsManager extends Component {
   @tracked private roomNameError: string | undefined;
   @tracked private roomIdForCurrentAction: string | undefined;
 
+  constructor(owner: unknown, args: any) {
+    super(owner, args);
+    this.loadJoinedRooms.perform();
+  }
+
+  @cached
   private get sortedJoinedRooms() {
     return [...this.matrixService.joinedRooms.values()].sort(
       (a, b) => a.timestamp - b.timestamp
     );
   }
 
+  @cached
   private get sortedInvites() {
     return [...this.matrixService.invites.values()].sort(
       (a, b) => a.timestamp - b.timestamp
@@ -228,6 +243,22 @@ export default class RoomsManager extends Component {
     await this.matrixService.client.joinRoom(roomId);
     await timeout(eventDebounceMs); // this makes it feel a bit more responsive
     this.roomIdForCurrentAction = undefined;
+  });
+
+  private loadJoinedRooms = restartableTask(async () => {
+    await this.matrixService.flushMembership;
+    let { joined_rooms: joinedRooms } =
+      await this.matrixService.client.getJoinedRooms();
+    const joinedRoomsTimeout = Date.now() + 1000 * 30;
+    for (;;) {
+      if (this.sortedJoinedRooms.length === joinedRooms.length) {
+        return;
+      }
+      if (Date.now() > joinedRoomsTimeout) {
+        throw new Error(`timed-out waiting for joined rooms`);
+      }
+      await timeout(50);
+    }
   });
 
   private resetCreateRoom() {

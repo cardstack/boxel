@@ -25,10 +25,10 @@ import ENV from '@cardstack/host/config/environment';
 import {
   type LooseSingleCardDocument,
   sanitizeHtml,
-  baseRealm,
 } from '@cardstack/runtime-common';
 import type LoaderService from './loader-service';
 import { type Card } from 'https://cardstack.com/base/card-api';
+import type { MatrixRoomCard } from 'https://cardstack.com/base/matrix-room';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 const { matrixURL } = ENV;
@@ -62,23 +62,13 @@ export default class MatrixService extends Service {
   > = new TrackedMap();
   rooms: Map<string, RoomMeta> = new Map();
   timelines: TrackedMap<string, TrackedMap<string, Event>> = new TrackedMap();
-  roomEventConsumers: TrackedMap<string, { card: Card; eventsField: string }> =
-    new TrackedMap();
+  roomEventConsumers: TrackedMap<string, MatrixRoomCard> = new TrackedMap();
   flushTimeline: Promise<void> | undefined;
-  mapClazz = TrackedMap as unknown as typeof Map;
+  flushMembership: Promise<void> | undefined;
   #ready: Promise<void>;
   #matrixSDK: typeof MatrixSDK | undefined;
   #eventBindings: [EmittedEvents, (...arg: any[]) => void][] | undefined;
-  // we process the matrix events in batched queues so that we can collapse the
-  // interstitial state between events to prevent unnecessary flashing on the
-  // screen, i.e. user was invited to a room and then declined the invite should
-  // result in nothing happening on the screen as opposed to an item appearing
-  // in the invite list and then immediately disappearing.
-  roomMembershipQueue: (
-    | (RoomInvite & { type: 'invite' })
-    | (RoomEventInfo & { type: 'join' })
-    | { type: 'leave'; roomId: string }
-  )[] = [];
+  roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[] = [];
   timelineQueue: MatrixEvent[] = [];
 
   constructor(properties: object) {
@@ -230,18 +220,6 @@ export default class MatrixService extends Service {
       name,
       topic,
       room_alias_name: encodeURIComponent(name),
-      initial_state: [
-        {
-          type: 'org.boxel.roomEventConsumer',
-          content: {
-            eventsField: 'events',
-            ref: {
-              name: 'MatrixRoomCard',
-              module: `${baseRealm.url}matrix-room`,
-            },
-          },
-        },
-      ],
     });
     return roomId;
   }

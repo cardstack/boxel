@@ -1,15 +1,49 @@
 import debounce from 'lodash/debounce';
 import { type MatrixEvent, type RoomMember } from 'matrix-js-sdk';
-import { Context, RoomInvite, RoomEvent } from './index';
+import { TrackedMap } from 'tracked-built-ins';
+import {
+  type Context,
+  type RoomInvite,
+  type RoomEvent,
+  addRoomEvent,
+} from './index';
 import { eventDebounceMs } from '../matrix-utils';
 
+type MembershipEvent =
+  | (RoomInvite & { type: 'invite' })
+  | (RoomEvent & { type: 'join' })
+  | { type: 'leave'; roomId: string };
+
 export function onMembership(context: Context) {
-  return (e: MatrixEvent, member: RoomMember) => {
-    let { event } = e;
+  return (event: MatrixEvent, member: RoomMember) => {
+    context.roomMembershipQueue.push({ event, member });
+    debouncedMembershipDrain(context);
+  };
+}
+
+const debouncedMembershipDrain = debounce((context: Context) => {
+  drainMembership(context);
+}, eventDebounceMs);
+
+async function drainMembership(context: Context) {
+  await context.flushMembership;
+
+  let eventsDrained: () => void;
+  context.flushMembership = new Promise((res) => (eventsDrained = res));
+
+  let tasks = [...context.roomMembershipQueue];
+  context.roomMembershipQueue = [];
+  let myMemberships: MembershipEvent[] = [];
+
+  for (let {
+    event: { event },
+    member,
+  } of tasks) {
+    // TODO the room card does this--probably we can remove it...
     let { roomId, userId } = member;
     let members = context.roomMembers.get(roomId);
     if (!members) {
-      members = new context.mapClazz();
+      members = new TrackedMap();
       context.roomMembers.set(roomId, members);
     }
     switch (member.membership) {
@@ -25,6 +59,8 @@ export function onMembership(context: Context) {
           `don't know how to handle membership status of '${member.membership}`
         );
     }
+
+    await addRoomEvent(context, event);
 
     if (member.userId === context.client.getUserId()) {
       let {
@@ -60,7 +96,7 @@ export function onMembership(context: Context) {
         );
       }
       if (member.membership === 'invite') {
-        context.roomMembershipQueue.push({
+        myMemberships.push({
           type: 'invite',
           roomId,
           eventId,
@@ -69,7 +105,7 @@ export function onMembership(context: Context) {
         });
       }
       if (member.membership === 'join') {
-        context.roomMembershipQueue.push({
+        myMemberships.push({
           type: 'join',
           roomId,
           eventId,
@@ -77,24 +113,26 @@ export function onMembership(context: Context) {
         });
       }
       if (member.membership === 'leave') {
-        context.roomMembershipQueue.push({ type: 'leave', roomId });
+        myMemberships.push({ type: 'leave', roomId });
       }
-      flushMembershipQueue(context);
     }
-  };
+  }
+
+  processMyMemberships(context, myMemberships);
+  eventsDrained!();
 }
 
-const flushMembershipQueue = debounce((context: Context) => {
+function processMyMemberships(
+  context: Context,
+  myMemberships: MembershipEvent[]
+) {
   let invites: Map<string, RoomInvite> = new Map();
   let joinedRooms: Map<string, RoomEvent> = new Map();
   let removals: Set<
     { type: 'join'; roomId: string } | { type: 'invite'; roomId: string }
   > = new Set();
-  let processingMemberships = [...context.roomMembershipQueue];
-  context.roomMembershipQueue = [];
-
   // collapse the invites/joins by eliminating rooms that we have joined or left (in order)
-  for (let membership of processingMemberships) {
+  for (let membership of myMemberships) {
     let { roomId } = membership;
     switch (membership.type) {
       case 'invite': {
@@ -143,7 +181,7 @@ const flushMembershipQueue = debounce((context: Context) => {
   for (let joinedRoom of joinedRooms.values()) {
     context.joinedRooms.set(joinedRoom.roomId, { ...joinedRoom });
   }
-}, eventDebounceMs);
+}
 
 function assertNever(value: never) {
   throw new Error(`should never happen ${value}`);
