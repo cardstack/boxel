@@ -13,7 +13,6 @@ import {
   assertMessages,
   sendMessage,
   joinRoom,
-  leaveRoom,
   testHost,
 } from '../helpers';
 
