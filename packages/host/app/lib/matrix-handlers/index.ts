@@ -69,7 +69,8 @@ export function setRoomMeta(context: Context, roomId: string, meta: RoomMeta) {
 }
 
 export async function addRoomEvent(context: Context, event: Event) {
-  let { event_id: eventId, room_id: roomId } = event;
+  let { event_id: eventId, room_id: roomId, state_key: stateKey } = event;
+  eventId = eventId ?? stateKey; // room state may not necessary have an event ID
   if (!eventId) {
     throw new Error(
       `bug: event ID is undefined for event ${JSON.stringify(event, null, 2)}`
