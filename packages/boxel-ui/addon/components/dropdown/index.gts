@@ -150,8 +150,14 @@ class BoxelDropdown extends Component<Signature> {
       }
       updateAria();
     }
-    element.addEventListener('click', handleMouseEvent);
-    element.addEventListener('keydown', handleKeyDown);
+    element.addEventListener(
+      'click',
+      handleMouseEvent as EventListenerOrEventListenerObject
+    );
+    element.addEventListener(
+      'keydown',
+      handleKeyDown as EventListenerOrEventListenerObject
+    );
 
     element.setAttribute('data-ebd-id', `${dropdown.uniqueId}-trigger`);
     element.setAttribute(
@@ -165,8 +171,14 @@ class BoxelDropdown extends Component<Signature> {
     updateAria();
 
     return function cleanup() {
-      element.removeEventListener('click', handleMouseEvent);
-      element.removeEventListener('keydown', handleKeyDown);
+      element.removeEventListener(
+        'click',
+        handleMouseEvent as EventListenerOrEventListenerObject
+      );
+      element.removeEventListener(
+        'keydown',
+        handleKeyDown as EventListenerOrEventListenerObject
+      );
     };
   });
 }
