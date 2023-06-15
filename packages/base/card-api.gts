@@ -1411,6 +1411,10 @@ export class CardBase {
   static data?: Record<string, any>;
   static displayName = 'Card';
 
+  static getDisplayName(instance: CardBase) {
+    return instance.constructor.displayName;
+  }
+
   static [serialize](
     value: any,
     doc: JSONAPISingleResourceDocument,

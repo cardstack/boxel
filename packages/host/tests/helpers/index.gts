@@ -36,6 +36,13 @@ export function cleanWhiteSpace(text: string) {
   return text.replace(/[\s ]+/g, ' ').trim();
 }
 
+export function trimCardContainer(text: string) {
+  return cleanWhiteSpace(text).replace(
+    /<div .*? data-test-field-component-card> (.*?) <\/div> <\/div>/,
+    '$1'
+  );
+}
+
 export function p(dateString: string): Date {
   return parse(dateString, 'yyyy-MM-dd', new Date());
 }

@@ -97,8 +97,8 @@ export default class OperatorModeOverlays extends Component<Signature> {
 
     // Places the button in the top right of the linksTo card
     return {
-      x: delta + cardElementRect.width - 60, // x starts at the left edge of the operator mode stack
-      y: cardElementRect.y + 10,
+      x: delta + cardElementRect.width - 65, // x starts at the left edge of the operator mode stack
+      y: cardElementRect.y,
     };
   }
 

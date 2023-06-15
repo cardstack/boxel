@@ -146,7 +146,7 @@ test.describe('Room messages', () => {
       },
     ]);
     await expect(
-      page.locator(`[data-test-message-idx="0"] .boxel-message__content em`)
+      page.locator(`[data-test-message-idx="0"] .content em`)
     ).toContainText('style');
   });
 
@@ -217,7 +217,7 @@ test.describe('Room messages', () => {
       },
     ]);
     await expect(
-      page.locator(`[data-test-message-idx="0"] .boxel-message__content em`)
+      page.locator(`[data-test-message-idx="0"] .content em`)
     ).toContainText('my');
   });
 

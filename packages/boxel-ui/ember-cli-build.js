@@ -3,12 +3,16 @@
 
 const { Webpack } = require('@embroider/webpack');
 const EmberAddon = require('ember-cli/lib/broccoli/ember-addon');
+const { GlimmerScopedCSSWebpackPlugin } = require('glimmer-scoped-css/webpack');
 
 // const { maybeEmbroider } = require('@embroider/test-setup');
 // return maybeEmbroider(app);
 
 module.exports = function (defaults) {
   const app = new EmberAddon(defaults, {
+    'ember-cli-babel': {
+      enableTypeScriptTransform: true,
+    },
     vendorFiles: { 'jquery.js': null, 'app-shims.js': null },
   });
 
@@ -42,6 +46,7 @@ module.exports = function (defaults) {
             },
           ],
         },
+        plugins: [new GlimmerScopedCSSWebpackPlugin()],
       },
       // publicAssetURL: '/boxel-ui/'
     },

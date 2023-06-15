@@ -4,6 +4,7 @@ import {
   TestRealmAdapter,
   testRealmURL,
   cleanWhiteSpace,
+  trimCardContainer,
   setupCardLogs,
   setupLocalIndexing,
   type CardDocFiles,
@@ -512,7 +513,7 @@ module('Integration | search-index', function (hooks) {
             (await indexer.searchEntry(new URL(`${testRealmURL}vangogh`))) ??
             {};
           assert.strictEqual(
-            cleanWhiteSpace(html!),
+            trimCardContainer(html!),
             cleanWhiteSpace(`<h1> Van Gogh </h1>`)
           );
         } else {
@@ -565,7 +566,7 @@ module('Integration | search-index', function (hooks) {
             (await indexer.searchEntry(new URL(`${testRealmURL}vangogh`))) ??
             {};
           assert.strictEqual(
-            cleanWhiteSpace(html!),
+            trimCardContainer(html!),
             cleanWhiteSpace(`<h1> Van Gogh </h1>`)
           );
         } else {
@@ -684,7 +685,7 @@ module('Integration | search-index', function (hooks) {
             (await indexer.searchEntry(new URL(`${testRealmURL}vangogh`))) ??
             {};
           assert.strictEqual(
-            cleanWhiteSpace(html!),
+            trimCardContainer(html!),
             cleanWhiteSpace(`<h1> Van Gogh </h1>`)
           );
         } else {
@@ -807,7 +808,7 @@ module('Integration | search-index', function (hooks) {
             (await indexer.searchEntry(new URL(`${testRealmURL}vangogh`))) ??
             {};
           assert.strictEqual(
-            cleanWhiteSpace(html!),
+            trimCardContainer(html!),
             cleanWhiteSpace(`<h1> Van Gogh </h1>`)
           );
         } else {
@@ -1345,8 +1346,13 @@ module('Integration | search-index', function (hooks) {
         id: `${testRealmURL}PetPerson/hassan`,
         type: 'card',
         links: { self: `${testRealmURL}PetPerson/hassan` },
-        attributes: { firstName: 'Hassan' },
+        attributes: { firstName: 'Hassan', title: 'Hassan Pet Person' },
         relationships: {
+          friend: {
+            links: {
+              self: null,
+            },
+          },
           'pets.0': {
             links: { self: `${testRealmURL}Pet/mango` },
             data: { id: `${testRealmURL}Pet/mango`, type: 'card' },
@@ -1429,6 +1435,8 @@ module('Integration | search-index', function (hooks) {
             owner: null,
           },
         ],
+        friend: null,
+        title: 'Hassan Pet Person',
       });
     } else {
       assert.ok(
@@ -1467,8 +1475,11 @@ module('Integration | search-index', function (hooks) {
           id: `${testRealmURL}PetPerson/burcu`,
           type: 'card',
           links: { self: `${testRealmURL}PetPerson/burcu` },
-          attributes: { firstName: 'Burcu' },
-          relationships: { pets: { links: { self: null } } },
+          attributes: { firstName: 'Burcu', title: 'Burcu Pet Person' },
+          relationships: {
+            pets: { links: { self: null } },
+            friend: { links: { self: null } },
+          },
           meta: {
             adoptsFrom: {
               module: `${testModuleRealm}pet-person`,
@@ -1496,6 +1507,8 @@ module('Integration | search-index', function (hooks) {
         id: `${testRealmURL}PetPerson/burcu`,
         firstName: 'Burcu',
         pets: [],
+        friend: null,
+        title: 'Burcu Pet Person',
       });
     } else {
       assert.ok(
@@ -1592,6 +1605,7 @@ module('Integration | search-index', function (hooks) {
           realmName: 'Unnamed Workspace',
         },
         relationships: {
+          'demo.friend': { links: { self: null } },
           'demo.pets.0': {
             links: { self: `${testRealmURL}Pet/mango` },
             data: { id: `${testRealmURL}Pet/mango`, type: 'card' },
@@ -1691,6 +1705,7 @@ module('Integration | search-index', function (hooks) {
               owner: null,
             },
           ],
+          friend: null,
         },
         isPrimitive: false,
         moduleHref: `${testModuleRealm}pet-person`,

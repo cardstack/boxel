@@ -9,7 +9,7 @@ import {
 import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Address } from './address';
-import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
+import { FieldContainer } from '@cardstack/boxel-ui';
 import { startCase } from 'lodash';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { PaymentMethod } from './payment-method';
@@ -37,7 +37,7 @@ class VendorDetails extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer class='vendor-card'>
+      <div class='vendor-card'>
         {{#each-in @fields as |key value|}}
           {{#unless (eq key 'id')}}
             <FieldContainer
@@ -49,7 +49,7 @@ class VendorDetails extends Card {
             </FieldContainer>
           {{/unless}}
         {{/each-in}}
-      </CardContainer>
+      </div>
     </template>
   };
 }
@@ -66,7 +66,7 @@ class Contact extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer class='vendor-card'>
+      <div class='vendor-card'>
         {{#each-in @fields as |key value|}}
           {{#unless (eq key 'id')}}
             <FieldContainer
@@ -78,7 +78,7 @@ class Contact extends Card {
             </FieldContainer>
           {{/unless}}
         {{/each-in}}
-      </CardContainer>
+      </div>
     </template>
   };
 }
@@ -102,19 +102,19 @@ export class Vendor extends Card {
   @field alternatePaymentMethod = containsMany(PaymentMethod);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer class='vendor-card--embedded'>
+      <div class='vendor-card--embedded'>
         <div>
           <@fields.vendor.name />
           <@fields.mailingAddress />
           <@fields.vendor.email />
         </div>
         <img src={{@model.vendor.logoHref}} />
-      </CardContainer>
+      </div>
     </template>
   };
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <CardContainer class='vendor-card'>
+      <div class='vendor-card'>
         <section>
           <h2>Vendor</h2>
           <@fields.vendor />
@@ -141,12 +141,12 @@ export class Vendor extends Card {
             <@fields.alternatePaymentMethod />
           {{/if}}
         </section>
-      </CardContainer>
+      </div>
     </template>
   };
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <CardContainer class='vendor-card'>
+      <div class='vendor-card'>
         <section>
           <h2>Vendor</h2>
           <@fields.vendor />
@@ -171,7 +171,7 @@ export class Vendor extends Card {
           <h2>Alternate Payment Method</h2>
           <@fields.alternatePaymentMethod />
         </section>
-      </CardContainer>
+      </div>
     </template>
   };
 }

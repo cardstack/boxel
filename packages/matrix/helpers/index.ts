@@ -107,9 +107,7 @@ export async function assertMessages(
     ).toContainText(from);
     if (message != null) {
       await expect(
-        page.locator(
-          `[data-test-message-idx="${index}"] .boxel-message__content`
-        )
+        page.locator(`[data-test-message-idx="${index}"] .content`)
       ).toContainText(message);
     }
     if (card) {

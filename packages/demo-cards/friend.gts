@@ -25,7 +25,13 @@ export class Friend extends Card {
   });
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <@fields.firstName />
+      <div
+        class='demo-card'
+        {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
+        ...attributes
+      >
+        <@fields.firstName />
+      </div>
     </template>
   };
 }

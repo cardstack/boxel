@@ -1,16 +1,14 @@
-<this.getIsolatedComponent />
+<div class="card-isolated-component">
+  <this.getIsolatedComponent />
+</div>
 
 <CodeLink />
 
 {{on-key 'Ctrl+.' this.toggleOperatorMode}}
 
 {{#if this.operatorModeEnabled}}
-  {{!-- TODO: Rather than a dedicated argument for the first card
-  in the stack, refactor this so that there will be a state that
-  reflects the whole stack --}}
   {{#if this.model}}
     <OperatorMode
-      @firstCardInStack={{this.model}}
       @onClose={{this.closeOperatorMode}}
     />
   {{/if}}

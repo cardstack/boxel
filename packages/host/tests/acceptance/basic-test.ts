@@ -1,5 +1,6 @@
 import { module, test } from 'qunit';
 import {
+  find,
   visit,
   currentURL,
   click,
@@ -236,6 +237,30 @@ module('Acceptance | basic tests', function (hooks) {
       personCardSource,
       'the monaco content is correct'
     );
+  });
+
+  test('glimmer-scoped-css smoke test', async function (assert) {
+    await visit('/code');
+
+    const buttonElement = find('[data-test-create-new-card-button]');
+
+    assert.ok(buttonElement);
+
+    if (!buttonElement) {
+      throw new Error('[data-test-create-new-card-button] element not found');
+    }
+
+    const buttonElementScopedCssAttribute = Array.from(buttonElement.attributes)
+      .map((attribute) => attribute.localName)
+      .find((attributeName) => attributeName.startsWith('data-scopedcss'));
+
+    if (!buttonElementScopedCssAttribute) {
+      throw new Error(
+        'Scoped CSS attribute not found on [data-test-create-new-card-button]'
+      );
+    }
+
+    assert.dom('[data-test-create-new-card-button] + style').doesNotExist();
   });
 
   test('can create a new card', async function (assert) {

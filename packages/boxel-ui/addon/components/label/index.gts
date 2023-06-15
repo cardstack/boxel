@@ -17,6 +17,13 @@ const Label: TemplateOnlyComponent<Signature> = <template>
       {{yield}}
     </Tag>
   {{/let}}
+  <style>
+    .boxel-label {
+      color: var(--boxel-label-color);
+      font: 700 var(--boxel-font-sm);
+      letter-spacing: var(--boxel-lsp-sm);
+    }
+  </style>
 </template>;
 
 export default Label;

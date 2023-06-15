@@ -108,6 +108,7 @@
     "eslint-plugin-qunit": "^7.3.4",
     "fast-json-stable-stringify": "^2.1.0",
     "flat": "^5.0.2",
+    "glimmer-scoped-css": "^0.3.1",
     "ignore": "^5.2.0",
     "loader.js": "^4.7.0",
     "lodash": "^4.17.21",

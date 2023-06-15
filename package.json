@@ -29,7 +29,8 @@
       "magic-string@0.25.9": "patches/magic-string@0.25.9.patch",
       "fastboot@4.1.0": "patches/fastboot@4.1.0.patch",
       "@types/eventsource@1.1.11": "patches/@types__eventsource@1.1.11.patch",
-      "matrix-js-sdk@25.0.0": "patches/matrix-js-sdk@25.0.0.patch"
+      "matrix-js-sdk@25.0.0": "patches/matrix-js-sdk@25.0.0.patch",
+      "style-loader@2.0.0": "patches/style-loader@2.0.0.patch"
     }
   },
   "devDependencies": {
@@ -51,9 +52,9 @@
     "eslint-config-prettier": "^8.4.0",
     "eslint-plugin-import": "^2.26.0",
     "eslint-plugin-prettier": "^4.0.0",
+    "hcl2-parser": "^1.0.3",
     "prettier": "^2.7.1",
     "prettier-plugin-ember-template-tag": "^0.3.2",
-    "hcl2-parser": "^1.0.3",
     "typescript": "^4.6.3"
   },
   "engines": {

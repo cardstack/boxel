@@ -1,7 +1,7 @@
 import { module, test, skip } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, cardTypeDisplayName } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 import { Loader } from '@cardstack/runtime-common/loader';
 import OperatorMode from '@cardstack/host/components/operator-mode';
@@ -24,8 +24,11 @@ import {
 } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
+const realmName = 'Operator Mode Workspace';
+let setCardInOperatorModeState: (card: string) => Promise<void>;
 
 module('Integration | operator-mode', function (hooks) {
   let adapter: TestRealmAdapter;
@@ -36,9 +39,7 @@ module('Integration | operator-mode', function (hooks) {
     hooks,
     async () => await Loader.import(`${baseRealm.url}card-api`)
   );
-
-  let onClose = () => {};
-
+  let noop = () => {};
   async function loadCard(url: string): Promise<Card> {
     let { createFromSerialized, recompute } = cardApi;
     let result = await realm.searchIndex.card(new URL(url));
@@ -66,7 +67,9 @@ module('Integration | operator-mode', function (hooks) {
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
+
     shimExternals();
+
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
     cardApi = await loader.import(`${baseRealm.url}card-api`);
@@ -458,18 +461,40 @@ module('Integration | operator-mode', function (hooks) {
           },
         },
       },
+      '.realm.json': `{ "name": "${realmName}" }`,
     });
     realm = await TestRealm.createWithAdapter(adapter, this.owner);
     loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
     await realm.ready;
+
+    setCardInOperatorModeState = async (cardURL: string) => {
+      let operatorModeStateService = this.owner.lookup(
+        'service:operator-mode-state-service'
+      ) as OperatorModeStateService;
+
+      await operatorModeStateService.restore({
+        stacks: [
+          {
+            items: [
+              {
+                card: {
+                  id: cardURL,
+                },
+                format: 'isolated',
+              },
+            ],
+          },
+        ],
+      });
+    };
   });
 
   test('it loads a card and renders its isolated view', async function (assert) {
-    let card = await loadCard(`${testRealmURL}Person/fadhlan`);
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -489,17 +514,19 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test("it doesn't change the field value if user clicks cancel in edit view", async function (assert) {
-    let card = await loadCard(`${testRealmURL}Person/fadhlan`);
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
     );
     await waitFor('[data-test-person]');
-    await click('[aria-label="Edit"]');
+    await click('[data-test-edit-button]');
+    await click('[data-test-boxel-menu-item-text="Edit"]');
     await fillIn('[data-test-boxel-input]', 'EditedName');
     await fillIn(
       '[data-test-boxel-input-city] [data-test-boxel-input]',
@@ -518,17 +545,19 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('it changes the field value if user clicks save in edit view', async function (assert) {
-    let card = await loadCard(`${testRealmURL}Person/fadhlan`);
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
     );
     await waitFor('[data-test-person]');
-    await click('[aria-label="Edit"]');
+    await click('[data-test-edit-button]');
+    await click('[data-test-boxel-menu-item-text="Edit"]');
     await fillIn('[data-test-boxel-input]', 'EditedName');
     await fillIn(
       '[data-test-boxel-input-city] [data-test-boxel-input]',
@@ -545,16 +574,19 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-country="EditedCountry"]');
     assert.dom('[data-test-person]').hasText('EditedName');
     assert.dom('[data-test-first-letter-of-the-name]').hasText('E');
+
+    await waitFor('[data-test-city="EditedCity"]');
     assert.dom('[data-test-city]').hasText('EditedCity');
     assert.dom('[data-test-country]').hasText('EditedCountry');
   });
 
   test('displays add card button if user closes the only card in the stack and opens a card from card chooser', async function (assert) {
-    let card = await loadCard(`${testRealmURL}Person/fadhlan`);
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -583,11 +615,12 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('displays cards on cards-grid', async function (assert) {
-    let card = await loadCard(`${testRealmURL}grid`);
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -614,11 +647,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can create a card using the cards-grid', async function (assert) {
-    let card = await loadCard(`${testRealmURL}grid`);
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -649,11 +682,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can open a card from the cards-grid and close it', async function (assert) {
-    let card = await loadCard(`${testRealmURL}grid`);
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -674,11 +707,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('create new card editor opens in the stack at each nesting level', async function (assert) {
-    let card = await loadCard(`${testRealmURL}grid`);
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -766,11 +799,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can choose a card for a linksTo field that has an existing value', async function (assert) {
-    let card = await loadCard(`${testRealmURL}BlogPost/1`);
+    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -778,7 +811,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/1"]`);
     await click('[data-test-edit-button]');
-
+    await click('[data-test-boxel-menu-item-text="Edit"]');
     assert.dom('[data-test-field="authorBio"]').containsText('Alien Bob');
     assert.dom('[data-test-choose-card]').doesNotExist();
     assert.dom('[data-test-create-new]').doesNotExist();
@@ -796,11 +829,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can choose a card for a linksTo field that has no existing value', async function (assert) {
-    let card = await loadCard(`${testRealmURL}BlogPost/2`);
+    await setCardInOperatorModeState(`${testRealmURL}BlogPost/2`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -808,6 +841,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
     await click('[data-test-edit-button]');
+    await click('[data-test-boxel-menu-item-text="Edit"]');
 
     assert.dom('[data-test-choose-card]').exists();
     assert.dom('[data-test-create-new]').exists();
@@ -828,11 +862,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can create a new card to populate a linksTo field', async function (assert) {
-    let card = await loadCard(`${testRealmURL}BlogPost/2`);
+    await setCardInOperatorModeState(`${testRealmURL}BlogPost/2`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -840,6 +874,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
     await click('[data-test-edit-button]');
+    await click('[data-test-boxel-menu-item-text="Edit"]');
 
     assert.dom('[data-test-choose-card]').exists();
     assert.dom('[data-test-create-new]').exists();
@@ -873,11 +908,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can remove the link for a linksTo field', async function (assert) {
-    let card = await loadCard(`${testRealmURL}BlogPost/1`);
+    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -885,6 +920,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/1"]`);
     await click('[data-test-edit-button]');
+    await click('[data-test-boxel-menu-item-text="Edit"]');
 
     assert.dom('[data-test-field="authorBio"]').containsText('Alien Bob');
     await click('[data-test-field="authorBio"] [data-test-remove-card]');
@@ -897,11 +933,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can add a card to a linksToMany field with existing values', async function (assert) {
-    let card = await loadCard(`${testRealmURL}Person/burcu`);
+    await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -909,6 +945,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/burcu"]`);
     await click('[data-test-edit-button]');
+    await click('[data-test-boxel-menu-item-text="Edit"]');
 
     assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
     assert.dom('[data-test-field="friends"] [data-test-add-new]').exists();
@@ -925,11 +962,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can add a card to linksToMany field that has no existing values', async function (assert) {
-    let card = await loadCard(`${testRealmURL}Person/fadhlan`);
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -937,6 +974,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-edit-button]');
+    await click('[data-test-boxel-menu-item-text="Edit"]');
 
     assert.dom('[data-test-field="friends"] [data-test-pet]').doesNotExist();
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
@@ -948,11 +986,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can change the item selection in a linksToMany field', async function (assert) {
-    let card = await loadCard(`${testRealmURL}Person/burcu`);
+    await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -960,6 +998,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/burcu"]`);
     await click('[data-test-edit-button]');
+    await click('[data-test-boxel-menu-item-text="Edit"]');
 
     assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
     await click(
@@ -977,11 +1016,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can create a new card to add to a linksToMany field with no existing value', async function (assert) {
-    let card = await loadCard(`${testRealmURL}Person/fadhlan`);
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -989,6 +1028,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-edit-button]');
+    await click('[data-test-boxel-menu-item-text="Edit"]');
 
     assert.dom('[data-test-field="friends"] [data-test-pet]').doesNotExist();
     await click('[data-test-links-to-many="friends"] [data-test-create-new]');
@@ -1006,11 +1046,11 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can create a new card to add to a linksToMany field with existing values', async function (assert) {
-    let card = await loadCard(`${testRealmURL}Person/burcu`);
+    await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -1018,6 +1058,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/burcu"]`);
     await click('[data-test-edit-button]');
+    await click('[data-test-boxel-menu-item-text="Edit"]');
 
     assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
 
@@ -1037,13 +1078,12 @@ module('Integration | operator-mode', function (hooks) {
       .containsText('Jackie Woody Woodster');
   });
 
-  skip('can remove all items of a linksToMany field', async function (assert) {
-    // TODO: Pre-existing bug: removing items in linksToMany field
-    let card = await loadCard(`${testRealmURL}Person/burcu`);
+  test('can remove all items of a linksToMany field', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -1052,6 +1092,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/burcu"]`);
     assert.dom(`[data-test-plural-view-item]`).exists({ count: 2 });
     await click('[data-test-edit-button]');
+    await click('[data-test-boxel-menu-item-text="Edit"]');
     assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
 
     await click(
@@ -1073,11 +1114,11 @@ module('Integration | operator-mode', function (hooks) {
   skip('can create a specialized a new card to populate a linksToMany field');
 
   test('can close cards by clicking the header of a card deeper in the stack', async function (assert) {
-    let card = await loadCard(`${testRealmURL}grid`);
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @firstCardInStack={{card}} @onClose={{onClose}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       }
@@ -1099,5 +1140,31 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom(`[data-test-cardstack-operator-mode-overlay-button]`)
       .doesNotExist();
+  });
+
+  test(`displays realm name as cards grid card title and card's display name as other card titles`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    assert.dom(`[data-test-stack-card-header]`).containsText(realmName);
+
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    assert.dom(`[data-test-stack-card-index="1"]`).exists();
+    let personCard = await loadCard(`${testRealmURL}Person/fadhlan`);
+    assert
+      .dom(
+        `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-boxel-header-title]`
+      )
+      .containsText(cardTypeDisplayName(personCard));
+
+    assert.dom(`[data-test-cards-grid-cards]`).isNotVisible();
+    assert.dom(`[data-test-create-new-card-button]`).isNotVisible();
   });
 });

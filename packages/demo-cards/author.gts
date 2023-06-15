@@ -21,7 +21,14 @@ export class Author extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <@fields.firstName /> <@fields.lastName />
+      <div
+        class='demo-card'
+        {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
+        ...attributes
+      >
+        <@fields.firstName />
+        <@fields.lastName />
+      </div>
     </template>
   };
 }
