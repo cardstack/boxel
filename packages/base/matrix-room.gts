@@ -39,6 +39,9 @@ function upsertRoomMember(
   return member;
 }
 
+// this is so we can have triple equals equivalent attached cards in messages
+const attachedCards = new Map<string, Card>();
+
 class JSONView extends Component<typeof MatrixEventCard> {
   <template>
     <pre>{{this.json}}</pre>
@@ -215,11 +218,20 @@ export class MatrixRoomCard extends Card {
         };
         if (event.content.msgtype === 'org.boxel.card') {
           let cardDoc = event.content.instance;
-          let attachedCard = await createFromSerialized(
-            cardDoc.data,
-            cardDoc,
-            undefined
-          );
+          let attachedCard: Card | undefined;
+          if (cardDoc.data.id != null) {
+            attachedCard = attachedCards.get(cardDoc.data.id);
+          }
+          if (!attachedCard) {
+            attachedCard = await createFromSerialized<typeof Card>(
+              cardDoc.data,
+              cardDoc,
+              undefined
+            );
+            if (cardDoc.data.id != null) {
+              attachedCards.set(cardDoc.data.id, attachedCard);
+            }
+          }
           messages.push(new MessageCard({ ...cardArgs, attachedCard }));
         } else {
           messages.push(new MessageCard(cardArgs));
