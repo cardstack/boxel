@@ -36,8 +36,8 @@ function _applyDecoratedDescriptor(target, property, decorators, descriptor, con
 
 function _initializerWarningHelper(descriptor, context) { throw new Error('Decorating class property failed. Please ensure that ' + 'proposal-class-properties is enabled and runs after the decorators transform.'); }
 
-import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
-import StringCard from "https://cardstack.com/base/string";
+import { contains, field, Component, Card } from 'https://cardstack.com/base/card-api';
+import StringCard from 'https://cardstack.com/base/string';
 export let Person = (_class = (_class2 = class Person extends Card {
   constructor(...args) {
     super(...args);
@@ -55,7 +55,7 @@ export let Person = (_class = (_class2 = class Person extends Card {
 {
   "id": ${id},
   "block": "[[[1,\\"\\\\n      \\"],[10,\\"h1\\"],[14,\\"data-test-card\\",\\"\\"],[12],[8,[30,1,[\\"firstName\\"]],null,null,null],[13],[1,\\"\\\\n    \\"]],[\\"@fields\\"],false,[]]",
-  "moduleName": "(unknown template module)",
+  "moduleName": "/dir/person.gts",
   "isStrictMode": true
 }), class Isolated extends Component {})), _class2), (_descriptor = _applyDecoratedDescriptor(_class.prototype, "firstName", [field], {
   configurable: true,
