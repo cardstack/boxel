@@ -327,12 +327,12 @@ module('Realm Server', function (hooks) {
     let body = response.text.trim();
     let moduleAbsolutePath = resolve(join(__dirname, '..', 'person.gts'));
 
+    // Remove platform-dependent id, from https://github.com/emberjs/babel-plugin-ember-template-compilation/blob/d67cca121cfb3bbf5327682b17ed3f2d5a5af528/__tests__/tests.ts#LL1430C1-L1431C1
+    body = body.replace(/"id":\s"[^"]+"/, '"id": "<id>"');
+
     assert.codeEqual(
       body,
-      compiledCard(
-        `"BigJxs6R"` /* id that glimmer assigns for the block */,
-        moduleAbsolutePath
-      ),
+      compiledCard('"<id>"', moduleAbsolutePath),
       'module JS is correct'
     );
   });
