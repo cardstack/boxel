@@ -20,9 +20,10 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
 import type * as CardPaySDK from '@cardstack/cardpay-sdk';
+import { BigNumber } from '@ethersproject/bignumber';
 
-// a type which the sdk failed to export
-interface TransactionReceipt {
+//transaciton receipt type from the SDK
+export interface TransactionReceipt {
   status: boolean;
   transactionHash: string;
   transactionIndex: number;
@@ -31,9 +32,40 @@ interface TransactionReceipt {
   from: string;
   to: string;
   contractAddress?: string;
-  cumulativeGasUsed: number;
-  gasUsed: number;
+  cumulativeGasUsed: number | typeof BigNumber;
+  gasUsed: number | typeof BigNumber;
   effectiveGasPrice: number;
+  logs: Log[];
+  logsBloom: string;
+  events?: {
+    [eventName: string]: EventLog;
+  };
+}
+
+export interface EventLog {
+  event: string;
+  address: string;
+  returnValues: any;
+  logIndex: number;
+  transactionIndex: number;
+  transactionHash: string;
+  blockHash: string;
+  blockNumber: number;
+  raw?: { data: string; topics: any[] };
+}
+
+export interface Log {
+  address: string;
+  data: string;
+  topics: string[];
+  logIndex: number;
+  transactionIndex: number;
+  transactionHash: string;
+  blockHash: string;
+  blockNumber: number;
+}
+interface SuccessfulTransactionReceipt extends TransactionReceipt {
+  status: true;
 }
 
 class Isolated extends Component<typeof Claim> {
@@ -104,14 +136,15 @@ class Isolated extends Component<typeof Claim> {
       ) {
         throw new Error('Claim fields not ready');
       }
-      const r: TransactionReceipt = await claimSettlementModule.executeSafe(
-        this.args.model.moduleAddress,
-        this.args.model.safeAddress,
-        {
-          signature: this.args.model.signature,
-          encoded: this.args.model.encoding,
-        }
-      );
+      const r: SuccessfulTransactionReceipt =
+        await claimSettlementModule.executeSafe(
+          this.args.model.moduleAddress,
+          this.args.model.safeAddress,
+          {
+            signature: this.args.model.signature,
+            encoded: this.args.model.encoding,
+          }
+        );
       if (r) {
         await this.createTransactionCard(r);
         console.log('You have succesfully claimed your reward!');
@@ -134,7 +167,7 @@ class Isolated extends Component<typeof Claim> {
   private connectMetamask() {
     this.metamask.doConnectMetamask.perform(this.chainId);
   }
-  private async createTransactionCard(r: TransactionReceipt) {
+  private async createTransactionCard(r: SuccessfulTransactionReceipt) {
     let realmUrl = this.args.model[realmURL];
     if (!realmUrl) {
       throw new Error('Realm is undefined');
@@ -149,8 +182,12 @@ class Isolated extends Component<typeof Claim> {
           blockNumber: r.blockNumber,
           from: r.from,
           to: r.to,
-          gasUsed: r.gasUsed,
-          effectiveGasPrice: r.effectiveGasPrice,
+          gasUsed: BigNumber.isBigNumber(r.gasUsed)
+            ? r.gasUsed.toString()
+            : r.gasUsed,
+          effectiveGasPrice: BigNumber.isBigNumber(r.effectiveGasPrice)
+            ? r.effectiveGasPrice.toString()
+            : r.effectiveGasPrice,
         },
         meta: {
           adoptsFrom: {
