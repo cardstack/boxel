@@ -43,7 +43,7 @@ import {
 } from './stream';
 import { preprocessEmbeddedTemplates } from '@cardstack/ember-template-imports/lib/preprocess-embedded-templates';
 import * as babel from '@babel/core';
-import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation';
+import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation/browser';
 //@ts-ignore no types are available
 import * as etc from 'ember-source/dist/ember-template-compiler';
 import { loaderPlugin } from './loader-plugin';
@@ -427,7 +427,7 @@ export class Realm {
         [typescriptPlugin, { allowDeclareFields: true }],
         [decoratorsProposalPlugin, { legacy: true }],
         classPropertiesProposalPlugin,
-        makeEmberTemplatePlugin,
+        [makeEmberTemplatePlugin, { compiler: etc }],
         loaderPlugin,
       ],
     })?.code;
