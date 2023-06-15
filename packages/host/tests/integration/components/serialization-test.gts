@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderCard } from '../../helpers/render-component';
 import parseISO from 'date-fns/parseISO';
@@ -1838,6 +1838,285 @@ module('Integration | serialization', function (hooks) {
       includeUnrenderedFields: true,
     });
     assert.strictEqual(serialized.data.attributes?.firstBirthday, '2020-10-30');
+  });
+
+  module('computed linksTo', function () {
+    test('can serialize a computed linksTo field', async function (assert) {
+      let { field, contains, linksTo, serializeCard, Card } = cardApi;
+      let { default: StringCard } = string;
+      class Pet extends Card {
+        @field name = contains(StringCard);
+      }
+      class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field friend = linksTo(() => Person);
+        @field pet = linksTo(Pet);
+        @field friendPet = linksTo(Pet, {
+          computeVia: function (this: Person) {
+            return this.friend?.pet;
+          },
+        });
+      }
+      await shimModule(`${realmURL}test-cards`, { Pet, Person });
+      let mango = new Pet({ name: 'Mango' });
+      let hassan = new Person({ firstName: 'Hassan', pet: mango });
+      await saveCard(mango, `${realmURL}Pet/mango`);
+      await saveCard(hassan, `${realmURL}Person/hassan`);
+      let burcu = new Person({ firstName: 'Burcu', friend: hassan });
+      let serialized = serializeCard(burcu, {
+        includeComputeds: true,
+        includeUnrenderedFields: true,
+      });
+      assert.deepEqual(serialized.data, {
+        type: 'card',
+        attributes: { firstName: 'Burcu', title: null },
+        relationships: {
+          pet: { links: { self: null } },
+          friend: {
+            links: { self: `${realmURL}Person/hassan` },
+            data: { id: `${realmURL}Person/hassan`, type: 'card' },
+          },
+          friendPet: {
+            links: { self: `${realmURL}Pet/mango` },
+            data: { id: `${realmURL}Pet/mango`, type: 'card' },
+          },
+        },
+        meta: {
+          adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+        },
+      });
+
+      assert.deepEqual(serialized.included, [
+        {
+          id: `${realmURL}Pet/mango`,
+          type: 'card',
+          attributes: { name: 'Mango', title: null },
+          meta: {
+            adoptsFrom: { module: `${realmURL}test-cards`, name: 'Pet' },
+          },
+        },
+        {
+          id: `${realmURL}Person/hassan`,
+          type: 'card',
+          attributes: { firstName: 'Hassan', title: null },
+          relationships: {
+            pet: {
+              links: { self: `${realmURL}Pet/mango` },
+              data: { id: `${realmURL}Pet/mango`, type: 'card' },
+            },
+            friend: { links: { self: null } },
+            friendPet: { links: { self: null } },
+          },
+          meta: {
+            adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+          },
+        },
+      ]);
+    });
+
+    test('can deserialize a computed linksTo field', async function (assert) {
+      let {
+        field,
+        contains,
+        linksTo,
+        Card,
+        createFromSerialized,
+        relationshipMeta,
+        isSaved,
+      } = cardApi;
+      let { default: StringCard } = string;
+      class Pet extends Card {
+        @field name = contains(StringCard);
+      }
+      class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field friend = linksTo(() => Person);
+        @field pet = linksTo(Pet);
+        @field friendPet = linksTo(Pet, {
+          computeVia: function (this: Person) {
+            return this.friend?.pet;
+          },
+        });
+      }
+      await shimModule(`${realmURL}test-cards`, { Pet, Person });
+      let doc: LooseSingleCardDocument = {
+        data: {
+          type: 'card',
+          attributes: { firstName: 'Burcu' },
+          relationships: {
+            pet: { links: { self: null } },
+            friend: {
+              links: { self: `${realmURL}Person/hassan` },
+              data: { id: `${realmURL}Person/hassan`, type: 'card' },
+            },
+            friendPet: {
+              links: { self: `${realmURL}Pet/mango` },
+              data: { id: `${realmURL}Pet/mango`, type: 'card' },
+            },
+          },
+          meta: {
+            adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+          },
+        },
+        included: [
+          {
+            id: `${realmURL}Pet/mango`,
+            type: 'card',
+            attributes: { name: 'Mango' },
+            meta: {
+              adoptsFrom: { module: `${realmURL}test-cards`, name: 'Pet' },
+            },
+          },
+          {
+            id: `${realmURL}Person/hassan`,
+            type: 'card',
+            attributes: { firstName: 'Hassan' },
+            relationships: {
+              pet: {
+                links: { self: `${realmURL}Pet/mango` },
+                data: { id: `${realmURL}Pet/mango`, type: 'card' },
+              },
+              friend: { links: { self: null } },
+              friendPet: { links: { self: null } },
+            },
+            meta: {
+              adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+            },
+          },
+        ],
+      };
+      let card = await createFromSerialized<typeof Person>(
+        doc.data,
+        doc,
+        undefined
+      );
+
+      assert.ok(card instanceof Person, 'card is an instance of person');
+      assert.strictEqual(card.firstName, 'Burcu');
+      let { friendPet } = card;
+      if (friendPet instanceof Pet) {
+        assert.strictEqual(isSaved(friendPet), true, 'Pet card is saved');
+        assert.strictEqual(friendPet.name, 'Mango');
+      } else {
+        assert.ok(false, '"friendPet" field value is not an instance of Pet');
+      }
+
+      let relationship = relationshipMeta(card, 'friendPet');
+      if (Array.isArray(relationship)) {
+        assert.ok(
+          false,
+          'relationshipMeta should not be an array for linksTo relationship'
+        );
+      } else {
+        if (relationship?.type === 'loaded') {
+          let relatedCard = relationship.card;
+          assert.strictEqual(
+            relatedCard instanceof Pet,
+            true,
+            'related card is a Pet'
+          );
+          assert.strictEqual(relatedCard?.id, `${realmURL}Pet/mango`);
+        } else {
+          assert.ok(false, 'relationship type was not "loaded"');
+        }
+      }
+    });
+
+    test('can serialize an empty computed linksTo field', async function (assert) {
+      let { field, contains, linksTo, Card, serializeCard } = cardApi;
+      let { default: StringCard } = string;
+      class Pet extends Card {
+        @field name = contains(StringCard);
+      }
+      class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field friend = linksTo(() => Person);
+        @field pet = linksTo(Pet);
+        @field friendPet = linksTo(Pet, {
+          computeVia: function (this: Person) {
+            return this.friend?.pet;
+          },
+        });
+      }
+      await shimModule(`${realmURL}test-cards`, { Pet, Person });
+      let person = new Person({ firstName: 'Burcu' });
+      let serialized = serializeCard(person, {
+        includeUnrenderedFields: true,
+        includeComputeds: true,
+      });
+      assert.deepEqual(serialized, {
+        data: {
+          type: 'card',
+          attributes: { firstName: 'Burcu', title: null },
+          relationships: {
+            pet: { links: { self: null } },
+            friend: { links: { self: null } },
+            friendPet: { links: { self: null } },
+          },
+          meta: {
+            adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+          },
+        },
+      });
+    });
+
+    test('can deserialize an empty computed linksTo field', async function (assert) {
+      let {
+        field,
+        contains,
+        linksTo,
+        Card,
+        createFromSerialized,
+        relationshipMeta,
+      } = cardApi;
+      let { default: StringCard } = string;
+      class Pet extends Card {
+        @field name = contains(StringCard);
+      }
+      class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field friend = linksTo(() => Person);
+        @field pet = linksTo(Pet);
+        @field friendPet = linksTo(Pet, {
+          computeVia: function (this: Person) {
+            return this.friend?.pet;
+          },
+        });
+      }
+      await shimModule(`${realmURL}test-cards`, { Pet, Person });
+      let doc: LooseSingleCardDocument = {
+        data: {
+          type: 'card',
+          attributes: { firstName: 'Burcu' },
+          relationships: {
+            pet: { links: { self: null } },
+            friend: { links: { self: null } },
+            friendPet: { links: { self: null } },
+          },
+          meta: {
+            adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+          },
+        },
+      };
+      let card = await createFromSerialized<typeof Person>(
+        doc.data,
+        doc,
+        undefined
+      );
+      assert.ok(card instanceof Person, 'card is a Person');
+      assert.strictEqual(card.firstName, 'Burcu');
+      assert.strictEqual(card.friendPet, null, 'relationship is null');
+
+      let relationship = relationshipMeta(card, 'friendPet');
+      assert.deepEqual(relationship, { type: 'loaded', card: null });
+    });
+
+    skip(
+      'can serialize a computed linksTo relationship that points to own card class'
+    );
+    skip(
+      'can deserialize a computed linksTo relationship that points to own card class'
+    );
   });
 
   test('can deserialize a containsMany field', async function (assert) {
