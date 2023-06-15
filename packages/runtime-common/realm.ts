@@ -43,6 +43,7 @@ import {
 } from './stream';
 import { preprocessEmbeddedTemplates } from '@cardstack/ember-template-imports/lib/preprocess-embedded-templates';
 import * as babel from '@babel/core';
+//@ts-ignore types are not found by consuming packages
 import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation/browser';
 //@ts-ignore no types are available
 import * as etc from 'ember-source/dist/ember-template-compiler';
