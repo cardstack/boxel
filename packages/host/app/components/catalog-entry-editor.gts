@@ -90,7 +90,10 @@ export default class CatalogEntryEditor extends Component<Signature> {
   @action
   async createEntry(): Promise<void> {
     let loader = this.cardService.loaderService.loader;
-    let realmInfoResponse = await loader.fetch(`${this.cardService.defaultURL}_info`, { headers: {Accept: SupportedMimeType.RealmInfo}});
+    let realmInfoResponse = await loader.fetch(
+      `${this.cardService.defaultURL}_info`,
+      { headers: { Accept: SupportedMimeType.RealmInfo } }
+    );
 
     let resource = {
       attributes: {

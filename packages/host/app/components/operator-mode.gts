@@ -3,11 +3,11 @@ import { on } from '@ember/modifier';
 import { Card, CardContext, Format } from 'https://cardstack.com/base/card-api';
 import Preview from './preview';
 import { action } from '@ember/object';
-import { fn } from '@ember/helper';
+import { fn, array } from '@ember/helper';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import type CardService from '../services/card-service';
 // import getValueFromWeakMap from '../helpers/get-value-from-weakmap';
-import { eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import optional from '@cardstack/boxel-ui/helpers/optional';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import {
@@ -43,6 +43,9 @@ import { getSearchResults, type Search } from '../resources/search';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import perform from 'ember-concurrency/helpers/perform';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
+import BoxelMenu from '@cardstack/boxel-ui/components/menu';
+import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
 
 interface Signature {
   Args: {
@@ -167,6 +170,11 @@ export default class OperatorMode extends Component<Signature> {
         });
       }
     }
+  }
+
+  //TODO: Implement remove card function
+  @action async delete(item: StackItem) {
+    await this.close(item);
   }
 
   replaceItemInStack(item: StackItem, newItem: StackItem) {
@@ -391,17 +399,39 @@ export default class OperatorMode extends Component<Signature> {
                   data-test-stack-card-header
                 >
                   <:actions>
-                    {{#if (not (eq item.format 'edit'))}}
-                      <IconButton
-                        @icon='icon-horizontal-three-dots'
-                        @width='20px'
-                        @height='20px'
-                        class='icon-button'
-                        aria-label='Edit'
-                        {{on 'click' (fn this.edit item i)}}
-                        data-test-edit-button
-                      />
-                    {{/if}}
+                    <BoxelDropdown>
+                      <:trigger as |bindings|>
+                        <IconButton
+                            @icon='icon-horizontal-three-dots'
+                            @width='20px'
+                            @height='20px'
+                            class='icon-button'
+                            aria-label='Options'
+                            data-test-edit-button
+                            {{bindings}}
+                          />
+                      </:trigger>
+                      <:content as |dd|>
+                        <BoxelMenu
+                          @closeMenu={{dd.close}}
+                          @items={{if (eq item.format 'edit') 
+                          (array
+                            (menuItem
+                              "Finish Editing" (fn this.save item i) icon='icon-check-mark'
+                            )
+                            (menuItem 
+                              "Delete" (fn this.delete item i) icon='icon-trash'
+                            )
+                          ) 
+                          (array 
+                            (menuItem
+                              "Edit" (fn this.edit item i) icon='icon-pencil'
+                            )
+                          )
+                          }}
+                        />
+                      </:content>
+                    </BoxelDropdown>
                     <IconButton
                       @icon='icon-x'
                       @width='20px'
