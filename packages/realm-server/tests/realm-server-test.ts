@@ -325,9 +325,14 @@ module('Realm Server', function (hooks) {
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
     let body = response.text.trim();
+    let moduleAbsolutePath = resolve(join(__dirname, '..', 'person.gts'));
+
     assert.codeEqual(
       body,
-      compiledCard(`"PRwgdZFk"` /* id that glimmer assigns for the block */),
+      compiledCard(
+        `"BigJxs6R"` /* id that glimmer assigns for the block */,
+        moduleAbsolutePath
+      ),
       'module JS is correct'
     );
   });

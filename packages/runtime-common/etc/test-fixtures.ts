@@ -21,7 +21,7 @@ export class Person extends Card {
   };
 }`.trim();
 
-export function compiledCard(id = 'null') {
+export function compiledCard(id = 'null', moduleName = '/dir/person.gts') {
   return `
 var _class, _descriptor, _descriptor2, _class2;
 
@@ -55,7 +55,7 @@ export let Person = (_class = (_class2 = class Person extends Card {
 {
   "id": ${id},
   "block": "[[[1,\\"\\\\n      \\"],[10,\\"h1\\"],[14,\\"data-test-card\\",\\"\\"],[12],[8,[30,1,[\\"firstName\\"]],null,null,null],[13],[1,\\"\\\\n    \\"]],[\\"@fields\\"],false,[]]",
-  "moduleName": "/dir/person.gts",
+  "moduleName": "${moduleName}",
   "isStrictMode": true
 }), class Isolated extends Component {})), _class2), (_descriptor = _applyDecoratedDescriptor(_class.prototype, "firstName", [field], {
   configurable: true,
