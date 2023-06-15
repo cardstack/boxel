@@ -151,6 +151,8 @@ class MessageCard extends Card {
   static edit = class Edit extends JSONView {};
 }
 
+const messageCache = new WeakMap<MatrixRoomCard, Map<string, MessageCard>>();
+
 export class MatrixRoomCard extends Card {
   // the only writeable field for this card should be the "events" field.
   // All other fields should derive from the "events" field.
@@ -203,12 +205,21 @@ export class MatrixRoomCard extends Card {
   @field messages = containsMany(MessageCard, {
     isUsed: true, // TODO we should not have to set this--need to research this issue
     computeVia: async function (this: MatrixRoomCard) {
-      let events = this.events
-        .filter((e) => e.type === 'm.room.message')
-        .sort((a, b) => a.origin_server_ts - b.origin_server_ts) as
-        | (MessageEvent | CardMessageEvent)[];
-      let messages: MessageCard[] = [];
-      for (let [index, event] of events.entries()) {
+      let cache = messageCache.get(this);
+      if (!cache) {
+        cache = new Map();
+        messageCache.set(this, cache);
+      }
+      let index = cache.size;
+      let newMessages = new Map<string, MessageCard>();
+      for (let event of this.events) {
+        if (event.type !== 'm.room.message') {
+          continue;
+        }
+        if (cache.has(event.event_id)) {
+          continue;
+        }
+
         let cardArgs = {
           author: upsertRoomMember(event.sender),
           created: new Date(event.origin_server_ts),
@@ -233,12 +244,29 @@ export class MatrixRoomCard extends Card {
               attachedCards.set(cardDoc.data.id, attachedCard);
             }
           }
-          messages.push(new MessageCard({ ...cardArgs, attachedCard }));
+          newMessages.set(
+            event.event_id,
+            new MessageCard({ ...cardArgs, attachedCard })
+          );
         } else {
-          messages.push(new MessageCard(cardArgs));
+          newMessages.set(event.event_id, new MessageCard(cardArgs));
+        }
+
+        index++;
+      }
+      // need to get the cache again as we have crossed an async boundary,
+      // and cache may have changed
+      let updatedCache = messageCache.get(this)!; // this should always have an entry as we initialized it at the beginning of the computed
+      for (let [eventId, message] of newMessages) {
+        if (!updatedCache.has(eventId)) {
+          updatedCache.set(eventId, message);
         }
       }
-      return messages;
+      // this sort should hopefully be very optimized since events will
+      // be close to chronological order
+      return [...updatedCache.values()].sort(
+        (a, b) => a.created.getTime() - b.created.getTime()
+      );
     },
   });
 
