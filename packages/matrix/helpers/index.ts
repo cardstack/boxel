@@ -8,16 +8,31 @@ interface ProfileAssertions {
   userId?: string;
   displayName?: string;
 }
+interface LoginOptions {
+  expectFailure?: true;
+}
 
-export async function login(page: Page, username: string, password: string) {
+export async function login(
+  page: Page,
+  username: string,
+  password: string,
+  opts?: LoginOptions
+) {
   await page.goto(`${rootPath}/chat`);
   await page.locator('[data-test-username-field]').fill(username);
   await page.locator('[data-test-password-field]').fill(password);
   await page.locator('[data-test-login-btn]').click();
+
+  if (opts?.expectFailure) {
+    await expect(page.locator('[data-test-login-error]')).toHaveCount(1);
+  } else {
+    await expect(page.locator('[data-test-rooms-list]')).toHaveCount(1);
+  }
 }
 
 export async function logout(page: Page) {
   await page.locator('[data-test-logout-btn]').click();
+  await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
 }
 
 export async function createRoom(

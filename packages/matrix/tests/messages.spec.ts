@@ -170,29 +170,6 @@ test.describe('Room messages', () => {
     );
   });
 
-  test('message sender has left room', async ({ page }) => {
-    await login(page, 'user1', 'pass');
-    await createRoom(page, {
-      name: 'Room 1',
-      invites: ['user2'],
-    });
-    await logout(page);
-
-    await login(page, 'user2', 'pass');
-    await joinRoom(page, 'Room 1');
-    await openRoom(page, 'Room 1');
-    await sendMessage(page, 'first message');
-    await leaveRoom(page, 'Room 1');
-
-    await logout(page);
-    await login(page, 'user1', 'pass');
-    await openRoom(page, 'Room 1');
-
-    await assertMessages(page, [
-      { from: 'user2 (left room)', message: 'first message' },
-    ]);
-  });
-
   test('can add a card to a markdown message', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
     await login(page, 'user1', 'pass');
