@@ -32,7 +32,8 @@ function upsertRoomMember(
   }
 
   // patch in the display name in case we don't have one yet
-  if (displayName && member.displayName === undefined) {
+  // TODO need to look up the event used to change the display name
+  if (displayName) {
     member.displayName = displayName;
   }
 
