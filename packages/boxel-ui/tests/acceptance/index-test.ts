@@ -1,5 +1,5 @@
 import { module, test } from 'qunit';
-import { visit } from '@ember/test-helpers';
+import { click, find, visit } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { a11yAudit } from 'ember-a11y-testing/test-support';
 
@@ -19,5 +19,30 @@ module('Acceptance | Docs', function (hooks) {
       },
     });
     assert.ok(true, 'no a11y errors found!');
+  });
+
+  test('glimmer-scoped-css smoke test', async function (assert) {
+    await visit('/');
+    await click('a[href*=Button]');
+
+    const buttonElement = find('[data-test-boxel-button]');
+
+    assert.ok(buttonElement);
+
+    if (!buttonElement) {
+      throw new Error('[data-test-boxel-button] element not found');
+    }
+
+    const buttonElementScopedCssAttribute = Array.from(buttonElement.attributes)
+      .map((attribute) => attribute.localName)
+      .find((attributeName) => attributeName.startsWith('data-scopedcss'));
+
+    if (!buttonElementScopedCssAttribute) {
+      throw new Error(
+        'Scoped CSS attribute not found on [data-test-boxel-button]'
+      );
+    }
+
+    assert.dom('[data-test-boxel-button] + style').doesNotExist();
   });
 });

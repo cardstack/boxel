@@ -1,5 +1,9 @@
 lockfileVersion: '6.0'
 
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
 overrides:
   '@types/eslint': 8.4.1
   '@embroider/util': 1.11.1
@@ -657,8 +661,8 @@ importers:
         specifier: ^7.4.3
         version: 7.4.3
       glimmer-scoped-css:
-        specifier: ^0.2.0
-        version: 0.2.0
+        specifier: ^0.3.1
+        version: 0.3.1
       lodash:
         specifier: ^4.17.21
         version: 4.17.21
@@ -1069,6 +1073,9 @@ importers:
       flat:
         specifier: ^5.0.2
         version: 5.0.2
+      glimmer-scoped-css:
+        specifier: ^0.3.1
+        version: 0.3.1
       ignore:
         specifier: ^5.2.0
         version: 5.2.0
@@ -15543,8 +15550,8 @@ packages:
       through: 2.2.7
     dev: true
 
-  /glimmer-scoped-css@0.2.0:
-    resolution: {integrity: sha512-Qb+DwnQfXhFIsCzZXn/GBwj/jw9Oyciczd4QfFYK7zVFK0DeHec9bB0Lgaj6UuMlK65+ulnTIolSdkF4WO/aqw==}
+  /glimmer-scoped-css@0.3.1:
+    resolution: {integrity: sha512-dYQqZIIj5bFHAy6GVxy+hOAqy26KbrBjHmIGt2YIhXZgERzgXJKpf1YNd/SfzD1d4zgiiHDfCUnJ3MlQu1l23w==}
     dependencies:
       '@embroider/addon-shim': 1.8.5
       js-string-escape: 1.0.1
@@ -15553,7 +15560,6 @@ packages:
       super-fast-md5: 1.0.1
     transitivePeerDependencies:
       - supports-color
-    dev: false
 
   /glob-parent@3.1.0:
     resolution: {integrity: sha512-E8Ak/2+dZY6fnzlR7+ueWvhsH1SjHr4jjss4YS/h4py44jY9MhK/VFdaZJAWDz6BbL21KeteKxFSFpq8OS5gVA==}
