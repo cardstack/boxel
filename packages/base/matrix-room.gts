@@ -5,6 +5,7 @@ import {
   Component,
   Card,
   primitive,
+  useIndexBasedKey,
   CardBase,
   createFromSerialized,
 } from './card-api';
@@ -18,30 +19,36 @@ import { formatRFC3339 } from 'date-fns';
 import Modifier from 'ember-modifier';
 import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
-const roomMembers = new Map<string, RoomMemberCard>();
-
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember(
+  matrixRoomCard: MatrixRoomCard,
   userId: string,
-  displayName?: string
+  displayName?: string,
+  membership?: 'invite' | 'join' | 'leave'
 ): RoomMemberCard {
+  let roomMembers = roomMemberCache.get(matrixRoomCard);
+  if (!roomMembers) {
+    roomMembers = new Map();
+    roomMemberCache.set(matrixRoomCard, roomMembers);
+  }
   let member = roomMembers.get(userId);
   if (!member) {
-    member = new RoomMemberCard({ userId });
+    member = new RoomMemberCard({ id: userId, userId });
     roomMembers.set(userId, member);
   }
-
   // patch in the display name in case we don't have one yet
   // TODO need to look up the event used to change the display name
   if (displayName) {
     member.displayName = displayName;
   }
-
+  if (membership) {
+    member.membership = membership;
+  }
   return member;
 }
 
 // this is so we can have triple equals equivalent attached cards in messages
-const attachedCards = new Map<string, Card>();
+const attachedCards = new Map<string, Promise<Card>>();
 
 class JSONView extends Component<typeof MatrixEventCard> {
   <template>
@@ -79,12 +86,33 @@ class RoomMemberView extends Component<typeof RoomMemberCard> {
       Name:
       {{@model.displayName}}
     </div>
+    <div>
+      Membership:
+      {{@model.membership}}
+    </div>
   </template>
+}
+
+class RoomMembershipCard extends CardBase {
+  static [primitive]: 'invite' | 'join' | 'leave';
+  static [useIndexBasedKey]: never;
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      {{@model}}
+    </template>
+  };
+  // The edit template is meant to be read-only, this field card is not mutable, room state can only be changed via matrix API
+  static edit = class Edit extends Component<typeof this> {
+    <template>
+      {{@model}}
+    </template>
+  };
 }
 
 class RoomMemberCard extends Card {
   @field userId = contains(StringCard);
   @field displayName = contains(StringCard);
+  @field membership = contains(RoomMembershipCard);
   static embedded = class Embedded extends RoomMemberView {};
   static isolated = class Isolated extends RoomMemberView {};
   // The edit template is meant to be read-only, this field card is not mutable
@@ -150,13 +178,43 @@ class MessageCard extends Card {
   // The edit template is meant to be read-only, this field card is not mutable
   static edit = class Edit extends JSONView {};
 }
-
-const messageCache = new WeakMap<MatrixRoomCard, Map<string, MessageCard>>();
+interface RoomState {
+  name?: string;
+  creator?: RoomMemberCard;
+  created?: number;
+}
+const eventCache = new WeakMap<MatrixRoomCard, Map<string, MatrixEvent>>();
+const messageCache = new WeakMap<MarkdownCard, Map<string, MessageCard>>();
+const roomMemberCache = new WeakMap<
+  MarkdownCard,
+  Map<string, RoomMemberCard>
+>();
+const roomStateCache = new WeakMap<MarkdownCard, RoomState>();
 
 export class MatrixRoomCard extends Card {
   // the only writeable field for this card should be the "events" field.
   // All other fields should derive from the "events" field.
   @field events = containsMany(MatrixEventCard);
+
+  // This works well for synchronous computeds only
+  @field newEvents = containsMany(MatrixEventCard, {
+    computeVia: function (this: MatrixRoomCard) {
+      let cache = eventCache.get(this);
+      if (!cache) {
+        cache = new Map();
+        eventCache.set(this, cache);
+      }
+      let newEvents = new Map<string, MatrixEvent>();
+      for (let event of this.events) {
+        if (cache.has(event.event_id)) {
+          continue;
+        }
+        cache.set(event.event_id, event);
+        newEvents.set(event.event_id, event);
+      }
+      return [...newEvents.values()];
+    },
+  });
 
   @field roomId = contains(StringCard, {
     computeVia: function (this: MatrixRoomCard) {
@@ -166,12 +224,21 @@ export class MatrixRoomCard extends Card {
 
   @field name = contains(StringCard, {
     computeVia: function (this: MatrixRoomCard) {
-      let events = this.events
+      let roomState = roomStateCache.get(this);
+      if (!roomState) {
+        roomState = {} as RoomState;
+        roomStateCache.set(this, roomState);
+      }
+      let name = roomState.name;
+      // room name can change so we need to check new
+      // events for a room name even if we already have one
+      let events = this.newEvents
         .filter((e) => e.type === 'm.room.name')
         .sort((a, b) => a.origin_server_ts - b.origin_server_ts) as
         | RoomNameEvent[];
       if (events.length > 0) {
-        return events.pop()!.content.name;
+        roomState.name = name ?? events.pop()!.content.name;
+        return roomState.name;
       }
       return; // this should never happen
     },
@@ -179,11 +246,21 @@ export class MatrixRoomCard extends Card {
 
   @field creator = contains(RoomMemberCard, {
     computeVia: function (this: MatrixRoomCard) {
-      let event = this.events.find((e) => e.type === 'm.room.create') as
+      let roomState = roomStateCache.get(this);
+      if (!roomState) {
+        roomState = {} as RoomState;
+        roomStateCache.set(this, roomState);
+      }
+      let creator = roomState.creator;
+      if (creator) {
+        return creator;
+      }
+      let event = this.newEvents.find((e) => e.type === 'm.room.create') as
         | RoomCreateEvent
         | undefined;
       if (event) {
-        return upsertRoomMember(event.sender);
+        roomState.creator = upsertRoomMember(this, event.sender);
+        return roomState.creator;
       }
       return; // this should never happen
     },
@@ -191,14 +268,50 @@ export class MatrixRoomCard extends Card {
 
   @field created = contains(DateTimeCard, {
     computeVia: function (this: MatrixRoomCard) {
-      let event = this.events.find((e) => e.type === 'm.room.create') as
+      let roomState = roomStateCache.get(this);
+      if (!roomState) {
+        roomState = {} as RoomState;
+        roomStateCache.set(this, roomState);
+      }
+      let created = roomState.created;
+      if (created != null) {
+        return new Date(created);
+      }
+      let event = this.newEvents.find((e) => e.type === 'm.room.create') as
         | RoomCreateEvent
         | undefined;
       if (event) {
-        let timestamp = event.origin_server_ts;
-        return new Date(timestamp);
+        roomState.created = event.origin_server_ts;
+        return new Date(roomState.created);
       }
       return; // this should never happen
+    },
+  });
+
+  @field roomMembers = containsMany(RoomMemberCard, {
+    computeVia: function (this: MatrixRoomCard) {
+      let roomMembers = roomMemberCache.get(this);
+      if (!roomMembers) {
+        roomMembers = new Map();
+        roomMemberCache.set(this, roomMembers);
+      }
+
+      for (let event of this.newEvents.sort(
+        // it's really important to process membership events chronologically
+        (a, b) => a.origin_server_ts - b.origin_server_ts
+      )) {
+        if (event.type !== 'm.room.member') {
+          continue;
+        }
+        let userId = event.state_key;
+        upsertRoomMember(
+          this,
+          userId,
+          event.content.displayname,
+          event.content.membership
+        );
+      }
+      return [...roomMembers.values()];
     },
   });
 
@@ -221,7 +334,7 @@ export class MatrixRoomCard extends Card {
         }
 
         let cardArgs = {
-          author: upsertRoomMember(event.sender),
+          author: upsertRoomMember(this, event.sender),
           created: new Date(event.origin_server_ts),
           message: event.content.body,
           formattedMessage: event.content.formatted_body,
@@ -230,12 +343,12 @@ export class MatrixRoomCard extends Card {
         };
         if (event.content.msgtype === 'org.boxel.card') {
           let cardDoc = event.content.instance;
-          let attachedCard: Card | undefined;
+          let attachedCard: Promise<Card> | undefined;
           if (cardDoc.data.id != null) {
             attachedCard = attachedCards.get(cardDoc.data.id);
           }
           if (!attachedCard) {
-            attachedCard = await createFromSerialized<typeof Card>(
+            attachedCard = createFromSerialized<typeof Card>(
               cardDoc.data,
               cardDoc,
               undefined
@@ -246,7 +359,7 @@ export class MatrixRoomCard extends Card {
           }
           newMessages.set(
             event.event_id,
-            new MessageCard({ ...cardArgs, attachedCard })
+            new MessageCard({ ...cardArgs, attachedCard: await attachedCard })
           );
         } else {
           newMessages.set(event.event_id, new MessageCard(cardArgs));
@@ -272,63 +385,13 @@ export class MatrixRoomCard extends Card {
 
   @field joinedMembers = containsMany(RoomMemberCard, {
     computeVia: function (this: MatrixRoomCard) {
-      let events = this.events
-        .filter((e) => e.type === 'm.room.member')
-        .sort((a, b) => a.origin_server_ts - b.origin_server_ts) as (
-        | InviteEvent
-        | JoinEvent
-        | LeaveEvent
-      )[];
-      let joined = events.reduce((accumulator, event) => {
-        let userId = event.state_key;
-        switch (event.content.membership) {
-          case 'invite':
-            // no action here
-            break;
-          case 'join': {
-            let member = upsertRoomMember(userId, event.content.displayname);
-            accumulator.set(userId, member);
-            break;
-          }
-          case 'leave':
-            accumulator.delete(userId);
-            break;
-          default:
-            assertNever(event.content);
-        }
-        return accumulator;
-      }, new Map<string, RoomMemberCard>());
-      return [...joined.values()];
+      return this.roomMembers.filter((m) => m.membership === 'join');
     },
   });
 
   @field invitedMembers = containsMany(RoomMemberCard, {
     computeVia: function (this: MatrixRoomCard) {
-      let events = this.events
-        .filter((e) => e.type === 'm.room.member')
-        .sort((a, b) => a.origin_server_ts - b.origin_server_ts) as (
-        | InviteEvent
-        | JoinEvent
-        | LeaveEvent
-      )[];
-      let invited = events.reduce((accumulator, event) => {
-        let userId = event.state_key;
-        switch (event.content.membership) {
-          case 'invite': {
-            let member = upsertRoomMember(userId, event.content.displayname);
-            accumulator.set(userId, member);
-            break;
-          }
-          case 'join':
-          case 'leave':
-            accumulator.delete(userId);
-            break;
-          default:
-            assertNever(event.content);
-        }
-        return accumulator;
-      }, new Map<string, RoomMemberCard>());
-      return [...invited.values()];
+      return this.roomMembers.filter((m) => m.membership === 'invite');
     },
   });
 
@@ -450,7 +513,3 @@ export type MatrixEvent =
   | InviteEvent
   | JoinEvent
   | LeaveEvent;
-
-function assertNever(value: never) {
-  throw new Error(`should never happen ${value}`);
-}
