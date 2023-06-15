@@ -814,6 +814,11 @@ nav > .directory-level {
   font-weight: initial;
 }
 
+header.matrix .content {
+  position: relative;
+  display: block;
+}
+
 .card-isolated-component {
   padding: var(--boxel-sp-lg);
 }

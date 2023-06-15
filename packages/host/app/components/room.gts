@@ -31,7 +31,7 @@ export default class Room extends Component<RoomArgs> {
     <BoxelHeader
       @title={{this.roomName}}
       @hasBackground={{TRUE}}
-      class='room__header'
+      class='matrix room__header'
     >
       <:actions>
         <Button

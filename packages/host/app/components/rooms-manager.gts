@@ -25,7 +25,7 @@ const TRUE = true;
 
 export default class RoomsManager extends Component {
   <template>
-    <BoxelHeader @title='Rooms' @hasBackground={{TRUE}}>
+    <BoxelHeader class='matrix' @title='Rooms' @hasBackground={{TRUE}}>
       <:actions>
         <Button
           data-test-create-room-mode-btn
