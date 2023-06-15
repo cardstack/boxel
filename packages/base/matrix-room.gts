@@ -19,6 +19,9 @@ import { formatRFC3339 } from 'date-fns';
 import Modifier from 'ember-modifier';
 import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
+// this is so we can have triple equals equivalent attached cards in messages
+const attachedCards = new Map<string, Promise<Card>>();
+
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember(
   matrixRoomCard: MatrixRoomCard,
@@ -36,8 +39,6 @@ function upsertRoomMember(
     member = new RoomMemberCard({ id: userId, userId });
     roomMembers.set(userId, member);
   }
-  // patch in the display name in case we don't have one yet
-  // TODO need to look up the event used to change the display name
   if (displayName) {
     member.displayName = displayName;
   }
@@ -46,9 +47,6 @@ function upsertRoomMember(
   }
   return member;
 }
-
-// this is so we can have triple equals equivalent attached cards in messages
-const attachedCards = new Map<string, Promise<Card>>();
 
 class JSONView extends Component<typeof MatrixEventCard> {
   <template>
@@ -183,6 +181,9 @@ interface RoomState {
   creator?: RoomMemberCard;
   created?: number;
 }
+
+// in addition to acting as a cache, this also ensures we have
+// triple equal equivalence for the interior cards of MatrixRoomCard
 const eventCache = new WeakMap<MatrixRoomCard, Map<string, MatrixEvent>>();
 const messageCache = new WeakMap<MarkdownCard, Map<string, MessageCard>>();
 const roomMemberCache = new WeakMap<
