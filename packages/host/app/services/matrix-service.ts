@@ -178,8 +178,8 @@ export default class MatrixService extends Service {
       saveAuth(auth);
       this.bindEventListeners();
 
-      await this.initializeRoomStates();
       await this._client.startClient();
+      await this.initializeRoomStates();
     }
   }
 

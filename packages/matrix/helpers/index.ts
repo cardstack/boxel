@@ -105,12 +105,6 @@ export async function assertMessages(
     card?: { id: string; text?: string };
   }[]
 ) {
-  const limit = 5;
-  if (messages.length > limit) {
-    throw new Error(
-      `don't use assertMessages() for more than ${limit} messages as pagination may unnecessarily break the assertion`
-    );
-  }
   await expect(page.locator('[data-test-message-idx]')).toHaveCount(
     messages.length
   );

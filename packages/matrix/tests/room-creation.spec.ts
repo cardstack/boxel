@@ -81,7 +81,7 @@ test.describe('Room creation', () => {
     );
   });
 
-  test('rooms are sorted by creation date', async ({ page }) => {
+  test('rooms are sorted by join date', async ({ page }) => {
     await login(page, 'user1', 'pass');
     await createRoom(page, { name: 'Room Z' });
     await createRoom(page, { name: 'Room A' });
