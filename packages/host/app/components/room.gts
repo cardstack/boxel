@@ -13,6 +13,7 @@ import {
   FieldContainer,
   Button,
 } from '@cardstack/boxel-ui';
+import { getRoomCard } from '../resources/room-card';
 import { TrackedMap } from 'tracked-built-ins';
 import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
 import type MatrixService from '../services/matrix-service';
@@ -29,7 +30,7 @@ interface RoomArgs {
 export default class Room extends Component<RoomArgs> {
   <template>
     <BoxelHeader
-      @title={{this.roomName}}
+      @title={{this.roomCard.name}}
       @hasBackground={{TRUE}}
       class='matrix room__header'
     >
@@ -129,53 +130,51 @@ export default class Room extends Component<RoomArgs> {
   </template>
 
   @service private declare matrixService: MatrixService;
-  @service declare cardService: CardService;
+  @service private declare cardService: CardService;
   @tracked private isInviteMode = false;
   @tracked private membersToInvite: string[] = [];
   private messagesToSend: TrackedMap<string, string | undefined> =
     new TrackedMap();
   private cardsToSend: TrackedMap<string, Card | undefined> = new TrackedMap();
+  private roomCardResource = getRoomCard(this, () => this.args.roomId);
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
   }
 
-  get roomCard() {
-    let roomCard = this.matrixService.roomEventConsumers.get(this.args.roomId);
-    if (!roomCard) {
-      throw new Error(`bug: no room card exists for room ${this.args.roomId}`);
-    }
-    return roomCard;
+  private get roomCard() {
+    return this.roomCardResource.roomCard;
   }
 
-  get messageCardComponents() {
-    return this.roomCard.messages.map((messageCard) =>
-      messageCard.constructor.getComponent(messageCard, 'embedded')
-    );
+  private get messageCardComponents() {
+    return this.roomCard
+      ? this.roomCard.messages.map((messageCard) =>
+          messageCard.constructor.getComponent(messageCard, 'embedded')
+        )
+      : [];
   }
 
   @cached
-  get memberNames() {
+  private get memberNames() {
+    if (!this.roomCard) {
+      return;
+    }
     return [
       ...this.roomCard.joinedMembers.map((m) => m.displayName),
       ...this.roomCard.invitedMembers.map((m) => `${m.displayName} (invited)`),
     ].join(', ');
   }
 
-  get roomName() {
-    return this.matrixService.rooms.get(this.args.roomId)?.name;
-  }
-
-  get messageToSend() {
+  private get messageToSend() {
     return this.messagesToSend.get(this.args.roomId);
   }
 
-  get cardtoSend() {
+  private get cardtoSend() {
     return this.cardsToSend.get(this.args.roomId);
   }
 
-  get cardToSendComponent() {
+  private get cardToSendComponent() {
     if (this.cardtoSend) {
       return this.cardtoSend.constructor.getComponent(
         this.cardtoSend,
@@ -185,7 +184,7 @@ export default class Room extends Component<RoomArgs> {
     return;
   }
 
-  get membersToInviteFormatted() {
+  private get membersToInviteFormatted() {
     return this.membersToInvite.join(', ');
   }
 
@@ -250,6 +249,7 @@ export default class Room extends Component<RoomArgs> {
   private doMatrixEventFlush = restartableTask(async () => {
     await this.matrixService.flushMembership;
     await this.matrixService.flushTimeline;
+    await this.roomCardResource.loading;
   });
 
   private doChooseCard = restartableTask(async () => {

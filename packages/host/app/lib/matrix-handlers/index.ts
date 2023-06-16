@@ -5,15 +5,15 @@ import {
   type IEvent,
 } from 'matrix-js-sdk';
 import type {
-  MatrixRoomCard,
+  RoomCard,
   MatrixEvent as DiscreteMatrixEvent,
-} from 'https://cardstack.com/base/matrix-room';
+} from 'https://cardstack.com/base/room';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { type LooseCardResource, baseRealm } from '@cardstack/runtime-common';
+import type * as MatrixSDK from 'matrix-js-sdk';
 
 export * as Membership from './membership';
 export * as Timeline from './timeline';
-export * as Room from './room';
 
 export interface RoomEvent extends RoomMeta {
   eventId: string;
@@ -32,40 +32,19 @@ export interface RoomMeta {
 export type Event = Partial<IEvent>;
 
 export interface Context {
-  invites: Map<string, RoomInvite>;
-  joinedRooms: Map<string, RoomEvent>;
-  rooms: Map<string, RoomMeta>;
-  roomEventConsumers: Map<string, MatrixRoomCard>;
+  roomCards: Map<string, Promise<RoomCard>>;
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[];
   timelineQueue: MatrixEvent[];
   cardAPI: typeof CardAPI;
   client: MatrixClient;
+  matrixSDK: typeof MatrixSDK;
   handleMessage?: (
     context: Context,
     event: Event,
     roomId: string
   ) => Promise<void>;
-}
-
-export function setRoomMeta(context: Context, roomId: string, meta: RoomMeta) {
-  let roomMeta = context.rooms.get(roomId);
-  if (!roomMeta) {
-    roomMeta = {};
-    context.rooms.set(roomId, roomMeta);
-  }
-  if (meta.name !== undefined) {
-    roomMeta.name = meta.name;
-  }
-  let invite = context.invites.get(roomId);
-  if (invite) {
-    context.invites.set(roomId, { ...invite, ...roomMeta });
-  }
-  let joinedRoom = context.joinedRooms.get(roomId);
-  if (joinedRoom) {
-    context.joinedRooms.set(roomId, { ...joinedRoom, ...roomMeta });
-  }
 }
 
 export async function addRoomEvent(context: Context, event: Event) {
@@ -81,25 +60,32 @@ export async function addRoomEvent(context: Context, event: Event) {
       `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`
     );
   }
-  let roomCard = context.roomEventConsumers.get(roomId);
+  let roomCard = context.roomCards.get(roomId);
   if (!roomCard) {
     let data: LooseCardResource = {
+      attributes: {
+        id: roomId,
+      },
       meta: {
         adoptsFrom: {
-          name: 'MatrixRoomCard',
-          module: `${baseRealm.url}matrix-room`,
+          name: 'RoomCard',
+          module: `${baseRealm.url}room`,
         },
       },
     };
-    roomCard = await context.cardAPI.createFromSerialized<
-      typeof MatrixRoomCard
-    >(data, { data }, undefined);
-    context.roomEventConsumers.set(roomId, roomCard);
+    roomCard = context.cardAPI.createFromSerialized<typeof RoomCard>(
+      data,
+      { data },
+      undefined
+    );
+    context.roomCards.set(roomId, roomCard);
   }
-  // duplicate events may be emitted from matrix
-  if (!roomCard.events.find((e) => e.event_id === eventId)) {
-    roomCard.events = [
-      ...(roomCard.events ?? []),
+  let resolvedRoomCard = await roomCard;
+
+  // duplicate events may be emitted from matrix, as well as the resolved room card might already contain this event
+  if (!resolvedRoomCard.events.find((e) => e.event_id === eventId)) {
+    resolvedRoomCard.events = [
+      ...(resolvedRoomCard.events ?? []),
       event as unknown as DiscreteMatrixEvent,
     ];
   }

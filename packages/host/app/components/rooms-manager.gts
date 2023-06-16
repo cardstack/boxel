@@ -18,8 +18,11 @@ import {
 import { isMatrixError } from '../lib/matrix-utils';
 import { LinkTo } from '@ember/routing';
 import { eventDebounceMs } from '../lib/matrix-utils';
+import { getRoomCard, RoomCardResource } from '../resources/room-card';
+import { TrackedMap } from 'tracked-built-ins';
 import RouterService from '@ember/routing/router-service';
 import type MatrixService from '../services/matrix-service';
+import type { RoomCard, RoomMemberCard } from 'https://cardstack.com/base/room';
 
 const TRUE = true;
 
@@ -70,7 +73,7 @@ export default class RoomsManager extends Component {
         </fieldset>
       {{/if}}
     {{/if}}
-    {{#if this.loadJoinedRooms.isRunning}}
+    {{#if this.loadRooms.isRunning}}
       <LoadingIndicator />
     {{else}}
       <div class='room-manager__room-list' data-test-invites-list>
@@ -78,24 +81,24 @@ export default class RoomsManager extends Component {
         {{#each this.sortedInvites as |invite|}}
           <div
             class='room-manager__room'
-            data-test-invited-room={{invite.name}}
+            data-test-invited-room={{invite.room.name}}
           >
             <span class='room-manager__room__item'>
-              {{invite.name}}
+              {{invite.room.name}}
               (from:
               <span
-                data-test-invite-sender={{invite.sender}}
-              >{{invite.sender}})</span>
+                data-test-invite-sender={{invite.member.membershipInitiator.displayName}}
+              >{{invite.member.membershipInitiator.displayName}})</span>
             </span>
             <Button
-              data-test-decline-room-btn={{invite.name}}
-              {{on 'click' (fn this.leaveRoom invite.roomId)}}
+              data-test-decline-room-btn={{invite.room.name}}
+              {{on 'click' (fn this.leaveRoom invite.room.roomId)}}
             >Decline</Button>
             <Button
-              data-test-join-room-btn={{invite.name}}
-              {{on 'click' (fn this.joinRoom invite.roomId)}}
+              data-test-join-room-btn={{invite.room.name}}
+              {{on 'click' (fn this.joinRoom invite.room.roomId)}}
             >Join</Button>
-            {{#if (eq invite.roomId this.roomIdForCurrentAction)}}
+            {{#if (eq invite.room.roomId this.roomIdForCurrentAction)}}
               <LoadingIndicator />
             {{/if}}
           </div>
@@ -105,23 +108,26 @@ export default class RoomsManager extends Component {
       </div>
       <div class='room-manager__room-list' data-test-rooms-list>
         <h3>Rooms</h3>
-        {{#each this.sortedJoinedRooms as |room|}}
-          <div class='room-manager__room' data-test-joined-room={{room.name}}>
+        {{#each this.sortedJoinedRooms as |joined|}}
+          <div
+            class='room-manager__room'
+            data-test-joined-room={{joined.room.name}}
+          >
             <span class='room-manager__room__item'>
               <LinkTo
                 class='link'
-                data-test-enter-room={{room.name}}
+                data-test-enter-room={{joined.room.name}}
                 @route='chat.room'
-                @model={{room.roomId}}
+                @model={{joined.room.roomId}}
               >
-                {{room.name}}
+                {{joined.room.name}}
               </LinkTo>
             </span>
             <Button
-              data-test-leave-room-btn={{room.name}}
-              {{on 'click' (fn this.leaveRoom room.roomId)}}
+              data-test-leave-room-btn={{joined.room.name}}
+              {{on 'click' (fn this.leaveRoom joined.room.roomId)}}
             >Leave</Button>
-            {{#if (eq room.roomId this.roomIdForCurrentAction)}}
+            {{#if (eq joined.room.roomId this.roomIdForCurrentAction)}}
               <LoadingIndicator />
             {{/if}}
           </div>
@@ -142,32 +148,78 @@ export default class RoomsManager extends Component {
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
-    this.loadJoinedRooms.perform();
+    this.loadRooms.perform();
+  }
+
+  @cached
+  private get roomResources() {
+    let resources = new TrackedMap<string, RoomCardResource>();
+    for (let roomId of this.matrixService.roomCards.keys()) {
+      resources.set(
+        roomId,
+        getRoomCard(this, () => roomId)
+      );
+    }
+    return resources;
+  }
+
+  @cached
+  private get myRooms() {
+    let rooms: {
+      invited: { room: RoomCard; member: RoomMemberCard }[];
+      joined: { room: RoomCard; member: RoomMemberCard }[];
+    } = {
+      invited: [],
+      joined: [],
+    };
+    for (let resource of this.roomResources.values()) {
+      if (!resource.roomCard) {
+        continue;
+      }
+      let joinedMember = resource.roomCard.joinedMembers.find(
+        (m) => this.matrixService.client.getUserId() === m.userId
+      );
+      if (joinedMember) {
+        rooms.joined.push({ room: resource.roomCard, member: joinedMember });
+        continue;
+      }
+      let invitedMember = resource.roomCard.invitedMembers.find(
+        (m) => this.matrixService.client.getUserId() === m.userId
+      );
+      if (invitedMember) {
+        rooms.invited.push({ room: resource.roomCard, member: invitedMember });
+      }
+    }
+    return rooms;
   }
 
   @cached
   private get sortedJoinedRooms() {
-    return [...this.matrixService.joinedRooms.values()].sort(
-      (a, b) => a.timestamp - b.timestamp
+    return this.myRooms.joined.sort(
+      (a, b) =>
+        a.member.membershipDateTime.getTime() -
+        b.member.membershipDateTime.getTime()
     );
   }
 
   @cached
   private get sortedInvites() {
-    return [...this.matrixService.invites.values()].sort(
-      (a, b) => a.timestamp - b.timestamp
+    return this.myRooms.invited.sort(
+      (a, b) =>
+        a.member.membershipDateTime.getTime() -
+        b.member.membershipDateTime.getTime()
     );
   }
 
-  get newRoomInviteFormatted() {
+  private get newRoomInviteFormatted() {
     return this.newRoomInvite.join(', ');
   }
 
-  get cleanNewRoomName() {
+  private get cleanNewRoomName() {
     return this.newRoomName ?? '';
   }
 
-  get roomNameInputState() {
+  private get roomNameInputState() {
     return this.roomNameError ? 'invalid' : 'initial';
   }
 
@@ -245,20 +297,10 @@ export default class RoomsManager extends Component {
     this.roomIdForCurrentAction = undefined;
   });
 
-  private loadJoinedRooms = restartableTask(async () => {
+  private loadRooms = restartableTask(async () => {
     await this.matrixService.flushMembership;
-    let { joined_rooms: joinedRooms } =
-      await this.matrixService.client.getJoinedRooms();
-    const joinedRoomsTimeout = Date.now() + 1000 * 30;
-    for (;;) {
-      if (this.sortedJoinedRooms.length === joinedRooms.length) {
-        return;
-      }
-      if (Date.now() > joinedRoomsTimeout) {
-        throw new Error(`timed-out waiting for joined rooms`);
-      }
-      await timeout(50);
-    }
+    await this.matrixService.flushTimeline;
+    await Promise.all([...this.roomResources.values()].map((r) => r.loading));
   });
 
   private resetCreateRoom() {

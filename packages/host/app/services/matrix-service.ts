@@ -14,12 +14,7 @@ import { TrackedMap } from 'tracked-built-ins';
 import RouterService from '@ember/routing/router-service';
 import { importResource } from '../resources/import';
 import { marked } from 'marked';
-import {
-  Timeline,
-  Membership,
-  Room,
-  type RoomEvent as RoomEventInfo,
-} from '../lib/matrix-handlers';
+import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import type CardService from '../services/card-service';
 import ENV from '@cardstack/host/config/environment';
 import {
@@ -28,24 +23,10 @@ import {
 } from '@cardstack/runtime-common';
 import type LoaderService from './loader-service';
 import { type Card } from 'https://cardstack.com/base/card-api';
-import type { MatrixRoomCard } from 'https://cardstack.com/base/matrix-room';
+import type { RoomCard } from 'https://cardstack.com/base/room';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 const { matrixURL } = ENV;
-
-interface Room extends RoomMeta {
-  eventId: string;
-  roomId: string;
-  timestamp: number;
-}
-
-interface RoomInvite extends Room {
-  sender: string;
-}
-
-interface RoomMeta {
-  name?: string;
-}
 
 export type Event = Partial<IEvent>;
 
@@ -55,17 +36,14 @@ export default class MatrixService extends Service {
   @service declare cardService: CardService;
   @tracked private _client: MatrixClient | undefined;
 
-  invites: TrackedMap<string, RoomInvite> = new TrackedMap();
-  joinedRooms: TrackedMap<string, RoomEventInfo> = new TrackedMap();
-  rooms: Map<string, RoomMeta> = new Map();
-  roomEventConsumers: TrackedMap<string, MatrixRoomCard> = new TrackedMap();
+  roomCards: TrackedMap<string, Promise<RoomCard>> = new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
+  roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[] = [];
+  timelineQueue: MatrixEvent[] = [];
   #ready: Promise<void>;
   #matrixSDK: typeof MatrixSDK | undefined;
   #eventBindings: [EmittedEvents, (...arg: any[]) => void][] | undefined;
-  roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[] = [];
-  timelineQueue: MatrixEvent[] = [];
 
   constructor(properties: object) {
     super(properties);
@@ -98,7 +76,6 @@ export default class MatrixService extends Service {
         this.matrixSDK.RoomMemberEvent.Membership,
         Membership.onMembership(this),
       ],
-      [this.matrixSDK.RoomEvent.Name, Room.onRoomName(this)],
       [this.matrixSDK.RoomEvent.Timeline, Timeline.onTimeline(this)],
     ];
   });
@@ -132,7 +109,7 @@ export default class MatrixService extends Service {
     return this.cardAPIModule.module as typeof CardAPI;
   }
 
-  private get matrixSDK() {
+  get matrixSDK() {
     if (!this.#matrixSDK) {
       throw new Error(`cannot use matrix SDK before it has loaded`);
     }
@@ -201,6 +178,7 @@ export default class MatrixService extends Service {
       saveAuth(auth);
       this.bindEventListeners();
 
+      await this.initializeRoomStates();
       await this._client.startClient();
     }
   }
@@ -262,11 +240,16 @@ export default class MatrixService extends Service {
     await this.client.sendHtmlMessage(roomId, markdown, html);
   }
 
+  async initializeRoomStates() {
+    let { joined_rooms: joinedRooms } = await this.client.getJoinedRooms();
+    for (let roomId of joinedRooms) {
+      let stateEvents = await this.client.roomState(roomId);
+      await Promise.all(stateEvents.map((event) => addRoomEvent(this, event)));
+    }
+  }
+
   private resetState() {
-    this.invites = new TrackedMap();
-    this.joinedRooms = new TrackedMap();
-    this.rooms = new Map();
-    this.roomEventConsumers = new TrackedMap();
+    this.roomCards = new TrackedMap();
     this.roomMembershipQueue = [];
     this.timelineQueue = [];
     this.flushMembership = undefined;
