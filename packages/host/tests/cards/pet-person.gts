@@ -23,11 +23,13 @@ export class PetPerson extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <h3><@fields.firstName /></h3>
-      Pets:
-      <@fields.pets />
-      Friend:
-      <@fields.friend />
+      <div class='demo-card'>
+        <h3><@fields.firstName /></h3>
+        Pets:
+        <@fields.pets />
+        Friend:
+        <@fields.friend />
+      </div>
     </template>
   };
 }

@@ -7,7 +7,6 @@ import {
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import IntegerCard from 'https://cardstack.com/base/integer';
 import StringCard from 'https://cardstack.com/base/string';
-import { CardContainer } from '@cardstack/boxel-ui';
 import { Booking } from './booking';
 
 export class Pet extends Card {
@@ -25,28 +24,27 @@ export class Pet extends Card {
   });
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer
+      <div
         class='demo-card'
-        @displayBoundaries={{true}}
         {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
         ...attributes
       >
         <h3><@fields.firstName /></h3>
-        <div><@fields.sleepsOnTheCouch /></div>
-      </CardContainer>
+        <div>Sleeps On the Couch: <@fields.sleepsOnTheCouch /></div>
+      </div>
     </template>
   };
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <CardContainer class='demo-card' @displayBoundaries={{true}}>
+      <div class='demo-card'>
         <h2><@fields.firstName /></h2>
         <div>
-          <div><@fields.sleepsOnTheCouch /></div>
+          <div>Sleeps On the Couch: <@fields.sleepsOnTheCouch /></div>
           <div>Favorite Toy: <@fields.favoriteToy /></div>
           <div>Favorite Treat: <@fields.favoriteTreat /></div>
           <div>Cuteness Rating: <@fields.cutenessRating /></div>
         </div>
-      </CardContainer>
+      </div>
     </template>
   };
 }

@@ -6,6 +6,7 @@ const { Webpack } = require('@embroider/webpack');
 const webpack = require('webpack');
 const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
 const MomentLocalesPlugin = require('moment-locales-webpack-plugin');
+const { GlimmerScopedCSSWebpackPlugin } = require('glimmer-scoped-css/webpack');
 
 module.exports = function (defaults) {
   const app = new EmberApp(defaults, {
@@ -36,6 +37,7 @@ module.exports = function (defaults) {
             ],
           },
           plugins: [
+            new GlimmerScopedCSSWebpackPlugin(),
             new MonacoWebpackPlugin(),
             new webpack.ProvidePlugin({
               process: 'process',

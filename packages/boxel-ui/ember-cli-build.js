@@ -10,6 +10,9 @@ const { GlimmerScopedCSSWebpackPlugin } = require('glimmer-scoped-css/webpack');
 
 module.exports = function (defaults) {
   const app = new EmberAddon(defaults, {
+    'ember-cli-babel': {
+      enableTypeScriptTransform: true,
+    },
     vendorFiles: { 'jquery.js': null, 'app-shims.js': null },
   });
 
@@ -43,14 +46,7 @@ module.exports = function (defaults) {
             },
           ],
         },
-      },
-      plugins: [new GlimmerScopedCSSWebpackPlugin()],
-      resolveLoader: {
-        alias: {
-          'glimmer-scoped-css/virtual-loader': require.resolve(
-            'glimmer-scoped-css/virtual-loader'
-          ),
-        },
+        plugins: [new GlimmerScopedCSSWebpackPlugin()],
       },
       // publicAssetURL: '/boxel-ui/'
     },

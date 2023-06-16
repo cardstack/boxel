@@ -13,7 +13,7 @@ import BooleanCard from './boolean';
 import CardRefCard from './card-ref';
 import { baseCardRef, loadCard } from '@cardstack/runtime-common';
 import { isEqual } from 'lodash';
-import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
+import { FieldContainer } from '@cardstack/boxel-ui';
 
 export class CatalogEntry extends Card {
   static displayName = 'Catalog Entry';
@@ -54,10 +54,7 @@ export class CatalogEntry extends Card {
   // right now in the edit view.
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <CardContainer
-        class='catalog-entry catalog-entry--edit'
-        @displayBoundaries={{true}}
-      >
+      <div class='catalog-entry catalog-entry--edit'>
         <FieldContainer @tag='label' @label='Title' data-test-field='title'>
           <@fields.title />
         </FieldContainer>
@@ -77,27 +74,25 @@ export class CatalogEntry extends Card {
         <FieldContainer @vertical={{true}} @label='Demo' data-test-field='demo'>
           <@fields.demo />
         </FieldContainer>
-      </CardContainer>
+      </div>
     </template>
   };
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <CardContainer
-        class='catalog-entry catalog-entry--embedded'
-        @displayBoundaries={{true}}
-      >
+      <div class='catalog-entry catalog-entry--embedded'>
         <header><@fields.title /></header>
         <div class='catalog-entry__realm-name' data-test-realm-name>
-          in <@fields.realmName />
+          in
+          <@fields.realmName />
         </div>
-      </CardContainer>
+      </div>
     </template>
   };
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <CardContainer class='catalog-entry' @displayBoundaries={{true}}>
+      <div class='catalog-entry'>
         <h1 data-test-title><@fields.title /></h1>
         <em data-test-description><@fields.description /></em>
         <div data-test-ref>
@@ -107,12 +102,13 @@ export class CatalogEntry extends Card {
           {{@model.ref.name}}
         </div>
         <div class='catalog-entry__realm-name' data-test-realm-name>
-          in <@fields.realmName />
+          in
+          <@fields.realmName />
         </div>
         {{#if @model.showDemo}}
           <div data-test-demo><@fields.demo /></div>
         {{/if}}
-      </CardContainer>
+      </div>
     </template>
   };
 }

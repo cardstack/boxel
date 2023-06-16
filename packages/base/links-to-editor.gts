@@ -18,7 +18,7 @@ import {
   identifyCard,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
-import { CardContainer, Button, IconButton } from '@cardstack/boxel-ui';
+import { Button, IconButton } from '@cardstack/boxel-ui';
 
 interface Signature {
   Args: {
@@ -41,9 +41,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
           </Button>
         {{/if}}
       {{else}}
-        <CardContainer class='links-to-editor__item'>
-          <this.linkedCard />
-        </CardContainer>
+        <this.linkedCard />
         <IconButton
           @icon='icon-minus-circle'
           @width='20px'
