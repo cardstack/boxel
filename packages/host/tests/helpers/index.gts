@@ -6,6 +6,7 @@ import {
   LooseSingleCardDocument,
   baseRealm,
   createResponse,
+  RealmInfo,
 } from '@cardstack/runtime-common';
 import GlimmerComponent from '@glimmer/component';
 import { type TestContext, visit } from '@ember/test-helpers';
@@ -52,7 +53,10 @@ export interface Dir {
 }
 
 export const testRealmURL = `http://test-realm/test/`;
-export const testRealmName = `Test Realm`;
+export const testRealmInfo: RealmInfo = {
+  name: 'Unnamed Workspace',
+  backgroundURL: null,
+};
 
 export interface CardDocFiles {
   [filename: string]: LooseSingleCardDocument;

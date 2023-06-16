@@ -1,4 +1,5 @@
 import { type CardRef, isCardRef } from './card-ref';
+import { RealmInfo } from './realm';
 
 export type Saved = string;
 export type Unsaved = string | undefined;
@@ -25,10 +26,6 @@ export type Relationship = {
   data?: ResourceID | ResourceID[] | null;
   meta?: Record<string, any>;
 };
-
-export type RealmInfo = {
-  name: string;
-}
 
 export interface CardResource<Identity extends Unsaved = Saved> {
   id: Identity;
