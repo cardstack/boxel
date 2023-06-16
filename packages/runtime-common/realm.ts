@@ -69,6 +69,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
+import { scopedCSSTransform } from 'glimmer-scoped-css';
 
 export interface FileRef {
   path: LocalPath;
@@ -424,6 +425,7 @@ export class Realm {
 
     let templateOptions: EmberTemplatePluginOptions = {
       compiler: etc as unknown as EmberTemplateCompiler,
+      transforms: [scopedCSSTransform],
     };
 
     let src = babel.transformSync(content, {
