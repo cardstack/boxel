@@ -43,8 +43,10 @@ import {
 } from './stream';
 import { preprocessEmbeddedTemplates } from '@cardstack/ember-template-imports/lib/preprocess-embedded-templates';
 import * as babel from '@babel/core';
-//@ts-ignore types are not found by consuming packages
+//@ts-ignore type import requires a newer Typescript with node16 moduleResolution
 import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation/browser';
+import type { Options as EmberTemplatePluginOptions } from 'babel-plugin-ember-template-compilation/src/plugin';
+import type { EmberTemplateCompiler } from 'babel-plugin-ember-template-compilation/src/ember-template-compiler';
 //@ts-ignore no types are available
 import * as etc from 'ember-source/dist/ember-template-compiler';
 import { loaderPlugin } from './loader-plugin';
@@ -419,6 +421,11 @@ export class Realm {
       includeSourceMaps: true,
       includeTemplateTokens: true,
     }).output;
+
+    let templateOptions: EmberTemplatePluginOptions = {
+      compiler: etc as unknown as EmberTemplateCompiler,
+    };
+
     let src = babel.transformSync(content, {
       filename: debugFilename,
       compact: false, // this helps for readability when debugging
@@ -428,7 +435,7 @@ export class Realm {
         [typescriptPlugin, { allowDeclareFields: true }],
         [decoratorsProposalPlugin, { legacy: true }],
         classPropertiesProposalPlugin,
-        [makeEmberTemplatePlugin, { compiler: etc }],
+        [makeEmberTemplatePlugin, templateOptions],
         loaderPlugin,
       ],
     })?.code;
