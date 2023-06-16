@@ -2111,6 +2111,75 @@ module('Integration | serialization', function (hooks) {
       assert.deepEqual(relationship, { type: 'loaded', card: null });
     });
 
+    test('can deserialize a computed linksTo relationship that does not include all the related resources', async function (assert) {
+      let {
+        field,
+        contains,
+        linksTo,
+        Card,
+        createFromSerialized,
+        relationshipMeta,
+      } = cardApi;
+      let { default: StringCard } = string;
+      class Pet extends Card {
+        @field name = contains(StringCard);
+      }
+      class Person extends Card {
+        @field firstName = contains(StringCard);
+        @field friend = linksTo(() => Person);
+        @field pet = linksTo(Pet);
+        @field friendPet = linksTo(Pet, {
+          computeVia: function (this: Person) {
+            return this.friend?.pet;
+          },
+        });
+      }
+      await shimModule(`${realmURL}test-cards`, { Pet, Person });
+      let doc: LooseSingleCardDocument = {
+        data: {
+          type: 'card',
+          attributes: { firstName: 'Burcu' },
+          relationships: {
+            pet: { links: { self: null } },
+            friend: { links: { self: `${realmURL}Person/hassan` } },
+            friendPet: { links: { self: `${realmURL}Pet/mango` } },
+          },
+          meta: {
+            adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+          },
+        },
+      };
+      let card = await createFromSerialized<typeof Person>(
+        doc.data,
+        doc,
+        undefined
+      );
+
+      try {
+        card.friendPet;
+        throw new Error(`expected error not thrown`);
+      } catch (err: any) {
+        assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
+        assert.ok(
+          err.message.match(
+            /The field Person\.friendPet refers to the card instance https:\/\/test-realm\/Pet\/mango which is not loaded/,
+            'NotLoaded error describes field not loaded'
+          )
+        );
+      }
+      let friendRel = relationshipMeta(card, 'friend');
+      assert.deepEqual(friendRel, {
+        type: 'not-loaded',
+        reference: `${realmURL}Person/hassan`,
+      });
+
+      let friendPetRel = relationshipMeta(card, 'friendPet');
+      assert.deepEqual(friendPetRel, {
+        type: 'not-loaded',
+        reference: `${realmURL}Pet/mango`,
+      });
+    });
+
     skip(
       'can serialize a computed linksTo relationship that points to own card class'
     );
