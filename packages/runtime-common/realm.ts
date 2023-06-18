@@ -43,7 +43,10 @@ import {
 } from './stream';
 import { preprocessEmbeddedTemplates } from '@cardstack/ember-template-imports/lib/preprocess-embedded-templates';
 import * as babel from '@babel/core';
-import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation';
+//@ts-ignore type import requires a newer Typescript with node16 moduleResolution
+import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation/browser';
+import type { Options as EmberTemplatePluginOptions } from 'babel-plugin-ember-template-compilation/src/plugin';
+import type { EmberTemplateCompiler } from 'babel-plugin-ember-template-compilation/src/ember-template-compiler';
 //@ts-ignore no types are available
 import * as etc from 'ember-source/dist/ember-template-compiler';
 import { loaderPlugin } from './loader-plugin';
@@ -418,6 +421,11 @@ export class Realm {
       includeSourceMaps: true,
       includeTemplateTokens: true,
     }).output;
+
+    let templateOptions: EmberTemplatePluginOptions = {
+      compiler: etc as unknown as EmberTemplateCompiler,
+    };
+
     let src = babel.transformSync(content, {
       filename: debugFilename,
       compact: false, // this helps for readability when debugging
@@ -427,18 +435,7 @@ export class Realm {
         [typescriptPlugin, { allowDeclareFields: true }],
         [decoratorsProposalPlugin, { legacy: true }],
         classPropertiesProposalPlugin,
-        // this "as any" is because typescript is using the Node-specific types
-        // from babel-plugin-ember-template-compilation, but we're using the
-        // browser interface
-        isNode
-          ? [
-              makeEmberTemplatePlugin,
-              {
-                precompile: etc.precompile,
-              },
-            ]
-          : // TODO type this better
-            (makeEmberTemplatePlugin as any)(() => etc.precompile),
+        [makeEmberTemplatePlugin, templateOptions],
         loaderPlugin,
       ],
     })?.code;
