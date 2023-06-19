@@ -810,6 +810,10 @@ export class Loader {
   }
 
   private async load(moduleURL: ResolvedURL): Promise<string> {
+    console.log(`loading ${moduleURL}`);
+    if (moduleURL.toString().includes('glimmer-scoped')) {
+      return Promise.resolve('// a glimmer scoped comment');
+    }
     let response: Response;
     try {
       response = await this.fetch(moduleURL);
