@@ -4014,7 +4014,7 @@ module('Integration | serialization', function (hooks) {
       let hassan = new Friend({ firstName: 'Hassan', pets: [mango, vanGogh] });
       await saveCard(mango, `${realmURL}Pet/mango`);
       await saveCard(vanGogh, `${realmURL}Pet/van-gogh`);
-      await saveCard(hassan, `${realmURL}Person/hassan`);
+      await saveCard(hassan, `${realmURL}Friend/hassan`);
       let burcu = new Person({ firstName: 'Burcu', friend: hassan });
       let serialized = serializeCard(burcu, {
         includeComputeds: true,
@@ -4025,8 +4025,8 @@ module('Integration | serialization', function (hooks) {
         attributes: { firstName: 'Burcu', title: null },
         relationships: {
           friend: {
-            links: { self: `${realmURL}Person/hassan` },
-            data: { id: `${realmURL}Person/hassan`, type: 'card' },
+            links: { self: `${realmURL}Friend/hassan` },
+            data: { id: `${realmURL}Friend/hassan`, type: 'card' },
           },
           'friendPets.0': {
             links: { self: `${realmURL}Pet/mango` },
@@ -4060,7 +4060,7 @@ module('Integration | serialization', function (hooks) {
           },
         },
         {
-          id: `${realmURL}Person/hassan`,
+          id: `${realmURL}Friend/hassan`,
           type: 'card',
           attributes: { firstName: 'Hassan', title: null },
           relationships: {
@@ -4115,8 +4115,8 @@ module('Integration | serialization', function (hooks) {
           attributes: { firstName: 'Burcu', title: null },
           relationships: {
             friend: {
-              links: { self: `${realmURL}Person/hassan` },
-              data: { id: `${realmURL}Person/hassan`, type: 'card' },
+              links: { self: `${realmURL}Friend/hassan` },
+              data: { id: `${realmURL}Friend/hassan`, type: 'card' },
             },
             'friendPets.0': {
               links: { self: `${realmURL}Pet/mango` },
@@ -4149,7 +4149,7 @@ module('Integration | serialization', function (hooks) {
             },
           },
           {
-            id: `${realmURL}Person/hassan`,
+            id: `${realmURL}Friend/hassan`,
             type: 'card',
             attributes: { firstName: 'Hassan', title: null },
             relationships: {
