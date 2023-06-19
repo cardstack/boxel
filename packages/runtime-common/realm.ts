@@ -69,7 +69,8 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
-import { scopedCSSTransform } from 'glimmer-scoped-css';
+import scopedCSSTransform from 'glimmer-scoped-css/ast-transform';
+import type scopedCSSTransformType from 'glimmer-scoped-css/src/ast-transform';
 
 export interface FileRef {
   path: LocalPath;

@@ -14,9 +14,6 @@ patchedDependencies:
   fastboot@4.1.0:
     hash: kizxbxhfcldguz4jcwonfduu2y
     path: patches/fastboot@4.1.0.patch
-  glimmer-scoped-css@0.3.1:
-    hash: zfblvld47pzyqjhaty4ni45q2y
-    path: patches/glimmer-scoped-css@0.3.1.patch
   magic-string@0.25.9:
     hash: sbmabuxrk2m44agmppz3qozwvq
     path: patches/magic-string@0.25.9.patch
@@ -661,7 +658,7 @@ importers:
         version: 7.4.3
       glimmer-scoped-css:
         specifier: ^0.3.1
-        version: 0.3.1(patch_hash=zfblvld47pzyqjhaty4ni45q2y)
+        version: 0.3.1
       lodash:
         specifier: ^4.17.21
         version: 4.17.21
@@ -1074,7 +1071,7 @@ importers:
         version: 5.0.2
       glimmer-scoped-css:
         specifier: ^0.3.1
-        version: 0.3.1(patch_hash=zfblvld47pzyqjhaty4ni45q2y)
+        version: 0.3.1
       ignore:
         specifier: ^5.2.0
         version: 5.2.0
@@ -1396,8 +1393,8 @@ importers:
         specifier: ^5.0.2
         version: 5.0.2
       glimmer-scoped-css:
-        specifier: ^0.3.1
-        version: 0.3.1(patch_hash=zfblvld47pzyqjhaty4ni45q2y)
+        specifier: ^0.3.2
+        version: 0.3.2
       http-status-codes:
         specifier: ^2.2.0
         version: 2.2.0
@@ -2278,7 +2275,7 @@ packages:
       '@babel/core': ^7.0.0-0
     dependencies:
       '@babel/core': 7.21.0(supports-color@8.1.1)
-      '@babel/helper-create-class-features-plugin': 7.20.2(@babel/core@7.21.0)
+      '@babel/helper-create-class-features-plugin': 7.21.8(@babel/core@7.21.0)
       '@babel/helper-plugin-utils': 7.20.2
     transitivePeerDependencies:
       - supports-color
@@ -15553,7 +15550,7 @@ packages:
       through: 2.2.7
     dev: true
 
-  /glimmer-scoped-css@0.3.1(patch_hash=zfblvld47pzyqjhaty4ni45q2y):
+  /glimmer-scoped-css@0.3.1:
     resolution: {integrity: sha512-dYQqZIIj5bFHAy6GVxy+hOAqy26KbrBjHmIGt2YIhXZgERzgXJKpf1YNd/SfzD1d4zgiiHDfCUnJ3MlQu1l23w==}
     dependencies:
       '@embroider/addon-shim': 1.8.5
@@ -15563,7 +15560,17 @@ packages:
       super-fast-md5: 1.0.1
     transitivePeerDependencies:
       - supports-color
-    patched: true
+
+  /glimmer-scoped-css@0.3.2:
+    resolution: {integrity: sha512-DW8LyfbH1XUMgswPxXJOl3b/bMNZ6UjbYeWSoiALHFRsIeTZgf0oYgSrzxTX/QArMvuLn42O2UbZ9trwZRD6LQ==}
+    dependencies:
+      '@embroider/addon-shim': 1.8.5
+      js-string-escape: 1.0.1
+      postcss: 8.4.23
+      postcss-selector-parser: 6.0.12
+      super-fast-md5: 1.0.1
+    transitivePeerDependencies:
+      - supports-color
 
   /glob-parent@3.1.0:
     resolution: {integrity: sha512-E8Ak/2+dZY6fnzlR7+ueWvhsH1SjHr4jjss4YS/h4py44jY9MhK/VFdaZJAWDz6BbL21KeteKxFSFpq8OS5gVA==}
@@ -25010,7 +25017,7 @@ packages:
       ember-concurrency-async-plugin: link:vendor/ember-concurrency-async-plugin
       ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0)
       flat: 5.0.2
-      glimmer-scoped-css: 0.3.1(patch_hash=zfblvld47pzyqjhaty4ni45q2y)
+      glimmer-scoped-css: 0.3.2
       http-status-codes: 2.2.0
       ignore: 5.2.4
       json-typescript: 1.1.2
