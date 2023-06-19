@@ -176,4 +176,9 @@ export default class CardService extends Service {
     await this.apiModule.loaded;
     return this.api.primitive in card;
   }
+
+  async realmInfoSymbol(): Promise<Symbol> {
+    await this.apiModule.loaded;
+    return this.api.realmInfo;
+  }
 }
