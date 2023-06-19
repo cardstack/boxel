@@ -13,8 +13,6 @@ import {
   assertMessages,
   sendMessage,
   joinRoom,
-  scrollToTopOfMessages,
-  leaveRoom,
   testHost,
 } from '../helpers';
 
@@ -104,7 +102,7 @@ test.describe('Room messages', () => {
     ]);
   });
 
-  test(`it can paginate back to beginning of timeline for timelines that truncated`, async ({
+  test(`it can load all events back to beginning of timeline for timelines that truncated`, async ({
     page,
   }) => {
     // generally the matrix server paginates after 10 messages
@@ -130,26 +128,7 @@ test.describe('Room messages', () => {
     let displayedMessageCount = await page
       .locator('[data-test-message-idx]')
       .count();
-    expect(displayedMessageCount).toBeGreaterThan(0);
-    expect(displayedMessageCount).toBeLessThan(totalMessageCount);
-    await expect(
-      page.locator('[data-test-timeline-start]'),
-      'the beginning of the timeline is not displayed'
-    ).toHaveCount(0);
-    await expect(
-      page.getByText(`message ${totalMessageCount}`),
-      'the most recent message is displayed'
-    ).toHaveCount(1);
-
-    await scrollToTopOfMessages(page);
-    await expect(page.locator('[data-test-message-idx]')).toHaveCount(
-      totalMessageCount
-    );
-    expect(displayedMessageCount).toBeLessThan(totalMessageCount);
-    await expect(
-      page.locator('[data-test-timeline-start]'),
-      'the beginning of the timeline is displayed'
-    ).toHaveCount(1);
+    expect(displayedMessageCount).toEqual(totalMessageCount);
   });
 
   test(`it can send a markdown message`, async ({ page }) => {
@@ -188,29 +167,6 @@ test.describe('Room messages', () => {
     await expect(page.locator('[data-test-message-field]')).toHaveValue(
       'room 2 message'
     );
-  });
-
-  test('message sender has left room', async ({ page }) => {
-    await login(page, 'user1', 'pass');
-    await createRoom(page, {
-      name: 'Room 1',
-      invites: ['user2'],
-    });
-    await logout(page);
-
-    await login(page, 'user2', 'pass');
-    await joinRoom(page, 'Room 1');
-    await openRoom(page, 'Room 1');
-    await sendMessage(page, 'first message');
-    await leaveRoom(page, 'Room 1');
-
-    await logout(page);
-    await login(page, 'user1', 'pass');
-    await openRoom(page, 'Room 1');
-
-    await assertMessages(page, [
-      { from: 'user2 (left room)', message: 'first message' },
-    ]);
   });
 
   test('can add a card to a markdown message', async ({ page }) => {

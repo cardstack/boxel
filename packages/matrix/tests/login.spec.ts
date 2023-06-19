@@ -65,8 +65,9 @@ test.describe('Login', () => {
   test('it shows an error when invalid credentials are provided', async ({
     page,
   }) => {
-    await login(page, 'user1', 'bad pass');
-
+    await page.goto(`${rootPath}/chat`);
+    await page.locator('[data-test-username-field]').fill('user1');
+    await page.locator('[data-test-password-field]').fill('bad pass');
     await expect(
       page.locator('[data-test-login-error]'),
       'login error message is not displayed'

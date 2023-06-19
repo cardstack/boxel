@@ -40,7 +40,7 @@ test.describe('Room membership', () => {
     await login(page, 'user2', 'pass');
 
     await assertRooms(page, {
-      invitedRooms: [{ name: 'Room 1', sender: '@user1:localhost' }],
+      invitedRooms: [{ name: 'Room 1', sender: 'user1' }],
     });
     await page.locator('[data-test-decline-room-btn="Room 1"]').click();
     await assertRooms(page, {});
@@ -59,7 +59,7 @@ test.describe('Room membership', () => {
     await login(page, 'user2', 'pass');
 
     await assertRooms(page, {
-      invitedRooms: [{ name: 'Room 1', sender: '@user1:localhost' }],
+      invitedRooms: [{ name: 'Room 1', sender: 'user1' }],
     });
     await joinRoom(page, 'Room 1');
     await assertRooms(page, {

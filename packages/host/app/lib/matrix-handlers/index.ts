@@ -4,10 +4,16 @@ import {
   type MatrixClient,
   type IEvent,
 } from 'matrix-js-sdk';
+import type {
+  RoomCard,
+  MatrixEvent as DiscreteMatrixEvent,
+} from 'https://cardstack.com/base/room';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import { type LooseCardResource, baseRealm } from '@cardstack/runtime-common';
+import type * as MatrixSDK from 'matrix-js-sdk';
 
 export * as Membership from './membership';
 export * as Timeline from './timeline';
-export * as Room from './room';
 
 export interface RoomEvent extends RoomMeta {
   eventId: string;
@@ -26,28 +32,14 @@ export interface RoomMeta {
 export type Event = Partial<IEvent>;
 
 export interface Context {
-  roomMembers: Map<
-    string,
-    Map<string, { member: RoomMember; status: 'join' | 'invite' }>
-  >;
-  invites: Map<string, RoomInvite>;
-  joinedRooms: Map<string, RoomEvent>;
-  rooms: Map<string, RoomMeta>;
-  timelines: Map<string, Map<string, Event>>;
+  roomCards: Map<string, Promise<RoomCard>>;
   flushTimeline: Promise<void> | undefined;
-  // we process the matrix events in batched queues so that we can collapse the
-  // interstitial state between events to prevent unnecessary flashing on the
-  // screen, i.e. user was invited to a room and then declined the invite should
-  // result in nothing happening on the screen as opposed to an item appearing
-  // in the invite list and then immediately disappearing.
-  roomMembershipQueue: (
-    | (RoomInvite & { type: 'invite' })
-    | (RoomEvent & { type: 'join' })
-    | { type: 'leave'; roomId: string }
-  )[];
+  flushMembership: Promise<void> | undefined;
+  roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[];
   timelineQueue: MatrixEvent[];
-  mapClazz: typeof Map;
+  cardAPI: typeof CardAPI;
   client: MatrixClient;
+  matrixSDK: typeof MatrixSDK;
   handleMessage?: (
     context: Context,
     event: Event,
@@ -55,21 +47,46 @@ export interface Context {
   ) => Promise<void>;
 }
 
-export function setRoomMeta(context: Context, roomId: string, meta: RoomMeta) {
-  let roomMeta = context.rooms.get(roomId);
-  if (!roomMeta) {
-    roomMeta = {};
-    context.rooms.set(roomId, roomMeta);
+export async function addRoomEvent(context: Context, event: Event) {
+  let { event_id: eventId, room_id: roomId, state_key: stateKey } = event;
+  eventId = eventId ?? stateKey; // room state may not necessary have an event ID
+  if (!eventId) {
+    throw new Error(
+      `bug: event ID is undefined for event ${JSON.stringify(event, null, 2)}`
+    );
   }
-  if (meta.name !== undefined) {
-    roomMeta.name = meta.name;
+  if (!roomId) {
+    throw new Error(
+      `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`
+    );
   }
-  let invite = context.invites.get(roomId);
-  if (invite) {
-    context.invites.set(roomId, { ...invite, ...roomMeta });
+  let roomCard = context.roomCards.get(roomId);
+  if (!roomCard) {
+    let data: LooseCardResource = {
+      attributes: {
+        id: roomId,
+      },
+      meta: {
+        adoptsFrom: {
+          name: 'RoomCard',
+          module: `${baseRealm.url}room`,
+        },
+      },
+    };
+    roomCard = context.cardAPI.createFromSerialized<typeof RoomCard>(
+      data,
+      { data },
+      undefined
+    );
+    context.roomCards.set(roomId, roomCard);
   }
-  let joinedRoom = context.joinedRooms.get(roomId);
-  if (joinedRoom) {
-    context.joinedRooms.set(roomId, { ...joinedRoom, ...roomMeta });
+  let resolvedRoomCard = await roomCard;
+
+  // duplicate events may be emitted from matrix, as well as the resolved room card might already contain this event
+  if (!resolvedRoomCard.events.find((e) => e.event_id === eventId)) {
+    resolvedRoomCard.events = [
+      ...(resolvedRoomCard.events ?? []),
+      event as unknown as DiscreteMatrixEvent,
+    ];
   }
 }

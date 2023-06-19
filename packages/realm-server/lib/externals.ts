@@ -13,6 +13,10 @@ export function shimExternals(loader: Loader = Loader.getLoader()) {
   loader.shimModule('@cardstack/boxel-ui/helpers/svg-jar', {
     svgJar() {},
   });
+  // import * as boxelCssVar from '@cardstack/boxel-ui/helpers/css-var';
+  loader.shimModule('@cardstack/boxel-ui/helpers/css-var', {
+    cssVar() {},
+  });
   // import * as boxelPickHelper from "@cardstack/boxel-ui/helpers/pick";
   loader.shimModule('@cardstack/boxel-ui/helpers/pick', {
     default() {},
