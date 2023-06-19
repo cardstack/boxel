@@ -235,11 +235,6 @@ export default class MatrixService extends Service {
     }
   }
 
-  async sendMarkdownMessage(roomId: string, markdown: string): Promise<void> {
-    let html = sanitizeHtml(marked(markdown));
-    await this.client.sendHtmlMessage(roomId, markdown, html);
-  }
-
   async initializeRoomStates() {
     let { joined_rooms: joinedRooms } = await this.client.getJoinedRooms();
     for (let roomId of joinedRooms) {
