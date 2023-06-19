@@ -70,6 +70,11 @@ import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
 
+export type RealmInfo = {
+  name: string;
+  backgroundURL: string | null;
+}
+
 export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
@@ -790,13 +795,15 @@ export class Realm {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
     let realmConfig = await this.readFileAsText(localPath);
-    let name = 'Unnamed Workspace';
+    let realmInfo: RealmInfo = {
+      name: 'Unnamed Workspace',
+      backgroundURL: null,
+    }
     if (realmConfig) {
       try {
         let realmConfigJson = JSON.parse(realmConfig.content);
-        if (realmConfigJson.name) {
-          name = realmConfigJson.name;
-        }
+        realmInfo.name = realmConfigJson.name ?? realmInfo.name;
+        realmInfo.backgroundURL = realmConfigJson.backgroundURL ?? realmInfo.backgroundURL;
       } catch (e) {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }
@@ -805,9 +812,7 @@ export class Realm {
       data: {
         id: this.paths.url.toString(),
         type: 'realm-info',
-        attributes: {
-          name,
-        },
+        attributes: realmInfo,
       },
     };
     return createResponse(JSON.stringify(doc, null, 2), {

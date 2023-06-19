@@ -104,7 +104,8 @@ module('Realm Server', function (hooks) {
             name: 'Person',
           },
           realmInfo: {
-            "name": "Test Realm"
+            "name": "Test Realm",
+            "backgroundURL": null
           },
           realmURL: "http://127.0.0.1:4444/",
         },
@@ -428,6 +429,7 @@ module('Realm Server', function (hooks) {
           type: 'realm-info',
           attributes: {
             name: 'Test Realm',
+            backgroundURL: null,
           },
         },
       },
