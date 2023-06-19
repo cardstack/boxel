@@ -44,6 +44,14 @@ function upsertRoomMember({
     roomMemberCache.set(roomCard, roomMembers);
   }
   let member = roomMembers.get(userId);
+  if (
+    member?.membershipDateTime != null &&
+    membershipTs != null &&
+    member.membershipDateTime.getTime() > membershipTs
+  ) {
+    // the member data provided is actually older than what we have in our cache
+    return member;
+  }
   if (!member) {
     member = new RoomMemberCard({ id: userId, userId });
     roomMembers.set(userId, member);
@@ -316,14 +324,7 @@ export class RoomCard extends Card {
         roomMemberCache.set(this, roomMembers);
       }
 
-      // The room member events are very much out of order chronologically,
-      // so using this.newEvents results in broken behavior as it is not
-      // uncommon to get an older invite event in a subsequent batch of events
-      // after the join event for a member has already been processed
-      for (let event of this.events.sort(
-        // it's really important to process membership events chronologically
-        (a, b) => a.origin_server_ts - b.origin_server_ts
-      )) {
+      for (let event of this.newEvents) {
         if (event.type !== 'm.room.member') {
           continue;
         }
