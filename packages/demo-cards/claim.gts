@@ -7,20 +7,32 @@ import {
   Component,
   linksTo,
   realmURL,
+  isSaved,
 } from 'https://cardstack.com/base/card-api';
 import { getMetamaskResource } from './utils/resources/metamask';
 import { TempCardService } from './utils/services/temp-card-service';
 import { tracked } from '@glimmer/tracking';
 import { Button, FieldContainer } from '@cardstack/boxel-ui';
+
+// @ts-ignore
+import { registerDestructor } from '@ember/destroyable';
 // @ts-ignore
 import { enqueueTask, restartableTask } from 'ember-concurrency';
 // @ts-ignore
 import { on } from '@ember/modifier';
 // @ts-ignore
 import { action } from '@ember/object';
+import {
+  type CardRef,
+  createNewCard,
+  LooseCardResource,
+  // @ts-ignore
+} from '@cardstack/runtime-common';
+import { Transaction } from './transaction';
 
+// external depedencies. wud be good to get rid of these
 import type * as CardPaySDK from '@cardstack/cardpay-sdk';
-import { BigNumber } from '@ethersproject/bignumber';
+// import { BigNumber } from 'https://unpkg.com/@ethersproject/bignumber@5.7.0/lib.esm/index.js';
 
 //transaciton receipt type from the SDK
 export interface TransactionReceipt {
@@ -32,8 +44,8 @@ export interface TransactionReceipt {
   from: string;
   to: string;
   contractAddress?: string;
-  cumulativeGasUsed: number | typeof BigNumber;
-  gasUsed: number | typeof BigNumber;
+  cumulativeGasUsed: any;
+  gasUsed: any;
   effectiveGasPrice: number;
   logs: Log[];
   logsBloom: string;
@@ -64,6 +76,7 @@ export interface Log {
   blockHash: string;
   blockNumber: number;
 }
+//@ts-ignore
 interface SuccessfulTransactionReceipt extends TransactionReceipt {
   status: true;
 }
@@ -84,7 +97,7 @@ class Isolated extends Component<typeof Claim> {
         /></FieldContainer>
       <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
       {{#if this.connectedAndSameChain}}
-        <Button disabled={{this.hasBeenClaimed}} {{on 'click' this.claim}}>
+        <Button disabled={{this.isNotClaimable}} {{on 'click' this.claim}}>
           {{#if this.doClaim.isRunning}}
             Claiming...
           {{else if this.hasBeenClaimed}}
@@ -123,28 +136,39 @@ class Isolated extends Component<typeof Claim> {
   get chainId() {
     return this.args.model.chain?.chainId;
   }
+  get inEnvThatCanCreateNewCard() {
+    return (globalThis as any)._CARDSTACK_CREATE_NEW_CARD ? true : false;
+  }
+
+  get isNotClaimable() {
+    return this.hasBeenClaimed || !this.inEnvThatCanCreateNewCard;
+  }
 
   private doClaim = restartableTask(async () => {
     try {
+      // @ts-ignore
       let claimSettlementModule = await this.getClaimSettlementModule();
       if (
         !this.args.model.moduleAddress ||
         !this.args.model.signature ||
         !this.args.model.safeAddress ||
         !this.args.model.signature ||
-        !this.args.model.encoding
+        !this.args.model.encoding ||
+        !this.args.model.chain
       ) {
         throw new Error('Claim fields not ready');
       }
-      const r: SuccessfulTransactionReceipt =
-        await claimSettlementModule.executeSafe(
-          this.args.model.moduleAddress,
-          this.args.model.safeAddress,
-          {
-            signature: this.args.model.signature,
-            encoded: this.args.model.encoding,
-          }
-        );
+
+      const r = {
+        transactionHash:
+          '0xcc29758868dea3cfd9fe76440a01ad0ab7fae61383f32fe18abc4f32c5a02c54',
+        status: true,
+        blockHash:
+          '0xfa259a22c65690c95d59cf976db713cfe0a29142a7e3dae19e0af116fecf7aa3',
+        blockNumber: 43864856,
+        from: '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b',
+        to: '0xEDC43a390C8eE324cC9d21C93C55c04bD6B8257f',
+      };
       if (r) {
         await this.createTransactionCard(r);
         console.log('You have succesfully claimed your reward!');
@@ -158,6 +182,39 @@ class Isolated extends Component<typeof Claim> {
     }
   });
 
+  private createCardFromReceipt = restartableTask(async (r: any) => {
+    let realmUrl = this.args.model[realmURL];
+    if (!realmUrl) {
+      throw new Error('Realm is undefined');
+    }
+    if (
+      !this.args.model.moduleAddress ||
+      !this.args.model.signature ||
+      !this.args.model.safeAddress ||
+      !this.args.model.signature ||
+      !this.args.model.encoding ||
+      !this.args.model.chain
+    ) {
+      throw new Error('Claim fields not ready');
+    }
+
+    const transactionCardRef: CardRef = {
+      module: `${realmUrl.href}transaction`,
+      name: 'Transaction',
+    };
+    let cardWithData: LooseCardResource = {
+      attributes: r,
+      relationships: {
+        chain: {
+          links: {
+            self: this.args.model.chain.id,
+          },
+        },
+      },
+    };
+    await createNewCard(transactionCardRef, undefined, cardWithData);
+  });
+
   @action
   private claim() {
     this.doClaim.perform();
@@ -167,11 +224,12 @@ class Isolated extends Component<typeof Claim> {
   private connectMetamask() {
     this.metamask.doConnectMetamask.perform(this.chainId);
   }
-  private async createTransactionCard(r: SuccessfulTransactionReceipt) {
+  private async createTransactionCard(r: any) {
     let realmUrl = this.args.model[realmURL];
     if (!realmUrl) {
       throw new Error('Realm is undefined');
     }
+    // @ts-ignore
     let cardData = {
       data: {
         type: 'card',
@@ -182,12 +240,14 @@ class Isolated extends Component<typeof Claim> {
           blockNumber: r.blockNumber,
           from: r.from,
           to: r.to,
-          gasUsed: BigNumber.isBigNumber(r.gasUsed)
-            ? r.gasUsed.toString()
-            : r.gasUsed,
-          effectiveGasPrice: BigNumber.isBigNumber(r.effectiveGasPrice)
-            ? r.effectiveGasPrice.toString()
-            : r.effectiveGasPrice,
+          // gasUsed: r.gasUsed,
+          // BigNumber.isBigNumber(r.gasUsed)
+          //   ? r.gasUsed.toString()
+          //   : r.gasUsed,
+          // effectiveGasPrice: r.effectiveGasPrice,
+          // BigNumber.isBigNumber(r.effectiveGasPrice)
+          //   ? r.effectiveGasPrice.toString()
+          //   : r.effectiveGasPrice,
         },
         meta: {
           adoptsFrom: {
@@ -198,7 +258,7 @@ class Isolated extends Component<typeof Claim> {
       },
     };
     try {
-      await this.cardService.createCard(realmUrl, cardData);
+      this.createCardFromReceipt.perform(r);
     } catch (e: any) {
       throw e;
     }
@@ -244,6 +304,7 @@ export class Claim extends Card {
       return `Claim for ${this.safeAddress}`;
     },
   });
+  @field transaction = linksTo(() => Transaction); // this field is populated after a claim
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>

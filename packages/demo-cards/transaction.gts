@@ -3,11 +3,13 @@ import {
   field,
   Component,
   Card,
+  linksTo,
 } from 'https://cardstack.com/base/card-api';
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import StringCard from 'https://cardstack.com/base/string';
 import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 import IntegerCard from 'https://cardstack.com/base/integer';
+import { Chain } from './chain';
 
 export class Transaction extends Card {
   static displayName = 'Transaction';
@@ -17,8 +19,10 @@ export class Transaction extends Card {
   @field blockNumber = contains(IntegerCard);
   @field from = contains(StringCard);
   @field to = contains(StringCard);
-  @field gasUsed = contains(IntegerCard);
-  @field effectiveGasPrice = contains(IntegerCard);
+  @field memo = contains(StringCard);
+  @field chain = linksTo(() => Chain);
+  // @field gasUsed = contains(IntegerCard);
+  // @field effectiveGasPrice = contains(IntegerCard);
   @field title = contains(StringCard, {
     computeVia: function (this: Transaction) {
       return `Txn ${this.transactionHash}`;
@@ -47,9 +51,6 @@ export class Transaction extends Card {
           /></FieldContainer>
         <FieldContainer @label='From'><@fields.from /></FieldContainer>
         <FieldContainer @label='To'><@fields.to /></FieldContainer>
-        <FieldContainer @label='GasUsed'><@fields.gasUsed /></FieldContainer>
-        <FieldContainer @label='EffectiveGasPrice'><@fields.effectiveGasPrice
-          /></FieldContainer>
       </CardContainer>
     </template>
   };

@@ -87,12 +87,9 @@ export {
   isCardResource,
   isCardDocument,
   isRelationship,
-  isCardCollectionDocument,
   isSingleCardDocument,
 } from './card-document';
-export {
-  sanitizeHtml
-} from './dompurify';
+export { sanitizeHtml } from './dompurify';
 
 import type { Card, CardBase } from 'https://cardstack.com/base/card-api';
 
@@ -137,13 +134,15 @@ export async function getCards(query: Query) {
 export interface CardCreator {
   create<T extends Card>(
     ref: CardRef,
-    relativeTo: URL | undefined
+    relativeTo: URL | undefined,
+    defaultData: LooseCardResource | undefined
   ): Promise<undefined | T>;
 }
 
 export async function createNewCard<T extends Card>(
   ref: CardRef,
-  relativeTo: URL | undefined
+  relativeTo: URL | undefined,
+  defaultData: LooseCardResource | undefined
 ): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CREATE_NEW_CARD) {
@@ -153,7 +152,7 @@ export async function createNewCard<T extends Card>(
   }
   let cardCreator: CardCreator = here._CARDSTACK_CREATE_NEW_CARD;
 
-  return await cardCreator.create<T>(ref, relativeTo);
+  return await cardCreator.create<T>(ref, relativeTo, defaultData);
 }
 
 export interface Actions {

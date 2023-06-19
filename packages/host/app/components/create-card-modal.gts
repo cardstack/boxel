@@ -1,5 +1,9 @@
 import Component from '@glimmer/component';
-import type { CardRef } from '@cardstack/runtime-common';
+import type {
+  CardRef,
+  LooseSingleCardDocument,
+  LooseCardResource,
+} from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
@@ -13,6 +17,7 @@ import type CardService from '../services/card-service';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import CardEditor from './card-editor';
 import { Modal, CardContainer, Header } from '@cardstack/boxel-ui';
+import { merge } from 'lodash';
 
 export default class CreateCardModal extends Component {
   <template>
@@ -64,15 +69,27 @@ export default class CreateCardModal extends Component {
 
   async create<T extends Card>(
     ref: CardRef,
-    relativeTo: URL | undefined
+    relativeTo: URL | undefined,
+    defaultData: LooseCardResource | undefined
   ): Promise<undefined | T> {
     this.zIndex++;
-    return (await this._create.perform(ref, relativeTo)) as T | undefined;
+    return (await this._create.perform(ref, relativeTo, defaultData)) as
+      | T
+      | undefined;
   }
 
   private _create = enqueueTask(
-    async <T extends Card>(ref: CardRef, relativeTo: URL | undefined) => {
-      let doc = { data: { meta: { adoptsFrom: ref } } };
+    async <T extends Card>(
+      ref: CardRef,
+      relativeTo: URL | undefined,
+      defaultData: LooseCardResource | undefined
+    ) => {
+      let doc: LooseSingleCardDocument = {
+        data: { meta: { adoptsFrom: ref } },
+      };
+      if (defaultData) {
+        doc.data = merge(doc.data, defaultData);
+      }
       this.currentRequest = {
         card: await this.cardService.createFromSerialized(
           doc.data,
