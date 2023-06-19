@@ -81,7 +81,7 @@ test.describe('Room creation', () => {
     );
   });
 
-  test('rooms are sorted by creation date', async ({ page }) => {
+  test('rooms are sorted by join date', async ({ page }) => {
     await login(page, 'user1', 'pass');
     await createRoom(page, { name: 'Room Z' });
     await createRoom(page, { name: 'Room A' });
@@ -105,7 +105,7 @@ test.describe('Room creation', () => {
     await logout(page);
     await login(page, 'user2', 'pass');
     await assertRooms(page, {
-      invitedRooms: [{ name: 'Room 1', sender: '@user1:localhost' }],
+      invitedRooms: [{ name: 'Room 1', sender: 'user1' }],
     });
   });
 
@@ -124,8 +124,8 @@ test.describe('Room creation', () => {
     await login(page, 'user2', 'pass');
     await assertRooms(page, {
       invitedRooms: [
-        { name: 'Room Z', sender: '@user1:localhost' },
-        { name: 'Room A', sender: '@user1:localhost' },
+        { name: 'Room Z', sender: 'user1' },
+        { name: 'Room A', sender: 'user1' },
       ],
     });
   });

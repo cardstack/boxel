@@ -104,7 +104,8 @@ module('Realm Server', function (hooks) {
             name: 'Person',
           },
           realmInfo: {
-            "name": "Test Realm"
+            "name": "Test Realm",
+            "backgroundURL": null
           },
           realmURL: "http://127.0.0.1:4444/",
         },
@@ -325,9 +326,14 @@ module('Realm Server', function (hooks) {
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
     let body = response.text.trim();
+    let moduleAbsolutePath = resolve(join(__dirname, '..', 'person.gts'));
+
+    // Remove platform-dependent id, from https://github.com/emberjs/babel-plugin-ember-template-compilation/blob/d67cca121cfb3bbf5327682b17ed3f2d5a5af528/__tests__/tests.ts#LL1430C1-L1431C1
+    body = body.replace(/"id":\s"[^"]+"/, '"id": "<id>"');
+
     assert.codeEqual(
       body,
-      compiledCard(`"PRwgdZFk"` /* id that glimmer assigns for the block */),
+      compiledCard('"<id>"', moduleAbsolutePath),
       'module JS is correct'
     );
   });
@@ -423,6 +429,7 @@ module('Realm Server', function (hooks) {
           type: 'realm-info',
           attributes: {
             name: 'Test Realm',
+            backgroundURL: null,
           },
         },
       },

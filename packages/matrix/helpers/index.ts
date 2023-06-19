@@ -8,16 +8,31 @@ interface ProfileAssertions {
   userId?: string;
   displayName?: string;
 }
+interface LoginOptions {
+  expectFailure?: true;
+}
 
-export async function login(page: Page, username: string, password: string) {
+export async function login(
+  page: Page,
+  username: string,
+  password: string,
+  opts?: LoginOptions
+) {
   await page.goto(`${rootPath}/chat`);
   await page.locator('[data-test-username-field]').fill(username);
   await page.locator('[data-test-password-field]').fill(password);
   await page.locator('[data-test-login-btn]').click();
+
+  if (opts?.expectFailure) {
+    await expect(page.locator('[data-test-login-error]')).toHaveCount(1);
+  } else {
+    await expect(page.locator('[data-test-rooms-list]')).toHaveCount(1);
+  }
 }
 
 export async function logout(page: Page) {
   await page.locator('[data-test-logout-btn]').click();
+  await expect(page.locator('[data-test-login-btn]')).toHaveCount(1);
 }
 
 export async function createRoom(
@@ -90,12 +105,6 @@ export async function assertMessages(
     card?: { id: string; text?: string };
   }[]
 ) {
-  const limit = 5;
-  if (messages.length > limit) {
-    throw new Error(
-      `don't use assertMessages() for more than ${limit} messages as pagination may unnecessarily break the assertion`
-    );
-  }
   await expect(page.locator('[data-test-message-idx]')).toHaveCount(
     messages.length
   );
@@ -145,10 +154,12 @@ interface RoomAssertions {
 
 export async function assertRooms(page: Page, rooms: RoomAssertions) {
   if (rooms.joinedRooms && rooms.joinedRooms.length > 0) {
-    await expect(
-      page.locator('[data-test-joined-room]'),
-      `${rooms.joinedRooms.length} joined room(s) are displayed`
-    ).toHaveCount(rooms.joinedRooms.length);
+    await page.waitForFunction(
+      (rooms: RoomAssertions) =>
+        document.querySelectorAll('[data-test-joined-room]').length ===
+        rooms.joinedRooms!.length,
+      rooms
+    );
     for (let { name } of rooms.joinedRooms) {
       await expect(
         page.locator(`[data-test-joined-room="${name}"]`),
@@ -162,10 +173,12 @@ export async function assertRooms(page: Page, rooms: RoomAssertions) {
     ).toHaveCount(0);
   }
   if (rooms.invitedRooms && rooms.invitedRooms.length > 0) {
-    await expect(
-      page.locator('[data-test-invited-room]'),
-      `${rooms.invitedRooms.length} invited room(s) are displayed`
-    ).toHaveCount(rooms.invitedRooms.length);
+    await page.waitForFunction(
+      (rooms: RoomAssertions) =>
+        document.querySelectorAll('[data-test-invited-room]').length ===
+        rooms.invitedRooms!.length,
+      rooms
+    );
     for (let { name, sender } of rooms.invitedRooms) {
       await expect(
         page.locator(

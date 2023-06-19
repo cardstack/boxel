@@ -43,7 +43,10 @@ import {
 } from './stream';
 import { preprocessEmbeddedTemplates } from '@cardstack/ember-template-imports/lib/preprocess-embedded-templates';
 import * as babel from '@babel/core';
-import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation';
+//@ts-ignore type import requires a newer Typescript with node16 moduleResolution
+import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation/browser';
+import type { Options as EmberTemplatePluginOptions } from 'babel-plugin-ember-template-compilation/src/plugin';
+import type { EmberTemplateCompiler } from 'babel-plugin-ember-template-compilation/src/ember-template-compiler';
 //@ts-ignore no types are available
 import * as etc from 'ember-source/dist/ember-template-compiler';
 import { loaderPlugin } from './loader-plugin';
@@ -66,6 +69,11 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
+
+export type RealmInfo = {
+  name: string;
+  backgroundURL: string | null;
+}
 
 export interface FileRef {
   path: LocalPath;
@@ -418,6 +426,11 @@ export class Realm {
       includeSourceMaps: true,
       includeTemplateTokens: true,
     }).output;
+
+    let templateOptions: EmberTemplatePluginOptions = {
+      compiler: etc as unknown as EmberTemplateCompiler,
+    };
+
     let src = babel.transformSync(content, {
       filename: debugFilename,
       compact: false, // this helps for readability when debugging
@@ -427,18 +440,7 @@ export class Realm {
         [typescriptPlugin, { allowDeclareFields: true }],
         [decoratorsProposalPlugin, { legacy: true }],
         classPropertiesProposalPlugin,
-        // this "as any" is because typescript is using the Node-specific types
-        // from babel-plugin-ember-template-compilation, but we're using the
-        // browser interface
-        isNode
-          ? [
-              makeEmberTemplatePlugin,
-              {
-                precompile: etc.precompile,
-              },
-            ]
-          : // TODO type this better
-            (makeEmberTemplatePlugin as any)(() => etc.precompile),
+        [makeEmberTemplatePlugin, templateOptions],
         loaderPlugin,
       ],
     })?.code;
@@ -793,13 +795,15 @@ export class Realm {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
     let realmConfig = await this.readFileAsText(localPath);
-    let name = 'Unnamed Workspace';
+    let realmInfo: RealmInfo = {
+      name: 'Unnamed Workspace',
+      backgroundURL: null,
+    }
     if (realmConfig) {
       try {
         let realmConfigJson = JSON.parse(realmConfig.content);
-        if (realmConfigJson.name) {
-          name = realmConfigJson.name;
-        }
+        realmInfo.name = realmConfigJson.name ?? realmInfo.name;
+        realmInfo.backgroundURL = realmConfigJson.backgroundURL ?? realmInfo.backgroundURL;
       } catch (e) {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }
@@ -808,9 +812,7 @@ export class Realm {
       data: {
         id: this.paths.url.toString(),
         type: 'realm-info',
-        attributes: {
-          name,
-        },
+        attributes: realmInfo,
       },
     };
     return createResponse(JSON.stringify(doc, null, 2), {

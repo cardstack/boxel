@@ -18,7 +18,7 @@ const TRUE = true;
 
 export default class UserProfile extends Component {
   <template>
-    <BoxelHeader @title='User Profile' @hasBackground={{TRUE}}>
+    <BoxelHeader class='matrix' @title='User Profile' @hasBackground={{TRUE}}>
       <:actions>
         {{#if (not this.isEditMode)}}
           <Button

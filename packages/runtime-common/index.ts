@@ -64,6 +64,7 @@ export type {
   RealmAdapter,
   FileRef,
   ResponseWithNodeStream,
+  RealmInfo,
 } from './realm';
 
 import type { Saved } from './card-document';
@@ -78,7 +79,6 @@ export type {
   CardDocument,
   CardFields,
   SingleCardDocument,
-  RealmInfo,
   Relationship,
   Meta,
 } from './card-document';
@@ -90,9 +90,7 @@ export {
   isCardCollectionDocument,
   isSingleCardDocument,
 } from './card-document';
-export {
-  sanitizeHtml
-} from './dompurify';
+export { sanitizeHtml } from './dompurify';
 
 import type { Card, CardBase } from 'https://cardstack.com/base/card-api';
 

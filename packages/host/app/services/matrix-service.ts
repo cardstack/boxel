@@ -12,67 +12,38 @@ import { task } from 'ember-concurrency';
 import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
 import RouterService from '@ember/routing/router-service';
+import { importResource } from '../resources/import';
 import { marked } from 'marked';
-import {
-  Timeline,
-  Membership,
-  Room,
-  type RoomEvent as RoomEventInfo,
-} from '../lib/matrix-handlers';
+import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import type CardService from '../services/card-service';
-import { type Card } from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
 import {
   type LooseSingleCardDocument,
   sanitizeHtml,
 } from '@cardstack/runtime-common';
+import type LoaderService from './loader-service';
+import { type Card } from 'https://cardstack.com/base/card-api';
+import type { RoomCard } from 'https://cardstack.com/base/room';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 const { matrixURL } = ENV;
-
-interface Room extends RoomMeta {
-  eventId: string;
-  roomId: string;
-  timestamp: number;
-}
-
-interface RoomInvite extends Room {
-  sender: string;
-}
-
-interface RoomMeta {
-  name?: string;
-}
 
 export type Event = Partial<IEvent>;
 
 export default class MatrixService extends Service {
   @service private declare router: RouterService;
+  @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @tracked private _client: MatrixClient | undefined;
-  invites: TrackedMap<string, RoomInvite> = new TrackedMap();
-  joinedRooms: TrackedMap<string, RoomEventInfo> = new TrackedMap();
-  roomMembers: TrackedMap<
-    string,
-    TrackedMap<string, { member: RoomMember; status: 'join' | 'invite' }>
-  > = new TrackedMap();
-  rooms: Map<string, RoomMeta> = new Map();
-  timelines: TrackedMap<string, TrackedMap<string, Event>> = new TrackedMap();
+
+  roomCards: TrackedMap<string, Promise<RoomCard>> = new TrackedMap();
   flushTimeline: Promise<void> | undefined;
-  mapClazz = TrackedMap as unknown as typeof Map;
+  flushMembership: Promise<void> | undefined;
+  roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[] = [];
+  timelineQueue: MatrixEvent[] = [];
   #ready: Promise<void>;
   #matrixSDK: typeof MatrixSDK | undefined;
   #eventBindings: [EmittedEvents, (...arg: any[]) => void][] | undefined;
-  // we process the matrix events in batched queues so that we can collapse the
-  // interstitial state between events to prevent unnecessary flashing on the
-  // screen, i.e. user was invited to a room and then declined the invite should
-  // result in nothing happening on the screen as opposed to an item appearing
-  // in the invite list and then immediately disappearing.
-  roomMembershipQueue: (
-    | (RoomInvite & { type: 'invite' })
-    | (RoomEventInfo & { type: 'join' })
-    | { type: 'leave'; roomId: string }
-  )[] = [];
-  timelineQueue: MatrixEvent[] = [];
 
   constructor(properties: object) {
     super(properties);
@@ -87,7 +58,13 @@ export default class MatrixService extends Service {
     return this.loadSDK.isRunning;
   }
 
+  private cardAPIModule = importResource(
+    this,
+    () => 'https://cardstack.com/base/card-api'
+  );
+
   private loadSDK = task(async () => {
+    await this.cardAPIModule.loaded;
     // The matrix SDK is VERY big so we only load it when we need it
     this.#matrixSDK = await import('matrix-js-sdk');
     this._client = this.matrixSDK.createClient({ baseUrl: matrixURL });
@@ -99,7 +76,6 @@ export default class MatrixService extends Service {
         this.matrixSDK.RoomMemberEvent.Membership,
         Membership.onMembership(this),
       ],
-      [this.matrixSDK.RoomEvent.Name, Room.onRoomName(this)],
       [this.matrixSDK.RoomEvent.Timeline, Timeline.onTimeline(this)],
     ];
   });
@@ -119,7 +95,21 @@ export default class MatrixService extends Service {
     return this._client;
   }
 
-  private get matrixSDK() {
+  get cardAPI() {
+    if (this.cardAPIModule.error) {
+      throw new Error(
+        `Error loading Card API: ${JSON.stringify(this.cardAPIModule.error)}`
+      );
+    }
+    if (!this.cardAPIModule.module) {
+      throw new Error(
+        `bug: Card API has not loaded yet--make sure to await this.loaded before using the api`
+      );
+    }
+    return this.cardAPIModule.module as typeof CardAPI;
+  }
+
+  get matrixSDK() {
     if (!this.#matrixSDK) {
       throw new Error(`cannot use matrix SDK before it has loaded`);
     }
@@ -127,6 +117,8 @@ export default class MatrixService extends Service {
   }
 
   async logout() {
+    await this.flushMembership;
+    await this.flushTimeline;
     clearAuth();
     this.unbindEventListeners();
     await this.client.stopClient();
@@ -187,6 +179,7 @@ export default class MatrixService extends Service {
       this.bindEventListeners();
 
       await this._client.startClient();
+      await this.initializeRoomStates();
     }
   }
 
@@ -226,7 +219,9 @@ export default class MatrixService extends Service {
     let serializedCard: LooseSingleCardDocument | undefined;
     if (card) {
       serializedCard = await this.cardService.serializeCard(card);
-      body = `${body} (Card: ${card.title ?? 'Untitled'}, ${card.id})`.trim();
+      body = `${body ?? ''} (Card: ${card.title ?? 'Untitled'}, ${
+        card.id
+      })`.trim();
     }
     if (card) {
       await this.client.sendEvent(roomId, 'm.room.message', {
@@ -245,13 +240,20 @@ export default class MatrixService extends Service {
     await this.client.sendHtmlMessage(roomId, markdown, html);
   }
 
+  async initializeRoomStates() {
+    let { joined_rooms: joinedRooms } = await this.client.getJoinedRooms();
+    for (let roomId of joinedRooms) {
+      let stateEvents = await this.client.roomState(roomId);
+      await Promise.all(stateEvents.map((event) => addRoomEvent(this, event)));
+    }
+  }
+
   private resetState() {
-    this.invites = new TrackedMap();
-    this.joinedRooms = new TrackedMap();
-    this.roomMembers = new TrackedMap();
-    this.rooms = new Map();
-    this.timelines = new TrackedMap();
+    this.roomCards = new TrackedMap();
     this.roomMembershipQueue = [];
+    this.timelineQueue = [];
+    this.flushMembership = undefined;
+    this.flushTimeline = undefined;
     this.unbindEventListeners();
     this._client = this.matrixSDK.createClient({ baseUrl: matrixURL });
   }

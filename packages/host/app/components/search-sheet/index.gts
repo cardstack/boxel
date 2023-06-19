@@ -47,7 +47,7 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   get isSearchDisabled() {
-    return !Boolean(this.searchInputValue);
+    return !this.searchInputValue;
   }
 
   // This funky little gymnastics has the effect of leaving the headline along when closing the sheet, to improve the animation
