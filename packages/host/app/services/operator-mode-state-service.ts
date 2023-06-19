@@ -10,6 +10,7 @@ import { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 import { getOwner } from '@ember/application';
+import { scheduleOnce } from '@ember/runloop';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
@@ -32,27 +33,31 @@ export default class OperatorModeStateService extends Service {
 
   addItemToStack(item: StackItem, stackIndex = 0) {
     this.state.stacks[stackIndex].items.push(item);
-    this.persist();
+    this.schedulePersist();
   }
 
   removeItemFromStack(item: StackItem, stackIndex = 0) {
     let itemIndex = this.state.stacks[stackIndex].items.indexOf(item);
     this.state.stacks[stackIndex].items.splice(itemIndex);
-    this.persist();
+    this.schedulePersist();
   }
 
   replaceItemInStack(item: StackItem, newItem: StackItem, stackIndex = 0) {
     let itemIndex = this.state.stacks[stackIndex].items.indexOf(item);
     this.state.stacks[stackIndex].items.splice(itemIndex, 1, newItem);
-    this.persist();
+    this.schedulePersist();
   }
 
   clearStack(stackIndex = 0) {
     this.state.stacks[stackIndex].items.splice(0);
-    this.persist();
+    this.schedulePersist();
   }
 
-  persist() {
+  private schedulePersist() {
+    scheduleOnce('afterRender', this, this.persist);
+  }
+
+  private persist() {
     let cardController = getOwner(this)!.lookup('controller:card') as any;
     if (!cardController) {
       throw new Error(
