@@ -19,7 +19,6 @@ permissions:
 jobs:
   host-deploy:
     name: Deploy host
-    needs: change-check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -31,6 +30,7 @@ jobs:
 
   realm-server-deploy:
     name: Deploy Realm Server
+    needs: host-deploy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
