@@ -5,7 +5,6 @@
   "license": "MIT",
   "devDependencies": {
     "@cardstack/cardpay-sdk": "^1.0.53",
-    "@ethersproject/bignumber": "^5.7.0",
     "@types/lodash": "^4.14.182"
   },
   "scripts": {}
