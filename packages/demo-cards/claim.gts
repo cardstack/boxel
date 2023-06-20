@@ -24,6 +24,7 @@ import { action } from '@ember/object';
 import {
   type CardRef,
   LooseSingleCardDocument,
+  createNewCard,
   // @ts-ignore
 } from '@cardstack/runtime-common';
 import { Transaction } from './transaction';
@@ -105,8 +106,10 @@ class Isolated extends Component<typeof Claim> {
             Claim has been used
           {{else if @context.actions.createCard}}
             Claim
+          {{else if this.inEnvThatCanCreateNewCard}}
+            Claim
           {{else}}
-            Claim (Can only be claimed if action is available)
+            Claim (Only if createCard action exist or card creator is creating)
           {{/if}}
         </Button>
       {{else}}
@@ -146,7 +149,11 @@ class Isolated extends Component<typeof Claim> {
   }
 
   get cannotClickClaimButton() {
-    return this.hasBeenClaimed || !this.args.context?.actions?.createCard; //|| !this.inEnvThatCanCreateNewCard;
+    return (
+      this.hasBeenClaimed ||
+      (!this.args.context?.actions?.createCard &&
+        !this.inEnvThatCanCreateNewCard)
+    );
   }
 
   private doClaim = restartableTask(async () => {
@@ -260,16 +267,19 @@ class Isolated extends Component<typeof Claim> {
         },
       };
       if (this.args.context?.actions?.createCard) {
-        let newCard = await this.args.context.actions.createCard(
+        // create using operator mode action
+        await this.args.context.actions.createCard(
           transactionCardRef,
           undefined,
           {
             doc: transactionDoc,
           }
         );
-        console.log(newCard);
       } else {
-        //possibly create new card
+        // create using create card modal
+        await createNewCard(transactionCardRef, undefined, {
+          doc: transactionDoc,
+        });
       }
     } catch (e: any) {
       throw e;
