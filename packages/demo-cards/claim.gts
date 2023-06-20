@@ -7,12 +7,14 @@ import {
   Component,
   linksTo,
   realmURL,
-  isSaved,
+  // isSaved,
+  // createFromSerialized,
 } from 'https://cardstack.com/base/card-api';
 import { getMetamaskResource } from './utils/resources/metamask';
 import { TempCardService } from './utils/services/temp-card-service';
 import { tracked } from '@glimmer/tracking';
 import { Button, FieldContainer } from '@cardstack/boxel-ui';
+// import { merge } from 'lodash';
 
 // @ts-ignore
 import { registerDestructor } from '@ember/destroyable';
@@ -26,6 +28,7 @@ import {
   type CardRef,
   createNewCard,
   LooseCardResource,
+  // LooseSingleCardDocument,
   // @ts-ignore
 } from '@cardstack/runtime-common';
 import { Transaction } from './transaction';
@@ -168,7 +171,7 @@ class Isolated extends Component<typeof Claim> {
         blockNumber: 43864856,
         from: '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b',
         to: '0xEDC43a390C8eE324cC9d21C93C55c04bD6B8257f',
-      };
+      } as TransactionReceipt;
       if (r) {
         await this.createTransactionCard(r);
         console.log('You have succesfully claimed your reward!');
@@ -212,7 +215,31 @@ class Isolated extends Component<typeof Claim> {
         },
       },
     };
-    await createNewCard(transactionCardRef, undefined, cardWithData);
+
+    // let doc: LooseSingleCardDocument = {
+    //   data: { meta: { adoptsFrom: transactionCardRef } },
+    // };
+    // doc.data = merge(doc.data, cardWithData);
+    // doc.data.attributes.memo = 'u suck';
+    // let c = await createFromSerialized(
+    //   doc.data as LooseCardResource,
+    //   doc,
+    //   undefined,
+    //   undefined
+    // );
+    // console.log('====');
+    // console.log(c);
+
+    // calls create card modal
+    let newCard = await createNewCard(
+      transactionCardRef,
+      undefined,
+      cardWithData
+    );
+    // you need to save the card
+    if (newCard) {
+      this.args.model.transaction = newCard;
+    }
   });
 
   @action
@@ -224,7 +251,7 @@ class Isolated extends Component<typeof Claim> {
   private connectMetamask() {
     this.metamask.doConnectMetamask.perform(this.chainId);
   }
-  private async createTransactionCard(r: any) {
+  private async createTransactionCard(r: TransactionReceipt) {
     let realmUrl = this.args.model[realmURL];
     if (!realmUrl) {
       throw new Error('Realm is undefined');
