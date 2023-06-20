@@ -31,7 +31,6 @@ import { Transaction } from './transaction';
 
 // external depedencies. wud be good to get rid of these
 import type * as CardPaySDK from '@cardstack/cardpay-sdk';
-// import { BigNumber } from 'https://unpkg.com/@ethersproject/bignumber@5.7.0/lib.esm/index.js';
 
 //transaciton receipt type from the SDK
 export interface TransactionReceipt {
@@ -43,9 +42,10 @@ export interface TransactionReceipt {
   from: string;
   to: string;
   contractAddress?: string;
-  cumulativeGasUsed: any;
-  gasUsed: any;
-  effectiveGasPrice: number;
+  // These are meant to be `number` but they return BigNumber
+  cumulativeGasUsed: any; // not sure why it returns BigNumber
+  gasUsed: any; // not sure why it returns BigNumber
+  effectiveGasPrice: any; // not sure why it returns BigNumber
   logs: Log[];
   logsBloom: string;
   events?: {
@@ -95,6 +95,8 @@ class Isolated extends Component<typeof Claim> {
       <FieldContainer @label='Explanation'><@fields.explanation
         /></FieldContainer>
       <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
+      <FieldContainer @label='Transaction'><@fields.transaction
+        /></FieldContainer>
       {{#if this.connectedAndSameChain}}
         <Button
           disabled={{this.cannotClickClaimButton}}
@@ -109,7 +111,7 @@ class Isolated extends Component<typeof Claim> {
           {{else if this.inEnvThatCanCreateNewCard}}
             Claim
           {{else}}
-            Claim (Only if createCard action exist or card creator is creating)
+            Claim (Environment does not allow card creation)
           {{/if}}
         </Button>
       {{else}}
@@ -135,7 +137,7 @@ class Isolated extends Component<typeof Claim> {
   }
 
   get hasBeenClaimed() {
-    return this.isClaimed; //TODO:  complex logic to check if its claimed using sdk
+    return this.isClaimed || this.args.model.transaciton; //TODO:  complex logic to check if its claimed using sdk
   }
 
   // the chain id data of the card itself
@@ -170,24 +172,15 @@ class Isolated extends Component<typeof Claim> {
       ) {
         throw new Error('Claim fields not ready');
       }
-      // const r = await claimSettlementModule.executeSafe(
-      //   this.args.model.moduleAddress,
-      //   this.args.model.safeAddress,
-      //   {
-      //     signature: this.args.model.signature,
-      //     encoded: this.args.model.encoding,
-      //   }
-      // );
-      const r = {
-        transactionHash:
-          '0xcc29758868dea3cfd9fe76440a01ad0ab7fae61383f32fe18abc4f32c5a02c54',
-        status: true,
-        blockHash:
-          '0xfa259a22c65690c95d59cf976db713cfe0a29142a7e3dae19e0af116fecf7aa3',
-        blockNumber: 43864856,
-        from: '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b',
-        to: '0xEDC43a390C8eE324cC9d21C93C55c04bD6B8257f',
-      } as TransactionReceipt;
+      const r = await claimSettlementModule.executeSafe(
+        this.args.model.moduleAddress,
+        this.args.model.safeAddress,
+        {
+          signature: this.args.model.signature,
+          encoded: this.args.model.encoding,
+        }
+      );
+
       if (r) {
         await this.createCardFromReceipt(r, this.args.model.chain);
         console.log('You have succesfully claimed your reward!');
@@ -216,41 +209,28 @@ class Isolated extends Component<typeof Claim> {
       if (!realmUrl) {
         throw new Error('Realm is undefined');
       }
-      // @ts-ignore
-      let cardData = {
-        data: {
-          type: 'card',
-          attributes: {
-            transactionHash: r.transactionHash,
-            status: r.status,
-            blockHash: r.blockHash,
-            blockNumber: r.blockNumber,
-            from: r.from,
-            to: r.to,
-            // gasUsed: r.gasUsed,
-            // BigNumber.isBigNumber(r.gasUsed)
-            //   ? r.gasUsed.toString()
-            //   : r.gasUsed,
-            // effectiveGasPrice: r.effectiveGasPrice,
-            // BigNumber.isBigNumber(r.effectiveGasPrice)
-            //   ? r.effectiveGasPrice.toString()
-            //   : r.effectiveGasPrice,
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${realmUrl.href}transaction`,
-              name: 'Transaction',
-            },
-          },
-        },
-      };
       const transactionCardRef: CardRef = {
         module: `${realmUrl.href}transaction`,
         name: 'Transaction',
       };
+
+      let transactionCardAttributes = {
+        transactionHash: r.transactionHash,
+        status: r.status,
+        blockHash: r.blockHash,
+        blockNumber: r.blockNumber,
+        from: r.from,
+        to: r.to,
+        // Workaround. Runtime doesn't correspond to types so we check type here
+        gasUsed: r.gasUsed._isBigNumber ? parseInt(r.gasUsed._hex) : r.gasUsed,
+        effectiveGasPrice: r.effectiveGasPrice._isBigNumber
+          ? parseInt(r.effectiveGasPrice._hex)
+          : r.effectiveGasPrice,
+      };
+
       let transactionDoc: LooseSingleCardDocument = {
         data: {
-          attributes: r,
+          attributes: transactionCardAttributes,
           relationships: {
             chain: {
               links: {
