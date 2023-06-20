@@ -137,7 +137,7 @@ class Isolated extends Component<typeof Claim> {
   }
 
   get hasBeenClaimed() {
-    return this.isClaimed || this.args.model.transaciton; //TODO:  complex logic to check if its claimed using sdk
+    return this.isClaimed || this.args.model.transaction; //TODO:  complex logic to check if its claimed using sdk
   }
 
   // the chain id data of the card itself
