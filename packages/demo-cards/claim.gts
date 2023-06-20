@@ -137,8 +137,7 @@ class Isolated extends Component<typeof Claim> {
   }
 
   get hasBeenClaimed() {
-    let transactionLinkExist = this.args.model.transaction ? true : false;
-    return this.isClaimed || transactionLinkExist; //TODO:  complex logic to check if its claimed using sdk
+    return this.isClaimed || !!this.args.model.transaction; //TODO:  complex logic to check if its claimed using sdk
   }
 
   // the chain id data of the card itself
@@ -152,9 +151,10 @@ class Isolated extends Component<typeof Claim> {
   }
 
   get cannotClickClaimButton() {
-    let actionExist = this.args.context?.actions?.createCard ? true : false;
     return (
-      this.hasBeenClaimed || (!actionExist && !this.inEnvThatCanCreateNewCard)
+      this.hasBeenClaimed ||
+      (!!this.args.context?.actions?.createCard &&
+        !this.inEnvThatCanCreateNewCard)
     );
   }
 
