@@ -9,7 +9,6 @@ import {
   realmURL,
 } from 'https://cardstack.com/base/card-api';
 import { getMetamaskResource } from './utils/resources/metamask';
-import { TempCardService } from './utils/services/temp-card-service';
 import { tracked } from '@glimmer/tracking';
 import { Button, FieldContainer } from '@cardstack/boxel-ui';
 
@@ -81,7 +80,6 @@ interface SuccessfulTransactionReceipt extends TransactionReceipt {
 }
 
 class Isolated extends Component<typeof Claim> {
-  cardService = new TempCardService();
   @tracked isClaimed = false;
   claimSettlementModule: CardPaySDK.ClaimSettlementModule | undefined;
   web3Provider: CardPaySDK.Web3Provider | undefined;
