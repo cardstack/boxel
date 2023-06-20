@@ -726,4 +726,16 @@ module('Realm Server serving from a subdirectory', function (hooks) {
     assert.strictEqual(response.status, 302, 'HTTP 302 status');
     assert.ok(response.headers['location'], 'http://127.0.0.1:4446/demo/');
   });
+
+  test('redirection keeps query params intact', async function (assert) {
+    let response = await request.get(
+      '/demo?operatorModeState=operatorModeEnabled=true&operatorModeState=%7B%22stacks%22%3A%5B%7B%22items%22%3A%5B%7B%22card%22%3A%7B%22id%22%3A%22http%3A%2F%2Flocalhost%3A4204%2Findex%22%7D%2C%22format%22%3A%22isolated%22%7D%5D%7D%5D%7D'
+    );
+
+    assert.strictEqual(response.status, 302, 'HTTP 302 status');
+    assert.ok(
+      response.headers['location'],
+      'http://127.0.0.1:4446/demo/?operatorModeEnabled=true&operatorModeState=%7B%22stacks%22%3A%5B%7B%22items%22%3A%5B%7B%22card%22%3A%7B%22id%22%3A%22http%3A%2F%2Flocalhost%3A4204%2Findex%22%7D%2C%22format%22%3A%22isolated%22%7D%5D%7D%5D%7D'
+    );
+  });
 });
