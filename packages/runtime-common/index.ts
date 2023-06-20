@@ -87,6 +87,7 @@ export {
   isCardResource,
   isCardDocument,
   isRelationship,
+  isCardCollectionDocument,
   isSingleCardDocument,
 } from './card-document';
 export { sanitizeHtml } from './dompurify';
