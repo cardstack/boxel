@@ -7,14 +7,11 @@ import {
   Component,
   linksTo,
   realmURL,
-  // isSaved,
-  // createFromSerialized,
 } from 'https://cardstack.com/base/card-api';
 import { getMetamaskResource } from './utils/resources/metamask';
 import { TempCardService } from './utils/services/temp-card-service';
 import { tracked } from '@glimmer/tracking';
 import { Button, FieldContainer } from '@cardstack/boxel-ui';
-// import { merge } from 'lodash';
 
 // @ts-ignore
 import { registerDestructor } from '@ember/destroyable';
