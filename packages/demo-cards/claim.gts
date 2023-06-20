@@ -26,9 +26,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import {
   type CardRef,
-  createNewCard,
-  LooseCardResource,
-  // LooseSingleCardDocument,
+  LooseSingleCardDocument,
   // @ts-ignore
 } from '@cardstack/runtime-common';
 import { Transaction } from './transaction';
@@ -100,13 +98,18 @@ class Isolated extends Component<typeof Claim> {
         /></FieldContainer>
       <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
       {{#if this.connectedAndSameChain}}
-        <Button disabled={{this.isNotClaimable}} {{on 'click' this.claim}}>
+        <Button
+          disabled={{this.cannotClickClaimButton}}
+          {{on 'click' this.claim}}
+        >
           {{#if this.doClaim.isRunning}}
             Claiming...
           {{else if this.hasBeenClaimed}}
             Claim has been used
-          {{else}}
+          {{else if @context.actions.createCard}}
             Claim
+          {{else}}
+            Claim (Can only be claimed if action is available)
           {{/if}}
         </Button>
       {{else}}
@@ -140,11 +143,13 @@ class Isolated extends Component<typeof Claim> {
     return this.args.model.chain?.chainId;
   }
   get inEnvThatCanCreateNewCard() {
+    // this checks that the host of the card is a card creator
+    // you can use methods like createNewCard
     return (globalThis as any)._CARDSTACK_CREATE_NEW_CARD ? true : false;
   }
 
-  get isNotClaimable() {
-    return this.hasBeenClaimed || !this.inEnvThatCanCreateNewCard;
+  get cannotClickClaimButton() {
+    return this.hasBeenClaimed || !this.args.context?.actions?.createCard; //|| !this.inEnvThatCanCreateNewCard;
   }
 
   private doClaim = restartableTask(async () => {
@@ -161,7 +166,14 @@ class Isolated extends Component<typeof Claim> {
       ) {
         throw new Error('Claim fields not ready');
       }
-
+      // const r = await claimSettlementModule.executeSafe(
+      //   this.args.model.moduleAddress,
+      //   this.args.model.safeAddress,
+      //   {
+      //     signature: this.args.model.signature,
+      //     encoded: this.args.model.encoding,
+      //   }
+      // );
       const r = {
         transactionHash:
           '0xcc29758868dea3cfd9fe76440a01ad0ab7fae61383f32fe18abc4f32c5a02c54',
@@ -173,7 +185,7 @@ class Isolated extends Component<typeof Claim> {
         to: '0xEDC43a390C8eE324cC9d21C93C55c04bD6B8257f',
       } as TransactionReceipt;
       if (r) {
-        await this.createTransactionCard(r);
+        await this.createCardFromReceipt(r, this.args.model.chain);
         console.log('You have succesfully claimed your reward!');
         this.isClaimed = true;
       }
@@ -182,63 +194,6 @@ class Isolated extends Component<typeof Claim> {
         this.isClaimed = true;
       }
       throw e;
-    }
-  });
-
-  private createCardFromReceipt = restartableTask(async (r: any) => {
-    let realmUrl = this.args.model[realmURL];
-    if (!realmUrl) {
-      throw new Error('Realm is undefined');
-    }
-    if (
-      !this.args.model.moduleAddress ||
-      !this.args.model.signature ||
-      !this.args.model.safeAddress ||
-      !this.args.model.signature ||
-      !this.args.model.encoding ||
-      !this.args.model.chain
-    ) {
-      throw new Error('Claim fields not ready');
-    }
-
-    const transactionCardRef: CardRef = {
-      module: `${realmUrl.href}transaction`,
-      name: 'Transaction',
-    };
-    let cardWithData: LooseCardResource = {
-      attributes: r,
-      relationships: {
-        chain: {
-          links: {
-            self: this.args.model.chain.id,
-          },
-        },
-      },
-    };
-
-    // let doc: LooseSingleCardDocument = {
-    //   data: { meta: { adoptsFrom: transactionCardRef } },
-    // };
-    // doc.data = merge(doc.data, cardWithData);
-    // doc.data.attributes.memo = 'u suck';
-    // let c = await createFromSerialized(
-    //   doc.data as LooseCardResource,
-    //   doc,
-    //   undefined,
-    //   undefined
-    // );
-    // console.log('====');
-    // console.log(c);
-
-    // calls create card modal
-    let newCard = await createNewCard(
-      transactionCardRef,
-      undefined,
-      cardWithData
-    );
-    // you need to save the card
-    if (newCard) {
-      this.args.model.transaction = newCard;
     }
   });
 
@@ -251,41 +206,74 @@ class Isolated extends Component<typeof Claim> {
   private connectMetamask() {
     this.metamask.doConnectMetamask.perform(this.chainId);
   }
-  private async createTransactionCard(r: TransactionReceipt) {
-    let realmUrl = this.args.model[realmURL];
-    if (!realmUrl) {
-      throw new Error('Realm is undefined');
-    }
-    // @ts-ignore
-    let cardData = {
-      data: {
-        type: 'card',
-        attributes: {
-          transactionHash: r.transactionHash,
-          status: r.status,
-          blockHash: r.blockHash,
-          blockNumber: r.blockNumber,
-          from: r.from,
-          to: r.to,
-          // gasUsed: r.gasUsed,
-          // BigNumber.isBigNumber(r.gasUsed)
-          //   ? r.gasUsed.toString()
-          //   : r.gasUsed,
-          // effectiveGasPrice: r.effectiveGasPrice,
-          // BigNumber.isBigNumber(r.effectiveGasPrice)
-          //   ? r.effectiveGasPrice.toString()
-          //   : r.effectiveGasPrice,
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${realmUrl.href}transaction`,
-            name: 'Transaction',
+  private async createCardFromReceipt(r: TransactionReceipt, c: Chain) {
+    try {
+      let realmUrl = this.args.model[realmURL];
+      if (!realmUrl) {
+        throw new Error('Realm is undefined');
+      }
+      // @ts-ignore
+      let cardData = {
+        data: {
+          type: 'card',
+          attributes: {
+            transactionHash: r.transactionHash,
+            status: r.status,
+            blockHash: r.blockHash,
+            blockNumber: r.blockNumber,
+            from: r.from,
+            to: r.to,
+            // gasUsed: r.gasUsed,
+            // BigNumber.isBigNumber(r.gasUsed)
+            //   ? r.gasUsed.toString()
+            //   : r.gasUsed,
+            // effectiveGasPrice: r.effectiveGasPrice,
+            // BigNumber.isBigNumber(r.effectiveGasPrice)
+            //   ? r.effectiveGasPrice.toString()
+            //   : r.effectiveGasPrice,
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${realmUrl.href}transaction`,
+              name: 'Transaction',
+            },
           },
         },
-      },
-    };
-    try {
-      this.createCardFromReceipt.perform(r);
+      };
+      const transactionCardRef: CardRef = {
+        module: `${realmUrl.href}transaction`,
+        name: 'Transaction',
+      };
+      let transactionDoc: LooseSingleCardDocument = {
+        data: {
+          attributes: r,
+          relationships: {
+            chain: {
+              links: {
+                self: c.id,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${realmUrl.href}transaction`,
+              name: 'Transaction',
+            },
+          },
+        },
+      };
+      if (this.args.context?.actions?.createCard) {
+        let newCard = await this.args.context.actions.createCard(
+          transactionCardRef,
+          undefined,
+          {
+            doc: transactionDoc,
+          }
+        );
+        console.log(newCard);
+      } else {
+        //possibly create new card
+      }
     } catch (e: any) {
       throw e;
     }

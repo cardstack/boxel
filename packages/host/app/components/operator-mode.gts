@@ -28,6 +28,7 @@ import {
   type Actions,
   type CardRef,
   cardTypeDisplayName,
+  LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import type LoaderService from '../services/loader-service';
 import { service } from '@ember/service';
@@ -214,9 +215,14 @@ export default class OperatorMode extends Component<Signature> {
       relativeTo: URL | undefined,
       opts?: {
         isLinkedCard?: boolean;
+        doc?: LooseSingleCardDocument; // fill in card data with values
       }
     ): Promise<Card | undefined> => {
-      let doc = { data: { meta: { adoptsFrom: ref } } };
+      // prefers optional doc to be passed in
+      // use case: to populate default values in a create modal
+      let doc: LooseSingleCardDocument = opts?.doc ?? {
+        data: { meta: { adoptsFrom: ref } },
+      };
       let newCard = await this.cardService.createFromSerialized(
         doc.data,
         doc,
@@ -402,32 +408,37 @@ export default class OperatorMode extends Component<Signature> {
                     <BoxelDropdown>
                       <:trigger as |bindings|>
                         <IconButton
-                            @icon='icon-horizontal-three-dots'
-                            @width='20px'
-                            @height='20px'
-                            class='icon-button'
-                            aria-label='Options'
-                            data-test-edit-button
-                            {{bindings}}
-                          />
+                          @icon='icon-horizontal-three-dots'
+                          @width='20px'
+                          @height='20px'
+                          class='icon-button'
+                          aria-label='Options'
+                          data-test-edit-button
+                          {{bindings}}
+                        />
                       </:trigger>
                       <:content as |dd|>
                         <BoxelMenu
                           @closeMenu={{dd.close}}
-                          @items={{if (eq item.format 'edit') 
-                          (array
-                            (menuItem
-                              "Finish Editing" (fn this.save item i) icon='icon-check-mark'
+                          @items={{if
+                            (eq item.format 'edit')
+                            (array
+                              (menuItem
+                                'Finish Editing'
+                                (fn this.save item i)
+                                icon='icon-check-mark'
+                              )
+                              (menuItem
+                                'Delete'
+                                (fn this.delete item i)
+                                icon='icon-trash'
+                              )
                             )
-                            (menuItem 
-                              "Delete" (fn this.delete item i) icon='icon-trash'
+                            (array
+                              (menuItem
+                                'Edit' (fn this.edit item i) icon='icon-pencil'
+                              )
                             )
-                          ) 
-                          (array 
-                            (menuItem
-                              "Edit" (fn this.edit item i) icon='icon-pencil'
-                            )
-                          )
                           }}
                         />
                       </:content>
@@ -487,19 +498,12 @@ export default class OperatorMode extends Component<Signature> {
     </Modal>
     <style>
       .operator-mode-card-stack__buried .operator-mode-card-stack__card {
-        background-color: var(--boxel-200);
-        grid-template-rows: var(--buried-operator-mode-header-height) auto;
-      }
-
-      .operator-mode-card-stack__buried .operator-mode-card-stack__card__header .icon-button {
-        display: none;
-      }
-
-      .operator-mode-card-stack__buried .operator-mode-card-stack__card__header {
-        cursor: pointer;
-        font: 500 var(--boxel-font-sm);
-        padding: 0 var(--boxel-sp-xs);
-      }
+      background-color: var(--boxel-200); grid-template-rows:
+      var(--buried-operator-mode-header-height) auto; }
+      .operator-mode-card-stack__buried .operator-mode-card-stack__card__header
+      .icon-button { display: none; } .operator-mode-card-stack__buried
+      .operator-mode-card-stack__card__header { cursor: pointer; font: 500
+      var(--boxel-font-sm); padding: 0 var(--boxel-sp-xs); }
     </style>
   </template>
 }
