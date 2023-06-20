@@ -93,8 +93,10 @@ class Isolated extends Component<typeof Claim> {
       <FieldContainer @label='Explanation'><@fields.explanation
         /></FieldContainer>
       <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
-      <FieldContainer @label='Transaction'><@fields.transaction
-        /></FieldContainer>
+      {{#if this.args.model.transaction}}
+        <FieldContainer @label='Transaction'><@fields.transaction
+          /></FieldContainer>
+      {{/if}}
       {{#if this.connectedAndSameChain}}
         <Button
           disabled={{this.cannotClickClaimButton}}
@@ -151,7 +153,7 @@ class Isolated extends Component<typeof Claim> {
   get cannotClickClaimButton() {
     return (
       this.hasBeenClaimed ||
-      (!!this.args.context?.actions?.createCard &&
+      (!!!this.args.context?.actions?.createCard &&
         !this.inEnvThatCanCreateNewCard)
     );
   }
