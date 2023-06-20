@@ -156,7 +156,8 @@ jobs:
               - '.github/actions/deploy-boxel-host/**'
               - '.github/actions/deploy-ember-preview/**'
               - '.github/actions/deploy-realm-server/**'
-              - '.github/actions/waypoint-deploy/**' - 'pnpm-lock.yaml'
+              - '.github/actions/waypoint-deploy/**'
+              - 'pnpm-lock.yaml'
 
   host-deploy:
     name: Deploy host to staging
