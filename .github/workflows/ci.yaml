@@ -162,7 +162,7 @@ jobs:
   host-deploy:
     name: Deploy host to staging
     needs: change-check
-    if: ${{ needs.change-check.outputs.host == 'true' }}
+    if: ${{ needs.change-check.outputs.realm-server == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -175,7 +175,6 @@ jobs:
   realm-server-deploy:
     name: Deploy realm server to staging
     needs: host-deploy
-    if: ${{ needs.change-check.outputs.realm-server == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
