@@ -7,38 +7,6 @@
   --buried-operator-mode-header-height: 2.5rem;
 }
 
-/* Go template */
-.main {
-  position: relative;
-  display: grid;
-  grid-template-columns: 15rem 1fr 1fr;
-  min-height: 100vh;
-}
-
-.main__column {
-  padding: var(--boxel-sp);
-}
-
-.main__column > * + * {
-  margin-top: var(--boxel-sp);
-}
-
-.editor__column {
-  display: flex;
-  flex-direction: column;
-}
-
-.editor__menu {
-  list-style-type: none;
-  padding: 0;
-  display: flex;
-  gap: var(--boxel-sp-sm);
-}
-
-.editor__container {
-  flex: 1;
-}
-
 /* FileTree template */
 .file:hover {
   color: var(--boxel-highlight);

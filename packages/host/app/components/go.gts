@@ -45,7 +45,7 @@ interface Signature {
 export default class Go extends Component<Signature> {
   <template>
     <div class='main'>
-      <div class='main__column'>
+      <div class='main-column'>
         <FileTree
           @url={{ownRealmURL}}
           @openFile={{@path}}
@@ -53,8 +53,8 @@ export default class Go extends Component<Signature> {
         />
       </div>
       {{#if this.openFile}}
-        <div class='editor__column'>
-          <menu class='editor__menu'>
+        <div class='editor-column'>
+          <menu class='editor-menu'>
             <li>
               {{#if this.contentChangedTask.isRunning}}
                 <span data-test-saving>⟳ Saving…</span>
@@ -72,7 +72,7 @@ export default class Go extends Component<Signature> {
             {{/if}}
           </menu>
           <div
-            class='editor__container'
+            class='editor-container'
             data-test-editor
             {{monacoModifier
               content=this.openFile.content
@@ -83,7 +83,7 @@ export default class Go extends Component<Signature> {
           >
           </div>
         </div>
-        <div class='main__column'>
+        <div class='main-column'>
           {{#if (isRunnable this.openFile.name)}}
             <Module @file={{this.openFile}} />
           {{else if this.openFileCardJSON}}
@@ -102,6 +102,38 @@ export default class Go extends Component<Signature> {
         </div>
       {{/if}}
     </div>
+    <style>
+      .main {
+        position: relative;
+        display: grid;
+        grid-template-columns: 15rem 1fr 1fr;
+        min-height: 100vh;
+      }
+
+      .main-column {
+        padding: var(--boxel-sp);
+      }
+
+      .main-column > * + * {
+        margin-top: var(--boxel-sp);
+      }
+
+      .editor-column {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .editor-menu {
+        list-style-type: none;
+        padding: 0;
+        display: flex;
+        gap: var(--boxel-sp-sm);
+      }
+
+      .editor-container {
+        flex: 1;
+      }
+    </style>
   </template>
 
   @service declare loaderService: LoaderService;
