@@ -327,6 +327,7 @@ function getter<CardT extends CardBaseConstructor>(
       field.computeVia.constructor.name !== 'AsyncFunction'
     ) {
       value = field.computeVia.bind(instance)();
+      value = field.validate(instance, value);
       deserialized.set(field.name, value);
     } else if (
       !deserialized.has(field.name) &&
@@ -2063,10 +2064,8 @@ function makeDescriptor<
     return field.getter(this);
   };
   if (field.computeVia) {
-    descriptor.set = function (this: CardInstanceType<CardT>, value: any) {
-      value = field.validate(this, value);
-      let deserialized = getDataBucket(this);
-      deserialized.set(field.name, value);
+    descriptor.set = function () {
+      // computeds should just no-op when an assignment occurs
     };
   } else {
     descriptor.set = function (this: CardInstanceType<CardT>, value: any) {

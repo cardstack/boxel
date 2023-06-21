@@ -1853,7 +1853,7 @@ module('Integration | serialization', function (hooks) {
         @field pet = linksTo(Pet);
         @field friendPet = linksTo(Pet, {
           computeVia: function (this: Person) {
-            return this.friend?.pet;
+            return this.friend?.pet.id;
           },
         });
       }

@@ -613,7 +613,7 @@ module('Integration | computeds', function (hooks) {
       @field author = contains(Person);
       @field friend = linksTo(Pet, {
         computeVia: function (this: Post) {
-          return this.author.bestFriend;
+          return this.author.bestFriend.id;
         },
       });
     }
