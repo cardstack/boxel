@@ -163,6 +163,10 @@ export interface Actions {
     opts?: { isLinkedCard?: boolean; doc?: LooseSingleCardDocument }
   ) => Promise<Card | undefined>;
   viewCard: (card: Card) => void;
+  createCardDirectly: (
+    doc: LooseSingleCardDocument,
+    relativeTo: URL | undefined
+  ) => Promise<void>;
   // more CRUD ops to come...
 }
 

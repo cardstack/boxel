@@ -228,7 +228,6 @@ export default class OperatorMode extends Component<Signature> {
         doc,
         relativeTo ?? this.cardService.defaultURL
       );
-
       let newItem: StackItem = {
         card: newCard,
         format: 'edit',
@@ -240,6 +239,22 @@ export default class OperatorMode extends Component<Signature> {
     },
     viewCard: (card: Card) => {
       return this.addToStack({ card, format: 'isolated' });
+    },
+    createCardDirectly: async (
+      doc: LooseSingleCardDocument,
+      relativeTo: URL | undefined
+    ): Promise<void> => {
+      let newCard = await this.cardService.createFromSerialized(
+        doc.data,
+        doc,
+        relativeTo ?? this.cardService.defaultURL
+      );
+      let newItem: StackItem = {
+        card: newCard,
+        format: 'isolated',
+      };
+      this.addToStack(newItem);
+      return;
     },
   };
 
