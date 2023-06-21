@@ -19,14 +19,17 @@ import type CardService from '../services/card-service';
 import ENV from '@cardstack/host/config/environment';
 import {
   type LooseSingleCardDocument,
+  type CardRef,
   sanitizeHtml,
 } from '@cardstack/runtime-common';
 import type LoaderService from './loader-service';
 import { type Card } from 'https://cardstack.com/base/card-api';
 import type { RoomCard } from 'https://cardstack.com/base/room';
+import type { RoomObjectiveCard } from 'https://cardstack.com/base/room-objective';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 const { matrixURL } = ENV;
+const SET_OBJECTIVE_POWER_LEVEL = 50;
 
 export type Event = Partial<IEvent>;
 
@@ -37,6 +40,8 @@ export default class MatrixService extends Service {
   @tracked private _client: MatrixClient | undefined;
 
   roomCards: TrackedMap<string, Promise<RoomCard>> = new TrackedMap();
+  roomObjectives: TrackedMap<string, Promise<RoomObjectiveCard>> =
+    new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[] = [];
@@ -198,7 +203,7 @@ export default class MatrixService extends Service {
       i.startsWith('@') ? i : `@${i}:${userId!.split(':')[1]}`
     );
     let { room_id: roomId } = await this.client.createRoom({
-      preset: this.matrixSDK.Preset.TrustedPrivateChat, // private chat where all members have same power level as user that creates the room
+      preset: this.matrixSDK.Preset.PrivateChat,
       invite,
       name,
       topic,
@@ -248,6 +253,38 @@ export default class MatrixService extends Service {
     } else {
       await this.client.sendHtmlMessage(roomId, body ?? '', html);
     }
+  }
+
+  canSetObjective(roomId: string): boolean {
+    let room = this.client.getRoom(roomId);
+    if (!room) {
+      throw new Error(`bug: cannot get room for ${roomId}`);
+    }
+    let myUserId = this.client.getUserId();
+    if (!myUserId) {
+      throw new Error(`bug: cannot get user ID for current matrix client`);
+    }
+
+    let myself = room.getMember(myUserId);
+    if (!myself) {
+      throw new Error(
+        `bug: cannot get room member '${myUserId}' in room '${roomId}'`
+      );
+    }
+    return myself.powerLevel >= SET_OBJECTIVE_POWER_LEVEL;
+  }
+
+  async setObjective(roomId: string, ref: CardRef): Promise<void> {
+    if (!this.canSetObjective(roomId)) {
+      throw new Error(
+        `The user '${this.client.getUserId()}' is not permitted to set an objective in room '${roomId}'`
+      );
+    }
+    await this.client.sendEvent(roomId, 'm.room.message', {
+      msgtype: 'org.boxel.objective',
+      body: `Objective has been set by ${this.client.getUserId()}`,
+      ref,
+    });
   }
 
   async initializeRoomStates() {

@@ -8,6 +8,7 @@ import type {
   RoomCard,
   MatrixEvent as DiscreteMatrixEvent,
 } from 'https://cardstack.com/base/room';
+import type { RoomObjectiveCard } from 'https://cardstack.com/base/room-objective';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { type LooseCardResource, baseRealm } from '@cardstack/runtime-common';
 import type * as MatrixSDK from 'matrix-js-sdk';
@@ -33,6 +34,7 @@ export type Event = Partial<IEvent>;
 
 export interface Context {
   roomCards: Map<string, Promise<RoomCard>>;
+  roomObjectives: Map<string, Promise<RoomObjectiveCard>>;
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[];

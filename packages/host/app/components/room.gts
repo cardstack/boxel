@@ -102,6 +102,9 @@ export default class Room extends Component<RoomArgs> {
         <Button data-test-remove-card-btn {{on 'click' this.removeCard}}>Remove
           Card</Button>
       {{else}}
+        {{#if this.canSetObjective}}
+          <Button data-test-set-objective-btn>Set Objective</Button>
+        {{/if}}
         <Button
           data-test-choose-card-btn
           @disabled={{this.doChooseCard.isRunning}}
@@ -172,6 +175,11 @@ export default class Room extends Component<RoomArgs> {
 
   private get cardtoSend() {
     return this.cardsToSend.get(this.args.roomId);
+  }
+
+  private get canSetObjective() {
+    // TODO also take into consideration whether the room already has an objective
+    return this.matrixService.canSetObjective(this.args.roomId);
   }
 
   private get cardToSendComponent() {
