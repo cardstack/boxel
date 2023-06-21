@@ -640,10 +640,13 @@ export class Realm {
   }
 
   private async getCard(request: Request): Promise<Response> {
+    let realmRootPath = new URL(request.url).pathname.replace('/', ''); // Could be '', 'base',...
     let localPath = this.paths.local(request.url);
-    if (localPath === '') {
+
+    if (localPath === realmRootPath) {
       localPath = 'index';
     }
+
     let url = this.paths.fileURL(localPath);
     let maybeError = await this.#searchIndex.card(url, { loadLinks: true });
     if (!maybeError) {
