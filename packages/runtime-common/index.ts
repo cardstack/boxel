@@ -135,13 +135,15 @@ export async function getCards(query: Query) {
 export interface CardCreator {
   create<T extends Card>(
     ref: CardRef,
-    relativeTo: URL | undefined
+    relativeTo: URL | undefined,
+    opts?: { doc?: LooseSingleCardDocument }
   ): Promise<undefined | T>;
 }
 
 export async function createNewCard<T extends Card>(
   ref: CardRef,
-  relativeTo: URL | undefined
+  relativeTo: URL | undefined,
+  opts?: { doc?: LooseSingleCardDocument }
 ): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CREATE_NEW_CARD) {
@@ -151,16 +153,20 @@ export async function createNewCard<T extends Card>(
   }
   let cardCreator: CardCreator = here._CARDSTACK_CREATE_NEW_CARD;
 
-  return await cardCreator.create<T>(ref, relativeTo);
+  return await cardCreator.create<T>(ref, relativeTo, opts);
 }
 
 export interface Actions {
   createCard: (
     ref: CardRef,
     relativeTo: URL | undefined,
-    opts?: { isLinkedCard?: boolean }
+    opts?: { isLinkedCard?: boolean; doc?: LooseSingleCardDocument }
   ) => Promise<Card | undefined>;
   viewCard: (card: Card) => void;
+  createCardDirectly: (
+    doc: LooseSingleCardDocument,
+    relativeTo: URL | undefined
+  ) => Promise<void>;
   // more CRUD ops to come...
 }
 

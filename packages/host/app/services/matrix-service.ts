@@ -185,11 +185,18 @@ export default class MatrixService extends Service {
 
   async createRoom(
     name: string,
-    localInvite: string[], // these are just local names--assume no federation, all users live on the same homeserver
+    invites: string[], // these can be local names
     topic?: string
   ): Promise<string> {
-    let homeserver = new URL(this.client.getHomeserverUrl());
-    let invite = localInvite.map((i) => `@${i}:${homeserver.hostname}`);
+    let userId = this.client.getUserId();
+    if (!userId) {
+      throw new Error(
+        `bug: there is no userId associated with the matrix client`
+      );
+    }
+    let invite = invites.map((i) =>
+      i.startsWith('@') ? i : `@${i}:${userId!.split(':')[1]}`
+    );
     let { room_id: roomId } = await this.client.createRoom({
       preset: this.matrixSDK.Preset.TrustedPrivateChat, // private chat where all members have same power level as user that creates the room
       invite,
@@ -200,12 +207,20 @@ export default class MatrixService extends Service {
     return roomId;
   }
 
-  // these are just local names--assume no federation, all users live on the same homeserver
-  async invite(roomId: string, localInvites: string[]) {
-    let homeserver = new URL(this.client.getHomeserverUrl());
+  // these can be local names
+  async invite(roomId: string, invite: string[]) {
+    let userId = this.client.getUserId();
+    if (!userId) {
+      throw new Error(
+        `bug: there is no userId associated with the matrix client`
+      );
+    }
     await Promise.all(
-      localInvites.map((localName) =>
-        this.client.invite(roomId, `@${localName}:${homeserver.hostname}`)
+      invite.map((i) =>
+        this.client.invite(
+          roomId,
+          i.startsWith('@') ? i : `@${i}:${userId!.split(':')[1]}`
+        )
       )
     );
   }
@@ -233,11 +248,6 @@ export default class MatrixService extends Service {
     } else {
       await this.client.sendHtmlMessage(roomId, body ?? '', html);
     }
-  }
-
-  async sendMarkdownMessage(roomId: string, markdown: string): Promise<void> {
-    let html = sanitizeHtml(marked(markdown));
-    await this.client.sendHtmlMessage(roomId, markdown, html);
   }
 
   async initializeRoomStates() {

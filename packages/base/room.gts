@@ -343,7 +343,10 @@ export class RoomCard extends Card {
   });
 
   @field messages = containsMany(MessageCard, {
-    isUsed: true, // TODO we should not have to set this--need to research this issue
+    // since we are rendering this card without the isolated renderer, we cannot use
+    // the rendering mechanism to test if a field is used or not, so we explicitely
+    // tell the card runtime that this field is being used
+    isUsed: true,
     computeVia: async function (this: RoomCard) {
       let cache = messageCache.get(this);
       if (!cache) {
