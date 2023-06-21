@@ -250,6 +250,7 @@ export default class OperatorMode extends Component<Signature> {
         doc,
         relativeTo ?? this.cardService.defaultURL
       );
+      await this.cardService.saveModel(newCard);
       let newItem: StackItem = {
         card: newCard,
         format: 'isolated',
