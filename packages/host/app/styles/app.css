@@ -93,10 +93,6 @@ nav > .directory-level {
 }
 
 /* Other */
-.card-editor__buttons {
-  text-align: right;
-}
-
 .schema,
 .catalog-entry-editor {
   display: grid;
