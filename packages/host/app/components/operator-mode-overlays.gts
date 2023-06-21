@@ -38,12 +38,21 @@ export default class OperatorModeOverlays extends Component<Signature> {
       <button
         {{on 'click' (fn this.addToStack overlayedButton.linksToCard)}}
         style={{this.styleForOverlayedButton overlayedButton}}
-        class='operator-mode-overlayed-button'
+        class='overlay-button'
         data-test-cardstack-operator-mode-overlay-button
       >
         Open
       </button>
     {{/each}}
+    <style>
+      .overlay-button {
+        position: absolute;
+        border: none;
+        width: auto;
+        margin-top: var(--boxel-sp);
+        margin-right: var(--boxel-sp);
+      }
+    </style>
   </template>
 
   @tracked overlayedButtons = new TrackedArray<OverlayedButton>([]);

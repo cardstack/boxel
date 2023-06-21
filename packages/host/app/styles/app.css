@@ -487,14 +487,6 @@
   margin-left: var(--boxel-sp-xs);
 }
 
-.operator-mode-overlayed-button {
-  position: absolute;
-  border: none;
-  width: auto;
-  margin-top: var(--boxel-sp);
-  margin-right: var(--boxel-sp);
-}
-
 .freestyle-search-sheet-example-container {
   background: #494559;
   min-height: 300px;
