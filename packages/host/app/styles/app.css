@@ -51,14 +51,6 @@
   color: var(--boxel-highlight);
 }
 
-nav > .directory-level {
-  padding-left: 0;
-}
-
-.directory-level {
-  padding-left: 1em;
-}
-
 /* Modal */
 .dialog-box {
   height: 100%;
