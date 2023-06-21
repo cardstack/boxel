@@ -13,6 +13,11 @@ let CHAIN_IDS: Record<string, number> = {
   'Gnosis Chain': 100,
   Polygon: 137,
 };
+let BLOCK_EXPLORER_URLS: Record<number, string> = {
+  1: 'https://etherscan.io',
+  137: 'https://polygonscan.com',
+  100: 'https://gnosisscan.io',
+};
 
 export class Chain extends Card {
   static displayName = 'Chain';
@@ -20,6 +25,11 @@ export class Chain extends Card {
   @field chainId = contains(IntegerCard, {
     computeVia: function (this: Chain) {
       return CHAIN_IDS[this.name];
+    },
+  });
+  @field blockExplorer = contains(StringCard, {
+    computeVia: function (this: Chain) {
+      return BLOCK_EXPLORER_URLS[CHAIN_IDS[this.name]];
     },
   });
   @field title = contains(StringCard, {
@@ -39,14 +49,23 @@ export class Chain extends Card {
       {{/if}}
     </template>
   };
-  static embedded = class Embedded extends Component<typeof Chain> {
-    <template>
-      <@fields.name /> ({{@model.chainId}})
-    </template>
-  };
+
   static isolated = class Isolated extends Component<typeof Chain> {
     <template>
-      <div><@fields.name /> ({{@model.chainId}})</div>
+      <FieldContainer @label='Chain'><@fields.name />
+        (<@fields.chainId />)</FieldContainer>
+      <FieldContainer @label='BlockExplorer'>
+        <a href={{@model.blockExplorer}}>{{@model.blockExplorer}}</a>
+      </FieldContainer>
+    </template>
+  };
+  static embedded = class Embedded extends Component<typeof Chain> {
+    <template>
+      <FieldContainer @label='Chain'><@fields.name />
+        (<@fields.chainId />)</FieldContainer>
+      <FieldContainer @label='BlockExplorer'>
+        <a href={{@model.blockExplorer}}>{{@model.blockExplorer}}</a>
+      </FieldContainer>
     </template>
   };
 }
