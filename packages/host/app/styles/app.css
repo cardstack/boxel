@@ -118,18 +118,6 @@ nav > .directory-level {
   margin-top: var(--boxel-sp);
 }
 
-.card-catalog {
-  list-style-type: none;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16.25rem, 1fr));
-  gap: var(--boxel-sp);
-  padding-left: 0;
-}
-
-.card-catalog > li > * + * {
-  margin-top: var(--boxel-sp);
-}
-
 .error {
   color: var(--boxel-error-100);
 }

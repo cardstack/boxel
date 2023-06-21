@@ -78,6 +78,19 @@ export default class CardCatalogModal extends Component<Signature> {
         </CardContainer>
       </Modal>
     {{/if}}
+    <style>
+      .card-catalog {
+        list-style-type: none;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(16.25rem, 1fr));
+        gap: var(--boxel-sp);
+        padding-left: 0;
+      }
+
+      .card-catalog > li > * + * {
+        margin-top: var(--boxel-sp);
+      }
+    </style>
   </template>
 
   @tracked currentRequest:
