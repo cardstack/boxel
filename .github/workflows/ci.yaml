@@ -138,31 +138,30 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
-      host: ${{ steps.filter.outputs.host }}
-      realm-server: ${{ steps.filter.outputs.realm-server }}
+      boxel: ${{ steps.filter.outputs.boxel }}
     steps:
       - uses: actions/checkout@v3
       - uses: dorny/paths-filter@v2
         id: filter
         with:
           filters: |
-            realm-server:
-              - 'packages/boxel-ui/**'
-              - 'packages/realm-server/**'
-              - 'packages/base/**'
-              - 'packages/host/**'
-              - 'packages/runtime-common/**'
-              - '.github/workflows/ci.yaml'
+            boxel:
               - '.github/actions/deploy-boxel-host/**'
               - '.github/actions/deploy-ember-preview/**'
               - '.github/actions/deploy-realm-server/**'
               - '.github/actions/waypoint-deploy/**'
+              - '.github/workflows/ci.yaml'
+              - 'packages/base/**'
+              - 'packages/boxel-ui/**'
+              - 'packages/host/**'
+              - 'packages/realm-server/**'
+              - 'packages/runtime-common/**'
               - 'pnpm-lock.yaml'
 
-  host-deploy:
+  deploy-host:
     name: Deploy host to staging
     needs: change-check
-    if: ${{ needs.change-check.outputs.realm-server == 'true' }}
+    if: ${{ needs.change-check.outputs.boxel == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -172,9 +171,9 @@ jobs:
           environment: staging
           discord_webhook: ${{ secrets.DISCORD_WEBHOOK }}
 
-  realm-server-deploy:
+  deploy-realm-server:
     name: Deploy realm server to staging
-    needs: host-deploy
+    needs: deploy-host
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3

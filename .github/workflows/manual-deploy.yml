@@ -30,7 +30,7 @@ jobs:
 
   deploy-realm-server:
     name: Deploy Realm Server
-    needs: host-deploy
+    needs: deploy-host
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
