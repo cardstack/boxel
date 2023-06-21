@@ -1,4 +1,4 @@
-name: Manual Deploy [realm-server]
+name: Manual Deploy [boxel]
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ permissions:
   id-token: write
 
 jobs:
-  host-deploy:
+  deploy-host:
     name: Deploy host
     runs-on: ubuntu-latest
     steps:
@@ -28,7 +28,7 @@ jobs:
           environment: ${{ inputs.environment }}
           discord_webhook: ${{ secrets.DISCORD_WEBHOOK }}
 
-  realm-server-deploy:
+  deploy-realm-server:
     name: Deploy Realm Server
     needs: host-deploy
     runs-on: ubuntu-latest
