@@ -106,7 +106,7 @@ class Isolated extends Component<typeof Claim> {
             Claiming...
           {{else if this.hasBeenClaimed}}
             Claim has been used
-          {{else if @context.actions.createCard}}
+          {{else if @context.actions.createCardDirectly}}
             Claim
           {{else if this.inEnvThatCanCreateNewCard}}
             Claim
@@ -153,7 +153,7 @@ class Isolated extends Component<typeof Claim> {
   get cannotClickClaimButton() {
     return (
       this.hasBeenClaimed ||
-      (!!!this.args.context?.actions?.createCard &&
+      (!!!this.args.context?.actions?.createCardDirectly &&
         !this.inEnvThatCanCreateNewCard)
     );
   }
@@ -246,14 +246,11 @@ class Isolated extends Component<typeof Claim> {
           },
         },
       };
-      if (this.args.context?.actions?.createCard) {
+      if (this.args.context?.actions?.createCardDirectly) {
         // create using operator mode action
-        await this.args.context.actions.createCard(
-          transactionCardRef,
-          undefined,
-          {
-            doc: transactionDoc,
-          }
+        await this.args.context.actions.createCardDirectly(
+          transactionDoc,
+          undefined
         );
       } else {
         // create using create card modal
