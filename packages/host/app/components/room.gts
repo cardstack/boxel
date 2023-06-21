@@ -2,11 +2,10 @@ import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { tracked } from '@glimmer/tracking';
-import debounce from 'lodash/debounce';
-import { not, or, and } from '../helpers/truth-helpers';
-import { ScrollPaginate } from '../modifiers/scrollers';
-import { restartableTask, enqueueTask } from 'ember-concurrency';
+//@ts-expect-error the types don't recognize the cached export
+import { tracked, cached } from '@glimmer/tracking';
+import { not, and } from '../helpers/truth-helpers';
+import { restartableTask } from 'ember-concurrency';
 import {
   BoxelHeader,
   BoxelInput,
@@ -14,16 +13,10 @@ import {
   FieldContainer,
   Button,
 } from '@cardstack/boxel-ui';
+import { getRoomCard } from '../resources/room-card';
 import { TrackedMap } from 'tracked-built-ins';
-import {
-  type LooseSingleCardDocument,
-  chooseCard,
-  baseCardRef,
-} from '@cardstack/runtime-common';
-import Message from './message';
-import { type RoomMember } from 'matrix-js-sdk';
+import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
 import type MatrixService from '../services/matrix-service';
-import { eventDebounceMs } from '../lib/matrix-utils';
 import { type Card } from 'https://cardstack.com/base/card-api';
 import type CardService from '../services/card-service';
 
@@ -32,18 +25,14 @@ const TRUE = true;
 interface RoomArgs {
   Args: {
     roomId: string;
-    members: TrackedMap<
-      string,
-      { member: RoomMember; status: 'join' | 'invite' | 'leave' }
-    >;
   };
 }
 export default class Room extends Component<RoomArgs> {
   <template>
     <BoxelHeader
-      @title={{this.roomName}}
+      @title={{this.roomCard.name}}
       @hasBackground={{TRUE}}
-      class='room__header'
+      class='matrix room__header'
     >
       <:actions>
         <Button
@@ -82,38 +71,15 @@ export default class Room extends Component<RoomArgs> {
       </fieldset>
     {{/if}}
 
-    <div
-      class='room__messages-wrapper'
-      {{ScrollPaginate
-        isDisabled=this.isPaginationStopped
-        onScrollTop=this.getPrevMessages
-      }}
-    >
+    <div class='room__messages-wrapper'>
       <div class='room__messages'>
         <div class='room__messages__notices'>
-          {{#if
-            (or this.doRoomScrollBack.isRunning this.doTimelineFlush.isRunning)
-          }}
-            <LoadingIndicator />
-          {{/if}}
-          {{#if this.atBeginningOfTimeline}}
-            <div
-              data-test-timeline-start
-              class='room__messages__timeline-start'
-            >
-              - Beginning of conversation -
-            </div>
-          {{/if}}
+          <div data-test-timeline-start class='room__messages__timeline-start'>
+            - Beginning of conversation -
+          </div>
         </div>
-        {{#each this.timelineEvents as |event index|}}
-          <Message
-            @event={{event}}
-            @members={{this.members}}
-            @index={{index}}
-            @loadCard={{this.loadCard}}
-            @register={{this.registerMessage}}
-            @resetScroll={{this.resetScroll}}
-          />
+        {{#each this.messageCardComponents as |Message|}}
+          <Message />
         {{else}}
           <div data-test-no-messages>
             (No messages)
@@ -127,12 +93,12 @@ export default class Room extends Component<RoomArgs> {
         data-test-message-field
         type='text'
         @multiline={{TRUE}}
-        @value={{this.message}}
+        @value={{this.messageToSend}}
         @onInput={{this.setMessage}}
         rows='4'
         cols='20'
       />
-      {{#if this.card}}
+      {{#if this.cardtoSend}}
         <Button data-test-remove-card-btn {{on 'click' this.removeCard}}>Remove
           Card</Button>
       {{else}}
@@ -144,122 +110,97 @@ export default class Room extends Component<RoomArgs> {
       {{/if}}
       <Button
         data-test-send-message-btn
-        @disabled={{and (not this.message) (not this.card)}}
+        @disabled={{and (not this.messageToSend) (not this.cardtoSend)}}
         @loading={{this.doSendMessage.isRunning}}
         @kind='primary'
         {{on 'click' this.sendMessage}}
       >Send</Button>
     </div>
-    {{#if this.card}}
+    {{#if this.cardtoSend}}
       <div class='room__selected-card'>
         <div class='room__selected-card__field'>Selected Card:</div>
         <div
           class='room__selected-card__card-wrapper'
-          data-test-selected-card={{this.card.id}}
+          data-test-selected-card={{this.cardtoSend.id}}
         >
-          <this.cardComponent />
+          <this.cardToSendComponent />
         </div>
       </div>
     {{/if}}
   </template>
 
   @service private declare matrixService: MatrixService;
-  @service declare cardService: CardService;
-  @tracked private paginationTime: number | undefined;
+  @service private declare cardService: CardService;
   @tracked private isInviteMode = false;
   @tracked private membersToInvite: string[] = [];
-  private messages: TrackedMap<string, string | undefined> = new TrackedMap();
-  private cards: TrackedMap<string, Card | undefined> = new TrackedMap();
-  private messageScrollers: Map<string, Map<string, () => void>> = new Map();
+  private messagesToSend: TrackedMap<string, string | undefined> =
+    new TrackedMap();
+  private cardsToSend: TrackedMap<string, Card | undefined> = new TrackedMap();
+  private roomCardResource = getRoomCard(this, () => this.args.roomId);
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
-    this.doTimelineFlush.perform();
+    this.doMatrixEventFlush.perform();
   }
 
-  get room() {
-    this.paginationTime; // just consume this so that we can invalidate the room after pagination
-    let room = this.matrixService.client.getRoom(this.args.roomId);
-    if (!room) {
-      throw new Error(
-        `bug: should never get here--matrix sdk returned a null room for ${this.args.roomId}`
+  private get roomCard() {
+    return this.roomCardResource.roomCard;
+  }
+
+  private get messageCardComponents() {
+    return this.roomCard
+      ? this.roomCard.messages.map((messageCard) =>
+          messageCard.constructor.getComponent(messageCard, 'embedded')
+        )
+      : [];
+  }
+
+  @cached
+  private get memberNames() {
+    if (!this.roomCard) {
+      return;
+    }
+    return [
+      ...this.roomCard.joinedMembers.map((m) => m.displayName),
+      ...this.roomCard.invitedMembers.map((m) => `${m.displayName} (invited)`),
+    ].join(', ');
+  }
+
+  private get messageToSend() {
+    return this.messagesToSend.get(this.args.roomId);
+  }
+
+  private get cardtoSend() {
+    return this.cardsToSend.get(this.args.roomId);
+  }
+
+  private get cardToSendComponent() {
+    if (this.cardtoSend) {
+      return this.cardtoSend.constructor.getComponent(
+        this.cardtoSend,
+        'embedded'
       );
-    }
-    return room;
-  }
-
-  get members() {
-    return [...this.args.members.values()];
-  }
-
-  get memberNames() {
-    return this.members
-      .map(
-        (m) => `${m.member.name}${m.status === 'invite' ? ' (invited)' : ''}`
-      )
-      .join(', ');
-  }
-
-  get roomName() {
-    return this.matrixService.rooms.get(this.args.roomId)?.name;
-  }
-
-  get atBeginningOfTimeline() {
-    return this.room.oldState.paginationToken === null;
-  }
-
-  get timelineEvents() {
-    let roomTimeline = this.matrixService.timelines.get(this.args.roomId);
-    if (!roomTimeline) {
-      return [];
-    }
-    return [...roomTimeline.values()].sort(
-      (a, b) => a.origin_server_ts! - b.origin_server_ts!
-    );
-  }
-
-  get message() {
-    return this.messages.get(this.args.roomId);
-  }
-
-  get card() {
-    return this.cards.get(this.args.roomId);
-  }
-
-  get cardComponent() {
-    if (this.card) {
-      return this.card.constructor.getComponent(this.card, 'embedded');
     }
     return;
   }
 
-  get membersToInviteFormatted() {
+  private get membersToInviteFormatted() {
     return this.membersToInvite.join(', ');
   }
 
   @action
-  isPaginationStopped() {
-    return this.doRoomScrollBack.isRunning || this.atBeginningOfTimeline;
-  }
-
-  @action
   private setMessage(message: string) {
-    this.messages.set(this.args.roomId, message);
+    this.messagesToSend.set(this.args.roomId, message);
   }
 
   @action
   private sendMessage() {
-    if (this.message == null && !this.card) {
+    if (this.messageToSend == null && !this.cardtoSend) {
       throw new Error(
         `bug: should never get here, send button is disabled when there is no message nor card`
       );
     }
-    this.doSendMessage.perform(this.message, this.card);
-  }
-
-  @action
-  private getPrevMessages() {
-    this.doRoomScrollBack.perform();
+    this.doSendMessage.perform(this.messageToSend, this.cardtoSend);
   }
 
   @action
@@ -289,52 +230,26 @@ export default class Room extends Component<RoomArgs> {
 
   @action
   private removeCard() {
-    this.cards.set(this.args.roomId, undefined);
+    this.cardsToSend.set(this.args.roomId, undefined);
   }
-
-  @action
-  registerMessage(id: string, scrollIntoView: () => void) {
-    let room = this.messageScrollers.get(this.args.roomId);
-    if (!room) {
-      room = new Map();
-      this.messageScrollers.set(this.args.roomId, room);
-    }
-    room.set(id, scrollIntoView);
-  }
-
-  // tell the last message to scroll into view
-  private resetScroll = debounce(() => {
-    let room = this.messageScrollers.get(this.args.roomId);
-    if (!room) {
-      return;
-    }
-    let lastEvent = [...this.timelineEvents.values()].pop();
-    let scrollTo = room.get(lastEvent?.event_id!);
-    if (scrollTo) {
-      scrollTo();
-    }
-  }, eventDebounceMs);
 
   private doSendMessage = restartableTask(
     async (message: string | undefined, card?: Card) => {
-      this.messages.set(this.args.roomId, undefined);
-      this.cards.set(this.args.roomId, undefined);
+      this.messagesToSend.set(this.args.roomId, undefined);
+      this.cardsToSend.set(this.args.roomId, undefined);
       await this.matrixService.sendMessage(this.args.roomId, message, card);
     }
   );
-
-  private doRoomScrollBack = restartableTask(async () => {
-    await this.matrixService.client.scrollback(this.room!);
-    this.paginationTime = Date.now();
-  });
 
   private doInvite = restartableTask(async () => {
     await this.matrixService.invite(this.args.roomId, this.membersToInvite);
     this.resetInvite();
   });
 
-  private doTimelineFlush = restartableTask(async () => {
+  private doMatrixEventFlush = restartableTask(async () => {
+    await this.matrixService.flushMembership;
     await this.matrixService.flushTimeline;
+    await this.roomCardResource.loading;
   });
 
   private doChooseCard = restartableTask(async () => {
@@ -342,29 +257,9 @@ export default class Room extends Component<RoomArgs> {
       filter: { type: baseCardRef },
     });
     if (chosenCard) {
-      this.cards.set(this.args.roomId, chosenCard);
+      this.cardsToSend.set(this.args.roomId, chosenCard);
     }
   });
-
-  // we are working around the loader bug that deadlocks when loading cyclic dependencies
-  // concurrently. When loading cards we use the enqueue task to load one card at a time
-  // in the room. When this bug is fixed we should move this method into the Message component
-  // so cards can load concurrently.
-  // TODO this bug has been solved so we can clean this up now
-  private loadCard = enqueueTask(
-    async (doc: LooseSingleCardDocument, onComplete: (card: Card) => void) => {
-      let id = doc.data.id;
-      if (!id) {
-        throw new Error(`Cannot render unsaved card`);
-      }
-      let card = await this.cardService.createFromSerialized(
-        doc.data,
-        doc,
-        new URL(id)
-      );
-      onComplete(card);
-    }
-  );
 
   private resetInvite() {
     this.membersToInvite = [];

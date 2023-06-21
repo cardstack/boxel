@@ -4,6 +4,7 @@ import { Card, CardContext, Format } from 'https://cardstack.com/base/card-api';
 import Preview from './preview';
 import { action } from '@ember/object';
 import { fn, array } from '@ember/helper';
+import { trackedFunction } from 'ember-resources/util/function';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import type CardService from '../services/card-service';
 // import getValueFromWeakMap from '../helpers/get-value-from-weakmap';
@@ -357,6 +358,17 @@ export default class OperatorMode extends Component<Signature> {
     }
   }
 
+  fetchBackgroundImageURL = trackedFunction(this, async () => {
+    let mostBottomCard = this.stack?.[0]?.card;
+    let realmInfoSymbol = await this.cardService.realmInfoSymbol();
+    // @ts-ignore allows using Symbol as an index
+    return mostBottomCard?.[realmInfoSymbol]?.backgroundURL;
+  });
+
+  get backgroundImageURL() {
+    return this.fetchBackgroundImageURL.value ?? '';
+  }
+
   <template>
     <Modal
       class='operator-mode'
@@ -364,6 +376,7 @@ export default class OperatorMode extends Component<Signature> {
       @onClose={{@onClose}}
       @isOverlayDismissalDisabled={{true}}
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
+      @backgroundImageURL={{this.backgroundImageURL}}
     >
 
       <CardCatalogModal />

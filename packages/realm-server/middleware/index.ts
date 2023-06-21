@@ -94,13 +94,18 @@ export function rootRealmRedirect(
 ): (ctxt: Koa.Context, next: Koa.Next) => void {
   return (ctxt: Koa.Context, next: Koa.Next) => {
     let url = fullRequestURL(ctxt);
+
+    let realmUrlWithoutQueryParams = url.href.split('?')[0];
     if (
-      !url.href.endsWith('/') &&
+      !realmUrlWithoutQueryParams.endsWith('/') &&
       realms.find(
-        (r) => Loader.reverseResolution(`${url.href}/`).href === r.url
+        (r) =>
+          Loader.reverseResolution(`${realmUrlWithoutQueryParams}/`).href ===
+          r.url
       )
     ) {
-      ctxt.redirect(`${url.href}/`);
+      url.pathname = `${url.pathname}/`;
+      ctxt.redirect(`${url.href}`); // Adding a trailing slash to the URL one line above will update the href
       return;
     }
     return next();

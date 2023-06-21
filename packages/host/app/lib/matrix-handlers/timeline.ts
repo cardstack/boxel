@@ -1,6 +1,6 @@
 import debounce from 'lodash/debounce';
 import { type MatrixEvent } from 'matrix-js-sdk';
-import { Context, Event } from './index';
+import { type Context, type Event, addRoomEvent } from './index';
 import { eventDebounceMs } from '../matrix-utils';
 
 export function onTimeline(context: Context) {
@@ -32,32 +32,23 @@ async function drainTimeline(context: Context) {
 }
 
 async function processDecryptedEvent(context: Context, event: Event) {
-  let { event_id: eventId, room_id: roomId } = event;
-  if (!eventId) {
+  await addRoomEvent(context, event);
+
+  let { room_id: roomId } = event;
+  if (!roomId) {
     throw new Error(
-      `bug: event ID is undefined for event ${JSON.stringify(event, null, 2)}`
+      `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`
     );
   }
-  if (event.type === 'm.room.message' || event.type === 'm.room.encrypted') {
-    if (!roomId) {
-      throw new Error(
-        `bug: roomId is undefined for message event ${JSON.stringify(
-          event,
-          null,
-          2
-        )}`
-      );
-    }
-    let timeline = context.timelines.get(roomId);
-    if (!timeline) {
-      timeline = new context.mapClazz<string, Event>();
-      context.timelines.set(roomId, timeline);
-    }
-    // we use a map for the timeline to de-dupe events
-    let performCallback = !timeline.has(eventId);
-    timeline.set(eventId, event);
-    if (performCallback && context.handleMessage) {
-      await context.handleMessage(context, event, roomId);
-    }
+
+  let room = context.client.getRoom(roomId);
+  if (!room) {
+    throw new Error(
+      `bug: should never get here--matrix sdk returned a null room for ${roomId}`
+    );
+  }
+  if (room.oldState.paginationToken != null) {
+    // we need to scroll back to capture any room events fired before this one
+    await context.client.scrollback(context.client.getRoom(roomId)!);
   }
 }
