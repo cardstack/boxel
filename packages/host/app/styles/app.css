@@ -93,8 +93,7 @@ nav > .directory-level {
 }
 
 /* Other */
-.schema,
-.catalog-entry-editor {
+.schema {
   display: grid;
   gap: var(--boxel-sp);
   padding: var(--boxel-sp);
