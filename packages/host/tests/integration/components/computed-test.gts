@@ -632,6 +632,53 @@ module('Integration | computeds', function (hooks) {
       .hasText('Van Gogh');
   });
 
+  test('can render an asynchronous computed linksTo field', async function (assert) {
+    let { field, contains, linksTo, Card, Component } = cardApi;
+    let { default: StringCard } = string;
+    class Pet extends Card {
+      @field name = contains(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <span data-test='name'><@fields.name /></span>
+        </template>
+      };
+    }
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field bestFriend = linksTo(Pet);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <span data-test='firstName'><@fields.firstName /></span>
+          <span data-test='bestFriend'><@fields.bestFriend /></span>
+        </template>
+      };
+    }
+    class Post extends Card {
+      @field title = contains(StringCard);
+      @field author = contains(Person);
+      @field friend = linksTo(Pet, {
+        computeVia: 'computeFriend',
+      });
+      async computeFriend(this: Post) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return this.author.bestFriend;
+      }
+    }
+
+    let friend = new Pet({ name: 'Van Gogh' });
+    let author = new Person({ firstName: 'Mango', bestFriend: friend });
+    let firstPost = new Post({ title: 'First Post', author });
+
+    await renderCard(firstPost, 'isolated');
+    assert.dom('[data-test-field="title"]').hasText('Title First Post');
+    assert
+      .dom('[data-test-field="author"] [data-test="firstName"]')
+      .hasText('Mango');
+    assert
+      .dom('[data-test-field="friend"] [data-test="name"]')
+      .hasText('Van Gogh');
+  });
+
   test('can render a computed linksToMany relationship', async function (this: RenderingTestContext, assert) {
     let { field, contains, linksTo, linksToMany, Card, Component } = cardApi;
     let { default: StringCard } = string;
@@ -660,6 +707,67 @@ module('Integration | computeds', function (hooks) {
         computeVia: 'findCollaborators',
       });
       findCollaborators(this: Post) {
+        let mango = this.author.pets.find((p) => p.name === 'Mango');
+        return [mango, ...this.factCheckers];
+      }
+    }
+
+    let p1 = new Pet({ id: `${testRealmURL}mango`, name: 'Mango' });
+    let p2 = new Pet({ name: 'Tango' });
+    let f1 = new Pet({ name: 'A' });
+    let f2 = new Pet({ name: 'B' });
+    let f3 = new Pet({ name: 'C' });
+    let author = new Person({ firstName: 'Van Gogh', pets: [p1, p2] });
+    let firstPost = new Post({
+      title: 'First Post',
+      author,
+      factCheckers: [f1, f2, f3],
+    });
+
+    await renderCard(firstPost, 'isolated');
+    assert.dom('[data-test-field="title"]').hasText('Title First Post');
+    assert
+      .dom('[data-test-field="author"] [data-test="firstName"]')
+      .hasText('Van Gogh');
+    assert.deepEqual(
+      [
+        ...this.element.querySelectorAll(
+          '[data-test-field="collaborators"] [data-test="name"]'
+        ),
+      ].map((element) => element.textContent?.trim()),
+      ['Mango', 'A', 'B', 'C']
+    );
+  });
+
+  test('can render an asynchronous computed linksToMany field', async function (this: RenderingTestContext, assert) {
+    let { field, contains, linksTo, linksToMany, Card, Component } = cardApi;
+    let { default: StringCard } = string;
+    class Pet extends Card {
+      @field name = contains(StringCard);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <span data-test='name'><@fields.name /></span>
+        </template>
+      };
+    }
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field pets = linksToMany(Pet);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <span data-test='firstName'><@fields.firstName /></span>
+        </template>
+      };
+    }
+    class Post extends Card {
+      @field title = contains(StringCard);
+      @field author = linksTo(Person);
+      @field factCheckers = linksToMany(Pet);
+      @field collaborators = linksToMany(Pet, {
+        computeVia: 'findCollaborators',
+      });
+      async findCollaborators(this: Post) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
         let mango = this.author.pets.find((p) => p.name === 'Mango');
         return [mango, ...this.factCheckers];
       }
