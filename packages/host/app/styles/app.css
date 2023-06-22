@@ -530,17 +530,3 @@
 .search-input__input:focus {
   outline: none;
 }
-
-/* matrix spike */
-.user-profile__wrapper {
-  padding: 0 var(--boxel-sp);
-  margin: var(--boxel-sp) 0;
-}
-
-.user-profile__wrapper label{
-  margin-top: var(--boxel-sp-sm);
-}
-
-.card-isolated-component {
-  padding: var(--boxel-sp-lg);
-}
