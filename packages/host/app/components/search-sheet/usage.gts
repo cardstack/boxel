@@ -22,7 +22,6 @@ export default class SearchSheetUsage extends Component {
   }
 
   <template>
-    {{! template-lint-disable no-inline-styles }}
     <FreestyleUsage @name='SearchSheet'>
       <:description>
         Boxel operator mode search sheet.
