@@ -50,25 +50,6 @@
 }
 
 /* Other */
-.schema {
-  display: grid;
-  gap: var(--boxel-sp);
-  padding: var(--boxel-sp);
-}
-
-.schema__new-field-type {
-  list-style-type: none;
-  padding-left: 0;
-  margin: 0;
-}
-
-.add-new-field {
-  border: var(--boxel-border);
-}
-
-.add-new-field > * + * {
-  margin-top: var(--boxel-sp);
-}
 
 .error {
   color: var(--boxel-error-100);
