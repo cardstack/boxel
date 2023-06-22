@@ -62,6 +62,12 @@ export default class CardCatalogModal extends Component<Signature> {
                   data-test-create-new
                 >Create New</Button>
               {{/if}}
+              <div class='card-catalog__results-length'>{{if
+                  this.currentRequest.search.instances.length
+                  this.currentRequest.search.instances.length
+                  '0'
+                }}
+                results</div>
               <ul class='card-catalog' data-test-card-catalog>
                 {{#each this.currentRequest.search.instances as |card|}}
                   <li

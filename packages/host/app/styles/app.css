@@ -67,7 +67,7 @@ nav > .directory-level {
 }
 
 .dialog-box__content {
-  padding: 0 var(--boxel-sp-xl) var(--boxel-sp-xl);
+  padding: 0 var(--boxel-sp-xxl) var(--boxel-sp-xl);
   height: 100%;
   overflow: auto;
 }
@@ -140,6 +140,9 @@ nav > .directory-level {
   grid-template-columns: repeat(auto-fit, minmax(16.25rem, 1fr));
   gap: var(--boxel-sp);
   padding-left: 0;
+}
+.card-catalog__results-length {
+  font: 700 var(--boxel-font);
 }
 
 .card-catalog-item {
