@@ -40,8 +40,7 @@ export default class MatrixService extends Service {
   @tracked private _client: MatrixClient | undefined;
 
   roomCards: TrackedMap<string, Promise<RoomCard>> = new TrackedMap();
-  roomObjectives: TrackedMap<string, Promise<RoomObjectiveCard>> =
-    new TrackedMap();
+  roomObjectives: TrackedMap<string, RoomObjectiveCard> = new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[] = [];

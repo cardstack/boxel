@@ -15,10 +15,15 @@ import {
 } from '@cardstack/boxel-ui';
 import { getRoomCard } from '../resources/room-card';
 import { TrackedMap } from 'tracked-built-ins';
-import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
+import {
+  chooseCard,
+  baseCardRef,
+  catalogEntryRef,
+} from '@cardstack/runtime-common';
 import type MatrixService from '../services/matrix-service';
 import { type Card } from 'https://cardstack.com/base/card-api';
 import type CardService from '../services/card-service';
+import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
 const TRUE = true;
 
@@ -71,6 +76,10 @@ export default class Room extends Component<RoomArgs> {
       </fieldset>
     {{/if}}
 
+    {{#if this.objective}}
+      <div class='room__objective'> <this.objectiveComponent /> </div>
+    {{/if}}
+
     <div class='room__messages-wrapper'>
       <div class='room__messages'>
         <div class='room__messages__notices'>
@@ -103,7 +112,11 @@ export default class Room extends Component<RoomArgs> {
           Card</Button>
       {{else}}
         {{#if this.canSetObjective}}
-          <Button data-test-set-objective-btn>Set Objective</Button>
+          <Button
+            data-test-set-objective-btn
+            @disabled={{this.doSetObjective.isRunning}}
+            {{on 'click' this.setObjective}}
+          >Set Objective</Button>
         {{/if}}
         <Button
           data-test-choose-card-btn
@@ -150,6 +163,20 @@ export default class Room extends Component<RoomArgs> {
     return this.roomCardResource.roomCard;
   }
 
+  private get objective() {
+    return this.matrixService.roomObjectives.get(this.args.roomId);
+  }
+
+  private get objectiveComponent() {
+    if (this.objective) {
+      return this.objective.constructor.getComponent(
+        this.objective,
+        'embedded'
+      );
+    }
+    return;
+  }
+
   private get messageCardComponents() {
     return this.roomCard
       ? this.roomCard.messages.map((messageCard) =>
@@ -178,8 +205,9 @@ export default class Room extends Component<RoomArgs> {
   }
 
   private get canSetObjective() {
-    // TODO also take into consideration whether the room already has an objective
-    return this.matrixService.canSetObjective(this.args.roomId);
+    return (
+      !this.objective && this.matrixService.canSetObjective(this.args.roomId)
+    );
   }
 
   private get cardToSendComponent() {
@@ -237,6 +265,11 @@ export default class Room extends Component<RoomArgs> {
   }
 
   @action
+  private setObjective() {
+    this.doSetObjective.perform();
+  }
+
+  @action
   private removeCard() {
     this.cardsToSend.set(this.args.roomId, undefined);
   }
@@ -266,6 +299,18 @@ export default class Room extends Component<RoomArgs> {
     });
     if (chosenCard) {
       this.cardsToSend.set(this.args.roomId, chosenCard);
+    }
+  });
+
+  private doSetObjective = restartableTask(async () => {
+    let catalogEntry = await chooseCard<CatalogEntry>({
+      filter: {
+        on: catalogEntryRef,
+        eq: { isPrimitive: false },
+      },
+    });
+    if (catalogEntry) {
+      await this.matrixService.setObjective(this.args.roomId, catalogEntry.ref);
     }
   });
 

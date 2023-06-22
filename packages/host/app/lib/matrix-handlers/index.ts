@@ -34,7 +34,8 @@ export type Event = Partial<IEvent>;
 
 export interface Context {
   roomCards: Map<string, Promise<RoomCard>>;
-  roomObjectives: Map<string, Promise<RoomObjectiveCard>>;
+  // TODO collapse this into the RoomCard
+  roomObjectives: Map<string, RoomObjectiveCard>;
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[];
