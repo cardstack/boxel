@@ -85,7 +85,7 @@ export default class CardCatalogModal extends Component<Signature> {
                     />
                     <button
                       class='card-catalog-item__select'
-                      {{on 'click' (fn this.pick card)}}
+                      {{on 'click' (fn this.select card)}}
                       data-test-select={{card.id}}
                       aria-label='Select'
                     />
@@ -127,7 +127,7 @@ export default class CardCatalogModal extends Component<Signature> {
                 @size='tall'
                 @disabled={{eq this.selectedCard undefined}}
                 class='dialog-box__footer-button'
-                {{on 'click' this.go}}
+                {{on 'click' (fn this.pick this.selectedCard)}}
                 data-test-card-catalog-go-button
               >
                 Go
@@ -151,7 +151,7 @@ export default class CardCatalogModal extends Component<Signature> {
       }
     | undefined = undefined;
   @tracked zIndex = 20;
-  @tracked selectedCard?: CardBase;
+  @tracked selectedCard?: CardBase = undefined;
   @tracked cardURL = '';
 
   constructor(owner: unknown, args: {}) {
@@ -193,13 +193,13 @@ export default class CardCatalogModal extends Component<Signature> {
     }
   );
 
-  @action pick(card?: CardBase): void {
+  @action select(card?: CardBase): void {
     this.selectedCard = card;
   }
 
-  @action go() {
+  @action pick(card?: CardBase) {
     if (this.currentRequest) {
-      this.currentRequest.deferred.fulfill(this.selectedCard);
+      this.currentRequest.deferred.fulfill(card);
       this.currentRequest = undefined;
     }
   }
