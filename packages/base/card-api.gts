@@ -876,6 +876,9 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
         );
       }
     }
+    if (value == null) {
+      return null;
+    }
     return value;
   }
 
@@ -1160,7 +1163,7 @@ class LinksToMany<FieldT extends CardConstructor>
     }
 
     if (values == null) {
-      return values;
+      return [];
     }
 
     if (!Array.isArray(values)) {
@@ -2064,8 +2067,11 @@ function makeDescriptor<
     return field.getter(this);
   };
   if (field.computeVia) {
-    descriptor.set = function () {
+    descriptor.set = function (/*this: CardInstanceType<CardT>, value: any*/) {
       // computeds should just no-op when an assignment occurs
+      // value = field.validate(this, value);
+      // let deserialized = getDataBucket(this);
+      // deserialized.set(field.name, value);
     };
   } else {
     descriptor.set = function (this: CardInstanceType<CardT>, value: any) {

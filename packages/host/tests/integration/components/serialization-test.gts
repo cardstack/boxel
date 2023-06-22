@@ -1853,7 +1853,7 @@ module('Integration | serialization', function (hooks) {
         @field pet = linksTo(Pet);
         @field friendPet = linksTo(Pet, {
           computeVia: function (this: Person) {
-            return this.friend?.pet.id;
+            return this.friend?.pet;
           },
         });
       }
@@ -4351,19 +4351,6 @@ module('Integration | serialization', function (hooks) {
       );
 
       try {
-        card.friendPets;
-        throw new Error(`expected error not thrown`);
-      } catch (err: any) {
-        assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
-        assert.ok(
-          err.message.match(
-            /The field Person\.friendPets refers to the card instance https:\/\/test-realm\/Pet\/vanGogh which is not loaded/,
-            'NotLoaded error describes field not loaded'
-          )
-        );
-      }
-
-      try {
         card.friend;
         throw new Error(`expected error not thrown`);
       } catch (err: any) {
@@ -4371,6 +4358,19 @@ module('Integration | serialization', function (hooks) {
         assert.ok(
           err.message.match(
             /The field Person\.friend refers to the card instance https:\/\/test-realm\/Friend\/hassan which is not loaded/,
+            'NotLoaded error describes field not loaded'
+          )
+        );
+      }
+
+      try {
+        card.friendPets;
+        throw new Error(`expected error not thrown`);
+      } catch (err: any) {
+        assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
+        assert.ok(
+          err.message.match(
+            /The field Person\.friendPets refers to the card instance https:\/\/test-realm\/Pet\/vanGogh which is not loaded/,
             'NotLoaded error describes field not loaded'
           )
         );
