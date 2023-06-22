@@ -560,29 +560,6 @@
   margin-top: var(--boxel-sp-sm);
 }
 
-.room-manager__room-list {
-  padding: 0 var(--boxel-sp);
-  margin: var(--boxel-sp) 0;
-}
-
-.room-manager__room {
-  margin-top: var(--boxel-sp-sm);
-}
-
-.room-manager__room__item {
-  display: inline-block;
-  min-width: 30rem;
-}
-
-.room-manager__room button {
-  margin-left: var(--boxel-sp-xs);
-}
-.room-manager__checkbox-field {
-  font-weight: bold;
-  display: block;
-  margin-bottom: var(--boxel-sp);
-}
-
 .card-isolated-component {
   padding: var(--boxel-sp-lg);
 }
