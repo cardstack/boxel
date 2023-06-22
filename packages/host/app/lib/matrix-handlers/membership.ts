@@ -81,6 +81,12 @@ async function drainMembership(context: Context) {
         }
       }
     }
+    // TODO DRY this
+    let roomCard = await context.roomCards.get(roomId);
+    let objective = context.roomObjectives.get(roomId);
+    if (objective && roomCard) {
+      objective.room = roomCard;
+    }
   }
 
   eventsDrained!();

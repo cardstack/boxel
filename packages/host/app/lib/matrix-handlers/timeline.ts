@@ -68,6 +68,13 @@ async function processDecryptedEvent(context: Context, event: Event) {
     }
   }
 
+  // TODO DRY this
+  let roomCard = await context.roomCards.get(roomId);
+  let objective = context.roomObjectives.get(roomId);
+  if (objective && roomCard) {
+    objective.room = roomCard;
+  }
+
   let room = context.client.getRoom(roomId);
   if (!room) {
     throw new Error(

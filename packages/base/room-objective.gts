@@ -1,5 +1,4 @@
 import { contains, containsMany, field, Component, Card } from './card-api';
-import IntegerCard from './integer';
 import BooleanCard from './boolean';
 import { RoomCard, RoomMemberCard } from './room';
 
@@ -11,9 +10,9 @@ class View extends Component<typeof RoomObjectiveCard> {
       <div>
         <strong data-test-objective-progress>
           Completed
-          {{@model.completedMilestones}}
+          {{this.completedMilestones}}
           of
-          {{@model.totalMilestones}}
+          {{this.totalMilestones}}
           ({{this.progressPercentage}}%)
         </strong>
       </div>
@@ -34,28 +33,25 @@ class View extends Component<typeof RoomObjectiveCard> {
       .sort()
       .join(', ');
   }
-
-  get progressPercentage() {
-    return Math.floor(
-      (this.args.model.completedMilestones! /
-        this.args.model.totalMilestones!) *
-        100
+  get completedUserCount() {
+    return this.args.model.usersThatFinishedTask!.length;
+  }
+  get completedMilestones() {
+    return this.args.model.usersThatFinishedTask!.length;
+  }
+  get totalMilestones() {
+    return (
+      this.args.model.usersThatFinishedTask!.length +
+      this.args.model.usersThatNeedToCompleteTask!.length
     );
+  }
+  get progressPercentage() {
+    return Math.floor((this.completedMilestones / this.totalMilestones) * 100);
   }
 }
 
 export class RoomObjectiveCard extends Card {
   @field room = contains(RoomCard);
-  @field totalMilestones = contains(IntegerCard, {
-    computeVia: function (this: RoomObjectiveCard) {
-      return this.room.joinedMembers.length;
-    },
-  });
-  @field completedMilestones = contains(IntegerCard, {
-    computeVia: function (this: RoomObjectiveCard) {
-      return this.usersThatFinishedTask.length;
-    },
-  });
   @field usersThatFinishedTask = containsMany(RoomMemberCard, {
     computeVia: function (this: RoomObjectiveCard) {
       let desiredMessages = this.room.messages.filter((m) =>
@@ -73,7 +69,7 @@ export class RoomObjectiveCard extends Card {
   });
   @field isComplete = contains(BooleanCard, {
     computeVia: function (this: RoomObjectiveCard) {
-      return this.completedMilestones === this.totalMilestones;
+      return this.usersThatNeedToCompleteTask.length === 0;
     },
   });
 
