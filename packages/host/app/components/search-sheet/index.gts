@@ -104,6 +104,10 @@ export default class SearchSheet extends Component<Signature> {
       </div>
     </div>
     <style>
+      :global(:root) {
+        --search-sheet-closed-height: 59px;
+      }
+
       .search-sheet {
         background: #fff;
         border-radius: 20px 20px 0 0;
@@ -118,7 +122,7 @@ export default class SearchSheet extends Component<Signature> {
       }
 
       .closed {
-        height: var(--closed-height);
+        height: var(--search-sheet-closed-height);
         padding: 0;
       }
 

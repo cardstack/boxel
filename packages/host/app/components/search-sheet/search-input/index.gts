@@ -43,7 +43,7 @@ export default class SearchInput extends Component<Signature> {
         margin: 31px 0 20px;
       }
 
-      .search-sheet.search-sheet--closed .search-input {
+      .search-sheet.closed .search-input {
         margin: 0;
       }
 
