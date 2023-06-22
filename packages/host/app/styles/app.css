@@ -380,10 +380,3 @@
 .add-button:hover {
   --icon-bg: var(--boxel-light-200);
 }
-
-.freestyle-search-sheet-example-container {
-  background: #494559;
-  min-height: 300px;
-  overflow: hidden;
-  position: relative;
-}

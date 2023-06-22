@@ -28,7 +28,7 @@ export default class SearchSheetUsage extends Component {
         Boxel operator mode search sheet.
       </:description>
       <:example>
-        <div class='freestyle-search-sheet-example-container'>
+        <div class='example-container'>
           <SearchSheet
             @mode={{this.mode}}
             @onCancel={{this.onCancel}}
@@ -55,5 +55,13 @@ export default class SearchSheetUsage extends Component {
         />
       </:api>
     </FreestyleUsage>
+    <style>
+      .example-container {
+        background: #494559;
+        min-height: 300px;
+        overflow: hidden;
+        position: relative;
+      }
+    </style>
   </template>
 }
