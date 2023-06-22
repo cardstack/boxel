@@ -3,18 +3,6 @@
   --grid-card-label-color: #919191;
 }
 
-/* FileTree template */
-.file:hover {
-  color: var(--boxel-highlight);
-  cursor: pointer;
-}
-
-.directory.selected,
-.file.selected,
-.file:active {
-  color: var(--boxel-highlight);
-}
-
 /* Modal */
 .dialog-box {
   height: 100%;

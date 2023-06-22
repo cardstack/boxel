@@ -61,6 +61,17 @@ export default class Directory extends Component<Args> {
       .level .level {
         padding-left: 1em;
       }
+
+      .file:hover {
+        color: var(--boxel-highlight);
+        cursor: pointer;
+      }
+
+      .directory.selected,
+      .file.selected,
+      .file:active {
+        color: var(--boxel-highlight);
+      }
     </style>
   </template>
 
