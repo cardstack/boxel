@@ -54,6 +54,10 @@ export default class OperatorModeStateService extends Service {
   }
 
   private schedulePersist() {
+    // When multiple stack manipulations are bunched together in a loop, for example when closing multiple cards in a loop,
+    // we get into a async race condition where the change to cardController.operatorModeState will reload the route and
+    // restore the state from the query param in a way that is out of sync with the state in the service. To avoid this,
+    // we do the change to the query param only after all modifications to the state have been rendered.
     scheduleOnce('afterRender', this, this.persist);
   }
 
