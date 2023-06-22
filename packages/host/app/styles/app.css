@@ -144,7 +144,7 @@ nav > .directory-level {
 
 .card-catalog-item {
   position: relative;
-  min-height: 6.25rem;
+  height: 6.25rem;
 }
 
 .card-catalog-item > .boxel-card-container {
@@ -164,6 +164,32 @@ nav > .directory-level {
   height: 100%;
   background: none;
   border: none;
+  border-radius: var(--boxel-border-radius);
+}
+.card-catalog-item:hover > .card-catalog-item__select:not(:disabled) {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
+  cursor: pointer;
+}
+.card-catalog-item > .card-catalog-item__hover-button {
+  display: none;
+  width: 30px;
+  height: 30px;
+}
+.card-catalog-item:hover > .card-catalog-item__hover-button:not(:disabled) {
+  display: block;
+  position: absolute;
+}
+.card-catalog-item__preview {
+  top: 0;
+  left: 0;
+}
+.card-catalog-item__more-actions {
+  bottom: 0;
+  right: 0;
+}
+.card-catalog-item__preview > svg,
+.card-catalog-item__more-actions > svg {
+  height: 100%;
 }
 
 .error {

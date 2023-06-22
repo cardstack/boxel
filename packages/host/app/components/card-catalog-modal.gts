@@ -15,7 +15,13 @@ import { createNewCard, type CardRef } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { getSearchResults, Search } from '../resources/search';
 import Preview from './preview';
-import { Modal, CardContainer, Header, Button } from '@cardstack/boxel-ui';
+import {
+  Modal,
+  CardContainer,
+  Header,
+  Button,
+  IconButton,
+} from '@cardstack/boxel-ui';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 
@@ -75,6 +81,16 @@ export default class CardCatalogModal extends Component<Signature> {
                       {{on 'click' (fn this.pick card)}}
                       data-test-select={{card.id}}
                       aria-label='Select'
+                    />
+                    <IconButton
+                      class='card-catalog-item__hover-button card-catalog-item__preview'
+                      @icon='eye'
+                      aria-label='preview'
+                    />
+                    <IconButton
+                      class='card-catalog-item__hover-button card-catalog-item__more-actions'
+                      @icon='more-actions'
+                      aria-label='more actions'
                     />
                   </li>
                 {{else}}
