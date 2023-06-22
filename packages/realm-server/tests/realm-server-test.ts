@@ -17,7 +17,11 @@ import {
 } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
 import { Query } from '@cardstack/runtime-common/query';
-import { setupCardLogs, setupBaseRealmServer, runTestRealmServer } from './helpers';
+import {
+  setupCardLogs,
+  setupBaseRealmServer,
+  runTestRealmServer,
+} from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
 
@@ -70,13 +74,21 @@ module('Realm Server', function (hooks) {
   hooks.beforeEach(async function () {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
-    
-    testRealmServer = await runTestRealmServer(dir.name, undefined, testRealmURL);
+
+    testRealmServer = await runTestRealmServer(
+      dir.name,
+      undefined,
+      testRealmURL
+    );
     request = supertest(testRealmServer);
 
-    testRealmServer2 = await runTestRealmServer(dir.name, undefined, testRealm2URL);
+    testRealmServer2 = await runTestRealmServer(
+      dir.name,
+      undefined,
+      testRealm2URL
+    );
   });
-  
+
   hooks.afterEach(function () {
     testRealmServer.close();
     testRealmServer2.close();
@@ -104,10 +116,10 @@ module('Realm Server', function (hooks) {
             name: 'Person',
           },
           realmInfo: {
-            "name": "Test Realm",
-            "backgroundURL": null
+            name: 'Test Realm',
+            backgroundURL: null,
           },
-          realmURL: "http://127.0.0.1:4444/",
+          realmURL: 'http://127.0.0.1:4444/',
         },
         links: {
           self: `${testRealmHref}person-1`,
@@ -501,7 +513,9 @@ module('Realm Server', function (hooks) {
 
 module('Realm Server serving from root', function (hooks) {
   let testRealmServer: Server;
+
   let request: SuperTest<Test>;
+
   let dir: DirResult;
   setupCardLogs(
     hooks,
@@ -514,7 +528,11 @@ module('Realm Server serving from root', function (hooks) {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
 
-    testRealmServer = await runTestRealmServer(dir.name, undefined, testRealmURL);
+    testRealmServer = await runTestRealmServer(
+      dir.name,
+      undefined,
+      testRealmURL
+    );
     request = supertest(testRealmServer);
   });
 
@@ -668,6 +686,56 @@ module('Realm Server serving from root', function (hooks) {
         },
       },
       'the directory response is correct'
+    );
+  });
+});
+
+module('Realm Server serving from a subdirectory', function (hooks) {
+  let testRealmServer: Server;
+
+  let request: SuperTest<Test>;
+
+  let dir: DirResult;
+  setupCardLogs(
+    hooks,
+    async () => await Loader.import(`${baseRealm.url}card-api`)
+  );
+
+  setupBaseRealmServer(hooks);
+
+  hooks.beforeEach(async function () {
+    dir = dirSync();
+    copySync(join(__dirname, 'cards'), dir.name);
+
+    testRealmServer = await runTestRealmServer(
+      dir.name,
+      undefined,
+      new URL('http://127.0.0.1:4446/demo/')
+    );
+
+    request = supertest(testRealmServer);
+  });
+
+  hooks.afterEach(function () {
+    testRealmServer.close();
+  });
+
+  test('serves a subdirectory GET request that results in redirect', async function (assert) {
+    let response = await request.get('/demo');
+
+    assert.strictEqual(response.status, 302, 'HTTP 302 status');
+    assert.ok(response.headers['location'], 'http://127.0.0.1:4446/demo/');
+  });
+
+  test('redirection keeps query params intact', async function (assert) {
+    let response = await request.get(
+      '/demo?operatorModeState=operatorModeEnabled=true&operatorModeState=%7B%22stacks%22%3A%5B%7B%22items%22%3A%5B%7B%22card%22%3A%7B%22id%22%3A%22http%3A%2F%2Flocalhost%3A4204%2Findex%22%7D%2C%22format%22%3A%22isolated%22%7D%5D%7D%5D%7D'
+    );
+
+    assert.strictEqual(response.status, 302, 'HTTP 302 status');
+    assert.ok(
+      response.headers['location'],
+      'http://127.0.0.1:4446/demo/?operatorModeEnabled=true&operatorModeState=%7B%22stacks%22%3A%5B%7B%22items%22%3A%5B%7B%22card%22%3A%7B%22id%22%3A%22http%3A%2F%2Flocalhost%3A4204%2Findex%22%7D%2C%22format%22%3A%22isolated%22%7D%5D%7D%5D%7D'
     );
   });
 });

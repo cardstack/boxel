@@ -81,7 +81,12 @@ type Setter = { setters: { [fieldName: string]: Setter } } & ((
 
 interface Options {
   computeVia?: string | (() => unknown);
-  isUsed?: true; // TODO this is a workaround for a bug that needs researching
+  // there exists cards that we only ever run in the host without
+  // the isolated renderer (RoomCard), which means that we cannot
+  // use the rendering mechanism to tell if a card is used or not,
+  // in which case we need to tell the runtime that a card is
+  // explictly being used.
+  isUsed?: true;
 }
 
 interface NotLoadedValue {
@@ -215,7 +220,12 @@ export interface Field<
   name: string;
   fieldType: FieldType;
   computeVia: undefined | string | (() => unknown);
-  isUsed?: undefined | true; // TODO this is a workaround for a bug that needs researching
+  // there exists cards that we only ever run in the host without
+  // the isolated renderer (RoomCard), which means that we cannot
+  // use the rendering mechanism to tell if a card is used or not,
+  // in which case we need to tell the runtime that a card is
+  // explictly being used.
+  isUsed?: undefined | true;
   serialize(
     value: any,
     doc: JSONAPISingleResourceDocument,

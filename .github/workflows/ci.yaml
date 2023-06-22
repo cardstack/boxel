@@ -138,65 +138,49 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
-      host: ${{ steps.filter.outputs.host }}
-      realm-server: ${{ steps.filter.outputs.realm-server }}
+      boxel: ${{ steps.filter.outputs.boxel }}
     steps:
       - uses: actions/checkout@v3
       - uses: dorny/paths-filter@v2
         id: filter
         with:
           filters: |
-            host:
-              - 'packages/host/**'
-              - 'packages/base/**'
-              - 'packages/boxel-ui/**'
-              - 'packages/runtime-common/**'
-              - '.github/workflows/ci.yaml'
+            boxel:
               - '.github/actions/deploy-boxel-host/**'
               - '.github/actions/deploy-ember-preview/**'
-              - 'pnpm-lock.yaml'
-            realm-server:
-              - 'packages/realm-server/**'
-              - 'packages/base/**'
-              - 'packages/host/**'
-              - 'packages/runtime-common/**'
-              - '.github/workflows/ci.yaml'
               - '.github/actions/deploy-realm-server/**'
               - '.github/actions/waypoint-deploy/**'
+              - '.github/workflows/ci.yaml'
+              - 'packages/base/**'
+              - 'packages/boxel-ui/**'
+              - 'packages/host/**'
+              - 'packages/realm-server/**'
+              - 'packages/runtime-common/**'
               - 'pnpm-lock.yaml'
 
-  host-deploy:
+  deploy-host:
     name: Deploy host to staging
     needs: change-check
+    if: ${{ needs.change-check.outputs.boxel == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
       - name: Deploy boxel-host if changes have happened
-        if: ${{ needs.change-check.outputs.host == 'true' }}
         uses: ./.github/actions/deploy-boxel-host
         with:
           environment: staging
           discord_webhook: ${{ secrets.DISCORD_WEBHOOK }}
 
-  realm-server-deploy:
+  deploy-realm-server:
     name: Deploy realm server to staging
-    needs: [change-check, host-deploy]
-    if: ${{ needs.change-check.outputs.realm-server == 'true' }}
+    needs: deploy-host
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # We are not currently using the realm-base server. Rather the base realm
-        # and demo realm are both being hosted by the realms server
-        # app: [realm-base, realm-demo]
-        app: [realm-demo]
     steps:
       - uses: actions/checkout@v3
-
       - name: Deploy ${{ matrix.app }}
         uses: ./.github/actions/deploy-realm-server
         with:
-          app_name: ${{ matrix.app }}
+          app_name: realm-demo
           environment: staging
           discord_webhook: ${{ secrets.DISCORD_WEBHOOK }}
           production_waypoint_server_token: ${{ secrets.PRODUCTION_WAYPOINT_SERVER_TOKEN }}
