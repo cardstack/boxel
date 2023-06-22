@@ -134,6 +134,22 @@ nav > .directory-level {
   margin-top: var(--boxel-sp);
 }
 
+.card-catalog-modal__footer {
+  display: flex;
+  justify-content: space-between;
+}
+.card-catalog-modal__url-search {
+  flex-grow: 0.5;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  justify-items: flex-start;
+  gap: var(--boxel-sp-xs);
+}
+.card-catalog-modal__url-search > span {
+  font: 700 var(--boxel-font-sm);
+}
+
 .card-catalog {
   list-style-type: none;
   display: grid;
@@ -177,6 +193,9 @@ nav > .directory-level {
   display: none;
   width: 30px;
   height: 30px;
+}
+.card-catalog-item__hover-button:not(:disabled):hover {
+  --icon-color: var(--boxel-highlight);
 }
 .card-catalog-item:hover > .card-catalog-item__hover-button:not(:disabled) {
   display: block;

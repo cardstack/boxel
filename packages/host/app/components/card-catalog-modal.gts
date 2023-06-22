@@ -21,6 +21,7 @@ import {
   Header,
   Button,
   IconButton,
+  BoxelInput,
 } from '@cardstack/boxel-ui';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import cn from '@cardstack/boxel-ui/helpers/cn';
@@ -105,31 +106,41 @@ export default class CardCatalogModal extends Component<Signature> {
               </ul>
             {{/if}}
           </div>
-          <footer class='dialog-box__footer'>
-            <Button
-              @kind='secondary-light'
-              @size='tall'
-              @disabled={{eq this.selectedCard undefined}}
-              class='dialog-box__footer-button'
-              {{on 'click' this.cancel}}
-              data-test-card-catalog-cancel-button
-            >
-              Cancel
-            </Button>
-            <Button
-              @kind='primary'
-              @size='tall'
-              @disabled={{eq this.selectedCard undefined}}
-              class='dialog-box__footer-button'
-              {{on 'click' this.go}}
-              data-test-card-catalog-go-button
-            >
-              Go
-            </Button>
+          <footer class='dialog-box__footer card-catalog-modal__footer'>
+            <label class='card-catalog-modal__url-search'>
+              <span>Enter Card URL:</span>
+              <BoxelInput @value={{this.cardURL}} placeholder='http://' />
+            </label>
+            <div>
+              <Button
+                @kind='secondary-light'
+                @size='tall'
+                @disabled={{eq this.selectedCard undefined}}
+                class='dialog-box__footer-button'
+                {{on 'click' this.cancel}}
+                data-test-card-catalog-cancel-button
+              >
+                Cancel
+              </Button>
+              <Button
+                @kind='primary'
+                @size='tall'
+                @disabled={{eq this.selectedCard undefined}}
+                class='dialog-box__footer-button'
+                {{on 'click' this.go}}
+                data-test-card-catalog-go-button
+              >
+                Go
+              </Button>
+            </div>
           </footer>
         </CardContainer>
       </Modal>
     {{/if}}
+    <style>
+      .card-catalog-modal__url-search > .boxel-input { border-color:
+      transparent; padding-left: var(--boxel-sp-xxs); }
+    </style>
   </template>
 
   @tracked currentRequest:
@@ -141,6 +152,7 @@ export default class CardCatalogModal extends Component<Signature> {
     | undefined = undefined;
   @tracked zIndex = 20;
   @tracked selectedCard?: CardBase;
+  @tracked cardURL = '';
 
   constructor(owner: unknown, args: {}) {
     super(owner, args);
