@@ -93,7 +93,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
   calculateOverlayedButtonCoordinates(linksToCardElement: HTMLElement) {
     let cardElementRect = linksToCardElement.getBoundingClientRect();
 
-    let stackElement = linksToCardElement.closest('.operator-mode-card-stack');
+    let stackElement = linksToCardElement.closest('.card-stack');
     if (!stackElement) {
       throw new Error(
         'Linked card must be nested under .operator-mode-card-stack element'

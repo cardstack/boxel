@@ -383,13 +383,13 @@ export default class OperatorMode extends Component<Signature> {
       <CardCatalogModal />
 
       {{#if (eq this.stack.length 0)}}
-        <div class='operator-mode__no-cards'>
-          <p class='operator-mode__no-cards__add-card-title'>Add a card to get
+        <div class='no-cards'>
+          <p class='add-card-title'>Add a card to get
             started</p>
           {{! Cannot find an svg icon with plus in the box
           that we can fill the color of the plus and the box. }}
           <button
-            class='operator-mode__no-cards__add-card-button icon-button'
+            class='icon-button'
             {{on 'click' (fn (perform this.addCard))}}
             data-test-add-card-button
           >
@@ -397,7 +397,7 @@ export default class OperatorMode extends Component<Signature> {
           </button>
         </div>
       {{else}}
-        <div class='operator-mode-card-stack'>
+        <div class='card-stack'>
           {{! z-index and offset calculation in the OperatorModeOverlays operates under assumption that it is nested under element with class operator-mode-card-stack }}
           <OperatorModeOverlays
             @renderedLinksToCards={{this.renderedLinksToCards}}
@@ -407,8 +407,8 @@ export default class OperatorMode extends Component<Signature> {
           {{#each this.stack as |item i|}}
             <div
               class={{cn
-                'operator-mode-card-stack__item'
-                operator-mode-card-stack__buried=(this.isBuried i)
+                'stack-item'
+                buried=(this.isBuried i)
               }}
               data-test-stack-card-index={{i}}
               data-test-stack-card={{item.card.id}}
@@ -416,13 +416,13 @@ export default class OperatorMode extends Component<Signature> {
             >
               <CardContainer
                 class={{cn
-                  'operator-mode-card-stack__card'
-                  operator-mode-card-stack__card--edit=(eq item.format 'edit')
+                  'card'
+                  card-in-edit=(eq item.format 'edit')
                 }}
               >
                 <Header
                   @title={{cardTypeDisplayName item.card}}
-                  class='operator-mode-card-stack__card__header'
+                  class='card-header'
                   {{on
                     'click'
                     (optional
@@ -483,7 +483,7 @@ export default class OperatorMode extends Component<Signature> {
                     />
                   </:actions>
                 </Header>
-                <div class='operator-mode-card-stack__card__content'>
+                <div class='card-content'>
                   <Preview
                     @card={{item.card}}
                     @format={{item.format}}
@@ -491,11 +491,11 @@ export default class OperatorMode extends Component<Signature> {
                   />
                 </div>
                 {{#if (eq item.format 'edit')}}
-                  <footer class='operator-mode-card-stack__card__footer'>
+                  <footer class='card-footer'>
                     <Button
                       @kind='secondary-light'
                       @size='tall'
-                      class='operator-mode-card-stack__card__footer-button'
+                      class='card-footer-button'
                       {{on 'click' (fn this.cancel item)}}
                       aria-label='Cancel'
                       data-test-cancel-button
@@ -505,7 +505,7 @@ export default class OperatorMode extends Component<Signature> {
                     <Button
                       @kind='primary'
                       @size='tall'
-                      class='operator-mode-card-stack__card__footer-button'
+                      class='card-footer-button'
                       {{on 'click' (fn this.save item)}}
                       aria-label='Save'
                       data-test-save-button
@@ -526,13 +526,97 @@ export default class OperatorMode extends Component<Signature> {
       />
     </Modal>
     <style>
-      .operator-mode-card-stack__buried .operator-mode-card-stack__card {
-      background-color: var(--boxel-200); grid-template-rows:
-      var(--buried-operator-mode-header-height) auto; }
-      .operator-mode-card-stack__buried .operator-mode-card-stack__card__header
-      .icon-button { display: none; } .operator-mode-card-stack__buried
-      .operator-mode-card-stack__card__header { cursor: pointer; font: 500
-      var(--boxel-font-sm); padding: 0 var(--boxel-sp-xs); }
+      :global(:root) {
+        --operator-mode-bg-color: #686283;
+        --stack-card-footer-height: 5rem;
+        --buried-operator-mode-header-height: 2.5rem;
+      }
+
+      .buried .card {
+        background-color: var(--boxel-200);
+        grid-template-rows:
+          var(--buried-operator-mode-header-height) auto;
+      }
+
+      .buried .card-header .icon-button {
+        display: none;
+      }
+
+      .buried .card-header {
+        cursor: pointer;
+        font: 500 var(--boxel-font-sm);
+        padding: 0 var(--boxel-sp-xs);
+      }
+
+      .operator-mode > div {
+        align-items: flex-start;
+      }
+
+      .card-stack {
+        position: relative;
+        height: calc(100% - var(--search-sheet-closed-height));
+        width: 100%;
+        max-width: 50rem;
+        padding-top: var(--boxel-sp-xxl);
+        display: flex;
+        justify-content: center;
+        overflow: hidden;
+        z-index: 0;
+      }
+
+      .stack-item {
+        justify-self: center;
+        position: absolute;
+        width: 89%;
+        height: inherit;
+        z-index: 0;
+        overflow: hidden;
+        pointer-events: none;
+      }
+
+      .card {
+        position: relative;
+        height: 100%;
+        display: grid;
+        grid-template-rows: 7.5rem auto;
+        box-shadow:0 15px 30px 0 rgb(0 0 0 / 35%);
+        pointer-events: auto;
+      }
+
+      .card-content {
+        overflow: auto;
+      }
+
+      .card-content > .boxel-card-container.boundaries {
+        box-shadow: none;
+      }
+
+      .card-content > .boxel-card-container > header {
+        display: none;
+      }
+
+      .card-in-edit .card-content {
+        margin-bottom: var(--stack-card-footer-height)
+      }
+
+      .card-footer {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        display: flex;
+        justify-content: flex-end;
+        padding: var(--boxel-sp);
+        width: 100%;
+        background: white;
+        height: var(--stack-card-footer-height);
+        border-top: 1px solid var(--boxel-300);
+        border-bottom-left-radius: var(--boxel-border-radius);
+        border-bottom-right-radius: var(--boxel-border-radius);
+      }
+
+      .card-footer-button + .card-footer-button {
+        margin-left: var(--boxel-sp-xs);
+      }
     </style>
   </template>
 }
