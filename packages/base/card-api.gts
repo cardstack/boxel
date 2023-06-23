@@ -1988,7 +1988,9 @@ async function _updateFromSerialized<T extends CardBaseConstructor>(
           `cannot change the id for saved instance ${originalId}`
         );
       }
-      instance[fieldName] = value;
+      let deserialized = getDataBucket(instance);
+      deserialized.set(fieldName as string, value);
+      logger.log(recompute(instance));
     }
     if (resource.id != null) {
       // importantly, we place this synchronously after the assignment of the model's
@@ -2067,11 +2069,8 @@ function makeDescriptor<
     return field.getter(this);
   };
   if (field.computeVia) {
-    descriptor.set = function (/*this: CardInstanceType<CardT>, value: any*/) {
+    descriptor.set = function () {
       // computeds should just no-op when an assignment occurs
-      // value = field.validate(this, value);
-      // let deserialized = getDataBucket(this);
-      // deserialized.set(field.name, value);
     };
   } else {
     descriptor.set = function (this: CardInstanceType<CardT>, value: any) {
