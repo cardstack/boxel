@@ -793,7 +793,7 @@ module('Integration | schema', function (hooks) {
     assert.dom(`[data-test-select="${testRealmURL}pet"]`).exists();
     assert
       .dom('[data-test-select]')
-      .exists({ count: 1 }, 'primitive fields are not shown');
+      .exists({ count: 2 }, 'primitive fields are not shown');
 
     await click(`[data-test-select="${testRealmURL}pet"]`);
     await waitFor('[data-test-field="pet"]');
@@ -1055,7 +1055,7 @@ module('Integration | schema', function (hooks) {
     assert.dom(`[data-test-select="${testRealmURL}pet"]`).exists();
     assert
       .dom('[data-test-select]')
-      .exists({ count: 1 }, 'primitive fields are not shown');
+      .exists({ count: 2 }, 'primitive fields are not shown');
 
     await click(`[data-test-select="${testRealmURL}pet"]`);
     await waitFor('[data-test-field="pets"]');
@@ -1150,7 +1150,7 @@ module('Integration | schema', function (hooks) {
     assert.dom(`[data-test-select="${testRealmURL}person"]`).exists();
     assert
       .dom('[data-test-select]')
-      .exists({ count: 1 }, 'primitive fields are not shown');
+      .exists({ count: 2 }, 'primitive fields are not shown');
 
     await click(`[data-test-select="${testRealmURL}person"]`);
     await waitFor('[data-test-field="friends"]');
