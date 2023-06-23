@@ -154,11 +154,6 @@ export default class RoomsManager extends Component {
       .room button {
         margin-left: var(--boxel-sp-xs);
       }
-      .checkbox-field {
-        font-weight: bold;
-        display: block;
-        margin-bottom: var(--boxel-sp);
-      }
     </style>
   </template>
 
