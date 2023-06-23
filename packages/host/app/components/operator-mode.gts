@@ -166,12 +166,10 @@ export default class OperatorMode extends Component<Signature> {
     await this.close(item);
   }
 
-  @action
   removeItemFromStack(item: StackItem) {
     this.operatorModeStateService.removeItemFromStack(item);
   }
 
-  @action
   replaceItemInStack(item: StackItem, newItem: StackItem) {
     this.operatorModeStateService.replaceItemInStack(item, newItem);
   }
@@ -374,8 +372,11 @@ export default class OperatorMode extends Component<Signature> {
               @addToStack={{this.addToStack}}
               @dismissStackedCardsAbove={{this.dismissStackedCardsAbove}}
               @isBuried={{this.isBuried}}
-              @removeItemFromStack={{this.removeItemFromStack}}
-              @replaceItemInStack={{this.replaceItemInStack}}
+              @close={{this.close}}
+              @cancel={{this.cancel}}
+              @edit={{this.edit}}
+              @delete={{this.delete}}
+              @save={{this.save}}
               @styleForStackedCard={{this.styleForStackedCard}}
             />
           {{/each}}

@@ -1,8 +1,7 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
-import { Card, CardContext, Format } from 'https://cardstack.com/base/card-api';
+import { Card, CardContext } from 'https://cardstack.com/base/card-api';
 import Preview from './preview';
-import { action } from '@ember/object';
 import { fn, array } from '@ember/helper';
 import type CardService from '../services/card-service';
 // import getValueFromWeakMap from '../helpers/get-value-from-weakmap';
@@ -15,11 +14,7 @@ import {
   CardContainer,
   Button,
 } from '@cardstack/boxel-ui';
-import { restartableTask } from 'ember-concurrency';
 import {
-  Deferred,
-  baseCardRef,
-  chooseCard,
   type Actions,
   cardTypeDisplayName,
 } from '@cardstack/runtime-common';
@@ -42,10 +37,13 @@ interface Signature {
     index: number;
     publicAPI: Actions;
     addToStack: (item: StackItem) => void;
+    cancel: (item: StackItem) => void;
+    close: (item: StackItem) => void;
+    delete: (item: StackItem) => void;
     dismissStackedCardsAbove: (stackIndex: number) => void;
+    edit: (item: StackItem) => void;
     isBuried: (stackIndex: number) => boolean;
-    removeItemFromStack: (item: StackItem) => void;
-    replaceItemInStack: (item: StackItem, newStackItem: StackItem) => void;
+    save: (item: StackItem) => void;
     styleForStackedCard: (stackIndex: number) => SafeString;
   };
 }
@@ -66,108 +64,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
   >();
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
-
-  @action async edit(item: StackItem) {
-    await this.saveCardFieldValues(item.card);
-    this.updateItem(item, 'edit', new Deferred());
-  }
-
-  @action updateItem(
-    item: StackItem,
-    format: Format,
-    request?: Deferred<Card>
-  ) {
-    let newItem = {
-      card: item.card,
-      format,
-      request,
-    };
-
-    this.args.replaceItemInStack(item, newItem);
-    return newItem;
-  }
-
-  @action async close(item: StackItem) {
-    await this.rollbackCardFieldValues(item.card);
-    this.args.removeItemFromStack(item);
-  }
-
-  @action async cancel(item: StackItem) {
-    await this.rollbackCardFieldValues(item.card);
-    this.updateItem(item, 'isolated');
-  }
-
-  @action async save(item: StackItem) {
-    let { card, request, isLinkedCard } = item;
-    await this.saveCardFieldValues(card);
-    let updatedCard = await this.write.perform(card);
-
-    if (updatedCard) {
-      request?.fulfill(updatedCard);
-
-      if (isLinkedCard) {
-        this.close(item); // closes the 'create new card' editor for linked card fields
-      } else {
-        this.args.replaceItemInStack(item, {
-          card: updatedCard,
-          format: 'isolated',
-        });
-      }
-    }
-  }
-
-  //TODO: Implement remove card function
-  @action async delete(item: StackItem) {
-    await this.close(item);
-  }
-
-  private write = restartableTask(async (card: Card) => {
-    return await this.cardService.saveModel(card);
-  });
-
-  private async saveCardFieldValues(card: Card) {
-    let fields = await this.cardService.getFields(card);
-    for (let fieldName of Object.keys(fields)) {
-      if (fieldName === 'id') continue;
-
-      let field = fields[fieldName];
-      if (
-        (field.fieldType === 'contains' ||
-          field.fieldType === 'containsMany') &&
-        !(await this.cardService.isPrimitive(field.card))
-      ) {
-        await this.saveCardFieldValues((card as any)[fieldName]);
-      }
-
-      let cardFieldValue = this.cardFieldValues.get(card);
-      if (!cardFieldValue) {
-        cardFieldValue = new Map<string, any>();
-      }
-      cardFieldValue.set(fieldName, (card as any)[fieldName]);
-      this.cardFieldValues.set(card, cardFieldValue);
-    }
-  }
-
-  private async rollbackCardFieldValues(card: Card) {
-    let fields = await this.cardService.getFields(card);
-    for (let fieldName of Object.keys(fields)) {
-      if (fieldName === 'id') continue;
-
-      let field = fields[fieldName];
-      if (
-        (field.fieldType === 'contains' ||
-          field.fieldType === 'containsMany') &&
-        !(await this.cardService.isPrimitive(field.card))
-      ) {
-        await this.rollbackCardFieldValues((card as any)[fieldName]);
-      }
-
-      let cardFieldValue = this.cardFieldValues.get(card);
-      if (cardFieldValue) {
-        (card as any)[fieldName] = cardFieldValue.get(fieldName);
-      }
-    }
-  }
 
   get context() {
     return {
@@ -202,21 +98,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
       this.renderedLinksToCards.splice(index, 1);
     }
   }
-
-  addCard = restartableTask(async () => {
-    let type = baseCardRef;
-    let chosenCard: Card | undefined = await chooseCard({
-      filter: { type },
-    });
-
-    if (chosenCard) {
-      let newItem: StackItem = {
-        card: chosenCard,
-        format: 'isolated',
-      };
-      this.args.addToStack(newItem);
-    }
-  });
 
   <template>
     <div
@@ -273,18 +154,18 @@ export default class OperatorModeStackItem extends Component<Signature> {
                   (array
                     (menuItem
                     'Finish Editing'
-                    (fn this.save @item @index)
+                    (fn @save @item @index)
                     icon='icon-check-mark'
                     )
                     (menuItem
                     'Delete'
-                    (fn this.delete @item @index)
+                    (fn @delete @item @index)
                     icon='icon-trash'
                     )
                   )
                   (array
                     (menuItem
-                    'Edit' (fn this.edit @item @index) icon='icon-pencil'
+                    'Edit' (fn @edit @item @index) icon='icon-pencil'
                     )
                   )
                   }}
@@ -297,7 +178,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               @height='20px'
               class='icon-button'
               aria-label='Close'
-              {{on 'click' (fn this.close @item)}}
+              {{on 'click' (fn @close @item)}}
               data-test-close-button
             />
           </:actions>
@@ -315,7 +196,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               @kind='secondary-light'
               @size='tall'
               class='operator-mode-stack-item__card__footer-button'
-              {{on 'click' (fn this.cancel @item)}}
+              {{on 'click' (fn @cancel @item)}}
               aria-label='Cancel'
               data-test-cancel-button
             >
@@ -325,7 +206,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               @kind='primary'
               @size='tall'
               class='operator-mode-stack-item__card__footer-button'
-              {{on 'click' (fn this.save @item)}}
+              {{on 'click' (fn @save @item)}}
               aria-label='Save'
               data-test-save-button
             >
