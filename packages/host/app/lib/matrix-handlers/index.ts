@@ -34,7 +34,6 @@ export type Event = Partial<IEvent>;
 
 export interface Context {
   roomCards: Map<string, Promise<RoomCard>>;
-  // TODO collapse this into the RoomCard
   roomObjectives: Map<string, RoomObjectiveCard>;
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
@@ -99,7 +98,7 @@ export async function addRoomEvent(context: Context, event: Event) {
 // changes, the consuming card's computeds will not automatically recompute. To
 // work around that, we are performing the assignment of the interior card to
 // the consuming card again which will trigger the consuming card's computeds to
-// pick up the interior card's updated fields. In the case the consuming card is
+// pick up the interior card's updated fields. In this case the consuming card is
 // the RoomObjectiveCard and the interior card is the RoomCard.
 export async function recomputeRoomObjective(context: Context, roomId: string) {
   let roomCard = await context.roomCards.get(roomId);
