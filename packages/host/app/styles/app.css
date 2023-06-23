@@ -316,8 +316,8 @@
 .operator-mode .cards-grid__cards > li {
   cursor: pointer;
 }
-.operator-mode-card-stack__buried .cards-grid__cards,
-.operator-mode-card-stack__buried .cards-grid__add-button {
+.operator-mode .buried .cards-grid__cards,
+.operator-mode .buried .cards-grid__add-button {
   display: none;
 }
 .cards-grid__add-button {
