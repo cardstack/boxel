@@ -81,6 +81,12 @@ type Setter = { setters: { [fieldName: string]: Setter } } & ((
 
 interface Options {
   computeVia?: string | (() => unknown);
+  // there exists cards that we only ever run in the host without
+  // the isolated renderer (RoomCard), which means that we cannot
+  // use the rendering mechanism to tell if a card is used or not,
+  // in which case we need to tell the runtime that a card is
+  // explictly being used.
+  isUsed?: true;
 }
 
 interface NotLoadedValue {
@@ -214,6 +220,12 @@ export interface Field<
   name: string;
   fieldType: FieldType;
   computeVia: undefined | string | (() => unknown);
+  // there exists cards that we only ever run in the host without
+  // the isolated renderer (RoomCard), which means that we cannot
+  // use the rendering mechanism to tell if a card is used or not,
+  // in which case we need to tell the runtime that a card is
+  // explictly being used.
+  isUsed?: undefined | true;
   serialize(
     value: any,
     doc: JSONAPISingleResourceDocument,
@@ -341,7 +353,8 @@ class ContainsMany<FieldT extends CardBaseConstructor>
   constructor(
     private cardThunk: () => FieldT,
     readonly computeVia: undefined | string | (() => unknown),
-    readonly name: string
+    readonly name: string,
+    readonly isUsed: undefined | true
   ) {}
 
   get card(): FieldT {
@@ -541,7 +554,8 @@ class Contains<CardT extends CardBaseConstructor> implements Field<CardT, any> {
   constructor(
     private cardThunk: () => CardT,
     readonly computeVia: undefined | string | (() => unknown),
-    readonly name: string
+    readonly name: string,
+    readonly isUsed: undefined | true
   ) {}
 
   get card(): CardT {
@@ -694,7 +708,8 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
   constructor(
     private cardThunk: () => CardT,
     readonly computeVia: undefined | string | (() => unknown),
-    readonly name: string
+    readonly name: string,
+    readonly isUsed: undefined | true
   ) {}
 
   get card(): CardT {
@@ -958,7 +973,8 @@ class LinksToMany<FieldT extends CardConstructor>
   constructor(
     private cardThunk: () => FieldT,
     readonly computeVia: undefined | string | (() => unknown),
-    readonly name: string
+    readonly name: string,
+    readonly isUsed: undefined | true
   ) {}
 
   get card(): FieldT {
@@ -1323,7 +1339,12 @@ export function containsMany<CardT extends CardBaseConstructor>(
   return {
     setupField(fieldName: string) {
       return makeDescriptor(
-        new ContainsMany(cardThunk(cardOrThunk), options?.computeVia, fieldName)
+        new ContainsMany(
+          cardThunk(cardOrThunk),
+          options?.computeVia,
+          fieldName,
+          options?.isUsed
+        )
       );
     },
   } as any;
@@ -1337,7 +1358,12 @@ export function contains<CardT extends CardBaseConstructor>(
   return {
     setupField(fieldName: string) {
       return makeDescriptor(
-        new Contains(cardThunk(cardOrThunk), options?.computeVia, fieldName)
+        new Contains(
+          cardThunk(cardOrThunk),
+          options?.computeVia,
+          fieldName,
+          options?.isUsed
+        )
       );
     },
   } as any;
@@ -1351,7 +1377,12 @@ export function linksTo<CardT extends CardConstructor>(
   return {
     setupField(fieldName: string) {
       return makeDescriptor(
-        new LinksTo(cardThunk(cardOrThunk), options?.computeVia, fieldName)
+        new LinksTo(
+          cardThunk(cardOrThunk),
+          options?.computeVia,
+          fieldName,
+          options?.isUsed
+        )
       );
     },
   } as any;
@@ -1365,7 +1396,12 @@ export function linksToMany<CardT extends CardConstructor>(
   return {
     setupField(fieldName: string) {
       return makeDescriptor(
-        new LinksToMany(cardThunk(cardOrThunk), options?.computeVia, fieldName)
+        new LinksToMany(
+          cardThunk(cardOrThunk),
+          options?.computeVia,
+          fieldName,
+          options?.isUsed
+        )
       );
     },
   } as any;
@@ -1948,7 +1984,9 @@ async function _updateFromSerialized<T extends CardBaseConstructor>(
           `cannot change the id for saved instance ${originalId}`
         );
       }
-      instance[fieldName] = value;
+      let deserialized = getDataBucket(instance);
+      deserialized.set(fieldName as string, value);
+      logger.log(recompute(instance));
     }
     if (resource.id != null) {
       // importantly, we place this synchronously after the assignment of the model's
@@ -2276,15 +2314,19 @@ export function getFields(
     let descs = Object.getOwnPropertyDescriptors(obj);
     let currentFields = flatMap(Object.keys(descs), (maybeFieldName) => {
       if (maybeFieldName !== 'constructor') {
-        if (opts?.usedFieldsOnly && !usedFields.includes(maybeFieldName)) {
-          return [];
-        }
         let maybeField = getField(
           (isCard(cardInstanceOrClass)
             ? cardInstanceOrClass.constructor
             : cardInstanceOrClass) as typeof CardBase,
           maybeFieldName
         );
+        if (
+          opts?.usedFieldsOnly &&
+          !usedFields.includes(maybeFieldName) &&
+          !maybeField?.isUsed
+        ) {
+          return [];
+        }
         if (maybeField?.computeVia && !opts?.includeComputeds) {
           return [];
         }

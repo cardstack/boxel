@@ -775,6 +775,9 @@ nav > .directory-level {
   display: flex;
   justify-content: center;
 }
+ .room__messages .boundaries {
+  margin: var(--boxel-sp-sm) 0;
+ }
 
 .room__send-message {
   display: flex;
@@ -812,6 +815,11 @@ nav > .directory-level {
   clear: both;
   font-size: var(--boxel-font-size-sm);
   font-weight: initial;
+}
+
+header.matrix .content {
+  position: relative;
+  display: block;
 }
 
 .card-isolated-component {

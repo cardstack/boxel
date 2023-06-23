@@ -71,7 +71,7 @@ export default class CardService extends Service {
   async createFromSerialized(
     resource: LooseCardResource,
     doc: LooseSingleCardDocument | CardDocument,
-    relativeTo: URL
+    relativeTo: URL | undefined
   ): Promise<Card> {
     await this.apiModule.loaded;
     let card = await this.api.createFromSerialized(resource, doc, relativeTo, {
@@ -175,5 +175,10 @@ export default class CardService extends Service {
   async isPrimitive(card: typeof CardBase): Promise<boolean> {
     await this.apiModule.loaded;
     return this.api.primitive in card;
+  }
+
+  async realmInfoSymbol(): Promise<Symbol> {
+    await this.apiModule.loaded;
+    return this.api.realmInfo;
   }
 }

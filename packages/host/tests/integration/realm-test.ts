@@ -8,6 +8,7 @@ import {
   TestRealm,
   TestRealmAdapter,
   testRealmURL,
+  testRealmInfo,
   setupCardLogs,
   setupLocalIndexing,
 } from '../helpers';
@@ -127,9 +128,7 @@ module('Integration | realm', function (hooks) {
           lastModified: adapter.lastModified.get(
             `${testRealmURL}dir/empty.json`
           ),
-          realmInfo: {
-            name: 'Unnamed Workspace',
-          },
+          realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
         links: {
@@ -217,9 +216,7 @@ module('Integration | realm', function (hooks) {
           lastModified: adapter.lastModified.get(
             `${testRealmURL}dir/mango.json`
           ),
-          realmInfo: {
-            name: 'Unnamed Workspace',
-          },
+          realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
         links: {
@@ -242,9 +239,7 @@ module('Integration | realm', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}dir/owner.json`
             ),
-            realmInfo: {
-              name: 'Unnamed Workspace',
-            },
+            realmInfo: testRealmInfo,
             realmURL: testRealmURL,
           },
           links: {
@@ -319,9 +314,7 @@ module('Integration | realm', function (hooks) {
           lastModified: adapter.lastModified.get(
             `${testRealmURL}dir/mango.json`
           ),
-          realmInfo: {
-            name: 'Unnamed Workspace',
-          },
+          realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
         links: {
@@ -342,6 +335,7 @@ module('Integration | realm', function (hooks) {
               name: 'Person',
             },
             realmInfo: {
+              ...testRealmInfo,
               name: 'Test Workspace',
             },
             realmURL: 'http://localhost:4202/test/',
@@ -623,9 +617,7 @@ module('Integration | realm', function (hooks) {
             name: 'Pet',
           },
           lastModified: adapter.lastModified.get(`${testRealmURL}Pet/1.json`),
-          realmInfo: {
-            name: 'Unnamed Workspace',
-          },
+          realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
         links: {
@@ -648,9 +640,7 @@ module('Integration | realm', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}dir/owner.json`
             ),
-            realmInfo: {
-              name: 'Unnamed Workspace',
-            },
+            realmInfo: testRealmInfo,
             realmURL: testRealmURL,
           },
           links: {
@@ -908,9 +898,7 @@ module('Integration | realm', function (hooks) {
           lastModified: adapter.lastModified.get(
             `${testRealmURL}ski-trip.json`
           ),
-          realmInfo: {
-            name: 'Unnamed Workspace',
-          },
+          realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
       },
@@ -1060,7 +1048,7 @@ module('Integration | realm', function (hooks) {
             name: 'PetPerson',
           },
           lastModified: adapter.lastModified.get(`${testRealmURL}jackie.json`),
-          realmInfo: { name: 'Unnamed Workspace' },
+          realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
       },
@@ -1078,7 +1066,7 @@ module('Integration | realm', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}dir/friend.json`
             ),
-            realmInfo: { name: 'Unnamed Workspace' },
+            realmInfo: testRealmInfo,
             realmURL: testRealmURL,
           },
         },
@@ -1096,7 +1084,7 @@ module('Integration | realm', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}dir/van-gogh.json`
             ),
-            realmInfo: { name: 'Unnamed Workspace' },
+            realmInfo: testRealmInfo,
             realmURL: testRealmURL,
           },
         },
@@ -1250,7 +1238,7 @@ module('Integration | realm', function (hooks) {
           name: 'PetPerson',
         },
         lastModified: adapter.lastModified.get(`${testRealmURL}jackie.json`),
-        realmInfo: { name: 'Unnamed Workspace' },
+        realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
     });
@@ -1353,7 +1341,7 @@ module('Integration | realm', function (hooks) {
           name: 'PetPerson',
         },
         lastModified: adapter.lastModified.get(`${testRealmURL}jackie.json`),
-        realmInfo: { name: 'Unnamed Workspace' },
+        realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
     });
@@ -1447,7 +1435,7 @@ module('Integration | realm', function (hooks) {
           name: 'PetPerson',
         },
         lastModified: adapter.lastModified.get(`${testRealmURL}jackie.json`),
-        realmInfo: { name: 'Unnamed Workspace' },
+        realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
     });
@@ -1563,7 +1551,7 @@ module('Integration | realm', function (hooks) {
           name: 'PetPerson',
         },
         lastModified: adapter.lastModified.get(`${testRealmURL}jackie.json`),
-        realmInfo: { name: 'Unnamed Workspace' },
+        realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
     });
@@ -1693,7 +1681,7 @@ module('Integration | realm', function (hooks) {
           name: 'PetPerson',
         },
         lastModified: adapter.lastModified.get(`${testRealmURL}jackie.json`),
-        realmInfo: { name: 'Unnamed Workspace' },
+        realmInfo: testRealmInfo,
         realmURL: testRealmURL,
       },
     });
@@ -1814,9 +1802,7 @@ module('Integration | realm', function (hooks) {
           lastModified: adapter.lastModified.get(
             `${testRealmURL}dir/mango.json`
           ),
-          realmInfo: {
-            name: 'Unnamed Workspace',
-          },
+          realmInfo: testRealmInfo,
           realmURL: testRealmURL,
         },
         links: {
@@ -1839,9 +1825,7 @@ module('Integration | realm', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}dir/mariko.json`
             ),
-            realmInfo: {
-              name: 'Unnamed Workspace',
-            },
+            realmInfo: testRealmInfo,
             realmURL: testRealmURL,
           },
           links: {
@@ -2320,9 +2304,7 @@ module('Integration | realm', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}dir/mango.json`
             ),
-            realmInfo: {
-              name: 'Unnamed Workspace',
-            },
+            realmInfo: testRealmInfo,
             realmURL: testRealmURL,
           },
           links: {
@@ -2344,9 +2326,7 @@ module('Integration | realm', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}dir/mariko.json`
             ),
-            realmInfo: {
-              name: 'Unnamed Workspace',
-            },
+            realmInfo: testRealmInfo,
             realmURL: testRealmURL,
           },
           links: {
@@ -2378,9 +2358,7 @@ module('Integration | realm', function (hooks) {
             lastModified: adapter.lastModified.get(
               `${testRealmURL}dir/vanGogh.json`
             ),
-            realmInfo: {
-              name: 'Unnamed Workspace',
-            },
+            realmInfo: testRealmInfo,
             realmURL: testRealmURL,
           },
           links: {
@@ -2401,7 +2379,7 @@ module('Integration | realm', function (hooks) {
               module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
-            realmInfo: { name: 'Test Workspace' },
+            realmInfo: { ...testRealmInfo, name: 'Test Workspace' },
             realmURL: 'http://localhost:4202/test/',
           },
           links: {
@@ -2561,7 +2539,8 @@ posts/ignore-me.gts
     let realm = await TestRealm.create(
       {
         '.realm.json': `{
-          "name": "Example Workspace"
+          "name": "Example Workspace",
+          "backgroundURL": "https://example-background-url.com"
         }`,
       },
       this.owner
@@ -2583,6 +2562,7 @@ posts/ignore-me.gts
           type: 'realm-info',
           attributes: {
             name: 'Example Workspace',
+            backgroundURL: 'https://example-background-url.com',
           },
         },
       },
@@ -2607,9 +2587,7 @@ posts/ignore-me.gts
         data: {
           id: testRealmURL,
           type: 'realm-info',
-          attributes: {
-            name: 'Unnamed Workspace',
-          },
+          attributes: testRealmInfo,
         },
       },
       '/_info response is correct'
@@ -2638,9 +2616,7 @@ posts/ignore-me.gts
         data: {
           id: testRealmURL,
           type: 'realm-info',
-          attributes: {
-            name: 'Unnamed Workspace',
-          },
+          attributes: testRealmInfo,
         },
       },
       '/_info response is correct'

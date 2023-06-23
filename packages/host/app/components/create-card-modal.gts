@@ -1,5 +1,8 @@
 import Component from '@glimmer/component';
-import type { CardRef } from '@cardstack/runtime-common';
+import type {
+  CardRef,
+  LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
@@ -64,15 +67,22 @@ export default class CreateCardModal extends Component {
 
   async create<T extends Card>(
     ref: CardRef,
-    relativeTo: URL | undefined
+    relativeTo: URL | undefined,
+    opts?: { doc?: LooseSingleCardDocument }
   ): Promise<undefined | T> {
     this.zIndex++;
-    return (await this._create.perform(ref, relativeTo)) as T | undefined;
+    return (await this._create.perform(ref, relativeTo, opts)) as T | undefined;
   }
 
   private _create = enqueueTask(
-    async <T extends Card>(ref: CardRef, relativeTo: URL | undefined) => {
-      let doc = { data: { meta: { adoptsFrom: ref } } };
+    async <T extends Card>(
+      ref: CardRef,
+      relativeTo: URL | undefined,
+      opts?: { doc?: LooseSingleCardDocument }
+    ) => {
+      let doc: LooseSingleCardDocument = opts?.doc ?? {
+        data: { meta: { adoptsFrom: ref } },
+      };
       this.currentRequest = {
         card: await this.cardService.createFromSerialized(
           doc.data,
