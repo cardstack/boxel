@@ -33,6 +33,7 @@ export default class Room extends Component<RoomArgs> {
       @title={{this.roomCard.name}}
       @hasBackground={{TRUE}}
       class='matrix header'
+      data-test-matrix-room-header
     >
       <:actions>
         <Button
