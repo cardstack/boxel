@@ -313,6 +313,7 @@ export class Loader {
   }
 
   async import<T extends object>(moduleIdentifier: string): Promise<T> {
+    console.log(`importing ${moduleIdentifier}`);
     let resolvedModule = this.resolve(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
     let shimmed = this.moduleShims.get(moduleIdentifier);
@@ -812,7 +813,8 @@ export class Loader {
   private async load(moduleURL: ResolvedURL): Promise<string> {
     console.log(`loading ${moduleURL}`);
     if (moduleURL.toString().includes('glimmer-scoped')) {
-      return Promise.resolve('// a glimmer scoped comment');
+      debugger;
+      return Promise.resolve('// a glimmer scoped comment?');
     }
     let response: Response;
     try {

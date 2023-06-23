@@ -29,6 +29,7 @@ export class Person extends Card {
           color: pink;
         }
       </style>
+      {{log 'person!'}}
       <div class='demo-card'>
         <h3><@fields.firstName /> <@fields.lastName /></h3>
         {{#if @model.pet}}<div><@fields.pet /></div>{{/if}}
