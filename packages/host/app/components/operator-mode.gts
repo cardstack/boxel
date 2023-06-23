@@ -397,7 +397,7 @@ export default class OperatorMode extends Component<Signature> {
           </button>
         </div>
       {{else}}
-        <div class='card-stack'>
+        <div class='card-stack' data-test-card-stack>
           {{! z-index and offset calculation in the OperatorModeOverlays operates under assumption that it is nested under element with class operator-mode-card-stack }}
           <OperatorModeOverlays
             @renderedLinksToCards={{this.renderedLinksToCards}}
