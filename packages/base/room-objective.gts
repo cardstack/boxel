@@ -5,7 +5,7 @@ import { RoomCard, RoomMemberCard } from './room';
 class View extends Component<typeof RoomObjectiveCard> {
   <template>
     <div data-test-objective>
-      <h3>Objective: Make sure that all room members greet eachother by saying
+      <h3>Objective: Make sure that all room members greet each other by saying
         "Hello"</h3>
       <div>
         <strong data-test-objective-progress>
