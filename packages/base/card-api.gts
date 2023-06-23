@@ -327,7 +327,6 @@ function getter<CardT extends CardBaseConstructor>(
       field.computeVia.constructor.name !== 'AsyncFunction'
     ) {
       value = field.computeVia.bind(instance)();
-      value = field.validate(instance, value);
       deserialized.set(field.name, value);
     } else if (
       !deserialized.has(field.name) &&
@@ -876,9 +875,6 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
         );
       }
     }
-    if (value == null) {
-      return null;
-    }
     return value;
   }
 
@@ -1163,7 +1159,7 @@ class LinksToMany<FieldT extends CardConstructor>
     }
 
     if (values == null) {
-      return [];
+      return values;
     }
 
     if (!Array.isArray(values)) {
