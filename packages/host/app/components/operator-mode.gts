@@ -1,22 +1,15 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { Card, CardContext, Format } from 'https://cardstack.com/base/card-api';
-import Preview from './preview';
 import { action } from '@ember/object';
-import { fn, array } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { trackedFunction } from 'ember-resources/util/function';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import type CardService from '../services/card-service';
 // import getValueFromWeakMap from '../helpers/get-value-from-weakmap';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import optional from '@cardstack/boxel-ui/helpers/optional';
-import cn from '@cardstack/boxel-ui/helpers/cn';
 import {
-  IconButton,
   Modal,
-  Header,
-  CardContainer,
-  Button,
 } from '@cardstack/boxel-ui';
 import SearchSheet, {
   SearchSheetMode,
@@ -28,26 +21,20 @@ import {
   chooseCard,
   type Actions,
   type CardRef,
-  cardTypeDisplayName,
   LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import type LoaderService from '../services/loader-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-import { TrackedArray } from 'tracked-built-ins';
-import OperatorModeOverlays from '@cardstack/host/components/operator-mode-overlays';
 import LinksToCardComponentModifier from '@cardstack/host/modifiers/links-to-card-component-modifier';
-import { schedule } from '@ember/runloop';
-import { htmlSafe } from '@ember/template';
+import { htmlSafe, SafeString } from '@ember/template';
 import { registerDestructor } from '@ember/destroyable';
 import type { Query } from '@cardstack/runtime-common/query';
 import { getSearchResults, type Search } from '../resources/search';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import perform from 'ember-concurrency/helpers/perform';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
-import BoxelMenu from '@cardstack/boxel-ui/components/menu';
-import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
+import OperatorModeStackItem from '@cardstack/host/components/operator-mode-stack-item';
 
 interface Signature {
   Args: {
@@ -179,6 +166,12 @@ export default class OperatorMode extends Component<Signature> {
     await this.close(item);
   }
 
+  @action
+  removeItemFromStack(item: StackItem) {
+    this.operatorModeStateService.removeItemFromStack(item);
+  }
+
+  @action
   replaceItemInStack(item: StackItem, newItem: StackItem) {
     this.operatorModeStateService.replaceItemInStack(item, newItem);
   }
@@ -292,41 +285,16 @@ export default class OperatorMode extends Component<Signature> {
     };
   }
 
-  @tracked renderedLinksToCards = new TrackedArray<RenderedLinksToCard>([]);
-  registerLinkedCardElement(
-    linksToCardElement: HTMLElement,
-    linksToCard: Card,
-    context: CardContext
-  ) {
-    // Without scheduling this after render, this produces the "attempted to update value, but it had already been used previously in the same computation" type error
-    schedule('afterRender', () => {
-      this.renderedLinksToCards.push({
-        element: linksToCardElement,
-        card: linksToCard,
-        stackedAtIndex: this.stack.length,
-        context,
-      });
-    });
-  }
-
-  unregisterLinkedCardElement(card: Card) {
-    let index = this.renderedLinksToCards.findIndex(
-      (renderedLinksToCard) => renderedLinksToCard.card === card
-    );
-    if (index !== -1) {
-      this.renderedLinksToCards.splice(index, 1);
-    }
-  }
-
-  styleForStackedCard(stack: StackItem[], index: number) {
-    let invertedIndex = stack.length - index - 1;
+  @action
+  styleForStackedCard(index: number): SafeString {
+    let invertedIndex = this.stack.length - index - 1;
 
     let widthReductionPercent = 5; // Every new card on the stack is 5% wider than the previous one
     let offsetPx = 40; // Every new card on the stack is 40px lower than the previous one
 
     return htmlSafe(`
       width: ${100 - invertedIndex * widthReductionPercent}%;
-      z-index: ${stack.length - invertedIndex};
+      z-index: ${this.stack.length - invertedIndex};
       padding-top: calc(${offsetPx}px * ${index});
     `);
   }
@@ -398,124 +366,18 @@ export default class OperatorMode extends Component<Signature> {
         </div>
       {{else}}
         <div class='operator-mode-card-stack'>
-          {{! z-index and offset calculation in the OperatorModeOverlays operates under assumption that it is nested under element with class operator-mode-card-stack }}
-          <OperatorModeOverlays
-            @renderedLinksToCards={{this.renderedLinksToCards}}
-            @addToStack={{this.addToStack}}
-          />
-
           {{#each this.stack as |item i|}}
-            <div
-              class={{cn
-                'operator-mode-card-stack__item'
-                operator-mode-card-stack__buried=(this.isBuried i)
-              }}
-              data-test-stack-card-index={{i}}
-              data-test-stack-card={{item.card.id}}
-              style={{this.styleForStackedCard this.stack i}}
-            >
-              <CardContainer
-                class={{cn
-                  'operator-mode-card-stack__card'
-                  operator-mode-card-stack__card--edit=(eq item.format 'edit')
-                }}
-              >
-                <Header
-                  @title={{cardTypeDisplayName item.card}}
-                  class='operator-mode-card-stack__card__header'
-                  {{on
-                    'click'
-                    (optional
-                      (if
-                        (this.isBuried i) (fn this.dismissStackedCardsAbove i)
-                      )
-                    )
-                  }}
-                  data-test-stack-card-header
-                >
-                  <:actions>
-                    <BoxelDropdown>
-                      <:trigger as |bindings|>
-                        <IconButton
-                          @icon='icon-horizontal-three-dots'
-                          @width='20px'
-                          @height='20px'
-                          class='icon-button'
-                          aria-label='Options'
-                          data-test-edit-button
-                          {{bindings}}
-                        />
-                      </:trigger>
-                      <:content as |dd|>
-                        <BoxelMenu
-                          @closeMenu={{dd.close}}
-                          @items={{if
-                            (eq item.format 'edit')
-                            (array
-                              (menuItem
-                                'Finish Editing'
-                                (fn this.save item i)
-                                icon='icon-check-mark'
-                              )
-                              (menuItem
-                                'Delete'
-                                (fn this.delete item i)
-                                icon='icon-trash'
-                              )
-                            )
-                            (array
-                              (menuItem
-                                'Edit' (fn this.edit item i) icon='icon-pencil'
-                              )
-                            )
-                          }}
-                        />
-                      </:content>
-                    </BoxelDropdown>
-                    <IconButton
-                      @icon='icon-x'
-                      @width='20px'
-                      @height='20px'
-                      class='icon-button'
-                      aria-label='Close'
-                      {{on 'click' (fn this.close item)}}
-                      data-test-close-button
-                    />
-                  </:actions>
-                </Header>
-                <div class='operator-mode-card-stack__card__content'>
-                  <Preview
-                    @card={{item.card}}
-                    @format={{item.format}}
-                    @context={{this.context}}
-                  />
-                </div>
-                {{#if (eq item.format 'edit')}}
-                  <footer class='operator-mode-card-stack__card__footer'>
-                    <Button
-                      @kind='secondary-light'
-                      @size='tall'
-                      class='operator-mode-card-stack__card__footer-button'
-                      {{on 'click' (fn this.cancel item)}}
-                      aria-label='Cancel'
-                      data-test-cancel-button
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      @kind='primary'
-                      @size='tall'
-                      class='operator-mode-card-stack__card__footer-button'
-                      {{on 'click' (fn this.save item)}}
-                      aria-label='Save'
-                      data-test-save-button
-                    >
-                      Save
-                    </Button>
-                  </footer>
-                {{/if}}
-              </CardContainer>
-            </div>
+            <OperatorModeStackItem
+              @item={{item}}
+              @index={{i}}
+              @publicAPI={{this.publicAPI}}
+              @addToStack={{this.addToStack}}
+              @dismissStackedCardsAbove={{this.dismissStackedCardsAbove}}
+              @isBuried={{this.isBuried}}
+              @removeItemFromStack={{this.removeItemFromStack}}
+              @replaceItemInStack={{this.replaceItemInStack}}
+              @styleForStackedCard={{this.styleForStackedCard}}
+            />
           {{/each}}
         </div>
       {{/if}}
@@ -525,15 +387,6 @@ export default class OperatorMode extends Component<Signature> {
         @onFocus={{this.onFocusSearchInput}}
       />
     </Modal>
-    <style>
-      .operator-mode-card-stack__buried .operator-mode-card-stack__card {
-      background-color: var(--boxel-200); grid-template-rows:
-      var(--buried-operator-mode-header-height) auto; }
-      .operator-mode-card-stack__buried .operator-mode-card-stack__card__header
-      .icon-button { display: none; } .operator-mode-card-stack__buried
-      .operator-mode-card-stack__card__header { cursor: pointer; font: 500
-      var(--boxel-font-sm); padding: 0 var(--boxel-sp-xs); }
-    </style>
   </template>
 }
 

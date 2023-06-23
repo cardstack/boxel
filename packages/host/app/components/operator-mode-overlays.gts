@@ -17,7 +17,6 @@ import { action } from '@ember/object';
 interface OverlayedButton {
   x: number;
   y: number;
-  zIndex: number;
   linksToCard: Card;
   linksToCardElement: HTMLElement;
 }
@@ -77,28 +76,34 @@ export default class OperatorModeOverlays extends Component<Signature> {
 
   styleForOverlayedButton(overlayedButton: OverlayedButton) {
     return htmlSafe(
-      `top: ${overlayedButton.y}px; left: ${overlayedButton.x}px; z-index: ${overlayedButton.zIndex}`
+      `top: ${overlayedButton.y}px; left: ${overlayedButton.x}px;`
     );
   }
 
-  calculateOverlayedButtonCoordinates(linksToCardElement: HTMLElement) {
+  calculateOverlayedButtonCoordinates(renderedLinksToCard: RenderedLinksToCard) {
+    let linksToCardElement = renderedLinksToCard.element;
     let cardElementRect = linksToCardElement.getBoundingClientRect();
 
-    let stackElement = linksToCardElement.closest('.operator-mode-card-stack');
+    let stackElement = linksToCardElement.closest('.operator-mode-stack-item');
     if (!stackElement) {
       throw new Error(
-        'Linked card must be nested under .operator-mode-card-stack element'
+        'Linked card must be nested under .operator-mode-stack-item element'
       );
     }
-
-    // This is absolute x axis distance between the operator mode stack and the card
-    let delta =
+  
+    // This is absolute x axis distance between the operator mode stack item and the card
+    let xDelta =
       cardElementRect.left - stackElement.getBoundingClientRect().left;
+    // This is absolute y axis distance between the operator mode stack item and the card
+    let yDelta =
+      cardElementRect.top - stackElement.getBoundingClientRect().top;
 
     // Places the button in the top right of the linksTo card
     return {
-      x: delta + cardElementRect.width - 65, // x starts at the left edge of the operator mode stack
-      y: cardElementRect.y,
+      x: xDelta + cardElementRect.width - 45, // x starts at the left edge of the operator mode stack item content
+      // currently maximum stacked cards are 3
+      // each buried card shows the header with height 40px
+      y: yDelta - (40 * (renderedLinksToCard.stackedAtIndex % 3)), 
     };
   }
 
@@ -118,13 +123,12 @@ export default class OperatorModeOverlays extends Component<Signature> {
     let refreshedOverlayedButtons: OverlayedButton[] =
       this.args.renderedLinksToCards.map((renderedLinksToCard) => {
         let { x, y } = this.calculateOverlayedButtonCoordinates(
-          renderedLinksToCard.element
+          renderedLinksToCard
         );
 
         return {
           x,
           y,
-          zIndex: renderedLinksToCard.stackedAtIndex + 1,
           linksToCard: renderedLinksToCard.card,
           linksToCardElement: renderedLinksToCard.element,
         };
