@@ -58,6 +58,7 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
 
       display: grid;
       gap: var(--boxel-sp-xs) 0;
+      overflow-wrap: anywhere;
     }
 
     .vertical {
