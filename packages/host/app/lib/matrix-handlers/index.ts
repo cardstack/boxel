@@ -93,3 +93,18 @@ export async function addRoomEvent(context: Context, event: Event) {
     ];
   }
 }
+
+// our reactive system doesn't cascade "up" through our consumers. meaning that
+// when a card's contained field is another card and the interior card's field
+// changes, the consuming card's computeds will not automatically recompute. To
+// work around that, we are performing the assignment of the interior card to
+// the consuming card again which will trigger the consuming card's computeds to
+// pick up the interior card's updated fields. In the case the consuming card is
+// the RoomObjectiveCard and the interior card is the RoomCard.
+export async function recomputeRoomObjective(context: Context, roomId: string) {
+  let roomCard = await context.roomCards.get(roomId);
+  let objective = context.roomObjectives.get(roomId);
+  if (objective && roomCard) {
+    objective.room = roomCard;
+  }
+}

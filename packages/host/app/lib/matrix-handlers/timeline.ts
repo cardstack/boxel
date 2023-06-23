@@ -1,6 +1,11 @@
 import debounce from 'lodash/debounce';
 import { type MatrixEvent } from 'matrix-js-sdk';
-import { type Context, type Event, addRoomEvent } from './index';
+import {
+  type Context,
+  type Event,
+  addRoomEvent,
+  recomputeRoomObjective,
+} from './index';
 import { eventDebounceMs } from '../matrix-utils';
 import { type MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
 import { type RoomObjectiveCard } from 'https://cardstack.com/base/room-objective';
@@ -68,12 +73,7 @@ async function processDecryptedEvent(context: Context, event: Event) {
     }
   }
 
-  // TODO DRY this
-  let roomCard = await context.roomCards.get(roomId);
-  let objective = context.roomObjectives.get(roomId);
-  if (objective && roomCard) {
-    objective.room = roomCard;
-  }
+  await recomputeRoomObjective(context, roomId);
 
   let room = context.client.getRoom(roomId);
   if (!room) {
