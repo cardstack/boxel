@@ -1984,7 +1984,9 @@ async function _updateFromSerialized<T extends CardBaseConstructor>(
           `cannot change the id for saved instance ${originalId}`
         );
       }
-      instance[fieldName] = value;
+      let deserialized = getDataBucket(instance);
+      deserialized.set(fieldName as string, value);
+      logger.log(recompute(instance));
     }
     if (resource.id != null) {
       // importantly, we place this synchronously after the assignment of the model's
