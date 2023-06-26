@@ -1,7 +1,15 @@
 import debounce from 'lodash/debounce';
 import { type MatrixEvent } from 'matrix-js-sdk';
-import { type Context, type Event, addRoomEvent } from './index';
+import {
+  type Context,
+  type Event,
+  addRoomEvent,
+  recomputeRoomObjective,
+} from './index';
 import { eventDebounceMs } from '../matrix-utils';
+import { type MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
+import { type RoomObjectiveCard } from 'https://cardstack.com/base/room-objective';
+import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 export function onTimeline(context: Context) {
   return (e: MatrixEvent) => {
@@ -33,13 +41,39 @@ async function drainTimeline(context: Context) {
 
 async function processDecryptedEvent(context: Context, event: Event) {
   await addRoomEvent(context, event);
-
   let { room_id: roomId } = event;
   if (!roomId) {
     throw new Error(
       `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`
     );
   }
+  let discreteEvent = event as DiscreteMatrixEvent;
+  if (
+    discreteEvent.type === 'm.room.message' &&
+    discreteEvent.content.msgtype === 'org.boxel.objective'
+  ) {
+    let objective = await context.roomObjectives.get(roomId);
+    if (!objective) {
+      let doc = {
+        data: {
+          meta: {
+            adoptsFrom: discreteEvent.content.ref,
+          },
+        },
+      } as LooseSingleCardDocument;
+      let roomCard = await context.roomCards.get(roomId);
+      if (!roomCard) {
+        throw new Error(`could not get room card for room '${roomId}'`);
+      }
+      objective = await context.cardAPI.createFromSerialized<
+        typeof RoomObjectiveCard
+      >(doc.data, doc, undefined);
+      objective.room = roomCard;
+      context.roomObjectives.set(roomId, objective);
+    }
+  }
+
+  await recomputeRoomObjective(context, roomId);
 
   let room = context.client.getRoom(roomId);
   if (!room) {

@@ -664,7 +664,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`
     );
-    assert.dom('[data-test-card-catalog-item]').exists({ count: 1 });
+    assert.dom('[data-test-card-catalog-item]').exists({ count: 2 });
 
     await click(
       `[data-test-select="${testRealmURL}CatalogEntry/publishing-packet"]`
@@ -724,7 +724,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`
     );
-    assert.dom('[data-test-card-catalog-item]').exists({ count: 1 });
+    assert.dom('[data-test-card-catalog-item]').exists({ count: 2 });
 
     await click(
       `[data-test-select="${testRealmURL}CatalogEntry/publishing-packet"]`
