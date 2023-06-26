@@ -156,9 +156,11 @@ nav > .directory-level {
   grid-template-columns: repeat(auto-fit, minmax(16.25rem, 1fr));
   gap: var(--boxel-sp);
   padding-left: 0;
+  margin: 0;
 }
 .card-catalog__results-length {
   font: 700 var(--boxel-font);
+  height: var(--boxel-sp-xxl);
 }
 
 .card-catalog-item {
@@ -171,7 +173,7 @@ nav > .directory-level {
   align-items: center;
   height: 100%;
 }
-.card-catalog-item.is-selected > .boxel-card-container {
+.card-catalog-item.card-catalog-item--selected > .boxel-card-container {
   box-shadow: 0 0 0 2px var(--boxel-highlight);
 }
 

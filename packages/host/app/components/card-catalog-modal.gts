@@ -23,7 +23,7 @@ import {
   IconButton,
   BoxelInput,
 } from '@cardstack/boxel-ui';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { eq, gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 
 interface Signature {
@@ -63,18 +63,27 @@ export default class CardCatalogModal extends Component<Signature> {
                   data-test-create-new
                 >Create New</Button>
               {{/if}}
-              <div class='card-catalog__results-length'>{{if
-                  this.currentRequest.search.instances.length
-                  this.currentRequest.search.instances.length
-                  '0'
-                }}
-                results</div>
+              {{#let
+                this.currentRequest.search.instances.length
+                as |numResults|
+              }}
+                <div class='card-catalog__results-length'>
+                  {{#if (gt numResults 1)}}
+                    {{numResults}}
+                    results
+                  {{else if (eq numResults 1)}}
+                    1 result
+                  {{/if}}
+                </div>
+              {{/let}}
               <ul class='card-catalog' data-test-card-catalog>
                 {{#each this.currentRequest.search.instances as |card|}}
                   <li
                     class={{cn
                       'card-catalog-item'
-                      is-selected=(eq this.selectedCard.id card.id)
+                      card-catalog-item--selected=(eq
+                        this.selectedCard.id card.id
+                      )
                     }}
                     data-test-card-catalog-item={{card.id}}
                   >
@@ -85,7 +94,7 @@ export default class CardCatalogModal extends Component<Signature> {
                     />
                     <button
                       class='card-catalog-item__select'
-                      {{on 'click' (fn this.select card)}}
+                      {{on 'click' (fn this.toggleSelect card)}}
                       data-test-select={{card.id}}
                       aria-label='Select'
                     />
@@ -115,7 +124,6 @@ export default class CardCatalogModal extends Component<Signature> {
               <Button
                 @kind='secondary-light'
                 @size='tall'
-                @disabled={{eq this.selectedCard undefined}}
                 class='dialog-box__footer-button'
                 {{on 'click' this.cancel}}
                 data-test-card-catalog-cancel-button
@@ -193,7 +201,11 @@ export default class CardCatalogModal extends Component<Signature> {
     }
   );
 
-  @action select(card?: CardBase): void {
+  @action toggleSelect(card?: CardBase): void {
+    if (this.selectedCard?.id === card?.id) {
+      this.selectedCard = undefined;
+      return;
+    }
     this.selectedCard = card;
   }
 
