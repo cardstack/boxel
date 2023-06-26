@@ -1,4 +1,3 @@
-import { FieldContainer } from '@cardstack/boxel-ui';
 import {
   contains,
   linksToMany,
