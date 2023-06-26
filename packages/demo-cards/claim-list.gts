@@ -11,11 +11,11 @@ import { Claim } from './claim';
 
 export class ClaimList extends Card {
   static displayName = 'List of Claims';
-  @field about = contains(StringCard);
+  @field description = contains(StringCard);
   @field claims = linksToMany(() => Claim);
   @field title = contains(StringCard, {
     computeVia: function (this: ClaimList) {
-      return this.about;
+      return this.description;
     },
   });
 
@@ -34,7 +34,7 @@ export class ClaimList extends Card {
     }
     <template>
       <div class='demo-card'>
-        <h2><@fields.about /></h2>
+        <h2><@fields.description /></h2>
         <FieldContainer @label='Number Claims:'>
           {{@model.claims.length}}
         </FieldContainer>

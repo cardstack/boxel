@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "about": "Staking Claims available to me"
+      "description": "Staking claims available to 0xEDC43a390C8eE324cC9d21C93C55c04bD6B8257f"
     },
     "relationships": {
       "claims.0": {
