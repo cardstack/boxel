@@ -1211,16 +1211,12 @@ class LinksToMany<FieldT extends CardConstructor>
       for (let field of deserialized.get(this.name)) {
         if (isNotLoadedValue(field)) {
           // replace the not-loaded values with the loaded cards
-          if (instance.id == 'http://localhost:4202/Friends/1') {
-            debugger;
-          }
-          values.push(fieldValues.find((v) => v.id === field.reference)! as T);
-          // values.push(
-          //   fieldValues.find(
-          //     (v) =>
-          //       v.id === new URL(field.reference, instance[relativeTo]).href
-          //   )! as T
-          // );
+          values.push(
+            fieldValues.find(
+              (v) =>
+                v.id === new URL(field.reference, instance[relativeTo]).href
+            )! as T
+          );
         } else {
           // keep existing loaded cards
           values.push(field);
