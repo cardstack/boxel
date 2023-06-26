@@ -158,10 +158,6 @@ export default class OperatorMode extends Component<Signature> {
     await this.close(item);
   }
 
-  removeItemFromStack(item: StackItem) {
-    this.operatorModeStateService.removeItemFromStack(item);
-  }
-
   replaceItemInStack(item: StackItem, newItem: StackItem) {
     this.operatorModeStateService.replaceItemInStack(item, newItem);
   }
