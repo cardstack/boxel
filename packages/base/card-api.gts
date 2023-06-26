@@ -757,7 +757,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
         relationships: {
           [this.name]: {
             links: {
-              self: opts
+              self: opts?.maybeRelativeURL
                 ? opts.maybeRelativeURL(new URL(value.reference))
                 : value.reference,
             },
@@ -779,7 +779,9 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
         relationships: {
           [this.name]: {
             links: {
-              self: opts ? opts.maybeRelativeURL(new URL(value.id)) : value.id,
+              self: opts?.maybeRelativeURL
+                ? opts.maybeRelativeURL(new URL(value.id))
+                : value.id,
             },
             data: { type: 'card', id: value.id },
           },
@@ -801,7 +803,9 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
         relationships: {
           [this.name]: {
             links: {
-              self: opts ? opts.maybeRelativeURL(new URL(value.id)) : value.id,
+              self: opts?.maybeRelativeURL
+                ? opts.maybeRelativeURL(new URL(value.id))
+                : value.id,
             },
             // we also write out the data form of the relationship
             // which correlates to the included resource
@@ -1069,7 +1073,7 @@ class LinksToMany<FieldT extends CardConstructor>
       if (isNotLoadedValue(value)) {
         relationships[`${this.name}\.${i}`] = {
           links: {
-            self: opts
+            self: opts?.maybeRelativeURL
               ? opts.maybeRelativeURL(new URL(value.reference))
               : value.reference,
           },
@@ -1080,7 +1084,9 @@ class LinksToMany<FieldT extends CardConstructor>
       if (visited.has(value.id)) {
         relationships[`${this.name}\.${i}`] = {
           links: {
-            self: opts ? opts.maybeRelativeURL(new URL(value.id)) : value.id,
+            self: opts?.maybeRelativeURL
+              ? opts.maybeRelativeURL(new URL(value.id))
+              : value.id,
           },
           data: { type: 'card', id: value.id },
         };
@@ -1106,7 +1112,9 @@ class LinksToMany<FieldT extends CardConstructor>
       }
       relationships[`${this.name}\.${i}`] = {
         links: {
-          self: opts ? opts.maybeRelativeURL(new URL(value.id)) : value.id,
+          self: opts?.maybeRelativeURL
+            ? opts.maybeRelativeURL(new URL(value.id))
+            : value.id,
         },
         data: { type: 'card', id: value.id },
       };
@@ -1785,7 +1793,7 @@ async function getDeserializedValue<CardT extends CardBaseConstructor>({
 export interface SerializeOpts {
   includeComputeds?: boolean;
   includeUnrenderedFields?: boolean;
-  maybeRelativeURL: (url: URL) => string;
+  maybeRelativeURL?: (url: URL) => string;
 }
 
 function serializeCardResource(
