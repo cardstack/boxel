@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Mike Wazowski"
+    },
+    "relationships": {
+      "friends.0": {
+        "links": {
+          "self": "../Friend/1"
+        }
+      },
+      "friends.1": {
+        "links": {
+          "self": "../Friend/2"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../friends",
+        "name": "Friends"
+      }
+    }
+  }
+}
