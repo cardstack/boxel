@@ -821,7 +821,7 @@ importers:
     devDependencies:
       '@cardstack/cardpay-sdk':
         specifier: ^1.0.53
-        version: 1.0.53(@babel/core@7.21.0)
+        version: 1.0.53(@babel/core@7.21.0)(typescript@4.9.3)
       '@types/lodash':
         specifier: ^4.14.182
         version: 4.14.189
@@ -1239,6 +1239,9 @@ importers:
       fastboot:
         specifier: ^4.1.0
         version: 4.1.0(patch_hash=kizxbxhfcldguz4jcwonfduu2y)
+      fastboot-app-server:
+        specifier: ^4.1.1
+        version: 4.1.1
       flat:
         specifier: ^5.0.2
         version: 5.0.2
@@ -1726,28 +1729,6 @@ packages:
     transitivePeerDependencies:
       - supports-color
 
-  /@babel/core@7.21.0:
-    resolution: {integrity: sha512-PuxUbxcW6ZYe656yL3EAhpy7qXKq0DmYsrJLpbB8XrsCP9Nm+XCg9XFMb5vIDliPD7+U/+M+QJlH17XOcB7eXA==}
-    engines: {node: '>=6.9.0'}
-    dependencies:
-      '@ampproject/remapping': 2.2.0
-      '@babel/code-frame': 7.21.4
-      '@babel/generator': 7.21.9
-      '@babel/helper-compilation-targets': 7.20.7(@babel/core@7.21.0)
-      '@babel/helper-module-transforms': 7.21.2
-      '@babel/helpers': 7.21.0
-      '@babel/parser': 7.21.9
-      '@babel/template': 7.20.7
-      '@babel/traverse': 7.21.5
-      '@babel/types': 7.21.5
-      convert-source-map: 1.9.0
-      debug: 4.3.4
-      gensync: 1.0.0-beta.2
-      json5: 2.2.3
-      semver: 6.3.0
-    transitivePeerDependencies:
-      - supports-color
-
   /@babel/core@7.21.0(supports-color@8.1.1):
     resolution: {integrity: sha512-PuxUbxcW6ZYe656yL3EAhpy7qXKq0DmYsrJLpbB8XrsCP9Nm+XCg9XFMb5vIDliPD7+U/+M+QJlH17XOcB7eXA==}
     engines: {node: '>=6.9.0'}
@@ -1846,7 +1827,7 @@ packages:
       '@babel/core': ^7.0.0
     dependencies:
       '@babel/compat-data': 7.21.0
-      '@babel/core': 7.21.0
+      '@babel/core': 7.21.0(supports-color@8.1.1)
       '@babel/helper-validator-option': 7.18.6
       browserslist: 4.21.4
       lru-cache: 5.1.1
@@ -1964,10 +1945,10 @@ packages:
     peerDependencies:
       '@babel/core': ^7.4.0-0
     dependencies:
-      '@babel/core': 7.21.0
+      '@babel/core': 7.21.0(supports-color@8.1.1)
       '@babel/helper-compilation-targets': 7.20.7(@babel/core@7.21.0)
       '@babel/helper-plugin-utils': 7.20.2
-      debug: 4.3.4
+      debug: 4.3.4(supports-color@8.1.1)
       lodash.debounce: 4.0.8
       resolve: 1.22.3
       semver: 6.3.0
@@ -2031,21 +2012,6 @@ packages:
       '@babel/helper-validator-identifier': 7.19.1
       '@babel/template': 7.20.7
       '@babel/traverse': 7.21.5(supports-color@8.1.1)
-      '@babel/types': 7.21.5
-    transitivePeerDependencies:
-      - supports-color
-
-  /@babel/helper-module-transforms@7.21.2:
-    resolution: {integrity: sha512-79yj2AR4U/Oqq/WOV7Lx6hUjau1Zfo4cI+JLAVYeMV5XIlbOhmjEk5ulbTc9fMpmlojzZHkUUxAiK+UKn+hNQQ==}
-    engines: {node: '>=6.9.0'}
-    dependencies:
-      '@babel/helper-environment-visitor': 7.21.5
-      '@babel/helper-module-imports': 7.18.6
-      '@babel/helper-simple-access': 7.20.2
-      '@babel/helper-split-export-declaration': 7.18.6
-      '@babel/helper-validator-identifier': 7.19.1
-      '@babel/template': 7.20.7
-      '@babel/traverse': 7.21.5
       '@babel/types': 7.21.5
     transitivePeerDependencies:
       - supports-color
@@ -2183,16 +2149,6 @@ packages:
     transitivePeerDependencies:
       - supports-color
 
-  /@babel/helpers@7.21.0:
-    resolution: {integrity: sha512-XXve0CBtOW0pd7MRzzmoyuSj0e3SEzj8pgyFxnTT1NJZL38BD1MK7yYrm8yefRPIDvNNe14xR4FdbHwpInD4rA==}
-    engines: {node: '>=6.9.0'}
-    dependencies:
-      '@babel/template': 7.20.7
-      '@babel/traverse': 7.21.5
-      '@babel/types': 7.21.5
-    transitivePeerDependencies:
-      - supports-color
-
   /@babel/helpers@7.21.0(supports-color@8.1.1):
     resolution: {integrity: sha512-XXve0CBtOW0pd7MRzzmoyuSj0e3SEzj8pgyFxnTT1NJZL38BD1MK7yYrm8yefRPIDvNNe14xR4FdbHwpInD4rA==}
     engines: {node: '>=6.9.0'}
@@ -2319,7 +2275,7 @@ packages:
       '@babel/core': ^7.0.0-0
     dependencies:
       '@babel/core': 7.21.0(supports-color@8.1.1)
-      '@babel/helper-create-class-features-plugin': 7.20.2(@babel/core@7.21.0)
+      '@babel/helper-create-class-features-plugin': 7.21.8(@babel/core@7.21.0)
       '@babel/helper-plugin-utils': 7.20.2
     transitivePeerDependencies:
       - supports-color
@@ -3528,7 +3484,7 @@ packages:
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
-      '@babel/core': 7.21.0
+      '@babel/core': 7.21.0(supports-color@8.1.1)
       '@babel/helper-module-imports': 7.18.6
       '@babel/helper-plugin-utils': 7.20.2
       babel-plugin-polyfill-corejs2: 0.3.3(@babel/core@7.21.0)
@@ -3968,23 +3924,6 @@ packages:
     transitivePeerDependencies:
       - supports-color
 
-  /@babel/traverse@7.21.5:
-    resolution: {integrity: sha512-AhQoI3YjWi6u/y/ntv7k48mcrCXmus0t79J9qPNlk/lAsFlCiJ047RmbfMOawySTHtywXhbXgpx/8nXMYd+oFw==}
-    engines: {node: '>=6.9.0'}
-    dependencies:
-      '@babel/code-frame': 7.21.4
-      '@babel/generator': 7.21.9
-      '@babel/helper-environment-visitor': 7.21.5
-      '@babel/helper-function-name': 7.21.0
-      '@babel/helper-hoist-variables': 7.18.6
-      '@babel/helper-split-export-declaration': 7.18.6
-      '@babel/parser': 7.21.9
-      '@babel/types': 7.21.5
-      debug: 4.3.4
-      globals: 11.12.0
-    transitivePeerDependencies:
-      - supports-color
-
   /@babel/traverse@7.21.5(supports-color@8.1.1):
     resolution: {integrity: sha512-AhQoI3YjWi6u/y/ntv7k48mcrCXmus0t79J9qPNlk/lAsFlCiJ047RmbfMOawySTHtywXhbXgpx/8nXMYd+oFw==}
     engines: {node: '>=6.9.0'}
@@ -4026,7 +3965,7 @@ packages:
       '@babel/helper-validator-identifier': 7.19.1
       to-fast-properties: 2.0.0
 
-  /@cardstack/cardpay-sdk@1.0.53(@babel/core@7.21.0):
+  /@cardstack/cardpay-sdk@1.0.53(@babel/core@7.21.0)(typescript@4.9.3):
     resolution: {integrity: sha512-EmEqIc98X1vSON5L6adPswoXrECv4GTscy+YWchkTxx8a99iOBpAwc+ovKhiUns97KOBXjIplvC+FidXXpdSww==}
     engines: {node: ^14.0.0 || ^18.0.0}
     requiresBuild: true
@@ -4056,7 +3995,7 @@ packages:
       fs-extra: 10.1.0
       glob: 7.2.3
       lodash: 4.17.21
-      msw: 0.48.3
+      msw: 0.48.3(typescript@4.9.3)
       semver: 7.3.8
       url-parse: 1.5.10
       uuid: 9.0.0
@@ -5447,7 +5386,7 @@ packages:
       '@open-draft/until': 1.0.3
       '@types/debug': 4.1.8
       '@xmldom/xmldom': 0.8.6
-      debug: 4.3.4
+      debug: 4.3.4(supports-color@8.1.1)
       headers-polyfill: 3.1.2
       outvariant: 1.4.0
       strict-event-emitter: 0.2.8
@@ -7956,7 +7895,7 @@ packages:
       '@babel/core': ^7.0.0-0
     dependencies:
       '@babel/compat-data': 7.21.0
-      '@babel/core': 7.21.0
+      '@babel/core': 7.21.0(supports-color@8.1.1)
       '@babel/helper-define-polyfill-provider': 0.3.3(@babel/core@7.21.0)
       semver: 6.3.0
     transitivePeerDependencies:
@@ -7978,7 +7917,7 @@ packages:
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
-      '@babel/core': 7.21.0
+      '@babel/core': 7.21.0(supports-color@8.1.1)
       '@babel/helper-define-polyfill-provider': 0.3.3(@babel/core@7.21.0)
       core-js-compat: 3.26.1
     transitivePeerDependencies:
@@ -7999,7 +7938,7 @@ packages:
     peerDependencies:
       '@babel/core': ^7.0.0-0
     dependencies:
-      '@babel/core': 7.21.0
+      '@babel/core': 7.21.0(supports-color@8.1.1)
       '@babel/helper-define-polyfill-provider': 0.3.3(@babel/core@7.21.0)
     transitivePeerDependencies:
       - supports-color
@@ -8508,7 +8447,7 @@ packages:
     dependencies:
       bytes: 3.1.2
       content-type: 1.0.4
-      debug: 2.6.9
+      debug: 2.6.9(supports-color@8.1.1)
       depd: 2.0.0
       destroy: 1.2.0
       http-errors: 2.0.0
@@ -10909,17 +10848,6 @@ packages:
     resolution: {integrity: sha512-+Yw9U6YO5TQohxLcIkrXBeY73WP3ejHWVvx8XCk3gxvQDCTEmS48ZrSZCKciI7Bhl/uCMyxYtE9UqRILmFphkQ==}
     dev: false
 
-  /debug@2.6.9:
-    resolution: {integrity: sha512-bC7ElrdJaJnPbAP+1EotYvqZsb3ecl5wi6Bfi6BJTUcNowp6cvspg0jXznRTKDjm/E7AdgFBVeAPVMNcKGsHMA==}
-    peerDependencies:
-      supports-color: '*'
-    peerDependenciesMeta:
-      supports-color:
-        optional: true
-    dependencies:
-      ms: 2.0.0
-    dev: true
-
   /debug@2.6.9(supports-color@8.1.1):
     resolution: {integrity: sha512-bC7ElrdJaJnPbAP+1EotYvqZsb3ecl5wi6Bfi6BJTUcNowp6cvspg0jXznRTKDjm/E7AdgFBVeAPVMNcKGsHMA==}
     peerDependencies:
@@ -10953,17 +10881,6 @@ packages:
     dependencies:
       ms: 2.1.2
     dev: true
-
-  /debug@4.3.4:
-    resolution: {integrity: sha512-PRWFHuSU3eDtQJPvnNY7Jcket1j0t5OuOsFzPPzsekD52Zl8qUfFIPEiswXqIvHWGVHOgX+7G/vCNNhehwxfkQ==}
-    engines: {node: '>=6.0'}
-    peerDependencies:
-      supports-color: '*'
-    peerDependenciesMeta:
-      supports-color:
-        optional: true
-    dependencies:
-      ms: 2.1.2
 
   /debug@4.3.4(supports-color@8.1.1):
     resolution: {integrity: sha512-PRWFHuSU3eDtQJPvnNY7Jcket1j0t5OuOsFzPPzsekD52Zl8qUfFIPEiswXqIvHWGVHOgX+7G/vCNNhehwxfkQ==}
@@ -11505,7 +11422,7 @@ packages:
       lodash: 4.17.21
       mini-css-extract-plugin: 2.7.0(webpack@5.75.0)
       parse5: 6.0.1
-      resolve: 1.22.1
+      resolve: 1.22.3
       resolve-package-path: 4.0.3
       semver: 7.3.8
       style-loader: 2.0.0(patch_hash=xqjji5denmqrswdovljl2t3yv4)(webpack@5.75.0)
@@ -14646,7 +14563,7 @@ packages:
       content-type: 1.0.4
       cookie: 0.5.0
       cookie-signature: 1.0.6
-      debug: 2.6.9
+      debug: 2.6.9(supports-color@8.1.1)
       depd: 2.0.0
       encodeurl: 1.0.2
       escape-html: 1.0.3
@@ -14804,12 +14721,42 @@ packages:
     transitivePeerDependencies:
       - supports-color
 
+  /fastboot-app-server@4.1.1:
+    resolution: {integrity: sha512-v7esODTxtPCZYXdW3B7at2otKHg7q5bR2YjkBISShqR5O2Ua4TrNslGQlI0VQIdSHG979g9g6bwr5EBCL2wtKw==}
+    engines: {node: 12.* || 14.* || >=16}
+    dependencies:
+      basic-auth: 2.0.1
+      chalk: 4.1.2
+      compression: 1.7.4
+      express: 4.18.2
+      fastboot: 4.1.1
+      fastboot-express-middleware: 4.1.1
+    transitivePeerDependencies:
+      - bufferutil
+      - canvas
+      - supports-color
+      - utf-8-validate
+    dev: true
+
   /fastboot-express-middleware@4.1.0:
     resolution: {integrity: sha512-RH/YnAn8S/CuzVsK0SLH5cVDP50R3MedqPFhf69T3z6h7LSFm12VAU2TKkqtW/N7qDs00CK1Clus2CwuzXVtWA==}
     engines: {node: 12.* || 14.* || >=16}
     dependencies:
       chalk: 4.1.2
       fastboot: 4.1.0(patch_hash=kizxbxhfcldguz4jcwonfduu2y)
+    transitivePeerDependencies:
+      - bufferutil
+      - canvas
+      - supports-color
+      - utf-8-validate
+    dev: true
+
+  /fastboot-express-middleware@4.1.1:
+    resolution: {integrity: sha512-RzobJdJXtFLOp+QtQlRSEm4RjepprLDITyYxPzd7M8LTH9jo2COhG0NFz2LFcv9Jtqlp8IzKh/0w2+hOt7JZow==}
+    engines: {node: 12.* || 14.* || >=16}
+    dependencies:
+      chalk: 4.1.2
+      fastboot: 4.1.1
     transitivePeerDependencies:
       - bufferutil
       - canvas
@@ -14844,6 +14791,24 @@ packages:
       - utf-8-validate
     dev: true
     patched: true
+
+  /fastboot@4.1.1:
+    resolution: {integrity: sha512-XG7YprsAuAGZrUDhmJ0NFuEP0gpWg9LZwGWSS1I5+f0ETHKPWqb4x59sN2rU1nvCEETBK70z68tLsWsl9daomg==}
+    engines: {node: 12.* || 14.* || >=16}
+    dependencies:
+      chalk: 4.1.2
+      cookie: 0.4.2
+      debug: 4.3.4(supports-color@8.1.1)
+      jsdom: 19.0.0
+      resolve: 1.22.3
+      simple-dom: 1.4.0
+      source-map-support: 0.5.21
+    transitivePeerDependencies:
+      - bufferutil
+      - canvas
+      - supports-color
+      - utf-8-validate
+    dev: true
 
   /fastest-levenshtein@1.0.16:
     resolution: {integrity: sha512-eRnCtTTtGZFpQCwhJiUOuxPQWRXVKYDn0b2PeHfXL6/Zi53SLAzAHfVhVWK2AryC/WH05kGfxhFIPvTF0SXQzg==}
@@ -14977,7 +14942,7 @@ packages:
     resolution: {integrity: sha512-5uXcUVftlQMFnWC9qu/svkWv3GTd2PfUhK/3PLkYNAe7FbqJMt3515HaxE6eRL74GdsriiwujiawdaB1BpEISg==}
     engines: {node: '>= 0.8'}
     dependencies:
-      debug: 2.6.9
+      debug: 2.6.9(supports-color@8.1.1)
       encodeurl: 1.0.2
       escape-html: 1.0.3
       on-finished: 2.4.1
@@ -18880,7 +18845,7 @@ packages:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
     dev: true
 
-  /msw@0.48.3:
+  /msw@0.48.3(typescript@4.9.3):
     resolution: {integrity: sha512-8ENBcX7JVWPA5v9WTeOnCWCMOVtyBiXZyD/0+AKlhOysJRB1ZdBAcMGLIiQ2/VpQ2lC0Yd7SFKg9aviAQSVeaw==}
     engines: {node: '>=14'}
     hasBin: true
@@ -18909,6 +18874,7 @@ packages:
       path-to-regexp: 6.2.1
       strict-event-emitter: 0.2.8
       type-fest: 2.19.0
+      typescript: 4.9.3
       yargs: 17.7.2
     transitivePeerDependencies:
       - encoding
@@ -21445,7 +21411,7 @@ packages:
     resolution: {integrity: sha512-qqWzuOjSFOuqPjFe4NOsMLafToQQwBSOEpS+FwEt3A2V3vKubTquT3vmLTQpFgMXp8AlFWFuP1qKaJZOtPpVXg==}
     engines: {node: '>= 0.8.0'}
     dependencies:
-      debug: 2.6.9
+      debug: 2.6.9(supports-color@8.1.1)
       depd: 2.0.0
       destroy: 1.2.0
       encodeurl: 1.0.2
@@ -24502,7 +24468,7 @@ packages:
     engines: {node: '>=4.0.0'}
     dependencies:
       bufferutil: 4.0.7
-      debug: 2.6.9
+      debug: 2.6.9(supports-color@8.1.1)
       es5-ext: 0.10.62
       typedarray-to-buffer: 3.1.5
       utf-8-validate: 5.0.10
