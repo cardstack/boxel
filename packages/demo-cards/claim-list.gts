@@ -15,7 +15,7 @@ export class ClaimList extends Card {
   @field claims = linksToMany(() => Claim);
   @field title = contains(StringCard, {
     computeVia: function (this: ClaimList) {
-      return this.description;
+      return this.constructor.displayName;
     },
   });
 
