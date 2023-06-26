@@ -100,6 +100,7 @@
     "ember-template-imports": "^3.0.1",
     "ember-template-lint": "^5.7.2",
     "ember-test-selectors": "^6.0.0",
+    "ember-velcro": "^2.1.0",
     "eslint": "^8.37.0",
     "eslint-config-prettier": "^8.8.0",
     "eslint-plugin-ember": "^11.5.0",

@@ -115,11 +115,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
           operator-mode-stack-item__card--edit=(eq @item.format 'edit')
         }}
       >
-        {{! z-index and offset calculation in the OperatorModeOverlays operates under assumption that it is nested under element with class operator-mode-stack-item }}
-        <OperatorModeOverlays
-            @renderedLinksToCards={{this.renderedLinksToCards}}
-            @addToStack={{@addToStack}}
-          />
         <Header
           @title={{cardTypeDisplayName @item.card}}
           class='operator-mode-stack-item__card__header'
@@ -189,6 +184,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
             @format={{@item.format}}
             @context={{this.context}}
           />
+          <OperatorModeOverlays
+            @renderedLinksToCards={{this.renderedLinksToCards}}
+            @addToStack={{@addToStack}}
+          />
         </div>
         {{#if (eq @item.format 'edit')}}
           <footer class='operator-mode-stack-item__card__footer'>
@@ -224,9 +223,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
       .icon-button { display: none; } .operator-mode-stack-item__buried
       .operator-mode-stack-item__card__header { cursor: pointer; font: 500
       var(--boxel-font-sm); padding: 0 var(--boxel-sp-xs); }
-      .operator-mode-overlayed-button { z-index: 1; }
-      .operator-mode-stack-item__card__header { z-index: 2; background: var(--boxel-light); }
-      .operator-mode-stack-item__card__footer { z-index: 2; }
     </style>
   </template>
 }

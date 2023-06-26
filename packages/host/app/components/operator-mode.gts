@@ -1,6 +1,6 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
-import { Card, CardContext, Format } from 'https://cardstack.com/base/card-api';
+import { Card, Format } from 'https://cardstack.com/base/card-api';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { trackedFunction } from 'ember-resources/util/function';
@@ -26,7 +26,6 @@ import {
 import type LoaderService from '../services/loader-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-import LinksToCardComponentModifier from '@cardstack/host/modifiers/links-to-card-component-modifier';
 import { htmlSafe, SafeString } from '@ember/template';
 import { registerDestructor } from '@ember/destroyable';
 import type { Query } from '@cardstack/runtime-common/query';
@@ -56,13 +55,6 @@ export type StackItem = {
   request?: Deferred<Card>;
   isLinkedCard?: boolean;
 };
-
-export interface RenderedLinksToCard {
-  element: HTMLElement;
-  card: Card;
-  context: CardContext;
-  stackedAtIndex: number;
-}
 
 export default class OperatorMode extends Component<Signature> {
   //A variable to store value of card field
@@ -270,17 +262,6 @@ export default class OperatorMode extends Component<Signature> {
         (card as any)[fieldName] = cardFieldValue.get(fieldName);
       }
     }
-  }
-
-  get context() {
-    return {
-      renderedIn: this as Component<any>,
-      cardComponentModifier: LinksToCardComponentModifier,
-      optional: {
-        stack: this.stack, // Not used currently, but eventually there will be more than one stack and we will need to know which one we are in.
-      },
-      actions: this.publicAPI,
-    };
   }
 
   @action
