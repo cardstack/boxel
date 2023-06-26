@@ -15,7 +15,16 @@ import { createNewCard, type CardRef } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { getSearchResults, Search } from '../resources/search';
 import Preview from './preview';
-import { Modal, CardContainer, Header, Button } from '@cardstack/boxel-ui';
+import {
+  Modal,
+  CardContainer,
+  Header,
+  Button,
+  IconButton,
+  BoxelInput,
+} from '@cardstack/boxel-ui';
+import { eq, gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import cn from '@cardstack/boxel-ui/helpers/cn';
 
 interface Signature {
   Args: {
@@ -54,20 +63,51 @@ export default class CardCatalogModal extends Component<Signature> {
                   data-test-create-new
                 >Create New</Button>
               {{/if}}
+              {{#let
+                this.currentRequest.search.instances.length
+                as |numResults|
+              }}
+                <div class='card-catalog__results-length'>
+                  {{#if (gt numResults 1)}}
+                    {{numResults}}
+                    results
+                  {{else if (eq numResults 1)}}
+                    1 result
+                  {{/if}}
+                </div>
+              {{/let}}
               <ul class='card-catalog' data-test-card-catalog>
                 {{#each this.currentRequest.search.instances as |card|}}
-                  <li data-test-card-catalog-item={{card.id}}>
+                  <li
+                    class={{cn
+                      'card-catalog-item'
+                      card-catalog-item--selected=(eq
+                        this.selectedCard.id card.id
+                      )
+                    }}
+                    data-test-card-catalog-item={{card.id}}
+                  >
                     <Preview
                       @card={{card}}
                       @format='embedded'
                       @context={{@context}}
                     />
                     <button
-                      {{on 'click' (fn this.pick card)}}
+                      class='card-catalog-item__select'
+                      {{on 'click' (fn this.toggleSelect card)}}
                       data-test-select={{card.id}}
-                    >
-                      Select
-                    </button>
+                      aria-label='Select'
+                    />
+                    <IconButton
+                      class='card-catalog-item__hover-button card-catalog-item__preview'
+                      @icon='eye'
+                      aria-label='preview'
+                    />
+                    <IconButton
+                      class='card-catalog-item__hover-button card-catalog-item__more-actions'
+                      @icon='more-actions'
+                      aria-label='more actions'
+                    />
                   </li>
                 {{else}}
                   <p>No cards available</p>
@@ -75,9 +115,40 @@ export default class CardCatalogModal extends Component<Signature> {
               </ul>
             {{/if}}
           </div>
+          <footer class='dialog-box__footer card-catalog-modal__footer'>
+            <label class='card-catalog-modal__url-search'>
+              <span>Enter Card URL:</span>
+              <BoxelInput @value={{this.cardURL}} placeholder='http://' />
+            </label>
+            <div>
+              <Button
+                @kind='secondary-light'
+                @size='tall'
+                class='dialog-box__footer-button'
+                {{on 'click' this.cancel}}
+                data-test-card-catalog-cancel-button
+              >
+                Cancel
+              </Button>
+              <Button
+                @kind='primary'
+                @size='tall'
+                @disabled={{eq this.selectedCard undefined}}
+                class='dialog-box__footer-button'
+                {{on 'click' (fn this.pick this.selectedCard)}}
+                data-test-card-catalog-go-button
+              >
+                Go
+              </Button>
+            </div>
+          </footer>
         </CardContainer>
       </Modal>
     {{/if}}
+    <style>
+      .card-catalog-modal__url-search > .boxel-input { border-color:
+      transparent; padding-left: var(--boxel-sp-xxs); }
+    </style>
   </template>
 
   @tracked currentRequest:
@@ -88,6 +159,8 @@ export default class CardCatalogModal extends Component<Signature> {
       }
     | undefined = undefined;
   @tracked zIndex = 20;
+  @tracked selectedCard?: CardBase = undefined;
+  @tracked cardURL = '';
 
   constructor(owner: unknown, args: {}) {
     super(owner, args);
@@ -128,11 +201,23 @@ export default class CardCatalogModal extends Component<Signature> {
     }
   );
 
-  @action pick(card?: CardBase): void {
+  @action toggleSelect(card?: CardBase): void {
+    if (this.selectedCard?.id === card?.id) {
+      this.selectedCard = undefined;
+      return;
+    }
+    this.selectedCard = card;
+  }
+
+  @action pick(card?: CardBase) {
     if (this.currentRequest) {
       this.currentRequest.deferred.fulfill(card);
       this.currentRequest = undefined;
     }
+  }
+
+  @action cancel(): void {
+    this.selectedCard = undefined;
   }
 
   @action async createNew(ref: CardRef): Promise<void> {
