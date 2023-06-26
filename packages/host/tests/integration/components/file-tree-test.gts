@@ -148,7 +148,7 @@ module('Integration | file-tree', function (hooks) {
 
     assert
       .dom('[data-test-card-catalog] li')
-      .exists({ count: 2 }, 'number of catalog items is correct');
+      .exists({ count: 3 }, 'number of catalog items is correct');
     assert
       .dom(
         `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"]`
