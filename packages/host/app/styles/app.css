@@ -3,6 +3,10 @@
   --grid-card-label-color: #919191;
 }
 
+.card-isolated-component {
+  padding: var(--boxel-sp-lg);
+}
+
 /* Modal */
 .dialog-box {
   height: 100%;

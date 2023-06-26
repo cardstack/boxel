@@ -72,10 +72,6 @@ export default class UserProfile extends Component {
       .wrapper label{
         margin-top: var(--boxel-sp-sm);
       }
-
-      .card-isolated-component {
-        padding: var(--boxel-sp-lg);
-      }
     </style>
   </template>
 
