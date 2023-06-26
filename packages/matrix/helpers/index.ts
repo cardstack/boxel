@@ -83,6 +83,7 @@ export async function sendMessage(
   if (cardId != null) {
     await page.locator('[data-test-choose-card-btn]').click();
     await page.locator(`[data-test-select="${cardId}"]`).click();
+    await page.locator('[data-test-card-catalog-go-button]').click();
   }
   await page.locator('[data-test-send-message-btn]').click();
 }
