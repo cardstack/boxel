@@ -4,7 +4,6 @@ import { Card, CardContext } from 'https://cardstack.com/base/card-api';
 import Preview from './preview';
 import { fn, array } from '@ember/helper';
 import type CardService from '../services/card-service';
-// import getValueFromWeakMap from '../helpers/get-value-from-weakmap';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import optional from '@cardstack/boxel-ui/helpers/optional';
 import cn from '@cardstack/boxel-ui/helpers/cn';
