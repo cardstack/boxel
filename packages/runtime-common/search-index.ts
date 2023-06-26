@@ -3,6 +3,7 @@ import {
   SupportedMimeType,
   internalKeyFor,
   maxLinkDepth,
+  maybeURL,
   type LooseCardResource,
 } from '.';
 import { Kind, Realm } from './realm';
@@ -280,6 +281,7 @@ export class SearchIndex {
           resource,
           omit,
           included,
+          relativeTo: new URL(resource.id),
         });
       }
       if (included.length > 0) {
@@ -321,6 +323,7 @@ export class SearchIndex {
         loader: this.loader,
         resource: doc.data,
         omit: [doc.data.id],
+        relativeTo: new URL(doc.data.id),
       });
       if (included.length > 0) {
         doc.included = included;
@@ -645,6 +648,7 @@ export async function loadLinks({
   instances,
   loader,
   resource,
+  relativeTo,
   omit = [],
   included = [],
   visited = [],
@@ -654,6 +658,7 @@ export async function loadLinks({
   instances: URLMap<SearchEntryWithErrors>;
   loader: Loader;
   resource: LooseCardResource;
+  relativeTo: URL;
   omit?: string[];
   included?: CardResource<Saved>[];
   visited?: string[];
@@ -715,6 +720,7 @@ export async function loadLinks({
         omit,
         included: [...included, linkResource],
         visited,
+        relativeTo,
         stack: [...(resource.id != null ? [resource.id] : []), ...stack],
       })) {
         foundLinks = true;
@@ -730,9 +736,15 @@ export async function loadLinks({
       }
     }
     if (foundLinks || omit.includes(relationship.links.self)) {
+      let id = maybeURL(relationship.links.self, relativeTo);
+      if (!id) {
+        throw new Error(
+          `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${relativeTo.href}`
+        );
+      }
       resource.relationships![fieldName].data = {
         type: 'card',
-        id: relationship.links.self,
+        id: id.href,
       };
     }
   }

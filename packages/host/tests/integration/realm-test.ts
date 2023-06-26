@@ -200,7 +200,7 @@ module('Integration | realm', function (hooks) {
         relationships: {
           owner: {
             links: {
-              self: `${testRealmURL}dir/owner`,
+              self: `./owner`,
             },
             data: {
               type: 'card',

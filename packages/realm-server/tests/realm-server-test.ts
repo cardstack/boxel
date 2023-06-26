@@ -227,7 +227,7 @@ module('Realm Server', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmHref}person`,
+                module: `./person`,
                 name: 'Person',
               },
             },
