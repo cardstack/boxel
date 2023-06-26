@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "about": "Staking Claims available to me"
+    },
+    "relationships": {
+      "claims.0": {
+        "links": {
+          "self": "../Claim/1"
+        }
+      },
+      "claims.1": {
+        "links": {
+          "self": "../Claim/2"
+        }
+      },
+      "claims.2": {
+        "links": {
+          "self": "../Claim/3"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../claim-list",
+        "name": "ClaimList"
+      }
+    }
+  }
+}
