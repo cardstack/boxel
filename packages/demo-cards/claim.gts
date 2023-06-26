@@ -293,7 +293,7 @@ class Isolated extends Component<typeof Claim> {
 }
 
 class Embedded extends Component<typeof Claim> {
-  get cannotClickViewClaimButton() {
+  get claimButtonDisabled() {
     return !!!this.args.context?.actions?.viewCard;
   }
   @action openCard(card: Partial<Claim> | undefined) {
@@ -312,10 +312,10 @@ class Embedded extends Component<typeof Claim> {
         <@fields.hasBeenClaimed />
       </FieldContainer>
       <Button
-        disabled={{this.cannotClickViewClaimButton}}
+        disabled={{this.claimButtonDisabled}}
         {{on 'click' (fn this.openCard this.args.model)}}
       >
-        {{#if this.cannotClickViewClaimButton}}
+        {{#if this.claimButtonDisabled}}
           View Claim (Environment does not allow card viewing)
         {{else}}
           View Claim
