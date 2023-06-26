@@ -1,3 +1,4 @@
+import { FieldContainer } from '@cardstack/boxel-ui';
 import {
   contains,
   linksToMany,
@@ -20,8 +21,10 @@ export class Friends extends Card {
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <div class='demo-card'>
-        Name:
         <@fields.firstName />
+        has
+        {{@model.friends.length}}
+        friends
       </div>
     </template>
   };
