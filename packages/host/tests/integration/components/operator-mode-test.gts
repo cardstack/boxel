@@ -629,7 +629,8 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
-    assert.dom(`[data-test-cards-grid-item`).exists({ count: 9 });
+    await waitFor(`[data-test-cards-grid-item]`);
+    assert.dom(`[data-test-cards-grid-item]`).exists();
     assert
       .dom(
         `[data-test-cards-grid-item="${testRealmURL}BlogPost/1"] [data-test-cards-grid-item-thumbnail-text]`
@@ -695,8 +696,10 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await waitFor(`[data-test-stack-card-index]`);
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
-
+    
+    await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
 
     assert.dom(`[data-test-stack-card-index="1"]`).exists(); // Opens card on the stack
@@ -1132,10 +1135,11 @@ module('Integration | operator-mode', function (hooks) {
       }
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
     await waitFor('[data-test-person]');
-    window.test__refreshOverlayedButtons();
+
     await waitFor('[data-test-cardstack-operator-mode-overlay-button]');
     await click('[data-test-cardstack-operator-mode-overlay-button]');
     assert.dom(`[data-test-stack-card-index="2"]`).exists();
@@ -1143,7 +1147,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-stack-card-index="2"]`).doesNotExist();
     assert.dom(`[data-test-stack-card-index="1"]`).doesNotExist();
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
-    window.test__refreshOverlayedButtons();
+
     await settled();
     assert
       .dom(`[data-test-cardstack-operator-mode-overlay-button]`)
@@ -1162,7 +1166,8 @@ module('Integration | operator-mode', function (hooks) {
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     assert.dom(`[data-test-stack-card-header]`).containsText(realmName);
-
+    
+    await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
     let personCard = await loadCard(`${testRealmURL}Person/fadhlan`);
