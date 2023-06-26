@@ -7,8 +7,7 @@ import { type CardRef, isCardRef } from './index';
 export interface Query {
   filter?: Filter;
   sort?: Sort;
-  page?: { size?: number | string; cursor?: string };
-  queryString?: string;
+  page?: { size?: number | string; cursor?: string }; // Support for this is not yet implmented
 }
 
 export type CardURL = string;
