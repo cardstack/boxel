@@ -12,11 +12,6 @@
       },
       "claims.1": {
         "links": {
-          "self": "../Claim/2"
-        }
-      },
-      "claims.2": {
-        "links": {
           "self": "../Claim/3"
         }
       }
