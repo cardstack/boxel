@@ -591,10 +591,6 @@ export default class OperatorMode extends Component<Signature> {
         box-shadow: none;
       }
 
-      .card-content > .boxel-card-container > header {
-        display: none;
-      }
-
       .card-in-edit .card-content {
         margin-bottom: var(--stack-card-footer-height)
       }
