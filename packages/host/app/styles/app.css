@@ -408,8 +408,9 @@ nav > .directory-level {
 .operator-mode .cards-grid__cards > li {
   cursor: pointer;
 }
-.operator-mode-card-stack__buried .cards-grid__cards,
-.operator-mode-card-stack__buried .cards-grid__add-button {
+
+.operator-mode-stack-item__buried .cards-grid__cards,
+.operator-mode-stack-item__buried .cards-grid__add-button {
   display: none;
 }
 .cards-grid__add-button {
@@ -490,7 +491,7 @@ nav > .directory-level {
   z-index: 0;
 }
 
-.operator-mode-card-stack__item {
+.operator-mode-stack-item {
   justify-self: center;
   position: absolute;
   width: 89%;
@@ -500,32 +501,32 @@ nav > .directory-level {
   pointer-events: none;
 }
 
-.operator-mode-card-stack__card {
+.operator-mode-stack-item__card {
   position: relative;
   height: 100%;
   display: grid;
   grid-template-rows: 7.5rem auto;
-  box-shadow:0 15px 30px 0 rgb(0 0 0 / 35%);
+  box-shadow: 0 15px 30px 0 rgb(0 0 0 / 35%);
   pointer-events: auto;
 }
 
-.operator-mode-card-stack__card__content {
+.operator-mode-stack-item__card__content {
   overflow: auto;
 }
 
-.operator-mode-card-stack__card__content > .boxel-card-container.boundaries {
+.operator-mode-stack-item__card__content > .boxel-card-container.boundaries {
   box-shadow: none;
 }
 
-.operator-mode-card-stack__card__content > .boxel-card-container > header {
+.operator-mode-stack-item__card__content > .boxel-card-container>header {
   display: none;
 }
 
-.operator-mode-card-stack__card--edit .operator-mode-card-stack__card__content {
+.operator-mode-stack-item__card--edit .operator-mode-stack-item__card__content {
   margin-bottom: var(--stack-card-footer-height)
 }
 
-.operator-mode-card-stack__card__footer {
+.operator-mode-stack-item__card__footer {
   position: absolute;
   bottom: 0;
   right: 0;
@@ -540,7 +541,7 @@ nav > .directory-level {
   border-bottom-right-radius: var(--boxel-border-radius);
 }
 
-.operator-mode-card-stack__card__footer-button + .operator-mode-card-stack__card__footer-button {
+.operator-mode-stack-item__card__footer-button + .operator-mode-stack-item__card__footer-button {
   margin-left: var(--boxel-sp-xs);
 }
 
@@ -548,8 +549,6 @@ nav > .directory-level {
   position: absolute;
   border: none;
   width: auto;
-  margin-top: var(--boxel-sp);
-  margin-right: var(--boxel-sp);
 }
 
 .freestyle-search-sheet-example-container {
@@ -775,9 +774,9 @@ nav > .directory-level {
   display: flex;
   justify-content: center;
 }
- .room__messages .boundaries {
+.room__messages .boundaries {
   margin: var(--boxel-sp-sm) 0;
- }
+}
 
 .room__send-message {
   display: flex;
