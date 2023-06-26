@@ -30,11 +30,11 @@ There exists a "dev" mode in which we can use ember-cli to host the card runtime
 ### ember-cli Hosted App
 In order to run the ember-cli hosted app:
 
-1. `pnpm start` in the host/ workspace to serve the ember app. Note that this script includes the environment variable `OWN_REALM_URL=http://localhost:4204/` which configures the host to point to the demo cards realm by default.
+1. `pnpm start` in the host/ workspace to serve the ember app. Note that this script includes the environment variable `OWN_REALM_URL=http://localhost:4201/demo/` which configures the host to point to the demo cards realm by default.
 2. `pnpm start:all` in the realm-server/ to serve the base realm and demo realms -- this will also allow you to switch between the app and the tests without having to restart servers)
 3. `pnpm start:synapse` in the matrix/ workspace to run the matrix server.
 
-The app is available at http://localhost:4200. Open the demo cards workspace by entering https:://localhost:4204/ in the search pane. 
+The app is available at http://localhost:4200. It will serve the demo cards realm (configurable with OWN_REALM_URL, as mentioned above). You can open the base and demo cards workspace directly by entering http://localhost:4201/base or http://localhost:4201/demo in the browser.
 
 When you are done running the app you can stop the synapse server by running the following from the `packages/matrix` workspace:
 ```
@@ -48,21 +48,22 @@ In order to run the realm server hosted app:
 2. `pnpm start:all` in the realm-server/ to serve the base and demo realms
 3. `pnpm start:synapse` in the matrix/ workspace to run the matrix server.
 
-You can visit the URL of each realm server to view that realm's app. So for instance, the base realm's app is available at `http://localhost:4201/base` and the demo realm's app is at `https://localhost:4204/`.
+You can visit the URL of each realm server to view that realm's app. So for instance, the base realm's app is available at `http://localhost:4201/base` and the demo realm's app is at `http://localhost:4201/demo`.
 
 Live reloads are not available in this mode, but you can just refresh the page to grab the latest code changes if you are running rebuilds (step #1 and #2 above).
 
 #### Using `start:all`
 
-Instead of running `start:base`, you can alternatively use `pnpm start:all` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. Here's what is spun up with `start:all`:
+Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all` which also serves a few other realms on other ports--this is convenient if you wish to switch between the app and the tests without having to restart servers. Here's what is spun up with `start:all`:
 
-| Port | Description                                           | Running `start:all` | Running `start:base` |
-| ---- | ------------------------------------------------------|---------------------|----------------------|
-|:4201 | `/base` base realm                                    |          ✅         |          ✅          |
-|:4202 | `/test` host test realm, `/node-test` node test realm |          ✅         |          🚫          |
-|:4203 | `root (/)` base realm                                 |          ✅         |          🚫          |
-|:4204 | `root (/)` demo realm                                 |          ✅         |          🚫          |
-|:4205 | qunit server mounting realms in iframes for testing   |          ✅         |          🚫          |
+| Port  | Description                                           | Running `start:all` | Running `start:base` |
+| ----- | ----------------------------------------------------- | ------------------- | -------------------- |
+| :4201 | `/base` base realm                                    | ✅                  | ✅                   |
+| :4201 | `/demo` demo realm                                    | ✅                  | 🚫                   |
+| :4202 | `/test` host test realm, `/node-test` node test realm | ✅                  | 🚫                   |
+| :4203 | `root (/)` base realm                                 | ✅                  | 🚫                   |
+| :4204 | `root (/)` demo realm                                 | ✅                  | 🚫                   |
+| :4205 | qunit server mounting realms in iframes for testing   | ✅                  | 🚫                   |
 
 ### Card Pre-rendering
 
