@@ -70,6 +70,13 @@ export default class CatalogEntryEditor extends Component<Signature> {
         </Button>
       {{/if}}
     </div>
+    <style>
+      .catalog-entry-editor {
+        display: grid;
+        gap: var(--boxel-sp);
+        padding: var(--boxel-sp);
+      }
+    </style>
   </template>
 
   @service declare cardService: CardService;

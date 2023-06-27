@@ -30,9 +30,9 @@ export default class UserProfile extends Component {
       </:actions>
     </BoxelHeader>
 
-    <div class='user-profile__wrapper'>
+    <div class='wrapper'>
       <FieldContainer @label='User ID' @tag='label'>
-        <div class='user-profile__value' data-test-field-value='userId'>
+        <div class='value' data-test-field-value='userId'>
           {{this.userId}}
         </div>
       </FieldContainer>
@@ -46,7 +46,7 @@ export default class UserProfile extends Component {
             @onInput={{this.setDisplayName}}
           />
         {{else}}
-          <div class='user-profile__value' data-test-field-value='displayName'>
+          <div class='value' data-test-field-value='displayName'>
             {{#if this.showLoading}}
               <LoadingIndicator />
             {{else}}
@@ -63,6 +63,16 @@ export default class UserProfile extends Component {
         {{on 'click' this.save}}
       >Save</Button>
     {{/if}}
+    <style>
+      .wrapper {
+        padding: 0 var(--boxel-sp);
+        margin: var(--boxel-sp) 0;
+      }
+
+      .wrapper label{
+        margin-top: var(--boxel-sp-sm);
+      }
+    </style>
   </template>
 
   @service private declare matrixService: MatrixService;

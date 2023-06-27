@@ -150,5 +150,10 @@
   },
   "ember": {
     "edition": "octane"
+  },
+  "ember-addon": {
+    "paths": [
+      "lib/setup-ast-transforms"
+    ]
   }
 }

@@ -111,7 +111,7 @@ export default class Schema extends Component<Signature> {
             />
           </FieldContainer>
           <FieldContainer @label='Field Type:'>
-            <ul class='schema__new-field-type'>
+            <ul class='new-field-type'>
               <li>
                 <label>
                   <input
@@ -184,6 +184,27 @@ export default class Schema extends Component<Signature> {
       </CardContainer>
       <CatalogEntryEditor @ref={{this.ref}} />
     {{/if}}
+    <style>
+      .schema {
+        display: grid;
+        gap: var(--boxel-sp);
+        padding: var(--boxel-sp);
+      }
+
+      .new-field-type {
+        list-style-type: none;
+        padding-left: 0;
+        margin: 0;
+      }
+
+      .add-new-field {
+        border: var(--boxel-border);
+      }
+
+      .add-new-field > * + * {
+        margin-top: var(--boxel-sp);
+      }
+    </style>
   </template>
 
   @service declare loaderService: LoaderService;

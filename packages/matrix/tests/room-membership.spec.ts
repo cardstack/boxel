@@ -185,14 +185,14 @@ test.describe('Room membership', () => {
     await openRoom(page, 'Room 1');
     await expect(page.url()).toContain('/chat/room/');
     await expect(
-      page.locator('.room__header'),
+      page.locator('[data-test-matrix-room-header]'),
       'the room is displayed'
     ).toHaveCount(1);
 
     await leaveRoom(page, 'Room 1');
     await page.waitForURL(`${testHost}/chat`);
     await expect(
-      page.locator('.room__header'),
+      page.locator('[data-test-matrix-room-header]'),
       'no room is displayed'
     ).toHaveCount(0);
   });

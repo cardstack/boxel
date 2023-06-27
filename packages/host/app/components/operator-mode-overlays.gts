@@ -26,13 +26,20 @@ export default class OperatorModeOverlays extends Component<Signature> {
     {{#each @renderedLinksToCards as |renderedCard|}}
       <button
         {{on 'click' (fn this.addToStack renderedCard.card)}}
-        class='operator-mode-overlayed-button'
+        class='button'
         data-test-cardstack-operator-mode-overlay-button
         {{velcro renderedCard.element middleware=(Array this.offset)}}
       >
         Open
       </button>
     {{/each}}
+    <style>
+      .button {
+        position: absolute;
+        border: none;
+        width: auto;
+      }
+    </style>
   </template>
 
   @action addToStack(card: Card) {

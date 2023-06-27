@@ -67,7 +67,7 @@ export default class CardCatalogModal extends Component<Signature> {
                 this.currentRequest.search.instances.length
                 as |numResults|
               }}
-                <div class='card-catalog__results-length'>
+                <div class='results-length'>
                   {{#if (gt numResults 1)}}
                     {{numResults}}
                     results
@@ -80,8 +80,8 @@ export default class CardCatalogModal extends Component<Signature> {
                 {{#each this.currentRequest.search.instances as |card|}}
                   <li
                     class={{cn
-                      'card-catalog-item'
-                      card-catalog-item--selected=(eq
+                      'item'
+                      selected=(eq
                         this.selectedCard.id card.id
                       )
                     }}
@@ -93,18 +93,18 @@ export default class CardCatalogModal extends Component<Signature> {
                       @context={{@context}}
                     />
                     <button
-                      class='card-catalog-item__select'
+                      class='select'
                       {{on 'click' (fn this.toggleSelect card)}}
                       data-test-select={{card.id}}
                       aria-label='Select'
                     />
                     <IconButton
-                      class='card-catalog-item__hover-button card-catalog-item__preview'
+                      class='hover-button preview'
                       @icon='eye'
                       aria-label='preview'
                     />
                     <IconButton
-                      class='card-catalog-item__hover-button card-catalog-item__more-actions'
+                      class='hover-button more-actions'
                       @icon='more-actions'
                       aria-label='more actions'
                     />
@@ -115,8 +115,8 @@ export default class CardCatalogModal extends Component<Signature> {
               </ul>
             {{/if}}
           </div>
-          <footer class='dialog-box__footer card-catalog-modal__footer'>
-            <label class='card-catalog-modal__url-search'>
+          <footer class='dialog-box__footer footer'>
+            <label class='url-search'>
               <span>Enter Card URL:</span>
               <BoxelInput @value={{this.cardURL}} placeholder='http://' />
             </label>
@@ -146,8 +146,92 @@ export default class CardCatalogModal extends Component<Signature> {
       </Modal>
     {{/if}}
     <style>
-      .card-catalog-modal__url-search > .boxel-input { border-color:
-      transparent; padding-left: var(--boxel-sp-xxs); }
+      .url-search > .boxel-input {
+        border-color: transparent;
+        padding-left: var(--boxel-sp-xxs);
+      }
+
+      .footer {
+        display: flex;
+        justify-content: space-between;
+      }
+      .url-search {
+        flex-grow: 0.5;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        align-items: center;
+        justify-items: flex-start;
+        gap: var(--boxel-sp-xs);
+      }
+      .url-search > span {
+        font: 700 var(--boxel-font-sm);
+      }
+
+      .card-catalog {
+        list-style-type: none;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(16.25rem, 1fr));
+        gap: var(--boxel-sp);
+        padding-left: 0;
+        margin: 0;
+      }
+      .results-length {
+        font: 700 var(--boxel-font);
+        height: var(--boxel-sp-xxl);
+      }
+
+      .item {
+        position: relative;
+        height: 6.25rem;
+      }
+
+      .item > .boxel-card-container {
+        display: flex;
+        align-items: center;
+        height: 100%;
+      }
+      .item.selected > .boxel-card-container {
+        box-shadow: 0 0 0 2px var(--boxel-highlight);
+      }
+
+      .select {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: none;
+        border: none;
+        border-radius: var(--boxel-border-radius);
+      }
+      .item:hover > .select:not(:disabled) {
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.16);
+        cursor: pointer;
+      }
+      .item > .hover-button {
+        display: none;
+        width: 30px;
+        height: 30px;
+      }
+      .hover-button:not(:disabled):hover {
+        --icon-color: var(--boxel-highlight);
+      }
+      .item:hover > .hover-button:not(:disabled) {
+        display: block;
+        position: absolute;
+      }
+      .preview {
+        top: 0;
+        left: 0;
+      }
+      .more-actions {
+        bottom: 0;
+        right: 0;
+      }
+      .preview > svg,
+      .more-actions > svg {
+        height: 100%;
+      }
     </style>
   </template>
 

@@ -76,14 +76,14 @@ export default class RoomsManager extends Component {
     {{#if this.loadRooms.isRunning}}
       <LoadingIndicator />
     {{else}}
-      <div class='room-manager__room-list' data-test-invites-list>
+      <div class='room-list' data-test-invites-list>
         <h3>Invites</h3>
         {{#each this.sortedInvites as |invite|}}
           <div
-            class='room-manager__room'
+            class='room'
             data-test-invited-room={{invite.room.name}}
           >
-            <span class='room-manager__room__item'>
+            <span class='room-item'>
               {{invite.room.name}}
               (from:
               <span
@@ -106,14 +106,14 @@ export default class RoomsManager extends Component {
           (No invites)
         {{/each}}
       </div>
-      <div class='room-manager__room-list' data-test-rooms-list>
+      <div class='room-list' data-test-rooms-list>
         <h3>Rooms</h3>
         {{#each this.sortedJoinedRooms as |joined|}}
           <div
-            class='room-manager__room'
+            class='room'
             data-test-joined-room={{joined.room.name}}
           >
-            <span class='room-manager__room__item'>
+            <span class='room-item'>
               <LinkTo
                 class='link'
                 data-test-enter-room={{joined.room.name}}
@@ -136,6 +136,25 @@ export default class RoomsManager extends Component {
         {{/each}}
       </div>
     {{/if}}
+    <style>
+      .room-list {
+        padding: 0 var(--boxel-sp);
+        margin: var(--boxel-sp) 0;
+      }
+
+      .room {
+        margin-top: var(--boxel-sp-sm);
+      }
+
+      .room-item {
+        display: inline-block;
+        min-width: 30rem;
+      }
+
+      .room button {
+        margin-left: var(--boxel-sp-xs);
+      }
+    </style>
   </template>
 
   @service private declare matrixService: MatrixService;
