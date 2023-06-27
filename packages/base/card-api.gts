@@ -28,6 +28,7 @@ import {
   identifyCard,
   loadCard,
   humanReadable,
+  maybeURL,
   maybeRelativeURL,
   type Meta,
   type CardFields,
@@ -208,7 +209,7 @@ type JSONAPIResource =
       meta?: Record<string, any>;
     };
 
-interface JSONAPISingleResourceDocument {
+export interface JSONAPISingleResourceDocument {
   data: Partial<JSONAPIResource> & { id?: string; type: string };
   included?: (Partial<JSONAPIResource> & { id: string; type: string })[];
 }
@@ -758,7 +759,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
           [this.name]: {
             links: {
               self: opts?.maybeRelativeURL
-                ? opts.maybeRelativeURL(new URL(value.reference))
+                ? opts.maybeRelativeURL(value.reference)
                 : value.reference,
             },
           },
@@ -780,7 +781,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
           [this.name]: {
             links: {
               self: opts?.maybeRelativeURL
-                ? opts.maybeRelativeURL(new URL(value.id))
+                ? opts.maybeRelativeURL(value.id)
                 : value.id,
             },
             data: { type: 'card', id: value.id },
@@ -804,7 +805,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
           [this.name]: {
             links: {
               self: opts?.maybeRelativeURL
-                ? opts.maybeRelativeURL(new URL(value.id))
+                ? opts.maybeRelativeURL(value.id)
                 : value.id,
             },
             // we also write out the data form of the relationship
@@ -1074,7 +1075,7 @@ class LinksToMany<FieldT extends CardConstructor>
         relationships[`${this.name}\.${i}`] = {
           links: {
             self: opts?.maybeRelativeURL
-              ? opts.maybeRelativeURL(new URL(value.reference))
+              ? opts.maybeRelativeURL(value.reference)
               : value.reference,
           },
           data: { type: 'card', id: value.reference },
@@ -1085,7 +1086,7 @@ class LinksToMany<FieldT extends CardConstructor>
         relationships[`${this.name}\.${i}`] = {
           links: {
             self: opts?.maybeRelativeURL
-              ? opts.maybeRelativeURL(new URL(value.id))
+              ? opts.maybeRelativeURL(value.id)
               : value.id,
           },
           data: { type: 'card', id: value.id },
@@ -1113,7 +1114,7 @@ class LinksToMany<FieldT extends CardConstructor>
       relationships[`${this.name}\.${i}`] = {
         links: {
           self: opts?.maybeRelativeURL
-            ? opts.maybeRelativeURL(new URL(value.id))
+            ? opts.maybeRelativeURL(value.id)
             : value.id,
         },
         data: { type: 'card', id: value.id },
@@ -1793,7 +1794,7 @@ async function getDeserializedValue<CardT extends CardBaseConstructor>({
 export interface SerializeOpts {
   includeComputeds?: boolean;
   includeUnrenderedFields?: boolean;
-  maybeRelativeURL?: (url: URL) => string;
+  maybeRelativeURL?: ((possibleURL: string) => string) | null; // setting this to null will force all URL's to be absolute
 }
 
 function serializeCardResource(
@@ -1835,12 +1836,24 @@ export function serializeCard(
   let modelRelativeTo = model[relativeTo];
   let data = serializeCardResource(model, doc, {
     ...opts,
-    maybeRelativeURL(url: URL) {
-      if (!modelRelativeTo) {
-        return url.href;
-      }
-      return maybeRelativeURL(url, modelRelativeTo);
-    },
+    // if opts.maybeRelativeURL is null that is our indication
+    // that the caller wants all the URL's to be absolute
+    ...(opts?.maybeRelativeURL !== null
+      ? {
+          maybeRelativeURL(possibleURL: string) {
+            let url = maybeURL(possibleURL, modelRelativeTo);
+            if (!url) {
+              throw new Error(
+                `could not determine url from '${maybeRelativeURL}' relative to ${modelRelativeTo}`
+              );
+            }
+            if (!modelRelativeTo) {
+              return url.href;
+            }
+            return maybeRelativeURL(url, modelRelativeTo);
+          },
+        }
+      : {}),
   });
   merge(doc, { data });
   if (!isSingleCardDocument(doc)) {

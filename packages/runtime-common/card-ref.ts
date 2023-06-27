@@ -106,7 +106,7 @@ export async function loadCard(
 
 export function identifyCard(
   card: unknown,
-  maybeRelativeURL?: (url: URL) => string
+  maybeRelativeURL?: ((possibleURL: string) => string) | null
 ): CardRef | undefined {
   if (!isCard(card)) {
     return undefined;
@@ -115,7 +115,7 @@ export function identifyCard(
   let ref = Loader.identify(card);
   if (ref) {
     return maybeRelativeURL
-      ? { ...ref, module: maybeRelativeURL(new URL(ref.module)) }
+      ? { ...ref, module: maybeRelativeURL(ref.module) }
       : ref;
   }
 

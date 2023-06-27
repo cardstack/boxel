@@ -294,7 +294,7 @@ module('Acceptance | basic tests', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}person`,
+            module: `../person`,
             name: 'Person',
           },
         },
@@ -315,7 +315,7 @@ module('Acceptance | basic tests', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}person`,
+              module: `../person`,
               name: 'Person',
             },
           },

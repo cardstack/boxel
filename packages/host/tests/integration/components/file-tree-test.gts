@@ -173,10 +173,14 @@ module('Integration | file-tree', function (hooks) {
     await click('[data-test-save-card]');
     await waitUntil(() => !document.querySelector('[data-test-saving]'));
 
-    assert.strictEqual(didTransition?.route, 'code');
-    assert.deepEqual(didTransition?.params, {
-      queryParams: { path: 'Person/1.json' },
-    });
+    assert.strictEqual(didTransition?.route, 'code', 'the route is correct');
+    assert.deepEqual(
+      didTransition?.params,
+      {
+        queryParams: { path: 'Person/1.json' },
+      },
+      'the query params are correct'
+    );
 
     let entry = await realm.searchIndex.card(
       new URL(`${testRealmURL}Person/1`)
@@ -197,7 +201,7 @@ module('Integration | file-tree', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}person`,
+              module: `../person`,
               name: 'Person',
             },
           },

@@ -115,9 +115,11 @@ export default class CardService extends Service {
 
   async saveModel(card: Card): Promise<Card> {
     await this.apiModule.loaded;
-    let doc = await this.serializeCard(card, { includeComputeds: true });
+    let doc = await this.serializeCard(card, {
+      includeComputeds: true,
+      maybeRelativeURL: null, // forces URL's to be absolute
+    });
     let isSaved = this.api.isSaved(card);
-    let relativeTo = isSaved ? new URL(card.id) : this.defaultURL;
     let json = await this.saveCardDocument(
       doc,
       card.id ? new URL(card.id) : undefined
@@ -125,6 +127,10 @@ export default class CardService extends Service {
     if (isSaved) {
       return (await this.api.updateFromSerialized(card, json)) as Card;
     }
+    // for a brand new card that has no id yet, we don't know what we are
+    // relativeTo because its up to the realm server to assign us an ID, so
+    // URL's should be absolute
+    let relativeTo = json.data.id ? new URL(json.data.id) : undefined;
     return await this.createFromSerialized(json.data, json, relativeTo);
   }
 

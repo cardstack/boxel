@@ -735,16 +735,16 @@ export async function loadLinks({
         }
       }
     }
-    if (foundLinks || omit.includes(relationship.links.self)) {
-      let id = maybeURL(relationship.links.self, relativeTo);
-      if (!id) {
-        throw new Error(
-          `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${relativeTo.href}`
-        );
-      }
+    let relationshipId = maybeURL(relationship.links.self, relativeTo);
+    if (!relationshipId) {
+      throw new Error(
+        `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${relativeTo.href}`
+      );
+    }
+    if (foundLinks || omit.includes(relationshipId.href)) {
       resource.relationships![fieldName].data = {
         type: 'card',
-        id: id.href,
+        id: relationshipId.href,
       };
     }
   }
