@@ -340,7 +340,7 @@ export default class OperatorMode extends Component<Signature> {
           </button>
         </div>
       {{else}}
-        <div class='operator-mode-card-stack'>
+        <div class='card-stack' data-test-card-stack>
           {{#each this.stack as |item i|}}
             <OperatorModeStackItem
               @item={{item}}
