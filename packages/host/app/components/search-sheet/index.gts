@@ -5,6 +5,11 @@ import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
+import SearchResult from './search-result';
+import { Label } from '@cardstack/boxel-ui';
+import { Card } from 'https://cardstack.com/base/card-api';
+import { gt } from '../../helpers/truth-helpers';
+import { reverse } from '../../helpers/array-helpers';
 
 export enum SearchSheetMode {
   Closed = 'closed',
@@ -20,6 +25,7 @@ interface Signature {
     mode: SearchSheetMode;
     onCancel: () => void;
     onFocus: () => void;
+    recentCards: Card[];
   };
   Blocks: {};
 }
@@ -74,6 +80,11 @@ export default class SearchSheet extends Component<Signature> {
     this.args.onCancel();
   }
 
+  @action
+  reverseRecentCards() {
+    return this.args.recentCards?.reverse() ?? [];
+  }
+
   <template>
     <div class='search-sheet {{this.sheetSize}}'>
       <div class='header'>
@@ -89,7 +100,22 @@ export default class SearchSheet extends Component<Signature> {
         @value={{this.searchInputValue}}
         @onFocus={{@onFocus}}
         @onInput={{fn (mut this.searchInputValue)}}
+        data-test-search-sheet
       />
+      <div class='search-sheet-content'>
+        {{#if (gt @recentCards.length 0)}}
+          <div class='search-sheet-content__recent-access'>
+            <Label>Recent</Label>
+            <div class='search-sheet-content__recent-access__body'>
+              <div class='search-sheet-content__recent-access__cards'>
+                {{#each (reverse @recentCards) as |card| }}
+                  <SearchResult @card={{card}}/>
+                {{/each}}
+              </div>
+            </div>
+          </div>
+        {{/if}}
+      </div>
       <div class='footer'>
         <div class='url-entry'>
           {{! Enter Card URL: .... }}
@@ -127,7 +153,6 @@ export default class SearchSheet extends Component<Signature> {
       }
 
       .prompt {
-        height: 236px;
         padding: 30px 40px;
       }
 
@@ -171,6 +196,22 @@ export default class SearchSheet extends Component<Signature> {
       .footer {
         height: 40px;
         overflow: hidden;
+      }
+
+      .search-sheet-content { display: flex; flex-direction: column; }
+      .search-sheet-content__recent-access { display: flex; flex-direction: column; padding: var(--boxel-sp); width: 100%; }
+      .search-sheet-content__recent-access .boxel-label {
+        font: 700 var(--boxel-font);
+      }
+      .search-sheet-content__recent-access__body {
+        overflow: auto;
+      }
+      .search-sheet-content__recent-access__cards { 
+        display: flex; 
+        flex-direction: row;
+        width: min-content; 
+        padding: var(--boxel-sp) var(--boxel-sp-xxxs);
+        gap: var(--boxel-sp);
       }
     </style>
   </template>

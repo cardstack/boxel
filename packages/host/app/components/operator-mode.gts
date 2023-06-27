@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { Card, Format } from 'https://cardstack.com/base/card-api';
+import { TrackedArray } from 'tracked-built-ins';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { trackedFunction } from 'ember-resources/util/function';
@@ -67,6 +68,7 @@ export default class OperatorMode extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
+  @tracked recentCards = new TrackedArray<Card>([]);
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -88,9 +90,13 @@ export default class OperatorMode extends Component<Signature> {
     return getSearchResults(this, () => query);
   }
 
-  @action onFocusSearchInput() {
+  @action async onFocusSearchInput() {
     if (this.searchSheetMode == SearchSheetMode.Closed) {
       this.searchSheetMode = SearchSheetMode.SearchPrompt;
+    }
+
+    if (this.recentCards.length === 0) {
+      await this.contructRecentCards();
     }
   }
 
@@ -100,6 +106,7 @@ export default class OperatorMode extends Component<Signature> {
 
   @action addToStack(item: StackItem) {
     this.operatorModeStateService.addItemToStack(item);
+    this.addRecentCards(item.card);
   }
 
   @action async edit(item: StackItem) {
@@ -313,6 +320,31 @@ export default class OperatorMode extends Component<Signature> {
     return this.fetchBackgroundImageURL.value ?? '';
   }
 
+  async contructRecentCards() {
+    const recentCardIdsString = localStorage.getItem('recent-cards');
+    if (!recentCardIdsString) {
+      return;
+    }
+  
+    const recentCardIds = JSON.parse(recentCardIdsString) as string[];
+    for (const recentCardId of recentCardIds) {
+      const card = await this.cardService.loadModel(new URL(recentCardId));
+      console.log(card);
+      this.recentCards.push(card);
+    }
+  }
+  
+  async addRecentCards(card: Card) {
+    const existingCardIndex = this.recentCards.findIndex((recentCard) => recentCard.id === card.id);
+    if (existingCardIndex !== -1) {
+      this.recentCards.splice(existingCardIndex, 1);
+    }
+
+    this.recentCards.push(card);
+    const recentCardIds = this.recentCards.map(recentCard => recentCard.id);
+    localStorage.setItem('recent-cards', JSON.stringify(recentCardIds));
+  }
+
   <template>
     <Modal
       class='operator-mode'
@@ -363,6 +395,7 @@ export default class OperatorMode extends Component<Signature> {
         @mode={{this.searchSheetMode}}
         @onCancel={{this.onCancelSearchSheet}}
         @onFocus={{this.onFocusSearchInput}}
+        @recentCards={{this.recentCards}}
       />
     </Modal>
     <style>
