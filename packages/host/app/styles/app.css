@@ -11,11 +11,11 @@
 .dialog-box {
   height: 100%;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto 1fr auto;
 }
 
 .dialog-box__content {
-  padding: 0 var(--boxel-sp-xl) var(--boxel-sp-xl);
+  padding: 0 var(--boxel-sp-xxl) var(--boxel-sp-xl);
   height: 100%;
   overflow: auto;
 }
@@ -38,6 +38,22 @@
 
 .dialog-box__close:hover {
   color: var(--boxel-highlight);
+}
+
+.dialog-box__footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--boxel-sp);
+  width: 100%;
+  background: var(--boxel-light);
+  height: var(--stack-card-footer-height);
+  border-top: 1px solid var(--boxel-300);
+  border-bottom-left-radius: var(--boxel-border-radius);
+  border-bottom-right-radius: var(--boxel-border-radius);
+}
+
+.dialog-box__footer-button + .dialog-box__footer-button {
+  margin-left: var(--boxel-sp-xs);
 }
 
 /* Other */

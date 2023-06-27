@@ -1,22 +1,15 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
-import { Card, CardContext, Format } from 'https://cardstack.com/base/card-api';
-import Preview from './preview';
+import { Card, Format } from 'https://cardstack.com/base/card-api';
 import { action } from '@ember/object';
-import { fn, array } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { trackedFunction } from 'ember-resources/util/function';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import type CardService from '../services/card-service';
 // import getValueFromWeakMap from '../helpers/get-value-from-weakmap';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import optional from '@cardstack/boxel-ui/helpers/optional';
-import cn from '@cardstack/boxel-ui/helpers/cn';
 import {
-  IconButton,
   Modal,
-  Header,
-  CardContainer,
-  Button,
 } from '@cardstack/boxel-ui';
 import SearchSheet, {
   SearchSheetMode,
@@ -28,26 +21,19 @@ import {
   chooseCard,
   type Actions,
   type CardRef,
-  cardTypeDisplayName,
   LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import type LoaderService from '../services/loader-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-import { TrackedArray } from 'tracked-built-ins';
-import OperatorModeOverlays from '@cardstack/host/components/operator-mode-overlays';
-import LinksToCardComponentModifier from '@cardstack/host/modifiers/links-to-card-component-modifier';
-import { schedule } from '@ember/runloop';
-import { htmlSafe } from '@ember/template';
+import { htmlSafe, SafeString } from '@ember/template';
 import { registerDestructor } from '@ember/destroyable';
 import type { Query } from '@cardstack/runtime-common/query';
 import { getSearchResults, type Search } from '../resources/search';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import perform from 'ember-concurrency/helpers/perform';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
-import BoxelMenu from '@cardstack/boxel-ui/components/menu';
-import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
+import OperatorModeStackItem from '@cardstack/host/components/operator-mode-stack-item';
 
 interface Signature {
   Args: {
@@ -69,13 +55,6 @@ export type StackItem = {
   request?: Deferred<Card>;
   isLinkedCard?: boolean;
 };
-
-export interface RenderedLinksToCard {
-  element: HTMLElement;
-  card: Card;
-  context: CardContext;
-  stackedAtIndex: number;
-}
 
 export default class OperatorMode extends Component<Signature> {
   //A variable to store value of card field
@@ -281,52 +260,16 @@ export default class OperatorMode extends Component<Signature> {
     }
   }
 
-  get context() {
-    return {
-      renderedIn: this as Component<any>,
-      cardComponentModifier: LinksToCardComponentModifier,
-      optional: {
-        stack: this.stack, // Not used currently, but eventually there will be more than one stack and we will need to know which one we are in.
-      },
-      actions: this.publicAPI,
-    };
-  }
-
-  @tracked renderedLinksToCards = new TrackedArray<RenderedLinksToCard>([]);
-  registerLinkedCardElement(
-    linksToCardElement: HTMLElement,
-    linksToCard: Card,
-    context: CardContext
-  ) {
-    // Without scheduling this after render, this produces the "attempted to update value, but it had already been used previously in the same computation" type error
-    schedule('afterRender', () => {
-      this.renderedLinksToCards.push({
-        element: linksToCardElement,
-        card: linksToCard,
-        stackedAtIndex: this.stack.length,
-        context,
-      });
-    });
-  }
-
-  unregisterLinkedCardElement(card: Card) {
-    let index = this.renderedLinksToCards.findIndex(
-      (renderedLinksToCard) => renderedLinksToCard.card === card
-    );
-    if (index !== -1) {
-      this.renderedLinksToCards.splice(index, 1);
-    }
-  }
-
-  styleForStackedCard(stack: StackItem[], index: number) {
-    let invertedIndex = stack.length - index - 1;
+  @action
+  styleForStackedCard(index: number): SafeString {
+    let invertedIndex = this.stack.length - index - 1;
 
     let widthReductionPercent = 5; // Every new card on the stack is 5% wider than the previous one
     let offsetPx = 40; // Every new card on the stack is 40px lower than the previous one
 
     return htmlSafe(`
       width: ${100 - invertedIndex * widthReductionPercent}%;
-      z-index: ${stack.length - invertedIndex};
+      z-index: ${this.stack.length - invertedIndex};
       padding-top: calc(${offsetPx}px * ${index});
     `);
   }
@@ -389,7 +332,7 @@ export default class OperatorMode extends Component<Signature> {
           {{! Cannot find an svg icon with plus in the box
           that we can fill the color of the plus and the box. }}
           <button
-            class='icon-button'
+            class='add-card-button icon-button'
             {{on 'click' (fn (perform this.addCard))}}
             data-test-add-card-button
           >
@@ -397,125 +340,22 @@ export default class OperatorMode extends Component<Signature> {
           </button>
         </div>
       {{else}}
-        <div class='card-stack' data-test-card-stack>
-          {{! z-index and offset calculation in the OperatorModeOverlays operates under assumption that it is nested under element with class operator-mode-card-stack }}
-          <OperatorModeOverlays
-            @renderedLinksToCards={{this.renderedLinksToCards}}
-            @addToStack={{this.addToStack}}
-          />
-
+        <div class='operator-mode-card-stack'>
           {{#each this.stack as |item i|}}
-            <div
-              class={{cn
-                'stack-item'
-                buried=(this.isBuried i)
-              }}
-              data-test-stack-card-index={{i}}
-              data-test-stack-card={{item.card.id}}
-              style={{this.styleForStackedCard this.stack i}}
-            >
-              <CardContainer
-                class={{cn
-                  'card'
-                  card-in-edit=(eq item.format 'edit')
-                }}
-              >
-                <Header
-                  @title={{cardTypeDisplayName item.card}}
-                  class='card-header'
-                  {{on
-                    'click'
-                    (optional
-                      (if
-                        (this.isBuried i) (fn this.dismissStackedCardsAbove i)
-                      )
-                    )
-                  }}
-                  data-test-stack-card-header
-                >
-                  <:actions>
-                    <BoxelDropdown>
-                      <:trigger as |bindings|>
-                        <IconButton
-                          @icon='icon-horizontal-three-dots'
-                          @width='20px'
-                          @height='20px'
-                          class='icon-button'
-                          aria-label='Options'
-                          data-test-edit-button
-                          {{bindings}}
-                        />
-                      </:trigger>
-                      <:content as |dd|>
-                        <BoxelMenu
-                          @closeMenu={{dd.close}}
-                          @items={{if
-                            (eq item.format 'edit')
-                            (array
-                              (menuItem
-                                'Finish Editing'
-                                (fn this.save item i)
-                                icon='icon-check-mark'
-                              )
-                              (menuItem
-                                'Delete'
-                                (fn this.delete item i)
-                                icon='icon-trash'
-                              )
-                            )
-                            (array
-                              (menuItem
-                                'Edit' (fn this.edit item i) icon='icon-pencil'
-                              )
-                            )
-                          }}
-                        />
-                      </:content>
-                    </BoxelDropdown>
-                    <IconButton
-                      @icon='icon-x'
-                      @width='20px'
-                      @height='20px'
-                      class='icon-button'
-                      aria-label='Close'
-                      {{on 'click' (fn this.close item)}}
-                      data-test-close-button
-                    />
-                  </:actions>
-                </Header>
-                <div class='card-content'>
-                  <Preview
-                    @card={{item.card}}
-                    @format={{item.format}}
-                    @context={{this.context}}
-                  />
-                </div>
-                {{#if (eq item.format 'edit')}}
-                  <footer class='card-footer'>
-                    <Button
-                      @kind='secondary-light'
-                      @size='tall'
-                      class='card-footer-button'
-                      {{on 'click' (fn this.cancel item)}}
-                      aria-label='Cancel'
-                      data-test-cancel-button
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      @kind='primary'
-                      @size='tall'
-                      class='card-footer-button'
-                      {{on 'click' (fn this.save item)}}
-                      aria-label='Save'
-                      data-test-save-button
-                    >
-                      Save
-                    </Button>
-                  </footer>
-                {{/if}}
-              </CardContainer>
-            </div>
+            <OperatorModeStackItem
+              @item={{item}}
+              @index={{i}}
+              @publicAPI={{this.publicAPI}}
+              @addToStack={{this.addToStack}}
+              @dismissStackedCardsAbove={{this.dismissStackedCardsAbove}}
+              @isBuried={{this.isBuried}}
+              @close={{this.close}}
+              @cancel={{this.cancel}}
+              @edit={{this.edit}}
+              @delete={{this.delete}}
+              @save={{this.save}}
+              @styleForStackedCard={{this.styleForStackedCard}}
+            />
           {{/each}}
         </div>
       {{/if}}
@@ -528,28 +368,38 @@ export default class OperatorMode extends Component<Signature> {
     <style>
       :global(:root) {
         --operator-mode-bg-color: #686283;
-        --stack-card-footer-height: 5rem;
-        --buried-operator-mode-header-height: 2.5rem;
-      }
-
-      .buried .card {
-        background-color: var(--boxel-200);
-        grid-template-rows:
-          var(--buried-operator-mode-header-height) auto;
-      }
-
-      .buried .card-header .icon-button {
-        display: none;
-      }
-
-      .buried .card-header {
-        cursor: pointer;
-        font: 500 var(--boxel-font-sm);
-        padding: 0 var(--boxel-sp-xs);
       }
 
       .operator-mode > div {
         align-items: flex-start;
+      }
+  
+      .no-cards {
+        height: calc(100% - var(--search-sheet-closed-height));
+        width: 100%;
+        max-width: 50rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .add-card-title {
+        color: var(--boxel-light);
+        font: var(--boxel-font-lg);
+      }
+
+      .add-card-button {
+        height: 350px;
+        width: 200px;
+        vertical-align: middle;
+        background: var(--boxel-teal);
+        border: none;
+        border-radius: var(--boxel-border-radius);
+      }
+
+      .add-card-button:hover {
+        background: var(--boxel-dark-teal);
       }
 
       .card-stack {
@@ -562,56 +412,6 @@ export default class OperatorMode extends Component<Signature> {
         justify-content: center;
         overflow: hidden;
         z-index: 0;
-      }
-
-      .stack-item {
-        justify-self: center;
-        position: absolute;
-        width: 89%;
-        height: inherit;
-        z-index: 0;
-        overflow: hidden;
-        pointer-events: none;
-      }
-
-      .card {
-        position: relative;
-        height: 100%;
-        display: grid;
-        grid-template-rows: 7.5rem auto;
-        box-shadow:0 15px 30px 0 rgb(0 0 0 / 35%);
-        pointer-events: auto;
-      }
-
-      .card-content {
-        overflow: auto;
-      }
-
-      .card-content > .boxel-card-container.boundaries {
-        box-shadow: none;
-      }
-
-      .card-in-edit .card-content {
-        margin-bottom: var(--stack-card-footer-height)
-      }
-
-      .card-footer {
-        position: absolute;
-        bottom: 0;
-        right: 0;
-        display: flex;
-        justify-content: flex-end;
-        padding: var(--boxel-sp);
-        width: 100%;
-        background: white;
-        height: var(--stack-card-footer-height);
-        border-top: 1px solid var(--boxel-300);
-        border-bottom-left-radius: var(--boxel-border-radius);
-        border-bottom-right-radius: var(--boxel-border-radius);
-      }
-
-      .card-footer-button + .card-footer-button {
-        margin-left: var(--boxel-sp-xs);
       }
     </style>
   </template>

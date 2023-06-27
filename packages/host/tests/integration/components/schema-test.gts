@@ -503,6 +503,7 @@ module('Integration | schema', function (hooks) {
       .doesNotExist('own card is not available to choose as a field');
 
     await click(`[data-test-select="${testRealmURL}person-entry"]`);
+    await click('[data-test-card-catalog-go-button]');
     await waitFor('.schema [data-test-field="author"]');
     assert.dom('[data-test-field="author"]').exists();
     assert
@@ -562,6 +563,7 @@ module('Integration | schema', function (hooks) {
     await waitFor('[data-test-card-catalog-modal] [data-test-realm-name]');
 
     await click(`[data-test-select="${baseRealm.url}fields/string-field"]`);
+    await click('[data-test-card-catalog-go-button]');
     await waitFor('[data-test-field="aliases"]');
     assert.dom('[data-test-field="aliases"]').exists();
     assert
@@ -679,6 +681,7 @@ module('Integration | schema', function (hooks) {
     assert.dom(`[data-test-select="${testRealmURL}appointment"]`).exists();
 
     await click(`[data-test-select="${testRealmURL}appointment"]`);
+    await click('[data-test-card-catalog-go-button]');
     await waitFor('[data-test-field="appointment"]');
     assert
       .dom('[data-test-field="appointment"]')
@@ -796,6 +799,7 @@ module('Integration | schema', function (hooks) {
       .exists({ count: 2 }, 'primitive fields are not shown');
 
     await click(`[data-test-select="${testRealmURL}pet"]`);
+    await click('[data-test-card-catalog-go-button]');
     await waitFor('[data-test-field="pet"]');
     assert
       .dom('[data-test-field="pet"]')
@@ -887,6 +891,7 @@ module('Integration | schema', function (hooks) {
     await click('[data-test-add-field]');
     await waitFor('[data-test-card-catalog-modal] [data-test-realm-name]');
     await click(`[data-test-select="${testRealmURL}person"]`);
+    await click('[data-test-card-catalog-go-button]');
     await waitFor('[data-test-field="friend"]');
     assert
       .dom('[data-test-field="friend"]')
@@ -1058,6 +1063,7 @@ module('Integration | schema', function (hooks) {
       .exists({ count: 2 }, 'primitive fields are not shown');
 
     await click(`[data-test-select="${testRealmURL}pet"]`);
+    await click('[data-test-card-catalog-go-button]');
     await waitFor('[data-test-field="pets"]');
     assert
       .dom('[data-test-field="pets"]')
@@ -1153,6 +1159,7 @@ module('Integration | schema', function (hooks) {
       .exists({ count: 2 }, 'primitive fields are not shown');
 
     await click(`[data-test-select="${testRealmURL}person"]`);
+    await click('[data-test-card-catalog-go-button]');
     await waitFor('[data-test-field="friends"]');
     assert
       .dom('[data-test-field="friends"]')

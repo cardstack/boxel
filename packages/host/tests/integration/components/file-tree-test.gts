@@ -166,6 +166,7 @@ module('Integration | file-tree', function (hooks) {
       .doesNotExist('primitive field cards are not displayed');
 
     await click(`[data-test-select="${testRealmURL}person-entry"]`);
+    await click('[data-test-card-catalog-go-button]');
     await waitFor(`[data-test-create-new-card="Person"]`);
     await waitFor(`[data-test-field="firstName"] input`);
 
