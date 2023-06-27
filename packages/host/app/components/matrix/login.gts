@@ -11,8 +11,8 @@ import {
   FieldContainer,
   LoadingIndicator,
 } from '@cardstack/boxel-ui';
-import { isMatrixError } from '../lib/matrix-utils';
-import type MatrixService from '../services/matrix-service';
+import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type IAuthData } from 'matrix-js-sdk';
 
 const TRUE = true;
@@ -114,6 +114,6 @@ export default class Login extends Component {
 
 declare module '@glint/environment-ember-loose/registry' {
   export default interface Login {
-    Login: typeof Login;
+    'Matrix::Login': typeof Login;
   }
 }

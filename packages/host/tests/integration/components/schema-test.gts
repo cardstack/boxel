@@ -3,7 +3,7 @@ import { waitFor, fillIn, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
-import Module from '@cardstack/host/components/module';
+import Module from '@cardstack/host/components/editor/module';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
 import {
