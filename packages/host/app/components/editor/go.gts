@@ -13,18 +13,18 @@ import {
   logger,
 } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
-import type LoaderService from '../services/loader-service';
-import type CardService from '../services/card-service';
-import type { FileResource } from '../resources/file';
-import CardEditor from './card-editor';
+import type LoaderService from '@cardstack/host/services/loader-service';
+import type CardService from '@cardstack/host/services/card-service';
+import type { FileResource } from '@cardstack/host/resources/file';
+import CardEditor from '@cardstack/host/components/card-editor';
 import Module from './module';
 import FileTree from './file-tree';
 import {
   getLangFromFileExtension,
   extendMonacoLanguage,
   languageConfigs,
-} from '../utils/editor-language';
-import monacoModifier from '../modifiers/monaco';
+} from '@cardstack/host/utils/editor-language';
+import monacoModifier from '@cardstack/host/modifiers/monaco';
 import type * as monaco from 'monaco-editor';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
@@ -103,36 +103,12 @@ export default class Go extends Component<Signature> {
       {{/if}}
     </div>
     <style>
-      .main {
-        position: relative;
-        display: grid;
-        grid-template-columns: 15rem 1fr 1fr;
-        min-height: 100vh;
-      }
-
-      .main-column {
-        padding: var(--boxel-sp);
-      }
-
-      .main-column > * + * {
-        margin-top: var(--boxel-sp);
-      }
-
-      .editor-column {
-        display: flex;
-        flex-direction: column;
-      }
-
-      .editor-menu {
-        list-style-type: none;
-        padding: 0;
-        display: flex;
-        gap: var(--boxel-sp-sm);
-      }
-
-      .editor-container {
-        flex: 1;
-      }
+      .main { position: relative; display: grid; grid-template-columns: 15rem
+      1fr 1fr; min-height: 100vh; } .main-column { padding: var(--boxel-sp); }
+      .main-column > * + * { margin-top: var(--boxel-sp); } .editor-column {
+      display: flex; flex-direction: column; } .editor-menu { list-style-type:
+      none; padding: 0; display: flex; gap: var(--boxel-sp-sm); }
+      .editor-container { flex: 1; }
     </style>
   </template>
 
@@ -280,6 +256,6 @@ function isRunnable(filename: string): boolean {
 
 declare module '@glint/environment-ember-loose/registry' {
   export default interface Registry {
-    Go: typeof Go;
+    'Editor::Go': typeof Go;
   }
 }

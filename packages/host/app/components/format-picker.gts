@@ -1,7 +1,7 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { eq } from '../helpers/truth-helpers';
+import { eq } from '@cardstack/host/helpers/truth-helpers';
 import type { Format } from 'https://cardstack.com/base/card-api';
 
 interface Signature {

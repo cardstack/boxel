@@ -4,10 +4,10 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { restartableTask } from 'ember-concurrency';
 import { service } from '@ember/service';
-import type CardService from '../services/card-service';
+import type CardService from '@cardstack/host/services/card-service';
 import type { Card, Format } from 'https://cardstack.com/base/card-api';
 import FormatPicker from './format-picker';
-import Preview from './preview';
+import Preview from '@cardstack/host/components/preview';
 import Button from '@cardstack/boxel-ui/components/button';
 
 interface Signature {
