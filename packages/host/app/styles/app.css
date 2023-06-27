@@ -340,7 +340,7 @@
 .operator-mode .buried .cards-grid__add-button {
   display: none;
 }
-.card-content > .boxel-card-container > header {
+.content > .boxel-card-container > header {
   display: none;
 }
 .cards-grid__add-button {

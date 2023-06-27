@@ -185,12 +185,12 @@ export default class CardCatalogModal extends Component<Signature> {
         height: 6.25rem;
       }
 
-      .item > .boxel-card-container {
+      .item > :deep(.boxel-card-container) {
         display: flex;
         align-items: center;
         height: 100%;
       }
-      .item.selected > .boxel-card-container {
+      .item.selected > :deep(.boxel-card-container) {
         box-shadow: 0 0 0 2px var(--boxel-highlight);
       }
 
