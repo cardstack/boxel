@@ -2,7 +2,8 @@ import Component from '@glimmer/component';
 import { fn } from '@ember/helper';
 import { Card } from 'https://cardstack.com/base/card-api';
 import { on } from '@ember/modifier';
-import StackItem, { RenderedLinksToCard } from './stack-item';
+import { StackItem } from './container';
+import { RenderedLinksToCard } from './stack-item';
 import { action } from '@ember/object';
 import { velcro } from 'ember-velcro';
 
