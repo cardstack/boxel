@@ -5,8 +5,7 @@ import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { trackedFunction } from 'ember-resources/util/function';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
-import type CardService from '../services/card-service';
-// import getValueFromWeakMap from '../helpers/get-value-from-weakmap';
+import type CardService from '@cardstack/host/services/card-service';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import {
   Modal,
@@ -23,17 +22,17 @@ import {
   type CardRef,
   LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-import type LoaderService from '../services/loader-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { htmlSafe, SafeString } from '@ember/template';
 import { registerDestructor } from '@ember/destroyable';
 import type { Query } from '@cardstack/runtime-common/query';
-import { getSearchResults, type Search } from '../resources/search';
+import { getSearchResults, type Search } from '@cardstack/host/resources/search';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import perform from 'ember-concurrency/helpers/perform';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import OperatorModeStackItem from '@cardstack/host/components/operator-mode-stack-item';
+import OperatorModeStackItem from './stack-item';
 
 interface Signature {
   Args: {
@@ -56,7 +55,7 @@ export type StackItem = {
   isLinkedCard?: boolean;
 };
 
-export default class OperatorMode extends Component<Signature> {
+export default class OperatorModeContainer extends Component<Signature> {
   //A variable to store value of card field
   //before in edit mode.
   cardFieldValues: WeakMap<Card, Map<string, any>> = new WeakMap<
@@ -419,6 +418,6 @@ export default class OperatorMode extends Component<Signature> {
 
 declare module '@glint/environment-ember-loose/registry' {
   export default interface Registry {
-    OperatorMode: typeof OperatorMode;
+    'OperatorMode::Container': typeof OperatorModeContainer;
   }
 }

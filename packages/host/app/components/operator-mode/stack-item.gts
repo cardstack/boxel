@@ -1,9 +1,9 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { Card, CardContext } from 'https://cardstack.com/base/card-api';
-import Preview from './preview';
+import Preview from '@cardstack/host/components/preview';
 import { fn, array } from '@ember/helper';
-import type CardService from '../services/card-service';
+import type CardService from '@cardstack/host/services/card-service';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import optional from '@cardstack/boxel-ui/helpers/optional';
 import cn from '@cardstack/boxel-ui/helpers/cn';
@@ -17,7 +17,7 @@ import {
   type Actions,
   cardTypeDisplayName,
 } from '@cardstack/runtime-common';
-import type LoaderService from '../services/loader-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { TrackedArray } from 'tracked-built-ins';
@@ -27,8 +27,8 @@ import { SafeString } from '@ember/template';
 import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
 import BoxelMenu from '@cardstack/boxel-ui/components/menu';
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
-import { StackItem } from '@cardstack/host/components/operator-mode';
-import OperatorModeOverlays from '@cardstack/host/components/operator-mode-overlays';
+import { StackItem } from '@cardstack/host/components/operator-mode/container';
+import OperatorModeOverlays from '@cardstack/host/components/operator-mode/overlays';
 
 interface Signature {
   Args: {
