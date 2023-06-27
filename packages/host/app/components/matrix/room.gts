@@ -4,7 +4,7 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 //@ts-expect-error the types don't recognize the cached export
 import { tracked, cached } from '@glimmer/tracking';
-import { not, and } from '../helpers/truth-helpers';
+import { not, and } from '@cardstack/host/helpers/truth-helpers';
 import { restartableTask } from 'ember-concurrency';
 import {
   BoxelHeader,
@@ -13,16 +13,16 @@ import {
   FieldContainer,
   Button,
 } from '@cardstack/boxel-ui';
-import { getRoomCard } from '../resources/room-card';
+import { getRoomCard } from '@cardstack/host/resources/room-card';
 import { TrackedMap } from 'tracked-built-ins';
 import {
   chooseCard,
   baseCardRef,
   catalogEntryRef,
 } from '@cardstack/runtime-common';
-import type MatrixService from '../services/matrix-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type Card } from 'https://cardstack.com/base/card-api';
-import type CardService from '../services/card-service';
+import type CardService from '@cardstack/host/services/card-service';
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
 const TRUE = true;
@@ -398,6 +398,6 @@ export default class Room extends Component<RoomArgs> {
 
 declare module '@glint/environment-ember-loose/registry' {
   export default interface Room {
-    Room: typeof Room;
+    'Matrix::Room': typeof Room;
   }
 }

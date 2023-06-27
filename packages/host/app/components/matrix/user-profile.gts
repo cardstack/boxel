@@ -11,8 +11,8 @@ import {
 } from '@cardstack/boxel-ui';
 import { dropTask, restartableTask } from 'ember-concurrency';
 import { tracked } from '@glimmer/tracking';
-import { not } from '../helpers/truth-helpers';
-import type MatrixService from '../services/matrix-service';
+import { not } from '@cardstack/host/helpers/truth-helpers';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 
 const TRUE = true;
 
@@ -140,6 +140,6 @@ export default class UserProfile extends Component {
 
 declare module '@glint/environment-ember-loose/registry' {
   export default interface UserProfile {
-    UserProfile: typeof UserProfile;
+    'Matrix::UserProfile': typeof UserProfile;
   }
 }
