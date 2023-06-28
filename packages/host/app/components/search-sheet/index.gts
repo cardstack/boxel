@@ -80,11 +80,6 @@ export default class SearchSheet extends Component<Signature> {
     this.args.onCancel();
   }
 
-  @action
-  reverseRecentCards() {
-    return this.args.recentCards?.reverse() ?? [];
-  }
-
   <template>
     <div class='search-sheet {{this.sheetSize}}'>
       <div class='header'>

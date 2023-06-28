@@ -96,7 +96,7 @@ export default class OperatorMode extends Component<Signature> {
     }
 
     if (this.recentCards.length === 0) {
-      await this.contructRecentCards();
+      await this.constructRecentCards();
     }
   }
 
@@ -329,7 +329,6 @@ export default class OperatorMode extends Component<Signature> {
     const recentCardIds = JSON.parse(recentCardIdsString) as string[];
     for (const recentCardId of recentCardIds) {
       const card = await this.cardService.loadModel(new URL(recentCardId));
-      console.log(card);
       this.recentCards.push(card);
     }
   }
@@ -341,6 +340,9 @@ export default class OperatorMode extends Component<Signature> {
     }
 
     this.recentCards.push(card);
+    if (this.recentCards.length > 10) {
+      this.recentCards = new TrackedArray<Card>(this.recentCards.slice(1));
+    }
     const recentCardIds = this.recentCards.map(recentCard => recentCard.id);
     localStorage.setItem('recent-cards', JSON.stringify(recentCardIds));
   }
