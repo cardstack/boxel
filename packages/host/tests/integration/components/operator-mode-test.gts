@@ -25,6 +25,7 @@ import {
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import percySnapshot from '@percy/ember';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 const realmName = 'Operator Mode Workspace';
@@ -607,6 +608,8 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-add-card-button]');
     assert.dom('[data-test-card-catalog-modal]').isVisible();
 
+    await percySnapshot(assert);
+
     await waitFor(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
     await click(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-card-catalog-go-button]');
@@ -628,8 +631,11 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    assert.dom(`[data-test-stack-card-index="0"]`).exists();
     await waitFor(`[data-test-cards-grid-item]`);
+
+    await percySnapshot(assert);
+
+    assert.dom(`[data-test-stack-card-index="0"]`).exists();
     assert.dom(`[data-test-cards-grid-item]`).exists();
     assert
       .dom(
