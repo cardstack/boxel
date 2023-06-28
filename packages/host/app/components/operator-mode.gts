@@ -320,7 +320,7 @@ export default class OperatorMode extends Component<Signature> {
     return this.fetchBackgroundImageURL.value ?? '';
   }
 
-  async contructRecentCards() {
+  async constructRecentCards() {
     const recentCardIdsString = localStorage.getItem('recent-cards');
     if (!recentCardIdsString) {
       return;
