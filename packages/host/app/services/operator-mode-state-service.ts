@@ -11,7 +11,7 @@ import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { getOwner } from '@ember/application';
 import { scheduleOnce } from '@ember/runloop';
-import { Card } from 'https://cardstack.com/base/card-api';
+import type { Card } from 'https://cardstack.com/base/card-api';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
@@ -143,7 +143,7 @@ export default class OperatorModeStateService extends Service {
     }
   }
 
-  async addRecentCards(card: Card) {
+  addRecentCards(card: Card) {
     const existingCardIndex = this.recentCards.findIndex(
       (recentCard) => recentCard.id === card.id
     );
@@ -153,7 +153,7 @@ export default class OperatorModeStateService extends Service {
 
     this.recentCards.push(card);
     if (this.recentCards.length > 10) {
-      this.recentCards = new TrackedArray<Card>(this.recentCards.slice(1));
+      this.recentCards.splice(0, 1);
     }
     const recentCardIds = this.recentCards.map((recentCard) => recentCard.id);
     localStorage.setItem('recent-cards', JSON.stringify(recentCardIds));

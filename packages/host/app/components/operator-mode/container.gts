@@ -88,15 +88,19 @@ export default class OperatorModeContainer extends Component<Signature> {
     return getSearchResults(this, () => query);
   }
 
-  @action async onFocusSearchInput() {
+  @action onFocusSearchInput() {
     if (this.searchSheetMode == SearchSheetMode.Closed) {
       this.searchSheetMode = SearchSheetMode.SearchPrompt;
     }
 
     if (this.operatorModeStateService.recentCards.length === 0) {
-      await this.operatorModeStateService.constructRecentCards();
+      this.constructRecentCards.perform();
     }
   }
+
+  constructRecentCards = restartableTask(async () => {
+    return await this.operatorModeStateService.constructRecentCards();
+  });
 
   @action onCancelSearchSheet() {
     this.searchSheetMode = SearchSheetMode.Closed;
