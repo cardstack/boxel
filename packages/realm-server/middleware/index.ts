@@ -79,8 +79,11 @@ export function assetRedirect(
         `./${ctxt.path.slice(assetsDir.length + 1)}`,
         assetsURL
       ).href;
-      ctxt.redirect(redirectURL);
-      return;
+
+      if (redirectURL !== ctxt.href) {
+        ctxt.redirect(redirectURL);
+        return;
+      }
     }
     return next();
   };
