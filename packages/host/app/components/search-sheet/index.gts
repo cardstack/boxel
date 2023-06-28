@@ -2,13 +2,14 @@ import Component from '@glimmer/component';
 import SearchInput, { SearchInputBottomTreatment } from './search-input';
 import { Button } from '@cardstack/boxel-ui';
 import { on } from '@ember/modifier';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import SearchResult from './search-result';
 import { Label } from '@cardstack/boxel-ui';
 import { Card } from 'https://cardstack.com/base/card-api';
 import { gt } from '../../helpers/truth-helpers';
+
 
 export enum SearchSheetMode {
   Closed = 'closed',
@@ -79,6 +80,7 @@ export default class SearchSheet extends Component<Signature> {
     this.args.onCancel();
   }
 
+  @cached
   get reverseRecentCards() {
     // Clone the array first before reversing it.
     // To avoid this error: You attempted to update `_value` on `TrackedStorageImpl`,
