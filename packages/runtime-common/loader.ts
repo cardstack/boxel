@@ -96,17 +96,17 @@ type UnregisteredDep =
 
 type EvaluatableDep =
   | {
-      type: 'dep';
-      moduleURL: ResolvedURL;
-    }
+    type: 'dep';
+    moduleURL: ResolvedURL;
+  }
   | {
-      type: 'completing-dep';
-      moduleURL: ResolvedURL;
-    }
+    type: 'completing-dep';
+    moduleURL: ResolvedURL;
+  }
   | {
-      type: 'shim-dep';
-      moduleId: string;
-    }
+    type: 'shim-dep';
+    moduleId: string;
+  }
   | { type: '__import_meta__' }
   | { type: 'exports' };
 
@@ -344,11 +344,11 @@ export class Loader {
       'registered-completing-deps': string[];
       'registered-with-deps': string[];
     } = {
-      'registered-completing-deps': [],
-      'registered-with-deps': [],
-    }
+        'registered-completing-deps': [],
+        'registered-with-deps': [],
+      }
   ): Promise<void> {
-    for (;;) {
+    for (; ;) {
       let module = this.getModule(resolvedURL.href);
       this.log.trace(
         `advance ${resolvedURL.href} to '${targetState}' current state is '${module?.state}'`
@@ -534,8 +534,8 @@ export class Loader {
       urlOrRequest instanceof Request
         ? urlOrRequest.url
         : typeof urlOrRequest === 'string'
-        ? urlOrRequest
-        : urlOrRequest.href
+          ? urlOrRequest
+          : urlOrRequest.href
     );
     if (urlOrRequest instanceof Request) {
       for (let [url, handle] of this.urlHandlers) {
@@ -549,6 +549,8 @@ export class Loader {
       let request = new Request(this.resolve(requestURL).href, {
         method: urlOrRequest.method,
         headers: urlOrRequest.headers,
+        // This is needed to use some web resources.
+        duplex: "half",
         body: urlOrRequest.body,
       });
       return getNativeFetch()(request);
@@ -557,8 +559,8 @@ export class Loader {
         typeof urlOrRequest === 'string'
           ? new URL(urlOrRequest)
           : isResolvedURL(urlOrRequest)
-          ? this.reverseResolution(urlOrRequest)
-          : urlOrRequest;
+            ? this.reverseResolution(urlOrRequest)
+            : urlOrRequest;
       for (let [url, handle] of this.urlHandlers) {
         let path = new RealmPaths(new URL(url));
         if (path.inRealm(unresolvedURL)) {
@@ -633,8 +635,8 @@ export class Loader {
           this.identities.set(value, {
             module: isUrlLike(moduleIdentifier)
               ? trimExecutableExtension(
-                  this.reverseResolution(moduleIdentifier)
-                ).href
+                this.reverseResolution(moduleIdentifier)
+              ).href
               : moduleIdentifier,
             name: property,
           });
@@ -749,8 +751,8 @@ export class Loader {
         dep.type === 'dep'
           ? [dep.moduleURL.href]
           : dep.type === 'shim-dep'
-          ? [dep.moduleId]
-          : []
+            ? [dep.moduleId]
+            : []
       )
     );
 

@@ -20,6 +20,7 @@ interface Signature {
     mode: SearchSheetMode;
     onCancel: () => void;
     onFocus: () => void;
+    onSearch: (searchString: string) => Promise<void>;
   };
   Blocks: {};
 }
@@ -69,6 +70,12 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   @action
+  onSearch() {
+    console.log('Onsearch');
+    this.args.onSearch(this.searchInputValue);
+  }
+
+  @action
   onCancel() {
     this.searchInputValue = '';
     this.args.onCancel();
@@ -97,6 +104,7 @@ export default class SearchSheet extends Component<Signature> {
         <div class='buttons'>
           <Button {{on 'click' this.onCancel}}>Cancel</Button>
           <Button
+            {{on 'click' this.onSearch}}
             @disabled={{this.isSearchDisabled}}
             @kind='primary'
           >Search</Button>

@@ -8,9 +8,7 @@ import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import type CardService from '../services/card-service';
 // import getValueFromWeakMap from '../helpers/get-value-from-weakmap';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import {
-  Modal,
-} from '@cardstack/boxel-ui';
+import { Modal } from '@cardstack/boxel-ui';
 import SearchSheet, {
   SearchSheetMode,
 } from '@cardstack/host/components/search-sheet';
@@ -92,6 +90,32 @@ export default class OperatorMode extends Component<Signature> {
     if (this.searchSheetMode == SearchSheetMode.Closed) {
       this.searchSheetMode = SearchSheetMode.SearchPrompt;
     }
+  }
+
+  @action async onSearch(searchString: string) {
+    console.log(searchString);
+    let topOfStack: StackItem = this.stack[this.stack.length - 1];
+    let card = topOfStack.card;
+    let fields = await this.cardService.getFields(card);
+    for (let fieldName of Object.keys(fields)) {
+      console.log(fieldName, (card as any)[fieldName]);
+    }
+    console.log(fields);
+    let cardData = this.cardService.api.serializeCard(card);
+    const response = await fetch('http://localhost:8000/contentChange', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      duplex: 'half',
+      body: JSON.stringify({
+        userChangeRequest: searchString,
+        card: cardData,
+      }),
+    });
+    const data = await response.json();
+    console.log(data, data.data);
+    await this.setFieldValues(card, data.data);
   }
 
   @action onCancelSearchSheet() {
@@ -239,6 +263,30 @@ export default class OperatorMode extends Component<Signature> {
     },
   };
 
+  private async setFieldValues(card: Card, values: StringMap) {
+    let fields = await this.cardService.getFields(card);
+    for (let fieldName of Object.keys(fields)) {
+      let field = fields[fieldName];
+      if (fieldName === 'id') continue;
+      try {
+        if (
+          (field.fieldType === 'contains' ||
+            field.fieldType === 'containsMany') &&
+          !(await this.cardService.isPrimitive(field.card))
+        ) {
+          // This does not work
+          console.log('Nested change', field.card, values[fieldName]);
+          await this.setFieldValues(field.card, values[fieldName]);
+        } else {
+          console.log('Setting', fieldName, values[fieldName], 'on card', card);
+          (card as any)[fieldName] = values[fieldName];
+        }
+      } catch (e) {
+        console.log(e);
+      }
+    }
+  }
+
   private async rollbackCardFieldValues(card: Card) {
     let fields = await this.cardService.getFields(card);
     for (let fieldName of Object.keys(fields)) {
@@ -363,6 +411,7 @@ export default class OperatorMode extends Component<Signature> {
         @mode={{this.searchSheetMode}}
         @onCancel={{this.onCancelSearchSheet}}
         @onFocus={{this.onFocusSearchInput}}
+        @onSearch={{this.onSearch}}
       />
     </Modal>
     <style>

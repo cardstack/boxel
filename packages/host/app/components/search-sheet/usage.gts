@@ -21,6 +21,8 @@ export default class SearchSheetUsage extends Component {
     this.mode = SearchSheetMode.Closed;
   }
 
+  @action onSearch() {}
+
   <template>
     <FreestyleUsage @name='SearchSheet'>
       <:description>
@@ -32,6 +34,7 @@ export default class SearchSheetUsage extends Component {
             @mode={{this.mode}}
             @onCancel={{this.onCancel}}
             @onFocus={{this.onFocus}}
+            @onSearch={{this.onSearch}}
           />
         </div>
       </:example>
@@ -47,6 +50,10 @@ export default class SearchSheetUsage extends Component {
         <Args.Action
           @name='onCancel'
           @description='Action to call when the user cancels search'
+        />
+        <Args.Action
+          @name='onSearch'
+          @description='Action to call when the user searches'
         />
         <Args.Action
           @name='onFocus'
