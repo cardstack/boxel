@@ -109,8 +109,8 @@ export default class SearchSheet extends Component<Signature> {
             <Label>Recent</Label>
             <div class='search-sheet-content__recent-access__body'>
               <div class='search-sheet-content__recent-access__cards'>
-                {{#each this.reverseRecentCards as |card| }}
-                  <SearchResult @card={{card}}/>
+                {{#each this.reverseRecentCards as |card i|}}
+                  <SearchResult @card={{card}} @index={{i}}/>
                 {{/each}}
               </div>
             </div>
