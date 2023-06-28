@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import { restartableTask } from 'ember-concurrency';
 import type RouterService from '@ember/routing/router-service';
-import type LoaderService from '../services/loader-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';

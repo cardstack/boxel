@@ -5,7 +5,7 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { directory } from '../resources/directory';
+import { directory } from '@cardstack/host/resources/directory';
 import { concat } from '@ember/helper';
 
 interface Args {

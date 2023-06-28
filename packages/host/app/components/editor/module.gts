@@ -4,7 +4,7 @@ import ImportModule from './import-module';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
-import type { FileResource } from '../resources/file';
+import type { FileResource } from '@cardstack/host/resources/file';
 import type { Card } from 'https://cardstack.com/base/card-api';
 
 interface Signature {

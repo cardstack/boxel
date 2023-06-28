@@ -4,7 +4,7 @@ import { setupRenderingTest } from 'ember-qunit';
 import { baseRealm, cardTypeDisplayName } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 import { Loader } from '@cardstack/runtime-common/loader';
-import OperatorMode from '@cardstack/host/components/operator-mode';
+import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import { Card } from 'https://cardstack.com/base/card-api';
 import { renderComponent } from '../../helpers/render-component';
