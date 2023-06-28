@@ -1,7 +1,6 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { Card, Format } from 'https://cardstack.com/base/card-api';
-import { TrackedArray } from 'tracked-built-ins';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { trackedFunction } from 'ember-resources/util/function';
