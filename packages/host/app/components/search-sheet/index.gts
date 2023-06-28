@@ -2,6 +2,7 @@ import Component from '@glimmer/component';
 import SearchInput, { SearchInputBottomTreatment } from './search-input';
 import { Button } from '@cardstack/boxel-ui';
 import { on } from '@ember/modifier';
+//@ts-ignore cached not available yet in definitely typed
 import { cached, tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
