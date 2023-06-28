@@ -102,7 +102,6 @@ export default class SearchSheet extends Component<Signature> {
         @value={{this.searchInputValue}}
         @onFocus={{@onFocus}}
         @onInput={{fn (mut this.searchInputValue)}}
-        data-test-search-sheet
       />
       <div class='search-sheet-content'>
         {{#if (gt @recentCards.length 0)}}
@@ -123,7 +122,7 @@ export default class SearchSheet extends Component<Signature> {
           {{! Enter Card URL: .... }}
         </div>
         <div class='buttons'>
-          <Button {{on 'click' this.onCancel}}>Cancel</Button>
+          <Button {{on 'click' this.onCancel}} data-test-search-sheet-cancel-button>Cancel</Button>
           <Button
             @disabled={{this.isSearchDisabled}}
             @kind='primary'
