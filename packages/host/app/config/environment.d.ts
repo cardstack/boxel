@@ -17,4 +17,5 @@ declare const config: {
   hostsOwnAssets: boolean;
   realmsServed?: string[];
   logLevels: string;
+  resolvedOwnRealmURL: string;
 };
