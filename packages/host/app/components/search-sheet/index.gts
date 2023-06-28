@@ -9,7 +9,6 @@ import SearchResult from './search-result';
 import { Label } from '@cardstack/boxel-ui';
 import { Card } from 'https://cardstack.com/base/card-api';
 import { gt } from '../../helpers/truth-helpers';
-import { reverse } from '../../helpers/array-helpers';
 
 export enum SearchSheetMode {
   Closed = 'closed',
@@ -80,6 +79,14 @@ export default class SearchSheet extends Component<Signature> {
     this.args.onCancel();
   }
 
+  get reverseRecentCards() {
+    // Clone the array first before reversing it.
+    // To avoid this error: You attempted to update `_value` on `TrackedStorageImpl`, 
+    // but it had already been used previously in the same computation
+    const recentCardsCopy = [...this.args.recentCards];
+    return recentCardsCopy.reverse();
+  }
+
   <template>
     <div class='search-sheet {{this.sheetSize}}'>
       <div class='header'>
@@ -103,7 +110,7 @@ export default class SearchSheet extends Component<Signature> {
             <Label>Recent</Label>
             <div class='search-sheet-content__recent-access__body'>
               <div class='search-sheet-content__recent-access__cards'>
-                {{#each (reverse @recentCards) as |card| }}
+                {{#each this.reverseRecentCards as |card| }}
                   <SearchResult @card={{card}}/>
                 {{/each}}
               </div>
