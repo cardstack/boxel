@@ -21,6 +21,7 @@ import {
 import { Realm } from '@cardstack/runtime-common/realm';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import percySnapshot from '@percy/ember';
 
 function getMonacoContent(): string {
   return (window as any).monaco.editor.getModels()[0].getValue();
@@ -190,6 +191,9 @@ module('Acceptance | basic tests', function (hooks) {
     await waitFor('[data-test-file="Person/1.json"]');
 
     await click('[data-test-file="Person/1.json"]');
+
+    await percySnapshot(assert);
+
     assert.strictEqual(
       currentURL(),
       '/code?openDirs=Person%2F&path=Person%2F1.json'
@@ -222,6 +226,8 @@ module('Acceptance | basic tests', function (hooks) {
     await waitFor('[data-test-file]');
     await click('[data-test-file="person.gts"]');
     await waitFor('[data-test-card-id]');
+
+    await percySnapshot(assert);
 
     assert.strictEqual(currentURL(), '/code?path=person.gts');
     assert

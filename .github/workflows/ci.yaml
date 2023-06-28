@@ -83,7 +83,9 @@ jobs:
         run: pnpm start:all &
         working-directory: packages/realm-server
       - name: host test suite
-        run: pnpm test
+        run: pnpm test:percy
+        env:
+          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
         working-directory: packages/host
   matrix-client-test:
     name: Matrix Client Tests
