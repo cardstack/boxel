@@ -83,7 +83,7 @@ jobs:
         run: pnpm start:all &
         working-directory: packages/realm-server
       - name: host test suite
-        run: pnpm test:percy
+        run: pnpm test-with-percy
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
         working-directory: packages/host
