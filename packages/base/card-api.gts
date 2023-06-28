@@ -957,7 +957,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     let fieldInstance = await createFromSerialized(
       json.data,
       json,
-      relativeTo,
+      new URL(json.data.id),
       {
         loader,
         identityContext,
@@ -1296,7 +1296,7 @@ class LinksToMany<FieldT extends CardConstructor>
         let fieldInstance = await createFromSerialized(
           json.data,
           json,
-          undefined,
+          new URL(json.data.id),
           {
             loader,
             identityContext,

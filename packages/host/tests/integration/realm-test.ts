@@ -331,7 +331,7 @@ module('Integration | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4202/test/person',
+              module: './person',
               name: 'Person',
             },
             realmInfo: {
@@ -2376,7 +2376,7 @@ module('Integration | realm', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'http://localhost:4202/test/person',
+              module: './person',
               name: 'Person',
             },
             realmInfo: { ...testRealmInfo, name: 'Test Workspace' },
