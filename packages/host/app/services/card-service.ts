@@ -117,9 +117,11 @@ export default class CardService extends Service {
     await this.apiModule.loaded;
     let doc = await this.serializeCard(card, {
       includeComputeds: true,
-      maybeRelativeURL: null, // forces URL's to be absolute
+      maybeRelativeURL: null, // forces URL's to be absolute.
     });
     let isSaved = this.api.isSaved(card);
+    // send doc over the wire with absolute URL's. The realm server will convert
+    // to relative URL's as it serializes the cards
     let json = await this.saveCardDocument(
       doc,
       card.id ? new URL(card.id) : undefined

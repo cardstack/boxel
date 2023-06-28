@@ -855,7 +855,8 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     if (cachedInstance) {
       return cachedInstance as CardInstanceType<CardT>;
     }
-    let resource = resourceFrom(doc, value.links.self);
+    let resourceId = new URL(value.links.self, relativeTo).href;
+    let resource = resourceFrom(doc, resourceId);
     if (!resource) {
       return {
         type: 'not-loaded',
@@ -1155,7 +1156,8 @@ class LinksToMany<FieldT extends CardConstructor>
         if (cachedInstance) {
           return cachedInstance;
         }
-        let resource = resourceFrom(doc, value.links.self);
+        let resourceId = new URL(value.links.self, relativeTo).href;
+        let resource = resourceFrom(doc, resourceId);
         if (!resource) {
           return {
             type: 'not-loaded',
