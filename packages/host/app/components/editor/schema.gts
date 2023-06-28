@@ -7,12 +7,12 @@ import {
   moduleFrom,
 } from '@cardstack/runtime-common';
 import { isCardRef, type CardRef } from '@cardstack/runtime-common/card-ref';
-import { getCardType, type Type } from '../resources/card-type';
+import { getCardType, type Type } from '@cardstack/host/resources/card-type';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { eq } from '../helpers/truth-helpers';
+import { eq } from '@cardstack/host/helpers/truth-helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 //@ts-ignore cached not available yet in definitely typed
 import { cached, tracked } from '@glimmer/tracking';
@@ -22,10 +22,10 @@ import { hash } from '@ember/helper';
 import CatalogEntryEditor from './catalog-entry-editor';
 import { restartableTask } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
-import type LoaderService from '../services/loader-service';
-import type CardService from '../services/card-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
+import type CardService from '@cardstack/host/services/card-service';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
-import type { FileResource } from '../resources/file';
+import type { FileResource } from '@cardstack/host/resources/file';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import type { Card, FieldType } from 'https://cardstack.com/base/card-api';
 import {
@@ -111,7 +111,7 @@ export default class Schema extends Component<Signature> {
             />
           </FieldContainer>
           <FieldContainer @label='Field Type:'>
-            <ul class='schema__new-field-type'>
+            <ul class='new-field-type'>
               <li>
                 <label>
                   <input
@@ -184,6 +184,27 @@ export default class Schema extends Component<Signature> {
       </CardContainer>
       <CatalogEntryEditor @ref={{this.ref}} />
     {{/if}}
+    <style>
+      .schema {
+        display: grid;
+        gap: var(--boxel-sp);
+        padding: var(--boxel-sp);
+      }
+
+      .new-field-type {
+        list-style-type: none;
+        padding-left: 0;
+        margin: 0;
+      }
+
+      .add-new-field {
+        border: var(--boxel-border);
+      }
+
+      .add-new-field > * + * {
+        margin-top: var(--boxel-sp);
+      }
+    </style>
   </template>
 
   @service declare loaderService: LoaderService;

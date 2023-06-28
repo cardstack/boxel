@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Friends from ../friends",
+      "description": "Catalog entry for Friends from ../friends",
+      "ref": {
+        "module": "../friends",
+        "name": "Friends"
+      },
+      "demo": {
+        "firstName": "Mike Wazowski"
+      }
+    },
+    "relationships": {
+      "demo.friends.0": {
+        "links": {
+          "self": "../Friend/2"
+        }
+      },
+      "demo.friends.1": {
+        "links": {
+          "self": "../Friend/1"
+        }
+      }
+    },
+    "meta": {
+      "fields": {
+        "demo": {
+          "adoptsFrom": {
+            "module": "../friends",
+            "name": "Friends"
+          }
+        }
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}

@@ -8,6 +8,7 @@ import type {
   RoomCard,
   MatrixEvent as DiscreteMatrixEvent,
 } from 'https://cardstack.com/base/room';
+import type { RoomObjectiveCard } from 'https://cardstack.com/base/room-objective';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { type LooseCardResource, baseRealm } from '@cardstack/runtime-common';
 import type * as MatrixSDK from 'matrix-js-sdk';
@@ -33,6 +34,7 @@ export type Event = Partial<IEvent>;
 
 export interface Context {
   roomCards: Map<string, Promise<RoomCard>>;
+  roomObjectives: Map<string, RoomObjectiveCard>;
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[];
@@ -88,5 +90,20 @@ export async function addRoomEvent(context: Context, event: Event) {
       ...(resolvedRoomCard.events ?? []),
       event as unknown as DiscreteMatrixEvent,
     ];
+  }
+}
+
+// our reactive system doesn't cascade "up" through our consumers. meaning that
+// when a card's contained field is another card and the interior card's field
+// changes, the consuming card's computeds will not automatically recompute. To
+// work around that, we are performing the assignment of the interior card to
+// the consuming card again which will trigger the consuming card's computeds to
+// pick up the interior card's updated fields. In this case the consuming card is
+// the RoomObjectiveCard and the interior card is the RoomCard.
+export async function recomputeRoomObjective(context: Context, roomId: string) {
+  let roomCard = await context.roomCards.get(roomId);
+  let objective = context.roomObjectives.get(roomId);
+  if (objective && roomCard) {
+    objective.room = roomCard;
   }
 }
