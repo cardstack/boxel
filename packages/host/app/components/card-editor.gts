@@ -29,7 +29,7 @@ export default class CardEditor extends Component<Signature> {
       @setFormat={{this.setFormat}}
     />
     <Preview @format={{this.format}} @card={{@card}} />
-    <div class='card-editor__buttons'>
+    <div class='buttons'>
       {{! @glint-ignore glint doesn't know about EC task properties }}
       {{#if this.write.last.isRunning}}
         <span data-test-saving>Saving...</span>
@@ -49,6 +49,11 @@ export default class CardEditor extends Component<Signature> {
         >Save</Button>
       {{/if}}
     </div>
+    <style>
+      .buttons {
+        text-align: right;
+      }
+    </style>
   </template>
 
   formats = formats;

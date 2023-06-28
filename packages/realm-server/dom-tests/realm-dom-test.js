@@ -77,7 +77,7 @@ QUnit.module(
     });
 
     test('renders file tree', async function (assert) {
-      await boot(`${testRealmURL}/code`, '.directory-level');
+      await boot(`${testRealmURL}/code`, '[data-test-directory-level]');
       assert.strictEqual(testDocument().location.href, `${testRealmURL}/code`);
       let nav = querySelector('.main nav');
       assert.ok(nav, '<nav> element exists');
@@ -137,7 +137,7 @@ QUnit.module(
     });
 
     test('can change routes', async function (assert) {
-      await boot(`${testRealmURL}/code`, '.directory-level');
+      await boot(`${testRealmURL}/code`, '[data-test-directory-level]');
       let files = querySelectorAll('.main nav .file');
       let instance = [...files].find(
         (file) => cleanWhiteSpace(file.textContent) === 'person-1.json'

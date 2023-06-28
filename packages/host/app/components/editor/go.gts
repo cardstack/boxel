@@ -13,18 +13,18 @@ import {
   logger,
 } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
-import type LoaderService from '../services/loader-service';
-import type CardService from '../services/card-service';
-import type { FileResource } from '../resources/file';
-import CardEditor from './card-editor';
+import type LoaderService from '@cardstack/host/services/loader-service';
+import type CardService from '@cardstack/host/services/card-service';
+import type { FileResource } from '@cardstack/host/resources/file';
+import CardEditor from '@cardstack/host/components/card-editor';
 import Module from './module';
 import FileTree from './file-tree';
 import {
   getLangFromFileExtension,
   extendMonacoLanguage,
   languageConfigs,
-} from '../utils/editor-language';
-import monacoModifier from '../modifiers/monaco';
+} from '@cardstack/host/utils/editor-language';
+import monacoModifier from '@cardstack/host/modifiers/monaco';
 import type * as monaco from 'monaco-editor';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
@@ -45,7 +45,7 @@ interface Signature {
 export default class Go extends Component<Signature> {
   <template>
     <div class='main'>
-      <div class='main__column'>
+      <div class='main-column'>
         <FileTree
           @url={{ownRealmURL}}
           @openFile={{@path}}
@@ -53,8 +53,8 @@ export default class Go extends Component<Signature> {
         />
       </div>
       {{#if this.openFile}}
-        <div class='editor__column'>
-          <menu class='editor__menu'>
+        <div class='editor-column'>
+          <menu class='editor-menu'>
             <li>
               {{#if this.contentChangedTask.isRunning}}
                 <span data-test-saving>⟳ Saving…</span>
@@ -72,7 +72,7 @@ export default class Go extends Component<Signature> {
             {{/if}}
           </menu>
           <div
-            class='editor__container'
+            class='editor-container'
             data-test-editor
             {{monacoModifier
               content=this.openFile.content
@@ -83,7 +83,7 @@ export default class Go extends Component<Signature> {
           >
           </div>
         </div>
-        <div class='main__column'>
+        <div class='main-column'>
           {{#if (isRunnable this.openFile.name)}}
             <Module @file={{this.openFile}} />
           {{else if this.openFileCardJSON}}
@@ -102,6 +102,38 @@ export default class Go extends Component<Signature> {
         </div>
       {{/if}}
     </div>
+    <style>
+      .main {
+          position: relative;
+          display: grid;
+          grid-template-columns: 15rem 1fr 1fr;
+          min-height: 100vh;
+        }
+
+        .main-column {
+          padding: var(--boxel-sp);
+        }
+
+        .main-column > * + * {
+          margin-top: var(--boxel-sp);
+        }
+
+        .editor-column {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .editor-menu {
+          list-style-type: none;
+          padding: 0;
+          display: flex;
+          gap: var(--boxel-sp-sm);
+        }
+
+        .editor-container {
+          flex: 1;
+        }
+    </style>
   </template>
 
   @service declare loaderService: LoaderService;
@@ -248,6 +280,6 @@ function isRunnable(filename: string): boolean {
 
 declare module '@glint/environment-ember-loose/registry' {
   export default interface Registry {
-    Go: typeof Go;
+    'Editor::Go': typeof Go;
   }
 }

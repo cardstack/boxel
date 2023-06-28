@@ -12,9 +12,9 @@ import { LinkTo } from '@ember/routing';
 import { service } from '@ember/service';
 //@ts-ignore glint does not think this is consumed-but it is consumed in the template
 import { hash } from '@ember/helper';
-import { getSearchResults } from '../resources/search';
-import type CardService from '../services/card-service';
-import CardEditor from './card-editor';
+import { getSearchResults } from '@cardstack/host/resources/search';
+import type CardService from '@cardstack/host/services/card-service';
+import CardEditor from '@cardstack/host/components/card-editor';
 import { type Card } from 'https://cardstack.com/base/card-api';
 import { Button, CardContainer } from '@cardstack/boxel-ui';
 
@@ -70,6 +70,13 @@ export default class CatalogEntryEditor extends Component<Signature> {
         </Button>
       {{/if}}
     </div>
+    <style>
+      .catalog-entry-editor {
+        display: grid;
+        gap: var(--boxel-sp);
+        padding: var(--boxel-sp);
+      }
+    </style>
   </template>
 
   @service declare cardService: CardService;

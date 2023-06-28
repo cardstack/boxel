@@ -5,7 +5,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 //@ts-expect-error the types don't recognize the cached export
 import { tracked, cached } from '@glimmer/tracking';
-import { not, eq } from '../helpers/truth-helpers';
+import { not, eq } from '@cardstack/host/helpers/truth-helpers';
 import { restartableTask, timeout } from 'ember-concurrency';
 import {
   BoxelHeader,
@@ -15,13 +15,13 @@ import {
   Button,
   FieldContainer,
 } from '@cardstack/boxel-ui';
-import { isMatrixError } from '../lib/matrix-utils';
+import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import { LinkTo } from '@ember/routing';
-import { eventDebounceMs } from '../lib/matrix-utils';
-import { getRoomCard, RoomCardResource } from '../resources/room-card';
+import { eventDebounceMs } from '@cardstack/host/lib/matrix-utils';
+import { getRoomCard, RoomCardResource } from '@cardstack/host/resources/room-card';
 import { TrackedMap } from 'tracked-built-ins';
 import RouterService from '@ember/routing/router-service';
-import type MatrixService from '../services/matrix-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import type { RoomCard, RoomMemberCard } from 'https://cardstack.com/base/room';
 
 const TRUE = true;
@@ -76,14 +76,14 @@ export default class RoomsManager extends Component {
     {{#if this.loadRooms.isRunning}}
       <LoadingIndicator />
     {{else}}
-      <div class='room-manager__room-list' data-test-invites-list>
+      <div class='room-list' data-test-invites-list>
         <h3>Invites</h3>
         {{#each this.sortedInvites as |invite|}}
           <div
-            class='room-manager__room'
+            class='room'
             data-test-invited-room={{invite.room.name}}
           >
-            <span class='room-manager__room__item'>
+            <span class='room-item'>
               {{invite.room.name}}
               (from:
               <span
@@ -106,14 +106,14 @@ export default class RoomsManager extends Component {
           (No invites)
         {{/each}}
       </div>
-      <div class='room-manager__room-list' data-test-rooms-list>
+      <div class='room-list' data-test-rooms-list>
         <h3>Rooms</h3>
         {{#each this.sortedJoinedRooms as |joined|}}
           <div
-            class='room-manager__room'
+            class='room'
             data-test-joined-room={{joined.room.name}}
           >
-            <span class='room-manager__room__item'>
+            <span class='room-item'>
               <LinkTo
                 class='link'
                 data-test-enter-room={{joined.room.name}}
@@ -136,6 +136,25 @@ export default class RoomsManager extends Component {
         {{/each}}
       </div>
     {{/if}}
+    <style>
+      .room-list {
+        padding: 0 var(--boxel-sp);
+        margin: var(--boxel-sp) 0;
+      }
+
+      .room {
+        margin-top: var(--boxel-sp-sm);
+      }
+
+      .room-item {
+        display: inline-block;
+        min-width: 30rem;
+      }
+
+      .room button {
+        margin-left: var(--boxel-sp-xs);
+      }
+    </style>
   </template>
 
   @service private declare matrixService: MatrixService;
@@ -312,6 +331,6 @@ export default class RoomsManager extends Component {
 
 declare module '@glint/environment-ember-loose/registry' {
   export default interface RoomsManager {
-    RoomsManager: typeof RoomsManager;
+    'Matrix::RoomsManager': typeof RoomsManager;
   }
 }

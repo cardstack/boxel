@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { eq } from '../helpers/truth-helpers';
+import { eq } from '@cardstack/host/helpers/truth-helpers';
 import { tracked } from '@glimmer/tracking';
 import { type IAuthData } from 'matrix-js-sdk';
 import { restartableTask } from 'ember-concurrency';
@@ -14,9 +14,9 @@ import {
   Button,
   FieldContainer,
 } from '@cardstack/boxel-ui';
-import { isMatrixError } from '../lib/matrix-utils';
+import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import difference from 'lodash/difference';
-import type MatrixService from '../services/matrix-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 
 const TRUE = true;
 const MATRIX_REGISTRATION_TYPES = {
@@ -362,6 +362,6 @@ function isRegistrationFlows(
 
 declare module '@glint/environment-ember-loose/registry' {
   export default interface RegisterUser {
-    RegisterUser: typeof RegisterUser;
+    'Matrix::RegisterUser': typeof RegisterUser;
   }
 }

@@ -4,7 +4,7 @@ import { setupRenderingTest } from 'ember-qunit';
 import { baseRealm, cardTypeDisplayName } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 import { Loader } from '@cardstack/runtime-common/loader';
-import OperatorMode from '@cardstack/host/components/operator-mode';
+import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import { Card } from 'https://cardstack.com/base/card-api';
 import { renderComponent } from '../../helpers/render-component';
@@ -609,6 +609,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
     await click(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
+    await click('[data-test-card-catalog-go-button]');
     assert
       .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
       .isVisible();
@@ -670,6 +671,7 @@ module('Integration | operator-mode', function (hooks) {
     await click(
       `[data-test-select="${testRealmURL}CatalogEntry/publishing-packet"]`
     );
+    await click('[data-test-card-catalog-go-button]');
     await waitFor('[data-test-stack-card-index="1"]');
     assert
       .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
@@ -732,6 +734,7 @@ module('Integration | operator-mode', function (hooks) {
     await click(
       `[data-test-select="${testRealmURL}CatalogEntry/publishing-packet"]`
     );
+    await click('[data-test-card-catalog-go-button]');
     await waitFor('[data-test-stack-card-index="1"]');
     assert
       .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
@@ -826,6 +829,7 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-choose-card]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
     await click(`[data-test-select="${testRealmURL}Author/2"]`);
+    await click('[data-test-card-catalog-go-button]');
 
     await waitFor(`.operator-mode [data-test-author="R2-D2"]`);
     assert.dom('[data-test-field="authorBio"]').containsText('R2-D2');
@@ -852,6 +856,7 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-choose-card]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
     await click(`[data-test-select="${testRealmURL}Author/2"]`);
+    await click('[data-test-card-catalog-go-button]');
 
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
     assert.dom('[data-test-field="authorBio"]').containsText('R2-D2');
@@ -957,6 +962,7 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
     await click(`[data-test-select="${testRealmURL}Pet/mango"]`);
+    await click('[data-test-card-catalog-go-button]');
 
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
     assert
@@ -983,6 +989,7 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
     await click(`[data-test-select="${testRealmURL}Pet/jackie"]`);
+    await click('[data-test-card-catalog-go-button]');
 
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
     assert.dom('[data-test-field="friends"]').containsText('Jackie');
@@ -1013,6 +1020,7 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
     await click(`[data-test-select="${testRealmURL}Pet/mango"]`);
+    await click('[data-test-card-catalog-go-button]');
 
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
     assert.dom('[data-test-field="friends"]').containsText('Mango');

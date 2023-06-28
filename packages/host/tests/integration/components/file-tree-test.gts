@@ -15,7 +15,7 @@ import {
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import CardPrerender from '@cardstack/host/components/card-prerender';
-import FileTree from '@cardstack/host/components/file-tree';
+import FileTree from '@cardstack/host/components/editor/file-tree';
 import { waitUntil, waitFor, fillIn, click } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
@@ -166,6 +166,7 @@ module('Integration | file-tree', function (hooks) {
       .doesNotExist('primitive field cards are not displayed');
 
     await click(`[data-test-select="${testRealmURL}person-entry"]`);
+    await click('[data-test-card-catalog-go-button]');
     await waitFor(`[data-test-create-new-card="Person"]`);
     await waitFor(`[data-test-field="firstName"] input`);
 

@@ -1,9 +1,9 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { Card, CardContext } from 'https://cardstack.com/base/card-api';
-import Preview from './preview';
+import Preview from '@cardstack/host/components/preview';
 import { fn, array } from '@ember/helper';
-import type CardService from '../services/card-service';
+import type CardService from '@cardstack/host/services/card-service';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import optional from '@cardstack/boxel-ui/helpers/optional';
 import cn from '@cardstack/boxel-ui/helpers/cn';
@@ -17,7 +17,7 @@ import {
   type Actions,
   cardTypeDisplayName,
 } from '@cardstack/runtime-common';
-import type LoaderService from '../services/loader-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { TrackedArray } from 'tracked-built-ins';
@@ -27,8 +27,8 @@ import { SafeString } from '@ember/template';
 import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
 import BoxelMenu from '@cardstack/boxel-ui/components/menu';
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
-import { StackItem } from '@cardstack/host/components/operator-mode';
-import OperatorModeOverlays from '@cardstack/host/components/operator-mode-overlays';
+import { StackItem } from '@cardstack/host/components/operator-mode/container';
+import OperatorModeOverlays from '@cardstack/host/components/operator-mode/overlays';
 
 interface Signature {
   Args: {
@@ -101,8 +101,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
   <template>
     <div
       class={{cn
-      'operator-mode-stack-item'
-      operator-mode-stack-item__buried=(@isBuried @index)
+      'item'
+      buried=(@isBuried @index)
       }}
       data-test-stack-card-index={{@index}}
       data-test-stack-card={{@item.card.id}}
@@ -110,13 +110,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
     >
       <CardContainer
         class={{cn
-          'operator-mode-stack-item__card'
-          operator-mode-stack-item__card--edit=(eq @item.format 'edit')
+          'card'
+          edit=(eq @item.format 'edit')
         }}
       >
         <Header
           @title={{cardTypeDisplayName @item.card}}
-          class='operator-mode-stack-item__card__header'
+          class='header'
           {{on
           'click'
           (optional
@@ -177,7 +177,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             />
           </:actions>
         </Header>
-        <div class='operator-mode-stack-item__card__content'>
+        <div class='content'>
           <Preview
             @card={{@item.card}}
             @format={{@item.format}}
@@ -189,11 +189,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
           />
         </div>
         {{#if (eq @item.format 'edit')}}
-          <footer class='operator-mode-stack-item__card__footer'>
+          <footer class='footer'>
             <Button
               @kind='secondary-light'
               @size='tall'
-              class='operator-mode-stack-item__card__footer-button'
+              class='footer-button'
               {{on 'click' (fn @cancel @item)}}
               aria-label='Cancel'
               data-test-cancel-button
@@ -203,7 +203,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             <Button
               @kind='primary'
               @size='tall'
-              class='operator-mode-stack-item__card__footer-button'
+              class='footer-button'
               {{on 'click' (fn @save @item)}}
               aria-label='Save'
               data-test-save-button
@@ -215,13 +215,79 @@ export default class OperatorModeStackItem extends Component<Signature> {
       </CardContainer>
     </div>
     <style>
-      .operator-mode-stack-item__buried .operator-mode-stack-item__card {
-      background-color: var(--boxel-200); grid-template-rows:
-      var(--buried-operator-mode-header-height) auto; }
-      .operator-mode-stack-item__buried .operator-mode-stack-item__card__header
-      .icon-button { display: none; } .operator-mode-stack-item__buried
-      .operator-mode-stack-item__card__header { cursor: pointer; font: 500
-      var(--boxel-font-sm); padding: 0 var(--boxel-sp-xs); }
+      :global(:root) {
+        --stack-card-footer-height: 5rem;
+        --buried-operator-mode-header-height: 2.5rem;
+      }
+
+      .item {
+        justify-self: center;
+        position: absolute;
+        width: 89%;
+        height: inherit;
+        z-index: 0;
+        overflow: hidden;
+        pointer-events: none;
+      }
+
+      .card {
+        position: relative;
+        height: 100%;
+        display: grid;
+        grid-template-rows: 7.5rem auto;
+        box-shadow: 0 15px 30px 0 rgb(0 0 0 / 35%);
+        pointer-events: auto;
+      }
+
+      .content {
+        overflow: auto;
+      }
+
+      .content > .boxel-card-container.boundaries {
+        box-shadow: none;
+      }
+
+      .content > .boxel-card-container > header {
+        display: none;
+      }
+
+      .edit .content {
+        margin-bottom: var(--stack-card-footer-height);
+      }
+
+      .footer {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        display: flex;
+        justify-content: flex-end;
+        padding: var(--boxel-sp);
+        width: 100%;
+        background: white;
+        height: var(--stack-card-footer-height);
+        border-top: 1px solid var(--boxel-300);
+        border-bottom-left-radius: var(--boxel-border-radius);
+        border-bottom-right-radius: var(--boxel-border-radius);
+      }
+
+      .footer-button + .footer-button {
+        margin-left: var(--boxel-sp-xs);
+      }
+
+      .buried .card {
+        background-color: var(--boxel-200);
+        grid-template-rows: var(--buried-operator-mode-header-height) auto;
+      }
+
+      .buried .header .icon-button {
+        display: none;
+      }
+
+      .buried .header {
+        cursor: pointer;
+        font: 500 var(--boxel-font-sm);
+        padding: 0 var(--boxel-sp-xs);
+      }
     </style>
   </template>
 }

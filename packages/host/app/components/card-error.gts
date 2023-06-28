@@ -9,19 +9,27 @@ interface Signature {
 
 export default class CardError extends Component<Signature> {
   <template>
-    {{! template-lint-disable no-inline-styles }}
-    <div data-card-error style='margin: 5em'>
+    <div data-card-error class='container'>
       {{#if @isIndexCard}}
         <b>Cannot load index card.</b>
       {{else}}
         <b>Cannot load card.</b>
       {{/if}}
-      <pre
-        style='overflow-x: auto; white-space: pre-wrap; word-wrap: break-word;'
-      >
+      <pre class='error'>
         {{@message}}
       </pre>
     </div>
+    <style>
+      .container {
+        margin: 5em;
+      }
+
+      .error {
+        overflow-x: auto;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+      }
+    </style>
   </template>
 }
 

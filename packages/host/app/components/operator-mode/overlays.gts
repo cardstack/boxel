@@ -2,12 +2,8 @@ import Component from '@glimmer/component';
 import { fn } from '@ember/helper';
 import { Card } from 'https://cardstack.com/base/card-api';
 import { on } from '@ember/modifier';
-import {
-  StackItem,
-} from '@cardstack/host/components/operator-mode';
-import {
-  RenderedLinksToCard,
-} from '@cardstack/host/components/operator-mode-stack-item';
+import { StackItem } from './container';
+import { RenderedLinksToCard } from './stack-item';
 import { action } from '@ember/object';
 import { velcro } from 'ember-velcro';
 
@@ -26,13 +22,20 @@ export default class OperatorModeOverlays extends Component<Signature> {
     {{#each @renderedLinksToCards as |renderedCard|}}
       <button
         {{on 'click' (fn this.addToStack renderedCard.card)}}
-        class='operator-mode-overlayed-button'
+        class='button'
         data-test-cardstack-operator-mode-overlay-button
         {{velcro renderedCard.element middleware=(Array this.offset)}}
       >
         Open
       </button>
     {{/each}}
+    <style>
+      .button {
+        position: absolute;
+        border: none;
+        width: auto;
+      }
+    </style>
   </template>
 
   @action addToStack(card: Card) {

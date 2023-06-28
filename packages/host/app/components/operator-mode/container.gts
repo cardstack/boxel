@@ -5,8 +5,7 @@ import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { trackedFunction } from 'ember-resources/util/function';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
-import type CardService from '../services/card-service';
-// import getValueFromWeakMap from '../helpers/get-value-from-weakmap';
+import type CardService from '@cardstack/host/services/card-service';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import {
   Modal,
@@ -23,17 +22,17 @@ import {
   type CardRef,
   LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-import type LoaderService from '../services/loader-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { htmlSafe, SafeString } from '@ember/template';
 import { registerDestructor } from '@ember/destroyable';
 import type { Query } from '@cardstack/runtime-common/query';
-import { getSearchResults, type Search } from '../resources/search';
+import { getSearchResults, type Search } from '@cardstack/host/resources/search';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import perform from 'ember-concurrency/helpers/perform';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import OperatorModeStackItem from '@cardstack/host/components/operator-mode-stack-item';
+import OperatorModeStackItem from './stack-item';
 
 interface Signature {
   Args: {
@@ -56,7 +55,7 @@ export type StackItem = {
   isLinkedCard?: boolean;
 };
 
-export default class OperatorMode extends Component<Signature> {
+export default class OperatorModeContainer extends Component<Signature> {
   //A variable to store value of card field
   //before in edit mode.
   cardFieldValues: WeakMap<Card, Map<string, any>> = new WeakMap<
@@ -326,13 +325,13 @@ export default class OperatorMode extends Component<Signature> {
       <CardCatalogModal />
 
       {{#if (eq this.stack.length 0)}}
-        <div class='operator-mode__no-cards'>
-          <p class='operator-mode__no-cards__add-card-title'>Add a card to get
+        <div class='no-cards'>
+          <p class='add-card-title'>Add a card to get
             started</p>
           {{! Cannot find an svg icon with plus in the box
           that we can fill the color of the plus and the box. }}
           <button
-            class='operator-mode__no-cards__add-card-button icon-button'
+            class='add-card-button icon-button'
             {{on 'click' (fn (perform this.addCard))}}
             data-test-add-card-button
           >
@@ -340,7 +339,7 @@ export default class OperatorMode extends Component<Signature> {
           </button>
         </div>
       {{else}}
-        <div class='operator-mode-card-stack'>
+        <div class='card-stack' data-test-card-stack>
           {{#each this.stack as |item i|}}
             <OperatorModeStackItem
               @item={{item}}
@@ -365,11 +364,60 @@ export default class OperatorMode extends Component<Signature> {
         @onFocus={{this.onFocusSearchInput}}
       />
     </Modal>
+    <style>
+      :global(:root) {
+        --operator-mode-bg-color: #686283;
+      }
+
+      .operator-mode > div {
+        align-items: flex-start;
+      }
+  
+      .no-cards {
+        height: calc(100% - var(--search-sheet-closed-height));
+        width: 100%;
+        max-width: 50rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .add-card-title {
+        color: var(--boxel-light);
+        font: var(--boxel-font-lg);
+      }
+
+      .add-card-button {
+        height: 350px;
+        width: 200px;
+        vertical-align: middle;
+        background: var(--boxel-teal);
+        border: none;
+        border-radius: var(--boxel-border-radius);
+      }
+
+      .add-card-button:hover {
+        background: var(--boxel-dark-teal);
+      }
+
+      .card-stack {
+        position: relative;
+        height: calc(100% - var(--search-sheet-closed-height));
+        width: 100%;
+        max-width: 50rem;
+        padding-top: var(--boxel-sp-xxl);
+        display: flex;
+        justify-content: center;
+        overflow: hidden;
+        z-index: 0;
+      }
+    </style>
   </template>
 }
 
 declare module '@glint/environment-ember-loose/registry' {
   export default interface Registry {
-    OperatorMode: typeof OperatorMode;
+    'OperatorMode::Container': typeof OperatorModeContainer;
   }
 }
