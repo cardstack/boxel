@@ -42,6 +42,7 @@ module.exports = {
     {
       files: [
         './.eslintrc.js',
+        './.percy.js',
         './.prettierrc.js',
         './.stylelintrc.js',
         './.template-lintrc.js',
