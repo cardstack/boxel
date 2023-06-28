@@ -21,7 +21,7 @@ import {
   click,
   fillIn,
   settled,
-  focus
+  focus,
 } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
@@ -77,7 +77,7 @@ module('Integration | operator-mode', function (hooks) {
 
     //Generate 11 person card to test recent card menu in card sheet
     let personCards: Map<String, any> = new Map<String, any>();
-    for(let i=1; i<=11; i++) {
+    for (let i = 1; i <= 11; i++) {
       personCards.set(`Person/${i}.json`, {
         data: {
           type: 'card',
@@ -103,7 +103,7 @@ module('Integration | operator-mode', function (hooks) {
             },
           },
         },
-      })
+      });
     }
 
     adapter = new TestRealmAdapter({
@@ -731,7 +731,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await waitFor(`[data-test-stack-card-index]`);
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
-    
+
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
 
@@ -1199,7 +1199,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     assert.dom(`[data-test-stack-card-header]`).containsText(realmName);
-    
+
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
@@ -1226,7 +1226,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     assert.dom(`[data-test-stack-card-header]`).containsText(realmName);
-    
+
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
@@ -1250,9 +1250,17 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
 
     await focus(`[data-test-search-input]`);
-    assert.dom(`.search-sheet-content__recent-access__cards [data-test-search-result]`).exists({ count: 2 });
-    assert.dom(`.search-sheet-content__recent-access__cards [data-test-search-result="${testRealmURL}Person/burcu"]`);
-    assert.dom(`.search-sheet-content__recent-access__cards [data-test-search-result="${testRealmURL}Person/fadhlan"]`);
+    assert
+      .dom(
+        `.search-sheet-content__recent-access__cards [data-test-search-result]`
+      )
+      .exists({ count: 2 });
+    assert.dom(
+      `.search-sheet-content__recent-access__cards [data-test-search-result="${testRealmURL}Person/burcu"]`
+    );
+    assert.dom(
+      `.search-sheet-content__recent-access__cards [data-test-search-result="${testRealmURL}Person/fadhlan"]`
+    );
   });
 
   test(`displays recently accessed card, maximum 10 cards`, async function (assert) {
@@ -1267,14 +1275,18 @@ module('Integration | operator-mode', function (hooks) {
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     assert.dom(`[data-test-stack-card-header]`).containsText(realmName);
-    
+
     await waitFor(`[data-test-cards-grid-item]`);
-    for(let i = 1; i <= 11; i++) {
+    for (let i = 1; i <= 11; i++) {
       await click(`[data-test-cards-grid-item="${testRealmURL}Person/${i}"]`);
       await click(`[data-test-stack-card-index="1"] [data-test-close-button]`);
     }
 
     await focus(`[data-test-search-input]`);
-    assert.dom(`.search-sheet-content__recent-access__cards [data-test-search-result]`).exists({ count: 10 });
+    assert
+      .dom(
+        `.search-sheet-content__recent-access__cards [data-test-search-result]`
+      )
+      .exists({ count: 10 });
   });
 });

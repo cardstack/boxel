@@ -1,10 +1,6 @@
 import Component from '@glimmer/component';
-import type {
-  Card,
-} from 'https://cardstack.com/base/card-api';
-import {
-  cardTypeDisplayName
-} from '@cardstack/runtime-common';
+import type { Card } from 'https://cardstack.com/base/card-api';
+import { cardTypeDisplayName } from '@cardstack/runtime-common';
 import { CardContainer } from '@cardstack/boxel-ui';
 import { trackedFunction } from 'ember-resources/util/function';
 import type CardService from '../../../services/card-service';

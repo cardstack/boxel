@@ -7,9 +7,7 @@ import { trackedFunction } from 'ember-resources/util/function';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import type CardService from '@cardstack/host/services/card-service';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import {
-  Modal,
-} from '@cardstack/boxel-ui';
+import { Modal } from '@cardstack/boxel-ui';
 import SearchSheet, {
   SearchSheetMode,
 } from '@cardstack/host/components/search-sheet';
@@ -28,7 +26,10 @@ import { tracked } from '@glimmer/tracking';
 import { htmlSafe, SafeString } from '@ember/template';
 import { registerDestructor } from '@ember/destroyable';
 import type { Query } from '@cardstack/runtime-common/query';
-import { getSearchResults, type Search } from '@cardstack/host/resources/search';
+import {
+  getSearchResults,
+  type Search,
+} from '@cardstack/host/resources/search';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import perform from 'ember-concurrency/helpers/perform';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';

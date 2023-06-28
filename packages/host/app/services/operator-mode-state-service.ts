@@ -135,16 +135,18 @@ export default class OperatorModeStateService extends Service {
     if (!recentCardIdsString) {
       return;
     }
-  
+
     const recentCardIds = JSON.parse(recentCardIdsString) as string[];
     for (const recentCardId of recentCardIds) {
       const card = await this.cardService.loadModel(new URL(recentCardId));
       this.recentCards.push(card);
     }
   }
-  
+
   async addRecentCards(card: Card) {
-    const existingCardIndex = this.recentCards.findIndex((recentCard) => recentCard.id === card.id);
+    const existingCardIndex = this.recentCards.findIndex(
+      (recentCard) => recentCard.id === card.id
+    );
     if (existingCardIndex !== -1) {
       this.recentCards.splice(existingCardIndex, 1);
     }
@@ -153,7 +155,7 @@ export default class OperatorModeStateService extends Service {
     if (this.recentCards.length > 10) {
       this.recentCards = new TrackedArray<Card>(this.recentCards.slice(1));
     }
-    const recentCardIds = this.recentCards.map(recentCard => recentCard.id);
+    const recentCardIds = this.recentCards.map((recentCard) => recentCard.id);
     localStorage.setItem('recent-cards', JSON.stringify(recentCardIds));
   }
 }

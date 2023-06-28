@@ -81,7 +81,7 @@ export default class SearchSheet extends Component<Signature> {
 
   get reverseRecentCards() {
     // Clone the array first before reversing it.
-    // To avoid this error: You attempted to update `_value` on `TrackedStorageImpl`, 
+    // To avoid this error: You attempted to update `_value` on `TrackedStorageImpl`,
     // but it had already been used previously in the same computation
     const recentCardsCopy = [...this.args.recentCards];
     return recentCardsCopy.reverse();
