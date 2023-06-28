@@ -910,12 +910,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     }
 
     if (opts?.loadFields) {
-      fieldValue = await this.loadMissingField(
-        instance,
-        e,
-        identityContext,
-        instance[relativeTo]
-      );
+      fieldValue = await this.loadMissingField(instance, e, identityContext);
       deserialized.set(this.name, fieldValue);
       return fieldValue as CardInstanceType<CardT>;
     }
@@ -926,11 +921,10 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
   private async loadMissingField(
     instance: Card,
     notLoaded: NotLoadedValue | NotLoaded,
-    identityContext: IdentityContext,
-    relativeTo: URL | undefined
+    identityContext: IdentityContext
   ): Promise<CardBase> {
     let { reference: maybeRelativeReference } = notLoaded;
-    let reference = new URL(maybeRelativeReference as string, relativeTo).href;
+    let reference = new URL(maybeRelativeReference as string, instance.id).href;
     let loader = Loader.getLoaderFor(createFromSerialized);
     let response = await loader.fetch(reference, {
       headers: { Accept: SupportedMimeType.CardJson },
@@ -1224,12 +1218,7 @@ class LinksToMany<FieldT extends CardConstructor>
     }
 
     if (opts?.loadFields) {
-      fieldValues = await this.loadMissingFields(
-        instance,
-        e,
-        identityContext,
-        instance[relativeTo]
-      );
+      fieldValues = await this.loadMissingFields(instance, e, identityContext);
     }
 
     if (fieldValues.length === e.reference.length) {
@@ -1261,11 +1250,10 @@ class LinksToMany<FieldT extends CardConstructor>
   private async loadMissingFields(
     instance: CardBase,
     notLoaded: NotLoaded,
-    identityContext: IdentityContext,
-    relativeTo: URL | undefined
+    identityContext: IdentityContext
   ): Promise<CardBase[]> {
     let refs = (notLoaded.reference as string[]).map(
-      (ref) => new URL(ref, relativeTo).href
+      (ref) => new URL(ref, instance.id).href
     );
     let loader = Loader.getLoaderFor(createFromSerialized);
     let errors = [];

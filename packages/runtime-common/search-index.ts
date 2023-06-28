@@ -281,7 +281,6 @@ export class SearchIndex {
           resource,
           omit,
           included,
-          relativeTo: new URL(resource.id),
         });
       }
       if (included.length > 0) {
@@ -323,7 +322,6 @@ export class SearchIndex {
         loader: this.loader,
         resource: doc.data,
         omit: [doc.data.id],
-        relativeTo: new URL(doc.data.id),
       });
       if (included.length > 0) {
         doc.included = included;
@@ -648,7 +646,6 @@ export async function loadLinks({
   instances,
   loader,
   resource,
-  relativeTo,
   omit = [],
   included = [],
   visited = [],
@@ -658,7 +655,6 @@ export async function loadLinks({
   instances: URLMap<SearchEntryWithErrors>;
   loader: Loader;
   resource: LooseCardResource;
-  relativeTo: URL;
   omit?: string[];
   included?: CardResource<Saved>[];
   visited?: string[];
@@ -720,7 +716,6 @@ export async function loadLinks({
         omit,
         included: [...included, linkResource],
         visited,
-        relativeTo,
         stack: [...(resource.id != null ? [resource.id] : []), ...stack],
       })) {
         foundLinks = true;
@@ -735,10 +730,10 @@ export async function loadLinks({
         }
       }
     }
-    let relationshipId = maybeURL(relationship.links.self, relativeTo);
+    let relationshipId = maybeURL(relationship.links.self, resource.id);
     if (!relationshipId) {
       throw new Error(
-        `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${relativeTo.href}`
+        `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${resource.id}`
       );
     }
     if (foundLinks || omit.includes(relationshipId.href)) {
