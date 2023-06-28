@@ -67,7 +67,6 @@ export default class OperatorModeContainer extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
-  @tracked recentCards = new TrackedArray<Card>([]);
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -94,8 +93,8 @@ export default class OperatorModeContainer extends Component<Signature> {
       this.searchSheetMode = SearchSheetMode.SearchPrompt;
     }
 
-    if (this.recentCards.length === 0) {
-      await this.constructRecentCards();
+    if (this.operatorModeStateService.recentCards.length === 0) {
+      await this.operatorModeStateService.constructRecentCards();
     }
   }
 
@@ -105,7 +104,6 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   @action addToStack(item: StackItem) {
     this.operatorModeStateService.addItemToStack(item);
-    this.addRecentCards(item.card);
   }
 
   @action async edit(item: StackItem) {
@@ -319,33 +317,6 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.fetchBackgroundImageURL.value ?? '';
   }
 
-  async constructRecentCards() {
-    const recentCardIdsString = localStorage.getItem('recent-cards');
-    if (!recentCardIdsString) {
-      return;
-    }
-  
-    const recentCardIds = JSON.parse(recentCardIdsString) as string[];
-    for (const recentCardId of recentCardIds) {
-      const card = await this.cardService.loadModel(new URL(recentCardId));
-      this.recentCards.push(card);
-    }
-  }
-  
-  async addRecentCards(card: Card) {
-    const existingCardIndex = this.recentCards.findIndex((recentCard) => recentCard.id === card.id);
-    if (existingCardIndex !== -1) {
-      this.recentCards.splice(existingCardIndex, 1);
-    }
-
-    this.recentCards.push(card);
-    if (this.recentCards.length > 10) {
-      this.recentCards = new TrackedArray<Card>(this.recentCards.slice(1));
-    }
-    const recentCardIds = this.recentCards.map(recentCard => recentCard.id);
-    localStorage.setItem('recent-cards', JSON.stringify(recentCardIds));
-  }
-
   <template>
     <Modal
       class='operator-mode'
@@ -396,7 +367,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         @mode={{this.searchSheetMode}}
         @onCancel={{this.onCancelSearchSheet}}
         @onFocus={{this.onFocusSearchInput}}
-        @recentCards={{this.recentCards}}
+        @recentCards={{this.operatorModeStateService.recentCards}}
       />
     </Modal>
     <style>
