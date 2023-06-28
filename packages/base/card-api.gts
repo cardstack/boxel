@@ -910,7 +910,12 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     }
 
     if (opts?.loadFields) {
-      fieldValue = await this.loadMissingField(instance, e, identityContext);
+      fieldValue = await this.loadMissingField(
+        instance,
+        e,
+        identityContext,
+        instance[relativeTo]
+      );
       deserialized.set(this.name, fieldValue);
       return fieldValue as CardInstanceType<CardT>;
     }
@@ -921,10 +926,14 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
   private async loadMissingField(
     instance: Card,
     notLoaded: NotLoadedValue | NotLoaded,
-    identityContext: IdentityContext
+    identityContext: IdentityContext,
+    relativeTo: URL | undefined
   ): Promise<CardBase> {
     let { reference: maybeRelativeReference } = notLoaded;
-    let reference = new URL(maybeRelativeReference as string, instance.id).href;
+    let reference = new URL(
+      maybeRelativeReference as string,
+      instance.id ?? relativeTo // new instances may not yet have an ID, in that case fallback to the relativeTo
+    ).href;
     let loader = Loader.getLoaderFor(createFromSerialized);
     let response = await loader.fetch(reference, {
       headers: { Accept: SupportedMimeType.CardJson },
@@ -1218,7 +1227,12 @@ class LinksToMany<FieldT extends CardConstructor>
     }
 
     if (opts?.loadFields) {
-      fieldValues = await this.loadMissingFields(instance, e, identityContext);
+      fieldValues = await this.loadMissingFields(
+        instance,
+        e,
+        identityContext,
+        instance[relativeTo]
+      );
     }
 
     if (fieldValues.length === e.reference.length) {
@@ -1250,10 +1264,11 @@ class LinksToMany<FieldT extends CardConstructor>
   private async loadMissingFields(
     instance: CardBase,
     notLoaded: NotLoaded,
-    identityContext: IdentityContext
+    identityContext: IdentityContext,
+    relativeTo: URL | undefined
   ): Promise<CardBase[]> {
     let refs = (notLoaded.reference as string[]).map(
-      (ref) => new URL(ref, instance.id).href
+      (ref) => new URL(ref, instance.id ?? relativeTo).href // new instances may not yet have an ID, in that case fallback to the relativeTo
     );
     let loader = Loader.getLoaderFor(createFromSerialized);
     let errors = [];
