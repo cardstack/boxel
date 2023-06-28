@@ -608,9 +608,10 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-add-card-button]');
     assert.dom('[data-test-card-catalog-modal]').isVisible();
 
+    await waitFor(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
+
     await percySnapshot(assert);
 
-    await waitFor(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
     await click(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-card-catalog-go-button]');
     assert
