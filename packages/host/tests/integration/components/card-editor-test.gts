@@ -51,7 +51,7 @@ module('Integration | card-editor', function (hooks) {
     let card = await createFromSerialized<typeof Card>(
       result.doc.data,
       result.doc,
-      undefined,
+      new URL(result.doc.data.id),
       {
         loader: Loader.getLoaderFor(createFromSerialized),
       }
@@ -394,6 +394,7 @@ module('Integration | card-editor', function (hooks) {
       .dom(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"`)
       .exists();
     await click(`[data-test-select="${testRealmURL}Pet/vangogh"]`);
+    await click('[data-test-card-catalog-go-button]');
 
     assert
       .dom('[data-test-card-catalog-modal]')
@@ -421,6 +422,7 @@ module('Integration | card-editor', function (hooks) {
       '[data-test-card-catalog-modal] [data-test-card-catalog-item]'
     );
     await click(`[data-test-select="${testRealmURL}Pet/vangogh"]`);
+    await click('[data-test-card-catalog-go-button]');
 
     assert
       .dom('[data-test-card-catalog-modal]')

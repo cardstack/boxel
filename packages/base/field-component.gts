@@ -198,10 +198,11 @@ export function getPluralViewComponent(
   cardTypeFor: (
     field: Field<typeof CardBase>,
     boxedElement: Box<CardBase>
-  ) => typeof CardBase
+  ) => typeof CardBase,
+  context?: CardContext
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let components = model.children.map((child) =>
-    getBoxComponent(cardTypeFor(field, child), format, child)
+    getBoxComponent(cardTypeFor(field, child), format, child, context)
   );
   let defaultComponent = class PluralView extends GlimmerComponent {
     <template>

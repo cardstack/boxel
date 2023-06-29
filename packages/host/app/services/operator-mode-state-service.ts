@@ -2,7 +2,7 @@ import {
   OperatorModeState,
   Stack,
   StackItem,
-} from '@cardstack/host/components/operator-mode';
+} from '@cardstack/host/components/operator-mode/container';
 import Service from '@ember/service';
 import type CardService from '../services/card-service';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';

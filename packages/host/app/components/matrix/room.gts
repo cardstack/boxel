@@ -4,7 +4,7 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 //@ts-expect-error the types don't recognize the cached export
 import { tracked, cached } from '@glimmer/tracking';
-import { not, and } from '../helpers/truth-helpers';
+import { not, and } from '@cardstack/host/helpers/truth-helpers';
 import { restartableTask } from 'ember-concurrency';
 import {
   BoxelHeader,
@@ -13,12 +13,17 @@ import {
   FieldContainer,
   Button,
 } from '@cardstack/boxel-ui';
-import { getRoomCard } from '../resources/room-card';
+import { getRoomCard } from '@cardstack/host/resources/room-card';
 import { TrackedMap } from 'tracked-built-ins';
-import { chooseCard, baseCardRef } from '@cardstack/runtime-common';
-import type MatrixService from '../services/matrix-service';
+import {
+  chooseCard,
+  baseCardRef,
+  catalogEntryRef,
+} from '@cardstack/runtime-common';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type Card } from 'https://cardstack.com/base/card-api';
-import type CardService from '../services/card-service';
+import type CardService from '@cardstack/host/services/card-service';
+import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
 const TRUE = true;
 
@@ -32,16 +37,17 @@ export default class Room extends Component<RoomArgs> {
     <BoxelHeader
       @title={{this.roomCard.name}}
       @hasBackground={{TRUE}}
-      class='matrix room__header'
+      class='matrix header'
+      data-test-matrix-room-header
     >
       <:actions>
         <Button
           data-test-invite-mode-btn
-          class='room__header__invite-btn'
+          class='invite-btn'
           {{on 'click' this.showInviteMode}}
           @disabled={{this.isInviteMode}}
         >Invite</Button>
-        <div data-test-room-members class='room__members'><b>Members:</b>
+        <div data-test-room-members class='members'><b>Members:</b>
           {{this.memberNames}}</div>
       </:actions>
     </BoxelHeader>
@@ -71,10 +77,14 @@ export default class Room extends Component<RoomArgs> {
       </fieldset>
     {{/if}}
 
-    <div class='room__messages-wrapper'>
-      <div class='room__messages'>
-        <div class='room__messages__notices'>
-          <div data-test-timeline-start class='room__messages__timeline-start'>
+    {{#if this.objective}}
+      <div class='room__objective'> <this.objectiveComponent /> </div>
+    {{/if}}
+
+    <div class='messages-wrapper'>
+      <div class='messages'>
+        <div class='notices'>
+          <div data-test-timeline-start class='timeline-start'>
             - Beginning of conversation -
           </div>
         </div>
@@ -88,7 +98,7 @@ export default class Room extends Component<RoomArgs> {
       </div>
     </div>
 
-    <div class='room__send-message'>
+    <div class='send-message'>
       <BoxelInput
         data-test-message-field
         type='text'
@@ -102,6 +112,13 @@ export default class Room extends Component<RoomArgs> {
         <Button data-test-remove-card-btn {{on 'click' this.removeCard}}>Remove
           Card</Button>
       {{else}}
+        {{#if this.canSetObjective}}
+          <Button
+            data-test-set-objective-btn
+            @disabled={{this.doSetObjective.isRunning}}
+            {{on 'click' this.setObjective}}
+          >Set Objective</Button>
+        {{/if}}
         <Button
           data-test-choose-card-btn
           @disabled={{this.doChooseCard.isRunning}}
@@ -117,16 +134,91 @@ export default class Room extends Component<RoomArgs> {
       >Send</Button>
     </div>
     {{#if this.cardtoSend}}
-      <div class='room__selected-card'>
-        <div class='room__selected-card__field'>Selected Card:</div>
+      <div class='selected-card'>
+        <div class='field'>Selected Card:</div>
         <div
-          class='room__selected-card__card-wrapper'
+          class='card-wrapper'
           data-test-selected-card={{this.cardtoSend.id}}
         >
           <this.cardToSendComponent />
         </div>
       </div>
     {{/if}}
+    <style>
+      .header .boxel-header__content {
+        display: block;
+      }
+
+      .invite-btn {
+        display: block;
+        float: right;
+        margin-bottom: var(--boxel-sp-sm);
+      }
+
+      .messages-wrapper {
+        overflow-y: auto;
+        max-height: 30vh;
+        padding: var(--boxel-sp);
+        margin: var(--boxel-sp) 0;
+      }
+
+      .timeline-start {
+        padding-bottom: var(--boxel-sp);
+      }
+
+      .notices {
+        display: flex;
+        justify-content: center;
+      }
+
+      .messages .boundaries {
+        margin: var(--boxel-sp-sm) 0;
+      }
+
+      .send-message {
+        display: flex;
+        justify-content: right;
+        flex-wrap: wrap;
+        row-gap: var(--boxel-sp-sm);
+        margin: 0 var(--boxel-sp);
+      }
+
+      .send-message button,
+      .send-message .selected-card {
+        margin-left: var(--boxel-sp-sm);
+      }
+
+      .selected-card {
+        margin: var(--boxel-sp);
+        float: right;
+      }
+
+      .selected-card::after {
+        content:'';
+        clear: both;
+      }
+
+      .field {
+        font-weight: bold;
+      }
+
+      .card-wrapper {
+        padding: var(--boxel-sp);
+        border: var(--boxel-border);
+        border-radius: var(--boxel-border-radius);
+      }
+
+      .members {
+        clear: both;
+        font-size: var(--boxel-font-size-sm);
+        font-weight: initial;
+      }
+
+      header.matrix .content {
+        position: relative;
+        display: block;
+      }
+    </style>
   </template>
 
   @service private declare matrixService: MatrixService;
@@ -145,6 +237,20 @@ export default class Room extends Component<RoomArgs> {
 
   private get roomCard() {
     return this.roomCardResource.roomCard;
+  }
+
+  private get objective() {
+    return this.matrixService.roomObjectives.get(this.args.roomId);
+  }
+
+  private get objectiveComponent() {
+    if (this.objective) {
+      return this.objective.constructor.getComponent(
+        this.objective,
+        'embedded'
+      );
+    }
+    return;
   }
 
   private get messageCardComponents() {
@@ -172,6 +278,12 @@ export default class Room extends Component<RoomArgs> {
 
   private get cardtoSend() {
     return this.cardsToSend.get(this.args.roomId);
+  }
+
+  private get canSetObjective() {
+    return (
+      !this.objective && this.matrixService.canSetObjective(this.args.roomId)
+    );
   }
 
   private get cardToSendComponent() {
@@ -229,6 +341,11 @@ export default class Room extends Component<RoomArgs> {
   }
 
   @action
+  private setObjective() {
+    this.doSetObjective.perform();
+  }
+
+  @action
   private removeCard() {
     this.cardsToSend.set(this.args.roomId, undefined);
   }
@@ -261,6 +378,18 @@ export default class Room extends Component<RoomArgs> {
     }
   });
 
+  private doSetObjective = restartableTask(async () => {
+    let catalogEntry = await chooseCard<CatalogEntry>({
+      filter: {
+        on: catalogEntryRef,
+        eq: { isPrimitive: false },
+      },
+    });
+    if (catalogEntry) {
+      await this.matrixService.setObjective(this.args.roomId, catalogEntry.ref);
+    }
+  });
+
   private resetInvite() {
     this.membersToInvite = [];
     this.isInviteMode = false;
@@ -269,6 +398,6 @@ export default class Room extends Component<RoomArgs> {
 
 declare module '@glint/environment-ember-loose/registry' {
   export default interface Room {
-    Room: typeof Room;
+    'Matrix::Room': typeof Room;
   }
 }

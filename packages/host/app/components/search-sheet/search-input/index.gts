@@ -22,11 +22,11 @@ interface Signature {
 export default class SearchInput extends Component<Signature> {
   <template>
     <div class='search-input search-input--bottom-{{@bottomTreatment}}'>
-      <label class='search-input__label'>
-        <span class='search-input__icon-label'>&#8981;</span>
-        <span class='search-input__sr-label'>Search</span>
+      <label class='label'>
+        <span class='icon-label'>&#8981;</span>
+        <span class='sr-label'>Search</span>
         <input
-          class='search-input__input'
+          class='input'
           placeholder='Enter search term or type a command'
           value={{@value}}
           {{on 'focus' (optional @onFocus)}}
@@ -34,5 +34,71 @@ export default class SearchInput extends Component<Signature> {
         />
       </label>
     </div>
+    <style>
+      .search-input {
+        transition: margin var(--boxel-transition);
+      }
+
+      .search-sheet .search-input {
+        margin: 31px 0 20px;
+      }
+
+      .search-sheet.closed .search-input {
+        margin: 0;
+      }
+
+      .search-input {
+        border-radius: 20px 20px 0 0;
+        border: solid 1px rgba(255, 255, 255, 0.5);
+        background: #000;
+        height: 59px;
+        transition: border-radius var(--boxel-transition);
+      }
+
+      .search-input--bottom-rounded {
+        border-radius: 20px;
+      }
+
+      .input {
+        width: 100%;
+        height: 23px;
+        font-family: Poppins;
+        font-size: 16px;
+        font-weight: normal;
+        font-stretch: normal;
+        font-style: normal;
+        line-height: 1.13;
+        letter-spacing: 0.19px;
+        text-align: left;
+        color: #fff;
+        background: transparent;
+        border: none;
+      }
+
+      .label {
+        padding: 18px 24px 18px 18px;
+        display: flex;
+      }
+
+      .icon-label {
+        color: var(--boxel-highlight);
+        font-size: 2.25rem;
+        line-height: 1.6rem;
+        margin-right: 0.35rem;
+      }
+
+      .sr-label {
+        display: none;
+      }
+
+      .input::placeholder {
+        color: #fff;
+        opacity: 0.6;
+      }
+
+      .input:focus {
+        outline: none;
+      }
+    </style>
   </template>
 }

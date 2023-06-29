@@ -5,7 +5,7 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { directory } from '../resources/directory';
+import { directory } from '@cardstack/host/resources/directory';
 import { concat } from '@ember/helper';
 
 interface Args {
@@ -20,7 +20,7 @@ interface Args {
 export default class Directory extends Component<Args> {
   <template>
     {{#each this.listing.entries key='path' as |entry|}}
-      <div class='directory-level'>
+      <div class='level' data-test-directory-level>
         {{#let (concat @relativePath entry.name) as |entryPath|}}
           {{#if (eq entry.kind 'file')}}
             <div
@@ -53,6 +53,26 @@ export default class Directory extends Component<Args> {
         {{/let}}
       </div>
     {{/each}}
+    <style>
+      .level {
+        padding-left: 0em;
+      }
+
+      .level .level {
+        padding-left: 1em;
+      }
+
+      .file:hover {
+        color: var(--boxel-highlight);
+        cursor: pointer;
+      }
+
+      .directory.selected,
+      .file.selected,
+      .file:active {
+        color: var(--boxel-highlight);
+      }
+    </style>
   </template>
 
   listing = directory(

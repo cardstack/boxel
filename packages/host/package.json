@@ -21,7 +21,7 @@
     "lint:js": "eslint . --cache --ext ts,js",
     "lint:js:fix": "eslint . --fix",
     "lint:glint": "glint",
-    "start": "FASTBOOT_DISABLED=true OWN_REALM_URL=http://localhost:4204/ ember serve",
+    "start": "FASTBOOT_DISABLED=true OWN_REALM_URL=http://localhost:4201/demo/ ember serve",
     "start:build": "FASTBOOT_DISABLED=true ember build --watch",
     "test": "concurrently \"npm:lint\" \"npm:test:*\" --names \"lint,test:\"",
     "test:wait-for-servers": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/fields/boolean-field?acceptHeader=application%2Fvnd.card%2Bjson|http-get://localhost:4202/test/hassan?acceptHeader=application%2Fvnd.card%2Bjson' 'ember-test-pre-built'",
@@ -100,6 +100,7 @@
     "ember-template-imports": "^3.0.1",
     "ember-template-lint": "^5.7.2",
     "ember-test-selectors": "^6.0.0",
+    "ember-velcro": "^2.1.0",
     "eslint": "^8.37.0",
     "eslint-config-prettier": "^8.8.0",
     "eslint-plugin-ember": "^11.5.0",
@@ -149,5 +150,10 @@
   },
   "ember": {
     "edition": "octane"
+  },
+  "ember-addon": {
+    "paths": [
+      "lib/setup-ast-transforms"
+    ]
   }
 }

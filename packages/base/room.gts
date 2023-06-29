@@ -17,7 +17,10 @@ import { BoxelMessage } from '@cardstack/boxel-ui';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import { formatRFC3339 } from 'date-fns';
 import Modifier from 'ember-modifier';
-import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
+import {
+  type LooseSingleCardDocument,
+  type CardRef,
+} from '@cardstack/runtime-common';
 
 // this is so we can have triple equals equivalent attached cards in messages
 const attachedCards = new Map<string, Promise<Card>>();
@@ -139,6 +142,11 @@ export class RoomMemberCard extends Card {
   @field membership = contains(RoomMembershipCard);
   @field membershipDateTime = contains(DateTimeCard);
   @field membershipInitiator = contains(() => RoomMemberCard);
+  @field name = contains(StringCard, {
+    computeVia: function (this: RoomMemberCard) {
+      return this.displayName ?? this.userId.split(':')[0].substring(1);
+    },
+  });
   static embedded = class Embedded extends RoomMemberView {};
   static isolated = class Isolated extends RoomMemberView {};
   // The edit template is meant to be read-only, this field card is not mutable
@@ -363,29 +371,33 @@ export class RoomCard extends Card {
           continue;
         }
 
+        let author = upsertRoomMember({ roomCard: this, userId: event.sender });
+        let formattedMessage =
+          event.content.msgtype === 'org.boxel.objective'
+            ? `<em>${author.name} has set the room objectives</em>`
+            : event.content.formatted_body;
         let cardArgs = {
-          author: upsertRoomMember({ roomCard: this, userId: event.sender }),
+          author,
           created: new Date(event.origin_server_ts),
           message: event.content.body,
-          formattedMessage: event.content.formatted_body,
+          formattedMessage,
           index,
           attachedCard: null,
         };
         if (event.content.msgtype === 'org.boxel.card') {
           let cardDoc = event.content.instance;
           let attachedCard: Promise<Card> | undefined;
-          if (cardDoc.data.id != null) {
-            attachedCard = attachedCards.get(cardDoc.data.id);
+          if (cardDoc.data.id == null) {
+            throw new Error(`cannot handle cards in room without an ID`);
           }
+          attachedCard = attachedCards.get(cardDoc.data.id);
           if (!attachedCard) {
             attachedCard = createFromSerialized<typeof Card>(
               cardDoc.data,
               cardDoc,
-              undefined
+              new URL(cardDoc.data.id)
             );
-            if (cardDoc.data.id != null) {
-              attachedCards.set(cardDoc.data.id, attachedCard);
-            }
+            attachedCards.set(cardDoc.data.id, attachedCard);
           }
           newMessages.set(
             event.event_id,
@@ -534,10 +546,26 @@ interface CardMessageEvent extends BaseMatrixEvent {
   };
 }
 
+interface ObjectiveEvent extends BaseMatrixEvent {
+  type: 'm.room.message';
+  content: {
+    msgtype: 'org.boxel.objective';
+    body: string;
+    ref: CardRef;
+  };
+  unsigned: {
+    age: number;
+    transaction_id: string;
+    prev_content?: any;
+    prev_sender?: string;
+  };
+}
+
 export type MatrixEvent =
   | RoomCreateEvent
   | MessageEvent
   | CardMessageEvent
+  | ObjectiveEvent
   | RoomNameEvent
   | RoomTopicEvent
   | InviteEvent

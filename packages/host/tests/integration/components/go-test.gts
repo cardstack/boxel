@@ -7,7 +7,7 @@ import {
   setupOnerror,
   waitUntil,
 } from '@ember/test-helpers';
-import Go from '@cardstack/host/components/go';
+import Go from '@cardstack/host/components/editor/go';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 import { baseRealm } from '@cardstack/runtime-common';

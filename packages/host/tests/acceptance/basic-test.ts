@@ -269,6 +269,7 @@ module('Acceptance | basic tests', function (hooks) {
     await waitFor('[data-test-card-catalog-modal] [data-test-realm-name]');
 
     await click(`[data-test-select="${testRealmURL}person-entry"]`);
+    await click('[data-test-card-catalog-go-button]');
     await waitFor(`[data-test-create-new-card="Person"]`);
     await waitFor(`[data-test-field="firstName"] input`);
 
@@ -294,7 +295,7 @@ module('Acceptance | basic tests', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}person`,
+            module: `../person`,
             name: 'Person',
           },
         },
@@ -315,7 +316,7 @@ module('Acceptance | basic tests', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}person`,
+              module: `../person`,
               name: 'Person',
             },
           },
