@@ -3,6 +3,7 @@ import {
   SupportedMimeType,
   internalKeyFor,
   maxLinkDepth,
+  maybeURL,
   type LooseCardResource,
 } from '.';
 import { Kind, Realm } from './realm';
@@ -729,10 +730,16 @@ export async function loadLinks({
         }
       }
     }
-    if (foundLinks || omit.includes(relationship.links.self)) {
+    let relationshipId = maybeURL(relationship.links.self, resource.id);
+    if (!relationshipId) {
+      throw new Error(
+        `bug: unable to turn relative URL '${relationship.links.self}' into an absolute URL relative to ${resource.id}`
+      );
+    }
+    if (foundLinks || omit.includes(relationshipId.href)) {
       resource.relationships![fieldName].data = {
         type: 'card',
-        id: relationship.links.self,
+        id: relationshipId.href,
       };
     }
   }

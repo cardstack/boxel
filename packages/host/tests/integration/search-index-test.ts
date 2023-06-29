@@ -156,7 +156,7 @@ module('Integration | search-index', function (hooks) {
           relationships: {
             owner: {
               links: {
-                self: `${testRealmURL}Person/owner`,
+                self: `../Person/owner`,
               },
             },
           },
@@ -233,7 +233,7 @@ module('Integration | search-index', function (hooks) {
         relationships: {
           owner: {
             links: {
-              self: `${testRealmURL}Person/owner`,
+              self: `../Person/owner`,
             },
           },
         },
@@ -309,7 +309,7 @@ module('Integration | search-index', function (hooks) {
         relationships: {
           owner: {
             links: {
-              self: `${testRealmURL}Person/owner`,
+              self: `../Person/owner`,
             },
           },
         },
@@ -901,7 +901,7 @@ module('Integration | search-index', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${testRealmURL}pet-card`,
+              module: `./pet-card`,
               name: 'PetCard',
             },
             lastModified: adapter.lastModified.get(
@@ -1337,11 +1337,11 @@ module('Integration | search-index', function (hooks) {
             },
           },
           'pets.0': {
-            links: { self: `${testRealmURL}Pet/mango` },
+            links: { self: `../Pet/mango` },
             data: { id: `${testRealmURL}Pet/mango`, type: 'card' },
           },
           'pets.1': {
-            links: { self: `${testRealmURL}Pet/vanGogh` },
+            links: { self: `../Pet/vanGogh` },
             data: { id: `${testRealmURL}Pet/vanGogh`, type: 'card' },
           },
         },
@@ -1772,7 +1772,7 @@ module('Integration | search-index', function (hooks) {
         relationships: {
           friend: {
             links: {
-              self: `${testRealmURL}Friend/mango`,
+              self: `./mango`,
             },
           },
         },
@@ -1884,7 +1884,7 @@ module('Integration | search-index', function (hooks) {
           relationships: {
             friend: {
               links: {
-                self: `${testRealmURL}Friend/mango`,
+                self: `./mango`,
               },
               data: {
                 type: 'card',
@@ -1916,7 +1916,7 @@ module('Integration | search-index', function (hooks) {
             relationships: {
               friend: {
                 links: {
-                  self: `${testRealmURL}Friend/hassan`,
+                  self: `./hassan`,
                 },
                 data: {
                   type: 'card',
@@ -1982,7 +1982,7 @@ module('Integration | search-index', function (hooks) {
           relationships: {
             friend: {
               links: {
-                self: `${testRealmURL}Friend/hassan`,
+                self: `./hassan`,
               },
               data: {
                 type: 'card',
@@ -2014,7 +2014,7 @@ module('Integration | search-index', function (hooks) {
             relationships: {
               friend: {
                 links: {
-                  self: `${testRealmURL}Friend/mango`,
+                  self: `./mango`,
                 },
                 data: {
                   type: 'card',
@@ -2119,11 +2119,11 @@ module('Integration | search-index', function (hooks) {
           attributes: { firstName: 'Hassan', title: 'Hassan' },
           relationships: {
             'friends.0': {
-              links: { self: mangoID },
+              links: { self: './mango' },
               data: { type: 'card', id: mangoID },
             },
             'friends.1': {
-              links: { self: vanGoghID },
+              links: { self: './vanGogh' },
               data: { type: 'card', id: vanGoghID },
             },
           },
@@ -2147,7 +2147,7 @@ module('Integration | search-index', function (hooks) {
             attributes: { firstName: 'Mango', title: 'Mango' },
             relationships: {
               'friends.0': {
-                links: { self: hassanID },
+                links: { self: './hassan' },
                 data: { type: 'card', id: hassanID },
               },
             },
@@ -2168,7 +2168,7 @@ module('Integration | search-index', function (hooks) {
             },
             relationships: {
               'friends.0': {
-                links: { self: hassanID },
+                links: { self: './hassan' },
                 data: { type: 'card', id: hassanID },
               },
             },
@@ -2228,7 +2228,7 @@ module('Integration | search-index', function (hooks) {
           },
           relationships: {
             'friends.0': {
-              links: { self: hassanID },
+              links: { self: './hassan' },
               data: { type: 'card', id: hassanID },
             },
           },
@@ -2254,11 +2254,11 @@ module('Integration | search-index', function (hooks) {
             },
             relationships: {
               'friends.0': {
-                links: { self: mangoID },
+                links: { self: './mango' },
                 data: { type: 'card', id: mangoID },
               },
               'friends.1': {
-                links: { self: vanGoghID },
+                links: { self: './vanGogh' },
                 data: { type: 'card', id: vanGoghID },
               },
             },
@@ -2279,7 +2279,7 @@ module('Integration | search-index', function (hooks) {
             },
             relationships: {
               'friends.0': {
-                links: { self: hassanID },
+                links: { self: './hassan' },
                 data: { type: 'card', id: hassanID },
               },
             },
@@ -2340,7 +2340,7 @@ module('Integration | search-index', function (hooks) {
           },
           relationships: {
             'friends.0': {
-              links: { self: hassanID },
+              links: { self: './hassan' },
               data: { type: 'card', id: hassanID },
             },
           },
@@ -2366,11 +2366,11 @@ module('Integration | search-index', function (hooks) {
             },
             relationships: {
               'friends.0': {
-                links: { self: mangoID },
+                links: { self: './mango' },
                 data: { type: 'card', id: mangoID },
               },
               'friends.1': {
-                links: { self: vanGoghID },
+                links: { self: './vanGogh' },
                 data: { type: 'card', id: vanGoghID },
               },
             },
@@ -2391,7 +2391,7 @@ module('Integration | search-index', function (hooks) {
             },
             relationships: {
               'friends.0': {
-                links: { self: hassanID },
+                links: { self: './hassan' },
                 data: { type: 'card', id: hassanID },
               },
             },

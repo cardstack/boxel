@@ -9,6 +9,8 @@ import {
   CardInstanceType,
   CardBase,
   relativeTo,
+  type SerializeOpts,
+  type JSONAPISingleResourceDocument,
 } from './card-api';
 
 class BaseView extends Component<typeof CardRefCard> {
@@ -27,8 +29,18 @@ type CardId = { name: string; module: string };
 export default class CardRefCard extends CardBase {
   static [primitive]: CardId;
 
-  static [serialize](cardRef: CardId) {
-    return { ...cardRef }; // return a new object so that the model cannot be mutated from the outside
+  static [serialize](
+    cardRef: CardId,
+    _doc: JSONAPISingleResourceDocument,
+    _visited?: Set<string>,
+    opts?: SerializeOpts
+  ) {
+    return {
+      ...cardRef,
+      ...(opts?.maybeRelativeURL
+        ? { module: opts.maybeRelativeURL(cardRef.module) }
+        : {}),
+    };
   }
   static async [deserialize]<T extends CardBaseConstructor>(
     this: T,

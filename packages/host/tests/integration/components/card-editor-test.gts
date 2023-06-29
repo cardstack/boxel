@@ -51,7 +51,7 @@ module('Integration | card-editor', function (hooks) {
     let card = await createFromSerialized<typeof Card>(
       result.doc.data,
       result.doc,
-      undefined,
+      new URL(result.doc.data.id),
       {
         loader: Loader.getLoaderFor(createFromSerialized),
       }

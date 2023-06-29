@@ -112,7 +112,7 @@ module('Realm Server', function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: `${testRealmURL}person`,
+            module: `./person`,
             name: 'Person',
           },
           realmInfo: {
@@ -227,7 +227,7 @@ module('Realm Server', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${testRealmHref}person`,
+                module: `./person`,
                 name: 'Person',
               },
             },
