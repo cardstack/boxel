@@ -10,7 +10,6 @@ const validModes = Object.values(SearchSheetMode);
 export default class SearchSheetUsage extends Component {
   defaultMode: SearchSheetMode = SearchSheetMode.Closed;
   @tracked mode: SearchSheetMode = SearchSheetMode.Closed;
-  recentCards: any[] = [];
 
   @action onFocus() {
     if (this.mode == SearchSheetMode.Closed) {
@@ -33,7 +32,6 @@ export default class SearchSheetUsage extends Component {
             @mode={{this.mode}}
             @onCancel={{this.onCancel}}
             @onFocus={{this.onFocus}}
-            @recentCards={{this.recentCards}}
           />
         </div>
       </:example>

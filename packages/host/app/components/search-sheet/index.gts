@@ -8,9 +8,9 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import SearchResult from './search-result';
 import { Label } from '@cardstack/boxel-ui';
-import { Card } from 'https://cardstack.com/base/card-api';
 import { gt } from '../../helpers/truth-helpers';
-
+import { service } from '@ember/service';
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 export enum SearchSheetMode {
   Closed = 'closed',
@@ -26,13 +26,13 @@ interface Signature {
     mode: SearchSheetMode;
     onCancel: () => void;
     onFocus: () => void;
-    recentCards: Card[];
   };
   Blocks: {};
 }
 
 export default class SearchSheet extends Component<Signature> {
   @tracked searchInputValue = '';
+  @service declare operatorModeStateService: OperatorModeStateService;
 
   get inputBottomTreatment() {
     return this.args.mode == SearchSheetMode.Closed
@@ -86,7 +86,7 @@ export default class SearchSheet extends Component<Signature> {
     // Clone the array first before reversing it.
     // To avoid this error: You attempted to update `_value` on `TrackedStorageImpl`,
     // but it had already been used previously in the same computation
-    const recentCardsCopy = [...this.args.recentCards];
+    const recentCardsCopy = [...this.operatorModeStateService.recentCards];
     return recentCardsCopy.reverse();
   }
 
@@ -107,7 +107,7 @@ export default class SearchSheet extends Component<Signature> {
         @onInput={{fn (mut this.searchInputValue)}}
       />
       <div class='search-sheet-content'>
-        {{#if (gt @recentCards.length 0)}}
+        {{#if (gt this.operatorModeStateService.recentCards.length 0)}}
           <div class='search-sheet-content__recent-access'>
             <Label>Recent</Label>
             <div class='search-sheet-content__recent-access__body'>

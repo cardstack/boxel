@@ -371,7 +371,6 @@ export default class OperatorModeContainer extends Component<Signature> {
         @mode={{this.searchSheetMode}}
         @onCancel={{this.onCancelSearchSheet}}
         @onFocus={{this.onFocusSearchInput}}
-        @recentCards={{this.operatorModeStateService.recentCards}}
       />
     </Modal>
     <style>
