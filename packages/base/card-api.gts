@@ -1081,7 +1081,7 @@ class LinksToMany<FieldT extends CardConstructor>
       if (visited.has(value.id)) {
         relationships[`${this.name}\.${i}`] = {
           links: {
-            self: makeRelativeURL(value.id),
+            self: makeRelativeURL(value.id, opts),
           },
           data: { type: 'card', id: value.id },
         };
@@ -1107,7 +1107,7 @@ class LinksToMany<FieldT extends CardConstructor>
       }
       relationships[`${this.name}\.${i}`] = {
         links: {
-          self: makeRelativeURL(value.id),
+          self: makeRelativeURL(value.id, opts),
         },
         data: { type: 'card', id: value.id },
       };
