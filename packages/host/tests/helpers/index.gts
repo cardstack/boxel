@@ -504,5 +504,5 @@ export async function percySnapshot(
     return true;
   });
 
-  return await percySnapshot(...args);
+  return await wrappedPercySnapshot(...args);
 }
