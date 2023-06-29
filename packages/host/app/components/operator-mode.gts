@@ -275,8 +275,8 @@ export default class OperatorMode extends Component<Signature> {
           !(await this.cardService.isPrimitive(field.card))
         ) {
           // This does not work
-          console.log('Nested change', field.card, values[fieldName]);
-          await this.setFieldValues(field.card, values[fieldName]);
+          console.log('Nested change', (card as any)[fieldName] , values[fieldName]);
+          await this.setFieldValues((card as any)[fieldName] , values[fieldName]);     
         } else {
           console.log('Setting', fieldName, values[fieldName], 'on card', card);
           (card as any)[fieldName] = values[fieldName];
