@@ -13,9 +13,9 @@ export default class LinksToCardComponentModifier extends Modifier<Signature> {
     element: HTMLElement,
     [card, context]: Signature['Args']['Positional']
   ) {
-    if(!context.optional){
-      // Do not try run modify hook if optional is not used 
-      return
+    if (!context.optional) {
+      // Do not try run modify hook if optional is not used
+      return;
     }
     if (context.optional.fieldType !== 'linksTo') {
       return;
