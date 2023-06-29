@@ -1,7 +1,7 @@
 import Component from '@glimmer/component';
-import { importResource } from '../resources/import';
+import { importResource } from '@cardstack/host/resources/import';
 import { service } from '@ember/service';
-import LoaderService from '../services/loader-service';
+import LoaderService from '@cardstack/host/services/loader-service';
 
 export interface Signature {
   Args: { url: string };

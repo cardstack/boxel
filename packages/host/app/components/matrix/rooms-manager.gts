@@ -5,7 +5,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 //@ts-expect-error the types don't recognize the cached export
 import { tracked, cached } from '@glimmer/tracking';
-import { not, eq } from '../helpers/truth-helpers';
+import { not, eq } from '@cardstack/host/helpers/truth-helpers';
 import { restartableTask, timeout } from 'ember-concurrency';
 import {
   BoxelHeader,
@@ -15,13 +15,13 @@ import {
   Button,
   FieldContainer,
 } from '@cardstack/boxel-ui';
-import { isMatrixError } from '../lib/matrix-utils';
+import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import { LinkTo } from '@ember/routing';
-import { eventDebounceMs } from '../lib/matrix-utils';
-import { getRoomCard, RoomCardResource } from '../resources/room-card';
+import { eventDebounceMs } from '@cardstack/host/lib/matrix-utils';
+import { getRoomCard, RoomCardResource } from '@cardstack/host/resources/room-card';
 import { TrackedMap } from 'tracked-built-ins';
 import RouterService from '@ember/routing/router-service';
-import type MatrixService from '../services/matrix-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import type { RoomCard, RoomMemberCard } from 'https://cardstack.com/base/room';
 
 const TRUE = true;
@@ -331,6 +331,6 @@ export default class RoomsManager extends Component {
 
 declare module '@glint/environment-ember-loose/registry' {
   export default interface RoomsManager {
-    RoomsManager: typeof RoomsManager;
+    'Matrix::RoomsManager': typeof RoomsManager;
   }
 }

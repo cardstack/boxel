@@ -5,7 +5,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 import { setupRenderingTest } from 'ember-qunit';
 import { renderComponent } from '../../helpers/render-component';
-import CatalogEntryEditor from '@cardstack/host/components/catalog-entry-editor';
+import CatalogEntryEditor from '@cardstack/host/components/editor/catalog-entry-editor';
 import {
   TestRealm,
   TestRealmAdapter,

@@ -25,6 +25,6 @@ export default class CodeLink extends Component<Signature> {
 
 declare module '@glint/environment-ember-loose/registry' {
   export default interface Registry {
-    CodeLink: typeof CodeLink;
+    'Editor::CodeLink': typeof CodeLink;
   }
 }

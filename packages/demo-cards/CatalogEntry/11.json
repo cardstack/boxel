@@ -1,0 +1,42 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "ClaimList from ../claim-list",
+      "description": "Catalog entry for ClaimList from ../claim-list",
+      "ref": {
+        "module": "../claim-list",
+        "name": "ClaimList"
+      },
+      "demo": {
+        "description": "Staking claims available to 0xEDC43a390C8eE324cC9d21C93C55c04bD6B8257f"
+      }
+    },
+    "relationships": {
+      "demo.claims.0": {
+        "links": {
+          "self": "../Claim/1"
+        }
+      },
+      "demo.claims.1": {
+        "links": {
+          "self": "../Claim/2"
+        }
+      }
+    },
+    "meta": {
+      "fields": {
+        "demo": {
+          "adoptsFrom": {
+            "module": "../claim-list",
+            "name": "ClaimList"
+          }
+        }
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}
