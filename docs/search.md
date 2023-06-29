@@ -104,7 +104,7 @@ A `sort` is an array property value where each item is an object that consists o
 
 * `on`: The card type being sorted
 * `by`: The field name to be sorted on. Nested fields may be supported using a dot (`.`) notation.
-* `direction`: `asc` of `desc`, default is `asc`
+* `direction`: `asc` or `desc`, default is `asc`
 
 #### Examples
 
