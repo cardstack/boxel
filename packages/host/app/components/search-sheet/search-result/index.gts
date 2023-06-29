@@ -10,13 +10,12 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     card: Card;
-    index: number; //currently this arg is only for testing purposes
   };
 }
 
 export default class SearchResult extends Component<Signature> {
   <template>
-    <CardContainer @displayBoundaries={{true}} class='search-result' data-test-search-result-index={{@index}} data-test-search-result={{@card.id}}>
+    <CardContainer @displayBoundaries={{true}} class='search-result' data-test-search-result={{@card.id}} ...attributes>
       <header class='search-result__title'>{{@card.title}}</header>
       <p class='search-result__display-name'>{{cardTypeDisplayName @card}}</p>
       <p class='search-result__realm-name'>In {{this.realmName}}</p>

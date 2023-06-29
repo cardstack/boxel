@@ -113,7 +113,7 @@ export default class SearchSheet extends Component<Signature> {
             <div class='search-sheet-content__recent-access__body'>
               <div class='search-sheet-content__recent-access__cards'>
                 {{#each this.reverseRecentCards as |card i|}}
-                  <SearchResult @card={{card}} @index={{i}}/>
+                  <SearchResult @card={{card}} data-test-search-result-index={{i}}/>
                 {{/each}}
               </div>
             </div>

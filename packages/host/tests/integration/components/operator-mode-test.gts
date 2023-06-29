@@ -1256,10 +1256,10 @@ module('Integration | operator-mode', function (hooks) {
       )
       .exists({ count: 2 });
     assert.dom(
-      `.search-sheet-content__recent-access__cards [data-test-search-result-index=0][data-test-search-result="${testRealmURL}Person/burcu"]`
+      `.search-sheet-content__recent-access__cards [data-test-search-result-index=0] [data-test-search-result="${testRealmURL}Person/burcu"]`
     );
     assert.dom(
-      `.search-sheet-content__recent-access__cards [data-test-search-result-index=1][data-test-search-result="${testRealmURL}Person/fadhlan"]`
+      `.search-sheet-content__recent-access__cards [data-test-search-result-index=1] [data-test-search-result="${testRealmURL}Person/fadhlan"]`
     );
   });
 
