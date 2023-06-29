@@ -11,6 +11,7 @@ import {
 import { getMetamaskResource } from './utils/resources/metamask';
 import { tracked } from '@glimmer/tracking';
 import { Button, FieldContainer } from '@cardstack/boxel-ui';
+import EthereumAddressCard from 'https://cardstack.com/base/ethereum-address';
 
 // @ts-ignore
 import { registerDestructor } from '@ember/destroyable';
@@ -292,8 +293,8 @@ class Isolated extends Component<typeof Claim> {
 
 export class Claim extends Card {
   static displayName = 'Claim';
-  @field moduleAddress = contains(StringCard);
-  @field safeAddress = contains(StringCard);
+  @field moduleAddress = contains(EthereumAddressCard);
+  @field safeAddress = contains(EthereumAddressCard);
   @field explanation = contains(StringCard);
   @field signature = contains(StringCard);
   @field encoding = contains(StringCard);

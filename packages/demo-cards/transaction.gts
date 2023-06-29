@@ -10,6 +10,7 @@ import StringCard from 'https://cardstack.com/base/string';
 import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
 import IntegerCard from 'https://cardstack.com/base/integer';
 import { Chain } from './chain';
+import EthereumAddressCard from 'https://cardstack.com/base/ethereum-address';
 
 export class Transaction extends Card {
   static displayName = 'Transaction';
@@ -17,8 +18,8 @@ export class Transaction extends Card {
   @field status = contains(BooleanCard);
   @field blockHash = contains(StringCard);
   @field blockNumber = contains(IntegerCard);
-  @field from = contains(StringCard);
-  @field to = contains(StringCard);
+  @field from = contains(EthereumAddressCard);
+  @field to = contains(EthereumAddressCard);
   @field memo = contains(StringCard);
   @field chain = linksTo(() => Chain);
   @field gasUsed = contains(IntegerCard);
