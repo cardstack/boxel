@@ -98,7 +98,9 @@ export interface CardContext {
   actions?: Actions;
   cardComponentModifier?: typeof Modifier<any>;
   renderedIn?: Component<any>;
-  optional?: any;
+  optional?: {
+    fieldType: FieldType;
+  };
 }
 
 function isNotLoadedValue(val: any): val is NotLoadedValue {

@@ -157,6 +157,12 @@ export function getLinksToManyComponent({
       </template>
     };
   } else {
-    return getPluralViewComponent(arrayField, field, format, cardTypeFor);
+    return getPluralViewComponent(
+      arrayField,
+      field,
+      format,
+      cardTypeFor,
+      context
+    );
   }
 }
