@@ -28,6 +28,7 @@ import * as dateFns from 'date-fns';
 import * as emberResourcesCore from 'ember-resources/core';
 import * as emberDestroyable from '@ember/destroyable';
 import * as marked from 'marked';
+import * as ethers from 'ethers';
 
 export function shimExternals(loader: Loader = Loader.getLoader()) {
   loader.shimModule('@cardstack/runtime-common', runtime);
@@ -65,6 +66,7 @@ export function shimExternals(loader: Loader = Loader.getLoader()) {
   loader.shimModule('ember-resources/core', emberResourcesCore);
   loader.shimModule('@ember/destroyable', emberDestroyable);
   loader.shimModule('marked', marked);
+  loader.shimModule('ethers', ethers);
 }
 
 shimExternals();
