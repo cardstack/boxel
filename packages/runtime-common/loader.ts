@@ -690,6 +690,10 @@ export class Loader {
     let dependencyList: UnregisteredDep[];
     let implementation: Function;
 
+    if (src.includes('glimmer-scoped')) {
+      src = 'console.log("hello!");';
+    }
+
     // this local is here for the evals to see
     // @ts-ignore
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -813,8 +817,8 @@ export class Loader {
   private async load(moduleURL: ResolvedURL): Promise<string> {
     console.log(`loading ${moduleURL}`);
     if (moduleURL.toString().includes('glimmer-scoped')) {
-      debugger;
-      return Promise.resolve('// a glimmer scoped comment?');
+      console.log('returning unfetched module URL');
+      return Promise.resolve(moduleURL.toString());
     }
     let response: Response;
     try {
