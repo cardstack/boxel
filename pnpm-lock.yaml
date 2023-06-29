@@ -1242,6 +1242,9 @@ importers:
       fastboot:
         specifier: ^4.1.0
         version: 4.1.0(patch_hash=kizxbxhfcldguz4jcwonfduu2y)
+      fastboot-app-server:
+        specifier: ^4.1.1
+        version: 4.1.1
       flat:
         specifier: ^5.0.2
         version: 5.0.2
@@ -2275,7 +2278,7 @@ packages:
       '@babel/core': ^7.0.0-0
     dependencies:
       '@babel/core': 7.21.0(supports-color@8.1.1)
-      '@babel/helper-create-class-features-plugin': 7.20.2(@babel/core@7.21.0)
+      '@babel/helper-create-class-features-plugin': 7.21.8(@babel/core@7.21.0)
       '@babel/helper-plugin-utils': 7.20.2
     transitivePeerDependencies:
       - supports-color
@@ -11432,7 +11435,7 @@ packages:
       lodash: 4.17.21
       mini-css-extract-plugin: 2.7.0(webpack@5.75.0)
       parse5: 6.0.1
-      resolve: 1.22.1
+      resolve: 1.22.3
       resolve-package-path: 4.0.3
       semver: 7.3.8
       style-loader: 2.0.0(patch_hash=xqjji5denmqrswdovljl2t3yv4)(webpack@5.75.0)
@@ -14744,12 +14747,42 @@ packages:
     transitivePeerDependencies:
       - supports-color
 
+  /fastboot-app-server@4.1.1:
+    resolution: {integrity: sha512-v7esODTxtPCZYXdW3B7at2otKHg7q5bR2YjkBISShqR5O2Ua4TrNslGQlI0VQIdSHG979g9g6bwr5EBCL2wtKw==}
+    engines: {node: 12.* || 14.* || >=16}
+    dependencies:
+      basic-auth: 2.0.1
+      chalk: 4.1.2
+      compression: 1.7.4
+      express: 4.18.2
+      fastboot: 4.1.1
+      fastboot-express-middleware: 4.1.1
+    transitivePeerDependencies:
+      - bufferutil
+      - canvas
+      - supports-color
+      - utf-8-validate
+    dev: true
+
   /fastboot-express-middleware@4.1.0:
     resolution: {integrity: sha512-RH/YnAn8S/CuzVsK0SLH5cVDP50R3MedqPFhf69T3z6h7LSFm12VAU2TKkqtW/N7qDs00CK1Clus2CwuzXVtWA==}
     engines: {node: 12.* || 14.* || >=16}
     dependencies:
       chalk: 4.1.2
       fastboot: 4.1.0(patch_hash=kizxbxhfcldguz4jcwonfduu2y)
+    transitivePeerDependencies:
+      - bufferutil
+      - canvas
+      - supports-color
+      - utf-8-validate
+    dev: true
+
+  /fastboot-express-middleware@4.1.1:
+    resolution: {integrity: sha512-RzobJdJXtFLOp+QtQlRSEm4RjepprLDITyYxPzd7M8LTH9jo2COhG0NFz2LFcv9Jtqlp8IzKh/0w2+hOt7JZow==}
+    engines: {node: 12.* || 14.* || >=16}
+    dependencies:
+      chalk: 4.1.2
+      fastboot: 4.1.1
     transitivePeerDependencies:
       - bufferutil
       - canvas
@@ -14784,6 +14817,24 @@ packages:
       - utf-8-validate
     dev: true
     patched: true
+
+  /fastboot@4.1.1:
+    resolution: {integrity: sha512-XG7YprsAuAGZrUDhmJ0NFuEP0gpWg9LZwGWSS1I5+f0ETHKPWqb4x59sN2rU1nvCEETBK70z68tLsWsl9daomg==}
+    engines: {node: 12.* || 14.* || >=16}
+    dependencies:
+      chalk: 4.1.2
+      cookie: 0.4.2
+      debug: 4.3.4(supports-color@8.1.1)
+      jsdom: 19.0.0
+      resolve: 1.22.3
+      simple-dom: 1.4.0
+      source-map-support: 0.5.21
+    transitivePeerDependencies:
+      - bufferutil
+      - canvas
+      - supports-color
+      - utf-8-validate
+    dev: true
 
   /fastest-levenshtein@1.0.16:
     resolution: {integrity: sha512-eRnCtTTtGZFpQCwhJiUOuxPQWRXVKYDn0b2PeHfXL6/Zi53SLAzAHfVhVWK2AryC/WH05kGfxhFIPvTF0SXQzg==}
