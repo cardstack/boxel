@@ -758,9 +758,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
         relationships: {
           [this.name]: {
             links: {
-              self: opts?.maybeRelativeURL
-                ? opts.maybeRelativeURL(value.reference)
-                : value.reference,
+              self: makeRelativeURL(value.reference, opts),
             },
           },
         },
@@ -780,9 +778,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
         relationships: {
           [this.name]: {
             links: {
-              self: opts?.maybeRelativeURL
-                ? opts.maybeRelativeURL(value.id)
-                : value.id,
+              self: makeRelativeURL(value.id, opts),
             },
             data: { type: 'card', id: value.id },
           },
@@ -804,9 +800,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
         relationships: {
           [this.name]: {
             links: {
-              self: opts?.maybeRelativeURL
-                ? opts.maybeRelativeURL(value.id)
-                : value.id,
+              self: makeRelativeURL(value.id, opts),
             },
             // we also write out the data form of the relationship
             // which correlates to the included resource
@@ -1078,9 +1072,7 @@ class LinksToMany<FieldT extends CardConstructor>
       if (isNotLoadedValue(value)) {
         relationships[`${this.name}\.${i}`] = {
           links: {
-            self: opts?.maybeRelativeURL
-              ? opts.maybeRelativeURL(value.reference)
-              : value.reference,
+            self: makeRelativeURL(value.reference, opts),
           },
           data: { type: 'card', id: value.reference },
         };
@@ -1089,9 +1081,7 @@ class LinksToMany<FieldT extends CardConstructor>
       if (visited.has(value.id)) {
         relationships[`${this.name}\.${i}`] = {
           links: {
-            self: opts?.maybeRelativeURL
-              ? opts.maybeRelativeURL(value.id)
-              : value.id,
+            self: makeRelativeURL(value.id),
           },
           data: { type: 'card', id: value.id },
         };
@@ -1117,9 +1107,7 @@ class LinksToMany<FieldT extends CardConstructor>
       }
       relationships[`${this.name}\.${i}`] = {
         links: {
-          self: opts?.maybeRelativeURL
-            ? opts.maybeRelativeURL(value.id)
-            : value.id,
+          self: makeRelativeURL(value.id),
         },
         data: { type: 'card', id: value.id },
       };
@@ -2531,3 +2519,7 @@ export class Box<T> {
 }
 
 type ElementType<T> = T extends (infer V)[] ? V : never;
+
+function makeRelativeURL(maybeURL: string, opts?: SerializeOpts): string {
+  return opts?.maybeRelativeURL ? opts.maybeRelativeURL(maybeURL) : maybeURL;
+}
