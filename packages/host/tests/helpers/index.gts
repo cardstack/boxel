@@ -9,7 +9,7 @@ import {
   RealmInfo,
 } from '@cardstack/runtime-common';
 import GlimmerComponent from '@glimmer/component';
-import { type TestContext, visit } from '@ember/test-helpers';
+import { type TestContext, visit, waitUntil } from '@ember/test-helpers';
 import { LocalPath } from '@cardstack/runtime-common/paths';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
@@ -28,6 +28,7 @@ import { WebMessageStream, messageCloseHandler } from './stream';
 import { file, FileResource } from '@cardstack/host/resources/file';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import Owner from '@ember/owner';
+import wrappedPercySnapshot from '@percy/ember';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
@@ -488,4 +489,19 @@ export function diff(
     removed: removed.map((e) => e.path),
     changed: changed.map((e) => e.path),
   };
+}
+
+// Ensure font is loaded, adapted from https://github.com/GoogleForCreators/web-stories-wp/blob/1ea476bb315d2618cfdd95f6ffd9775593064a69/assets/src/edit-story/karma/fixture/fixture.js#L299-L306
+export async function percySnapshot(
+  ...args: Parameters<typeof wrappedPercySnapshot>
+): ReturnType<typeof wrappedPercySnapshot> {
+  await waitUntil(async () => {
+    const font = '13px Poppins';
+    await document.fonts.load(font, '');
+    if (!document.fonts.check(font, '')) {
+      throw new Error('Not ready: Poppins font could not be loaded');
+    }
+  });
+
+  return await percySnapshot(...args);
 }

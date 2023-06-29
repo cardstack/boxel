@@ -6,6 +6,7 @@ import { baseRealm } from '@cardstack/runtime-common';
 import {
   TestRealm,
   TestRealmAdapter,
+  percySnapshot,
   setupLocalIndexing,
   setupMockMessageService,
   testRealmURL,
@@ -13,7 +14,6 @@ import {
 import { Realm } from '@cardstack/runtime-common/realm';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import type LoaderService from '@cardstack/host/services/loader-service';
-import percySnapshot from '@percy/ember';
 
 module('Acceptance | basic tests', function (hooks) {
   let realm: Realm;
