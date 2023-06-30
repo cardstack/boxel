@@ -2,8 +2,12 @@ import { isAddress } from 'ethers';
 import { primitive, Component, CardBase, useIndexBasedKey } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui';
 import { fn } from '@ember/helper';
+import { not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
-function validateEthereumAddress(address: string): boolean {
+function isEthAddress(address: string): boolean {
+  // this validates the input field is an eth address
+  // it also checks that the address is checksummed
+  // note: we do not checksum the address for the user but only indicate of the missing checksum
   try {
     return isAddress(address);
   } catch {
@@ -17,38 +21,33 @@ export default class EthereumAddressCard extends CardBase {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div class={{this.addressClass}}>
-        {{@model}}
-      </div>
+      {{@model}}
     </template>
-
-    get addressClass() {
-      return validateEthereumAddress(this.args.model || '')
-        ? 'valid-address'
-        : 'invalid-address';
-    }
   };
 
-  static edit = class Edit extends Component<typeof this> {
+  static edit = class Edit extends Component<typeof EthereumAddressCard> {
     <template>
       <BoxelInput
-        class={{this.addressClass}}
         @value={{@model}}
-        @onInput={{fn this.validateAndSetInput @set}}
+        @onInput={{fn this.parseInput @set}}
+        @errorMessage={{this.errorMessage}}
+        @invalid={{not this.isValidEthAddress}}
       />
     </template>
 
-    validateAndSetInput(set: Function, value: string) {
-      debugger;
-      if (validateEthereumAddress(value)) {
-        return set(value);
+    get isValidEthAddress() {
+      if (this.args.model == null) {
+        return false;
       }
+      return isEthAddress(this.args.model);
     }
 
-    get addressClass() {
-      return validateEthereumAddress(this.args.model || '')
-        ? 'valid-address'
-        : 'invalid-address';
+    get errorMessage() {
+      return 'Invalid Ethereum address. Please make sure it is a checksummed address.';
+    }
+
+    parseInput(set: Function, value: string) {
+      return set(value);
     }
   };
 }
