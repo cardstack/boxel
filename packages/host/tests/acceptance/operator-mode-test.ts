@@ -212,10 +212,10 @@ module('Acceptance | basic tests', function (hooks) {
       ctrlKey: true,
     });
 
-    await percySnapshot(assert);
-
     assert.dom('[data-test-card-stack]').exists();
     assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
+
+    await percySnapshot(assert);
 
     // In the URL, operatorModeEnabled is set to true and operatorModeState is set to the current stack
     assert.strictEqual(
