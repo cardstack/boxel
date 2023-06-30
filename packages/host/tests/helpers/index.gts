@@ -497,7 +497,9 @@ export async function percySnapshot(
 ): ReturnType<typeof wrappedPercySnapshot> {
   await waitUntil(async () => {
     const font = '13px Poppins';
-    await document.fonts.load(font, '');
+    console.log('checking load?');
+    const loaded = await document.fonts.load(font, '');
+    console.log('loaded', loaded);
     if (!document.fonts.check(font, '')) {
       throw new Error('Not ready: Poppins font could not be loaded');
     }
