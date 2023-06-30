@@ -11,6 +11,7 @@ import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { getOwner } from '@ember/application';
 import { scheduleOnce } from '@ember/runloop';
+import type { Card } from 'https://cardstack.com/base/card-api';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
@@ -24,6 +25,7 @@ export default class OperatorModeStateService extends Service {
   @tracked state: OperatorModeState = new TrackedObject({
     stacks: new TrackedArray([]),
   });
+  @tracked recentCards = new TrackedArray<Card>([]);
 
   @service declare cardService: CardService;
 
@@ -33,6 +35,7 @@ export default class OperatorModeStateService extends Service {
 
   addItemToStack(item: StackItem, stackIndex = 0) {
     this.state.stacks[stackIndex].items.push(item);
+    this.addRecentCards(item.card);
     this.schedulePersist();
   }
 
@@ -125,5 +128,34 @@ export default class OperatorModeStateService extends Service {
     }
 
     return newState;
+  }
+
+  async constructRecentCards() {
+    const recentCardIdsString = localStorage.getItem('recent-cards');
+    if (!recentCardIdsString) {
+      return;
+    }
+
+    const recentCardIds = JSON.parse(recentCardIdsString) as string[];
+    for (const recentCardId of recentCardIds) {
+      const card = await this.cardService.loadModel(new URL(recentCardId));
+      this.recentCards.push(card);
+    }
+  }
+
+  addRecentCards(card: Card) {
+    const existingCardIndex = this.recentCards.findIndex(
+      (recentCard) => recentCard.id === card.id
+    );
+    if (existingCardIndex !== -1) {
+      this.recentCards.splice(existingCardIndex, 1);
+    }
+
+    this.recentCards.push(card);
+    if (this.recentCards.length > 10) {
+      this.recentCards.splice(0, 1);
+    }
+    const recentCardIds = this.recentCards.map((recentCard) => recentCard.id);
+    localStorage.setItem('recent-cards', JSON.stringify(recentCardIds));
   }
 }

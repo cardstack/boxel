@@ -31,6 +31,7 @@ export default class SearchInput extends Component<Signature> {
           value={{@value}}
           {{on 'focus' (optional @onFocus)}}
           {{on 'input' (pick 'target.value' (optional @onInput))}}
+          data-test-search-input
         />
       </label>
     </div>

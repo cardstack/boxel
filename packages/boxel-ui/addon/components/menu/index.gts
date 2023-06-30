@@ -52,7 +52,6 @@ export default class Menu extends Component<Signature> {
       (actionOrLink as () => never)();
     }
     let { closeMenu } = this.args;
-    console.log(closeMenu);
     closeMenu && closeMenu();
   }
 

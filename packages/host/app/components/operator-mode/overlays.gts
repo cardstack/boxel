@@ -49,9 +49,12 @@ export default class OperatorModeOverlays extends Component<Signature> {
     name: 'offset',
     fn: (state: any) => {
       let rects = state.rects;
-      return {x: rects.reference.x + rects.reference.width - rects.floating.width, y: rects.reference.y};
-   }
-  }
+      return {
+        x: rects.reference.x + rects.reference.width - rects.floating.width,
+        y: rects.reference.y,
+      };
+    },
+  };
 }
 
 declare module '@glint/environment-ember-loose/registry' {
