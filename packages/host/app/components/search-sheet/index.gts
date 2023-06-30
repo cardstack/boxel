@@ -32,6 +32,7 @@ interface Signature {
 
 export default class SearchSheet extends Component<Signature> {
   @tracked searchInputValue = '';
+  @tracked cardURL = '';
   @service declare operatorModeStateService: OperatorModeStateService;
 
   get inputBottomTreatment() {
@@ -81,6 +82,9 @@ export default class SearchSheet extends Component<Signature> {
     this.args.onCancel();
   }
 
+  @action
+  onKeypress(_e: KeyboardEvent) {}
+
   @cached
   get reverseRecentCards() {
     // Clone the array first before reversing it.
@@ -107,8 +111,7 @@ export default class SearchSheet extends Component<Signature> {
         @onInput={{fn (mut this.searchInputValue)}}
       />
       <div class='search-sheet-content'>
-        {{#if (gt this.operatorModeStateService.recentCards.length 0)}}.url-entry { flex: 2;
-      margin-right: var(--boxel-sp); }
+        {{#if (gt this.operatorModeStateService.recentCards.length 0)}}
           <div class='search-sheet-content__recent-access'>
             <Label>Recent</Label>
             <div class='search-sheet-content__recent-access__body'>
@@ -127,7 +130,13 @@ export default class SearchSheet extends Component<Signature> {
       <div class='footer'>
         <div class='url-entry'>
           <FieldContainer @label='Enter Card URL:' @horizontalLabelSize='small'>
-            <BoxelInput @placeholder='http://' />
+            <BoxelInput
+              data-test-url-field
+              @placeholder='http://'
+              @value={{this.cardURL}}
+              @onInput={{fn (mut this.cardURL)}}
+              @onKeyPress={{this.onKeypress}}
+            />
           </FieldContainer>
         </div>
         <div class='buttons'>
