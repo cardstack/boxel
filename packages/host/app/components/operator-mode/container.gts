@@ -342,8 +342,6 @@ export default class OperatorModeContainer extends Component<Signature> {
         </div>
       {{else}}
         {{#each this.stacks as |stack stackIndex|}}
-          {{! Argument of type 'unknown' is not assignable to parameter of type 'Element'. (this is because of class='operator-mode-stack') }}
-          {{! @glint-ignore }}
           <OperatorModeStack
             data-test-operator-mode-stack={{stackIndex}}
             class='operator-mode-stack'

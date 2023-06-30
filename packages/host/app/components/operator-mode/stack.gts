@@ -5,7 +5,9 @@ import OperatorModeStackItem from '@cardstack/host/components/operator-mode/stac
 import { action } from '@ember/object';
 
 interface Signature {
+  Element: HTMLElement;
   Args: {
+    tag?: keyof HTMLElementTagNameMap;
     stackItems: StackItem[];
     stackIndex: number;
     publicAPI: Actions;
@@ -15,6 +17,7 @@ interface Signature {
     delete: (stackItem: StackItem) => void;
     save: (stackItem: StackItem) => void;
   };
+  Blocks: {};
 }
 
 export default class OperatorModeStack extends Component<Signature> {
@@ -26,8 +29,6 @@ export default class OperatorModeStack extends Component<Signature> {
   }
 
   <template>
-    {{! Argument of type 'unknown' is not assignable to parameter of type 'Element'. (this is because of ...attributes) }}
-    {{! @glint-ignore}}
     <div ...attributes>
       {{#each @stackItems as |item i|}}
         <OperatorModeStackItem
