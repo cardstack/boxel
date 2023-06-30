@@ -31,6 +31,9 @@ import { Transaction } from './transaction';
 
 // external depedencies. wud be good to get rid of these
 import type * as CardPaySDK from '@cardstack/cardpay-sdk';
+// @ts-ignore
+import { fn } from '@ember/helper';
+import BooleanCard from 'https://cardstack.com/base/boolean';
 
 //transaciton receipt type from the SDK
 export interface TransactionReceipt {
@@ -158,7 +161,6 @@ class Isolated extends Component<typeof Claim> {
         !this.inEnvThatCanCreateNewCard)
     );
   }
-
   private doClaim = restartableTask(async () => {
     try {
       // @ts-ignore
@@ -291,6 +293,39 @@ class Isolated extends Component<typeof Claim> {
   }
 }
 
+class Embedded extends Component<typeof Claim> {
+  get claimButtonDisabled() {
+    return !!!this.args.context?.actions?.viewCard;
+  }
+  @action openCard(card: Partial<Claim> | undefined) {
+    if (card) {
+      this.args.context?.actions?.viewCard(card as Card);
+    }
+  }
+
+  <template>
+    <div class='demo-card'>
+      <FieldContainer @label='Title'><@fields.title /></FieldContainer>
+      <FieldContainer @label='Explanation'><@fields.explanation
+        /></FieldContainer>
+      <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
+      <FieldContainer @label='Already Claimed?'>
+        <@fields.hasBeenClaimed />
+      </FieldContainer>
+      <Button
+        disabled={{this.claimButtonDisabled}}
+        {{on 'click' (fn this.openCard this.args.model)}}
+      >
+        {{#if this.claimButtonDisabled}}
+          View Claim (Environment does not allow card viewing)
+        {{else}}
+          View Claim
+        {{/if}}
+      </Button>
+    </div>
+  </template>
+}
+
 export class Claim extends Card {
   static displayName = 'Claim';
   @field moduleAddress = contains(EthereumAddressCard);
@@ -305,19 +340,12 @@ export class Claim extends Card {
     },
   });
   @field transaction = linksTo(() => Transaction); // this field is populated after a claim
+  @field hasBeenClaimed = contains(BooleanCard, {
+    computeVia: function (this: Claim) {
+      return !!this.transaction;
+    },
+  });
 
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      <div class='demo-card'>
-        <FieldContainer @label='Title'><@fields.title /></FieldContainer>
-        <FieldContainer @label='Explanation'><@fields.explanation
-          /></FieldContainer>
-        <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
-        <Button>
-          Look at Claim
-        </Button>
-      </div>
-    </template>
-  };
+  static embedded = Embedded;
   static isolated = Isolated;
 }

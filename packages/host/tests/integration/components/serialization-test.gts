@@ -3022,7 +3022,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${realmURL}person`,
+              module: `./person`,
               name: 'Person',
             },
           },
@@ -3085,7 +3085,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${realmURL}post`,
+              module: `./post`,
               name: 'Post',
             },
           },
@@ -3193,7 +3193,7 @@ module('Integration | serialization', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${realmURL}blog`,
+              module: `./blog`,
               name: 'Blog',
             },
           },

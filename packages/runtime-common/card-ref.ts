@@ -104,14 +104,19 @@ export async function loadCard(
   throw err;
 }
 
-export function identifyCard(card: unknown): CardRef | undefined {
+export function identifyCard(
+  card: unknown,
+  maybeRelativeURL?: ((possibleURL: string) => string) | null
+): CardRef | undefined {
   if (!isCard(card)) {
     return undefined;
   }
 
   let ref = Loader.identify(card);
   if (ref) {
-    return ref;
+    return maybeRelativeURL
+      ? { ...ref, module: maybeRelativeURL(ref.module) }
+      : ref;
   }
 
   let local = localIdentities.get(card);

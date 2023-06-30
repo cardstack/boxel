@@ -28,6 +28,8 @@ import {
   identifyCard,
   loadCard,
   humanReadable,
+  maybeURL,
+  maybeRelativeURL,
   type Meta,
   type CardFields,
   type Relationship,
@@ -98,7 +100,9 @@ export interface CardContext {
   actions?: Actions;
   cardComponentModifier?: typeof Modifier<any>;
   renderedIn?: Component<any>;
-  optional?: any;
+  optional?: {
+    fieldType: FieldType;
+  };
 }
 
 function isNotLoadedValue(val: any): val is NotLoadedValue {
@@ -207,7 +211,7 @@ type JSONAPIResource =
       meta?: Record<string, any>;
     };
 
-interface JSONAPISingleResourceDocument {
+export interface JSONAPISingleResourceDocument {
   data: Partial<JSONAPIResource> & { id?: string; type: string };
   included?: (Partial<JSONAPIResource> & { id: string; type: string })[];
 }
@@ -755,7 +759,9 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
       return {
         relationships: {
           [this.name]: {
-            links: { self: value.reference },
+            links: {
+              self: makeRelativeURL(value.reference, opts),
+            },
           },
         },
       };
@@ -773,7 +779,9 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
       return {
         relationships: {
           [this.name]: {
-            links: { self: value.id },
+            links: {
+              self: makeRelativeURL(value.id, opts),
+            },
             data: { type: 'card', id: value.id },
           },
         },
@@ -793,7 +801,9 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
       let resource: JSONAPIResource = {
         relationships: {
           [this.name]: {
-            links: { self: value.id },
+            links: {
+              self: makeRelativeURL(value.id, opts),
+            },
             // we also write out the data form of the relationship
             // which correlates to the included resource
             data: { type: 'card', id: value.id },
@@ -841,7 +851,8 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     if (cachedInstance) {
       return cachedInstance as CardInstanceType<CardT>;
     }
-    let resource = resourceFrom(doc, value.links.self);
+    let resourceId = new URL(value.links.self, relativeTo).href;
+    let resource = resourceFrom(doc, resourceId);
     if (!resource) {
       return {
         type: 'not-loaded',
@@ -915,7 +926,10 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     relativeTo: URL | undefined
   ): Promise<CardBase> {
     let { reference: maybeRelativeReference } = notLoaded;
-    let reference = new URL(maybeRelativeReference as string, relativeTo).href;
+    let reference = new URL(
+      maybeRelativeReference as string,
+      instance.id ?? relativeTo // new instances may not yet have an ID, in that case fallback to the relativeTo
+    ).href;
     let loader = Loader.getLoaderFor(createFromSerialized);
     let response = await loader.fetch(reference, {
       headers: { Accept: SupportedMimeType.CardJson },
@@ -942,7 +956,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     let fieldInstance = await createFromSerialized(
       json.data,
       json,
-      relativeTo,
+      new URL(json.data.id),
       {
         loader,
         identityContext,
@@ -1059,14 +1073,18 @@ class LinksToMany<FieldT extends CardConstructor>
     values.map((value, i) => {
       if (isNotLoadedValue(value)) {
         relationships[`${this.name}\.${i}`] = {
-          links: { self: value.reference },
+          links: {
+            self: makeRelativeURL(value.reference, opts),
+          },
           data: { type: 'card', id: value.reference },
         };
         return;
       }
       if (visited.has(value.id)) {
         relationships[`${this.name}\.${i}`] = {
-          links: { self: value.id },
+          links: {
+            self: makeRelativeURL(value.id, opts),
+          },
           data: { type: 'card', id: value.id },
         };
         return;
@@ -1090,7 +1108,9 @@ class LinksToMany<FieldT extends CardConstructor>
         doc.included.push(serialized);
       }
       relationships[`${this.name}\.${i}`] = {
-        links: { self: value.id },
+        links: {
+          self: makeRelativeURL(value.id, opts),
+        },
         data: { type: 'card', id: value.id },
       };
     });
@@ -1129,7 +1149,8 @@ class LinksToMany<FieldT extends CardConstructor>
         if (cachedInstance) {
           return cachedInstance;
         }
-        let resource = resourceFrom(doc, value.links.self);
+        let resourceId = new URL(value.links.self, relativeTo).href;
+        let resource = resourceFrom(doc, resourceId);
         if (!resource) {
           return {
             type: 'not-loaded',
@@ -1237,7 +1258,7 @@ class LinksToMany<FieldT extends CardConstructor>
     relativeTo: URL | undefined
   ): Promise<CardBase[]> {
     let refs = (notLoaded.reference as string[]).map(
-      (ref) => new URL(ref, relativeTo).href
+      (ref) => new URL(ref, instance.id ?? relativeTo).href // new instances may not yet have an ID, in that case fallback to the relativeTo
     );
     let loader = Loader.getLoaderFor(createFromSerialized);
     let errors = [];
@@ -1268,7 +1289,7 @@ class LinksToMany<FieldT extends CardConstructor>
         let fieldInstance = await createFromSerialized(
           json.data,
           json,
-          undefined,
+          new URL(json.data.id),
           {
             loader,
             identityContext,
@@ -1768,6 +1789,7 @@ async function getDeserializedValue<CardT extends CardBaseConstructor>({
 export interface SerializeOpts {
   includeComputeds?: boolean;
   includeUnrenderedFields?: boolean;
+  maybeRelativeURL?: ((possibleURL: string) => string) | null; // setting this to null will force all URL's to be absolute
 }
 
 function serializeCardResource(
@@ -1776,7 +1798,7 @@ function serializeCardResource(
   opts?: SerializeOpts,
   visited: Set<string> = new Set()
 ): LooseCardResource {
-  let adoptsFrom = identifyCard(model.constructor);
+  let adoptsFrom = identifyCard(model.constructor, opts?.maybeRelativeURL);
   if (!adoptsFrom) {
     throw new Error(`bug: could not identify card: ${model.constructor.name}`);
   }
@@ -1806,7 +1828,28 @@ export function serializeCard(
   let doc = {
     data: { type: 'card', ...(model.id != null ? { id: model.id } : {}) },
   };
-  let data = serializeCardResource(model, doc, opts);
+  let modelRelativeTo = model[relativeTo];
+  let data = serializeCardResource(model, doc, {
+    ...opts,
+    // if opts.maybeRelativeURL is null that is our indication
+    // that the caller wants all the URL's to be absolute
+    ...(opts?.maybeRelativeURL !== null
+      ? {
+          maybeRelativeURL(possibleURL: string) {
+            let url = maybeURL(possibleURL, modelRelativeTo);
+            if (!url) {
+              throw new Error(
+                `could not determine url from '${maybeRelativeURL}' relative to ${modelRelativeTo}`
+              );
+            }
+            if (!modelRelativeTo) {
+              return url.href;
+            }
+            return maybeRelativeURL(url, modelRelativeTo);
+          },
+        }
+      : {}),
+  });
   merge(doc, { data });
   if (!isSingleCardDocument(doc)) {
     throw new Error(
@@ -2478,3 +2521,7 @@ export class Box<T> {
 }
 
 type ElementType<T> = T extends (infer V)[] ? V : never;
+
+function makeRelativeURL(maybeURL: string, opts?: SerializeOpts): string {
+  return opts?.maybeRelativeURL ? opts.maybeRelativeURL(maybeURL) : maybeURL;
+}

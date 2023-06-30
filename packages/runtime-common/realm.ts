@@ -73,7 +73,7 @@ import { mergeRelationships } from './merge-relationships';
 export type RealmInfo = {
   name: string;
   backgroundURL: string | null;
-}
+};
 
 export interface FileRef {
   path: LocalPath;
@@ -798,12 +798,13 @@ export class Realm {
     let realmInfo: RealmInfo = {
       name: 'Unnamed Workspace',
       backgroundURL: null,
-    }
+    };
     if (realmConfig) {
       try {
         let realmConfigJson = JSON.parse(realmConfig.content);
         realmInfo.name = realmConfigJson.name ?? realmInfo.name;
-        realmInfo.backgroundURL = realmConfigJson.backgroundURL ?? realmInfo.backgroundURL;
+        realmInfo.backgroundURL =
+          realmConfigJson.backgroundURL ?? realmInfo.backgroundURL;
       } catch (e) {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }

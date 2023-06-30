@@ -387,18 +387,17 @@ export class RoomCard extends Card {
         if (event.content.msgtype === 'org.boxel.card') {
           let cardDoc = event.content.instance;
           let attachedCard: Promise<Card> | undefined;
-          if (cardDoc.data.id != null) {
-            attachedCard = attachedCards.get(cardDoc.data.id);
+          if (cardDoc.data.id == null) {
+            throw new Error(`cannot handle cards in room without an ID`);
           }
+          attachedCard = attachedCards.get(cardDoc.data.id);
           if (!attachedCard) {
             attachedCard = createFromSerialized<typeof Card>(
               cardDoc.data,
               cardDoc,
-              undefined
+              new URL(cardDoc.data.id)
             );
-            if (cardDoc.data.id != null) {
-              attachedCards.set(cardDoc.data.id, attachedCard);
-            }
+            attachedCards.set(cardDoc.data.id, attachedCard);
           }
           newMessages.set(
             event.event_id,
