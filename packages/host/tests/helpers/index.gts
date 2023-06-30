@@ -501,6 +501,7 @@ export async function percySnapshot(
     if (!document.fonts.check(font, '')) {
       throw new Error('Not ready: Poppins font could not be loaded');
     }
+    console.log(`search for font ${document.fonts.check(font, '')}`);
     return true;
   });
 
