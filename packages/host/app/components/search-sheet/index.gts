@@ -10,6 +10,7 @@ import SearchResult from './search-result';
 import { Label } from '@cardstack/boxel-ui';
 import { gt } from '../../helpers/truth-helpers';
 import { service } from '@ember/service';
+import { restartableTask } from 'ember-concurrency';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 export enum SearchSheetMode {
@@ -75,6 +76,12 @@ export default class SearchSheet extends Component<Signature> {
     }
     return this._headline;
   }
+
+  getCard = restartableTask(async () => {
+    // fetch card URL. assert response is actually a card
+    // if HTTP error or not a card then update UI with error state, otherwise
+    // replace the stack with the card
+  });
 
   @action
   onCancel() {
