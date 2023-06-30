@@ -1,6 +1,6 @@
 import Component from '@glimmer/component';
 import SearchInput, { SearchInputBottomTreatment } from './search-input';
-import { Button } from '@cardstack/boxel-ui';
+import { Button, BoxelInput, FieldContainer } from '@cardstack/boxel-ui';
 import { on } from '@ember/modifier';
 //@ts-ignore cached not available yet in definitely typed
 import { cached, tracked } from '@glimmer/tracking';
@@ -107,13 +107,17 @@ export default class SearchSheet extends Component<Signature> {
         @onInput={{fn (mut this.searchInputValue)}}
       />
       <div class='search-sheet-content'>
-        {{#if (gt this.operatorModeStateService.recentCards.length 0)}}
+        {{#if (gt this.operatorModeStateService.recentCards.length 0)}}.url-entry { flex: 2;
+      margin-right: var(--boxel-sp); }
           <div class='search-sheet-content__recent-access'>
             <Label>Recent</Label>
             <div class='search-sheet-content__recent-access__body'>
               <div class='search-sheet-content__recent-access__cards'>
                 {{#each this.reverseRecentCards as |card i|}}
-                  <SearchResult @card={{card}} data-test-search-result-index={{i}}/>
+                  <SearchResult
+                    @card={{card}}
+                    data-test-search-result-index={{i}}
+                  />
                 {{/each}}
               </div>
             </div>
@@ -122,14 +126,19 @@ export default class SearchSheet extends Component<Signature> {
       </div>
       <div class='footer'>
         <div class='url-entry'>
-          {{! Enter Card URL: .... }}
+          <FieldContainer @label='Enter Card URL:' @horizontalLabelSize='small'>
+            <BoxelInput @placeholder='http://' />
+          </FieldContainer>
         </div>
         <div class='buttons'>
-          <Button {{on 'click' this.onCancel}} data-test-search-sheet-cancel-button>Cancel</Button>
+          <Button
+            {{on 'click' this.onCancel}}
+            data-test-search-sheet-cancel-button
+          >Cancel</Button>
           <Button
             @disabled={{this.isSearchDisabled}}
             @kind='primary'
-          >Search</Button>
+          >Go</Button>
         </div>
       </div>
     </div>
@@ -217,6 +226,12 @@ export default class SearchSheet extends Component<Signature> {
         padding: var(--boxel-sp) var(--boxel-sp-xxxs);
         gap: var(--boxel-sp);
       }
+
+      .url-entry {
+        flex: 2;
+        margin-right: var(--boxel-sp);
+      }
+
     </style>
   </template>
 }
