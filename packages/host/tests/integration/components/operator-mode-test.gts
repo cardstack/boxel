@@ -10,7 +10,6 @@ import { Card } from 'https://cardstack.com/base/card-api';
 import { renderComponent } from '../../helpers/render-component';
 import {
   testRealmURL,
-  percySnapshot,
   setupCardLogs,
   setupLocalIndexing,
   TestRealmAdapter,
@@ -26,6 +25,7 @@ import {
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import percySnapshot from '@percy/ember';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 const realmName = 'Operator Mode Workspace';
