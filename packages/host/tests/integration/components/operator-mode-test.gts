@@ -1180,4 +1180,47 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-cards-grid-cards]`).isNotVisible();
     assert.dom(`[data-test-create-new-card-button]`).isNotVisible();
   });
+
+    test("it sets the name and doesn't change the city when given a patch change", async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+    await waitFor('[data-test-person]');
+    await click('[data-test-edit-button]');
+    await click('[data-test-boxel-menu-item-text="Edit"]');
+    // User edits the name, this should be overritten by the patch
+    await fillIn('[data-test-boxel-input]', 'EditedName');
+    // User edits the city, this should not be overwritten
+    await fillIn(
+      '[data-test-boxel-input-city] [data-test-boxel-input]',
+      'EditedCity'
+    );
+
+    // Request a change from the AI
+    await fillIn(
+      '.search-input input',
+      'Set the name to John, change nothing else')
+
+    // Await click search
+    await click('[data-search-button]');
+    console.log("Waiting for search stopped");
+    await waitFor(`.search-success`);
+    console.log("Search stopped")
+
+    // Save the model
+    await click('[aria-label="Save"]');
+
+    // Name should be John - timeout required here, would be good to avoid
+    await waitFor('[data-test-person="John"]', { timeout: 2000 });
+    assert.dom('[data-test-person]').hasText('John');
+    assert.dom('[data-test-first-letter-of-the-name]').hasText('J');
+    assert.dom('[data-test-city]').hasText('EditedCity');
+  });
 });
