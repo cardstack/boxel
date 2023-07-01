@@ -116,6 +116,7 @@ export default class OperatorMode extends Component<Signature> {
     const data = await response.json();
     console.log(data, data.data);
     await this.setFieldValues(card, data.data);
+    console.log("Set");
   }
 
   @action onCancelSearchSheet() {
@@ -265,7 +266,7 @@ export default class OperatorMode extends Component<Signature> {
 
   private async setFieldValues(card: Card, values: StringMap) {
     let fields = await this.cardService.getFields(card);
-    for (let fieldName of Object.keys(fields)) {
+    for (let fieldName of Object.keys(values)) {
       let field = fields[fieldName];
       if (fieldName === 'id') continue;
       try {
