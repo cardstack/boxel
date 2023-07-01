@@ -27,6 +27,7 @@ interface Signature {
 
 export default class SearchSheet extends Component<Signature> {
   @tracked searchInputValue = '';
+  @tracked state = 'search-stopped';
 
   get inputBottomTreatment() {
     return this.args.mode == SearchSheetMode.Closed
@@ -72,7 +73,9 @@ export default class SearchSheet extends Component<Signature> {
   @action
   onSearch() {
     console.log('Onsearch');
+    this.state = 'search-started';
     this.args.onSearch(this.searchInputValue);
+    this.state = 'search-success';
   }
 
   @action
@@ -97,13 +100,13 @@ export default class SearchSheet extends Component<Signature> {
         @onFocus={{@onFocus}}
         @onInput={{fn (mut this.searchInputValue)}}
       />
-      <div class='footer'>
+      <div class='footer {{this.state}}'>
         <div class='url-entry'>
           {{! Enter Card URL: .... }}
         </div>
         <div class='buttons'>
           <Button {{on 'click' this.onCancel}}>Cancel</Button>
-          <Button
+          <Button data-search-button
             {{on 'click' this.onSearch}}
             @disabled={{this.isSearchDisabled}}
             @kind='primary'
