@@ -22,6 +22,7 @@ import {
   LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import type LoaderService from '../services/loader-service';
+import type AiService from '../services/ai-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { htmlSafe, SafeString } from '@ember/template';
@@ -64,6 +65,7 @@ export default class OperatorMode extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
+  @service declare aiService: AiService;
   @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
 
   constructor(owner: unknown, args: any) {
@@ -96,27 +98,9 @@ export default class OperatorMode extends Component<Signature> {
     console.log(searchString);
     let topOfStack: StackItem = this.stack[this.stack.length - 1];
     let card = topOfStack.card;
-    let fields = await this.cardService.getFields(card);
-    for (let fieldName of Object.keys(fields)) {
-      console.log(fieldName, (card as any)[fieldName]);
-    }
-    console.log(fields);
-    let cardData = this.cardService.api.serializeCard(card);
-    const response = await fetch('http://localhost:8000/contentChange', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      duplex: 'half',
-      body: JSON.stringify({
-        userChangeRequest: searchString,
-        card: cardData,
-      }),
-    });
-    const data = await response.json();
-    console.log(data, data.data);
-    await this.setFieldValues(card, data.data);
-    console.log("Set");
+    const data = await this.aiService.getChanges(card, searchString);
+    console.log("received data from AI service:", data);
+    await this.setFieldValues(card, data);
   }
 
   @action onCancelSearchSheet() {
