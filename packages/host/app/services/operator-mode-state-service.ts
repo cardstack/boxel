@@ -66,9 +66,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   clearStacks() {
-    this.state = new TrackedObject({
-      stacks: new TrackedArray([]),
-    });
+    this.state.stacks.splice(0);
     this.schedulePersist();
   }
 
