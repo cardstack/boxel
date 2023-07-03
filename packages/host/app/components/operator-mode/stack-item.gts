@@ -3,39 +3,38 @@ import { on } from '@ember/modifier';
 import { Card, CardContext } from 'https://cardstack.com/base/card-api';
 import Preview from '@cardstack/host/components/preview';
 import { fn, array } from '@ember/helper';
-import type CardService from '@cardstack/host/services/card-service';
+
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import optional from '@cardstack/boxel-ui/helpers/optional';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import { IconButton, Header, CardContainer, Button } from '@cardstack/boxel-ui';
 import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import { service } from '@ember/service';
+
 import { tracked } from '@glimmer/tracking';
 import { TrackedArray } from 'tracked-built-ins';
 import LinksToCardComponentModifier from '@cardstack/host/modifiers/links-to-card-component-modifier';
 import { schedule } from '@ember/runloop';
-import { SafeString } from '@ember/template';
+
 import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
 import BoxelMenu from '@cardstack/boxel-ui/components/menu';
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
 import { StackItem } from '@cardstack/host/components/operator-mode/container';
+
+import { htmlSafe, SafeString } from '@ember/template';
 import OperatorModeOverlays from '@cardstack/host/components/operator-mode/overlays';
 
 interface Signature {
   Args: {
     item: StackItem;
+    stackItems: StackItem[];
     index: number;
     publicAPI: Actions;
-    addToStack: (item: StackItem) => void;
     cancel: (item: StackItem) => void;
     close: (item: StackItem) => void;
     delete: (item: StackItem) => void;
     dismissStackedCardsAbove: (stackIndex: number) => void;
     edit: (item: StackItem) => void;
-    isBuried: (stackIndex: number) => boolean;
     save: (item: StackItem) => void;
-    styleForStackedCard: (stackIndex: number) => SafeString;
   };
 }
 
@@ -47,14 +46,24 @@ export interface RenderedLinksToCard {
 }
 
 export default class OperatorModeStackItem extends Component<Signature> {
-  //A variable to store value of card field
-  //before in edit mode.
-  cardFieldValues: WeakMap<Card, Map<string, any>> = new WeakMap<
-    Card,
-    Map<string, any>
-  >();
-  @service declare loaderService: LoaderService;
-  @service declare cardService: CardService;
+  @tracked renderedLinksToCards = new TrackedArray<RenderedLinksToCard>([]);
+
+  get styleForStackedCard(): SafeString {
+    let itemsOnStackCount = this.args.stackItems.length;
+    let invertedIndex = itemsOnStackCount - this.args.index - 1;
+    let widthReductionPercent = 5; // Every new card on the stack is 5% wider than the previous one
+    let offsetPx = 40; // Every new card on the stack is 40px lower than the previous one
+
+    return htmlSafe(`
+      width: ${100 - invertedIndex * widthReductionPercent}%;
+      z-index: ${itemsOnStackCount - invertedIndex};
+      padding-top: calc(${offsetPx}px * ${this.args.index});
+    `);
+  }
+
+  get isBuried() {
+    return this.args.index + 1 < this.args.stackItems.length;
+  }
 
   get context() {
     return {
@@ -64,7 +73,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     };
   }
 
-  @tracked renderedLinksToCards = new TrackedArray<RenderedLinksToCard>([]);
   registerLinkedCardElement(
     linksToCardElement: HTMLElement,
     linksToCard: Card,
@@ -92,30 +100,18 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   <template>
     <div
-      class={{cn
-      'item'
-      buried=(@isBuried @index)
-      }}
+      class='item {{if this.isBuried "buried"}}'
       data-test-stack-card-index={{@index}}
       data-test-stack-card={{@item.card.id}}
-      style={{@styleForStackedCard @index}}
+      style={{this.styleForStackedCard}}
     >
-      <CardContainer
-        class={{cn
-          'card'
-          edit=(eq @item.format 'edit')
-        }}
-      >
+      <CardContainer class={{cn 'card' edit=(eq @item.format 'edit')}}>
         <Header
           @title={{cardTypeDisplayName @item.card}}
           class='header'
           {{on
-          'click'
-          (optional
-              (if
-              (@isBuried @index) (fn @dismissStackedCardsAbove @index)
-              )
-          )
+            'click'
+            (optional (if this.isBuried (fn @dismissStackedCardsAbove @index)))
           }}
           data-test-stack-card-header
         >
@@ -136,24 +132,22 @@ export default class OperatorModeStackItem extends Component<Signature> {
                 <BoxelMenu
                   @closeMenu={{dd.close}}
                   @items={{if
-                  (eq @item.format 'edit')
-                  (array
-                    (menuItem
-                    'Finish Editing'
-                    (fn @save @item @index)
-                    icon='icon-check-mark'
+                    (eq @item.format 'edit')
+                    (array
+                      (menuItem
+                        'Finish Editing'
+                        (fn @save @item @index)
+                        icon='icon-check-mark'
+                      )
+                      (menuItem
+                        'Delete' (fn @delete @item @index) icon='icon-trash'
+                      )
                     )
-                    (menuItem
-                    'Delete'
-                    (fn @delete @item @index)
-                    icon='icon-trash'
+                    (array
+                      (menuItem
+                        'Edit' (fn @edit @item @index) icon='icon-pencil'
+                      )
                     )
-                  )
-                  (array
-                    (menuItem
-                    'Edit' (fn @edit @item @index) icon='icon-pencil'
-                    )
-                  )
                   }}
                 />
               </:content>
@@ -177,7 +171,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
           />
           <OperatorModeOverlays
             @renderedLinksToCards={{this.renderedLinksToCards}}
-            @addToStack={{@addToStack}}
+            @publicAPI={{@publicAPI}}
           />
         </div>
         {{#if (eq @item.format 'edit')}}

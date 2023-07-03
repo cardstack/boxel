@@ -6,6 +6,7 @@ import { fn } from '@ember/helper';
 import { trackedFunction } from 'ember-resources/util/function';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import type CardService from '@cardstack/host/services/card-service';
+
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { Modal } from '@cardstack/boxel-ui';
 import SearchSheet, {
@@ -23,7 +24,7 @@ import {
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-import { htmlSafe, SafeString } from '@ember/template';
+
 import { registerDestructor } from '@ember/destroyable';
 import type { Query } from '@cardstack/runtime-common/query';
 import {
@@ -33,7 +34,8 @@ import {
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import perform from 'ember-concurrency/helpers/perform';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import OperatorModeStackItem from './stack-item';
+
+import OperatorModeStack from '@cardstack/host/components/operator-mode/stack';
 
 interface Signature {
   Args: {
@@ -54,11 +56,11 @@ export type StackItem = {
   format: Format;
   request?: Deferred<Card>;
   isLinkedCard?: boolean;
+  stackIndex: number;
 };
 
 export default class OperatorModeContainer extends Component<Signature> {
-  //A variable to store value of card field
-  //before in edit mode.
+  // In this map we store the field values of cards that are being edited so that we can restore them if the user cancels the edit
   cardFieldValues: WeakMap<Card, Map<string, any>> = new WeakMap<
     Card,
     Map<string, any>
@@ -74,13 +76,12 @@ export default class OperatorModeContainer extends Component<Signature> {
     (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
     registerDestructor(this, () => {
       delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
-      this.operatorModeStateService.clearStack();
+      this.operatorModeStateService.clearStacks();
     });
   }
 
-  get stack() {
-    // We return the first one until we start supporting 2 stacks
-    return this.operatorModeStateService.state?.stacks[0]?.items;
+  get stacks() {
+    return this.operatorModeStateService.state?.stacks ?? [];
   }
 
   @action
@@ -124,6 +125,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       card: item.card,
       format,
       request,
+      stackIndex: item.stackIndex,
     };
 
     this.replaceItemInStack(item, newItem);
@@ -156,12 +158,13 @@ export default class OperatorModeContainer extends Component<Signature> {
         this.replaceItemInStack(item, {
           card: updatedCard,
           format: 'isolated',
+          stackIndex: item.stackIndex,
         });
       }
     }
   }
 
-  //TODO: Implement remove card function
+  // TODO: Implement remove card function
   @action async delete(item: StackItem) {
     await this.close(item);
   }
@@ -197,55 +200,62 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   }
 
-  private publicAPI: Actions = {
-    createCard: async (
-      ref: CardRef,
-      relativeTo: URL | undefined,
-      opts?: {
-        isLinkedCard?: boolean;
-        doc?: LooseSingleCardDocument; // fill in card data with values
-      }
-    ): Promise<Card | undefined> => {
-      // prefers optional doc to be passed in
-      // use case: to populate default values in a create modal
-      let doc: LooseSingleCardDocument = opts?.doc ?? {
-        data: { meta: { adoptsFrom: ref } },
-      };
-      let newCard = await this.cardService.createFromSerialized(
-        doc.data,
-        doc,
-        relativeTo ?? this.cardService.defaultURL
-      );
-      let newItem: StackItem = {
-        card: newCard,
-        format: 'edit',
-        request: new Deferred(),
-        isLinkedCard: opts?.isLinkedCard,
-      };
-      this.addToStack(newItem);
-      return await newItem.request?.promise;
-    },
-    viewCard: (card: Card) => {
-      return this.addToStack({ card, format: 'isolated' });
-    },
-    createCardDirectly: async (
-      doc: LooseSingleCardDocument,
-      relativeTo: URL | undefined
-    ): Promise<void> => {
-      let newCard = await this.cardService.createFromSerialized(
-        doc.data,
-        doc,
-        relativeTo ?? this.cardService.defaultURL
-      );
-      await this.cardService.saveModel(newCard);
-      let newItem: StackItem = {
-        card: newCard,
-        format: 'isolated',
-      };
-      this.addToStack(newItem);
-      return;
-    },
-  };
+  // The public API is wrapped in a closure so that whatever calls its methods
+  // in the context of operator-mode, the methods can be aware of which stack to deal with (via stackIndex), i.e.
+  // to which stack the cards will be added to, or from which stack the cards will be removed from.
+  private publicAPI(here: OperatorModeContainer, stackIndex: number): Actions {
+    return {
+      createCard: async (
+        ref: CardRef,
+        relativeTo: URL | undefined,
+        opts?: {
+          isLinkedCard?: boolean;
+          doc?: LooseSingleCardDocument; // fill in card data with values
+        }
+      ): Promise<Card | undefined> => {
+        // prefers optional doc to be passed in
+        // use case: to populate default values in a create modal
+        let doc: LooseSingleCardDocument = opts?.doc ?? {
+          data: { meta: { adoptsFrom: ref } },
+        };
+        let newCard = await here.cardService.createFromSerialized(
+          doc.data,
+          doc,
+          relativeTo ?? here.cardService.defaultURL
+        );
+        let newItem: StackItem = {
+          card: newCard,
+          format: 'edit',
+          request: new Deferred(),
+          isLinkedCard: opts?.isLinkedCard,
+          stackIndex,
+        };
+        here.addToStack(newItem);
+        return await newItem.request?.promise;
+      },
+      viewCard: (card: Card) => {
+        return here.addToStack({ card, format: 'isolated', stackIndex });
+      },
+      createCardDirectly: async (
+        doc: LooseSingleCardDocument,
+        relativeTo: URL | undefined
+      ): Promise<void> => {
+        let newCard = await here.cardService.createFromSerialized(
+          doc.data,
+          doc,
+          relativeTo ?? here.cardService.defaultURL
+        );
+        await here.cardService.saveModel(newCard);
+        let newItem: StackItem = {
+          card: newCard,
+          format: 'isolated',
+          stackIndex,
+        };
+        here.addToStack(newItem);
+        return;
+      },
+    };
+  }
 
   private async rollbackCardFieldValues(card: Card) {
     let fields = await this.cardService.getFields(card);
@@ -268,20 +278,6 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   }
 
-  @action
-  styleForStackedCard(index: number): SafeString {
-    let invertedIndex = this.stack.length - index - 1;
-
-    let widthReductionPercent = 5; // Every new card on the stack is 5% wider than the previous one
-    let offsetPx = 40; // Every new card on the stack is 40px lower than the previous one
-
-    return htmlSafe(`
-      width: ${100 - invertedIndex * widthReductionPercent}%;
-      z-index: ${this.stack.length - invertedIndex};
-      padding-top: calc(${offsetPx}px * ${index});
-    `);
-  }
-
   addCard = restartableTask(async () => {
     let type = baseCardRef;
     let chosenCard: Card | undefined = await chooseCard({
@@ -292,26 +288,15 @@ export default class OperatorModeContainer extends Component<Signature> {
       let newItem: StackItem = {
         card: chosenCard,
         format: 'isolated',
+        stackIndex: 0, // This is called when there are no cards in the stack left, so we can assume the stackIndex is 0
       };
       this.addToStack(newItem);
     }
   });
 
-  @action
-  isBuried(stackIndex: number) {
-    return stackIndex + 1 < this.stack.length;
-  }
-
-  @action
-  async dismissStackedCardsAbove(stackIndex: number) {
-    for (let i = this.stack.length - 1; i > stackIndex; i--) {
-      let stackItem = this.stack[i];
-      await this.close(stackItem);
-    }
-  }
-
+  // For now use the background from the 1st stack, but eventually, each stack to have its own background URL
   fetchBackgroundImageURL = trackedFunction(this, async () => {
-    let mostBottomCard = this.stack?.[0]?.card;
+    let mostBottomCard = this.stacks[0]?.items[0]?.card;
     let realmInfoSymbol = await this.cardService.realmInfoSymbol();
     // @ts-ignore allows using Symbol as an index
     return mostBottomCard?.[realmInfoSymbol]?.backgroundURL;
@@ -319,6 +304,14 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   get backgroundImageURL() {
     return this.fetchBackgroundImageURL.value ?? '';
+  }
+
+  get allStackItems() {
+    return (
+      this.operatorModeStateService.state?.stacks
+        .map((stack) => stack.items)
+        .flat() ?? []
+    );
   }
 
   <template>
@@ -333,12 +326,12 @@ export default class OperatorModeContainer extends Component<Signature> {
 
       <CardCatalogModal />
 
-      {{#if (eq this.stack.length 0)}}
+      {{#if (eq this.allStackItems.length 0)}}
         <div class='no-cards'>
-          <p class='add-card-title'>Add a card to get
-            started</p>
-          {{! Cannot find an svg icon with plus in the box
-          that we can fill the color of the plus and the box. }}
+          <p class='add-card-title'>
+            Add a card to get started
+          </p>
+
           <button
             class='add-card-button icon-button'
             {{on 'click' (fn (perform this.addCard))}}
@@ -348,42 +341,38 @@ export default class OperatorModeContainer extends Component<Signature> {
           </button>
         </div>
       {{else}}
-        <div class='card-stack' data-test-card-stack>
-          {{#each this.stack as |item i|}}
-            <OperatorModeStackItem
-              @item={{item}}
-              @index={{i}}
-              @publicAPI={{this.publicAPI}}
-              @addToStack={{this.addToStack}}
-              @dismissStackedCardsAbove={{this.dismissStackedCardsAbove}}
-              @isBuried={{this.isBuried}}
-              @close={{this.close}}
-              @cancel={{this.cancel}}
-              @edit={{this.edit}}
-              @delete={{this.delete}}
-              @save={{this.save}}
-              @styleForStackedCard={{this.styleForStackedCard}}
-            />
-          {{/each}}
-        </div>
+        {{#each this.stacks as |stack stackIndex|}}
+          <OperatorModeStack
+            data-test-operator-mode-stack={{stackIndex}}
+            class='operator-mode-stack'
+            @stackItems={{stack.items}}
+            @stackIndex={{stackIndex}}
+            @publicAPI={{this.publicAPI this stackIndex}}
+            @close={{this.close}}
+            @cancel={{this.cancel}}
+            @edit={{this.edit}}
+            @delete={{this.delete}}
+            @save={{this.save}}
+          />
+        {{/each}}
       {{/if}}
+
       <SearchSheet
         @mode={{this.searchSheetMode}}
         @onCancel={{this.onCancelSearchSheet}}
         @onFocus={{this.onFocusSearchInput}}
       />
     </Modal>
+
     <style>
       :global(:root) {
         --operator-mode-bg-color: #686283;
       }
-
       .operator-mode > div {
         align-items: flex-start;
       }
-  
       .no-cards {
-        height: calc(100% - var(--search-sheet-closed-height));
+        height: calc(100% -var(--search-sheet-closed-height));
         width: 100%;
         max-width: 50rem;
         display: flex;
@@ -391,12 +380,10 @@ export default class OperatorModeContainer extends Component<Signature> {
         justify-content: center;
         align-items: center;
       }
-
       .add-card-title {
         color: var(--boxel-light);
         font: var(--boxel-font-lg);
       }
-
       .add-card-button {
         height: 350px;
         width: 200px;
@@ -405,21 +392,8 @@ export default class OperatorModeContainer extends Component<Signature> {
         border: none;
         border-radius: var(--boxel-border-radius);
       }
-
       .add-card-button:hover {
         background: var(--boxel-dark-teal);
-      }
-
-      .card-stack {
-        position: relative;
-        height: calc(100% - var(--search-sheet-closed-height));
-        width: 100%;
-        max-width: 50rem;
-        padding-top: var(--boxel-sp-xxl);
-        display: flex;
-        justify-content: center;
-        overflow: hidden;
-        z-index: 0;
       }
     </style>
   </template>
