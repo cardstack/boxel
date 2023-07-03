@@ -33,26 +33,40 @@ export default class OperatorModeStateService extends Service {
     this.state = await this.deserialize(rawState);
   }
 
-  addItemToStack(item: StackItem, stackIndex = 0) {
+  addItemToStack(item: StackItem) {
+    let stackIndex = item.stackIndex;
+    if (!this.state.stacks[stackIndex]) {
+      this.state.stacks[stackIndex] = new TrackedObject({
+        items: new TrackedArray([]),
+      });
+    }
     this.state.stacks[stackIndex].items.push(item);
     this.addRecentCards(item.card);
     this.schedulePersist();
   }
 
-  removeItemFromStack(item: StackItem, stackIndex = 0) {
+  removeItemFromStack(item: StackItem) {
+    let stackIndex = item.stackIndex;
     let itemIndex = this.state.stacks[stackIndex].items.indexOf(item);
     this.state.stacks[stackIndex].items.splice(itemIndex);
+
+    // If the additional stack is now empty, remove it from the state
+    if (this.state.stacks[stackIndex].items.length === 0 && stackIndex !== 0) {
+      this.state.stacks.splice(stackIndex);
+    }
+
     this.schedulePersist();
   }
 
-  replaceItemInStack(item: StackItem, newItem: StackItem, stackIndex = 0) {
+  replaceItemInStack(item: StackItem, newItem: StackItem) {
+    let stackIndex = item.stackIndex;
     let itemIndex = this.state.stacks[stackIndex].items.indexOf(item);
     this.state.stacks[stackIndex].items.splice(itemIndex, 1, newItem);
     this.schedulePersist();
   }
 
-  clearStack(stackIndex = 0) {
-    this.state.stacks[stackIndex].items.splice(0);
+  clearStacks() {
+    this.state.stacks.splice(0);
     this.schedulePersist();
   }
 
@@ -117,14 +131,16 @@ export default class OperatorModeStateService extends Service {
       stacks: [],
     });
 
+    let stackIndex = 0;
     for (let stack of rawState.stacks) {
       let newStack: Stack = { items: new TrackedArray([]) };
       for (let item of stack.items) {
         let cardUrl = new URL(item.card.id);
         let card = await this.cardService.loadModel(cardUrl);
-        newStack.items.push({ card, format: item.format });
+        newStack.items.push({ card, format: item.format, stackIndex });
       }
       newState.stacks.push(newStack);
+      stackIndex++;
     }
 
     return newState;
