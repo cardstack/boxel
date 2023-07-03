@@ -14,7 +14,7 @@ function isEthAddress(address: string): boolean {
 
 function isChecksumAddress(address: string): boolean {
   try {
-    return getAddress(address) == address;
+    return getAddress(address) === address;
   } catch {
     return false;
   }
