@@ -218,6 +218,7 @@ export default class SearchSheet extends Component<Signature> {
             data-test-search-sheet-cancel-button
           >Cancel</Button>
           <Button
+            data-test-go-button
             @disabled={{this.isGoDisabled}}
             @kind='primary'
             {{on 'click' this.onGo}}
