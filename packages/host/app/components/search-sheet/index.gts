@@ -113,6 +113,7 @@ export default class SearchSheet extends Component<Signature> {
         this.operatorModeStateService.addItemToStack({
           card,
           format: 'isolated',
+          stackIndex: 0,
         });
         this.resetState();
         this.args.onCancel();
@@ -225,94 +226,29 @@ export default class SearchSheet extends Component<Signature> {
       </div>
     </div>
     <style>
-      :global(:root) {
-        --search-sheet-closed-height: 59px;
-      }
-
-      .search-sheet {
-        background: #fff;
-        border-radius: 20px 20px 0 0;
-        bottom: -1px;
-        box-shadow: 0 5px 15px 0 rgba(0, 0, 0, 0.5);
-        display: flex;
-        flex-direction: column;
-        left: 3.5%;
-        position: absolute;
-        transition: height var(--boxel-transition), padding var(--boxel-transition);
-        width: 93%;
-      }
-
-      .closed {
-        height: var(--search-sheet-closed-height);
-        padding: 0;
-      }
-
-      .prompt {
-        padding: 30px 40px;
-      }
-
-      .results {
-        height: 300px;
-        padding: 30px 40px;
-      }
-
-      .header,
-      .footer {
-        align-items: center;
-        display: flex;
-        flex: 1;
-        justify-content: space-between;
-        opacity: 1;
-        transition: flex var(--boxel-transition), opacity var(--boxel-transition);
-      }
-
-      .closed .header,
-      .closed .footer {
-        flex: 0;
-        opacity: 0;
-      }
-
-      .header {
-        height: 37px;
-        overflow: hidden;
-      }
-
-      .headline {
-        font-family: Poppins;
-        font-size: 22px;
-        font-weight: bold;
-        font-stretch: normal;
-        font-style: normal;
-        line-height: 0.91;
-        letter-spacing: 0.22px;
-        color: #000;
-      }
-
-      .footer {
-        height: 40px;
-        overflow: hidden;
-      }
-
-      .search-sheet-content { display: flex; flex-direction: column; }
-      .search-sheet-content__recent-access { display: flex; flex-direction: column; padding: var(--boxel-sp); width: 100%; }
-      .search-sheet-content__recent-access .boxel-label {
-        font: 700 var(--boxel-font);
-      }
-      .search-sheet-content__recent-access__body {
-        overflow: auto;
-      }
-      .search-sheet-content__recent-access__cards { 
-        display: flex; 
-        flex-direction: row;
-        width: min-content; 
-        padding: var(--boxel-sp) var(--boxel-sp-xxxs);
-        gap: var(--boxel-sp);
-      }
-
-      .url-entry {
-        flex: 2;
-        margin-right: var(--boxel-sp);
-      }
+      :global(:root) { --search-sheet-closed-height: 59px; } .search-sheet {
+      background: #fff; border-radius: 20px 20px 0 0; bottom: -1px; box-shadow:
+      0 5px 15px 0 rgba(0, 0, 0, 0.5); display: flex; flex-direction: column;
+      left: 3.5%; position: absolute; transition: height
+      var(--boxel-transition), padding var(--boxel-transition); width: 93%; }
+      .closed { height: var(--search-sheet-closed-height); padding: 0; } .prompt
+      { padding: 30px 40px; } .results { height: 300px; padding: 30px 40px; }
+      .header, .footer { align-items: center; display: flex; flex: 1;
+      justify-content: space-between; opacity: 1; transition: flex
+      var(--boxel-transition), opacity var(--boxel-transition); } .closed
+      .header, .closed .footer { flex: 0; opacity: 0; } .header { height: 37px;
+      overflow: hidden; } .headline { font-family: Poppins; font-size: 22px;
+      font-weight: bold; font-stretch: normal; font-style: normal; line-height:
+      0.91; letter-spacing: 0.22px; color: #000; } .footer { height: 40px;
+      overflow: hidden; } .search-sheet-content { display: flex; flex-direction:
+      column; } .search-sheet-content__recent-access { display: flex;
+      flex-direction: column; padding: var(--boxel-sp); width: 100%; }
+      .search-sheet-content__recent-access .boxel-label { font: 700
+      var(--boxel-font); } .search-sheet-content__recent-access__body {
+      overflow: auto; } .search-sheet-content__recent-access__cards { display:
+      flex; flex-direction: row; width: min-content; padding: var(--boxel-sp)
+      var(--boxel-sp-xxxs); gap: var(--boxel-sp); } .url-entry { flex: 2;
+      margin-right: var(--boxel-sp); }
 
     </style>
   </template>
