@@ -10,7 +10,89 @@ import {
 } from './card-api';
 import { fn } from '@ember/helper';
 import { BoxelInput } from '@cardstack/boxel-ui';
-import { not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { on } from '@ember/modifier';
+import { tracked } from '@glimmer/tracking';
+
+function _deserialize(bigintString: string | null): bigint | undefined {
+  if (!bigintString) {
+    return undefined;
+  }
+  try {
+    let bigintVal = BigInt(bigintString);
+    return bigintVal;
+  } catch (e) {
+    // passes original value back to the form
+    return undefined;
+    // TODO: catch the exact error e
+  }
+}
+
+//business logic goes into guide
+//schema validation shud be here so computeds that consume this field dont have issues
+// other fields that consume this field will see undefined
+// TODO: write out clear logic for input
+// TODO: unit test if possible
+
+function _serialize(val: bigint | null): string | undefined {
+  if (!val) {
+    return undefined;
+  }
+  return val.toString();
+}
+
+class Edit extends Component<typeof BigIntegerCard> {
+  <template>
+    <BoxelInput
+      @value={{this.editingValue}}
+      @onInput={{this.parseInput}}
+      @errorMessage={{this.errorMessage}}
+      @invalid={{this.isInvalidBigInt}}
+    />
+    <button {{on 'click' this.testGetter}}>Test Getter</button>
+  </template>
+
+  testGetter = () => {
+    this.args.set(333);
+  };
+
+  @tracked lastEditingValue: string | undefined;
+
+  // perhaps generalise in a ember resource (perhaps just a class)
+  // or component tht wraps boxel input
+
+  get editingValue(): string {
+    let serialized = _serialize(this.args.model);
+    if (serialized != null && this.lastEditingValue !== serialized) {
+      // this.lastEditingValue = serialized;
+      return serialized;
+    }
+    return this.lastEditingValue || '';
+  }
+
+  get formatted() {
+    if (!this.args.model) {
+      return;
+    }
+    return _serialize(this.args.model);
+  }
+
+  get isInvalidBigInt() {
+    return this.editingValue.length > 0 && this.args.model == null;
+  }
+
+  get errorMessage(): string | undefined {
+    if (this.isInvalidBigInt) {
+      return 'Not a valid big int';
+    }
+    return;
+  }
+
+  parseInput = async (bigintString: string) => {
+    let newValue = _deserialize(bigintString);
+    this.args.set(newValue);
+    this.lastEditingValue = bigintString;
+  };
+}
 
 export default class BigIntegerCard extends CardBase {
   static [primitive]: bigint;
@@ -44,58 +126,5 @@ export default class BigIntegerCard extends CardBase {
     }
   };
 
-  static edit = class Edit extends Component<typeof this> {
-    <template>
-      <BoxelInput
-        @value={{this.formatted}}
-        @onInput={{fn this.parseInput @set}}
-        @errorMessage={{this.errorMessage}}
-        @invalid={{not this.isValidBigInt}}
-      />
-    </template>
-
-    get formatted() {
-      if (!this.args.model) {
-        return;
-      }
-      return _serialize(this.args.model);
-    }
-
-    get isValidBigInt() {
-      try {
-        if (!this.args.model) {
-          return false;
-        }
-        BigInt(this.args.model);
-        return true;
-      } catch {
-        return false;
-      }
-    }
-
-    get errorMessage() {
-      return 'Invalid Big Int value.';
-    }
-
-    async parseInput(set: Function, bigintString: string) {
-      return set(_deserialize(bigintString));
-    }
-  };
-}
-
-function _serialize(val: bigint): string {
-  return val.toString();
-}
-
-function _deserialize(bigintString: any): any {
-  if (typeof bigintString === 'bigint') {
-    return bigintString;
-  }
-  try {
-    let bigintVal = BigInt(bigintString);
-    return bigintVal;
-  } catch (e) {
-    // passes original value back to the form
-    return bigintString;
-  }
+  static edit = Edit;
 }
