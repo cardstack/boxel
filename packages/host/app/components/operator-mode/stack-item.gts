@@ -7,16 +7,8 @@ import type CardService from '@cardstack/host/services/card-service';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import optional from '@cardstack/boxel-ui/helpers/optional';
 import cn from '@cardstack/boxel-ui/helpers/cn';
-import {
-  IconButton,
-  Header,
-  CardContainer,
-  Button,
-} from '@cardstack/boxel-ui';
-import {
-  type Actions,
-  cardTypeDisplayName,
-} from '@cardstack/runtime-common';
+import { IconButton, Header, CardContainer, Button } from '@cardstack/boxel-ui';
+import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';

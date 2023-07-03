@@ -2,9 +2,15 @@ import Component from '@glimmer/component';
 import SearchInput, { SearchInputBottomTreatment } from './search-input';
 import { Button } from '@cardstack/boxel-ui';
 import { on } from '@ember/modifier';
-import { tracked } from '@glimmer/tracking';
+//@ts-ignore cached not available yet in definitely typed
+import { cached, tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
+import SearchResult from './search-result';
+import { Label } from '@cardstack/boxel-ui';
+import { gt } from '../../helpers/truth-helpers';
+import { service } from '@ember/service';
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 export enum SearchSheetMode {
   Closed = 'closed',
@@ -26,6 +32,7 @@ interface Signature {
 
 export default class SearchSheet extends Component<Signature> {
   @tracked searchInputValue = '';
+  @service declare operatorModeStateService: OperatorModeStateService;
 
   get inputBottomTreatment() {
     return this.args.mode == SearchSheetMode.Closed
@@ -74,6 +81,15 @@ export default class SearchSheet extends Component<Signature> {
     this.args.onCancel();
   }
 
+  @cached
+  get reverseRecentCards() {
+    // Clone the array first before reversing it.
+    // To avoid this error: You attempted to update `_value` on `TrackedStorageImpl`,
+    // but it had already been used previously in the same computation
+    const recentCardsCopy = [...this.operatorModeStateService.recentCards];
+    return recentCardsCopy.reverse();
+  }
+
   <template>
     <div class='search-sheet {{this.sheetSize}}'>
       <div class='header'>
@@ -90,12 +106,26 @@ export default class SearchSheet extends Component<Signature> {
         @onFocus={{@onFocus}}
         @onInput={{fn (mut this.searchInputValue)}}
       />
+      <div class='search-sheet-content'>
+        {{#if (gt this.operatorModeStateService.recentCards.length 0)}}
+          <div class='search-sheet-content__recent-access'>
+            <Label>Recent</Label>
+            <div class='search-sheet-content__recent-access__body'>
+              <div class='search-sheet-content__recent-access__cards'>
+                {{#each this.reverseRecentCards as |card i|}}
+                  <SearchResult @card={{card}} data-test-search-result-index={{i}}/>
+                {{/each}}
+              </div>
+            </div>
+          </div>
+        {{/if}}
+      </div>
       <div class='footer'>
         <div class='url-entry'>
           {{! Enter Card URL: .... }}
         </div>
         <div class='buttons'>
-          <Button {{on 'click' this.onCancel}}>Cancel</Button>
+          <Button {{on 'click' this.onCancel}} data-test-search-sheet-cancel-button>Cancel</Button>
           <Button
             @disabled={{this.isSearchDisabled}}
             @kind='primary'
@@ -127,7 +157,6 @@ export default class SearchSheet extends Component<Signature> {
       }
 
       .prompt {
-        height: 236px;
         padding: 30px 40px;
       }
 
@@ -171,6 +200,22 @@ export default class SearchSheet extends Component<Signature> {
       .footer {
         height: 40px;
         overflow: hidden;
+      }
+
+      .search-sheet-content { display: flex; flex-direction: column; }
+      .search-sheet-content__recent-access { display: flex; flex-direction: column; padding: var(--boxel-sp); width: 100%; }
+      .search-sheet-content__recent-access .boxel-label {
+        font: 700 var(--boxel-font);
+      }
+      .search-sheet-content__recent-access__body {
+        overflow: auto;
+      }
+      .search-sheet-content__recent-access__cards { 
+        display: flex; 
+        flex-direction: row;
+        width: min-content; 
+        padding: var(--boxel-sp) var(--boxel-sp-xxxs);
+        gap: var(--boxel-sp);
       }
     </style>
   </template>

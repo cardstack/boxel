@@ -49,7 +49,7 @@ module.exports = {
         './testem.js',
         './blueprints/*/index.js',
         './config/**/*.js',
-        './lib/*/index.js',
+        './lib/**/*.js',
         './server/**/*.js',
       ],
       parserOptions: {
