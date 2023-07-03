@@ -8,7 +8,7 @@ import {
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import StringCard from 'https://cardstack.com/base/string';
 import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
-import IntegerCard from 'https://cardstack.com/base/integer';
+import BigIntegerCard from 'https://cardstack.com/base/big-integer';
 import { Chain } from './chain';
 import EthereumAddressCard from 'https://cardstack.com/base/ethereum-address';
 
@@ -17,13 +17,13 @@ export class Transaction extends Card {
   @field transactionHash = contains(StringCard);
   @field status = contains(BooleanCard);
   @field blockHash = contains(StringCard);
-  @field blockNumber = contains(IntegerCard);
+  @field blockNumber = contains(BigIntegerCard);
   @field from = contains(EthereumAddressCard);
   @field to = contains(EthereumAddressCard);
   @field memo = contains(StringCard);
   @field chain = linksTo(() => Chain);
-  @field gasUsed = contains(IntegerCard);
-  @field effectiveGasPrice = contains(IntegerCard);
+  @field gasUsed = contains(BigIntegerCard);
+  @field effectiveGasPrice = contains(BigIntegerCard);
   @field blockExplorerLink = contains(StringCard, {
     computeVia: function (this: Transaction) {
       return `${this.chain.blockExplorer}/tx/${this.transactionHash}`;

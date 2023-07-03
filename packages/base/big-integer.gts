@@ -2,36 +2,33 @@ import {
   primitive,
   Component,
   CardBase,
-  // useIndexBasedKey,
   serialize,
   CardInstanceType,
   CardBaseConstructor,
   deserialize,
+  queryableValue,
 } from './card-api';
 import { fn } from '@ember/helper';
 import { BoxelInput } from '@cardstack/boxel-ui';
+import { not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 export default class BigIntegerCard extends CardBase {
   static [primitive]: bigint;
-  static [serialize](n: bigint) {
-    return n.toString();
+  static [serialize](val: bigint) {
+    return _serialize(val);
   }
   static async [deserialize]<T extends CardBaseConstructor>(
     this: T,
     bigintString: any
   ): Promise<CardInstanceType<T>> {
-    if (typeof bigintString === 'bigint') {
-      return bigintString as CardInstanceType<T>;
+    return _deserialize(bigintString) as CardInstanceType<T>;
+  }
+  static [queryableValue](val: bigint | undefined): string | undefined {
+    if (val) {
+      return BigIntegerCard[serialize](val);
+    } else {
+      return undefined;
     }
-
-    if (typeof bigintString === 'string' || typeof bigintString === 'number') {
-      try {
-        return BigInt(bigintString) as CardInstanceType<T>;
-      } catch {
-        return bigintString as CardInstanceType<T>;
-      }
-    }
-    return bigintString as CardInstanceType<T>;
   }
 
   static embedded = class Embedded extends Component<typeof this> {
@@ -52,6 +49,8 @@ export default class BigIntegerCard extends CardBase {
       <BoxelInput
         @value={{this.formatted}}
         @onInput={{fn this.parseInput @set}}
+        @errorMessage={{this.errorMessage}}
+        @invalid={{not this.isValidBigInt}}
       />
     </template>
 
@@ -62,24 +61,41 @@ export default class BigIntegerCard extends CardBase {
       return _serialize(this.args.model);
     }
 
-    parseInput(set: Function, value: string) {
+    get isValidBigInt() {
       try {
-        let formatted = this.formatted;
-        if (!formatted) {
-          return;
+        if (!this.args.model) {
+          return false;
         }
-        return set(_deserialize(formatted));
-      } catch (error) {
-        debugger;
-        console.error('Invalid BigInt value:', value);
+        BigInt(this.args.model);
+        return true;
+      } catch {
+        return false;
       }
+    }
+
+    get errorMessage() {
+      return 'Invalid Big Int value.';
+    }
+
+    async parseInput(set: Function, bigintString: string) {
+      return set(_deserialize(bigintString));
     }
   };
 }
 
-async function _deserialize(value: string | number): Promise<bigint> {
-  return BigIntegerCard[deserialize](value);
+function _serialize(val: bigint): string {
+  return val.toString();
 }
-function _serialize(value: bigint): string {
-  return BigIntegerCard[serialize](value);
+
+function _deserialize(bigintString: any): any {
+  if (typeof bigintString === 'bigint') {
+    return bigintString;
+  }
+  try {
+    let bigintVal = BigInt(bigintString);
+    return bigintVal;
+  } catch (e) {
+    // passes original value back to the form
+    return bigintString;
+  }
 }
