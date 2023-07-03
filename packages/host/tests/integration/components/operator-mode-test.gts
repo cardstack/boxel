@@ -7,6 +7,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import OperatorMode from '@cardstack/host/components/operator-mode';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import { Card } from 'https://cardstack.com/base/card-api';
+import Service from '@ember/service';
 import { renderComponent } from '../../helpers/render-component';
 import {
   testRealmURL,
@@ -29,6 +30,18 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 const realmName = 'Operator Mode Workspace';
 let setCardInOperatorModeState: (card: string) => Promise<void>;
+
+class MockAiService extends Service {
+
+  public nextResponse: Map<string, string> = {};
+
+  public async getChanges(
+        card: Card,
+        request: string
+    ): Promise<Map<string, string>> {
+        return this.nextResponse;
+    }
+}
 
 module('Integration | operator-mode', function (hooks) {
   let adapter: TestRealmAdapter;
@@ -73,6 +86,8 @@ module('Integration | operator-mode', function (hooks) {
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
     cardApi = await loader.import(`${baseRealm.url}card-api`);
+
+    this.owner.register('service:ai-service', MockAiService);
 
     adapter = new TestRealmAdapter({
       'pet.gts': `
@@ -1183,6 +1198,10 @@ module('Integration | operator-mode', function (hooks) {
 
     test("it sets the name and doesn't change the city when given a patch change", async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+     const mockAiService = this.owner.lookup('service:ai-service');
+     mockAiService.nextResponse = {
+      "firstName": "Dave"
+     };
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1218,9 +1237,11 @@ module('Integration | operator-mode', function (hooks) {
     await click('[aria-label="Save"]');
 
     // Name should be John - timeout required here, would be good to avoid
-    await waitFor('[data-test-person="John"]', { timeout: 2000 });
-    assert.dom('[data-test-person]').hasText('John');
-    assert.dom('[data-test-first-letter-of-the-name]').hasText('J');
+    await waitFor('[data-test-person="Dave"]', { timeout: 2000 });
+    assert.dom('[data-test-person]').hasText('Dave');
+    assert.dom('[data-test-first-letter-of-the-name]').hasText('D');
     assert.dom('[data-test-city]').hasText('EditedCity');
   });
+
+
 });
