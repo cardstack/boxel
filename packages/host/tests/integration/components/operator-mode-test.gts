@@ -21,10 +21,12 @@ import {
   click,
   fillIn,
   settled,
+  focus,
 } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import percySnapshot from '@percy/ember';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 const realmName = 'Operator Mode Workspace';
@@ -73,6 +75,37 @@ module('Integration | operator-mode', function (hooks) {
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
     cardApi = await loader.import(`${baseRealm.url}card-api`);
+
+    //Generate 11 person card to test recent card menu in card sheet
+    let personCards: Map<String, any> = new Map<String, any>();
+    for (let i = 1; i <= 11; i++) {
+      personCards.set(`Person/${i}.json`, {
+        data: {
+          type: 'card',
+          id: `${testRealmURL}Person/${i}`,
+          attributes: {
+            firstName: `${i}`,
+            address: {
+              city: 'Bandung',
+              country: 'Indonesia',
+            },
+          },
+          relationships: {
+            pet: {
+              links: {
+                self: `${testRealmURL}Pet/mango`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+          },
+        },
+      });
+    }
 
     adapter = new TestRealmAdapter({
       'pet.gts': `
@@ -462,6 +495,7 @@ module('Integration | operator-mode', function (hooks) {
         },
       },
       '.realm.json': `{ "name": "${realmName}" }`,
+      ...Object.fromEntries(personCards),
     });
     realm = await TestRealm.createWithAdapter(adapter, this.owner);
     loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
@@ -608,6 +642,9 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-card-catalog-modal]').isVisible();
 
     await waitFor(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
+
+    await percySnapshot(assert);
+
     await click(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-card-catalog-go-button]');
     assert
@@ -628,8 +665,11 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    assert.dom(`[data-test-stack-card-index="0"]`).exists();
     await waitFor(`[data-test-cards-grid-item]`);
+
+    await percySnapshot(assert);
+
+    assert.dom(`[data-test-stack-card-index="0"]`).exists();
     assert.dom(`[data-test-cards-grid-item]`).exists();
     assert
       .dom(
@@ -698,7 +738,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await waitFor(`[data-test-stack-card-index]`);
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
-    
+
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
 
@@ -1166,7 +1206,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     assert.dom(`[data-test-stack-card-header]`).containsText(realmName);
-    
+
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
@@ -1179,5 +1219,144 @@ module('Integration | operator-mode', function (hooks) {
 
     assert.dom(`[data-test-cards-grid-cards]`).isNotVisible();
     assert.dom(`[data-test-create-new-card-button]`).isNotVisible();
+  });
+
+  test(`displays recently accessed card`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    assert.dom(`[data-test-stack-card-header]`).containsText(realmName);
+
+    await waitFor(`[data-test-cards-grid-item]`);
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`);
+    assert.dom(`[data-test-stack-card-index="1"]`).exists();
+    let personCard = await loadCard(`${testRealmURL}Person/fadhlan`);
+    assert
+      .dom(
+        `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-boxel-header-title]`
+      )
+      .containsText(cardTypeDisplayName(personCard));
+
+    assert.dom(`[data-test-cards-grid-cards]`).isNotVisible();
+    assert.dom(`[data-test-create-new-card-button]`).isNotVisible();
+
+    await focus(`[data-test-search-input]`);
+    assert.dom(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`);
+    await click(`[data-test-search-sheet-cancel-button]`);
+    await click(`[data-test-stack-card-index="1"] [data-test-close-button]`);
+
+    await waitFor(`[data-test-cards-grid-item]`);
+    await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
+    assert.dom(`[data-test-stack-card-index="1"]`).exists();
+
+    await focus(`[data-test-search-input]`);
+    assert
+      .dom(
+        `.search-sheet-content__recent-access__cards [data-test-search-result]`
+      )
+      .exists({ count: 2 });
+    assert.dom(
+      `.search-sheet-content__recent-access__cards [data-test-search-result-index=0] [data-test-search-result="${testRealmURL}Person/burcu"]`
+    );
+    assert.dom(
+      `.search-sheet-content__recent-access__cards [data-test-search-result-index=1] [data-test-search-result="${testRealmURL}Person/fadhlan"]`
+    );
+  });
+
+  test(`displays recently accessed card, maximum 10 cards`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    assert.dom(`[data-test-stack-card-header]`).containsText(realmName);
+
+    await waitFor(`[data-test-cards-grid-item]`);
+    for (let i = 1; i <= 11; i++) {
+      await click(`[data-test-cards-grid-item="${testRealmURL}Person/${i}"]`);
+      await click(`[data-test-stack-card-index="1"] [data-test-close-button]`);
+    }
+
+    await focus(`[data-test-search-input]`);
+    assert
+      .dom(
+        `.search-sheet-content__recent-access__cards [data-test-search-result]`
+      )
+      .exists({ count: 10 });
+  });
+
+  test(`can add a card to the stack by URL`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+    await focus(`[data-test-search-input]`);
+
+    await fillIn(
+      `[data-test-url-field] input`,
+      `http://localhost:4202/test/mango`
+    );
+    await click(`[data-test-go-button]`);
+    await waitFor(`[data-test-stack-card-index="1"]`);
+    assert
+      .dom(
+        `[data-test-stack-card="http://localhost:4202/test/mango"] [data-test-field-component-card]`
+      )
+      .containsText('Mango', 'the card is rendered in the stack');
+  });
+
+  test(`error message is shown when invalid card URL is entered`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+    await focus(`[data-test-search-input]`);
+
+    assert
+      .dom(`[data-test-boxel-input-validation-state="invalid"]`)
+      .doesNotExist('invalid state is not shown');
+
+    await fillIn(
+      `[data-test-url-field] input`,
+      `http://localhost:4202/test/not-a-card`
+    );
+    await click(`[data-test-go-button]`);
+    await waitFor(`[data-test-boxel-input-validation-state="invalid"]`);
+    assert
+      .dom(`[data-test-boxel-input-error-message]`)
+      .containsText('Not a valid Card URL');
+    await fillIn(
+      `[data-test-url-field] input`,
+      `http://localhost:4202/test/mango`
+    );
+    assert
+      .dom(`[data-test-boxel-input-validation-state="invalid"]`)
+      .doesNotExist('invalid state is not shown');
   });
 });

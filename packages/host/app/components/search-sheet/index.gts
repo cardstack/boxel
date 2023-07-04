@@ -1,10 +1,23 @@
 import Component from '@glimmer/component';
 import SearchInput, { SearchInputBottomTreatment } from './search-input';
-import { Button } from '@cardstack/boxel-ui';
+import {
+  Button,
+  FieldContainer,
+  BoxelInputValidationState,
+} from '@cardstack/boxel-ui';
 import { on } from '@ember/modifier';
-import { tracked } from '@glimmer/tracking';
+//@ts-ignore cached not available yet in definitely typed
+import { cached, tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
+import SearchResult from './search-result';
+import { Label } from '@cardstack/boxel-ui';
+import { gt } from '../../helpers/truth-helpers';
+import { service } from '@ember/service';
+import { restartableTask } from 'ember-concurrency';
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type CardService from '../../services/card-service';
+import { isSingleCardDocument } from '@cardstack/runtime-common';
 
 export enum SearchSheetMode {
   Closed = 'closed',
@@ -26,6 +39,10 @@ interface Signature {
 
 export default class SearchSheet extends Component<Signature> {
   @tracked searchInputValue = '';
+  @tracked cardURL = '';
+  @tracked hasCardURLError = false;
+  @service declare operatorModeStateService: OperatorModeStateService;
+  @service declare cardService: CardService;
 
   get inputBottomTreatment() {
     return this.args.mode == SearchSheetMode.Closed
@@ -46,8 +63,19 @@ export default class SearchSheet extends Component<Signature> {
     }
   }
 
-  get isSearchDisabled() {
-    return !this.searchInputValue;
+  get isGoDisabled() {
+    // TODO after we have ember concurrency task for search implemented,
+    // make sure to also include the task.isRunning as criteria for
+    // disabling the go button
+    return (!this.searchInputValue && !this.cardURL) || this.getCard.isRunning;
+  }
+
+  get cardURLFieldState() {
+    return this.hasCardURLError ? 'invalid' : 'initial';
+  }
+
+  get cardURLErrorMessage() {
+    return this.hasCardURLError ? 'Not a valid Card URL' : undefined;
   }
 
   // This funky little gymnastics has the effect of leaving the headline along when closing the sheet, to improve the animation
@@ -68,10 +96,73 @@ export default class SearchSheet extends Component<Signature> {
     return this._headline;
   }
 
+  getCard = restartableTask(async (cardURL: string) => {
+    let response = await fetch(cardURL, {
+      headers: {
+        Accept: 'application/vnd.card+json',
+      },
+    });
+    if (response.ok) {
+      let maybeCardDoc = await response.json();
+      if (isSingleCardDocument(maybeCardDoc)) {
+        let card = await this.cardService.createFromSerialized(
+          maybeCardDoc.data,
+          maybeCardDoc,
+          new URL(maybeCardDoc.data.id)
+        );
+        this.operatorModeStateService.addItemToStack({
+          card,
+          format: 'isolated',
+          stackIndex: 0,
+        });
+        this.resetState();
+        this.args.onCancel();
+        return;
+      }
+    }
+    this.hasCardURLError = true;
+  });
+
   @action
   onCancel() {
-    this.searchInputValue = '';
+    this.resetState();
     this.args.onCancel();
+  }
+
+  @action
+  setCardURL(cardURL: string) {
+    this.hasCardURLError = false;
+    this.cardURL = cardURL;
+  }
+
+  @action
+  onURLFieldKeypress(e: KeyboardEvent) {
+    if (e.key === 'Enter') {
+      this.getCard.perform(this.cardURL);
+    }
+  }
+
+  @action
+  onGo() {
+    // load card if URL field is populated, otherwise perform search if search term specified
+    if (this.cardURL) {
+      this.getCard.perform(this.cardURL);
+    }
+  }
+
+  resetState() {
+    this.searchInputValue = '';
+    this.cardURL = '';
+    this.hasCardURLError = false;
+  }
+
+  @cached
+  get reverseRecentCards() {
+    // Clone the array first before reversing it.
+    // To avoid this error: You attempted to update `_value` on `TrackedStorageImpl`,
+    // but it had already been used previously in the same computation
+    const recentCardsCopy = [...this.operatorModeStateService.recentCards];
+    return recentCardsCopy.reverse();
   }
 
   <template>
@@ -90,16 +181,48 @@ export default class SearchSheet extends Component<Signature> {
         @onFocus={{@onFocus}}
         @onInput={{fn (mut this.searchInputValue)}}
       />
+      <div class='search-sheet-content'>
+        {{#if (gt this.operatorModeStateService.recentCards.length 0)}}
+          <div class='search-sheet-content__recent-access'>
+            <Label>Recent</Label>
+            <div class='search-sheet-content__recent-access__body'>
+              <div class='search-sheet-content__recent-access__cards'>
+                {{#each this.reverseRecentCards as |card i|}}
+                  <SearchResult
+                    @card={{card}}
+                    data-test-search-result-index={{i}}
+                  />
+                {{/each}}
+              </div>
+            </div>
+          </div>
+        {{/if}}
+      </div>
       <div class='footer'>
         <div class='url-entry'>
-          {{! Enter Card URL: .... }}
+          <FieldContainer @label='Enter Card URL:' @horizontalLabelSize='small'>
+            <BoxelInputValidationState
+              data-test-url-field
+              @placeholder='http://'
+              @value={{this.cardURL}}
+              @onInput={{this.setCardURL}}
+              @onKeyPress={{this.onURLFieldKeypress}}
+              @state={{this.cardURLFieldState}}
+              @errorMessage={{this.cardURLErrorMessage}}
+            />
+          </FieldContainer>
         </div>
         <div class='buttons'>
-          <Button {{on 'click' this.onCancel}}>Cancel</Button>
           <Button
-            @disabled={{this.isSearchDisabled}}
+            {{on 'click' this.onCancel}}
+            data-test-search-sheet-cancel-button
+          >Cancel</Button>
+          <Button
+            data-test-go-button
+            @disabled={{this.isGoDisabled}}
             @kind='primary'
-          >Search</Button>
+            {{on 'click' this.onGo}}
+          >Go</Button>
         </div>
       </div>
     </div>
@@ -127,7 +250,6 @@ export default class SearchSheet extends Component<Signature> {
       }
 
       .prompt {
-        height: 236px;
         padding: 30px 40px;
       }
 
@@ -172,6 +294,28 @@ export default class SearchSheet extends Component<Signature> {
         height: 40px;
         overflow: hidden;
       }
+
+      .search-sheet-content { display: flex; flex-direction: column; }
+      .search-sheet-content__recent-access { display: flex; flex-direction: column; padding: var(--boxel-sp); width: 100%; }
+      .search-sheet-content__recent-access .boxel-label {
+        font: 700 var(--boxel-font);
+      }
+      .search-sheet-content__recent-access__body {
+        overflow: auto;
+      }
+      .search-sheet-content__recent-access__cards { 
+        display: flex; 
+        flex-direction: row;
+        width: min-content; 
+        padding: var(--boxel-sp) var(--boxel-sp-xxxs);
+        gap: var(--boxel-sp);
+      }
+
+      .url-entry {
+        flex: 2;
+        margin-right: var(--boxel-sp);
+      }
+
     </style>
   </template>
 }

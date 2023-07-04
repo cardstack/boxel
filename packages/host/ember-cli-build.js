@@ -7,9 +7,13 @@ const webpack = require('webpack');
 const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
 const MomentLocalesPlugin = require('moment-locales-webpack-plugin');
 const { GlimmerScopedCSSWebpackPlugin } = require('glimmer-scoped-css/webpack');
+const withSideWatch = require('./lib/with-side-watch');
 
 module.exports = function (defaults) {
   const app = new EmberApp(defaults, {
+    trees: {
+      app: withSideWatch('app', { watching: ['../runtime-common'] }),
+    },
     'ember-cli-babel': {
       enableTypeScriptTransform: true,
     },

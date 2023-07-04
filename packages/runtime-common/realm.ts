@@ -320,8 +320,9 @@ export class Realm {
       (_match, g1, g2, g3) => {
         let config = JSON.parse(decodeURIComponent(g2));
         config = merge({}, config, {
-          ownRealmURL: this.url,
+          ownRealmURL: this.url, // unresolved url
           resolvedBaseRealmURL,
+          resolvedOwnRealmURL: this.#searchIndex.loader.resolve(this.url).href,
           hostsOwnAssets: !isNode,
           realmsServed: opts?.realmsServed,
         });
