@@ -165,7 +165,7 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   <template>
-    <div class='search-sheet {{this.sheetSize}}'>
+    <div class='search-sheet {{this.sheetSize}}' data-test-search-sheet>
       <div class='header'>
         <div class='headline'>
           {{this.headline}}
@@ -213,6 +213,10 @@ export default class SearchSheet extends Component<Signature> {
           </FieldContainer>
         </div>
         <div class='buttons'>
+          <Button
+            {{on 'click' this.onCancel}}
+            data-test-search-sheet-cancel-button
+          >Cancel</Button>
           <Button
             {{on 'click' this.onCancel}}
             data-test-search-sheet-cancel-button

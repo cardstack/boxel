@@ -51,8 +51,11 @@ export default class OperatorModeStateService extends Service {
     this.state.stacks[stackIndex].items.splice(itemIndex);
 
     // If the additional stack is now empty, remove it from the state
-    if (this.state.stacks[stackIndex].items.length === 0 && stackIndex !== 0) {
-      this.state.stacks.splice(stackIndex);
+    if (
+      this.state.stacks[stackIndex].items.length === 0 &&
+      this.state.stacks.length > 1
+    ) {
+      this.state.stacks.splice(stackIndex, 1);
     }
 
     this.schedulePersist();
@@ -61,6 +64,13 @@ export default class OperatorModeStateService extends Service {
   replaceItemInStack(item: StackItem, newItem: StackItem) {
     let stackIndex = item.stackIndex;
     let itemIndex = this.state.stacks[stackIndex].items.indexOf(item);
+
+    if (newItem.stackIndex !== stackIndex) {
+      this.removeItemFromStack(item);
+      this.addItemToStack(newItem);
+      return this.schedulePersist();
+    }
+
     this.state.stacks[stackIndex].items.splice(itemIndex, 1, newItem);
     this.schedulePersist();
   }

@@ -21,7 +21,7 @@ export default class SearchResult extends Component<Signature> {
       <p class='search-result__realm-name'>In {{this.realmName}}</p>
     </CardContainer>
     <style>
-      .search-result { padding: var(--boxel-sp); width: 250px; }
+      .search-result { padding: var(--boxel-sp); width: 250px; cursor: pointer; }
       .search-result__title { margin-bottom: var(--boxel-sp-xs); font: 500 var(--boxel-font-sm); overflow: hidden; text-wrap: nowrap; }
       .search-result__display-name { margin: 0; font: 500 var(--boxel-font-xs); color: #919191}
       .search-result__realm-name { margin: 0; color: var(--boxel-teal); font-size: var(--boxel-font-size-xs); }

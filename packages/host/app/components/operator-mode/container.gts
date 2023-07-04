@@ -34,7 +34,6 @@ import {
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import perform from 'ember-concurrency/helpers/perform';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
 import OperatorModeStack from '@cardstack/host/components/operator-mode/stack';
 
 interface Signature {
@@ -59,6 +58,11 @@ export type StackItem = {
   stackIndex: number;
 };
 
+enum SearchSheetTrigger {
+  DropCardToLeftNeighborStackButton = 'drop-card-to-left-neighbor-stack-button',
+  DropCardToRightNeighborStackButton = 'drop-card-to-right-neighbor-stack-button',
+}
+
 export default class OperatorModeContainer extends Component<Signature> {
   // In this map we store the field values of cards that are being edited so that we can restore them if the user cancels the edit
   cardFieldValues: WeakMap<Card, Map<string, any>> = new WeakMap<
@@ -69,6 +73,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
+  @tracked searchSheetTrigger: SearchSheetTrigger | null = null;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -89,7 +94,11 @@ export default class OperatorModeContainer extends Component<Signature> {
     return getSearchResults(this, () => query);
   }
 
-  @action onFocusSearchInput() {
+  @action onFocusSearchInput(searchSheetTrigger?: SearchSheetTrigger) {
+    if (searchSheetTrigger != null) {
+      this.searchSheetTrigger = searchSheetTrigger;
+    }
+
     if (this.searchSheetMode == SearchSheetMode.Closed) {
       this.searchSheetMode = SearchSheetMode.SearchPrompt;
     }
@@ -105,6 +114,7 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   @action onCancelSearchSheet() {
     this.searchSheetMode = SearchSheetMode.Closed;
+    this.searchSheetTrigger = null;
   }
 
   @action addToStack(item: StackItem) {
@@ -314,6 +324,64 @@ export default class OperatorModeContainer extends Component<Signature> {
     );
   }
 
+  @action onCardSelectFromSearch(card: Card) {
+    let searchSheetTrigger = this.searchSheetTrigger; // Will be set by onFocusSearchInput
+
+    if (!searchSheetTrigger) {
+      throw new Error('bug: searchSheetTrigger should be set here');
+    }
+
+    // This logic assumes there is currently one stack when this method is called (i.e. the stack with index 0)
+
+    // In case the left button was clicked, whatever is currently in stack with index 0 will be moved to stack with index 1,
+    // and the card will be added to stack with index 0.
+    if (
+      searchSheetTrigger ===
+      SearchSheetTrigger.DropCardToLeftNeighborStackButton
+    ) {
+      let stackItem: StackItem = {
+        card,
+        format: 'isolated',
+        stackIndex: 0,
+      };
+
+      let currentStackItems =
+        this.operatorModeStateService.state.stacks[0].items;
+
+      currentStackItems.forEach((item) => {
+        this.operatorModeStateService.replaceItemInStack(item, {
+          ...item,
+          stackIndex: 1,
+        });
+      });
+
+      this.operatorModeStateService.addItemToStack(stackItem);
+
+      // In case the right button was clicked, the card will be added to stack with index 1.
+    } else if (
+      searchSheetTrigger ===
+      SearchSheetTrigger.DropCardToRightNeighborStackButton
+    ) {
+      this.operatorModeStateService.addItemToStack({
+        card,
+        format: 'isolated',
+        stackIndex: 1,
+      });
+    }
+
+    // Close the search sheet
+    this.onCancelSearchSheet();
+  }
+
+  // This determines whether we show the left and right button that trigger the search sheet whose card selection will go to the left or right stack
+  // (there is a single stack with at least one card in it)
+  get canCreateNeighbourStack() {
+    return (
+      this.allStackItems.length > 0 &&
+      this.operatorModeStateService.state.stacks.length === 1
+    );
+  }
+
   <template>
     <Modal
       class='operator-mode'
@@ -325,6 +393,20 @@ export default class OperatorModeContainer extends Component<Signature> {
     >
 
       <CardCatalogModal />
+
+      {{#if this.canCreateNeighbourStack}}
+        <button
+          data-test-add-card-left-stack
+          class='add-card-left'
+          {{on
+            'click'
+            (fn
+              this.onFocusSearchInput
+              SearchSheetTrigger.DropCardToLeftNeighborStackButton
+            )
+          }}
+        >Add</button>
+      {{/if}}
 
       {{#if (eq this.allStackItems.length 0)}}
         <div class='no-cards'>
@@ -357,10 +439,25 @@ export default class OperatorModeContainer extends Component<Signature> {
         {{/each}}
       {{/if}}
 
+      {{#if this.canCreateNeighbourStack}}
+        <button
+          data-test-add-card-right-stack
+          class='add-card-right'
+          {{on
+            'click'
+            (fn
+              this.onFocusSearchInput
+              SearchSheetTrigger.DropCardToRightNeighborStackButton
+            )
+          }}
+        >Add</button>
+      {{/if}}
+
       <SearchSheet
         @mode={{this.searchSheetMode}}
         @onCancel={{this.onCancelSearchSheet}}
         @onFocus={{this.onFocusSearchInput}}
+        @onCardSelect={{this.onCardSelectFromSearch}}
       />
     </Modal>
 
@@ -395,7 +492,11 @@ export default class OperatorModeContainer extends Component<Signature> {
       .add-card-button:hover {
         background: var(--boxel-dark-teal);
       }
-    </style>
+      .add-card-left,
+      .add-card-right {
+        width: 40px;
+      }
+      </style>
   </template>
 }
 
