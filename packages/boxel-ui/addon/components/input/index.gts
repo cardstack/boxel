@@ -23,7 +23,6 @@ export interface Signature {
     onInput?: (val: string) => void;
     onBlur?: (ev: Event) => void;
     onKeyPress?: (ev: KeyboardEvent) => void;
-    onKeyDown?: (ev: KeyboardEvent) => void;
     required?: boolean;
     optional?: boolean;
   };
@@ -65,7 +64,6 @@ export default class BoxelInput extends Component<Signature> {
           {{on 'input' (pick 'target.value' (optional @onInput))}}
           {{on 'blur' (optional @onBlur)}}
           {{on 'keypress' (optional @onKeyPress)}}
-          {{on 'keydown' (optional @onKeyDown)}}
           ...attributes
         />
         {{#if shouldShowErrorMessage}}
