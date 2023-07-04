@@ -13,6 +13,7 @@ import {
 import { Realm } from '@cardstack/runtime-common/realm';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import percySnapshot from '@percy/ember';
 
 module('Acceptance | operator mode tests', function (hooks) {
   let realm: Realm;
@@ -214,6 +215,8 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.dom('[data-test-operator-mode-stack]').exists();
     assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
 
+    await percySnapshot(assert);
+
     // In the URL, operatorModeEnabled is set to true and operatorModeState is set to the current stack
     assert.strictEqual(
       currentURL(),
@@ -257,6 +260,8 @@ module('Acceptance | operator mode tests', function (hooks) {
         operatorModeStateParam
       )}`
     );
+
+    await percySnapshot(assert);
 
     assert
       .dom('[data-test-stack-card-index="0"] [data-test-boxel-header-title]')
@@ -361,6 +366,8 @@ module('Acceptance | operator mode tests', function (hooks) {
         operatorModeStateParam
       )}`
     );
+
+    await percySnapshot(assert);
 
     assert.dom('[data-test-field="firstName"] input').exists(); // Existence of an input field means it is in edit mode
     assert.dom('[data-test-save-button]').exists(); // Existence of save button means it is in edit mode

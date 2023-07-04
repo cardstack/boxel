@@ -190,6 +190,7 @@ module('Acceptance | basic tests', function (hooks) {
     await waitFor('[data-test-file="Person/1.json"]');
 
     await click('[data-test-file="Person/1.json"]');
+
     assert.strictEqual(
       currentURL(),
       '/code?openDirs=Person%2F&path=Person%2F1.json'
