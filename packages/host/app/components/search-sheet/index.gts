@@ -18,6 +18,7 @@ import { restartableTask } from 'ember-concurrency';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type CardService from '../../services/card-service';
 import { isSingleCardDocument } from '@cardstack/runtime-common';
+import { Card } from 'https://cardstack.com/base/card-api';
 
 export enum SearchSheetMode {
   Closed = 'closed',
@@ -33,6 +34,7 @@ interface Signature {
     mode: SearchSheetMode;
     onCancel: () => void;
     onFocus: () => void;
+    onCardSelect: (card: Card) => void;
   };
   Blocks: {};
 }
@@ -157,12 +159,9 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   @cached
-  get reverseRecentCards() {
-    // Clone the array first before reversing it.
-    // To avoid this error: You attempted to update `_value` on `TrackedStorageImpl`,
-    // but it had already been used previously in the same computation
-    const recentCardsCopy = [...this.operatorModeStateService.recentCards];
-    return recentCardsCopy.reverse();
+  get orderedRecentCards() {
+    // Most recently added first
+    return [...this.operatorModeStateService.recentCards].reverse();
   }
 
   <template>
@@ -187,9 +186,10 @@ export default class SearchSheet extends Component<Signature> {
             <Label>Recent</Label>
             <div class='search-sheet-content__recent-access__body'>
               <div class='search-sheet-content__recent-access__cards'>
-                {{#each this.reverseRecentCards as |card i|}}
+                {{#each this.orderedRecentCards as |card i|}}
                   <SearchResult
                     @card={{card}}
+                    {{on 'click' (fn this.args.onCardSelect card)}}
                     data-test-search-result-index={{i}}
                   />
                 {{/each}}
@@ -303,10 +303,10 @@ export default class SearchSheet extends Component<Signature> {
       .search-sheet-content__recent-access__body {
         overflow: auto;
       }
-      .search-sheet-content__recent-access__cards { 
-        display: flex; 
+      .search-sheet-content__recent-access__cards {
+        display: flex;
         flex-direction: row;
-        width: min-content; 
+        width: min-content;
         padding: var(--boxel-sp) var(--boxel-sp-xxxs);
         gap: var(--boxel-sp);
       }
