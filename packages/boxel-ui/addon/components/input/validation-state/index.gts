@@ -10,10 +10,12 @@ interface ValidationStateInputArgs {
   disabled?: boolean;
   errorMessage?: string;
   helperText?: string;
-  id: string;
+  placeholder?: string;
+  id?: string;
   value: string;
   onInput?: (val: string) => void;
   onBlur?: (ev: Event) => void;
+  onKeyPress?: (ev: KeyboardEvent) => void;
 }
 
 interface Signature {
@@ -58,6 +60,8 @@ export default class BoxelInputValidationState extends Component<Signature> {
         @disabled={{@disabled}}
         @errorMessage={{@errorMessage}}
         @helperText={{@helperText}}
+        @placeholder={{@placeholder}}
+        @onKeyPress={{@onKeyPress}}
         autocomplete='off'
         autocorrect='off'
         autocapitalize='off'
