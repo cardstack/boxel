@@ -1709,6 +1709,11 @@ module('Integration | serialization', function (hooks) {
 
     class Employee extends Person {
       @field department = contains(StringCard);
+      @field title = contains(StringCard, {
+        computeVia: function (this: Employee) {
+          return `${this.firstName} - ${this.department}`;
+        },
+      });
     }
 
     class Post extends Card {
@@ -2402,6 +2407,11 @@ module('Integration | serialization', function (hooks) {
     class Person extends Animal {
       @field firstName = contains(StringCard);
       @field birthdate = contains(DateCard);
+      @field title = contains(StringCard, {
+        computeVia: function (this: Person) {
+          return this.firstName;
+        },
+      });
     }
     class Post extends Card {
       @field title = contains(StringCard);
@@ -2452,6 +2462,11 @@ module('Integration | serialization', function (hooks) {
 
     class Employee extends Person {
       @field department = contains(StringCard);
+      @field title = contains(StringCard, {
+        computeVia: function (this: Employee) {
+          return `${this.firstName} - ${this.department}`;
+        },
+      });
     }
 
     class Post extends Card {
@@ -2526,10 +2541,20 @@ module('Integration | serialization', function (hooks) {
 
     class Pet extends Card {
       @field firstName = contains(StringCard);
+      @field title = contains(StringCard, {
+        computeVia: function (this: Pet) {
+          return this.firstName;
+        },
+      });
     }
 
     class Employee extends Person {
       @field department = contains(StringCard);
+      @field title = contains(StringCard, {
+        computeVia: function (this: Employee) {
+          return `${this.firstName} - ${this.department}`;
+        },
+      });
     }
 
     class Post extends Card {
@@ -3039,6 +3064,11 @@ module('Integration | serialization', function (hooks) {
 
     class Person extends Card {
       @field firstName = contains(StringCard);
+      @field title = contains(StringCard, {
+        computeVia: function (this: Person) {
+          return this.firstName;
+        },
+      });
     }
     class Post extends Card {
       @field title = contains(StringCard);
@@ -3275,10 +3305,20 @@ module('Integration | serialization', function (hooks) {
 
       class Pet extends Card {
         @field firstName = contains(StringCard);
+        @field title = contains(StringCard, {
+          computeVia: function (this: Person) {
+            return this.firstName;
+          },
+        });
       }
       class Person extends Card {
         @field firstName = contains(StringCard);
         @field pets = linksToMany(Pet);
+        @field title = contains(StringCard, {
+          computeVia: function (this: Person) {
+            return this.firstName;
+          },
+        });
       }
       await shimModule(`${realmURL}test-cards`, { Person, Pet });
 
@@ -3475,14 +3515,29 @@ module('Integration | serialization', function (hooks) {
 
       class Toy extends Card {
         @field description = contains(StringCard);
+        @field title = contains(StringCard, {
+          computeVia: function (this: Toy) {
+            return this.description;
+          },
+        });
       }
       class Pet extends Card {
         @field firstName = contains(StringCard);
         @field favoriteToy = linksTo(Toy);
+        @field title = contains(StringCard, {
+          computeVia: function (this: Pet) {
+            return this.firstName;
+          },
+        });
       }
       class Person extends Card {
         @field firstName = contains(StringCard);
         @field pets = linksToMany(Pet);
+        @field title = contains(StringCard, {
+          computeVia: function (this: Pet) {
+            return this.firstName;
+          },
+        });
       }
       await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
 

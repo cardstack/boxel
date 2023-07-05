@@ -196,6 +196,7 @@ module('Integration | realm', function (hooks) {
         id: `${testRealmURL}dir/mango`,
         attributes: {
           firstName: 'Mango',
+          title: 'Mango',
         },
         relationships: {
           owner: {
@@ -229,7 +230,11 @@ module('Integration | realm', function (hooks) {
           id: `${testRealmURL}dir/owner`,
           attributes: {
             firstName: 'Hassan',
+            fullName: 'Hassan Abdel-Rahman',
             lastName: 'Abdel-Rahman',
+            title: 'Hassan Abdel-Rahman',
+            email: null,
+            posts: null,
           },
           meta: {
             adoptsFrom: {
@@ -294,6 +299,7 @@ module('Integration | realm', function (hooks) {
         id: `${testRealmURL}dir/mango`,
         attributes: {
           firstName: 'Mango',
+          title: 'Mango',
         },
         relationships: {
           owner: {
@@ -328,6 +334,10 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
+            fullName: 'Hassan Abdel-Rahman',
+            title: 'Hassan Abdel-Rahman',
+            email: null,
+            posts: null,
           },
           meta: {
             adoptsFrom: {
@@ -453,6 +463,9 @@ module('Integration | realm', function (hooks) {
             JSON.parse(fileRef.content as string),
             {
               data: {
+                attributes: {
+                  title: null,
+                },
                 type: 'card',
                 meta: {
                   adoptsFrom: {
@@ -599,6 +612,7 @@ module('Integration | realm', function (hooks) {
         id: `${testRealmURL}Pet/1`,
         attributes: {
           firstName: 'Mango',
+          title: 'Mango',
         },
         relationships: {
           owner: {
@@ -631,6 +645,10 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
+            fullName: 'Hassan Abdel-Rahman',
+            title: 'Hassan Abdel-Rahman',
+            email: null,
+            posts: null,
           },
           meta: {
             adoptsFrom: {
@@ -769,6 +787,8 @@ module('Integration | realm', function (hooks) {
             attributes: {
               firstName: 'Van Gogh',
               lastName: 'Abdel-Rahman',
+              email: null,
+              posts: null,
             },
             meta: {
               adoptsFrom: {
@@ -852,7 +872,14 @@ module('Integration | realm', function (hooks) {
             data: {
               type: 'card',
               attributes: {
-                hosts: [{ firstName: 'Hassan' }],
+                hosts: [
+                  {
+                    email: null,
+                    firstName: 'Hassan',
+                    lastName: null,
+                    posts: null,
+                  },
+                ],
                 sponsors: ['Burton'],
               },
               meta: {
@@ -884,7 +911,12 @@ module('Integration | realm', function (hooks) {
           endTime: '2023-02-19T02:00:00.000Z',
           hosts: [
             {
+              email: null,
               firstName: 'Hassan',
+              fullName: 'Hassan ',
+              lastName: null,
+              posts: null,
+              title: 'Hassan ',
             },
           ],
           sponsors: ['Burton'],
@@ -917,7 +949,14 @@ module('Integration | realm', function (hooks) {
             venue: 'Gore Mountain',
             startTime: '2023-02-18T10:00:00.000Z',
             endTime: '2023-02-19T02:00:00.000Z',
-            hosts: [{ firstName: 'Hassan' }],
+            hosts: [
+              {
+                email: null,
+                firstName: 'Hassan',
+                lastName: null,
+                posts: null,
+              },
+            ],
             sponsors: ['Burton'],
             posts: [],
           },
@@ -1057,7 +1096,14 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           id: `${testRealmURL}dir/friend`,
           links: { self: `${testRealmURL}dir/friend` },
-          attributes: { firstName: 'Hassan', lastName: 'Abdel-Rahman' },
+          attributes: {
+            firstName: 'Hassan',
+            lastName: 'Abdel-Rahman',
+            email: null,
+            fullName: 'Hassan Abdel-Rahman',
+            posts: null,
+            title: 'Hassan Abdel-Rahman',
+          },
           meta: {
             adoptsFrom: {
               module: 'http://localhost:4202/test/person',
@@ -1074,7 +1120,7 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           id: `${testRealmURL}dir/van-gogh`,
           links: { self: `${testRealmURL}dir/van-gogh` },
-          attributes: { firstName: 'Van Gogh' },
+          attributes: { firstName: 'Van Gogh', title: 'Van Gogh' },
           relationships: { owner: { links: { self: null } } },
           meta: {
             adoptsFrom: {
@@ -1782,6 +1828,7 @@ module('Integration | realm', function (hooks) {
         id: `${testRealmURL}dir/mango`,
         attributes: {
           firstName: 'Mango',
+          title: 'Mango',
         },
         relationships: {
           owner: {
@@ -1816,6 +1863,10 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Mariko',
             lastName: 'Abdel-Rahman',
+            fullName: 'Mariko Abdel-Rahman',
+            title: 'Mariko Abdel-Rahman',
+            email: null,
+            posts: null,
           },
           meta: {
             adoptsFrom: {
@@ -2284,6 +2335,7 @@ module('Integration | realm', function (hooks) {
           id: `${testRealmURL}dir/mango`,
           attributes: {
             firstName: 'Mango',
+            title: 'Mango',
           },
           relationships: {
             owner: {
@@ -2317,6 +2369,10 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Mariko',
             lastName: 'Abdel-Rahman',
+            fullName: 'Mariko Abdel-Rahman',
+            title: 'Mariko Abdel-Rahman',
+            email: null,
+            posts: null,
           },
           meta: {
             adoptsFrom: {
@@ -2338,6 +2394,7 @@ module('Integration | realm', function (hooks) {
           id: `${testRealmURL}dir/vanGogh`,
           attributes: {
             firstName: 'Van Gogh',
+            title: 'Van Gogh',
           },
           relationships: {
             owner: {
@@ -2373,6 +2430,10 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
+            fullName: 'Hassan Abdel-Rahman',
+            title: 'Hassan Abdel-Rahman',
+            email: null,
+            posts: null,
           },
           meta: {
             adoptsFrom: {

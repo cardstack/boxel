@@ -18,7 +18,10 @@ import {
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import { LinkTo } from '@ember/routing';
 import { eventDebounceMs } from '@cardstack/host/lib/matrix-utils';
-import { getRoomCard, RoomCardResource } from '@cardstack/host/resources/room-card';
+import {
+  getRoomCard,
+  RoomCardResource,
+} from '@cardstack/host/resources/room-card';
 import { TrackedMap } from 'tracked-built-ins';
 import RouterService from '@ember/routing/router-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';

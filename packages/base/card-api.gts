@@ -1477,7 +1477,7 @@ export class CardBase {
       }
       return Object.fromEntries(
         Object.entries(
-          getFields(value, { includeComputeds: true, usedFieldsOnly: true })
+          getFields(value, { includeComputeds: true, usedLinkedFieldsOnly: true })
         ).map(([fieldName, field]) => {
           let rawValue = peekAtField(value, fieldName);
           if (field?.fieldType === 'linksToMany') {
@@ -1805,7 +1805,7 @@ function serializeCardResource(
   let { includeUnrenderedFields: remove, ...fieldOpts } = opts ?? {};
   let { id: removedIdField, ...fields } = getFields(model, {
     ...fieldOpts,
-    usedFieldsOnly: !opts?.includeUnrenderedFields,
+    usedLinkedFieldsOnly: !opts?.includeUnrenderedFields,
   });
   let fieldResources = Object.keys(fields).map((fieldName) =>
     serializedGet(model, fieldName, doc, visited, opts)
@@ -2220,7 +2220,7 @@ export async function recompute(
       Object.keys(
         getFields(model, {
           includeComputeds: true,
-          usedFieldsOnly: !opts?.recomputeAllFields,
+          usedLinkedFieldsOnly: !opts?.recomputeAllFields,
         })
       )
     );
@@ -2337,15 +2337,15 @@ export async function getIfReady<T extends CardBase, K extends keyof T>(
 
 export function getFields(
   card: typeof CardBase,
-  opts?: { usedFieldsOnly?: boolean; includeComputeds?: boolean }
+  opts?: { usedLinkedFieldsOnly?: boolean; includeComputeds?: boolean }
 ): { [fieldName: string]: Field<CardBaseConstructor> };
 export function getFields<T extends CardBase>(
   card: T,
-  opts?: { usedFieldsOnly?: boolean; includeComputeds?: boolean }
+  opts?: { usedLinkedFieldsOnly?: boolean; includeComputeds?: boolean }
 ): { [P in keyof T]?: Field<CardBaseConstructor> };
 export function getFields(
   cardInstanceOrClass: CardBase | typeof CardBase,
-  opts?: { usedFieldsOnly?: boolean; includeComputeds?: boolean }
+  opts?: { usedLinkedFieldsOnly?: boolean; includeComputeds?: boolean }
 ): { [fieldName: string]: Field<CardBaseConstructor> } {
   let obj: object | null;
   let usedFields: string[] = [];
@@ -2369,9 +2369,11 @@ export function getFields(
           maybeFieldName
         );
         if (
-          opts?.usedFieldsOnly &&
+          opts?.usedLinkedFieldsOnly &&
           !usedFields.includes(maybeFieldName) &&
-          !maybeField?.isUsed
+          !maybeField?.isUsed &&
+          (maybeField?.fieldType === 'linksTo' ||
+          maybeField?.fieldType === 'linksToMany')
         ) {
           return [];
         }
