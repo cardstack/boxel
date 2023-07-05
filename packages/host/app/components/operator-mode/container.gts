@@ -95,7 +95,12 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   @action onFocusSearchInput(searchSheetTrigger?: SearchSheetTrigger) {
-    if (searchSheetTrigger != null) {
+    if (
+      searchSheetTrigger ==
+        SearchSheetTrigger.DropCardToLeftNeighborStackButton ||
+      searchSheetTrigger ==
+        SearchSheetTrigger.DropCardToRightNeighborStackButton
+    ) {
       this.searchSheetTrigger = searchSheetTrigger;
     }
 
@@ -375,7 +380,7 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   // This determines whether we show the left and right button that trigger the search sheet whose card selection will go to the left or right stack
   // (there is a single stack with at least one card in it)
-  get canCreateNeighbourStack() {
+  get canCreateNeighborStack() {
     return (
       this.allStackItems.length > 0 &&
       this.operatorModeStateService.state.stacks.length === 1
@@ -394,10 +399,10 @@ export default class OperatorModeContainer extends Component<Signature> {
 
       <CardCatalogModal />
 
-      {{#if this.canCreateNeighbourStack}}
+      {{#if this.canCreateNeighborStack}}
         <button
           data-test-add-card-left-stack
-          class='add-card-left'
+          class='add-card-to-neighbor-stack add-card-to-neighbor-stack--left {{if (eq this.searchSheetTrigger SearchSheetTrigger.DropCardToLeftNeighborStackButton) 'add-card-to-neighbor-stack--active'}}'
           {{on
             'click'
             (fn
@@ -405,7 +410,9 @@ export default class OperatorModeContainer extends Component<Signature> {
               SearchSheetTrigger.DropCardToLeftNeighborStackButton
             )
           }}
-        >Add</button>
+        >
+          {{svgJar 'download' width='30px' height='30px'}}
+        </button>
       {{/if}}
 
       {{#if (eq this.allStackItems.length 0)}}
@@ -439,10 +446,10 @@ export default class OperatorModeContainer extends Component<Signature> {
         {{/each}}
       {{/if}}
 
-      {{#if this.canCreateNeighbourStack}}
+      {{#if this.canCreateNeighborStack}}
         <button
           data-test-add-card-right-stack
-          class='add-card-right'
+          class='add-card-to-neighbor-stack add-card-to-neighbor-stack--right {{if (eq this.searchSheetTrigger SearchSheetTrigger.DropCardToRightNeighborStackButton) 'add-card-to-neighbor-stack--active'}}'
           {{on
             'click'
             (fn
@@ -450,7 +457,9 @@ export default class OperatorModeContainer extends Component<Signature> {
               SearchSheetTrigger.DropCardToRightNeighborStackButton
             )
           }}
-        >Add</button>
+        >
+          {{svgJar 'download' width='30px' height='30px'}}
+        </button>
       {{/if}}
 
       <SearchSheet
@@ -492,11 +501,28 @@ export default class OperatorModeContainer extends Component<Signature> {
       .add-card-button:hover {
         background: var(--boxel-dark-teal);
       }
-      .add-card-left,
-      .add-card-right {
-        width: 40px;
+      .add-card-to-neighbor-stack {
+        position: absolute;
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background: #AEABBA;
+        fill: #3295A2;
+        border-color: transparent;
       }
-      </style>
+      .add-card-to-neighbor-stack:hover, .add-card-to-neighbor-stack--active {
+        background: var(--boxel-light);
+        fill: var(--boxel-teal);
+      }
+      .add-card-to-neighbor-stack--left {
+        left: 0;
+        margin-left: var(--boxel-sp-lg);
+      }
+      .add-card-to-neighbor-stack--right {
+        right: 0;
+        margin-right: var(--boxel-sp-lg);
+      }
+    </style>
   </template>
 }
 
