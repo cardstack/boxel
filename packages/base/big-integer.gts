@@ -9,7 +9,6 @@ import {
   queryableValue,
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui';
-import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 
 function _deserialize(bigintString: string | null): bigint | undefined {
@@ -44,12 +43,7 @@ class Edit extends Component<typeof BigIntegerCard> {
       @errorMessage={{this.errorMessage}}
       @invalid={{this.isInvalidBigInt}}
     />
-    <button {{on 'click' this.testGetter}}>Test Getter</button>
   </template>
-
-  testGetter = () => {
-    this.args.set(333);
-  };
 
   @tracked lastEditingValue: string | undefined;
 
