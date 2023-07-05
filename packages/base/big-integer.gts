@@ -11,6 +11,41 @@ import {
 import { BoxelInput } from '@cardstack/boxel-ui';
 import { tracked } from '@glimmer/tracking';
 
+class ValidatorEditor<T> {
+  constructor(
+    private getValue: () => T | null,
+    private setValue: (val: T | null | undefined) => void,
+    private serialize: (val: T | null) => string | undefined,
+    private deserialize: (value: string) => T | null | undefined
+  ) {}
+  @tracked lastEditingValue: string | undefined;
+
+  get current(): string {
+    let serialized = this.serialize(this.getValue());
+    if (serialized != null && this.lastEditingValue !== serialized) {
+      return serialized;
+    }
+    return this.lastEditingValue || '';
+  }
+
+  get isInvalid() {
+    return this.current.length > 0 && this.getValue() == null;
+  }
+
+  get errorMessage(): string | undefined {
+    if (this.isInvalid) {
+      return 'Not a valid field input';
+    }
+    return;
+  }
+
+  parseInput = async (inputVal: string) => {
+    let deserializedValue = this.deserialize(inputVal);
+    this.setValue(deserializedValue);
+    this.lastEditingValue = inputVal;
+  };
+}
+
 function _deserialize(bigintString: string | null): bigint | undefined {
   if (!bigintString) {
     return undefined;
@@ -44,49 +79,19 @@ function _serialize(val: bigint | null): string | undefined {
 class Edit extends Component<typeof BigIntegerCard> {
   <template>
     <BoxelInput
-      @value={{this.editingValue}}
-      @onInput={{this.parseInput}}
-      @errorMessage={{this.errorMessage}}
-      @invalid={{this.isInvalidBigInt}}
+      @value={{this.validatorEditor.current}}
+      @onInput={{this.validatorEditor.parseInput}}
+      @errorMessage={{this.validatorEditor.errorMessage}}
+      @invalid={{this.validatorEditor.isInvalid}}
     />
   </template>
 
-  @tracked lastEditingValue: string | undefined;
-
-  // TODO: generalise input validation logic in a ember resource (perhaps just a class)
-  // instantiate class in Edit component
-
-  get editingValue(): string {
-    let serialized = _serialize(this.args.model);
-    if (serialized != null && this.lastEditingValue !== serialized) {
-      return serialized;
-    }
-    return this.lastEditingValue || '';
-  }
-
-  get formatted() {
-    if (!this.args.model) {
-      return;
-    }
-    return _serialize(this.args.model);
-  }
-
-  get isInvalidBigInt() {
-    return this.editingValue.length > 0 && this.args.model == null;
-  }
-
-  get errorMessage(): string | undefined {
-    if (this.isInvalidBigInt) {
-      return 'Not a valid big int';
-    }
-    return;
-  }
-
-  parseInput = async (bigintString: string) => {
-    let newValue = _deserialize(bigintString);
-    this.args.set(newValue);
-    this.lastEditingValue = bigintString;
-  };
+  validatorEditor = new ValidatorEditor(
+    () => this.args.model,
+    (inputVal) => this.args.set(inputVal),
+    _serialize,
+    _deserialize
+  );
 }
 
 export default class BigIntegerCard extends CardBase {
