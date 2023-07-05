@@ -19,18 +19,15 @@ function _deserialize(bigintString: string | null): bigint | undefined {
   try {
     let bigintVal = BigInt(bigintString);
     return bigintVal;
-  } catch (e) {
+  } catch (e: any) {
     // passes original value back to the form
-    return undefined;
-    // TODO: catch the exact error e
+    const re = /Cannot convert (.*) to a BigInt/;
+    if (e.message && e.message.match(re) && e instanceof SyntaxError) {
+      return undefined;
+    }
+    throw e;
   }
 }
-
-//business logic goes into guide
-//schema validation shud be here so computeds that consume this field dont have issues
-// other fields that consume this field will see undefined
-// TODO: write out clear logic for input
-// TODO: unit test if possible
 
 function _serialize(val: bigint | null): string | undefined {
   if (!val) {
@@ -56,13 +53,12 @@ class Edit extends Component<typeof BigIntegerCard> {
 
   @tracked lastEditingValue: string | undefined;
 
-  // perhaps generalise in a ember resource (perhaps just a class)
-  // or component tht wraps boxel input
+  // TODO: generalise input validation logic in a ember resource (perhaps just a class)
+  // instantiate class in Edit component
 
   get editingValue(): string {
     let serialized = _serialize(this.args.model);
     if (serialized != null && this.lastEditingValue !== serialized) {
-      // this.lastEditingValue = serialized;
       return serialized;
     }
     return this.lastEditingValue || '';
