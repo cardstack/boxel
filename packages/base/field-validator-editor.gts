@@ -5,7 +5,8 @@ export class FieldInputEditor<T> {
     private getValue: () => T | null,
     private setValue: (val: T | null | undefined) => void,
     private serialize: (val: T | null) => string | undefined,
-    private deserialize: (value: string) => T | null | undefined
+    private deserialize: (value: string) => T | null | undefined,
+    private errorMessageIfInvalid: string = 'Not a valid field input'
   ) {}
   @tracked lastEditingValue: string | undefined;
 
@@ -23,7 +24,7 @@ export class FieldInputEditor<T> {
 
   get errorMessage(): string | undefined {
     if (this.isInvalid) {
-      return 'Not a valid field input';
+      return this.errorMessageIfInvalid;
     }
     return;
   }
