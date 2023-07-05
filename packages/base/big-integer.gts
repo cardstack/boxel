@@ -55,7 +55,8 @@ class Edit extends Component<typeof BigIntegerCard> {
     () => this.args.model,
     (inputVal) => this.args.set(inputVal),
     _serialize,
-    _deserialize
+    _deserialize,
+    'Not a valid big int'
   );
 }
 
