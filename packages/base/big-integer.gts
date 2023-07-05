@@ -19,8 +19,15 @@ function _deserialize(bigintString: string | null): bigint | undefined {
     let bigintVal = BigInt(bigintString);
     return bigintVal;
   } catch (e: any) {
-    const re = /Cannot convert (.*) to a BigInt/;
-    if (e.message && e.message.match(re) && e instanceof SyntaxError) {
+    if (
+      (e.message &&
+        e.message.match(/Cannot convert (.*) to a BigInt/) &&
+        e instanceof SyntaxError) ||
+      (e.message.match(
+        /The number (.*) cannot be converted to a BigInt because it is not an integer/
+      ) &&
+        e instanceof RangeError)
+    ) {
       return undefined;
     }
     throw e;
