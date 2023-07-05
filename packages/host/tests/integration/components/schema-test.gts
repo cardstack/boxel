@@ -98,10 +98,10 @@ module('Integration | schema', function (hooks) {
       'test.gts',
       `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
-      import IntegerCard from "https://cardstack.com/base/integer";
+      import NumberCard from "https://cardstack.com/base/integer";
 
       export class Test extends Card {
-        @field test = contains(IntegerCard, {
+        @field test = contains(NumberCard, {
           computeVia: function () {
             return 10 / 2;
           },

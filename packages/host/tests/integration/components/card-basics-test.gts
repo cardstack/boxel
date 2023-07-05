@@ -69,13 +69,13 @@ module('Integration | card-basics', function (hooks) {
   test('primitive field type checking', async function (assert) {
     let { field, contains, containsMany, Card, Component } = cardApi;
     let { default: StringCard } = string;
-    let { default: IntegerCard } = integer;
+    let { default: NumberCard } = integer;
     let { default: BooleanCard } = boolean;
     let { default: CardRefCard } = cardRef;
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field title = contains(StringCard);
-      @field number = contains(IntegerCard);
+      @field number = contains(NumberCard);
       @field languagesSpoken = containsMany(StringCard);
       @field ref = contains(CardRefCard);
       @field boolean = contains(BooleanCard);
@@ -118,11 +118,11 @@ module('Integration | card-basics', function (hooks) {
   test('access @model for primitive and composite fields', async function (assert) {
     let { field, contains, containsMany, Card, Component } = cardApi;
     let { default: StringCard } = string;
-    let { default: IntegerCard } = integer;
+    let { default: NumberCard } = integer;
     let { default: BooleanCard } = boolean;
     class Person extends Card {
       @field firstName = contains(StringCard);
-      @field subscribers = contains(IntegerCard);
+      @field subscribers = contains(NumberCard);
       @field languagesSpoken = containsMany(StringCard);
       @field isCool = contains(BooleanCard);
     }
@@ -456,11 +456,11 @@ module('Integration | card-basics', function (hooks) {
   test('render whole composite field', async function (assert) {
     let { field, contains, Card, Component } = cardApi;
     let { default: StringCard } = string;
-    let { default: IntegerCard } = integer;
+    let { default: NumberCard } = integer;
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field title = contains(StringCard);
-      @field number = contains(IntegerCard);
+      @field number = contains(NumberCard);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <div data-test-embedded-person><@fields.title />
@@ -782,7 +782,7 @@ module('Integration | card-basics', function (hooks) {
   test('renders a card with a polymorphic "containsMany" field', async function (assert) {
     let { field, contains, containsMany, Card, Component } = cardApi;
     let { default: StringCard } = string;
-    let { default: IntegerCard } = integer;
+    let { default: NumberCard } = integer;
 
     class Person extends Card {
       @field firstName = contains(StringCard);
@@ -799,7 +799,7 @@ module('Integration | card-basics', function (hooks) {
     }
 
     class Customer extends Person {
-      @field billAmount = contains(IntegerCard);
+      @field billAmount = contains(NumberCard);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <div data-test-customer-firstName><@fields.firstName /></div>
@@ -1126,7 +1126,7 @@ module('Integration | card-basics', function (hooks) {
   test('can edit primitive and composite fields', async function (assert) {
     let { field, contains, Card, Component } = cardApi;
     let { default: StringCard } = string;
-    let { default: IntegerCard } = integer;
+    let { default: NumberCard } = integer;
     class Person extends Card {
       @field firstName = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
@@ -1138,7 +1138,7 @@ module('Integration | card-basics', function (hooks) {
 
     class Post extends Card {
       @field title = contains(StringCard);
-      @field reviews = contains(IntegerCard);
+      @field reviews = contains(NumberCard);
       @field author = contains(Person);
       static edit = class Edit extends Component<typeof this> {
         <template>

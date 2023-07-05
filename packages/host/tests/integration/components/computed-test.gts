@@ -460,16 +460,16 @@ module('Integration | computeds', function (hooks) {
   test('can recompute containsMany field', async function (assert) {
     let { field, contains, containsMany, Card, recompute } = cardApi;
     let { default: StringCard } = string;
-    let { default: IntegerCard } = integer;
+    let { default: NumberCard } = integer;
 
     class Person extends Card {
       @field firstName = contains(StringCard);
-      @field age = contains(IntegerCard);
+      @field age = contains(NumberCard);
     }
 
     class Family extends Card {
       @field people = containsMany(Person);
-      @field totalAge = contains(IntegerCard, {
+      @field totalAge = contains(NumberCard, {
         computeVia: 'computeTotalAge',
       });
       async computeTotalAge() {

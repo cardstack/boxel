@@ -728,7 +728,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
       'invoice.gts',
       `
       import { contains, containsMany, field, linksTo, Card, Component } from "https://cardstack.com/base/card-api";
-      import IntegerCard from "https://cardstack.com/base/integer";
+      import NumberCard from "https://cardstack.com/base/integer";
       import StringCard from "https://cardstack.com/base/string";
       class Vendor extends Card {
         @field company = contains(StringCard);
@@ -743,7 +743,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
       }
       class Item extends Card {
         @field name = contains(StringCard);
-        @field price = contains(IntegerCard);
+        @field price = contains(NumberCard);
         @field title =  contains(StringCard, {
           computeVia: function (this: Item) {
             return this.name + ' ' + this.price;
@@ -751,7 +751,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
         });
       }
       class LineItem extends Item {
-        @field quantity = contains(IntegerCard);
+        @field quantity = contains(NumberCard);
         static embedded = class Embedded extends Component<typeof this> {
           <template><div data-test-line-item="{{@model.name}}"><@fields.name/> - <@fields.quantity/> @ $<@fields.price/> USD</div></template>
         };
@@ -759,7 +759,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
       export class Invoice extends Card {
         @field vendor = linksTo(Vendor);
         @field lineItems = containsMany(LineItem);
-        @field balanceDue = contains(IntegerCard, { computeVia: function(this: Invoice) {
+        @field balanceDue = contains(NumberCard, { computeVia: function(this: Invoice) {
           return this.lineItems.length === 0 ? 0 : this.lineItems.map(i => i.price * i.quantity).reduce((a, b) => (a + b));
         }});
         @field title =  contains(StringCard, {

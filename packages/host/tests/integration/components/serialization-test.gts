@@ -1746,7 +1746,7 @@ module('Integration | serialization', function (hooks) {
   test('can serialize a composite field that has been edited', async function (assert) {
     let { field, contains, serializeCard, Card, Component } = cardApi;
     let { default: StringCard } = string;
-    let { default: IntegerCard } = integer;
+    let { default: NumberCard } = integer;
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field title = contains(StringCard, {
@@ -1763,7 +1763,7 @@ module('Integration | serialization', function (hooks) {
 
     class Post extends Card {
       @field title = contains(StringCard);
-      @field reviews = contains(IntegerCard);
+      @field reviews = contains(NumberCard);
       @field author = contains(Person);
       static edit = class Edit extends Component<typeof this> {
         <template>
@@ -2621,7 +2621,7 @@ module('Integration | serialization', function (hooks) {
       Card,
       createFromSerialized,
     } = cardApi;
-    let { default: IntegerCard } = integer;
+    let { default: NumberCard } = integer;
     let { default: StringCard } = string;
 
     class Person extends Card {
@@ -2643,7 +2643,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     class Customer extends Person {
-      @field billAmount = contains(IntegerCard);
+      @field billAmount = contains(NumberCard);
     }
 
     class Group extends Card {
@@ -2749,7 +2749,7 @@ module('Integration | serialization', function (hooks) {
       Card,
       createFromSerialized,
     } = cardApi;
-    let { default: IntegerCard } = integer;
+    let { default: NumberCard } = integer;
     let { default: StringCard } = string;
 
     class Person extends Card {
@@ -2771,7 +2771,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     class DogWalker extends Role {
-      @field poopBagCount = contains(IntegerCard);
+      @field poopBagCount = contains(NumberCard);
     }
 
     class Employee extends Person {

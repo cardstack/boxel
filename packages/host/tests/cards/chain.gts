@@ -1,5 +1,5 @@
 import { contains, field, Card } from 'https://cardstack.com/base/card-api';
-import IntegerCard from 'https://cardstack.com/base/integer';
+import NumberCard from 'https://cardstack.com/base/integer';
 import StringCard from 'https://cardstack.com/base/string';
 
 let CHAIN_IDS: Record<string, number> = {
@@ -9,7 +9,7 @@ let CHAIN_IDS: Record<string, number> = {
 };
 export class Chain extends Card {
   @field name = contains(StringCard);
-  @field chainId = contains(IntegerCard, {
+  @field chainId = contains(NumberCard, {
     computeVia: function (this: Chain) {
       return CHAIN_IDS[this.name];
     },

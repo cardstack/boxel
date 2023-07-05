@@ -6,7 +6,7 @@ import {
   relativeTo,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
-import IntegerCard from 'https://cardstack.com/base/integer';
+import NumberCard from 'https://cardstack.com/base/integer';
 
 let EXCHANGE_RATES: Record<string, number> = {
   USD: 1,
@@ -21,7 +21,7 @@ class Asset extends Card {
   @field name = contains(StringCard);
   @field symbol = contains(StringCard);
   @field logoURL = contains(StringCard);
-  @field exchangeRate = contains(IntegerCard, {
+  @field exchangeRate = contains(NumberCard, {
     computeVia: function (this: Asset) {
       return EXCHANGE_RATES[this.symbol];
     },
