@@ -19,7 +19,6 @@ function _deserialize(bigintString: string | null): bigint | undefined {
     let bigintVal = BigInt(bigintString);
     return bigintVal;
   } catch (e: any) {
-    // passes original value back to the form
     const re = /Cannot convert (.*) to a BigInt/;
     if (e.message && e.message.match(re) && e instanceof SyntaxError) {
       return undefined;
