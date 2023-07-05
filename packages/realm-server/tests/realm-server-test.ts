@@ -109,6 +109,7 @@ module('Realm Server', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Mango',
+          title: 'Mango',
         },
         meta: {
           adoptsFrom: {
@@ -164,6 +165,9 @@ module('Realm Server', function (hooks) {
         {
           data: {
             type: 'card',
+            attributes: {
+              title: null
+            },
             meta: {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/card-api',
