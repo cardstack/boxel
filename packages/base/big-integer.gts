@@ -9,7 +9,7 @@ import {
   queryableValue,
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui';
-import { FieldInputEditor } from './field-validator-editor';
+import { FieldInputEditor } from './field-input-editor';
 
 function _deserialize(bigintString: string | null): bigint | undefined {
   if (!bigintString) {

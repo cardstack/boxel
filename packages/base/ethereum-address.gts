@@ -1,8 +1,15 @@
 import { isAddress, getAddress } from 'ethers';
-import { primitive, Component, CardBase, useIndexBasedKey } from './card-api';
+import {
+  primitive,
+  Component,
+  CardBase,
+  useIndexBasedKey,
+  CardBaseConstructor,
+  CardInstanceType,
+} from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui';
-import { fn } from '@ember/helper';
-import { not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { FieldInputEditor } from './field-input-editor';
+import { serialize, deserialize } from './card-api';
 
 function isEthAddress(address: string): boolean {
   try {
@@ -20,9 +27,52 @@ function isChecksumAddress(address: string): boolean {
   }
 }
 
+function _serialize(val: string | null): string | undefined {
+  if (!val) {
+    return undefined;
+  }
+  return val;
+}
+
+function _deserialize(address: string | null): string | undefined {
+  if (!address) {
+    return undefined;
+  }
+  if (isEthAddress(address) && isChecksumAddress(address)) {
+    return address;
+  }
+  return undefined;
+}
+
+class Edit extends Component<typeof EthereumAddressCard> {
+  <template>
+    <BoxelInput
+      @value={{this.validatorEditor.current}}
+      @onInput={{this.validatorEditor.parseInput}}
+      @errorMessage={{this.validatorEditor.errorMessage}}
+      @invalid={{this.validatorEditor.isInvalid}}
+    />
+  </template>
+
+  validatorEditor = new FieldInputEditor(
+    () => this.args.model,
+    (inputVal: any) => this.args.set(inputVal),
+    _serialize, //TODO fix types
+    _deserialize, //TODO fix types
+    'Invalid Ethereum address. Please make sure it is a checksummed address.;'
+  );
+}
+
 export default class EthereumAddressCard extends CardBase {
   static [primitive]: string;
   static [useIndexBasedKey]: never;
+
+  static async [deserialize]<T extends CardBaseConstructor>(
+    this: T,
+    address: any
+  ): Promise<CardInstanceType<T>> {
+    return _deserialize(address) as CardInstanceType<T>;
+  }
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
@@ -30,31 +80,5 @@ export default class EthereumAddressCard extends CardBase {
     </template>
   };
 
-  static edit = class Edit extends Component<typeof EthereumAddressCard> {
-    <template>
-      <BoxelInput
-        @value={{@model}}
-        @onInput={{fn this.parseInput @set}}
-        @errorMessage={{this.errorMessage}}
-        @invalid={{not this.isValidEthAddress}}
-      />
-    </template>
-
-    get isValidEthAddress() {
-      if (this.args.model == null) {
-        return false;
-      }
-      return (
-        isEthAddress(this.args.model) && isChecksumAddress(this.args.model)
-      );
-    }
-
-    get errorMessage() {
-      return 'Invalid Ethereum address. Please make sure it is a checksummed address.';
-    }
-
-    parseInput(set: Function, value: string) {
-      return set(value);
-    }
-  };
+  static edit = Edit;
 }

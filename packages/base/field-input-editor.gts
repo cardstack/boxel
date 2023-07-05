@@ -1,5 +1,6 @@
 import { tracked } from '@glimmer/tracking';
 
+// only for primitive fields
 export class FieldInputEditor<T> {
   constructor(
     private getValue: () => T | null,
