@@ -8,7 +8,6 @@ import {
   deserialize,
   queryableValue,
 } from './card-api';
-import { fn } from '@ember/helper';
 import { BoxelInput } from '@cardstack/boxel-ui';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
