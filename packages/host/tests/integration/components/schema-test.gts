@@ -98,7 +98,7 @@ module('Integration | schema', function (hooks) {
       'test.gts',
       `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
-      import NumberCard from "https://cardstack.com/base/integer";
+      import NumberCard from "https://cardstack.com/base/number";
 
       export class Test extends Card {
         @field test = contains(NumberCard, {
@@ -480,7 +480,7 @@ module('Integration | schema', function (hooks) {
       .exists('base realm primitive field displayed');
     assert
       .dom(
-        `[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/integer-field`
+        `[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/number-field`
       )
       .exists('base realm primitive field displayed');
     assert

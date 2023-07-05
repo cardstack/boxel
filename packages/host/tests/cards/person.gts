@@ -5,7 +5,7 @@ import {
   Card,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
-import NumberCard from 'https://cardstack.com/base/integer';
+import NumberCard from 'https://cardstack.com/base/number';
 
 export class Person extends Card {
   @field firstName = contains(StringCard);

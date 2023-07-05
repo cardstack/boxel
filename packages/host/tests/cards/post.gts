@@ -5,7 +5,7 @@ import {
   Card,
 } from 'https://cardstack.com/base/card-api';
 import DatetimeCard from 'https://cardstack.com/base/datetime';
-import NumberCard from 'https://cardstack.com/base/integer';
+import NumberCard from 'https://cardstack.com/base/number';
 import StringCard from 'https://cardstack.com/base/string';
 import { Person } from './person';
 

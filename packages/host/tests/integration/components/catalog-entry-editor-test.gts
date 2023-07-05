@@ -728,7 +728,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
       'invoice.gts',
       `
       import { contains, containsMany, field, linksTo, Card, Component } from "https://cardstack.com/base/card-api";
-      import NumberCard from "https://cardstack.com/base/integer";
+      import NumberCard from "https://cardstack.com/base/number";
       import StringCard from "https://cardstack.com/base/string";
       class Vendor extends Card {
         @field company = contains(StringCard);

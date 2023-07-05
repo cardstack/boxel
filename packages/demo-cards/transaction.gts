@@ -8,7 +8,7 @@ import {
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import StringCard from 'https://cardstack.com/base/string';
 import { CardContainer, FieldContainer } from '@cardstack/boxel-ui';
-import NumberCard from 'https://cardstack.com/base/integer';
+import NumberCard from 'https://cardstack.com/base/number';
 import { Chain } from './chain';
 
 export class Transaction extends Card {

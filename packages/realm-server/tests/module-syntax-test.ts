@@ -41,7 +41,7 @@ module('module-syntax', function () {
       { type: 'exportedName', name: 'Person' },
       'age',
       {
-        module: 'https://cardstack.com/base/integer',
+        module: 'https://cardstack.com/base/number',
         name: 'default',
       },
       'contains'
@@ -50,7 +50,7 @@ module('module-syntax', function () {
     assert.codeEqual(
       mod.code(),
       `
-        import NumberCard from "https://cardstack.com/base/integer";
+        import NumberCard from "https://cardstack.com/base/number";
         import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
@@ -71,7 +71,7 @@ module('module-syntax', function () {
       field?.card,
       {
         type: 'external',
-        module: 'https://cardstack.com/base/integer',
+        module: 'https://cardstack.com/base/number',
         name: 'default',
       },
       'the field card is correct'
@@ -109,7 +109,7 @@ module('module-syntax', function () {
     assert.codeEqual(
       mod.code(),
       `
-        import NumberCard from "https://cardstack.com/base/integer";
+        import NumberCard from "https://cardstack.com/base/number";
         import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
@@ -178,7 +178,7 @@ module('module-syntax', function () {
       { type: 'localName', name: 'Person' },
       'age',
       {
-        module: 'https://cardstack.com/base/integer',
+        module: 'https://cardstack.com/base/number',
         name: 'default',
       },
       'contains'
@@ -187,7 +187,7 @@ module('module-syntax', function () {
     assert.codeEqual(
       mod.code(),
       `
-        import NumberCard from "https://cardstack.com/base/integer";
+        import NumberCard from "https://cardstack.com/base/number";
         import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
@@ -384,7 +384,7 @@ module('module-syntax', function () {
       { type: 'exportedName', name: 'Person' },
       'age',
       {
-        module: 'https://cardstack.com/base/integer',
+        module: 'https://cardstack.com/base/number',
         name: 'default',
       },
       'contains'
@@ -393,7 +393,7 @@ module('module-syntax', function () {
     assert.codeEqual(
       mod.code(),
       `
-        import NumberCard0 from "https://cardstack.com/base/integer";
+        import NumberCard0 from "https://cardstack.com/base/number";
         import { contains, field, Card } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 

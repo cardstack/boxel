@@ -8,7 +8,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import DateCard from 'https://cardstack.com/base/date';
 import DatetimeCard from 'https://cardstack.com/base/datetime';
-import NumberCard from 'https://cardstack.com/base/integer';
+import NumberCard from 'https://cardstack.com/base/number';
 import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Vendor } from './vendor';

@@ -6,7 +6,7 @@ import {
   relativeTo,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
-import NumberCard from 'https://cardstack.com/base/integer';
+import NumberCard from 'https://cardstack.com/base/number';
 
 let EXCHANGE_RATES: Record<string, number> = {
   USD: 1,

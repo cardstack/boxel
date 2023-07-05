@@ -5,7 +5,7 @@ import {
   Component,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
-import NumberCard from 'https://cardstack.com/base/integer';
+import NumberCard from 'https://cardstack.com/base/number';
 import { FieldContainer } from '@cardstack/boxel-ui';
 
 let CHAIN_IDS: Record<string, number> = {

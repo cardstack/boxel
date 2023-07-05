@@ -31,7 +31,7 @@ import format from 'date-fns/format';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
-let integer: typeof import('https://cardstack.com/base/integer');
+let number: typeof import('https://cardstack.com/base/number');
 let date: typeof import('https://cardstack.com/base/date');
 let datetime: typeof import('https://cardstack.com/base/datetime');
 let boolean: typeof import('https://cardstack.com/base/boolean');
@@ -58,7 +58,7 @@ module('Integration | card-basics', function (hooks) {
     primitive = cardApi.primitive;
     queryableValue = cardApi.queryableValue;
     string = await Loader.import(`${baseRealm.url}string`);
-    integer = await Loader.import(`${baseRealm.url}integer`);
+    number = await Loader.import(`${baseRealm.url}number`);
     date = await Loader.import(`${baseRealm.url}date`);
     datetime = await Loader.import(`${baseRealm.url}datetime`);
     boolean = await Loader.import(`${baseRealm.url}boolean`);
@@ -69,7 +69,7 @@ module('Integration | card-basics', function (hooks) {
   test('primitive field type checking', async function (assert) {
     let { field, contains, containsMany, Card, Component } = cardApi;
     let { default: StringCard } = string;
-    let { default: NumberCard } = integer;
+    let { default: NumberCard } = number;
     let { default: BooleanCard } = boolean;
     let { default: CardRefCard } = cardRef;
     class Person extends Card {
@@ -118,7 +118,7 @@ module('Integration | card-basics', function (hooks) {
   test('access @model for primitive and composite fields', async function (assert) {
     let { field, contains, containsMany, Card, Component } = cardApi;
     let { default: StringCard } = string;
-    let { default: NumberCard } = integer;
+    let { default: NumberCard } = number;
     let { default: BooleanCard } = boolean;
     class Person extends Card {
       @field firstName = contains(StringCard);
@@ -176,18 +176,18 @@ module('Integration | card-basics', function (hooks) {
       };
     }
 
-    class StrongInteger extends Card {
+    class Strongnumber extends Card {
       static [primitive]: number;
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <strong data-test='integer'>{{@model}}</strong>
+          <strong data-test='number'>{{@model}}</strong>
         </template>
       };
     }
 
     class Person extends Card {
       @field firstName = contains(EmphasizedString);
-      @field number = contains(StrongInteger);
+      @field number = contains(Strongnumber);
 
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -200,7 +200,7 @@ module('Integration | card-basics', function (hooks) {
 
     await renderCard(arthur, 'embedded');
     assert.dom('[data-test="name"]').containsText('Arthur');
-    assert.dom('[data-test="integer"]').containsText('10');
+    assert.dom('[data-test="number"]').containsText('10');
   });
 
   test('can set the ID for an unsaved card', async function (assert) {
@@ -456,7 +456,7 @@ module('Integration | card-basics', function (hooks) {
   test('render whole composite field', async function (assert) {
     let { field, contains, Card, Component } = cardApi;
     let { default: StringCard } = string;
-    let { default: NumberCard } = integer;
+    let { default: NumberCard } = number;
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field title = contains(StringCard);
@@ -502,18 +502,18 @@ module('Integration | card-basics', function (hooks) {
       };
     }
 
-    class TestInteger extends Card {
+    class Testnumber extends Card {
       static [primitive]: number;
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <strong data-test='integer'>{{@model}}</strong>
+          <strong data-test='number'>{{@model}}</strong>
         </template>
       };
     }
 
     class Person extends Card {
       @field firstName = contains(TestString);
-      @field number = contains(TestInteger);
+      @field number = contains(Testnumber);
     }
 
     class Post extends Card {
@@ -528,7 +528,7 @@ module('Integration | card-basics', function (hooks) {
     await shimModule(`${testRealmURL}test-cards`, {
       Post,
       Person,
-      TestInteger,
+      Testnumber,
       TestString,
     });
 
@@ -538,7 +538,7 @@ module('Integration | card-basics', function (hooks) {
 
     await renderCard(helloWorld, 'isolated');
     assert.dom('[data-test="string"]').containsText('Arthur');
-    assert.dom('[data-test="integer"]').containsText('10');
+    assert.dom('[data-test="number"]').containsText('10');
   });
 
   test('render default isolated template', async function (assert) {
@@ -782,7 +782,7 @@ module('Integration | card-basics', function (hooks) {
   test('renders a card with a polymorphic "containsMany" field', async function (assert) {
     let { field, contains, containsMany, Card, Component } = cardApi;
     let { default: StringCard } = string;
-    let { default: NumberCard } = integer;
+    let { default: NumberCard } = number;
 
     class Person extends Card {
       @field firstName = contains(StringCard);
@@ -1126,7 +1126,7 @@ module('Integration | card-basics', function (hooks) {
   test('can edit primitive and composite fields', async function (assert) {
     let { field, contains, Card, Component } = cardApi;
     let { default: StringCard } = string;
-    let { default: NumberCard } = integer;
+    let { default: NumberCard } = number;
     class Person extends Card {
       @field firstName = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {

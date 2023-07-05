@@ -1,5 +1,5 @@
 import { contains, field, Card } from 'https://cardstack.com/base/card-api';
-import NumberCard from 'https://cardstack.com/base/integer';
+import NumberCard from 'https://cardstack.com/base/number';
 import StringCard from 'https://cardstack.com/base/string';
 
 let CHAIN_IDS: Record<string, number> = {

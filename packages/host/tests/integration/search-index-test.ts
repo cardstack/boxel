@@ -2484,7 +2484,7 @@ module('Integration | search-index', function (hooks) {
         'http://localhost:4201/base/contains-many-component',
         'http://localhost:4201/base/default-card-component',
         'http://localhost:4201/base/field-component',
-        'http://localhost:4201/base/integer',
+        'http://localhost:4201/base/number',
         'http://localhost:4201/base/links-to-editor',
         'http://localhost:4201/base/links-to-many-component',
         'http://localhost:4201/base/string',
@@ -3456,7 +3456,7 @@ posts/ignore-me.json
       );
     });
 
-    test('can sort by integer value', async function (assert) {
+    test('can sort by number value', async function (assert) {
       let { data: matching } = await indexer.search({
         sort: [
           {

@@ -11,7 +11,7 @@ import {
 } from './card-api';
 import StringCard from './string';
 import DateTimeCard from './datetime';
-import NumberCard from './integer';
+import NumberCard from './number';
 import MarkdownCard from './markdown';
 import { BoxelMessage } from '@cardstack/boxel-ui';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
