@@ -189,7 +189,7 @@ export default class SearchSheet extends Component<Signature> {
                 {{#each this.orderedRecentCards as |card i|}}
                   <SearchResult
                     @card={{card}}
-                    {{on 'click' (fn this.args.onCardSelect card)}}
+                    {{on 'click' (fn @onCardSelect card)}}
                     data-test-search-result-index={{i}}
                   />
                 {{/each}}
