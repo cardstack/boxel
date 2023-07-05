@@ -9,42 +9,7 @@ import {
   queryableValue,
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui';
-import { tracked } from '@glimmer/tracking';
-
-class ValidatorEditor<T> {
-  constructor(
-    private getValue: () => T | null,
-    private setValue: (val: T | null | undefined) => void,
-    private serialize: (val: T | null) => string | undefined,
-    private deserialize: (value: string) => T | null | undefined
-  ) {}
-  @tracked lastEditingValue: string | undefined;
-
-  get current(): string {
-    let serialized = this.serialize(this.getValue());
-    if (serialized != null && this.lastEditingValue !== serialized) {
-      return serialized;
-    }
-    return this.lastEditingValue || '';
-  }
-
-  get isInvalid() {
-    return this.current.length > 0 && this.getValue() == null;
-  }
-
-  get errorMessage(): string | undefined {
-    if (this.isInvalid) {
-      return 'Not a valid field input';
-    }
-    return;
-  }
-
-  parseInput = async (inputVal: string) => {
-    let deserializedValue = this.deserialize(inputVal);
-    this.setValue(deserializedValue);
-    this.lastEditingValue = inputVal;
-  };
-}
+import { FieldInputEditor } from './field-validator-editor';
 
 function _deserialize(bigintString: string | null): bigint | undefined {
   if (!bigintString) {
@@ -86,7 +51,7 @@ class Edit extends Component<typeof BigIntegerCard> {
     />
   </template>
 
-  validatorEditor = new ValidatorEditor(
+  validatorEditor = new FieldInputEditor(
     () => this.args.model,
     (inputVal) => this.args.set(inputVal),
     _serialize,
