@@ -17,6 +17,7 @@ import { service } from '@ember/service';
 import { restartableTask } from 'ember-concurrency';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type CardService from '../../services/card-service';
+import type LoaderService from '../../services/loader-service';
 import { isSingleCardDocument } from '@cardstack/runtime-common';
 
 export enum SearchSheetMode {
@@ -43,6 +44,7 @@ export default class SearchSheet extends Component<Signature> {
   @tracked hasCardURLError = false;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare cardService: CardService;
+  @service declare loaderService: LoaderService;
 
   get inputBottomTreatment() {
     return this.args.mode == SearchSheetMode.Closed
@@ -97,7 +99,7 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   getCard = restartableTask(async (cardURL: string) => {
-    let response = await fetch(cardURL, {
+    let response = await this.loaderService.loader.fetch(cardURL, {
       headers: {
         Accept: 'application/vnd.card+json',
       },

@@ -29,6 +29,7 @@ import debounce from 'lodash/debounce';
 import { service } from '@ember/service';
 import { isSingleCardDocument } from '@cardstack/runtime-common';
 import type CardService from '../services/card-service';
+import type LoaderService from '../services/loader-service';
 
 interface Signature {
   Args: {
@@ -121,6 +122,7 @@ export default class CardCatalogModal extends Component<Signature> {
             <label class='url-search'>
               <span>Enter Card URL:</span>
               <BoxelInputValidationState
+                data-test-url-field
                 placeholder='http://'
                 @value={{this.cardURL}}
                 @onInput={{this.setCardURL}}
@@ -259,6 +261,7 @@ export default class CardCatalogModal extends Component<Signature> {
   @tracked cardURL = '';
   @tracked hasCardURLError = false;
   @service declare cardService: CardService;
+  @service declare loaderService: LoaderService;
 
   constructor(owner: unknown, args: {}) {
     super(owner, args);
@@ -315,7 +318,7 @@ export default class CardCatalogModal extends Component<Signature> {
   );
 
   private getCard = restartableTask(async (cardURL: string) => {
-    let response = await fetch(cardURL, {
+    let response = await this.loaderService.loader.fetch(cardURL, {
       headers: {
         Accept: 'application/vnd.card+json',
       },
