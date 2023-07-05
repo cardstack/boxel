@@ -299,7 +299,6 @@ module('Integration | input-field', function (hooks) {
       `${testRealmURL}Sample/1`,
       Loader.getLoaderFor(updateFromSerialized)
     );
-    debugger;
     await waitFor('[data-test-field="someBigInt"]');
     await assert
       .dom('div[data-test-field="someBigInt"] [data-test-boxel-input]')
