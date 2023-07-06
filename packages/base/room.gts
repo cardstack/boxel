@@ -11,7 +11,7 @@ import {
 } from './card-api';
 import StringCard from './string';
 import DateTimeCard from './datetime';
-import IntegerCard from './integer';
+import NumberCard from './number';
 import MarkdownCard from './markdown';
 import { BoxelMessage } from '@cardstack/boxel-ui';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
@@ -165,7 +165,7 @@ class MessageCard extends Card {
   @field formattedMessage = contains(StringCard);
   @field created = contains(DateTimeCard);
   @field attachedCard = contains(Card);
-  @field index = contains(IntegerCard);
+  @field index = contains(NumberCard);
 
   static embedded = class Embedded extends Component<typeof this> {
     // TODO need to add the message specific CSS here

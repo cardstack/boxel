@@ -5,14 +5,14 @@ import {
   Card,
   Component,
 } from 'https://cardstack.com/base/card-api';
-import IntegerCard from 'https://cardstack.com/base/integer';
+import NumberCard from 'https://cardstack.com/base/number';
 import StringCard from 'https://cardstack.com/base/string';
 
 export class Friend extends Card {
   static displayName = 'Friend';
   @field firstName = contains(StringCard);
   @field friend = linksTo(() => Friend);
-  @field test = contains(IntegerCard, {
+  @field test = contains(NumberCard, {
     computeVia: function () {
       // make sure we don't blow up when '/' appears
       return 10 / 2;

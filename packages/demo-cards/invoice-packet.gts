@@ -8,7 +8,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import DateCard from 'https://cardstack.com/base/date';
 import DatetimeCard from 'https://cardstack.com/base/datetime';
-import IntegerCard from 'https://cardstack.com/base/integer';
+import NumberCard from 'https://cardstack.com/base/number';
 import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Vendor } from './vendor';
@@ -76,8 +76,8 @@ class Details extends Card {
 
 class LineItem extends Card {
   @field name = contains(StringCard);
-  @field quantity = contains(IntegerCard);
-  @field amount = contains(IntegerCard);
+  @field quantity = contains(NumberCard);
+  @field amount = contains(NumberCard);
   @field description = contains(StringCard);
 
   static embedded = class Embedded extends Component<typeof this> {
@@ -308,7 +308,7 @@ export class InvoicePacket extends Card {
       // return this.vendor?.alternatePaymentMethod?.length ?  this.vendor.alternatePaymentMethod.map(p =>  p.cryptoPayment?.token ?? p.wireTransfer?.currency) : [];
     },
   });
-  @field balanceDue = contains(IntegerCard, {
+  @field balanceDue = contains(NumberCard, {
     computeVia: function (this: InvoicePacket) {
       return this.lineItems.length === 0
         ? 0

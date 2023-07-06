@@ -14,7 +14,7 @@ import { shimExternals } from '@cardstack/host/lib/externals';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
-let integer: typeof import('https://cardstack.com/base/integer');
+let number: typeof import('https://cardstack.com/base/number');
 
 module('Integration | computeds', function (hooks) {
   setupRenderingTest(hooks);
@@ -32,7 +32,7 @@ module('Integration | computeds', function (hooks) {
     );
     cardApi = await Loader.import(`${baseRealm.url}card-api`);
     string = await Loader.import(`${baseRealm.url}string`);
-    integer = await Loader.import(`${baseRealm.url}integer`);
+    number = await Loader.import(`${baseRealm.url}number`);
   });
 
   test('can render a synchronous computed field', async function (assert) {
@@ -460,16 +460,16 @@ module('Integration | computeds', function (hooks) {
   test('can recompute containsMany field', async function (assert) {
     let { field, contains, containsMany, Card, recompute } = cardApi;
     let { default: StringCard } = string;
-    let { default: IntegerCard } = integer;
+    let { default: NumberCard } = number;
 
     class Person extends Card {
       @field firstName = contains(StringCard);
-      @field age = contains(IntegerCard);
+      @field age = contains(NumberCard);
     }
 
     class Family extends Card {
       @field people = containsMany(Person);
-      @field totalAge = contains(IntegerCard, {
+      @field totalAge = contains(NumberCard, {
         computeVia: 'computeTotalAge',
       });
       async computeTotalAge() {
