@@ -2409,8 +2409,6 @@ module('Integration | realm', function (hooks) {
             lastName: 'Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
-            email: null,
-            posts: null,
           },
           meta: {
             adoptsFrom: {
