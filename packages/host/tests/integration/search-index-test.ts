@@ -398,7 +398,6 @@ module('Integration | search-index', function (hooks) {
           },
           demo: {
             firstName: 'Mango',
-            title: null,
           },
         },
         meta: {
@@ -1020,17 +1019,13 @@ module('Integration | search-index', function (hooks) {
                 type: 'crypto',
                 payment: {
                   address: '0x1111',
-                  title: null,
                 },
-                title: null,
               },
               {
                 type: 'crypto',
                 payment: {
                   address: '0x2222',
-                  title: null,
                 },
-                title: null,
               },
             ],
           },
@@ -1263,7 +1258,6 @@ module('Integration | search-index', function (hooks) {
         startTime: undefined,
         title: null,
         venue: null,
-        posts: [],
       },
       description: 'Catalog entry for Booking',
       isPrimitive: false,

@@ -233,8 +233,6 @@ module('Integration | realm', function (hooks) {
             fullName: 'Hassan Abdel-Rahman',
             lastName: 'Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
-            email: null,
-            posts: null,
           },
           meta: {
             adoptsFrom: {
@@ -336,8 +334,6 @@ module('Integration | realm', function (hooks) {
             lastName: 'Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
-            email: null,
-            posts: null,
           },
           meta: {
             adoptsFrom: {
@@ -463,9 +459,6 @@ module('Integration | realm', function (hooks) {
             JSON.parse(fileRef.content as string),
             {
               data: {
-                attributes: {
-                  title: null,
-                },
                 type: 'card',
                 meta: {
                   adoptsFrom: {
@@ -647,8 +640,6 @@ module('Integration | realm', function (hooks) {
             lastName: 'Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
-            email: null,
-            posts: null,
           },
           meta: {
             adoptsFrom: {
@@ -787,8 +778,6 @@ module('Integration | realm', function (hooks) {
             attributes: {
               firstName: 'Van Gogh',
               lastName: 'Abdel-Rahman',
-              email: null,
-              posts: null,
             },
             meta: {
               adoptsFrom: {
@@ -874,10 +863,8 @@ module('Integration | realm', function (hooks) {
               attributes: {
                 hosts: [
                   {
-                    email: null,
                     firstName: 'Hassan',
                     lastName: null,
-                    posts: null,
                   },
                 ],
                 sponsors: ['Burton'],
@@ -911,11 +898,9 @@ module('Integration | realm', function (hooks) {
           endTime: '2023-02-19T02:00:00.000Z',
           hosts: [
             {
-              email: null,
               firstName: 'Hassan',
               fullName: 'Hassan ',
               lastName: null,
-              posts: null,
               title: 'Hassan ',
             },
           ],
@@ -951,10 +936,8 @@ module('Integration | realm', function (hooks) {
             endTime: '2023-02-19T02:00:00.000Z',
             hosts: [
               {
-                email: null,
                 firstName: 'Hassan',
                 lastName: null,
-                posts: null,
               },
             ],
             sponsors: ['Burton'],
@@ -1099,9 +1082,7 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
-            email: null,
             fullName: 'Hassan Abdel-Rahman',
-            posts: null,
             title: 'Hassan Abdel-Rahman',
           },
           meta: {
@@ -1865,8 +1846,6 @@ module('Integration | realm', function (hooks) {
             lastName: 'Abdel-Rahman',
             fullName: 'Mariko Abdel-Rahman',
             title: 'Mariko Abdel-Rahman',
-            email: null,
-            posts: null,
           },
           meta: {
             adoptsFrom: {
@@ -2371,8 +2350,6 @@ module('Integration | realm', function (hooks) {
             lastName: 'Abdel-Rahman',
             fullName: 'Mariko Abdel-Rahman',
             title: 'Mariko Abdel-Rahman',
-            email: null,
-            posts: null,
           },
           meta: {
             adoptsFrom: {
