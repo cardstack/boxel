@@ -176,7 +176,7 @@ module('Integration | card-basics', function (hooks) {
       };
     }
 
-    class Strongnumber extends Card {
+    class StrongNumber extends Card {
       static [primitive]: number;
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -187,7 +187,7 @@ module('Integration | card-basics', function (hooks) {
 
     class Person extends Card {
       @field firstName = contains(EmphasizedString);
-      @field number = contains(Strongnumber);
+      @field number = contains(StrongNumber);
 
       static embedded = class Embedded extends Component<typeof this> {
         <template>
