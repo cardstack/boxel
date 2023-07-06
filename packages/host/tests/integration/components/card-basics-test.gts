@@ -502,7 +502,7 @@ module('Integration | card-basics', function (hooks) {
       };
     }
 
-    class Testnumber extends Card {
+    class TestNumber extends Card {
       static [primitive]: number;
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -513,7 +513,7 @@ module('Integration | card-basics', function (hooks) {
 
     class Person extends Card {
       @field firstName = contains(TestString);
-      @field number = contains(Testnumber);
+      @field number = contains(TestNumber);
     }
 
     class Post extends Card {
@@ -528,7 +528,7 @@ module('Integration | card-basics', function (hooks) {
     await shimModule(`${testRealmURL}test-cards`, {
       Post,
       Person,
-      Testnumber,
+      TestNumber,
       TestString,
     });
 
