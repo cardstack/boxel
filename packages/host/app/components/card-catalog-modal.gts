@@ -126,7 +126,6 @@ export default class CardCatalogModal extends Component<Signature> {
                 placeholder='http://'
                 @value={{this.cardURL}}
                 @onInput={{this.setCardURL}}
-                @onBlur={{this.onURLFieldUpdated}}
                 @onKeyPress={{this.onURLFieldKeypress}}
                 @state={{this.cardURLFieldState}}
                 @errorMessage={{this.cardURLErrorMessage}}
@@ -357,6 +356,7 @@ export default class CardCatalogModal extends Component<Signature> {
   @action
   setCardURL(cardURL: string) {
     this.hasCardURLError = false;
+    this.selectedCard = undefined;
     this.cardURL = cardURL;
     this.debouncedURLFieldUpdate();
   }
@@ -371,11 +371,13 @@ export default class CardCatalogModal extends Component<Signature> {
   @action
   onURLFieldUpdated() {
     if (this.cardURL) {
+      this.selectedCard = undefined;
       this.getCard.perform(this.cardURL);
     }
   }
 
   @action toggleSelect(card?: CardBase): void {
+    this.cardURL = '';
     if (this.selectedCard?.id === card?.id) {
       this.selectedCard = undefined;
       return;

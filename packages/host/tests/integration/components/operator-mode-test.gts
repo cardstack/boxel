@@ -65,6 +65,7 @@ module('Integration | operator-mode', function (hooks) {
   }
 
   hooks.beforeEach(async function () {
+    localStorage.removeItem('recent-cards');
     Loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
@@ -1363,6 +1364,49 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom(`[data-test-boxel-input-validation-state="invalid"]`)
       .doesNotExist('invalid state is not shown');
+  });
+
+  test(`card selection and card URL field are mutually exclusive in card chooser`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+    await click(`[data-test-create-new-card-button]`);
+    await waitFor(`[data-test-card-catalog-item]`);
+
+    await click(
+      `[data-test-card-catalog-item="https://cardstack.com/base/types/room-objective"] button`
+    );
+    assert
+      .dom(
+        `[data-test-card-catalog-item="https://cardstack.com/base/types/room-objective"].selected`
+      )
+      .exists('card is selected');
+
+    await fillIn(
+      `[data-test-url-field] input`,
+      `https://cardstack.com/base/types/room-objective`
+    );
+
+    assert
+      .dom(
+        `[data-test-card-catalog-item="https://cardstack.com/base/types/room-objective"].selected`
+      )
+      .doesNotExist('card is not selected');
+
+    await click(
+      `[data-test-card-catalog-item="https://cardstack.com/base/types/room-objective"] button`
+    );
+    assert
+      .dom(`[data-test-url-field] input`)
+      .hasNoValue('card URL field is cleared');
   });
 
   test(`can add a card to the stack by URL from search sheet`, async function (assert) {
