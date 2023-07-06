@@ -4,12 +4,12 @@ import {
   Component,
   CardBase,
   useIndexBasedKey,
-  CardBaseConstructor,
   CardInstanceType,
+  deserialize,
+  CardBaseConstructor,
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui';
-import { FieldInputEditor } from './field-input-editor';
-import { deserialize, serializePrimitive } from './card-api';
+import { FieldInputEditor, DeserializedResult } from './field-input-editor';
 
 function isEthAddress(address: string): boolean {
   try {
@@ -27,21 +27,27 @@ function isChecksumAddress(address: string): boolean {
   }
 }
 
-function _serialize(val: string | null): string | undefined {
-  if (!val) {
-    return undefined;
-  }
-  return val;
-}
-
-function _deserialize(address: string | null): string | undefined {
+function _deserialize(address: string | null): DeserializedResult<string> {
   if (!address) {
-    return undefined;
+    return { value: null, errorMessage: 'eth address undefined' };
   }
-  if (isEthAddress(address) && isChecksumAddress(address)) {
-    return address;
+  const validations = [
+    {
+      validate: (address: string) => isChecksumAddress(address),
+      errorMessage: 'Not a checksummed address.',
+    },
+    {
+      validate: (address: string) => isEthAddress(address),
+      errorMessage: 'Not a valid Ethereum address.',
+    },
+  ];
+
+  for (let validation of validations) {
+    if (!validation.validate(address)) {
+      return { value: null, errorMessage: validation.errorMessage };
+    }
   }
-  return undefined;
+  return { value: address };
 }
 
 class Edit extends Component<typeof EthereumAddressCard> {
@@ -54,12 +60,11 @@ class Edit extends Component<typeof EthereumAddressCard> {
     />
   </template>
 
-  validatorEditor = new FieldInputEditor(
+  validatorEditor = new FieldInputEditor<string>(
     () => this.args.model,
     (inputVal: any) => this.args.set(inputVal),
     undefined,
-    _deserialize, //TODO fix types
-    'Invalid Ethereum address. Please make sure it is a checksummed address.;'
+    _deserialize //TODO fix types
   );
 }
 
@@ -71,7 +76,7 @@ export default class EthereumAddressCard extends CardBase {
     this: T,
     address: any
   ): Promise<CardInstanceType<T>> {
-    return _deserialize(address) as CardInstanceType<T>;
+    return _deserialize(address).value as CardInstanceType<T>;
   }
 
   static embedded = class Embedded extends Component<typeof this> {

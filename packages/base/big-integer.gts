@@ -9,15 +9,15 @@ import {
   queryableValue,
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui';
-import { FieldInputEditor } from './field-input-editor';
+import { FieldInputEditor, DeserializedResult } from './field-input-editor';
 
-function _deserialize(bigintString: string | null): bigint | undefined {
+function _deserialize(bigintString: string | null): DeserializedResult<bigint> {
   if (!bigintString) {
-    return undefined;
+    return { value: null, errorMessage: 'big int undefined' };
   }
   try {
     let bigintVal = BigInt(bigintString);
-    return bigintVal;
+    return { value: bigintVal };
   } catch (e: any) {
     if (
       (e.message &&
@@ -28,7 +28,7 @@ function _deserialize(bigintString: string | null): bigint | undefined {
       ) &&
         e instanceof RangeError)
     ) {
-      return undefined;
+      return { value: null, errorMessage: 'Not a valid big int' };
     }
     throw e;
   }
@@ -55,8 +55,7 @@ class Edit extends Component<typeof BigIntegerCard> {
     () => this.args.model,
     (inputVal) => this.args.set(inputVal),
     _serialize,
-    _deserialize,
-    'Not a valid big int'
+    _deserialize
   );
 }
 
@@ -69,7 +68,7 @@ export default class BigIntegerCard extends CardBase {
     this: T,
     bigintString: any
   ): Promise<CardInstanceType<T>> {
-    return _deserialize(bigintString) as CardInstanceType<T>;
+    return _deserialize(bigintString).value as CardInstanceType<T>;
   }
   static [queryableValue](val: bigint | undefined): string | undefined {
     if (val) {

@@ -1,6 +1,10 @@
 import { tracked } from '@glimmer/tracking';
-import { serializePrimitive, deserializePrimitive } from './card-api';
+import { serializePrimitive } from './card-api';
 
+export type DeserializedResult<T> = {
+  value: T | null;
+  errorMessage?: string;
+};
 // only for primitive fields
 export class FieldInputEditor<T> {
   constructor(
@@ -9,12 +13,10 @@ export class FieldInputEditor<T> {
     private serialize: (
       val: T | null
     ) => string | undefined = serializePrimitive,
-    private deserialize: (
-      value: string
-    ) => T | null | undefined = deserializePrimitive,
-    private errorMessageIfInvalid: string = 'Not a valid field input'
+    private deserialize: (value: string) => DeserializedResult<T>
   ) {}
   @tracked lastEditingValue: string | undefined;
+  @tracked error: string | undefined;
 
   get current(): string {
     let serialized = this.serialize(this.getValue());
@@ -30,14 +32,15 @@ export class FieldInputEditor<T> {
 
   get errorMessage(): string | undefined {
     if (this.isInvalid) {
-      return this.errorMessageIfInvalid;
+      return this.error;
     }
     return;
   }
 
   parseInput = async (inputVal: string) => {
-    let deserializedValue = this.deserialize(inputVal);
-    this.setValue(deserializedValue);
+    let deserialized = this.deserialize(inputVal);
+    this.setValue(deserialized.value);
+    this.error = deserialized.errorMessage;
     this.lastEditingValue = inputVal;
   };
 }
