@@ -1434,6 +1434,13 @@ export function linksToMany<CardT extends CardConstructor>(
 }
 linksToMany[fieldType] = 'linksToMany' as FieldType;
 
+//default implementation
+export const serializePrimitive = (val: any) => {
+  return val;
+};
+export const deserializePrimitive = (val: any) => {
+  return val;
+};
 export class CardBase {
   // this is here because CardBase has no public instance methods, so without it
   // typescript considers everything a valid card.
@@ -1459,7 +1466,7 @@ export class CardBase {
   ): any {
     if (primitive in this) {
       // primitive cards can override this as need be
-      return value;
+      return serializePrimitive(value);
     } else {
       return serializeCardResource(value, doc, opts, visited);
     }
@@ -1507,7 +1514,7 @@ export class CardBase {
   ): Promise<CardInstanceType<T>> {
     if (primitive in this) {
       // primitive cards can override this as need be
-      return data;
+      return deserializePrimitive(data);
     }
     return _createFromSerialized(this, data, doc, relativeTo, identityContext);
   }

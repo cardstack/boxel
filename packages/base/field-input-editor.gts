@@ -1,12 +1,17 @@
 import { tracked } from '@glimmer/tracking';
+import { serializePrimitive, deserializePrimitive } from './card-api';
 
 // only for primitive fields
 export class FieldInputEditor<T> {
   constructor(
     private getValue: () => T | null,
     private setValue: (val: T | null | undefined) => void,
-    private serialize: (val: T | null) => string | undefined,
-    private deserialize: (value: string) => T | null | undefined,
+    private serialize: (
+      val: T | null
+    ) => string | undefined = serializePrimitive,
+    private deserialize: (
+      value: string
+    ) => T | null | undefined = deserializePrimitive,
     private errorMessageIfInvalid: string = 'Not a valid field input'
   ) {}
   @tracked lastEditingValue: string | undefined;

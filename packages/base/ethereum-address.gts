@@ -9,7 +9,7 @@ import {
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui';
 import { FieldInputEditor } from './field-input-editor';
-import { serialize, deserialize } from './card-api';
+import { deserialize, serializePrimitive } from './card-api';
 
 function isEthAddress(address: string): boolean {
   try {
@@ -57,7 +57,7 @@ class Edit extends Component<typeof EthereumAddressCard> {
   validatorEditor = new FieldInputEditor(
     () => this.args.model,
     (inputVal: any) => this.args.set(inputVal),
-    _serialize, //TODO fix types
+    undefined,
     _deserialize, //TODO fix types
     'Invalid Ethereum address. Please make sure it is a checksummed address.;'
   );
