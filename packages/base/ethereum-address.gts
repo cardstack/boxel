@@ -62,7 +62,7 @@ class Edit extends Component<typeof EthereumAddressCard> {
 
   validatorEditor: FieldInputEditor<string> = new FieldInputEditor(
     () => this.args.model,
-    (inputVal: any) => this.args.set(inputVal),
+    (inputVal) => this.args.set(inputVal),
     undefined,
     _deserialize
   );
