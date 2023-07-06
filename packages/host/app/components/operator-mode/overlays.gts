@@ -32,7 +32,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
           {{velcro renderedCard.element middleware=(Array this.offset)}}
         >
           <button
-            {{on 'click' (fn this.openCard card)}}
+            {{on 'click' (fn this.openOrSelectCard card)}}
             class='overlay-button'
             aria-label='open card'
             data-test-cardstack-operator-mode-overlay-button
@@ -135,7 +135,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
     },
   };
 
-  @action openCard(card: Card) {
+  @action openOrSelectCard(card: Card) {
     if (this.args.toggleSelect && this.args.selectedCards?.length) {
       this.args.toggleSelect(card);
     } else {
