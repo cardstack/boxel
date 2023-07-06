@@ -51,7 +51,7 @@ class Edit extends Component<typeof BigIntegerCard> {
     />
   </template>
 
-  validatorEditor = new FieldInputEditor(
+  validatorEditor: FieldInputEditor<bigint> = new FieldInputEditor(
     () => this.args.model,
     (inputVal) => this.args.set(inputVal),
     _serialize,
