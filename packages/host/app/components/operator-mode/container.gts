@@ -473,6 +473,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     <style>
       :global(:root) {
         --operator-mode-bg-color: #686283;
+        --boxel-modal-max-width: 100%;
       }
       .operator-mode > div {
         align-items: flex-start;
