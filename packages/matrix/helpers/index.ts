@@ -113,7 +113,6 @@ export async function assertMessages(
     card?: { id: string; text?: string };
   }[]
 ) {
-  await page.waitForSelector('[data-test-message-idx]', { timeout: 1000});
   await expect(page.locator('[data-test-message-idx]')).toHaveCount(
     messages.length
   );

@@ -74,7 +74,6 @@ test.describe('Room objectives', () => {
     await openRoom(page, 'Room 1');
 
     await sendMessage(page, `I'm not saying Hello yet...`);
-    await page.waitForTimeout(1000);
     await expect(page.locator(`[data-test-objective-progress]`)).toContainText(
       `Completed 0 of 2 (0%)`
     );
