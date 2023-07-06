@@ -64,7 +64,7 @@ class Edit extends Component<typeof EthereumAddressCard> {
     () => this.args.model,
     (inputVal: any) => this.args.set(inputVal),
     undefined,
-    _deserialize //TODO fix types
+    _deserialize
   );
 }
 
