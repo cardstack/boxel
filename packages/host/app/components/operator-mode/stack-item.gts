@@ -184,6 +184,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
           <OperatorModeOverlays
             @renderedLinksToCards={{this.renderedLinksToCards}}
             @publicAPI={{@publicAPI}}
+            @toggleSelect={{this.toggleSelect}}
+            @selectedCards={{this.selectedCards}}
           />
         </div>
         {{#if (eq @item.format 'edit')}}

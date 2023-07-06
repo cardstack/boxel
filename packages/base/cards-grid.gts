@@ -31,7 +31,10 @@ class Isolated extends Component<typeof CardsGrid> {
             data-test-cards-grid-item={{card.id}}
             {{on 'click' (fn this.openCard card)}}
           >
-            <div class='grid-card'>
+            <div
+              class='grid-card'
+              {{@context.cardComponentModifier card @context}}
+            >
               <div class='grid-card__thumbnail'>
                 <div
                   class='grid-card__thumbnail-text'

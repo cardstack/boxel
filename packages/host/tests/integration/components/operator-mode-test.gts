@@ -1359,4 +1359,63 @@ module('Integration | operator-mode', function (hooks) {
       .dom(`[data-test-boxel-input-validation-state="invalid"]`)
       .doesNotExist('invalid state is not shown');
   });
+
+  test(`can select one or more cards on cards-grid and unselect`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    assert.dom(`[data-test-cards-grid-cards]`).exists();
+
+    await waitFor(
+      `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`
+    );
+    assert.dom('[data-test-actions-overlay-selected]').doesNotExist();
+
+    await click(
+      `[data-test-actions-overlay-select="${testRealmURL}Person/fadhlan"]`
+    );
+    assert
+      .dom(
+        `[data-test-actions-overlay-selected="${testRealmURL}Person/fadhlan"]`
+      )
+      .exists();
+    assert.dom('[data-test-actions-overlay-selected]').exists({ count: 1 });
+
+    await click(
+      `[data-test-actions-overlay-select="${testRealmURL}Pet/jackie"]`
+    );
+    await click(
+      `[data-test-cardstack-operator-mode-overlay-button="${testRealmURL}Author/1"]`
+    );
+    await click(
+      `[data-test-cardstack-operator-mode-overlay-button="${testRealmURL}BlogPost/2"]`
+    );
+    assert.dom('[data-test-actions-overlay-selected]').exists({ count: 4 });
+
+    await click(
+      `[data-test-cardstack-operator-mode-overlay-button="${testRealmURL}Pet/jackie"]`
+    );
+    assert.dom('[data-test-actions-overlay-selected]').exists({ count: 3 });
+
+    await click(
+      `[data-test-cardstack-operator-mode-overlay-button="${testRealmURL}Person/fadhlan"]`
+    );
+    await click(
+      `[data-test-cardstack-operator-mode-overlay-button="${testRealmURL}BlogPost/2"]`
+    );
+    await click(`[data-test-actions-overlay-select="${testRealmURL}Author/1"]`);
+    assert.dom('[data-test-actions-overlay-selected]').doesNotExist();
+
+    await click(
+      `[data-test-cardstack-operator-mode-overlay-button="${testRealmURL}Person/fadhlan"]`
+    );
+    assert.dom(`[data-test-stack-card-index="1"]`).exists();
+  });
 });
