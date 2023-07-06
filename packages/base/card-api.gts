@@ -2372,8 +2372,10 @@ export function getFields(
           opts?.usedLinkedFieldsOnly &&
           !usedFields.includes(maybeFieldName) &&
           !maybeField?.isUsed &&
-          (maybeField?.fieldType === 'linksTo' ||
-          maybeField?.fieldType === 'linksToMany')
+          // Do not skip computed `contains` and `containsMany` fields.
+          !((maybeField?.fieldType === 'contains' ||
+            maybeField?.fieldType === 'containsMany') &&
+            maybeField?.computeVia)
         ) {
           return [];
         }
