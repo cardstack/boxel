@@ -52,7 +52,11 @@ export function getBoxComponent(
 
   let component: ComponentLike<{ Args: {}; Blocks: {} }> = <template>
     {{#if (isCard model.value)}}
-      <CardContainer @displayBoundaries={{true}}>
+      <CardContainer
+        @displayBoundaries={{true}}
+        {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
+        ...attributes
+      >
         {{#if (and (not (eq format 'embedded')) (isSaved model.value))}}
           <Header
             @title='{{if (eq format "edit") "Edit "}} {{cardTypeDisplayName

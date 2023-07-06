@@ -1,5 +1,9 @@
 lockfileVersion: '6.0'
 
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
 overrides:
   '@types/eslint': 8.4.1
   '@embroider/util': 1.11.1
@@ -877,6 +881,9 @@ importers:
       '@embroider/webpack':
         specifier: ^3.0.0
         version: 3.0.0(@embroider/core@3.0.1)(webpack@5.84.0)
+      '@floating-ui/dom':
+        specifier: ^1.4.3
+        version: 1.4.3
       '@glimmer/component':
         specifier: ^1.1.2
         version: 1.1.2(@babel/core@7.20.2)
@@ -2278,7 +2285,7 @@ packages:
       '@babel/core': ^7.0.0-0
     dependencies:
       '@babel/core': 7.20.2
-      '@babel/helper-create-class-features-plugin': 7.20.2(@babel/core@7.20.2)
+      '@babel/helper-create-class-features-plugin': 7.21.8(@babel/core@7.20.2)
       '@babel/helper-plugin-utils': 7.20.2
     transitivePeerDependencies:
       - supports-color
@@ -4944,8 +4951,8 @@ packages:
     resolution: {integrity: sha512-Bu+AMaXNjrpjh41znzHqaz3r2Nr8hHuHZT6V2LBKMhyMl0FgKA62PNYbqnfgmzOhoWZj70Zecisbo4H1rotP5g==}
     dev: true
 
-  /@floating-ui/dom@1.4.2:
-    resolution: {integrity: sha512-VKmvHVatWnewmGGy+7Mdy4cTJX71Pli6v/Wjb5RQBuq5wjUYx+Ef+kRThi8qggZqDgD8CogCpqhRoVp3+yQk+g==}
+  /@floating-ui/dom@1.4.3:
+    resolution: {integrity: sha512-nB/68NyaQlcdY22L+Fgd1HERQ7UGv7XFN+tPxwrEfQL4nKtAP/jIZnZtpUlXbtV+VEGHh6W/63Gy2C5biWI3sA==}
     dependencies:
       '@floating-ui/core': 1.3.1
     dev: true
@@ -7958,7 +7965,6 @@ packages:
       make-dir: 3.1.0
       schema-utils: 2.7.1
       webpack: 5.75.0
-    dev: false
 
   /babel-loader@8.3.0(@babel/core@7.21.0)(webpack@5.84.0):
     resolution: {integrity: sha512-H8SvsMF+m9t15HNLMipppzkC+Y2Yq+v3SonZyU70RBL/h1gxPkH08Ot8pEE9Z4Kd+czyWJClmFS8qzIP9OZ04Q==}
@@ -11638,7 +11644,6 @@ packages:
       - '@glint/template'
       - supports-color
       - webpack
-    dev: false
 
   /ember-auto-import@2.6.3(@glint/template@1.0.2)(webpack@5.84.0):
     resolution: {integrity: sha512-uLhrRDJYWCRvQ4JQ1e64XlSrqAKSd6PXaJ9ZsZI6Tlms9T4DtQFxNXasqji2ZRJBVrxEoLCRYX3RTldsQ0vNGQ==}
@@ -12807,7 +12812,7 @@ packages:
       '@embroider/addon-shim': 1.8.5
       ember-cli-normalize-entity-name: 1.0.0
       ember-cli-string-utils: 1.1.0
-      ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0)
+      ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.75.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -13076,7 +13081,6 @@ packages:
       - '@glint/template'
       - supports-color
       - webpack
-    dev: false
 
   /ember-source@4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0):
     resolution: {integrity: sha512-h0lV902A4Mny2eiqXPy15uXXoCc7BnUegE4axLAy4IoxEkJ1o5h0aLJFiB4Tzb1htx8vgHjJz//Y5Jig7NSDTw==}
@@ -13442,7 +13446,7 @@ packages:
     engines: {node: 14.* || >= 16}
     dependencies:
       '@embroider/addon-shim': 1.8.5
-      '@floating-ui/dom': 1.4.2
+      '@floating-ui/dom': 1.4.3
       ember-functions-as-helper-polyfill: 2.1.1(ember-source@4.12.0)
       ember-modifier: 4.1.0(ember-source@4.12.0)
     transitivePeerDependencies:
@@ -25231,7 +25235,6 @@ packages:
     resolution: {directory: packages/base, type: directory}
     id: file:packages/base
     name: '@cardstack/base'
-    version: 1.0.0
     peerDependencies:
       ember-source: ~4.12.0
     dependencies:
@@ -25242,7 +25245,6 @@ packages:
     resolution: {directory: packages/runtime-common, type: directory}
     id: file:packages/runtime-common
     name: '@cardstack/runtime-common'
-    version: 1.0.0
     peerDependencies:
       '@babel/core': ^7.17.8
       ember-cli-htmlbars: ^6.2.0
@@ -25295,7 +25297,6 @@ packages:
     resolution: {directory: vendor/ember-template-imports, type: directory}
     id: file:vendor/ember-template-imports
     name: '@cardstack/ember-template-imports'
-    version: 2.0.1
     engines: {node: 12.* || >= 14}
     peerDependencies:
       ember-cli-htmlbars: ^6.0.0
@@ -25339,11 +25340,7 @@ packages:
       ember-cli-htmlbars: 6.2.0
       ember-compatibility-helpers: 1.2.6(@babel/core@7.20.2)
       ember-destroyable-polyfill: 2.0.3(@babel/core@7.20.2)
-      ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0)
+      ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.75.0)
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
-
-settings:
-  autoInstallPeers: true
-  excludeLinksFromLockfile: false
