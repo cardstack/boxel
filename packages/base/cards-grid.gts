@@ -1,6 +1,5 @@
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import {
   contains,
@@ -75,32 +74,20 @@ class Isolated extends Component<typeof CardsGrid> {
     </div>
   </template>
 
-  @tracked request?: {
-    instances: Card[];
-    isLoading: boolean;
-  };
-
-  constructor(owner: unknown, args: any) {
-    super(owner, args);
-    this.getRealmCards.perform();
-  }
-
-  private getRealmCards = restartableTask(async () => {
-    this.request = await getCards({
-      filter: {
-        not: {
-          any: [
-            { type: catalogEntryRef },
-            {
-              type: {
-                module: `${baseRealm.url}cards-grid`,
-                name: 'CardsGrid',
-              },
+  request = getCards({
+    filter: {
+      not: {
+        any: [
+          { type: catalogEntryRef },
+          {
+            type: {
+              module: `${baseRealm.url}cards-grid`,
+              name: 'CardsGrid',
             },
-          ],
-        },
+          },
+        ],
       },
-    });
+    },
   });
 
   @action
