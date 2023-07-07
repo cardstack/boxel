@@ -123,16 +123,16 @@ export default class OperatorModeOverlays extends Component<Signature> {
   offset = {
     name: 'offset',
     fn: (state: MiddlewareState) => {
-      let padding = 20;
       let { elements, rects } = state;
       let { floating, reference } = elements;
       let { width, height } = reference.getBoundingClientRect();
-      floating.style.width = width + 2 * padding + 'px';
-      floating.style.height = height + 2 * padding + 'px';
+      
+      floating.style.width = width + 'px';
+      floating.style.height = height + 'px';
 
       return {
-        x: rects.reference.x - padding,
-        y: rects.reference.y - padding,
+        x: rects.reference.x,
+        y: rects.reference.y,
       };
     },
   };

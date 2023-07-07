@@ -64,7 +64,7 @@
 
 .link {
   color: var(--boxel-highlight);
-  text-decoration:underline
+  text-decoration: underline;
 }
 .link:hover {
   color: var(--boxel-highlight-hover);
@@ -352,7 +352,7 @@
 .grid-card {
   width: var(--grid-card-width);
   height: var(--grid-card-height);
-  padding: var(--boxel-sp-xs);
+  padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
 }
 .grid-card > *,
 .grid-card__thumbnail-text {
