@@ -34,13 +34,14 @@ function _deserialize(
     return { value: null };
   }
   const validations = [
-    {
-      validate: (address: string) => isChecksumAddress(address),
-      errorMessage: 'Not a checksummed address.',
-    },
+    // desc order of priority
     {
       validate: (address: string) => isEthAddress(address),
       errorMessage: 'Not a valid Ethereum address.',
+    },
+    {
+      validate: (address: string) => isChecksumAddress(address),
+      errorMessage: 'Not a checksummed address.',
     },
   ];
 
