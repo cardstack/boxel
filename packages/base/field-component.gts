@@ -45,10 +45,11 @@ export function getBoxComponent(
 
   // cardComponentModifier, when provided, is used for the host environment to get access to card's rendered elements
   let cardComponentModifier =
-    context.cardComponentModifier ||
-    class NoOpModifier extends Modifier<any> {
-      modify() {}
-    };
+    format === 'embedded' && context.cardComponentModifier
+      ? context.cardComponentModifier
+      : class NoOpModifier extends Modifier<any> {
+          modify() {}
+        };
 
   let component: ComponentLike<{ Args: {}; Blocks: {} }> = <template>
     {{#if (isCard model.value)}}
@@ -68,6 +69,7 @@ export function getBoxComponent(
           class='field-component-card
             {{format}}-card
             {{if (isSaved model.value) "saved" "not-saved"}}'
+          {{cardComponentModifier model.value context}}
           data-test-field-component-card
         >
           <Implementation
@@ -76,7 +78,6 @@ export function getBoxComponent(
             @set={{model.set}}
             @fieldName={{model.name}}
             @context={{context}}
-            {{cardComponentModifier model.value context}}
           />
         </div>
       </CardContainer>
@@ -87,7 +88,6 @@ export function getBoxComponent(
         @set={{model.set}}
         @fieldName={{model.name}}
         @context={{context}}
-        {{cardComponentModifier model.value context}}
       />
     {{/if}}
   </template>;

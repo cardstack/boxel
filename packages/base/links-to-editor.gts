@@ -80,10 +80,12 @@ class LinksToEditor extends GlimmerComponent<Signature> {
     }
     let card = Reflect.getPrototypeOf(this.args.model.value)!
       .constructor as typeof CardBase;
-    return getBoxComponent(card, 'embedded', this.args.model as Box<CardBase>, {
-      ...this.args.context,
-      ...{ optional: { fieldType: this.args.field.fieldType } },
-    });
+    return getBoxComponent(
+      card,
+      'embedded',
+      this.args.model as Box<CardBase>,
+      this.args.context
+    );
   }
 
   private chooseCard = restartableTask(async () => {

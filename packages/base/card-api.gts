@@ -100,9 +100,6 @@ export interface CardContext {
   actions?: Actions;
   cardComponentModifier?: typeof Modifier<any>;
   renderedIn?: Component<any>;
-  optional?: {
-    fieldType: FieldType;
-  };
 }
 
 function isNotLoadedValue(val: any): val is NotLoadedValue {
@@ -1340,11 +1337,7 @@ function fieldComponent(
       (model.value[fieldName]?.constructor as typeof CardBase) ?? field.card;
   }
   let innerModel = model.field(fieldName) as unknown as Box<CardBase>;
-
-  return getBoxComponent(card, format, innerModel, {
-    ...context,
-    ...{ optional: { fieldType: field.fieldType } },
-  });
+  return getBoxComponent(card, format, innerModel, context);
 }
 
 // our decorators are implemented by Babel, not TypeScript, so they have a

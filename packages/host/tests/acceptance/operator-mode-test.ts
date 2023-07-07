@@ -44,11 +44,9 @@ module('Acceptance | operator mode tests', function (hooks) {
           });
           static embedded = class Embedded extends Component<typeof this> {
             <template>
-              <div ...attributes>
-                <h3 data-test-pet={{@model.name}}>
-                  <@fields.name/>
-                </h3>
-              </div>
+              <h3 data-test-pet={{@model.name}}>
+                <@fields.name/>
+              </h3>
             </template>
           }
         }
@@ -294,7 +292,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     );
 
     // Add the dog back to the stack (via overlayed linked card button)
-    await click('[data-test-cardstack-operator-mode-overlay-button]');
+    await click('[data-test-overlay-button]');
 
     // The stack should be reflected in the URL
     assert.strictEqual(

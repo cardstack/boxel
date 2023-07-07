@@ -26,29 +26,25 @@ export default class OperatorModeOverlays extends Component<Signature> {
 
   <template>
     {{#each @renderedLinksToCards as |renderedCard|}}
-      {{#let renderedCard.card as |card|}}
+      {{#let renderedCard.card (this.isSelected renderedCard.card.id) as |card isSelected|}}
         <div
-          class={{cn 'actions-overlay' selected=(this.isSelected card.id)}}
+          class={{cn 'actions-overlay' selected=isSelected}}
           {{velcro renderedCard.element middleware=(Array this.offset)}}
-          data-test-actions-overlay-selected={{if (this.isSelected card.id) card.id}}
+          data-test-overlay-selected={{if isSelected card.id}}
         >
           <button
             {{on 'click' (fn this.openOrSelectCard card)}}
             class='overlay-button'
             aria-label='open card'
-            data-test-cardstack-operator-mode-overlay-button={{card.id}}
+            data-test-overlay-button={{card.id}}
           />
           {{#if @toggleSelect}}
             <IconButton
               {{on 'click' (fn @toggleSelect card)}}
               class='hover-button select'
-              @icon={{if
-                (this.isSelected card.id)
-                'icon-circle-selected'
-                'icon-circle'
-              }}
+              @icon={{if isSelected 'icon-circle-selected' 'icon-circle'}}
               aria-label='select card'
-              data-test-actions-overlay-select={{card.id}}
+              data-test-overlay-select={{card.id}}
             />
           {{/if}}
           <IconButton
