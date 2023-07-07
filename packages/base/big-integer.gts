@@ -9,7 +9,7 @@ import {
   queryableValue,
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui';
-import { TextInputFilter, DeserializedResult } from './field-input-editor';
+import { TextInputFilter, DeserializedResult } from './text-input-filter';
 
 function _deserialize(
   bigintString: string | null | undefined

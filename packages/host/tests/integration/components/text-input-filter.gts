@@ -38,7 +38,7 @@ let updateFromSerialized: (typeof cardApi)['updateFromSerialized'];
 // We need to  validate the inputs of the user so that if serialization fails,
 // consumers, particularly those which reference the base field via computeds of these field do not have to do a lot of error handling
 
-module('Integration | field-input-editor', function (hooks) {
+module('Integration | text-input-filter', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
   setupRenderingTest(hooks);

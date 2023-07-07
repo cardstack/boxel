@@ -9,7 +9,7 @@ import {
   CardBaseConstructor,
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui';
-import { TextInputFilter, DeserializedResult } from './field-input-editor';
+import { TextInputFilter, DeserializedResult } from './text-input-filter';
 
 function isEthAddress(address: string): boolean {
   try {
