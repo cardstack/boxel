@@ -1180,8 +1180,8 @@ module('Integration | search-index', function (hooks) {
           attributes: { firstName: 'Mango' },
           relationships: {
             owner: {
-              links: { self: `${testRealmURL}Person/hassan` }
-            }
+              links: { self: `${testRealmURL}Person/hassan` },
+            },
           },
           meta: {
             adoptsFrom: {
@@ -1212,9 +1212,7 @@ module('Integration | search-index', function (hooks) {
     let realm = await TestRealm.createWithAdapter(adapter, this.owner);
     await realm.ready;
     let indexer = realm.searchIndex;
-    let entry = await indexer.searchEntry(
-      new URL(`${testRealmURL}Pet/mango`)
-    );
+    let entry = await indexer.searchEntry(new URL(`${testRealmURL}Pet/mango`));
     assert.deepEqual(entry?.searchData, {
       id: `${testRealmURL}Pet/mango`,
       firstName: 'Mango',
@@ -1227,7 +1225,7 @@ module('Integration | search-index', function (hooks) {
         posts: 100,
         fullName: 'Hassan Abdel-Rahman',
         title: 'Hassan Abdel-Rahman',
-      }
+      },
     });
   });
 
