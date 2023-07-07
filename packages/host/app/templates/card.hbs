@@ -5,6 +5,8 @@
 <Editor::CodeLink />
 
 {{on-key 'Ctrl+.' this.toggleOperatorMode}}
+{{!-- Ctrl+. doesn't work in ubuntu --}}
+{{on-key 'Ctrl+,' this.toggleOperatorMode}}
 
 {{#if this.operatorModeEnabled}}
   {{#if this.model}}

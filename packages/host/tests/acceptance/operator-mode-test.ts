@@ -13,8 +13,9 @@ import {
 import { Realm } from '@cardstack/runtime-common/realm';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import percySnapshot from '@percy/ember';
 
-module('Acceptance | basic tests', function (hooks) {
+module('Acceptance | operator mode tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
 
@@ -211,8 +212,10 @@ module('Acceptance | basic tests', function (hooks) {
       ctrlKey: true,
     });
 
-    assert.dom('[data-test-card-stack]').exists();
+    assert.dom('[data-test-operator-mode-stack]').exists();
     assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
+
+    await percySnapshot(assert);
 
     // In the URL, operatorModeEnabled is set to true and operatorModeState is set to the current stack
     assert.strictEqual(
@@ -257,6 +260,8 @@ module('Acceptance | basic tests', function (hooks) {
         operatorModeStateParam
       )}`
     );
+
+    await percySnapshot(assert);
 
     assert
       .dom('[data-test-stack-card-index="0"] [data-test-boxel-header-title]')
@@ -362,7 +367,80 @@ module('Acceptance | basic tests', function (hooks) {
       )}`
     );
 
+    await percySnapshot(assert);
+
     assert.dom('[data-test-field="firstName"] input').exists(); // Existence of an input field means it is in edit mode
     assert.dom('[data-test-save-button]').exists(); // Existence of save button means it is in edit mode
+  });
+
+  module('2 stacks', function () {
+    test('restoring the stacks from query param', async function (assert) {
+      let operatorModeStateParam = JSON.stringify({
+        stacks: [
+          {
+            items: [
+              {
+                card: { id: 'http://test-realm/test/Person/fadhlan' },
+                format: 'isolated',
+              },
+            ],
+          },
+          {
+            items: [
+              {
+                card: { id: 'http://test-realm/test/Pet/mango' },
+                format: 'isolated',
+              },
+            ],
+          },
+        ],
+      });
+
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam
+        )}`
+      );
+
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
+      assert.dom('[data-test-operator-mode-stack="0"]').includesText('Fadhlan');
+      assert.dom('[data-test-operator-mode-stack="1"]').includesText('Mango');
+
+      // Close the card in the 2nd stack
+      await click(
+        '[data-test-operator-mode-stack="1"] [data-test-close-button]'
+      );
+      assert.dom('[data-test-operator-mode-stack="0"]').exists();
+
+      // 2nd stack is removed, 1st stack remains
+      assert.dom('[data-test-operator-mode-stack="1"]').doesNotExist();
+      assert.dom('[data-test-operator-mode-stack="0"]').includesText('Fadhlan');
+
+      // The stack should be updated in the URL
+      assert.strictEqual(
+        currentURL(),
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          JSON.stringify({
+            stacks: [
+              {
+                items: [
+                  {
+                    card: { id: 'http://test-realm/test/Person/fadhlan' },
+                    format: 'isolated',
+                  },
+                ],
+              },
+            ],
+          })
+        )}`
+      );
+
+      // Close the last card in the last stack that is left - should get the empty state
+      await click(
+        '[data-test-operator-mode-stack="0"] [data-test-close-button]'
+      );
+
+      assert.dom('.no-cards').includesText('Add a card to get started');
+    });
   });
 });
