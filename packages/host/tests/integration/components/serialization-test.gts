@@ -17,6 +17,7 @@ import {
 } from '@cardstack/runtime-common';
 import { fillIn, RenderingTestContext } from '@ember/test-helpers';
 import { shimExternals } from '@cardstack/host/lib/externals';
+import { isAddress, getAddress } from 'ethers';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let cardRef: typeof import('https://cardstack.com/base/card-ref');
@@ -25,6 +26,7 @@ let datetime: typeof import('https://cardstack.com/base/datetime');
 let number: typeof import('https://cardstack.com/base/number');
 let string: typeof import('https://cardstack.com/base/string');
 let bigInteger: typeof import('https://cardstack.com/base/big-integer');
+let ethereumAddress: typeof import('https://cardstack.com/base/ethereum-address');
 
 module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
@@ -49,6 +51,7 @@ module('Integration | serialization', function (hooks) {
     datetime = await Loader.import(`${baseRealm.url}datetime`);
     cardRef = await Loader.import(`${baseRealm.url}card-ref`);
     bigInteger = await Loader.import(`${baseRealm.url}big-integer`);
+    ethereumAddress = await Loader.import(`${baseRealm.url}ethereum-address`);
   });
 
   test('can deserialize field', async function (assert) {
@@ -4557,7 +4560,107 @@ module('Integration | serialization', function (hooks) {
       });
     });
 
-    module('ethereum address card', function () {});
-    //..and more
+    module('EthereumAddressCard', function () {
+      function isEthAddress(address: string): boolean {
+        return isAddress(address);
+      }
+      test('can deserialize field', async function (assert) {
+        let { field, contains, Card, createFromSerialized } = cardApi;
+        let { default: StringCard } = string;
+        let { default: EthereumAddressCard } = ethereumAddress;
+        class Sample extends Card {
+          @field title = contains(StringCard);
+          @field someAddress = contains(EthereumAddressCard);
+          @field nonChecksummedAddress = contains(EthereumAddressCard);
+          @field checksummedAddressThatDontLookLikeOne =
+            contains(EthereumAddressCard);
+          @field faultyAddress = contains(EthereumAddressCard);
+          @field bitcoinAddress = contains(EthereumAddressCard);
+          @field someString = contains(EthereumAddressCard);
+          @field someNull = contains(EthereumAddressCard);
+        }
+        await shimModule(`${realmURL}test-cards`, { Sample });
+
+        let resource = {
+          attributes: {
+            title: 'Ethereum Test Cases',
+            someAddress: '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b',
+            checksummedAddressThatDontLookLikeOne:
+              '0x27b1fdb04752bbc536007a920d24acb045561c26',
+            nonChecksummedAddress: '0x3bc8e82b5856b2f2bdc7f6693f79db9648c0aaaa',
+            faultyAddress: '0x159ADe032073d930E85f95AbBAB9995110c43C7', //missing a character
+            bitcoinAddress: '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2',
+            someString: 'hello world',
+            someNull: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Sample',
+            },
+          },
+        };
+        let sample = await createFromSerialized<typeof Sample>(
+          resource,
+          { data: resource },
+          undefined
+        );
+
+        assert.strictEqual(isEthAddress(sample.someAddress), true);
+        assert.strictEqual(
+          isEthAddress(sample.checksummedAddressThatDontLookLikeOne),
+          true
+        );
+
+        // failed to deserialize
+        assert.strictEqual(sample.faultyAddress, null);
+        assert.strictEqual(sample.nonChecksummedAddress, null);
+        assert.strictEqual(sample.bitcoinAddress, null);
+        assert.strictEqual(sample.someString, null);
+        assert.strictEqual(sample.someNull, null);
+      });
+
+      test('can serialize field', async function (assert) {
+        let { field, contains, Card, serializeCard } = cardApi;
+        let { default: StringCard } = string;
+        let { default: EthereumAddressCard } = ethereumAddress;
+        class Sample extends Card {
+          @field title = contains(StringCard);
+          @field someAddress = contains(EthereumAddressCard);
+          @field nonChecksummedAddress = contains(EthereumAddressCard);
+          @field someNull = contains(EthereumAddressCard);
+        }
+
+        await shimModule(`${realmURL}test-cards`, { Sample });
+
+        let sample = new Sample({
+          someAddress: '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b',
+          nonChecksummedAddress: '0x3bc8e82b5856b2f2bdc7f6693f79db9648c0aaaa',
+          someNull: null,
+        });
+
+        let serialized = serializeCard(sample, {
+          includeUnrenderedFields: true,
+        });
+
+        assert.strictEqual(
+          typeof serialized?.data?.attributes?.someAddress === 'string',
+          true
+        );
+        assert.strictEqual(
+          typeof serialized?.data?.attributes?.someAddress !== 'number',
+          true
+        );
+        assert.strictEqual(
+          serialized?.data?.attributes?.someAddress,
+          '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b'
+        );
+        assert.strictEqual(
+          serialized?.data?.attributes?.nonChecksummedAddress,
+          '0x3bc8e82b5856b2f2bdc7f6693f79db9648c0aaaa'
+        );
+        assert.strictEqual(serialized?.data?.attributes?.someNull, null);
+      });
+    });
   });
 });
