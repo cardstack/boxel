@@ -13,8 +13,8 @@ export class Person extends Card {
   @field email = contains(StringCard);
   @field posts = contains(IntegerCard);
   @field fullName = contains(StringCard, {
-    computeVia: function (this: Person) {
-      //await new Promise((resolve) => setTimeout(resolve, 10));
+    computeVia: async function (this: Person) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
       return `${this.firstName ?? ''} ${this.lastName ?? ''}`;
     },
   });

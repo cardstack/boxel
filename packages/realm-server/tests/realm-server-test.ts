@@ -164,6 +164,9 @@ module('Realm Server', function (hooks) {
         card,
         {
           data: {
+            attributes: {
+              title: null
+            },
             type: 'card',
             meta: {
               adoptsFrom: {

@@ -398,6 +398,7 @@ module('Integration | search-index', function (hooks) {
           },
           demo: {
             firstName: 'Mango',
+            title: null,
           },
         },
         meta: {
@@ -1016,15 +1017,19 @@ module('Integration | search-index', function (hooks) {
             title: 'Acme Industries',
             paymentMethods: [
               {
+                title: null,
                 type: 'crypto',
                 payment: {
                   address: '0x1111',
+                  title: null,
                 },
               },
               {
+                title: null,
                 type: 'crypto',
                 payment: {
                   address: '0x2222',
+                  title: null,
                 },
               },
             ],
@@ -1254,6 +1259,7 @@ module('Integration | search-index', function (hooks) {
         endTime: undefined,
         hosts: [],
         id: undefined,
+        posts: [],
         sponsors: [],
         startTime: undefined,
         title: null,

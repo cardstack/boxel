@@ -88,7 +88,6 @@ interface Options {
   // use the rendering mechanism to tell if a card is used or not,
   // in which case we need to tell the runtime that a card is
   // explictly being used.
-  isUsed?: true;
 }
 
 interface NotLoadedValue {
@@ -224,12 +223,6 @@ export interface Field<
   name: string;
   fieldType: FieldType;
   computeVia: undefined | string | (() => unknown);
-  // there exists cards that we only ever run in the host without
-  // the isolated renderer (RoomCard), which means that we cannot
-  // use the rendering mechanism to tell if a card is used or not,
-  // in which case we need to tell the runtime that a card is
-  // explictly being used.
-  isUsed?: undefined | true;
   serialize(
     value: any,
     doc: JSONAPISingleResourceDocument,
@@ -358,7 +351,6 @@ class ContainsMany<FieldT extends CardBaseConstructor>
     private cardThunk: () => FieldT,
     readonly computeVia: undefined | string | (() => unknown),
     readonly name: string,
-    readonly isUsed: undefined | true
   ) {}
 
   get card(): FieldT {
@@ -559,7 +551,6 @@ class Contains<CardT extends CardBaseConstructor> implements Field<CardT, any> {
     private cardThunk: () => CardT,
     readonly computeVia: undefined | string | (() => unknown),
     readonly name: string,
-    readonly isUsed: undefined | true
   ) {}
 
   get card(): CardT {
@@ -713,7 +704,6 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     private cardThunk: () => CardT,
     readonly computeVia: undefined | string | (() => unknown),
     readonly name: string,
-    readonly isUsed: undefined | true
   ) {}
 
   get card(): CardT {
@@ -988,7 +978,6 @@ class LinksToMany<FieldT extends CardConstructor>
     private cardThunk: () => FieldT,
     readonly computeVia: undefined | string | (() => unknown),
     readonly name: string,
-    readonly isUsed: undefined | true
   ) {}
 
   get card(): FieldT {
@@ -1369,7 +1358,6 @@ export function containsMany<CardT extends CardBaseConstructor>(
           cardThunk(cardOrThunk),
           options?.computeVia,
           fieldName,
-          options?.isUsed
         )
       );
     },
@@ -1388,7 +1376,6 @@ export function contains<CardT extends CardBaseConstructor>(
           cardThunk(cardOrThunk),
           options?.computeVia,
           fieldName,
-          options?.isUsed
         )
       );
     },
@@ -1407,7 +1394,6 @@ export function linksTo<CardT extends CardConstructor>(
           cardThunk(cardOrThunk),
           options?.computeVia,
           fieldName,
-          options?.isUsed
         )
       );
     },
@@ -1426,7 +1412,6 @@ export function linksToMany<CardT extends CardConstructor>(
           cardThunk(cardOrThunk),
           options?.computeVia,
           fieldName,
-          options?.isUsed
         )
       );
     },
@@ -1477,7 +1462,7 @@ export class CardBase {
       }
       return Object.fromEntries(
         Object.entries(
-          getFields(value, { includeComputeds: true, usedLinkedFieldsOnly: true })
+          getFields(value, { includeComputeds: true, includeUsedLinkedFields: true })
         ).map(([fieldName, field]) => {
           let rawValue = peekAtField(value, fieldName);
           if (field?.fieldType === 'linksToMany') {
@@ -1788,7 +1773,6 @@ async function getDeserializedValue<CardT extends CardBaseConstructor>({
 
 export interface SerializeOpts {
   includeComputeds?: boolean;
-  includeUnrenderedFields?: boolean;
   maybeRelativeURL?: ((possibleURL: string) => string) | null; // setting this to null will force all URL's to be absolute
 }
 
@@ -1802,10 +1786,10 @@ function serializeCardResource(
   if (!adoptsFrom) {
     throw new Error(`bug: could not identify card: ${model.constructor.name}`);
   }
-  let { includeUnrenderedFields: remove, ...fieldOpts } = opts ?? {};
+  let { ...fieldOpts } = opts ?? {};
   let { id: removedIdField, ...fields } = getFields(model, {
     ...fieldOpts,
-    usedLinkedFieldsOnly: !opts?.includeUnrenderedFields,
+    includeUsedLinkedFields: false,
   });
   let fieldResources = Object.keys(fields).map((fieldName) =>
     serializedGet(model, fieldName, doc, visited, opts)
@@ -1821,10 +1805,11 @@ function serializeCardResource(
   );
 }
 
-export function serializeCard(
+export async function serializeCard(
   model: CardBase,
   opts?: SerializeOpts
-): LooseSingleCardDocument {
+): Promise<LooseSingleCardDocument> {
+  await loadModel(model, [], { recomputeAllFields: true });
   let doc = {
     data: { type: 'card', ...(model.id != null ? { id: model.id } : {}) },
   };
@@ -2212,47 +2197,7 @@ export async function recompute(
     return;
   }
 
-  async function _loadModel<T extends CardBase>(
-    model: T,
-    stack: CardBase[] = []
-  ): Promise<void> {
-    let pendingFields = new Set<string>(
-      Object.keys(
-        getFields(model, {
-          includeComputeds: true,
-          usedLinkedFieldsOnly: !opts?.recomputeAllFields,
-        })
-      )
-    );
-    do {
-      for (let fieldName of [...pendingFields]) {
-        let value = await getIfReady(
-          model,
-          fieldName as keyof T,
-          undefined,
-          opts
-        );
-        if (!isNotReadyValue(value) && !isStaleValue(value)) {
-          pendingFields.delete(fieldName);
-          if (recomputePromises.get(card) !== recomputePromise) {
-            return;
-          }
-          if (Array.isArray(value)) {
-            for (let item of value) {
-              if (item && isCard(item) && !stack.includes(item)) {
-                await _loadModel(item, [item, ...stack]);
-              }
-            }
-          } else if (isCard(value) && !stack.includes(value)) {
-            await _loadModel(value, [value, ...stack]);
-          }
-        }
-      }
-      // TODO should we have a timeout?
-    } while (pendingFields.size > 0);
-  }
-
-  await _loadModel(card);
+  await loadModel(card, [], { recomputePromise, ...opts });
   if (recomputePromises.get(card) !== recomputePromise) {
     return;
   }
@@ -2262,12 +2207,54 @@ export async function recompute(
   done!();
 }
 
+async function loadModel<T extends CardBase>(
+  model: T,
+  stack: CardBase[] = [],
+  opts?: { recomputePromise?: Promise<any>, recomputeAllFields?: true, loadFields?: true}
+): Promise<void> {
+  let pendingFields = new Set<string>(
+    Object.keys(
+      getFields(model, {
+        includeComputeds: true,
+        includeUsedLinkedFields: !opts?.recomputeAllFields,
+      })
+    )
+  );
+  do {
+    for (let fieldName of [...pendingFields]) {
+      let value = await getIfReady(
+        model,
+        fieldName as keyof T,
+        undefined,
+        { recomputeAllFields: opts?.recomputeAllFields, loadFields: opts?.loadFields }
+      );
+      if (!isNotReadyValue(value) && !isStaleValue(value)) {
+        pendingFields.delete(fieldName);
+        if (opts?.recomputePromise && recomputePromises.get(model) !== opts.recomputePromise) {
+          return;
+        }
+        if (Array.isArray(value)) {
+          for (let item of value) {
+            if (item && isCard(item) && !stack.includes(item)) {
+              await loadModel(item, [item, ...stack]);
+            }
+          }
+        } else if (isCard(value) && !stack.includes(value)) {
+          await loadModel(value, [value, ...stack]);
+        }
+      }
+    }
+    // TODO should we have a timeout?
+  } while (pendingFields.size > 0);
+}
+
 export async function getIfReady<T extends CardBase, K extends keyof T>(
   instance: T,
   fieldName: K,
   compute: () => T[K] | Promise<T[K]> = () => instance[fieldName],
   opts?: RecomputeOptions
 ): Promise<T[K] | T[K][] | NotReadyValue | StaleValue | undefined> {
+  debugger;
   let result: T[K] | T[K][] | undefined;
   let deserialized = getDataBucket(instance);
   let maybeStale = deserialized.get(fieldName as string);
@@ -2337,15 +2324,15 @@ export async function getIfReady<T extends CardBase, K extends keyof T>(
 
 export function getFields(
   card: typeof CardBase,
-  opts?: { usedLinkedFieldsOnly?: boolean; includeComputeds?: boolean }
+  opts?: { includeUsedLinkedFields?: boolean; includeComputeds?: boolean }
 ): { [fieldName: string]: Field<CardBaseConstructor> };
 export function getFields<T extends CardBase>(
   card: T,
-  opts?: { usedLinkedFieldsOnly?: boolean; includeComputeds?: boolean }
+  opts?: { includeUsedLinkedFields?: boolean; includeComputeds?: boolean }
 ): { [P in keyof T]?: Field<CardBaseConstructor> };
 export function getFields(
   cardInstanceOrClass: CardBase | typeof CardBase,
-  opts?: { usedLinkedFieldsOnly?: boolean; includeComputeds?: boolean }
+  opts?: { includeUsedLinkedFields?: boolean; includeComputeds?: boolean }
 ): { [fieldName: string]: Field<CardBaseConstructor> } {
   let obj: object | null;
   let usedFields: string[] = [];
@@ -2361,32 +2348,24 @@ export function getFields(
   while (obj?.constructor.name && obj.constructor.name !== 'Object') {
     let descs = Object.getOwnPropertyDescriptors(obj);
     let currentFields = flatMap(Object.keys(descs), (maybeFieldName) => {
-      if (maybeFieldName !== 'constructor') {
-        let maybeField = getField(
-          (isCard(cardInstanceOrClass)
-            ? cardInstanceOrClass.constructor
-            : cardInstanceOrClass) as typeof CardBase,
-          maybeFieldName
-        );
-        if (
-          opts?.usedLinkedFieldsOnly &&
-          !usedFields.includes(maybeFieldName) &&
-          !maybeField?.isUsed &&
-          // Do not skip computed `contains` and `containsMany` fields.
-          !((maybeField?.fieldType === 'contains' ||
-            maybeField?.fieldType === 'containsMany') &&
-            maybeField?.computeVia)
-        ) {
-          return [];
-        }
-        if (maybeField?.computeVia && !opts?.includeComputeds) {
-          return [];
-        }
-        if (maybeField) {
-          return [[maybeFieldName, maybeField]];
-        }
+      if (maybeFieldName === 'constructor') {
+        return [];
       }
-      return [];
+      let maybeField: Field | undefined = getField(
+        (isCard(cardInstanceOrClass)
+          ? cardInstanceOrClass.constructor
+          : cardInstanceOrClass) as typeof CardBase,
+        maybeFieldName
+      );
+
+      if (!maybeField ||
+          (maybeField.computeVia && !opts?.includeComputeds) ||
+          (!usedFields.includes(maybeFieldName) && opts?.includeUsedLinkedFields &&
+            (maybeField.fieldType === 'linksTo' || maybeField.fieldType === 'linksToMany'))) {
+        return [];
+      }
+      
+      return [[maybeFieldName, maybeField]];
     });
     fields = { ...fields, ...Object.fromEntries(currentFields) };
     obj = Reflect.getPrototypeOf(obj);

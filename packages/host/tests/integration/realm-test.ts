@@ -233,6 +233,8 @@ module('Integration | realm', function (hooks) {
             fullName: 'Hassan Abdel-Rahman',
             lastName: 'Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
+            email: null,
+            posts: null,
           },
           meta: {
             adoptsFrom: {
@@ -334,6 +336,8 @@ module('Integration | realm', function (hooks) {
             lastName: 'Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
+            email: null,
+            posts: null,
           },
           meta: {
             adoptsFrom: {
@@ -459,6 +463,9 @@ module('Integration | realm', function (hooks) {
             JSON.parse(fileRef.content as string),
             {
               data: {
+                attributes: {
+                  title: null,
+                },
                 type: 'card',
                 meta: {
                   adoptsFrom: {
@@ -640,6 +647,8 @@ module('Integration | realm', function (hooks) {
             lastName: 'Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
+            email: null,
+            posts: null,
           },
           meta: {
             adoptsFrom: {
@@ -778,6 +787,8 @@ module('Integration | realm', function (hooks) {
             attributes: {
               firstName: 'Van Gogh',
               lastName: 'Abdel-Rahman',
+              email: null,
+              posts: null,
             },
             meta: {
               adoptsFrom: {
@@ -902,6 +913,8 @@ module('Integration | realm', function (hooks) {
               fullName: 'Hassan ',
               lastName: null,
               title: 'Hassan ',
+              email: null,
+              posts: null,
             },
           ],
           sponsors: ['Burton'],
@@ -938,6 +951,8 @@ module('Integration | realm', function (hooks) {
               {
                 firstName: 'Hassan',
                 lastName: null,
+                email: null,
+                posts: null,
               },
             ],
             sponsors: ['Burton'],
@@ -1084,6 +1099,8 @@ module('Integration | realm', function (hooks) {
             lastName: 'Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
+            email: null,
+            posts: null,
           },
           meta: {
             adoptsFrom: {
@@ -1846,6 +1863,8 @@ module('Integration | realm', function (hooks) {
             lastName: 'Abdel-Rahman',
             fullName: 'Mariko Abdel-Rahman',
             title: 'Mariko Abdel-Rahman',
+            email: null,
+            posts: null,
           },
           meta: {
             adoptsFrom: {
@@ -2350,6 +2369,8 @@ module('Integration | realm', function (hooks) {
             lastName: 'Abdel-Rahman',
             fullName: 'Mariko Abdel-Rahman',
             title: 'Mariko Abdel-Rahman',
+            email: null,
+            posts: null,
           },
           meta: {
             adoptsFrom: {
@@ -2409,6 +2430,8 @@ module('Integration | realm', function (hooks) {
             lastName: 'Abdel-Rahman',
             fullName: 'Hassan Abdel-Rahman',
             title: 'Hassan Abdel-Rahman',
+            email: null,
+            posts: null,
           },
           meta: {
             adoptsFrom: {
