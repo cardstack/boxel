@@ -1173,8 +1173,24 @@ module('Integration | search-index', function (hooks) {
     }
   });
 
-  test(`search doc includes 'contains' and 'containsMany' fields`, async function (assert) {
+  test(`search doc includes 'contains' and used 'linksTo' fields`, async function (assert) {
     let adapter = new TestRealmAdapter({
+      'Pet/mango.json': {
+        data: {
+          attributes: { firstName: 'Mango' },
+          relationships: {
+            owner: {
+              links: { self: `${testRealmURL}Person/hassan` }
+            }
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}pet`,
+              name: 'Pet',
+            },
+          },
+        },
+      },
       'Person/hassan.json': {
         data: {
           id: `${testRealmURL}Person/hassan`,
@@ -1197,16 +1213,21 @@ module('Integration | search-index', function (hooks) {
     await realm.ready;
     let indexer = realm.searchIndex;
     let entry = await indexer.searchEntry(
-      new URL(`${testRealmURL}Person/hassan`)
+      new URL(`${testRealmURL}Pet/mango`)
     );
     assert.deepEqual(entry?.searchData, {
-      id: `${testRealmURL}Person/hassan`,
-      firstName: 'Hassan',
-      lastName: 'Abdel-Rahman',
-      email: 'hassan@cardstack.com',
-      posts: 100,
-      fullName: 'Hassan Abdel-Rahman',
-      title: 'Hassan Abdel-Rahman',
+      id: `${testRealmURL}Pet/mango`,
+      firstName: 'Mango',
+      title: 'Mango',
+      owner: {
+        id: `${testRealmURL}Person/hassan`,
+        firstName: 'Hassan',
+        lastName: 'Abdel-Rahman',
+        email: 'hassan@cardstack.com',
+        posts: 100,
+        fullName: 'Hassan Abdel-Rahman',
+        title: 'Hassan Abdel-Rahman',
+      }
     });
   });
 
