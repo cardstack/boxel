@@ -56,14 +56,14 @@ function _deserialize(
 class Edit extends Component<typeof EthereumAddressCard> {
   <template>
     <BoxelInput
-      @value={{this.validatorEditor.asString}}
-      @onInput={{this.validatorEditor.onInput}}
-      @errorMessage={{this.validatorEditor.errorMessage}}
-      @invalid={{this.validatorEditor.isInvalid}}
+      @value={{this.textInputFilter.asString}}
+      @onInput={{this.textInputFilter.onInput}}
+      @errorMessage={{this.textInputFilter.errorMessage}}
+      @invalid={{this.textInputFilter.isInvalid}}
     />
   </template>
 
-  validatorEditor: TextInputFilter<string> = new TextInputFilter(
+  textInputFilter: TextInputFilter<string> = new TextInputFilter(
     () => this.args.model,
     (inputVal) => this.args.set(inputVal),
     _deserialize
