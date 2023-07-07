@@ -1,5 +1,6 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import { Card, CardContext } from 'https://cardstack.com/base/card-api';
 import Preview from '@cardstack/host/components/preview';
 import { fn, array } from '@ember/helper';
@@ -47,6 +48,7 @@ export interface RenderedLinksToCard {
 
 export default class OperatorModeStackItem extends Component<Signature> {
   @tracked renderedLinksToCards = new TrackedArray<RenderedLinksToCard>([]);
+  @tracked selectedCards = new TrackedArray<Card>([]);
 
   get styleForStackedCard(): SafeString {
     let itemsOnStackCount = this.args.stackItems.length;
@@ -95,6 +97,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
     );
     if (index !== -1) {
       this.renderedLinksToCards.splice(index, 1);
+    }
+  }
+
+  @action toggleSelect(card: Card) {
+    let index = this.selectedCards.findIndex((c) => c.id === card.id);
+
+    if (index === -1) {
+      this.selectedCards.push(card);
+    } else {
+      this.selectedCards.splice(index, 1);
     }
   }
 

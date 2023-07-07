@@ -5,7 +5,7 @@ import {
   Component,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
-import IntegerCard from 'https://cardstack.com/base/integer';
+import NumberCard from 'https://cardstack.com/base/number';
 import { FieldContainer } from '@cardstack/boxel-ui';
 
 let CHAIN_IDS: Record<string, number> = {
@@ -22,7 +22,7 @@ let BLOCK_EXPLORER_URLS: Record<number, string> = {
 export class Chain extends Card {
   static displayName = 'Chain';
   @field name = contains(StringCard); // dropdown
-  @field chainId = contains(IntegerCard, {
+  @field chainId = contains(NumberCard, {
     computeVia: function (this: Chain) {
       return CHAIN_IDS[this.name];
     },

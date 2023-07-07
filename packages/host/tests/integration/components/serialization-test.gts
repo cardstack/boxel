@@ -22,7 +22,7 @@ let cardApi: typeof import('https://cardstack.com/base/card-api');
 let cardRef: typeof import('https://cardstack.com/base/card-ref');
 let date: typeof import('https://cardstack.com/base/date');
 let datetime: typeof import('https://cardstack.com/base/datetime');
-let integer: typeof import('https://cardstack.com/base/integer');
+let number: typeof import('https://cardstack.com/base/number');
 let string: typeof import('https://cardstack.com/base/string');
 
 module('Integration | serialization', function (hooks) {
@@ -43,7 +43,7 @@ module('Integration | serialization', function (hooks) {
 
     cardApi = await Loader.import(`${baseRealm.url}card-api`);
     string = await Loader.import(`${baseRealm.url}string`);
-    integer = await Loader.import(`${baseRealm.url}integer`);
+    number = await Loader.import(`${baseRealm.url}number`);
     date = await Loader.import(`${baseRealm.url}date`);
     datetime = await Loader.import(`${baseRealm.url}datetime`);
     cardRef = await Loader.import(`${baseRealm.url}card-ref`);
@@ -1746,7 +1746,7 @@ module('Integration | serialization', function (hooks) {
   test('can serialize a composite field that has been edited', async function (assert) {
     let { field, contains, serializeCard, Card, Component } = cardApi;
     let { default: StringCard } = string;
-    let { default: IntegerCard } = integer;
+    let { default: NumberCard } = number;
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field title = contains(StringCard, {
@@ -1763,7 +1763,7 @@ module('Integration | serialization', function (hooks) {
 
     class Post extends Card {
       @field title = contains(StringCard);
-      @field reviews = contains(IntegerCard);
+      @field reviews = contains(NumberCard);
       @field author = contains(Person);
       static edit = class Edit extends Component<typeof this> {
         <template>
@@ -2621,7 +2621,7 @@ module('Integration | serialization', function (hooks) {
       Card,
       createFromSerialized,
     } = cardApi;
-    let { default: IntegerCard } = integer;
+    let { default: NumberCard } = number;
     let { default: StringCard } = string;
 
     class Person extends Card {
@@ -2643,7 +2643,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     class Customer extends Person {
-      @field billAmount = contains(IntegerCard);
+      @field billAmount = contains(NumberCard);
     }
 
     class Group extends Card {
@@ -2749,7 +2749,7 @@ module('Integration | serialization', function (hooks) {
       Card,
       createFromSerialized,
     } = cardApi;
-    let { default: IntegerCard } = integer;
+    let { default: NumberCard } = number;
     let { default: StringCard } = string;
 
     class Person extends Card {
@@ -2771,7 +2771,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     class DogWalker extends Role {
-      @field poopBagCount = contains(IntegerCard);
+      @field poopBagCount = contains(NumberCard);
     }
 
     class Employee extends Person {

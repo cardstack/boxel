@@ -5,7 +5,7 @@ import {
   Component,
 } from 'https://cardstack.com/base/card-api';
 import BooleanCard from 'https://cardstack.com/base/boolean';
-import IntegerCard from 'https://cardstack.com/base/integer';
+import NumberCard from 'https://cardstack.com/base/number';
 import StringCard from 'https://cardstack.com/base/string';
 import { Booking } from './booking';
 
@@ -14,7 +14,7 @@ export class Pet extends Card {
   @field firstName = contains(StringCard);
   @field favoriteToy = contains(StringCard);
   @field favoriteTreat = contains(StringCard);
-  @field cutenessRating = contains(IntegerCard);
+  @field cutenessRating = contains(NumberCard);
   @field sleepsOnTheCouch = contains(BooleanCard);
   @field appointment = contains(() => Booking);
   @field title = contains(StringCard, {

@@ -41,7 +41,7 @@ module('module-syntax', function () {
       { type: 'exportedName', name: 'Person' },
       'age',
       {
-        module: 'https://cardstack.com/base/integer',
+        module: 'https://cardstack.com/base/number',
         name: 'default',
       },
       'contains'
@@ -50,13 +50,13 @@ module('module-syntax', function () {
     assert.codeEqual(
       mod.code(),
       `
-        import IntegerCard from "https://cardstack.com/base/integer";
+        import NumberCard from "https://cardstack.com/base/number";
         import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
         export class Person extends Card {
           @field firstName = contains(StringCard);
-          @field age = contains(IntegerCard);
+          @field age = contains(NumberCard);
           static embedded = class Embedded extends Component<typeof this> {
             <template><h1><@fields.firstName/></h1></template>
           }
@@ -71,7 +71,7 @@ module('module-syntax', function () {
       field?.card,
       {
         type: 'external',
-        module: 'https://cardstack.com/base/integer',
+        module: 'https://cardstack.com/base/number',
         name: 'default',
       },
       'the field card is correct'
@@ -109,13 +109,13 @@ module('module-syntax', function () {
     assert.codeEqual(
       mod.code(),
       `
-        import IntegerCard from "https://cardstack.com/base/integer";
+        import NumberCard from "https://cardstack.com/base/number";
         import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
         export class Person extends Card {
           @field firstName = contains(StringCard);
-          @field age = contains(IntegerCard);
+          @field age = contains(NumberCard);
           @field lastName = contains(StringCard);
           static embedded = class Embedded extends Component<typeof this> {
             <template><h1><@fields.firstName/></h1></template>
@@ -178,7 +178,7 @@ module('module-syntax', function () {
       { type: 'localName', name: 'Person' },
       'age',
       {
-        module: 'https://cardstack.com/base/integer',
+        module: 'https://cardstack.com/base/number',
         name: 'default',
       },
       'contains'
@@ -187,13 +187,13 @@ module('module-syntax', function () {
     assert.codeEqual(
       mod.code(),
       `
-        import IntegerCard from "https://cardstack.com/base/integer";
+        import NumberCard from "https://cardstack.com/base/number";
         import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
         class Person extends Card {
           @field firstName = contains(StringCard);
-          @field age = contains(IntegerCard);
+          @field age = contains(NumberCard);
           static embedded = class Embedded extends Component<typeof this> {
             <template><h1><@fields.firstName/></h1></template>
           }
@@ -372,7 +372,7 @@ module('module-syntax', function () {
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      const IntegerCard = "don't collide with me";
+      const NumberCard = "don't collide with me";
 
       export class Person extends Card {
         @field firstName = contains(StringCard);
@@ -384,7 +384,7 @@ module('module-syntax', function () {
       { type: 'exportedName', name: 'Person' },
       'age',
       {
-        module: 'https://cardstack.com/base/integer',
+        module: 'https://cardstack.com/base/number',
         name: 'default',
       },
       'contains'
@@ -393,15 +393,15 @@ module('module-syntax', function () {
     assert.codeEqual(
       mod.code(),
       `
-        import IntegerCard0 from "https://cardstack.com/base/integer";
+        import NumberCard0 from "https://cardstack.com/base/number";
         import { contains, field, Card } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
-        const IntegerCard = "don't collide with me";
+        const NumberCard = "don't collide with me";
 
         export class Person extends Card {
           @field firstName = contains(StringCard);
-          @field age = contains(IntegerCard0);
+          @field age = contains(NumberCard0);
         }
       `
     );
