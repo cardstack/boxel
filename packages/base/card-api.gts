@@ -1773,6 +1773,7 @@ async function getDeserializedValue<CardT extends CardBaseConstructor>({
 
 export interface SerializeOpts {
   includeComputeds?: boolean;
+  includeUnrenderedFields?: boolean;
   maybeRelativeURL?: ((possibleURL: string) => string) | null; // setting this to null will force all URL's to be absolute
 }
 
@@ -1789,7 +1790,7 @@ function serializeCardResource(
   let { ...fieldOpts } = opts ?? {};
   let { id: removedIdField, ...fields } = getFields(model, {
     ...fieldOpts,
-    excludeUnusedLinkedFields: false,
+    excludeUnusedLinkedFields: !opts?.includeUnrenderedFields,
   });
   let fieldResources = Object.keys(fields).map((fieldName) =>
     serializedGet(model, fieldName, doc, visited, opts)
@@ -1809,7 +1810,7 @@ export async function serializeCard(
   model: CardBase,
   opts?: SerializeOpts
 ): Promise<LooseSingleCardDocument> {
-  await loadModel(model);
+  await loadModel(model, [], { recomputeAllFields: opts?.includeUnrenderedFields });
   let doc = {
     data: { type: 'card', ...(model.id != null ? { id: model.id } : {}) },
   };
@@ -2179,7 +2180,7 @@ interface RecomputeOptions {
   // for host initiated renders (vs indexer initiated renders), glimmer will expect
   // all the fields to be available synchronously, in which case we need to buffer the
   // async in the recompute using this option
-  recomputeAllFields?: true;
+  recomputeAllFields?: boolean;
 }
 export async function recompute(
   card: CardBase,
@@ -2210,7 +2211,7 @@ export async function recompute(
 async function loadModel<T extends CardBase>(
   model: T,
   stack: CardBase[] = [],
-  opts?: { recomputePromise?: Promise<any>, recomputeAllFields?: true, loadFields?: true}
+  opts?: { recomputePromise?: Promise<any>, recomputeAllFields?: boolean, loadFields?: true}
 ): Promise<void> {
   let pendingFields = new Set<string>(
     Object.keys(
