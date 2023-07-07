@@ -21,7 +21,7 @@ export class Transaction extends Card {
   @field from = contains(EthereumAddressCard);
   @field to = contains(EthereumAddressCard);
   @field memo = contains(StringCard);
-  @field chain = linksTo(() => Chain);
+  @field chain = linksTo(Chain);
   @field gasUsed = contains(NumberCard);
   @field effectiveGasPrice = contains(NumberCard);
   @field blockExplorerLink = contains(StringCard, {
