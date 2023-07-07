@@ -24,6 +24,7 @@ let date: typeof import('https://cardstack.com/base/date');
 let datetime: typeof import('https://cardstack.com/base/datetime');
 let number: typeof import('https://cardstack.com/base/number');
 let string: typeof import('https://cardstack.com/base/string');
+let bigInteger: typeof import('https://cardstack.com/base/big-integer');
 
 module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
@@ -47,6 +48,7 @@ module('Integration | serialization', function (hooks) {
     date = await Loader.import(`${baseRealm.url}date`);
     datetime = await Loader.import(`${baseRealm.url}datetime`);
     cardRef = await Loader.import(`${baseRealm.url}card-ref`);
+    bigInteger = await Loader.import(`${baseRealm.url}big-integer`);
   });
 
   test('can deserialize field', async function (assert) {
@@ -4415,5 +4417,147 @@ module('Integration | serialization', function (hooks) {
         },
       });
     });
+  });
+
+  module('base cards', function () {
+    // this module checks the custom serialization and deserialization behaviour of base cards
+    // which have custom serialize and deserialize
+
+    module('BigIntegerCard', function () {
+      function isBigInt(input: any) {
+        return typeof input == 'bigint';
+      }
+      test('can deserialize field', async function (assert) {
+        let { field, contains, Card, createFromSerialized } = cardApi;
+        let { default: StringCard } = string;
+        let { default: BigIntegerCard } = bigInteger;
+        class Sample extends Card {
+          @field title = contains(StringCard);
+          @field someBigInt = contains(BigIntegerCard);
+          @field bigIntNull = contains(BigIntegerCard);
+          @field bigIntString = contains(BigIntegerCard);
+          @field bigIntNumber = contains(BigIntegerCard);
+          @field bigIntNegativeNumber = contains(BigIntegerCard);
+          @field bigIntDecimal = contains(BigIntegerCard);
+          @field bigIntZeroString = contains(BigIntegerCard);
+        }
+        await shimModule(`${realmURL}test-cards`, { Sample });
+
+        let resource = {
+          attributes: {
+            title: 'BigInt Test Cases',
+            someBigInt: '9223372036854775808',
+            bigIntNull: null,
+            bigIntString: 'some text',
+            bigIntNumber: 42,
+            bigIntDecimal: 0.0001,
+            bigIntNegativeNumber: -42,
+            bigIntZeroString: '0',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Sample',
+            },
+          },
+        };
+        let sample = await createFromSerialized<typeof Sample>(
+          resource,
+          { data: resource },
+          undefined
+        );
+
+        assert.strictEqual(isBigInt(sample.someBigInt), true);
+        assert.strictEqual(isBigInt(sample.bigIntNumber), true);
+        assert.strictEqual(isBigInt(sample.bigIntNegativeNumber), true);
+        assert.strictEqual(isBigInt(sample.bigIntZeroString), true);
+
+        // failed to deserialize
+        assert.strictEqual(sample.bigIntNull, undefined);
+        assert.strictEqual(sample.bigIntString, undefined);
+        assert.strictEqual(sample.bigIntDecimal, undefined);
+      });
+
+      test('can serialize field', async function (assert) {
+        let { field, contains, Card, serializeCard } = cardApi;
+        let { default: StringCard } = string;
+        let { default: BigIntegerCard } = bigInteger;
+        class Sample extends Card {
+          @field title = contains(StringCard);
+          @field someBigInt = contains(BigIntegerCard);
+          @field someNull = contains(BigIntegerCard);
+        }
+
+        await shimModule(`${realmURL}test-cards`, { Sample });
+
+        let sample = new Sample({
+          someBigInt: BigInt('9223372036854775808'),
+          someNull: null,
+        });
+
+        let serialized = serializeCard(sample, {
+          includeUnrenderedFields: true,
+        });
+
+        assert.strictEqual(
+          typeof serialized?.data?.attributes?.someBigInt === 'string',
+          true
+        );
+        assert.strictEqual(
+          typeof serialized?.data?.attributes?.someBigInt !== 'number',
+          true
+        );
+        assert.strictEqual(
+          serialized?.data?.attributes?.someBigInt,
+          '9223372036854775808'
+        );
+        assert.strictEqual(serialized?.data?.attributes?.someNull, null);
+      });
+
+      test('can perform bigint operations with computed', async function (assert) {
+        let { field, contains, Card, serializeCard } = cardApi;
+        let { default: StringCard } = string;
+        let { default: BigIntegerCard } = bigInteger;
+
+        class Sample extends Card {
+          @field title = contains(StringCard);
+          @field someBigInt = contains(BigIntegerCard);
+          @field anotherBigInt = contains(BigIntegerCard);
+          @field someNull = contains(BigIntegerCard);
+          @field someComputed = contains(BigIntegerCard, {
+            computeVia: function (this: Sample) {
+              return this.someBigInt + this.anotherBigInt;
+            },
+          });
+          //TODO: This doesn't seem to work
+          // Promise rejected during "can perform bigint operations with computed": Cannot mix BigInt and other types, use explicit conversions
+          // @field someComputedWithNull = contains(BigIntegerCard, {
+          //   computeVia: function (this: Sample) {
+          //     return this.someBigInt + this.someNull;
+          //   },
+          // });
+        }
+        await shimModule(`${realmURL}test-cards`, { Sample });
+
+        let sample = new Sample({
+          someBigInt: BigInt('1'),
+          anotherBigInt: BigInt('2'),
+          someNull: null,
+        });
+
+        let serialized = serializeCard(sample, {
+          includeComputeds: true,
+          includeUnrenderedFields: true,
+        });
+
+        assert.strictEqual(
+          serialized?.data?.attributes?.someComputed,
+          (BigInt('1') + BigInt('2')).toString()
+        );
+      });
+    });
+
+    module('ethereum address card', function () {});
+    //..and more
   });
 });
