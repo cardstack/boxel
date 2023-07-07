@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Ethereum Address Field",
+      "description": "A field that captures checksum ethereum addresses",
+      "ref": {
+        "module": "https://cardstack.com/base/ethereum-address",
+        "name": "default"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}
