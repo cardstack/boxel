@@ -4434,12 +4434,12 @@ module('Integration | serialization', function (hooks) {
         class Sample extends Card {
           @field title = contains(StringCard);
           @field someBigInt = contains(BigIntegerCard);
-          @field bigIntNull = contains(BigIntegerCard);
-          @field bigIntString = contains(BigIntegerCard);
-          @field bigIntNumber = contains(BigIntegerCard);
-          @field bigIntNegativeNumber = contains(BigIntegerCard);
-          @field bigIntDecimal = contains(BigIntegerCard);
-          @field bigIntZeroString = contains(BigIntegerCard);
+          @field someNull = contains(BigIntegerCard);
+          @field someString = contains(BigIntegerCard);
+          @field someNumber = contains(BigIntegerCard);
+          @field someNegativeNumber = contains(BigIntegerCard);
+          @field someDecimal = contains(BigIntegerCard);
+          @field someZeroString = contains(BigIntegerCard);
         }
         await shimModule(`${realmURL}test-cards`, { Sample });
 
@@ -4447,12 +4447,12 @@ module('Integration | serialization', function (hooks) {
           attributes: {
             title: 'BigInt Test Cases',
             someBigInt: '9223372036854775808',
-            bigIntNull: null,
-            bigIntString: 'some text',
-            bigIntNumber: 42,
-            bigIntDecimal: 0.0001,
-            bigIntNegativeNumber: -42,
-            bigIntZeroString: '0',
+            someNull: null,
+            someString: 'some text',
+            someNumber: 42,
+            someDecimal: 0.0001,
+            someNegativeNumber: -42,
+            someZeroString: '0',
           },
           meta: {
             adoptsFrom: {
@@ -4468,14 +4468,14 @@ module('Integration | serialization', function (hooks) {
         );
 
         assert.strictEqual(isBigInt(sample.someBigInt), true);
-        assert.strictEqual(isBigInt(sample.bigIntNumber), true);
-        assert.strictEqual(isBigInt(sample.bigIntNegativeNumber), true);
-        assert.strictEqual(isBigInt(sample.bigIntZeroString), true);
+        assert.strictEqual(isBigInt(sample.someNumber), true);
+        assert.strictEqual(isBigInt(sample.someNegativeNumber), true);
+        assert.strictEqual(isBigInt(sample.someZeroString), true);
 
         // failed to deserialize
-        assert.strictEqual(sample.bigIntNull, null);
-        assert.strictEqual(sample.bigIntString, null);
-        assert.strictEqual(sample.bigIntDecimal, null);
+        assert.strictEqual(sample.someNull, null);
+        assert.strictEqual(sample.someString, null);
+        assert.strictEqual(sample.someDecimal, null);
       });
 
       test('can serialize field', async function (assert) {
