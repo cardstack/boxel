@@ -17,7 +17,7 @@ import {
 } from '@cardstack/runtime-common';
 import { fillIn, RenderingTestContext } from '@ember/test-helpers';
 import { shimExternals } from '@cardstack/host/lib/externals';
-import { isAddress, getAddress } from 'ethers';
+import { isAddress } from 'ethers';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let cardRef: typeof import('https://cardstack.com/base/card-ref');
