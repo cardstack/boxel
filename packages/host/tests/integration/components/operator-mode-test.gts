@@ -65,6 +65,7 @@ module('Integration | operator-mode', function (hooks) {
   }
 
   hooks.beforeEach(async function () {
+    localStorage.removeItem('recent-cards');
     Loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
@@ -1297,7 +1298,118 @@ module('Integration | operator-mode', function (hooks) {
       .exists({ count: 10 });
   });
 
-  test(`can add a card to the stack by URL`, async function (assert) {
+  test(`can specify a card by URL in the card chooser`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+    await click(`[data-test-create-new-card-button]`);
+    await waitFor(`[data-test-card-catalog-item]`);
+    await fillIn(
+      `[data-test-url-field] input`,
+      `https://cardstack.com/base/types/room-objective`
+    );
+    await waitUntil(
+      () =>
+        (
+          document.querySelector(`[data-test-card-catalog-go-button]`) as
+            | HTMLButtonElement
+            | undefined
+        )?.disabled === false
+    );
+    await click(`[data-test-card-catalog-go-button]`);
+    assert
+      .dom(`[data-test-stack-card-index="1"] [data-test-field-component-card]`)
+      .containsText('Objective', 'the card is rendered in the stack');
+  });
+
+  test(`error message is shown when invalid card URL is entered in card chooser`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+    await click(`[data-test-create-new-card-button]`);
+    await waitFor(`[data-test-card-catalog-item]`);
+
+    assert
+      .dom(`[data-test-boxel-input-validation-state="invalid"]`)
+      .doesNotExist('invalid state is not shown');
+
+    await fillIn(
+      `[data-test-url-field] input`,
+      `https://cardstack.com/base/not-a-card`
+    );
+    await waitFor(`[data-test-boxel-input-validation-state="invalid"]`);
+    assert
+      .dom(`[data-test-boxel-input-error-message]`)
+      .containsText('Not a valid Card URL');
+    await fillIn(
+      `[data-test-url-field] input`,
+      `https://cardstack.com/base/types/room-objective`
+    );
+    assert
+      .dom(`[data-test-boxel-input-validation-state="invalid"]`)
+      .doesNotExist('invalid state is not shown');
+  });
+
+  test(`card selection and card URL field are mutually exclusive in card chooser`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+    await click(`[data-test-create-new-card-button]`);
+    await waitFor(`[data-test-card-catalog-item]`);
+
+    await click(
+      `[data-test-card-catalog-item="https://cardstack.com/base/types/room-objective"] button`
+    );
+    assert
+      .dom(
+        `[data-test-card-catalog-item="https://cardstack.com/base/types/room-objective"].selected`
+      )
+      .exists('card is selected');
+
+    await fillIn(
+      `[data-test-url-field] input`,
+      `https://cardstack.com/base/types/room-objective`
+    );
+
+    assert
+      .dom(
+        `[data-test-card-catalog-item="https://cardstack.com/base/types/room-objective"].selected`
+      )
+      .doesNotExist('card is not selected');
+
+    await click(
+      `[data-test-card-catalog-item="https://cardstack.com/base/types/room-objective"] button`
+    );
+    assert
+      .dom(`[data-test-url-field] input`)
+      .hasNoValue('card URL field is cleared');
+  });
+
+  test(`can add a card to the stack by URL from search sheet`, async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1324,7 +1436,7 @@ module('Integration | operator-mode', function (hooks) {
       .containsText('Mango', 'the card is rendered in the stack');
   });
 
-  test(`error message is shown when invalid card URL is entered`, async function (assert) {
+  test(`error message is shown when invalid card URL is entered in search sheet`, async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {

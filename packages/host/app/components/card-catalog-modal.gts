@@ -5,7 +5,7 @@ import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { htmlSafe } from '@ember/template';
 import { registerDestructor } from '@ember/destroyable';
-import { enqueueTask } from 'ember-concurrency';
+import { enqueueTask, restartableTask } from 'ember-concurrency';
 import type {
   CardBase,
   CardContext,
@@ -21,10 +21,15 @@ import {
   Header,
   Button,
   IconButton,
-  BoxelInput,
+  BoxelInputValidationState,
 } from '@cardstack/boxel-ui';
 import { eq, gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import cn from '@cardstack/boxel-ui/helpers/cn';
+import debounce from 'lodash/debounce';
+import { service } from '@ember/service';
+import { isSingleCardDocument } from '@cardstack/runtime-common';
+import type CardService from '../services/card-service';
+import type LoaderService from '../services/loader-service';
 
 interface Signature {
   Args: {
@@ -81,9 +86,7 @@ export default class CardCatalogModal extends Component<Signature> {
                   <li
                     class={{cn
                       'item'
-                      selected=(eq
-                        this.selectedCard.id card.id
-                      )
+                      selected=(eq this.selectedCard.id card.id)
                     }}
                     data-test-card-catalog-item={{card.id}}
                   >
@@ -118,7 +121,15 @@ export default class CardCatalogModal extends Component<Signature> {
           <footer class='dialog-box__footer footer'>
             <label class='url-search'>
               <span>Enter Card URL:</span>
-              <BoxelInput @value={{this.cardURL}} placeholder='http://' />
+              <BoxelInputValidationState
+                data-test-url-field
+                placeholder='http://'
+                @value={{this.cardURL}}
+                @onInput={{this.setCardURL}}
+                @onKeyPress={{this.onURLFieldKeypress}}
+                @state={{this.cardURLFieldState}}
+                @errorMessage={{this.cardURLErrorMessage}}
+              />
             </label>
             <div>
               <Button
@@ -154,6 +165,8 @@ export default class CardCatalogModal extends Component<Signature> {
       .footer {
         display: flex;
         justify-content: space-between;
+        /* This bottom margin is neccesary to show card URL error messages */
+        margin-bottom: var(--boxel-sp);
       }
       .url-search {
         flex-grow: 0.5;
@@ -245,6 +258,9 @@ export default class CardCatalogModal extends Component<Signature> {
   @tracked zIndex = 20;
   @tracked selectedCard?: CardBase = undefined;
   @tracked cardURL = '';
+  @tracked hasCardURLError = false;
+  @service declare cardService: CardService;
+  @service declare loaderService: LoaderService;
 
   constructor(owner: unknown, args: {}) {
     super(owner, args);
@@ -258,6 +274,21 @@ export default class CardCatalogModal extends Component<Signature> {
     return htmlSafe(`z-index: ${this.zIndex}`);
   }
 
+  get cardURLFieldState() {
+    return this.hasCardURLError ? 'invalid' : 'initial';
+  }
+
+  get cardURLErrorMessage() {
+    return this.hasCardURLError ? 'Not a valid Card URL' : undefined;
+  }
+
+  private resetState() {
+    this.cardURL = '';
+    this.hasCardURLError = false;
+    this.selectedCard = undefined;
+  }
+
+  // This is part of our public API for runtime-common to invoke the card chooser
   async chooseCard<T extends CardBase>(
     query: Query,
     opts?: { offerToCreate?: CardRef }
@@ -285,7 +316,68 @@ export default class CardCatalogModal extends Component<Signature> {
     }
   );
 
+  private getCard = restartableTask(async (cardURL: string) => {
+    let response = await this.loaderService.loader.fetch(cardURL, {
+      headers: {
+        Accept: 'application/vnd.card+json',
+      },
+    });
+    if (response.ok) {
+      let maybeCardDoc = await response.json();
+      if (isSingleCardDocument(maybeCardDoc)) {
+        this.selectedCard = await this.cardService.createFromSerialized(
+          maybeCardDoc.data,
+          maybeCardDoc,
+          new URL(maybeCardDoc.data.id)
+        );
+        return;
+      }
+    }
+    this.selectedCard = undefined;
+    this.hasCardURLError = true;
+  });
+
+  debouncedURLFieldUpdate = debounce(() => {
+    if (!this.cardURL) {
+      this.selectedCard = undefined;
+      return;
+    }
+    try {
+      new URL(this.cardURL);
+    } catch (e: any) {
+      if (e instanceof TypeError && e.message.includes('Invalid URL')) {
+        return;
+      }
+      throw e;
+    }
+    this.onURLFieldUpdated();
+  }, 500);
+
+  @action
+  setCardURL(cardURL: string) {
+    this.hasCardURLError = false;
+    this.selectedCard = undefined;
+    this.cardURL = cardURL;
+    this.debouncedURLFieldUpdate();
+  }
+
+  @action
+  onURLFieldKeypress(e: KeyboardEvent) {
+    if (e.key === 'Enter' && this.cardURL) {
+      this.getCard.perform(this.cardURL);
+    }
+  }
+
+  @action
+  onURLFieldUpdated() {
+    if (this.cardURL) {
+      this.selectedCard = undefined;
+      this.getCard.perform(this.cardURL);
+    }
+  }
+
   @action toggleSelect(card?: CardBase): void {
+    this.cardURL = '';
     if (this.selectedCard?.id === card?.id) {
       this.selectedCard = undefined;
       return;
@@ -298,10 +390,11 @@ export default class CardCatalogModal extends Component<Signature> {
       this.currentRequest.deferred.fulfill(card);
       this.currentRequest = undefined;
     }
+    this.resetState();
   }
 
   @action cancel(): void {
-    this.selectedCard = undefined;
+    this.resetState();
   }
 
   @action async createNew(ref: CardRef): Promise<void> {

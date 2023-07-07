@@ -171,7 +171,9 @@ export default class OperatorModeStateService extends Service {
     if (this.recentCards.length > 10) {
       this.recentCards.splice(0, 1);
     }
-    const recentCardIds = this.recentCards.map((recentCard) => recentCard.id);
+    const recentCardIds = this.recentCards
+      .map((recentCard) => recentCard.id)
+      .filter(Boolean); // don't include cards that don't have an ID
     localStorage.setItem('recent-cards', JSON.stringify(recentCardIds));
   }
 }
