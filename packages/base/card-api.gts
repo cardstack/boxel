@@ -2254,7 +2254,6 @@ export async function getIfReady<T extends CardBase, K extends keyof T>(
   compute: () => T[K] | Promise<T[K]> = () => instance[fieldName],
   opts?: RecomputeOptions
 ): Promise<T[K] | T[K][] | NotReadyValue | StaleValue | undefined> {
-  debugger;
   let result: T[K] | T[K][] | undefined;
   let deserialized = getDataBucket(instance);
   let maybeStale = deserialized.get(fieldName as string);
