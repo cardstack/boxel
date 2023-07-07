@@ -9,7 +9,7 @@ import {
   CardBaseConstructor,
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui';
-import { FieldInputEditor, DeserializedResult } from './field-input-editor';
+import { TextInputFilter, DeserializedResult } from './field-input-editor';
 
 function isEthAddress(address: string): boolean {
   try {
@@ -27,9 +27,11 @@ function isChecksumAddress(address: string): boolean {
   }
 }
 
-function _deserialize(address: string | null): DeserializedResult<string> {
+function _deserialize(
+  address: string | null | undefined
+): DeserializedResult<string> {
   if (!address) {
-    return { value: null, errorMessage: 'eth address undefined' };
+    return { value: null };
   }
   const validations = [
     {
@@ -53,17 +55,16 @@ function _deserialize(address: string | null): DeserializedResult<string> {
 class Edit extends Component<typeof EthereumAddressCard> {
   <template>
     <BoxelInput
-      @value={{this.validatorEditor.current}}
-      @onInput={{this.validatorEditor.parseInput}}
+      @value={{this.validatorEditor.asString}}
+      @onInput={{this.validatorEditor.onInput}}
       @errorMessage={{this.validatorEditor.errorMessage}}
       @invalid={{this.validatorEditor.isInvalid}}
     />
   </template>
 
-  validatorEditor: FieldInputEditor<string> = new FieldInputEditor(
+  validatorEditor: TextInputFilter<string> = new TextInputFilter(
     () => this.args.model,
     (inputVal) => this.args.set(inputVal),
-    undefined,
     _deserialize
   );
 }

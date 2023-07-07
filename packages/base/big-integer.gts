@@ -9,11 +9,13 @@ import {
   queryableValue,
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui';
-import { FieldInputEditor, DeserializedResult } from './field-input-editor';
+import { TextInputFilter, DeserializedResult } from './field-input-editor';
 
-function _deserialize(bigintString: string | null): DeserializedResult<bigint> {
+function _deserialize(
+  bigintString: string | null | undefined
+): DeserializedResult<bigint> {
   if (!bigintString) {
-    return { value: null, errorMessage: 'big int undefined' };
+    return { value: null };
   }
   try {
     let bigintVal = BigInt(bigintString);
@@ -34,9 +36,9 @@ function _deserialize(bigintString: string | null): DeserializedResult<bigint> {
   }
 }
 
-function _serialize(val: bigint | null): string | undefined {
+function _serialize(val: bigint | null | undefined): string | undefined {
   if (!val) {
-    return undefined;
+    return;
   }
   return val.toString();
 }
@@ -44,18 +46,18 @@ function _serialize(val: bigint | null): string | undefined {
 class Edit extends Component<typeof BigIntegerCard> {
   <template>
     <BoxelInput
-      @value={{this.validatorEditor.current}}
-      @onInput={{this.validatorEditor.parseInput}}
+      @value={{this.validatorEditor.asString}}
+      @onInput={{this.validatorEditor.onInput}}
       @errorMessage={{this.validatorEditor.errorMessage}}
       @invalid={{this.validatorEditor.isInvalid}}
     />
   </template>
 
-  validatorEditor: FieldInputEditor<bigint> = new FieldInputEditor(
+  validatorEditor: TextInputFilter<bigint> = new TextInputFilter(
     () => this.args.model,
     (inputVal) => this.args.set(inputVal),
-    _serialize,
-    _deserialize
+    _deserialize,
+    _serialize
   );
 }
 
