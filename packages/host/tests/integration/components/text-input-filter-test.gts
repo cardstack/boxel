@@ -32,12 +32,6 @@ import { shimExternals } from '@cardstack/host/lib/externals';
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let updateFromSerialized: (typeof cardApi)['updateFromSerialized'];
 
-// This integration test is to check input validation of custom base fields (base cards)
-// Examples of these fields are: BigInt, EthereumAddress, Date; base cards, which have a custom serialize and deserialize logic
-// Currently, these test only cover BigInt. TODO, will refactor the validation checks into a class/resource which can exist on Edit Component of the base field
-// We need to  validate the inputs of the user so that if serialization fails,
-// consumers, particularly those which reference the base field via computeds of these field do not have to do a lot of error handling
-
 module('Integration | text-input-filter', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
