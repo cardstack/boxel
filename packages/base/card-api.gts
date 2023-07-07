@@ -1462,7 +1462,7 @@ export class CardBase {
       }
       return Object.fromEntries(
         Object.entries(
-          getFields(value, { includeComputeds: true, includeUsedLinkedFields: true })
+          getFields(value, { includeComputeds: true, excludeUnusedLinkedFields: true })
         ).map(([fieldName, field]) => {
           let rawValue = peekAtField(value, fieldName);
           if (field?.fieldType === 'linksToMany') {
@@ -1789,7 +1789,7 @@ function serializeCardResource(
   let { ...fieldOpts } = opts ?? {};
   let { id: removedIdField, ...fields } = getFields(model, {
     ...fieldOpts,
-    includeUsedLinkedFields: false,
+    excludeUnusedLinkedFields: false,
   });
   let fieldResources = Object.keys(fields).map((fieldName) =>
     serializedGet(model, fieldName, doc, visited, opts)
@@ -1809,7 +1809,7 @@ export async function serializeCard(
   model: CardBase,
   opts?: SerializeOpts
 ): Promise<LooseSingleCardDocument> {
-  await loadModel(model, [], { recomputeAllFields: true });
+  await loadModel(model);
   let doc = {
     data: { type: 'card', ...(model.id != null ? { id: model.id } : {}) },
   };
@@ -2216,7 +2216,7 @@ async function loadModel<T extends CardBase>(
     Object.keys(
       getFields(model, {
         includeComputeds: true,
-        includeUsedLinkedFields: !opts?.recomputeAllFields,
+        excludeUnusedLinkedFields: !opts?.recomputeAllFields,
       })
     )
   );
@@ -2323,15 +2323,15 @@ export async function getIfReady<T extends CardBase, K extends keyof T>(
 
 export function getFields(
   card: typeof CardBase,
-  opts?: { includeUsedLinkedFields?: boolean; includeComputeds?: boolean }
+  opts?: { excludeUnusedLinkedFields?: boolean; includeComputeds?: boolean }
 ): { [fieldName: string]: Field<CardBaseConstructor> };
 export function getFields<T extends CardBase>(
   card: T,
-  opts?: { includeUsedLinkedFields?: boolean; includeComputeds?: boolean }
+  opts?: { excludeUnusedLinkedFields?: boolean; includeComputeds?: boolean }
 ): { [P in keyof T]?: Field<CardBaseConstructor> };
 export function getFields(
   cardInstanceOrClass: CardBase | typeof CardBase,
-  opts?: { includeUsedLinkedFields?: boolean; includeComputeds?: boolean }
+  opts?: { excludeUnusedLinkedFields?: boolean; includeComputeds?: boolean }
 ): { [fieldName: string]: Field<CardBaseConstructor> } {
   let obj: object | null;
   let usedFields: string[] = [];
@@ -2359,7 +2359,7 @@ export function getFields(
 
       if (!maybeField ||
           (maybeField.computeVia && !opts?.includeComputeds) ||
-          (!usedFields.includes(maybeFieldName) && opts?.includeUsedLinkedFields &&
+          (!usedFields.includes(maybeFieldName) && opts?.excludeUnusedLinkedFields &&
             (maybeField.fieldType === 'linksTo' || maybeField.fieldType === 'linksToMany'))) {
         return [];
       }
