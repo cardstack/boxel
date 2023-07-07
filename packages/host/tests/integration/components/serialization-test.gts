@@ -4473,9 +4473,9 @@ module('Integration | serialization', function (hooks) {
         assert.strictEqual(isBigInt(sample.bigIntZeroString), true);
 
         // failed to deserialize
-        assert.strictEqual(sample.bigIntNull, undefined);
-        assert.strictEqual(sample.bigIntString, undefined);
-        assert.strictEqual(sample.bigIntDecimal, undefined);
+        assert.strictEqual(sample.bigIntNull, null);
+        assert.strictEqual(sample.bigIntString, null);
+        assert.strictEqual(sample.bigIntDecimal, null);
       });
 
       test('can serialize field', async function (assert) {
