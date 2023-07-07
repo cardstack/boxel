@@ -163,7 +163,7 @@ module('Integration | serialization', function (hooks) {
       firstName: 'Mango',
     });
 
-    assert.deepEqual(await serializeCard(mango), {
+    assert.deepEqual(await serializeCard(mango,), {
       data: {
         id: `${realmURL}Person/mango`,
         type: 'card',

@@ -90,8 +90,8 @@ export default class RoomsManager extends Component {
               {{invite.room.name}}
               (from:
               <span
-                data-test-invite-sender={{invite.member.membershipInitiator.displayName}}
-              >{{invite.member.membershipInitiator.displayName}})</span>
+                data-test-invite-sender={{invite.member.membershipInitiator}}
+              >{{invite.member.membershipInitiator}})</span>
             </span>
             <Button
               data-test-decline-room-btn={{invite.room.name}}

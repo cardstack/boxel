@@ -190,7 +190,7 @@ export async function assertRooms(page: Page, rooms: RoomAssertions) {
     for (let { name, sender } of rooms.invitedRooms) {
       await expect(
         page.locator(
-          `[data-test-invited-room="${name}"] [data-test-invite-sender="${sender}"]`
+          `[data-test-invited-room="${name}"] [data-test-invite-sender="@${sender}:localhost"]`
         ),
         `the invited room '${name}' from '${sender}' is displayed`
       ).toHaveCount(1);

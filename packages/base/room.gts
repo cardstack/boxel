@@ -69,10 +69,7 @@ function upsertRoomMember({
     member.membershipDateTime = new Date(membershipTs);
   }
   if (membershipInitiator) {
-    member.membershipInitiator = upsertRoomMember({
-      roomCard,
-      userId: membershipInitiator,
-    });
+    member.membershipInitiator = membershipInitiator
   }
   return member;
 }
@@ -141,7 +138,7 @@ export class RoomMemberCard extends Card {
   @field displayName = contains(StringCard);
   @field membership = contains(RoomMembershipCard);
   @field membershipDateTime = contains(DateTimeCard);
-  @field membershipInitiator = contains(() => RoomMemberCard);
+  @field membershipInitiator = contains(() => StringCard);
   @field name = contains(StringCard, {
     computeVia: function (this: RoomMemberCard) {
       return this.displayName ?? this.userId.split(':')[0].substring(1);
