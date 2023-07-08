@@ -4661,6 +4661,26 @@ module('Integration | serialization', function (hooks) {
         );
         assert.strictEqual(serialized?.data?.attributes?.someNull, null);
       });
+
+      test('queryable value', async function (assert) {
+        let { getQueryableValue } = cardApi;
+        let { default: EthereumAddressCard } = ethereumAddress;
+        assert.strictEqual(
+          getQueryableValue(
+            EthereumAddressCard,
+            '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b'
+          ),
+          '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b'
+        );
+        assert.strictEqual(
+          getQueryableValue(EthereumAddressCard, null),
+          undefined
+        );
+        assert.strictEqual(
+          getQueryableValue(EthereumAddressCard, undefined),
+          undefined
+        );
+      });
     });
   });
 });
