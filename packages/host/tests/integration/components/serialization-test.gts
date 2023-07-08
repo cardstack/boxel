@@ -4514,6 +4514,20 @@ module('Integration | serialization', function (hooks) {
         assert.strictEqual(serialized?.data?.attributes?.someNull, null);
       });
 
+      test('queryable value', async function (assert) {
+        let { getQueryableValue } = cardApi;
+        let { default: BigIntegerCard } = bigInteger;
+        assert.strictEqual(
+          getQueryableValue(BigIntegerCard, BigInt('9223372036854775808')),
+          '9223372036854775808'
+        );
+        assert.strictEqual(getQueryableValue(BigIntegerCard, null), undefined);
+        assert.strictEqual(
+          getQueryableValue(BigIntegerCard, undefined),
+          undefined
+        );
+      });
+
       test('can perform bigint operations with computed', async function (assert) {
         let { field, contains, Card, serializeCard } = cardApi;
         let { default: StringCard } = string;
