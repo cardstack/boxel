@@ -94,6 +94,7 @@ export function shimExternals(loader: Loader = Loader.getLoader()) {
   loader.shimModule('ember-resources/core', { Resource: class {} });
   loader.shimModule('@ember/destroyable', {});
   loader.shimModule('marked', { marked: () => {} });
+  loader.shimModule('ethers', {});
 }
 
 shimExternals();

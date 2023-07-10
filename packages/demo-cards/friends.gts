@@ -11,7 +11,7 @@ import { Friend } from './friend';
 export class Friends extends Card {
   static displayName = 'Friends';
   @field firstName = contains(StringCard);
-  @field friends = linksToMany(() => Friend);
+  @field friends = linksToMany(Friend);
   @field title = contains(StringCard, {
     computeVia: function (this: Friends) {
       return this.firstName;

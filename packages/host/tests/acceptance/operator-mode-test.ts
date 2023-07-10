@@ -14,6 +14,7 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import percySnapshot from '@percy/ember';
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 module('Acceptance | operator mode tests', function (hooks) {
   let realm: Realm;
@@ -198,177 +199,267 @@ module('Acceptance | operator mode tests', function (hooks) {
     await realm.ready;
   });
 
-  test('visiting index card and entering operator mode', async function (assert) {
-    await visit('/');
+  module('1 stack', function () {
+    test('visiting index card and entering operator mode', async function (assert) {
+      await visit('/');
 
-    assert.strictEqual(currentURL(), '/');
+      assert.strictEqual(currentURL(), '/');
 
-    // Enter operator mode
-    await triggerEvent(document.body, 'keydown', {
-      code: 'Key.',
-      key: '.',
-      ctrlKey: true,
+      // Enter operator mode
+      await triggerEvent(document.body, 'keydown', {
+        code: 'Key.',
+        key: '.',
+        ctrlKey: true,
+      });
+
+      assert.dom('[data-test-operator-mode-stack]').exists();
+      assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
+
+      await percySnapshot(assert);
+
+      // In the URL, operatorModeEnabled is set to true and operatorModeState is set to the current stack
+      assert.strictEqual(
+        currentURL(),
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          JSON.stringify({
+            stacks: [
+              {
+                items: [
+                  {
+                    card: { id: 'http://test-realm/test/index' },
+                    format: 'isolated',
+                  },
+                ],
+              },
+            ],
+          })
+        )}`
+      );
     });
 
-    assert.dom('[data-test-operator-mode-stack]').exists();
-    assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
+    test('restoring the stack from query param', async function (assert) {
+      let operatorModeStateParam = JSON.stringify({
+        stacks: [
+          {
+            items: [
+              {
+                card: { id: 'http://test-realm/test/Person/fadhlan' },
+                format: 'isolated',
+              },
+              {
+                card: { id: 'http://test-realm/test/Pet/mango' },
+                format: 'isolated',
+              },
+            ],
+          },
+        ],
+      });
 
-    await percySnapshot(assert);
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam
+        )}`
+      );
 
-    // In the URL, operatorModeEnabled is set to true and operatorModeState is set to the current stack
-    assert.strictEqual(
-      currentURL(),
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        JSON.stringify({
-          stacks: [
-            {
-              items: [
-                {
-                  card: { id: 'http://test-realm/test/index' },
-                  format: 'isolated',
-                },
-              ],
-            },
-          ],
-        })
-      )}`
-    );
-  });
+      await percySnapshot(assert);
 
-  test('restoring the stack from query param', async function (assert) {
-    let operatorModeStateParam = JSON.stringify({
-      stacks: [
-        {
-          items: [
-            {
-              card: { id: 'http://test-realm/test/Person/fadhlan' },
-              format: 'isolated',
-            },
-            {
-              card: { id: 'http://test-realm/test/Pet/mango' },
-              format: 'isolated',
-            },
-          ],
-        },
-      ],
+      assert
+        .dom('[data-test-stack-card-index="0"] [data-test-boxel-header-title]')
+        .includesText('Person');
+
+      assert
+        .dom('[data-test-stack-card-index="1"] [data-test-boxel-header-title]')
+        .includesText('Pet');
+
+      // Remove the dog from the stack
+      await click('[data-test-stack-card-index="1"] [data-test-close-button]');
+
+      // The stack should be updated in the URL
+      assert.strictEqual(
+        currentURL(),
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          JSON.stringify({
+            stacks: [
+              {
+                items: [
+                  {
+                    card: { id: 'http://test-realm/test/Person/fadhlan' },
+                    format: 'isolated',
+                  },
+                ],
+              },
+            ],
+          })
+        )}`
+      );
+
+      // Add the dog back to the stack (via overlayed linked card button)
+      await click('[data-test-cardstack-operator-mode-overlay-button]');
+
+      // The stack should be reflected in the URL
+      assert.strictEqual(
+        currentURL(),
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          JSON.stringify({
+            stacks: [
+              {
+                items: [
+                  {
+                    card: { id: 'http://test-realm/test/Person/fadhlan' },
+                    format: 'isolated',
+                  },
+                  {
+                    card: { id: 'http://test-realm/test/Pet/mango' },
+                    format: 'isolated',
+                  },
+                ],
+              },
+            ],
+          })
+        )}`
+      );
+
+      // Click Edit on the top card
+      await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
+      await click('[data-test-boxel-menu-item-text="Edit"]');
+
+      // The edit format should be reflected in the URL
+      assert.strictEqual(
+        currentURL(),
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          JSON.stringify({
+            stacks: [
+              {
+                items: [
+                  {
+                    card: { id: 'http://test-realm/test/Person/fadhlan' },
+                    format: 'isolated',
+                  },
+                  {
+                    card: { id: 'http://test-realm/test/Pet/mango' },
+                    format: 'edit',
+                  },
+                ],
+              },
+            ],
+          })
+        )}`
+      );
     });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam
-      )}`
-    );
+    test('restoring the stack from query param when card is in edit format', async function (assert) {
+      let operatorModeStateParam = JSON.stringify({
+        stacks: [
+          {
+            items: [
+              {
+                card: { id: 'http://test-realm/test/Person/fadhlan' },
+                format: 'edit',
+              },
+            ],
+          },
+        ],
+      });
 
-    await percySnapshot(assert);
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam
+        )}`
+      );
 
-    assert
-      .dom('[data-test-stack-card-index="0"] [data-test-boxel-header-title]')
-      .includesText('Person');
+      await percySnapshot(assert);
 
-    assert
-      .dom('[data-test-stack-card-index="1"] [data-test-boxel-header-title]')
-      .includesText('Pet');
-
-    // Remove the dog from the stack
-    await click('[data-test-stack-card-index="1"] [data-test-close-button]');
-
-    // The stack should be updated in the URL
-    assert.strictEqual(
-      currentURL(),
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        JSON.stringify({
-          stacks: [
-            {
-              items: [
-                {
-                  card: { id: 'http://test-realm/test/Person/fadhlan' },
-                  format: 'isolated',
-                },
-              ],
-            },
-          ],
-        })
-      )}`
-    );
-
-    // Add the dog back to the stack (via overlayed linked card button)
-    await click('[data-test-overlay-button]');
-
-    // The stack should be reflected in the URL
-    assert.strictEqual(
-      currentURL(),
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        JSON.stringify({
-          stacks: [
-            {
-              items: [
-                {
-                  card: { id: 'http://test-realm/test/Person/fadhlan' },
-                  format: 'isolated',
-                },
-                {
-                  card: { id: 'http://test-realm/test/Pet/mango' },
-                  format: 'isolated',
-                },
-              ],
-            },
-          ],
-        })
-      )}`
-    );
-
-    // Click Edit on the top card
-    await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
-    await click('[data-test-boxel-menu-item-text="Edit"]');
-
-    // The edit format should be reflected in the URL
-    assert.strictEqual(
-      currentURL(),
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        JSON.stringify({
-          stacks: [
-            {
-              items: [
-                {
-                  card: { id: 'http://test-realm/test/Person/fadhlan' },
-                  format: 'isolated',
-                },
-                {
-                  card: { id: 'http://test-realm/test/Pet/mango' },
-                  format: 'edit',
-                },
-              ],
-            },
-          ],
-        })
-      )}`
-    );
-  });
-
-  test('restoring the stack from query param when card is in edit format', async function (assert) {
-    let operatorModeStateParam = JSON.stringify({
-      stacks: [
-        {
-          items: [
-            {
-              card: { id: 'http://test-realm/test/Person/fadhlan' },
-              format: 'edit',
-            },
-          ],
-        },
-      ],
+      assert.dom('[data-test-field="firstName"] input').exists(); // Existence of an input field means it is in edit mode
+      assert.dom('[data-test-save-button]').exists(); // Existence of save button means it is in edit mode
     });
 
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam
-      )}`
-    );
+    test('click left or right add card button will open the search panel and then click on a recent card will open a new stack on the left or right', async function (assert) {
+      let operatorModeStateParam = JSON.stringify({
+        stacks: [
+          {
+            items: [
+              {
+                card: { id: 'http://test-realm/test/Person/fadhlan' },
+                format: 'isolated',
+              },
+              {
+                card: { id: 'http://test-realm/test/Pet/mango' },
+                format: 'edit',
+              },
+            ],
+          },
+        ],
+      });
 
-    await percySnapshot(assert);
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam
+        )}`
+      );
 
-    assert.dom('[data-test-field="firstName"] input').exists(); // Existence of an input field means it is in edit mode
-    assert.dom('[data-test-save-button]').exists(); // Existence of save button means it is in edit mode
+      let operatorModeStateService = this.owner.lookup(
+        'service:operator-mode-state-service'
+      ) as OperatorModeStateService;
+
+      // @ts-ignore Property '#private' is missing in type 'Card[]' but required in type 'TrackedArray<Card>'.glint(2741) - don't care about this error here, just stubbing
+      operatorModeStateService.recentCards =
+        operatorModeStateService.state.stacks[0].items.map((item) => item.card);
+
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
+      assert.dom('[data-test-add-card-left-stack]').exists();
+      assert.dom('[data-test-add-card-right-stack]').exists();
+      assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
+
+      // Add a card to the left stack
+      await click('[data-test-add-card-left-stack]');
+
+      assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
+
+      await click(
+        '[data-test-search-result="http://test-realm/test/Pet/mango"]'
+      );
+
+      assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
+
+      // There are now 2 stacks
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
+      assert.dom('[data-test-operator-mode-stack="0"]').includesText('Mango'); // Mango goes on the left stack
+      assert.dom('[data-test-operator-mode-stack="1"]').includesText('Fadhlan');
+
+      // Buttons to add a neighbor stack are gone
+      assert.dom('[data-test-add-card-left-stack]').doesNotExist();
+      assert.dom('[data-test-add-card-right-stack]').doesNotExist();
+
+      // Close the only card in the 2nd stack
+      await click(
+        '[data-test-operator-mode-stack="1"] [data-test-close-button]'
+      );
+
+      // There is now only 1 stack and the buttons to add a neighbor stack are back
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
+      assert.dom('[data-test-add-card-left-stack]').exists();
+      assert.dom('[data-test-add-card-right-stack]').exists();
+
+      // Add a card to the right stack
+      await click('[data-test-add-card-left-stack]');
+
+      assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
+
+      await click(
+        '[data-test-search-result="http://test-realm/test/Person/fadhlan"]'
+      );
+
+      assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
+
+      // There are now 2 stacks
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
+      assert.dom('[data-test-operator-mode-stack="0"]').includesText('Fadhlan');
+      assert.dom('[data-test-operator-mode-stack="1"]').includesText('Mango'); // Fadhlan goes on the right stack
+
+      // Buttons to add a neighbor stack are gone
+      assert.dom('[data-test-add-card-left-stack]').doesNotExist();
+      assert.dom('[data-test-add-card-right-stack]').doesNotExist();
+    });
   });
 
   module('2 stacks', function () {
