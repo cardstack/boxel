@@ -9,8 +9,7 @@ export default class HeaderUsage extends Component {
   @tracked title = 'Header';
   @tracked hasBackground = true;
   @tracked isHighlighted = false;
-  @tracked iconURL =
-    'https://ipfs.io/ipfs/QmQJ4AYtLLvi1kiVWWM2n8zisJaeWCb53XHCywLSAiF5nP';
+  @tracked iconURL = undefined;
 
   <template>
     <FreestyleUsage @name='Header'>

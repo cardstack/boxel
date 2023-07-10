@@ -29,17 +29,15 @@ const Header: TemplateOnlyComponent<Signature> = <template>
     data-test-boxel-header
     ...attributes
   >
-    {{#if (or @label @title @iconURL) }}
-      <div class="header__row">
-        {{#if @iconURL}}
-          <img class="header__icon" src={{@iconURL}} data-test-boxel-header-icon={{@iconURL}}/>
-        {{/if}}
-        <div data-test-boxel-header-title>
-          {{#if @label}}<Label
-              data-test-boxel-header-label
-            >{{@label}}</Label>{{/if}}
-          {{#if @title}}{{@title}}{{/if}}
-        </div>
+    {{#if @iconURL}}
+      <img class="header__icon" src={{@iconURL}} data-test-boxel-header-icon={{@iconURL}} alt="Header icon"/>
+    {{/if}}
+    {{#if (or @label @title) }}
+      <div data-test-boxel-header-title>
+        {{#if @label}}<Label
+            data-test-boxel-header-label
+          >{{@label}}</Label>{{/if}}
+        {{#if @title}}{{@title}}{{/if}}
       </div>
     {{/if}}
 
@@ -56,7 +54,6 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       position: relative;
       display: flex;
       align-items: center;
-      justify-content: space-between;
       padding: 0 var(--boxel-sp-xxxs) 0 var(--boxel-sp-sm);
       min-height: var(--boxel-header-min-height, 1.875rem); /* 30px */
       color: var(--boxel-header-text-color, var(--boxel-dark));
@@ -67,6 +64,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       text-transform: uppercase;
       transition: background-color var(--boxel-transition),
         color var(--boxel-transition);
+      gap: var(--boxel-sp-xs);
     }
     .large {
       padding: var(--boxel-sp-xl);
@@ -85,12 +83,6 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       top: 0;
       right: 0;
       display: flex;
-      align-items: center;
-    }
-    .header__row {
-      display: flex;
-      flex-direction: row;
-      gap: var(--boxel-sp-xs);
       align-items: center;
     }
     .header__icon {
