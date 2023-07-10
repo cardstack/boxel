@@ -369,7 +369,14 @@ export class RoomCard extends Card {
         if (event.type !== 'm.room.message') {
           continue;
         }
-        if (cache.has(event.event_id)) {
+        let event_id = event.event_id;
+        let update = false;
+        if (event.content['m.relates_to'] && event.content['m.relates_to'].rel_type === 'm.replace') {
+          event_id = event.content['m.relates_to'].event_id;
+          console.log("Updating", event_id);
+          update = true;
+        }
+        if (cache.has(event_id) && !update) {
           continue;
         }
 
@@ -402,11 +409,12 @@ export class RoomCard extends Card {
             attachedCards.set(cardDoc.data.id, attachedCard);
           }
           newMessages.set(
-            event.event_id,
+            event_id,
             new MessageCard({ ...cardArgs, attachedCard: await attachedCard })
           );
         } else {
-          newMessages.set(event.event_id, new MessageCard(cardArgs));
+          console.log("Setting new messages with ", event_id, cardArgs);
+          newMessages.set(event_id, new MessageCard(cardArgs));
         }
 
         index++;
@@ -415,9 +423,9 @@ export class RoomCard extends Card {
       // and cache may have changed
       let updatedCache = messageCache.get(this)!; // this should always have an entry as we initialized it at the beginning of the computed
       for (let [eventId, message] of newMessages) {
-        if (!updatedCache.has(eventId)) {
+        //if (!updatedCache.has(eventId)) {
           updatedCache.set(eventId, message);
-        }
+        //}
       }
       // this sort should hopefully be very optimized since events will
       // be close to chronological order
