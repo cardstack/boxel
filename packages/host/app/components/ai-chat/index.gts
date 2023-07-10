@@ -10,6 +10,7 @@ import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import pick from '@cardstack/boxel-ui/helpers/pick';
+import ENV from '@cardstack/host/config/environment';
 
 export enum AiMode {
   Closed = 'closed',
@@ -31,9 +32,10 @@ interface Signature {
 }
 
 import { Configuration, OpenAIApi } from "openai";
+const { openAIKey } = ENV;
 
 const configuration = new Configuration({
-  apiKey: 'REPLACEME',
+  apiKey: openAIKey,
 });
 const openai = new OpenAIApi(configuration);
 
@@ -91,35 +93,35 @@ export default class AIChat extends Component<Signature> {
   <div class='ai-chat {{this.state}}' >
     <input
           class='input'
-placeholder = 'Enter search term or type a command'
-value = {{ @value }}
-{ {on 'input'(pick 'target.value' this.onInput) } }
+          placeholder= 'Enter search term or type a command'
+          value = {{ @value }}
+          {{on 'input'(pick 'target.value' this.onInput) }}
 />
-  < Button
-@kind='primary'
-@size='tall'
-aria - label='Save'
-data - test - save - button
+  <Button
+    @kind='primary'
+    @size='tall'
+    aria-label='Save'
+    data-test-save-button
 
-{ {on 'click'(fn this.run @api) } }
-            >
-  Apply
-  < /Button>
-  < /div>
-    <style>
-    .ai - chat {
-  background - color: #fff;
-  border - radius: 4px;
-  box - shadow: 0 0 0 1px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.2);
-  padding: 16px;
-  margin: 16px;
+    {{on 'click'(fn this.run @api) }}
+                >
+      Apply
+      < /Button>
+      < /div>
+        <style>
+        .ai-chat {
+      background-color: #fff;
+      border-radius: 4px;
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.2);
+      padding: 16px;
+      margin: 16px;
 
-  transition: width var(--boxel - transition), padding var(--boxel - transition);
-}
+      transition: width var(--boxel-transition), padding var(--boxel-transition);
+    }
 
-      .ai - chat.closed.ai - chat {
-  margin: 0;
-}
-</style>
-  < /template>
+          .ai-chat.closed.ai-chat {
+      margin: 0;
+    }
+    </style>
+  </template>
 }

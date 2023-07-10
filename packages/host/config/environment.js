@@ -6,6 +6,7 @@ module.exports = function (environment) {
     environment,
     rootURL: '/',
     locationType: 'history',
+    openAIKey: process.env.OPENAI_API_KEY,
     EmberENV: {
       EXTEND_PROTOTYPES: false,
       FEATURES: {
