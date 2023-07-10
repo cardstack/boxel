@@ -5,8 +5,10 @@ import {
   CardBase,
   useIndexBasedKey,
   CardInstanceType,
+  serialize,
   deserialize,
   CardBaseConstructor,
+  queryableValue,
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui';
 import { TextInputFilter, DeserializedResult } from './text-input-filter';
@@ -70,15 +72,33 @@ class Edit extends Component<typeof EthereumAddressCard> {
   );
 }
 
+function _serialize(val: string | null | undefined): string | undefined {
+  if (!val) {
+    return;
+  }
+  return val;
+}
+
 export default class EthereumAddressCard extends CardBase {
   static [primitive]: string;
   static [useIndexBasedKey]: never;
+  static [serialize](val: string) {
+    return _serialize(val);
+  }
 
   static async [deserialize]<T extends CardBaseConstructor>(
     this: T,
     address: any
   ): Promise<CardInstanceType<T>> {
     return _deserialize(address).value as CardInstanceType<T>;
+  }
+
+  static [queryableValue](val: string | undefined): string | undefined {
+    if (val) {
+      return EthereumAddressCard[serialize](val);
+    } else {
+      return undefined;
+    }
   }
 
   static embedded = class Embedded extends Component<typeof this> {
