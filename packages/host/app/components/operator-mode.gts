@@ -12,6 +12,7 @@ import { Modal } from '@cardstack/boxel-ui';
 import SearchSheet, {
   SearchSheetMode,
 } from '@cardstack/host/components/search-sheet';
+import AiChat from '@cardstack/host/components/ai-chat';
 import { restartableTask } from 'ember-concurrency';
 import {
   Deferred,
@@ -196,6 +197,63 @@ export default class OperatorMode extends Component<Signature> {
       cardFieldValue.set(fieldName, (card as any)[fieldName]);
       this.cardFieldValues.set(card, cardFieldValue);
     }
+  }
+
+  private aiAPI: Actions = {
+    documentation: () => {
+      return [{
+          "name": "updateCard",
+          "description": "Updates the current card with the given values, accepts patches. Changes will be immediately visible to the user, this is the main way of altering the content of a card. Callable as updateCard({patch: {field: value}})",
+          "parameters": {
+                "type": "object",
+                "properties": {
+                  "patch": {
+                    "description": "A map of field names to values, this must match a subset of the card structure",
+                    "type": "object"
+                  }
+                  },
+                "required": [
+                  "patch"
+                ],
+            
+          },
+        },
+        {
+          "name": "closeCard",
+          "description": "Closes the card the user is looking at, optionally saving it. Example calls: closeCard(true), closeCard(false)",
+          "parameters": {
+                "type": "object",
+                "properties": {
+                  "save": {
+                    "description": "Whether to save the card before closing",
+                    "type": "boolean"
+                  }
+                  },
+                "required": [
+                  "save"
+                ],
+            
+          },
+        },
+      ]
+    },
+    closeCard: async (args) => {
+      let {save} = args;
+      if (save) {
+        console.log("Saving!", save);
+        await this.save(this.stack[this.stack.length - 1]);
+      } else {
+        console.log("Not saving");
+      }
+      await this.close(this.stack[this.stack.length - 1]);
+    },
+    updateCard: async (data: StringMap) => {
+      data = data.patch || data;
+      await this.setFieldValues(this.stack[this.stack.length - 1].card, data);
+    },
+    getContext: async () => {
+      return this.cardService.api.serializeCard(this.stack[this.stack.length - 1].card);
+    },
   }
 
   private publicAPI: Actions = {
@@ -398,6 +456,11 @@ export default class OperatorMode extends Component<Signature> {
         @onFocus={{this.onFocusSearchInput}}
         @onSearch={{this.onSearch}}
       />
+      <AiChat 
+        @onClose={{this.onCloseAiChat}}
+        @onOpen={{this.onOpenAiChat}}
+        @api={{this.aiAPI}}
+        />
     </Modal>
     <style>
       :global(:root) {
