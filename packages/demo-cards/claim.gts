@@ -333,7 +333,7 @@ export class Claim extends Card {
   @field explanation = contains(StringCard);
   @field signature = contains(StringCard);
   @field encoding = contains(StringCard);
-  @field chain = linksTo(() => Chain);
+  @field chain = linksTo(Chain);
   @field title = contains(StringCard, {
     computeVia: function (this: Claim) {
       return `Claim for ${this.safeAddress}`;
