@@ -78,6 +78,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build host dist/ for fastboot
         run: pnpm build
+        env:
+          JOBS: 1
         working-directory: packages/host
       - name: Start realm servers
         run: pnpm start:all &
@@ -100,6 +102,8 @@ jobs:
         working-directory: packages/matrix
       - name: Build host dist/ for fastboot
         run: pnpm build
+        env:
+          JOBS: 1
         working-directory: packages/host
       - name: Start realm servers
         run: pnpm start:all &
@@ -123,6 +127,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build host dist/ for fastboot
         run: pnpm build
+        env:
+          JOBS: 1
         working-directory: packages/host
       - name: Start base realm server
         run: pnpm start:all &
