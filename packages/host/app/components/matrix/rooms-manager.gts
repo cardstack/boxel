@@ -18,7 +18,10 @@ import {
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import { LinkTo } from '@ember/routing';
 import { eventDebounceMs } from '@cardstack/host/lib/matrix-utils';
-import { getRoomCard, RoomCardResource } from '@cardstack/host/resources/room-card';
+import {
+  getRoomCard,
+  RoomCardResource,
+} from '@cardstack/host/resources/room-card';
 import { TrackedMap } from 'tracked-built-ins';
 import RouterService from '@ember/routing/router-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -79,16 +82,15 @@ export default class RoomsManager extends Component {
       <div class='room-list' data-test-invites-list>
         <h3>Invites</h3>
         {{#each this.sortedInvites as |invite|}}
-          <div
-            class='room'
-            data-test-invited-room={{invite.room.name}}
-          >
+          <div class='room' data-test-invited-room={{invite.room.name}}>
             <span class='room-item'>
               {{invite.room.name}}
               (from:
               <span
-                data-test-invite-sender={{invite.member.membershipInitiator.displayName}}
-              >{{invite.member.membershipInitiator.displayName}})</span>
+                data-test-invite-sender={{niceName
+                  invite.member.membershipInitiator
+                }}
+              >{{niceName invite.member.membershipInitiator}})</span>
             </span>
             <Button
               data-test-decline-room-btn={{invite.room.name}}
@@ -109,10 +111,7 @@ export default class RoomsManager extends Component {
       <div class='room-list' data-test-rooms-list>
         <h3>Rooms</h3>
         {{#each this.sortedJoinedRooms as |joined|}}
-          <div
-            class='room'
-            data-test-joined-room={{joined.room.name}}
-          >
+          <div class='room' data-test-joined-room={{joined.room.name}}>
             <span class='room-item'>
               <LinkTo
                 class='link'
@@ -327,6 +326,10 @@ export default class RoomsManager extends Component {
     this.newRoomInvite = [];
     this.isCreateRoomMode = false;
   }
+}
+
+function niceName(userId: string): string {
+  return userId.split(':')[0].substring(1);
 }
 
 declare module '@glint/environment-ember-loose/registry' {

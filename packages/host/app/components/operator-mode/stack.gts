@@ -57,6 +57,8 @@ export default class OperatorModeStack extends Component<Signature> {
         justify-content: center;
         overflow: hidden;
         z-index: 0;
+        margin-left: var(--boxel-sp-xs);
+        margin-right: var(--boxel-sp-xs);
       }
     </style>
   </template>

@@ -12,7 +12,7 @@ import { Claim } from './claim';
 export class ClaimList extends Card {
   static displayName = 'List of Claims';
   @field description = contains(StringCard);
-  @field claims = linksToMany(() => Claim);
+  @field claims = linksToMany(Claim);
   @field title = contains(StringCard, {
     computeVia: function (this: ClaimList) {
       return this.constructor.displayName;

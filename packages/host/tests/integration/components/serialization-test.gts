@@ -18,6 +18,7 @@ import {
 import { fillIn, RenderingTestContext } from '@ember/test-helpers';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import { isAddress } from 'ethers';
+import { type Card as CardType } from 'https://cardstack.com/base/card-api';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let cardRef: typeof import('https://cardstack.com/base/card-ref');
@@ -125,11 +126,11 @@ module('Integration | serialization', function (hooks) {
         },
       },
     };
-    let savedCard = await createFromSerialized(
+    let savedCard = (await createFromSerialized(
       resource,
       { data: resource },
       undefined
-    );
+    )) as CardType;
 
     assert.strictEqual(
       savedCard.id,

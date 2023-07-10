@@ -57,7 +57,7 @@ export class RoomObjectiveCard extends Card {
       let desiredMessages = this.room.messages.filter((m) =>
         m.message.match(/^[\W_b]*[Hh][Ee][Ll][Ll][Oo][\W_\b]*$/)
       );
-      return desiredMessages.map((m) => m.author);
+      return [...new Set(desiredMessages.map((m) => m.author))];
     },
   });
   @field usersThatNeedToCompleteTask = containsMany(RoomMemberCard, {
