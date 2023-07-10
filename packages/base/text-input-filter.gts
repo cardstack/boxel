@@ -1,7 +1,5 @@
 import { tracked } from '@glimmer/tracking';
 
-import { timeout, restartableTask } from 'ember-concurrency';
-
 export type DeserializedResult<T> = {
   value: T | null; //the expected deserialized value. If deserialiation fails the value is expected to be null
   errorMessage?: string;
@@ -62,13 +60,8 @@ export class TextInputFilter<T> {
 
   onInput = async (inputVal: string) => {
     let deserialized = this.deserialize(inputVal);
-    this.updateValue.perform(deserialized.value);
+    this.setValue(deserialized.value);
     this._lastEditedInputValue = inputVal;
     this._errorMessage = deserialized.errorMessage;
   };
-
-  private updateValue = restartableTask(async (value: T | null) => {
-    await timeout(300); //debouncing so that value not updated immediately
-    this.setValue(value);
-  });
 }
