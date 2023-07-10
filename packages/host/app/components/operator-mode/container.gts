@@ -312,9 +312,11 @@ export default class OperatorModeContainer extends Component<Signature> {
   // For now use the background from the 1st stack, but eventually, each stack to have its own background URL
   fetchBackgroundImageURL = trackedFunction(this, async () => {
     let mostBottomCard = this.stacks[0]?.items[0]?.card;
-    let realmInfoSymbol = await this.cardService.realmInfoSymbol();
-    // @ts-ignore allows using Symbol as an index
-    return mostBottomCard?.[realmInfoSymbol]?.backgroundURL;
+    let realmInfo;
+    if (mostBottomCard) {
+      realmInfo = await this.cardService.getRealmInfo(mostBottomCard);
+    }
+    return realmInfo?.backgroundURL;
   });
 
   get backgroundImageURL() {

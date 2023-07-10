@@ -9,6 +9,8 @@ export default class HeaderUsage extends Component {
   @tracked title = 'Header';
   @tracked hasBackground = true;
   @tracked isHighlighted = false;
+  @tracked iconURL =
+    'https://ipfs.io/ipfs/QmQJ4AYtLLvi1kiVWWM2n8zisJaeWCb53XHCywLSAiF5nP';
 
   <template>
     <FreestyleUsage @name='Header'>
@@ -20,6 +22,7 @@ export default class HeaderUsage extends Component {
           @title={{this.title}}
           @hasBackground={{this.hasBackground}}
           @isHighlighted={{this.isHighlighted}}
+          @iconURL={{this.iconURL}}
         >
           <:actions>
             <BoxelButton>Edit</BoxelButton>
@@ -46,6 +49,12 @@ export default class HeaderUsage extends Component {
           @defaultValue={{false}}
           @value={{this.isHighlighted}}
           @onInput={{fn (mut this.isHighlighted)}}
+        />
+        <Args.String
+          @name='icon URL'
+          @description='Header icon URL'
+          @value={{this.iconURL}}
+          @onInput={{fn (mut this.iconURL)}}
         />
         <Args.Yield @description='Content' />
       </:api>

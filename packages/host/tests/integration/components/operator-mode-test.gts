@@ -495,7 +495,7 @@ module('Integration | operator-mode', function (hooks) {
           },
         },
       },
-      '.realm.json': `{ "name": "${realmName}" }`,
+      '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
       ...Object.fromEntries(personCards),
     });
     realm = await TestRealm.createWithAdapter(adapter, this.owner);
@@ -537,6 +537,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor('[data-test-person]');
     assert.dom('[data-test-boxel-header-title]').hasText('Person');
+    assert.dom(`[data-test-boxel-header-icon="https://example-icon.test"]`).exists();
     assert.dom('[data-test-person]').hasText('Fadhlan');
     assert.dom('[data-test-first-letter-of-the-name]').hasText('F');
     assert.dom('[data-test-city]').hasText('Bandung');

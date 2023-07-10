@@ -6,6 +6,7 @@ import Label from '../label';
 interface Signature {
   Element: HTMLElement;
   Args: {
+    iconURL?: string;
     label?: string;
     title?: string;
     size?: 'large';
@@ -28,12 +29,17 @@ const Header: TemplateOnlyComponent<Signature> = <template>
     data-test-boxel-header
     ...attributes
   >
-    {{#if (or @label @title)}}
-      <div data-test-boxel-header-title>
-        {{#if @label}}<Label
-            data-test-boxel-header-label
-          >{{@label}}</Label>{{/if}}
-        {{#if @title}}{{@title}}{{/if}}
+    {{#if (or @label @title @iconURL) }}
+      <div class="header__row">
+        {{#if @iconURL}}
+          <img class="header__icon" src={{@iconURL}} data-test-boxel-header-icon={{@iconURL}}/>
+        {{/if}}
+        <div data-test-boxel-header-title>
+          {{#if @label}}<Label
+              data-test-boxel-header-label
+            >{{@label}}</Label>{{/if}}
+          {{#if @title}}{{@title}}{{/if}}
+        </div>
       </div>
     {{/if}}
 
@@ -80,6 +86,16 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       right: 0;
       display: flex;
       align-items: center;
+    }
+    .header__row {
+      display: flex;
+      flex-direction: row;
+      gap: var(--boxel-sp-xs);
+      align-items: center;
+    }
+    .header__icon {
+      width: var(--boxel-header-icon-width, 20px);
+      height: var(--boxel-header-icon-height, 20px);
     }
   </style>
 </template>;

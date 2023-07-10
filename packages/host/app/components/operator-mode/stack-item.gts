@@ -3,7 +3,9 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { Card, CardContext } from 'https://cardstack.com/base/card-api';
 import Preview from '@cardstack/host/components/preview';
+import { trackedFunction } from 'ember-resources/util/function';
 import { fn, array } from '@ember/helper';
+import type CardService from '@cardstack/host/services/card-service';
 
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import optional from '@cardstack/boxel-ui/helpers/optional';
@@ -11,6 +13,7 @@ import cn from '@cardstack/boxel-ui/helpers/cn';
 import { IconButton, Header, CardContainer, Button } from '@cardstack/boxel-ui';
 import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 
+import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { TrackedArray } from 'tracked-built-ins';
 import LinksToCardComponentModifier from '@cardstack/host/modifiers/links-to-card-component-modifier';
@@ -23,6 +26,7 @@ import { StackItem } from '@cardstack/host/components/operator-mode/container';
 
 import { htmlSafe, SafeString } from '@ember/template';
 import OperatorModeOverlays from '@cardstack/host/components/operator-mode/overlays';
+import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 
 interface Signature {
   Args: {
@@ -49,6 +53,7 @@ export interface RenderedLinksToCard {
 export default class OperatorModeStackItem extends Component<Signature> {
   @tracked renderedLinksToCards = new TrackedArray<RenderedLinksToCard>([]);
   @tracked selectedCards = new TrackedArray<Card>([]);
+  @service declare cardService: CardService;
 
   get styleForStackedCard(): SafeString {
     let itemsOnStackCount = this.args.stackItems.length;
@@ -110,6 +115,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
     }
   }
 
+  fetchIconURL = trackedFunction(this, async () => {
+    let card = this.args.item.card;
+    let realmInfo = await this.cardService.getRealmInfo(card);
+    return realmInfo?.iconURL;
+  });
+
+  get iconURL() {
+    return this.fetchIconURL.value ?? '/default-realm-icon.png';
+  }
+
   <template>
     <div
       class='item {{if this.isBuried "buried"}}'
@@ -119,11 +134,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
     >
       <CardContainer class={{cn 'card' edit=(eq @item.format 'edit')}}>
         <Header
+          @iconURL={{this.iconURL}}
           @title={{cardTypeDisplayName @item.card}}
           class='header'
           {{on
             'click'
             (optional (if this.isBuried (fn @dismissStackedCardsAbove @index)))
+          }}
+          style={{cssVar 
+            boxel-header-icon-width='30px' 
+            boxel-header-icon-height='30px'
           }}
           data-test-stack-card-header
         >
