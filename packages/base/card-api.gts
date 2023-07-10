@@ -98,7 +98,15 @@ interface NotLoadedValue {
 
 export interface CardContext {
   actions?: Actions;
-  cardComponentModifier?: typeof Modifier<any>;
+  cardComponentModifier?: typeof Modifier<{
+    Args: {
+      Named: {
+        card: Card;
+        format: Format;
+        fieldType: string | undefined;
+      };
+    };
+  }>;
   renderedIn?: Component<any>;
 }
 

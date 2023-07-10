@@ -1,7 +1,7 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { Card, CardContext } from 'https://cardstack.com/base/card-api';
+import { Card, CardContext, Format } from 'https://cardstack.com/base/card-api';
 import Preview from '@cardstack/host/components/preview';
 import { fn, array } from '@ember/helper';
 
@@ -13,7 +13,6 @@ import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import { tracked } from '@glimmer/tracking';
 import { TrackedArray } from 'tracked-built-ins';
-import LinksToCardComponentModifier from '@cardstack/host/modifiers/links-to-card-component-modifier';
 import { schedule } from '@ember/runloop';
 
 import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
@@ -23,6 +22,7 @@ import { StackItem } from '@cardstack/host/components/operator-mode/container';
 
 import { htmlSafe, SafeString } from '@ember/template';
 import OperatorModeOverlays from '@cardstack/host/components/operator-mode/overlays';
+import ElementTracker from '../../resources/element-tracker';
 
 interface Signature {
   Args: {
@@ -47,8 +47,27 @@ export interface RenderedLinksToCard {
 }
 
 export default class OperatorModeStackItem extends Component<Signature> {
-  @tracked renderedLinksToCards = new TrackedArray<RenderedLinksToCard>([]);
   @tracked selectedCards = new TrackedArray<Card>([]);
+
+  cardTracker = new ElementTracker<{
+    card: Card;
+    format: Format;
+    fieldType: string | undefined;
+  }>();
+
+  get renderedLinksToCards(): RenderedLinksToCard[] {
+    return this.cardTracker.elements
+      .filter((entry) => {
+        return entry.meta.fieldType === 'linksTo';
+      })
+      // this mapping could probably be eliminated or simplified if we refactor OperatorModeOverlays to accept our type
+      .map((entry) => ({
+        element: entry.element,
+        card: entry.meta.card,
+        context: {}, // todo remove me
+        stackedAtIndex: 0, // todo remove me
+      }));
+  }
 
   get styleForStackedCard(): SafeString {
     let itemsOnStackCount = this.args.stackItems.length;
@@ -70,7 +89,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   get context() {
     return {
       renderedIn: this as Component<any>,
-      cardComponentModifier: LinksToCardComponentModifier,
+      cardComponentModifier: this.cardTracker.trackElement,
       actions: this.args.publicAPI,
     };
   }

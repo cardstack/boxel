@@ -69,7 +69,11 @@ export function getBoxComponent(
           class='field-component-card
             {{format}}-card
             {{if (isSaved model.value) "saved" "not-saved"}}'
-          {{cardComponentModifier model.value context}}
+          {{cardComponentModifier
+            card=model.value
+            format=format
+            fieldType=field.fieldType
+          }}
           data-test-field-component-card
         >
           <Implementation
