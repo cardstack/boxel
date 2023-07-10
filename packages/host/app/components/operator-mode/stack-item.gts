@@ -1,7 +1,7 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { Card, CardContext, Format } from 'https://cardstack.com/base/card-api';
+import type { Card, Format, FieldType } from 'https://cardstack.com/base/card-api';
 import Preview from '@cardstack/host/components/preview';
 import { fn, array } from '@ember/helper';
 
@@ -42,8 +42,6 @@ interface Signature {
 export interface RenderedLinksToCard {
   element: HTMLElement;
   card: Card;
-  context: CardContext;
-  stackedAtIndex: number;
 }
 
 export default class OperatorModeStackItem extends Component<Signature> {
@@ -51,8 +49,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   cardTracker = new ElementTracker<{
     card: Card;
-    format: Format;
-    fieldType: string | undefined;
+    format: Format | 'data';
+    fieldType: FieldType | undefined;
   }>();
 
   get renderedLinksToCards(): RenderedLinksToCard[] {
@@ -63,9 +61,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       // this mapping could probably be eliminated or simplified if we refactor OperatorModeOverlays to accept our type
       .map((entry) => ({
         element: entry.element,
-        card: entry.meta.card,
-        context: {}, // todo remove me
-        stackedAtIndex: 0, // todo remove me
+        card: entry.meta.card
       }));
   }
 
@@ -96,16 +92,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   registerLinkedCardElement(
     linksToCardElement: HTMLElement,
-    linksToCard: Card,
-    context: CardContext
+    linksToCard: Card
   ) {
     // Without scheduling this after render, this produces the "attempted to update value, but it had already been used previously in the same computation" type error
     schedule('afterRender', () => {
       this.renderedLinksToCards.push({
         element: linksToCardElement,
-        card: linksToCard,
-        stackedAtIndex: this.args.index,
-        context,
+        card: linksToCard
       });
     });
   }

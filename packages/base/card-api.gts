@@ -102,8 +102,8 @@ export interface CardContext {
     Args: {
       Named: {
         card: Card;
-        format: Format;
-        fieldType: string | undefined;
+        format: Format | 'data';
+        fieldType: FieldType | undefined;
       };
     };
   }>;
@@ -1345,7 +1345,7 @@ function fieldComponent(
       (model.value[fieldName]?.constructor as typeof CardBase) ?? field.card;
   }
   let innerModel = model.field(fieldName) as unknown as Box<CardBase>;
-  return getBoxComponent(card, format, innerModel, context);
+  return getBoxComponent(card, format, innerModel, field, context);
 }
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
@@ -1513,8 +1513,13 @@ export class CardBase {
     return _createFromSerialized(this, data, doc, relativeTo, identityContext);
   }
 
-  static getComponent(card: CardBase, format: Format, context?: CardContext) {
-    return getComponent(card, format, context);
+  static getComponent(
+    card: CardBase,
+    format: Format,
+    field?: Field,
+    context?: CardContext
+  ) {
+    return getComponent(card, format, field, context);
   }
 
   constructor(data?: Record<string, any>) {
@@ -2177,6 +2182,7 @@ export type SignatureFor<CardT extends CardBaseConstructor> = {
 export function getComponent(
   model: CardBase,
   format: Format,
+  field?: Field,
   context?: CardContext
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let box = Box.create(model);
@@ -2184,6 +2190,7 @@ export function getComponent(
     model.constructor as CardBaseConstructor,
     format,
     box,
+    field,
     context
   );
   return component;
