@@ -1,5 +1,7 @@
 import { tracked } from '@glimmer/tracking';
 
+import { timeout, restartableTask } from 'ember-concurrency';
+
 export type DeserializedResult<T> = {
   value: T | null; //the expected deserialized value. If deserialiation fails the value is expected to be null
   errorMessage?: string;
@@ -30,20 +32,21 @@ export class TextInputFilter<T> {
     private getValue: () => T | null,
     private setValue: (val: T | null | undefined) => void,
     private deserialize: (
-      value: string | null | undefined
+      inputValue: string | null | undefined
     ) => DeserializedResult<T>,
     private serialize: (val: T | null | undefined) => string | undefined = (
       v
     ) => (!v ? undefined : String(v))
   ) {}
-  @tracked result: DeserializedResult<string> | undefined;
+  @tracked _lastEditedInputValue: string | undefined;
+  @tracked _errorMessage: string | undefined;
 
   get asString(): string {
     let serialized = this.serialize(this.getValue());
-    if (serialized != null && this.result?.value !== serialized) {
+    if (serialized) {
       return serialized;
     }
-    return this.result?.value || '';
+    return this._lastEditedInputValue || '';
   }
 
   get isInvalid() {
@@ -52,14 +55,20 @@ export class TextInputFilter<T> {
 
   get errorMessage(): string | undefined {
     if (this.isInvalid) {
-      return this.result?.errorMessage;
+      return this._errorMessage;
     }
     return;
   }
 
   onInput = async (inputVal: string) => {
     let deserialized = this.deserialize(inputVal);
-    this.setValue(deserialized.value);
-    this.result = { value: inputVal, errorMessage: deserialized.errorMessage };
+    this.updateValue.perform(deserialized.value);
+    this._lastEditedInputValue = inputVal;
+    this._errorMessage = deserialized.errorMessage;
   };
+
+  private updateValue = restartableTask(async (value: T | null) => {
+    await timeout(300); //debouncing so that value not updated immediately
+    this.setValue(value);
+  });
 }
