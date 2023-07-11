@@ -306,6 +306,17 @@ export default class OperatorModeStackItem extends Component<Signature> {
         font: 500 var(--boxel-font-sm);
         padding: 0 var(--boxel-sp-xs);
       }
+
+      .edit .header {
+        background: var(--boxel-cyan);
+        color: var(--boxel-light);
+      }
+
+      .edit .icon-button {
+        --icon-bg: var(--boxel-light);
+        --icon-border: none;
+        --icon-color: var(--boxel-light);
+      }
     </style>
   </template>
 }

@@ -7,7 +7,6 @@ import {
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import NumberCard from 'https://cardstack.com/base/number';
 import StringCard from 'https://cardstack.com/base/string';
-import { Booking } from './booking';
 
 export class Pet extends Card {
   static displayName = 'Pet';
@@ -16,7 +15,6 @@ export class Pet extends Card {
   @field favoriteTreat = contains(StringCard);
   @field cutenessRating = contains(NumberCard);
   @field sleepsOnTheCouch = contains(BooleanCard);
-  @field appointment = contains(() => Booking);
   @field title = contains(StringCard, {
     computeVia: function (this: Pet) {
       return this.firstName;

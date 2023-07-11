@@ -225,9 +225,11 @@ class Isolated extends Component<typeof Claim> {
         from: r.from,
         to: r.to,
         // Workaround. Runtime doesn't correspond to types so we check type here
-        gasUsed: r.gasUsed._isBigNumber ? parseInt(r.gasUsed._hex) : r.gasUsed,
+        // We transform the BigNumber into a string which is expected serialized form
+        // It's one extra step to convert .toBigInt and then serialize it from there
+        gasUsed: r.gasUsed._isBigNumber ? r.gasUsed.toString() : r.gasUsed,
         effectiveGasPrice: r.effectiveGasPrice._isBigNumber
-          ? parseInt(r.effectiveGasPrice._hex)
+          ? r.effectiveGasPrice.toString()
           : r.effectiveGasPrice,
       };
 
@@ -333,7 +335,7 @@ export class Claim extends Card {
   @field explanation = contains(StringCard);
   @field signature = contains(StringCard);
   @field encoding = contains(StringCard);
-  @field chain = linksTo(() => Chain);
+  @field chain = linksTo(Chain);
   @field title = contains(StringCard, {
     computeVia: function (this: Claim) {
       return `Claim for ${this.safeAddress}`;

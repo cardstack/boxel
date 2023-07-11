@@ -196,7 +196,7 @@ export async function flushLogs() {
 }
 
 export class IdentityContext {
-  readonly identities = new Map<string, CardBase>();
+  readonly identities = new Map<string, Card>();
 }
 
 type JSONAPIResource =
@@ -924,7 +924,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     notLoaded: NotLoadedValue | NotLoaded,
     identityContext: IdentityContext,
     relativeTo: URL | undefined
-  ): Promise<CardBase> {
+  ): Promise<Card> {
     let { reference: maybeRelativeReference } = notLoaded;
     let reference = new URL(
       maybeRelativeReference as string,
@@ -953,7 +953,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
       );
     }
 
-    let fieldInstance = await createFromSerialized(
+    let fieldInstance = (await createFromSerialized(
       json.data,
       json,
       new URL(json.data.id),
@@ -961,7 +961,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
         loader,
         identityContext,
       }
-    );
+    )) as Card; // a linksTo field could only be a composite card
     return fieldInstance;
   }
 
@@ -1198,13 +1198,13 @@ class LinksToMany<FieldT extends CardConstructor>
     return new WatchedArray(() => logger.log(recompute(instance)), values);
   }
 
-  async handleNotLoadedError<T extends CardBase>(
+  async handleNotLoadedError<T extends Card>(
     instance: T,
     e: NotLoaded,
     opts?: RecomputeOptions
   ): Promise<T[] | undefined> {
     let result: T[] | undefined;
-    let fieldValues: CardBase[] = [];
+    let fieldValues: Card[] = [];
     let identityContext =
       identityContexts.get(instance) ?? new IdentityContext();
 
@@ -1252,17 +1252,17 @@ class LinksToMany<FieldT extends CardConstructor>
   }
 
   private async loadMissingFields(
-    instance: CardBase,
+    instance: Card,
     notLoaded: NotLoaded,
     identityContext: IdentityContext,
     relativeTo: URL | undefined
-  ): Promise<CardBase[]> {
+  ): Promise<Card[]> {
     let refs = (notLoaded.reference as string[]).map(
       (ref) => new URL(ref, instance.id ?? relativeTo).href // new instances may not yet have an ID, in that case fallback to the relativeTo
     );
     let loader = Loader.getLoaderFor(createFromSerialized);
     let errors = [];
-    let fieldInstances: CardBase[] = [];
+    let fieldInstances: Card[] = [];
 
     for (let reference of refs) {
       let response = await loader.fetch(reference, {
@@ -1286,7 +1286,7 @@ class LinksToMany<FieldT extends CardConstructor>
             )}`
           );
         }
-        let fieldInstance = await createFromSerialized(
+        let fieldInstance = (await createFromSerialized(
           json.data,
           json,
           new URL(json.data.id),
@@ -1294,7 +1294,7 @@ class LinksToMany<FieldT extends CardConstructor>
             loader,
             identityContext,
           }
-        );
+        )) as Card; // A linksTo field could only be a composite card
         fieldInstances.push(fieldInstance);
       }
     }
@@ -1359,14 +1359,14 @@ export const field = function (
 (field as any)[fieldDecorator] = undefined;
 
 export function containsMany<CardT extends CardBaseConstructor>(
-  cardOrThunk: CardT | (() => CardT),
+  card: CardT,
   options?: Options
 ): CardInstanceType<CardT>[] {
   return {
     setupField(fieldName: string) {
       return makeDescriptor(
         new ContainsMany(
-          cardThunk(cardOrThunk),
+          cardThunk(card),
           options?.computeVia,
           fieldName,
           options?.isUsed
@@ -1378,14 +1378,14 @@ export function containsMany<CardT extends CardBaseConstructor>(
 containsMany[fieldType] = 'contains-many' as FieldType;
 
 export function contains<CardT extends CardBaseConstructor>(
-  cardOrThunk: CardT | (() => CardT),
+  card: CardT,
   options?: Options
 ): CardInstanceType<CardT> {
   return {
     setupField(fieldName: string) {
       return makeDescriptor(
         new Contains(
-          cardThunk(cardOrThunk),
+          cardThunk(card),
           options?.computeVia,
           fieldName,
           options?.isUsed
@@ -1535,8 +1535,6 @@ export class CardBase {
       }
     }
   }
-
-  @field id = contains(() => IDCard);
 }
 
 export function isCard(card: any): card is CardBase {
@@ -1583,6 +1581,7 @@ export class StringCard extends CardBase {
 }
 
 export class Card extends CardBase {
+  @field id = contains(IDCard);
   @field title = contains(StringCard);
 }
 
@@ -1693,11 +1692,11 @@ interface NotLoadedRelationship {
 }
 interface LoadedRelationship {
   type: 'loaded';
-  card: CardBase | null;
+  card: Card | null;
 }
 
 export function relationshipMeta(
-  instance: CardBase,
+  instance: Card,
   fieldName: string
 ): RelationshipMeta | RelationshipMeta[] | undefined {
   let field = getField(
@@ -1712,7 +1711,7 @@ export function relationshipMeta(
   if (!(field.fieldType === 'linksTo' || field.fieldType === 'linksToMany')) {
     return undefined;
   }
-  let related = getter(instance, field);
+  let related = getter(instance, field) as Card; // only compound cards can be linksTo fields
   if (field.fieldType === 'linksToMany') {
     if (!Array.isArray(related)) {
       throw new Error(
@@ -1793,7 +1792,7 @@ export interface SerializeOpts {
 }
 
 function serializeCardResource(
-  model: CardBase,
+  model: Card,
   doc: JSONAPISingleResourceDocument,
   opts?: SerializeOpts,
   visited: Set<string> = new Set()
@@ -1822,7 +1821,7 @@ function serializeCardResource(
 }
 
 export function serializeCard(
-  model: CardBase,
+  model: Card,
   opts?: SerializeOpts
 ): LooseSingleCardDocument {
   let doc = {
@@ -1966,7 +1965,7 @@ async function _updateFromSerialized<T extends CardBaseConstructor>(
   identityContext: IdentityContext
 ): Promise<CardInstanceType<T>> {
   if (resource.id != null) {
-    identityContext.identities.set(resource.id, instance);
+    identityContext.identities.set(resource.id, instance as Card); // the instance must be a composite card since we are updating it from a resource
   }
   let deferred = new Deferred<CardBase>();
   let card = Reflect.getPrototypeOf(instance)!.constructor as T;
@@ -2024,7 +2023,7 @@ async function _updateFromSerialized<T extends CardBaseConstructor>(
   // this block needs to be synchronous
   {
     let wasSaved = instance[isSavedInstance];
-    let originalId = instance.id;
+    let originalId = (instance as Card).id; // the instance is a composite card
     instance[isSavedInstance] = false;
     for (let [fieldName, value] of values) {
       if (fieldName === 'id' && wasSaved && originalId !== value) {

@@ -15,7 +15,7 @@ export class Booking extends Card {
   @field venue = contains(StringCard);
   @field startTime = contains(DateTimeCard);
   @field endTime = contains(DateTimeCard);
-  @field hosts = containsMany(() => Person);
+  @field hosts = containsMany(Person);
   @field sponsors = containsMany(StringCard);
 
   static embedded = class Embedded extends Component<typeof this> {

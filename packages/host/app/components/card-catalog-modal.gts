@@ -6,10 +6,7 @@ import { action } from '@ember/object';
 import { htmlSafe } from '@ember/template';
 import { registerDestructor } from '@ember/destroyable';
 import { enqueueTask, restartableTask } from 'ember-concurrency';
-import type {
-  CardBase,
-  CardContext,
-} from 'https://cardstack.com/base/card-api';
+import type { Card, CardContext } from 'https://cardstack.com/base/card-api';
 import type { Query } from '@cardstack/runtime-common/query';
 import { createNewCard, type CardRef } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
@@ -251,12 +248,12 @@ export default class CardCatalogModal extends Component<Signature> {
   @tracked currentRequest:
     | {
         search: Search;
-        deferred: Deferred<CardBase | undefined>;
+        deferred: Deferred<Card | undefined>;
         opts?: { offerToCreate?: CardRef };
       }
     | undefined = undefined;
   @tracked zIndex = 20;
-  @tracked selectedCard?: CardBase = undefined;
+  @tracked selectedCard?: Card = undefined;
   @tracked cardURL = '';
   @tracked hasCardURLError = false;
   @service declare cardService: CardService;
@@ -289,7 +286,7 @@ export default class CardCatalogModal extends Component<Signature> {
   }
 
   // This is part of our public API for runtime-common to invoke the card chooser
-  async chooseCard<T extends CardBase>(
+  async chooseCard<T extends Card>(
     query: Query,
     opts?: { offerToCreate?: CardRef }
   ): Promise<undefined | T> {
@@ -298,7 +295,7 @@ export default class CardCatalogModal extends Component<Signature> {
   }
 
   private _chooseCard = enqueueTask(
-    async <T extends CardBase>(
+    async <T extends Card>(
       query: Query,
       opts: { offerToCreate?: CardRef } = {}
     ) => {
@@ -376,7 +373,7 @@ export default class CardCatalogModal extends Component<Signature> {
     }
   }
 
-  @action toggleSelect(card?: CardBase): void {
+  @action toggleSelect(card?: Card): void {
     this.cardURL = '';
     if (this.selectedCard?.id === card?.id) {
       this.selectedCard = undefined;
@@ -385,7 +382,7 @@ export default class CardCatalogModal extends Component<Signature> {
     this.selectedCard = card;
   }
 
-  @action pick(card?: CardBase) {
+  @action pick(card?: Card) {
     if (this.currentRequest) {
       this.currentRequest.deferred.fulfill(card);
       this.currentRequest = undefined;
