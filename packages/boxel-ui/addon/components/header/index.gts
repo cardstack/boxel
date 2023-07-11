@@ -30,7 +30,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
     ...attributes
   >
     {{#if @iconURL}}
-      <img class="header__icon" src={{@iconURL}} data-test-boxel-header-icon={{@iconURL}} alt="Header icon"/>
+      <img class="icon" src={{@iconURL}} data-test-boxel-header-icon={{@iconURL}} alt="Header icon"/>
     {{/if}}
     {{#if (or @label @title) }}
       <div data-test-boxel-header-title>
@@ -85,7 +85,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       display: flex;
       align-items: center;
     }
-    .header__icon {
+    .icon {
       width: var(--boxel-header-icon-width, 20px);
       height: var(--boxel-header-icon-height, 20px);
     }
