@@ -13,7 +13,6 @@ import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import { tracked } from '@glimmer/tracking';
 import { TrackedArray } from 'tracked-built-ins';
-import { schedule } from '@ember/runloop';
 
 import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
 import BoxelMenu from '@cardstack/boxel-ui/components/menu';
@@ -56,7 +55,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
   get renderedLinksToCards(): RenderedLinksToCard[] {
     return this.cardTracker.elements
       .filter((entry) => {
-        return entry.meta.fieldType === 'linksTo';
+        return (
+          entry.meta.format === 'data' ||
+          entry.meta.fieldType === 'linksTo' ||
+          entry.meta.fieldType === 'linksToMany'
+        );
       })
       // this mapping could probably be eliminated or simplified if we refactor OperatorModeOverlays to accept our type
       .map((entry) => ({
@@ -90,30 +93,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
     };
   }
 
-  registerLinkedCardElement(
-    linksToCardElement: HTMLElement,
-    linksToCard: Card
-  ) {
-    // Without scheduling this after render, this produces the "attempted to update value, but it had already been used previously in the same computation" type error
-    schedule('afterRender', () => {
-      this.renderedLinksToCards.push({
-        element: linksToCardElement,
-        card: linksToCard
-      });
-    });
-  }
-
-  unregisterLinkedCardElement(card: Card) {
-    let index = this.renderedLinksToCards.findIndex(
-      (renderedLinksToCard) => renderedLinksToCard.card === card
-    );
-    if (index !== -1) {
-      this.renderedLinksToCards.splice(index, 1);
-    }
-  }
-
   @action toggleSelect(card: Card) {
-    let index = this.selectedCards.findIndex((c) => c.id === card.id);
+    let index = this.selectedCards.findIndex((c) => c === card);
 
     if (index === -1) {
       this.selectedCards.push(card);

@@ -1543,7 +1543,7 @@ export class CardBase {
   }
 }
 
-export function isCard(card: any): card is CardBase {
+export function isCard(card: any): card is Card {
   return card && typeof card === 'object' && isBaseCard in card;
 }
 
