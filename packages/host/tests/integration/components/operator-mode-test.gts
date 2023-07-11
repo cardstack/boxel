@@ -1472,4 +1472,19 @@ module('Integration | operator-mode', function (hooks) {
       .dom(`[data-test-boxel-input-validation-state="invalid"]`)
       .doesNotExist('invalid state is not shown');
   });
+
+  test(`it has an option to copy the card url`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+    await click('[data-test-edit-button]');
+    await click('[data-test-boxel-menu-item-text="Copy Card URL"]');
+    assert.dom('[data-test-boxel-menu-item]').doesNotExist();
+  });
 });
