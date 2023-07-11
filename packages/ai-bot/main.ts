@@ -118,8 +118,55 @@ function getUserMessage(request, card) {
     `
 }
 
+async function chunkStream(stream, client, room, sentId) {
+    let total = []
+    let unsent = 0;
+    for await (const part of stream) {
+        unsent += 1;
+        total.push(part);
+        if (unsent > 20) {
+            let content = total.map(part => part.choices[0].delta?.content).join('');
+            await client.sendEvent(room.roomId, "m.room.message",
+                {
+                    "body": content,
+                    "msgtype": "m.text",
+                    "formatted_body": content,
+                    "format": "org.matrix.custom.html",
+                    "m.new_content": {
+                        "body": content,
+                        "msgtype": "m.text",
+                        "formatted_body": content,
+                        "format": "org.matrix.custom.html"
+                    },
+                    "m.relates_to": {
+                        "rel_type": "m.replace",
+                        "event_id": sentId,
+                    }
+                });
+            unsent = 0;
+        }
+    }
+    let content = total.map(part => part.choices[0].delta?.content).join('');
+    await client.sendEvent(room.roomId, "m.room.message",
+        {
+            "body": content,
+            "msgtype": "m.text",
+            "formatted_body": content,
+            "format": "org.matrix.custom.html",
+            "m.new_content": {
+                "body": content,
+                "msgtype": "m.text",
+                "formatted_body": content,
+                "format": "org.matrix.custom.html"
+            },
+            "m.relates_to": {
+                "rel_type": "m.replace",
+                "event_id": sentId,
+            }
+        });
+}
+
 async function getResponse(event) {
-    console.log
     if (event.getContent().msgtype === "org.boxel.card") {
         let card = event.getContent().instance.data;
         console.log("Processing card: " + event);
@@ -181,52 +228,9 @@ async function getResponse(event) {
 
 
         const stream = await getResponse(event);
+        await chunkStream(stream, client, room, sentId);
         //await sendStream(stream, client, room, sentId);
-        let total = []
-        let unsent = 0;
-        for await (const part of stream) {
-            unsent += 1;
-            total.push(part);
-            if (unsent > 20) {
-                let content = total.map(part => part.choices[0].delta?.content).join('');
-                await client.sendEvent(room.roomId, "m.room.message",
-                    {
-                        "body": content,
-                        "msgtype": "m.text",
-                        "formatted_body": content,
-                        "format": "org.matrix.custom.html",
-                        "m.new_content": {
-                            "body": content,
-                            "msgtype": "m.text",
-                            "formatted_body": content,
-                            "format": "org.matrix.custom.html"
-                        },
-                        "m.relates_to": {
-                            "rel_type": "m.replace",
-                            "event_id": sentId,
-                        }
-                    });
-                unsent = 0;
-            }
-        }
-        let content = total.map(part => part.choices[0].delta?.content).join('');
-        await client.sendEvent(room.roomId, "m.room.message",
-            {
-                "body": content,
-                "msgtype": "m.text",
-                "formatted_body": content,
-                "format": "org.matrix.custom.html",
-                "m.new_content": {
-                    "body": content,
-                    "msgtype": "m.text",
-                    "formatted_body": content,
-                    "format": "org.matrix.custom.html"
-                },
-                "m.relates_to": {
-                    "rel_type": "m.replace",
-                    "event_id": sentId,
-                }
-            });
+
         //let content = chunks.map(part => part.choices[0].delta?.content).join('');
         //await client.sendHtmlMessage(room.roomId, content, content);
         //MatrixSDK.
