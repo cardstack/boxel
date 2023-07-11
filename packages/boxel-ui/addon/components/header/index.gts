@@ -6,6 +6,7 @@ import Label from '../label';
 interface Signature {
   Element: HTMLElement;
   Args: {
+    iconURL?: string;
     label?: string;
     title?: string;
     size?: 'large';
@@ -28,7 +29,10 @@ const Header: TemplateOnlyComponent<Signature> = <template>
     data-test-boxel-header
     ...attributes
   >
-    {{#if (or @label @title)}}
+    {{#if @iconURL}}
+      <img class="icon" src={{@iconURL}} data-test-boxel-header-icon={{@iconURL}} alt="Header icon"/>
+    {{/if}}
+    {{#if (or @label @title) }}
       <div data-test-boxel-header-title>
         {{#if @label}}<Label
             data-test-boxel-header-label
@@ -50,7 +54,6 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       position: relative;
       display: flex;
       align-items: center;
-      justify-content: space-between;
       padding: 0 var(--boxel-sp-xxxs) 0 var(--boxel-sp-sm);
       min-height: var(--boxel-header-min-height, 1.875rem); /* 30px */
       color: var(--boxel-header-text-color, var(--boxel-dark));
@@ -61,6 +64,7 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       text-transform: uppercase;
       transition: background-color var(--boxel-transition),
         color var(--boxel-transition);
+      gap: var(--boxel-sp-xs);
     }
     .large {
       padding: var(--boxel-sp-xl);
@@ -80,6 +84,10 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       right: 0;
       display: flex;
       align-items: center;
+    }
+    .icon {
+      width: var(--boxel-header-icon-width, 20px);
+      height: var(--boxel-header-icon-height, 20px);
     }
   </style>
 </template>;

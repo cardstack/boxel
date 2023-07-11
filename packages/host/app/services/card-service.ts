@@ -9,6 +9,7 @@ import {
   type CardDocument,
   type SingleCardDocument,
   type LooseSingleCardDocument,
+  type RealmInfo,
 } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import { importResource } from '../resources/import';
@@ -185,8 +186,8 @@ export default class CardService extends Service {
     return this.api.primitive in card;
   }
 
-  async realmInfoSymbol(): Promise<Symbol> {
+  async getRealmInfo(card: Card): Promise<RealmInfo | undefined> {
     await this.apiModule.loaded;
-    return this.api.realmInfo;
+    return card[this.api.realmInfo];
   }
 }
