@@ -21,6 +21,7 @@ import {
 } from '@cardstack/runtime-common';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type Card } from 'https://cardstack.com/base/card-api';
+import { type RoomCard } from 'https://cardstack.com/base/room';
 import type CardService from '@cardstack/host/services/card-service';
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
@@ -33,7 +34,8 @@ interface RoomArgs {
 }
 export default class Room extends Component<RoomArgs> {
   <template>
-    <div class="room-members">
+    <div>Number of cards: {{this.cards.length}}</div>
+    <div class='room-members'>
       <div data-test-room-members class='members'><b>Members:</b>
         {{this.memberNames}}
       </div>
@@ -50,7 +52,7 @@ export default class Room extends Component<RoomArgs> {
       {{#if this.doInvite.isRunning}}
         <LoadingIndicator />
       {{/if}}
-      <div class="invite-form">
+      <div class='invite-form'>
         <FieldContainer @label='Invite:' @tag='label'>
           <BoxelInput
             data-test-room-invite-field
@@ -59,7 +61,7 @@ export default class Room extends Component<RoomArgs> {
             @onInput={{this.setMembersToInvite}}
           />
         </FieldContainer>
-        <div class="invite-button-wrapper">
+        <div class='invite-button-wrapper'>
           <Button
             data-test-room-invite-cancel-btn
             {{on 'click' this.cancelInvite}}
@@ -249,6 +251,39 @@ export default class Room extends Component<RoomArgs> {
 
   private get objective() {
     return this.matrixService.roomObjectives.get(this.args.roomId);
+  }
+
+  @cached
+  private get cards() {
+    if (!this.roomCard) {
+      return [];
+    }
+    return this.roomCard.messages
+      .filter((m) => m.attachedCard)
+      .map((m) => m.attachedCard);
+  }
+
+  @cached
+  private get currentCards() {
+    if (!this.roomCard) {
+      return new Map();
+    }
+    let getVersion = (
+      Reflect.getPrototypeOf(this.roomCard)!.constructor as typeof RoomCard
+    ).getVersion;
+    return this.cards.reduce((accumulator, card) => {
+      let latestInstance = accumulator.get(card.id);
+      if (!latestInstance) {
+        accumulator.set(card.id, card);
+      } else {
+        let latestInstanceVer = getVersion(latestInstance)!;
+        let cardVer = getVersion(card)!;
+        if (cardVer > latestInstanceVer) {
+          accumulator.set(card.id, card);
+        }
+      }
+      return accumulator;
+    }, new Map<string, Card>());
   }
 
   private get objectiveComponent() {
