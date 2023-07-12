@@ -116,6 +116,9 @@ function getUserMessage(request, card) {
 }
 
 async function sendMessage(client, room, content, previous) {
+  if (content.startsWith('option>')) {
+    content = content.replace('option>', '');
+  }
   let messageObject = {
     "body": content,
     "msgtype": "m.text",
@@ -137,24 +140,84 @@ async function sendMessage(client, room, content, previous) {
   return await client.sendEvent(room.roomId, "m.room.message", messageObject);
 }
 
+async function sendOption(client, room, content) {
+  let messageObject = {
+    "body": content,
+    "msgtype": "org.boxel.card",
+    "formatted_body": "Option",
+    "format": "org.matrix.custom.html",
+    "instance": {
+      "data": {
+        "type": "card",
+        "id": "http://localhost:4201/demo/Option/" + Math.random().toString(36).substring(7),
+        "attributes": {
+          "changes": content
+        },
+        "meta": {
+          "adoptsFrom": {
+            "module": "../option",
+            "name": "Option"
+          }
+        }
+      }
+    }
+  };
+  console.log("Sending", messageObject);
+  return await client.sendEvent(room.roomId, "m.room.message", messageObject);
+}
+
+
 async function sendStream(stream, client, room) {
-  let previous = await sendMessage(client, room, "...", undefined);
-  console.log("Previous: ", previous.event_id);
+  let append_to = undefined;
   let content = "";
   let unsent = 0;
+  let state = "text";
   for await (const part of stream) {
-    if (part.choices[0].delta?.content) {
-      console.log(part.choices[0].delta?.content);
+    if (!append_to && state == "text") {
+      let placeholder = await sendMessage(client, room, "...", undefined);
+      append_to = placeholder.event_id;
+    }
+    let token = part.choices[0].delta?.content;
+    if (token == undefined) {
+      break;
+    }
+
+    console.log("TOKEN: ", token, token.includes('</'));
+    if (token.includes('</')) {
+      if (content.startsWith('option>')) {
+        content = content.replace('option>', '');
+      }
+      if (content.startsWith('>')) {
+        content = content.replace('>', '');
+      }
+      content += token.split('</')[0];
+      // Now we need to drop into card mode for the stream
+      console.log("Ended")
+      await sendOption(client, room, content, undefined);
+      content = "";
+      state = "text";
+      unsent = 0;
+    } else if (token.includes('<')) {
+      state = "card";
+      // Send the last update
+      let beforeTag = token.split('<')[0];
+      await sendMessage(client, room, content + beforeTag, append_to);
+      content = '';
+      unsent = 0;
+      append_to = undefined;
+    } else if (token) {
       unsent += 1;
       content += part.choices[0].delta?.content;
-      if (unsent > 20) {
-        await sendMessage(client, room, content, previous.event_id);
+      if (state == "text" && unsent > 20) {
+        await sendMessage(client, room, content, append_to);
         unsent = 0;
       }
     }
   }
-  await sendMessage(client, room, content, previous.event_id);
+  await sendMessage(client, room, content, append_to);
 }
+
+
 
 async function getResponse(event) {
   if (event.getContent().msgtype === "org.boxel.card") {
