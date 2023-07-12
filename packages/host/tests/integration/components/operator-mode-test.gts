@@ -22,6 +22,7 @@ import {
   fillIn,
   settled,
   focus,
+  triggerEvent,
 } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
@@ -537,7 +538,9 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor('[data-test-person]');
     assert.dom('[data-test-boxel-header-title]').hasText('Person');
-    assert.dom(`[data-test-boxel-header-icon="https://example-icon.test"]`).exists();
+    assert
+      .dom(`[data-test-boxel-header-icon="https://example-icon.test"]`)
+      .exists();
     assert.dom('[data-test-person]').hasText('Fadhlan');
     assert.dom('[data-test-first-letter-of-the-name]').hasText('F');
     assert.dom('[data-test-city]').hasText('Bandung');
@@ -1471,5 +1474,29 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom(`[data-test-boxel-input-validation-state="invalid"]`)
       .doesNotExist('invalid state is not shown');
+  });
+
+  test('displays realm name as header title when hovering realm icon', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor('[data-test-person]');
+    assert.dom('[data-test-boxel-header-title]').hasText('Person');
+    assert
+      .dom(`[data-test-boxel-header-icon="https://example-icon.test"]`)
+      .exists();
+    await triggerEvent(`[data-test-boxel-header-icon]`, 'mouseenter');
+    assert
+      .dom('[data-test-boxel-header-title]')
+      .hasText('In Operator Mode Workspace');
+    await triggerEvent(`[data-test-boxel-header-icon]`, 'mouseleave');
+    assert.dom('[data-test-boxel-header-title]').hasText('Person');
   });
 });

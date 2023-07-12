@@ -9,7 +9,9 @@ export default class HeaderUsage extends Component {
   @tracked title = 'Header';
   @tracked hasBackground = true;
   @tracked isHighlighted = false;
-  @tracked iconURL = undefined;
+  @tracked icon = {
+    URL: '',
+  };
 
   <template>
     <FreestyleUsage @name='Header'>
@@ -21,7 +23,7 @@ export default class HeaderUsage extends Component {
           @title={{this.title}}
           @hasBackground={{this.hasBackground}}
           @isHighlighted={{this.isHighlighted}}
-          @iconURL={{this.iconURL}}
+          @icon={{this.icon}}
         >
           <:actions>
             <BoxelButton>Edit</BoxelButton>
@@ -50,10 +52,10 @@ export default class HeaderUsage extends Component {
           @onInput={{fn (mut this.isHighlighted)}}
         />
         <Args.String
-          @name='icon URL'
+          @name='icon.URL'
           @description='Header icon URL'
-          @value={{this.iconURL}}
-          @onInput={{fn (mut this.iconURL)}}
+          @value={{this.icon.URL}}
+          @onInput={{fn (mut this.icon.URL)}}
         />
         <Args.Yield @description='Content' />
       </:api>
