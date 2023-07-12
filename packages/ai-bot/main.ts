@@ -16,7 +16,7 @@ let startTime = Date.now();
 
 
 const MODIFY_SYSTEM_MESSAGE = "\
-You are able to modify content according to user requests.\
+You are able to modify content according to user requests as well as answer questions for them. You may ask any followup questions you may need.\
 If a user may be requesting a change, respond politely but not ingratiatingly to the user. The more complex the request, the more you can explain what you're about to do.\
 \
 Return up to 3 options for the user to select from, exploring a range of things the user may want. If the request has only one sensible option or they ask for something very directly you don't need to return more than one. The format of your response should be\
@@ -217,27 +217,82 @@ async function sendStream(stream, client, room) {
   await sendMessage(client, room, content, append_to);
 }
 
+function constructHistory(history: MatrixEvent[]) {
+  const events = new Map<string, MatrixEvent[]>();
+  for (let event of history) {
+    let event_id = event.getId();
+    if (event.getRelation()?.rel_type === "m.replace") {
+      event_id = event.getRelation()!.event_id;
+    }
+    if (!events.get(event_id)) {
+      events.set(event_id, [event]);
+    } else {
+      events.get(event_id).push(event);
+    }
+  }
+  //console.log(events);
+  //console.log("SHOULD ITERATE");
+  let latest_events: MatrixEvent[] = [];
+  events.forEach((event_list, event_id) => {
+    //console.log(event_list);
+    event_list = event_list.sort((a, b) => {
+      return a.getTs() - b.getTs();
+    });
+    latest_events.push(event_list[event_list.length - 1]);
+  });
+  latest_events = latest_events.sort((a, b) => {
+    return a.getTs() - b.getTs();
+  });
+  return latest_events;
+  //console.log(latest_events);
+}
 
-
-async function getResponse(event) {
+async function getResponse(event: MatrixEvent, history: MatrixEvent[]) {
+  let historical_messages = []
+  console.log(history);
+  history.pop();
+  for (let event of history) {
+    console.log(event.sender?.name, event.getContent().body);
+    if (event.getContent().body) {
+      if (event.sender?.name === "aibot") {
+        historical_messages.push({
+          "role": "assistant",
+          "content": event.getContent().body
+        });
+      } else {
+        console.log(event.sender?.name, event.getContent());
+        historical_messages.push({
+          "role": "user",
+          "content": event.getContent().body
+        });
+      }
+    }
+  }
   if (event.getContent().msgtype === "org.boxel.card") {
     let card = event.getContent().instance.data;
     console.log("Processing card: " + event);
+    let messages = [
+      {
+        "role": "system", "content": MODIFY_SYSTEM_MESSAGE
+      }];
+
+    messages = messages.concat(historical_messages);
+    messages.push({
+      "role": "user", "content": getUserMessage(event.getContent().body, card)
+    })
     return await openai.chat.completions.create({
       model: "gpt-4-0613",
-      messages: [
-        {
-          "role": "system", "content": MODIFY_SYSTEM_MESSAGE
-        },
-        {
-          "role": "user", "content": getUserMessage(event.getContent().body, card)
-        }],
+      messages: messages,
       stream: true,
     });
   } else {
+    let messages = historical_messages;
+
+    messages.push({ "role": "user", "content": event.getContent().body });
+    console.log(messages);
     return await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
-      messages: [{ "role": "user", "content": event.getContent().body }],
+      messages: messages,
       stream: true,
     });
   }
@@ -258,10 +313,15 @@ async function getResponse(event) {
       });
     }
   });
+
+
   // SCARY WARNING ABOUT ASYNC, THIS SHOULD BE SYNC AND USE A QUEUE
   client.on(MatrixSDK.RoomEvent.Timeline, async function (event, room, toStartOfTimeline) {
-
+    let eventList = room!.getLiveTimeline().getEvents();
     if (event.event.origin_server_ts! < startTime) {
+      //console.log(eventList);
+
+      constructHistory(eventList)
       return;
     }
     if (toStartOfTimeline) {
@@ -273,10 +333,12 @@ async function getResponse(event) {
     if (event.getSender() === user_id) {
       return;
     }
+    let history: MatrixEvent[] = constructHistory(eventList);
+
     let initialMessage = await client.sendHtmlMessage(room.roomId, "Thinking...", "Thinking...");
 
 
-    const stream = await getResponse(event);
+    const stream = await getResponse(event, history);
     await sendStream(stream, client, room);
     //await sendStream(stream, client, room, sentId);
 
