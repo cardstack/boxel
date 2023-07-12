@@ -83,7 +83,7 @@ module('loader', function (hooks) {
       },
       'http://example.com/'
     );
-    loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
+    loader.registerURLHandler(realm.maybeHandle.bind(realm));
     await realm.ready;
 
     let { checkImportMeta, myLoader } = await loader.import<{
