@@ -6,6 +6,7 @@ import { RealmPaths } from './paths';
 import { CardError } from './error';
 import flatMap from 'lodash/flatMap';
 import { type RunnerOpts } from './search-index';
+import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
@@ -820,4 +821,26 @@ function isEvaluatable(
     return false;
   }
   return stateOrder[module.state] >= stateOrder['registered-completing-deps'];
+}
+
+async function maybeHandleScopedCSSRequest(req: Request) {
+  if (isScopedCSSRequest(req.url)) {
+    if (isFastBoot) {
+      console.log('not decoding css in fastboot');
+      return Promise.resolve(new Response('console.log("skipped css")'));
+    } else {
+      let decodedCSS = decodeScopedCSSRequest(req.url);
+      return Promise.resolve(
+        new Response(`
+          console.log(\`glimmer scoped css! hey ${decodedCSS}\`);
+          let styleNode = document.createElement('style');
+          let styleText = document.createTextNode(\`${decodedCSS}\`);
+          styleNode.appendChild(styleText);
+          document.body.appendChild(styleNode);
+        `)
+      );
+    }
+  } else {
+    return Promise.resolve(null);
+  }
 }
