@@ -146,6 +146,7 @@ export default class RoomsManager extends Component {
             (No rooms)
           {{/each}}
         </div>
+        <hr/>
       {{/unless}}
     {{/if}}
 
@@ -160,13 +161,14 @@ export default class RoomsManager extends Component {
       }
 
       .room {
-        margin-top: var(--boxel-sp-sm);
         display: flex;
+        margin-top: var(--boxel-sp-sm);
+        flex-wrap: nowrap
       }
 
       .room-item {
         display: inline-block;
-        min-width: 18rem;
+        flex-grow: 1;
       }
 
       .room button {

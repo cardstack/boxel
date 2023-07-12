@@ -8,7 +8,7 @@ import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import type CardService from '@cardstack/host/services/card-service';
 
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { Modal } from '@cardstack/boxel-ui';
+import { Modal, Button } from '@cardstack/boxel-ui';
 import SearchSheet, {
   SearchSheetMode,
 } from '@cardstack/host/components/search-sheet';
@@ -24,6 +24,7 @@ import {
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
+import { htmlSafe } from '@ember/template';
 
 import { registerDestructor } from '@ember/destroyable';
 import type { Query } from '@cardstack/runtime-common/query';
@@ -77,6 +78,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   @service declare matrixService: MatrixService;
   @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
   @tracked searchSheetTrigger: SearchSheetTrigger | null = null;
+  @tracked isChatVisible = false;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -95,6 +97,11 @@ export default class OperatorModeContainer extends Component<Signature> {
   @action
   getCards(query: Query): Search {
     return getSearchResults(this, () => query);
+  }
+
+  @action
+  toggleChat() {
+    this.isChatVisible = !this.isChatVisible;
   }
 
   @action onFocusSearchInput(searchSheetTrigger?: SearchSheetTrigger) {
@@ -390,6 +397,10 @@ export default class OperatorModeContainer extends Component<Signature> {
     );
   }
 
+  get gridCss() {
+    return htmlSafe(this.isChatVisible ? `grid-template-columns: 1.5fr 0.5fr;`: `grid-template-columns: 1fr;`);
+  }
+
   <template>
     <Modal
       class='operator-mode'
@@ -402,7 +413,7 @@ export default class OperatorModeContainer extends Component<Signature> {
 
       <CardCatalogModal />
 
-      <div class='operator-mode__with-chat'>
+      <div class='operator-mode__with-chat' style={{this.gridCss}}>
         <div class='operator-mode__main'>
           {{#if this.canCreateNeighborStack}}
             <button
@@ -481,7 +492,15 @@ export default class OperatorModeContainer extends Component<Signature> {
             </button>
           {{/if}}
         </div>
-        <ChatSidebar />
+
+        {{#if this.isChatVisible}}
+          <ChatSidebar @onClose={{this.toggleChat}}/>
+        {{else}}
+          <Button
+            class="chat-btn"
+            {{on 'click' this.toggleChat}}
+          >Chat</Button>
+        {{/if}}
       </div>
 
       <SearchSheet
@@ -559,6 +578,14 @@ export default class OperatorModeContainer extends Component<Signature> {
         justify-content: center;
         align-items: center;
         position: relative;
+      }
+
+      .chat-btn {
+        position: absolute;
+        background-color: white;
+        bottom: calc(var(--search-sheet-closed-height) + var(--boxel-sp));
+        right: var(--boxel-sp);
+        margin-right: var(--boxel-sp-lg);
       }
     </style>
   </template>
