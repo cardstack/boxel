@@ -7,7 +7,6 @@ import { tracked, cached } from '@glimmer/tracking';
 import { not, and } from '@cardstack/host/helpers/truth-helpers';
 import { restartableTask } from 'ember-concurrency';
 import {
-  BoxelHeader,
   BoxelInput,
   LoadingIndicator,
   FieldContainer,
@@ -34,28 +33,24 @@ interface RoomArgs {
 }
 export default class Room extends Component<RoomArgs> {
   <template>
-    <BoxelHeader
-      @title={{this.roomCard.name}}
-      @hasBackground={{TRUE}}
-      class='matrix header'
-      data-test-matrix-room-header
-    >
-      <:actions>
+    <div class="room-members">
+      <div data-test-room-members class='members'><b>Members:</b>
+        {{this.memberNames}}
+      </div>
+      {{#unless this.isInviteMode}}
         <Button
           data-test-invite-mode-btn
           class='invite-btn'
           {{on 'click' this.showInviteMode}}
           @disabled={{this.isInviteMode}}
         >Invite</Button>
-        <div data-test-room-members class='members'><b>Members:</b>
-          {{this.memberNames}}</div>
-      </:actions>
-    </BoxelHeader>
+      {{/unless}}
+    </div>
     {{#if this.isInviteMode}}
       {{#if this.doInvite.isRunning}}
         <LoadingIndicator />
       {{/if}}
-      <fieldset>
+      <div class="invite-form">
         <FieldContainer @label='Invite:' @tag='label'>
           <BoxelInput
             data-test-room-invite-field
@@ -64,17 +59,19 @@ export default class Room extends Component<RoomArgs> {
             @onInput={{this.setMembersToInvite}}
           />
         </FieldContainer>
-        <Button
-          data-test-room-invite-cancel-btn
-          {{on 'click' this.cancelInvite}}
-        >Cancel</Button>
-        <Button
-          data-test-room-invite-btn
-          @kind='primary'
-          @disabled={{not this.membersToInvite}}
-          {{on 'click' this.invite}}
-        >Invite</Button>
-      </fieldset>
+        <div class="invite-button-wrapper">
+          <Button
+            data-test-room-invite-cancel-btn
+            {{on 'click' this.cancelInvite}}
+          >Cancel</Button>
+          <Button
+            data-test-room-invite-btn
+            @kind='primary'
+            @disabled={{not this.membersToInvite}}
+            {{on 'click' this.invite}}
+          >Invite</Button>
+        </div>
+      </div>
     {{/if}}
 
     {{#if this.objective}}
@@ -145,19 +142,7 @@ export default class Room extends Component<RoomArgs> {
       </div>
     {{/if}}
     <style>
-      .header .boxel-header__content {
-        display: block;
-      }
-
-      .invite-btn {
-        display: block;
-        float: right;
-        margin-bottom: var(--boxel-sp-sm);
-      }
-
       .messages-wrapper {
-        overflow-y: auto;
-        max-height: 30vh;
         padding: var(--boxel-sp);
         margin: var(--boxel-sp) 0;
       }
@@ -209,14 +194,33 @@ export default class Room extends Component<RoomArgs> {
       }
 
       .members {
-        clear: both;
         font-size: var(--boxel-font-size-sm);
         font-weight: initial;
       }
 
-      header.matrix .content {
-        position: relative;
-        display: block;
+      .room-members {
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        padding: var(--boxel-sp) var(--boxel-sp) 0;
+      }
+
+      .room__objective {
+        padding: var(--boxel-sp);
+      }
+
+      .invite-form {
+        padding: var(--boxel-sp);
+      }
+
+      .invite-form button {
+        margin-left: var(--boxel-sp-xs);
+      }
+
+      .invite-button-wrapper {
+        display: flex;
+        justify-content: flex-end;
+        padding-top: var(--boxel-sp-xs);
       }
     </style>
   </template>

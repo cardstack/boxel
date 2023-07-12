@@ -7,7 +7,7 @@ import type { RoomCard } from 'https://cardstack.com/base/room';
 
 interface Args {
   named: {
-    roomId: string;
+    roomId: string | undefined;
   };
 }
 
@@ -20,12 +20,14 @@ export class RoomCardResource extends Resource<Args> {
     this.loading = this.load.perform(named.roomId);
   }
 
-  private load = restartableTask(async (roomId: string) => {
-    this.roomCard = await this.matrixService.roomCards.get(roomId);
+  private load = restartableTask(async (roomId: string | undefined) => {
+    this.roomCard = roomId
+      ? await this.matrixService.roomCards.get(roomId)
+      : undefined;
   });
 }
 
-export function getRoomCard(parent: object, roomId: () => string) {
+export function getRoomCard(parent: object, roomId: () => string | undefined) {
   return RoomCardResource.from(parent, () => ({
     named: {
       roomId: roomId(),

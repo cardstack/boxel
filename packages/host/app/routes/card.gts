@@ -6,6 +6,7 @@ import type CardService from '../services/card-service';
 import type RouterService from '@ember/routing/router-service';
 import { Card } from 'https://cardstack.com/base/card-api';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type MatrixService from '../services/matrix-service';
 
 const { ownRealmURL } = ENV;
 const rootPath = new URL(ownRealmURL).pathname.replace(/^\//, '');
@@ -25,6 +26,7 @@ export default class RenderCard extends Route<Model | null> {
   @service declare cardService: CardService;
   @service declare router: RouterService;
   @service declare operatorModeStateService: OperatorModeStateService;
+  @service declare matrixService: MatrixService;
 
   beforeModel(transition: any) {
     let queryParams = parse(
@@ -50,6 +52,9 @@ export default class RenderCard extends Route<Model | null> {
     operatorModeState: string;
     operatorModeEnabled: boolean;
   }): Promise<Model> {
+    await this.matrixService.ready;
+    await this.matrixService.start();
+
     let { path, operatorModeState, operatorModeEnabled } = params;
     path = path || '';
     let url = path
