@@ -23,18 +23,9 @@ Router.map(function () {
   this.route('card', { path: '/*path' });
 
   if (!path || hostsOwnAssets) {
-    this.route('chat', function () {
-      this.route('register');
-      this.route('room', { path: `/room/:id` });
-    });
     this.route('index-card', { path: '/' });
     this.route('code');
   } else {
-    this.route('chat', { path: `${path}/chat` }, function () {
-      this.route('register');
-      this.route('room', { path: `/room/:id` });
-    });
-
     this.route('code', { path: `${path}/code` });
   }
 });
