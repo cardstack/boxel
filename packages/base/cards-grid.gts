@@ -19,7 +19,6 @@ import {
   cardTypeDisplayName,
 } from '@cardstack/runtime-common';
 import { type CatalogEntry } from './catalog-entry';
-import { fn } from '@ember/helper';
 import StringCard from './string';
 
 class Isolated extends Component<typeof CardsGrid> {
@@ -28,8 +27,12 @@ class Isolated extends Component<typeof CardsGrid> {
       <ul class='cards-grid__cards' data-test-cards-grid-cards>
         {{#each this.request.instances as |card|}}
           <li
+            {{@context.cardComponentModifier
+              card=card
+              format='data'
+              fieldType=undefined
+            }}
             data-test-cards-grid-item={{card.id}}
-            {{on 'click' (fn this.openCard card)}}
           >
             <div class='grid-card'>
               <div class='grid-card__thumbnail'>
@@ -95,10 +98,6 @@ class Isolated extends Component<typeof CardsGrid> {
     this.createCard.perform();
   }
 
-  @action openCard(card: Card) {
-    this.args.context?.actions?.viewCard(card);
-  }
-
   private createCard = restartableTask(async () => {
     let card = await chooseCard<CatalogEntry>({
       filter: {
@@ -116,7 +115,7 @@ class Isolated extends Component<typeof CardsGrid> {
     );
 
     if (newCard) {
-      this.openCard(newCard);
+      this.args.context?.actions?.viewCard(newCard);
     }
   });
 }
