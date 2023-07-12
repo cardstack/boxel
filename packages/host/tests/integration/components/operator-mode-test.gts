@@ -15,7 +15,14 @@ import {
   TestRealmAdapter,
   TestRealm,
 } from '../../helpers';
-import { waitFor, waitUntil, click, fillIn, focus } from '@ember/test-helpers';
+import {
+  waitFor,
+  waitUntil,
+  click,
+  fillIn,
+  focus,
+  triggerEvent,
+} from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -486,7 +493,7 @@ module('Integration | operator-mode', function (hooks) {
           },
         },
       },
-      '.realm.json': `{ "name": "${realmName}" }`,
+      '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
       ...Object.fromEntries(personCards),
     });
     realm = await TestRealm.createWithAdapter(adapter, this.owner);
@@ -528,6 +535,9 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor('[data-test-person]');
     assert.dom('[data-test-boxel-header-title]').hasText('Person');
+    assert
+      .dom(`[data-test-boxel-header-icon="https://example-icon.test"]`)
+      .exists();
     assert.dom('[data-test-person]').hasText('Fadhlan');
     assert.dom('[data-test-first-letter-of-the-name]').hasText('F');
     assert.dom('[data-test-city]').hasText('Bandung');
@@ -1497,5 +1507,44 @@ module('Integration | operator-mode', function (hooks) {
 
     await click(`[data-test-overlay-button="${testRealmURL}Person/fadhlan"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
+  });
+
+  test('displays realm name as header title when hovering realm icon', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor('[data-test-person]');
+    assert.dom('[data-test-boxel-header-title]').hasText('Person');
+    assert
+      .dom(`[data-test-boxel-header-icon="https://example-icon.test"]`)
+      .exists();
+    await triggerEvent(`[data-test-boxel-header-icon]`, 'mouseenter');
+    assert
+      .dom('[data-test-boxel-header-title]')
+      .hasText('In Operator Mode Workspace');
+    await triggerEvent(`[data-test-boxel-header-icon]`, 'mouseleave');
+    assert.dom('[data-test-boxel-header-title]').hasText('Person');
+  });
+
+  test(`it has an option to copy the card url`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+    await click('[data-test-edit-button]');
+    await click('[data-test-boxel-menu-item-text="Copy Card URL"]');
+    assert.dom('[data-test-boxel-menu-item]').doesNotExist();
   });
 });

@@ -17,6 +17,7 @@ import {
 } from '@cardstack/runtime-common';
 import { fillIn, RenderingTestContext } from '@ember/test-helpers';
 import { shimExternals } from '@cardstack/host/lib/externals';
+import { isAddress } from 'ethers';
 import { type Card as CardType } from 'https://cardstack.com/base/card-api';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -25,6 +26,8 @@ let date: typeof import('https://cardstack.com/base/date');
 let datetime: typeof import('https://cardstack.com/base/datetime');
 let number: typeof import('https://cardstack.com/base/number');
 let string: typeof import('https://cardstack.com/base/string');
+let bigInteger: typeof import('https://cardstack.com/base/big-integer');
+let ethereumAddress: typeof import('https://cardstack.com/base/ethereum-address');
 
 module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
@@ -48,6 +51,8 @@ module('Integration | serialization', function (hooks) {
     date = await Loader.import(`${baseRealm.url}date`);
     datetime = await Loader.import(`${baseRealm.url}datetime`);
     cardRef = await Loader.import(`${baseRealm.url}card-ref`);
+    bigInteger = await Loader.import(`${baseRealm.url}big-integer`);
+    ethereumAddress = await Loader.import(`${baseRealm.url}ethereum-address`);
   });
 
   test('can deserialize field', async function (assert) {
@@ -4414,6 +4419,282 @@ module('Integration | serialization', function (hooks) {
           links: { self: `${realmURL}Pet/vanGogh` },
           data: { type: 'card', id: `${realmURL}Pet/vanGogh` },
         },
+      });
+    });
+  });
+
+  module('base cards', function () {
+    // this module checks the custom serialization and deserialization behaviour of base cards
+    // which have custom serialize and deserialize
+
+    module('BigIntegerCard', function () {
+      function isBigInt(input: any) {
+        return typeof input == 'bigint';
+      }
+      test('can deserialize field', async function (assert) {
+        let { field, contains, Card, createFromSerialized } = cardApi;
+        let { default: StringCard } = string;
+        let { default: BigIntegerCard } = bigInteger;
+        class Sample extends Card {
+          @field title = contains(StringCard);
+          @field someBigInt = contains(BigIntegerCard);
+          @field someNull = contains(BigIntegerCard);
+          @field someString = contains(BigIntegerCard);
+          @field someNumber = contains(BigIntegerCard);
+          @field someNegativeNumber = contains(BigIntegerCard);
+          @field someDecimal = contains(BigIntegerCard);
+          @field someZeroString = contains(BigIntegerCard);
+        }
+        await shimModule(`${realmURL}test-cards`, { Sample });
+
+        let resource = {
+          attributes: {
+            title: 'BigInt Test Cases',
+            someBigInt: '9223372036854775808',
+            someNull: null,
+            someString: 'some text',
+            someNumber: 42,
+            someDecimal: 0.0001,
+            someNegativeNumber: -42,
+            someZeroString: '0',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Sample',
+            },
+          },
+        };
+        let sample = await createFromSerialized<typeof Sample>(
+          resource,
+          { data: resource },
+          undefined
+        );
+
+        assert.strictEqual(isBigInt(sample.someBigInt), true);
+        assert.strictEqual(isBigInt(sample.someNumber), true);
+        assert.strictEqual(isBigInt(sample.someNegativeNumber), true);
+        assert.strictEqual(isBigInt(sample.someZeroString), true);
+
+        // failed to deserialize
+        assert.strictEqual(sample.someNull, null);
+        assert.strictEqual(sample.someString, null);
+        assert.strictEqual(sample.someDecimal, null);
+      });
+
+      test('can serialize field', async function (assert) {
+        let { field, contains, Card, serializeCard } = cardApi;
+        let { default: StringCard } = string;
+        let { default: BigIntegerCard } = bigInteger;
+        class Sample extends Card {
+          @field title = contains(StringCard);
+          @field someBigInt = contains(BigIntegerCard);
+          @field someNull = contains(BigIntegerCard);
+        }
+
+        await shimModule(`${realmURL}test-cards`, { Sample });
+
+        let sample = new Sample({
+          someBigInt: BigInt('9223372036854775808'),
+          someNull: null,
+        });
+
+        let serialized = serializeCard(sample, {
+          includeUnrenderedFields: true,
+        });
+
+        assert.strictEqual(
+          typeof serialized?.data?.attributes?.someBigInt === 'string',
+          true
+        );
+        assert.strictEqual(
+          typeof serialized?.data?.attributes?.someBigInt !== 'number',
+          true
+        );
+        assert.strictEqual(
+          serialized?.data?.attributes?.someBigInt,
+          '9223372036854775808'
+        );
+        assert.strictEqual(serialized?.data?.attributes?.someNull, null);
+      });
+
+      test('queryable value', async function (assert) {
+        let { getQueryableValue } = cardApi;
+        let { default: BigIntegerCard } = bigInteger;
+        assert.strictEqual(
+          getQueryableValue(BigIntegerCard, BigInt('9223372036854775808')),
+          '9223372036854775808'
+        );
+        assert.strictEqual(getQueryableValue(BigIntegerCard, null), undefined);
+        assert.strictEqual(
+          getQueryableValue(BigIntegerCard, undefined),
+          undefined
+        );
+      });
+
+      test('can perform bigint operations with computed', async function (assert) {
+        let { field, contains, Card, serializeCard } = cardApi;
+        let { default: StringCard } = string;
+        let { default: BigIntegerCard } = bigInteger;
+
+        class Sample extends Card {
+          @field title = contains(StringCard);
+          @field someBigInt = contains(BigIntegerCard);
+          @field anotherBigInt = contains(BigIntegerCard);
+          @field someNull = contains(BigIntegerCard);
+          @field someComputed = contains(BigIntegerCard, {
+            computeVia: function (this: Sample) {
+              return this.someBigInt + this.anotherBigInt;
+            },
+          });
+          //TODO: This doesn't seem to work
+          // Promise rejected during "can perform bigint operations with computed": Cannot mix BigInt and other types, use explicit conversions
+          // @field someComputedWithNull = contains(BigIntegerCard, {
+          //   computeVia: function (this: Sample) {
+          //     return this.someBigInt + this.someNull;
+          //   },
+          // });
+        }
+        await shimModule(`${realmURL}test-cards`, { Sample });
+
+        let sample = new Sample({
+          someBigInt: BigInt('1'),
+          anotherBigInt: BigInt('2'),
+          someNull: null,
+        });
+
+        let serialized = serializeCard(sample, {
+          includeComputeds: true,
+          includeUnrenderedFields: true,
+        });
+
+        assert.strictEqual(
+          serialized?.data?.attributes?.someComputed,
+          (BigInt('1') + BigInt('2')).toString()
+        );
+      });
+    });
+
+    module('EthereumAddressCard', function () {
+      function isEthAddress(address: string): boolean {
+        return isAddress(address);
+      }
+      test('can deserialize field', async function (assert) {
+        let { field, contains, Card, createFromSerialized } = cardApi;
+        let { default: StringCard } = string;
+        let { default: EthereumAddressCard } = ethereumAddress;
+        class Sample extends Card {
+          @field title = contains(StringCard);
+          @field someAddress = contains(EthereumAddressCard);
+          @field nonChecksummedAddress = contains(EthereumAddressCard);
+          @field checksummedAddressThatDontLookLikeOne =
+            contains(EthereumAddressCard);
+          @field faultyAddress = contains(EthereumAddressCard);
+          @field bitcoinAddress = contains(EthereumAddressCard);
+          @field someString = contains(EthereumAddressCard);
+          @field someNull = contains(EthereumAddressCard);
+        }
+        await shimModule(`${realmURL}test-cards`, { Sample });
+
+        let resource = {
+          attributes: {
+            title: 'Ethereum Test Cases',
+            someAddress: '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b',
+            checksummedAddressThatDontLookLikeOne:
+              '0x27b1fdb04752bbc536007a920d24acb045561c26',
+            nonChecksummedAddress: '0x3bc8e82b5856b2f2bdc7f6693f79db9648c0aaaa',
+            faultyAddress: '0x159ADe032073d930E85f95AbBAB9995110c43C7', //missing a character
+            bitcoinAddress: '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2',
+            someString: 'hello world',
+            someNull: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Sample',
+            },
+          },
+        };
+        let sample = await createFromSerialized<typeof Sample>(
+          resource,
+          { data: resource },
+          undefined
+        );
+
+        assert.strictEqual(isEthAddress(sample.someAddress), true);
+        assert.strictEqual(
+          isEthAddress(sample.checksummedAddressThatDontLookLikeOne),
+          true
+        );
+
+        // failed to deserialize
+        assert.strictEqual(sample.faultyAddress, null);
+        assert.strictEqual(sample.nonChecksummedAddress, null);
+        assert.strictEqual(sample.bitcoinAddress, null);
+        assert.strictEqual(sample.someString, null);
+        assert.strictEqual(sample.someNull, null);
+      });
+
+      test('can serialize field', async function (assert) {
+        let { field, contains, Card, serializeCard } = cardApi;
+        let { default: StringCard } = string;
+        let { default: EthereumAddressCard } = ethereumAddress;
+        class Sample extends Card {
+          @field title = contains(StringCard);
+          @field someAddress = contains(EthereumAddressCard);
+          @field nonChecksummedAddress = contains(EthereumAddressCard);
+          @field someNull = contains(EthereumAddressCard);
+        }
+
+        await shimModule(`${realmURL}test-cards`, { Sample });
+
+        let sample = new Sample({
+          someAddress: '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b',
+          nonChecksummedAddress: '0x3bc8e82b5856b2f2bdc7f6693f79db9648c0aaaa',
+          someNull: null,
+        });
+
+        let serialized = serializeCard(sample, {
+          includeUnrenderedFields: true,
+        });
+
+        assert.strictEqual(
+          typeof serialized?.data?.attributes?.someAddress === 'string',
+          true
+        );
+        assert.strictEqual(
+          typeof serialized?.data?.attributes?.someAddress !== 'number',
+          true
+        );
+        assert.strictEqual(
+          serialized?.data?.attributes?.someAddress,
+          '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b'
+        );
+        assert.strictEqual(
+          serialized?.data?.attributes?.nonChecksummedAddress,
+          '0x3bc8e82b5856b2f2bdc7f6693f79db9648c0aaaa'
+        );
+        assert.strictEqual(serialized?.data?.attributes?.someNull, null);
+      });
+
+      test('queryable value', async function (assert) {
+        let { getQueryableValue } = cardApi;
+        let { default: EthereumAddressCard } = ethereumAddress;
+        assert.strictEqual(
+          getQueryableValue(
+            EthereumAddressCard,
+            '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b'
+          ),
+          '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b'
+        );
+        assert.strictEqual(
+          getQueryableValue(EthereumAddressCard, null),
+          undefined
+        );
+        assert.strictEqual(
+          getQueryableValue(EthereumAddressCard, undefined),
+          undefined
+        );
       });
     });
   });
