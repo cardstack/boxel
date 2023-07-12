@@ -55,6 +55,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @tracked renderedLinksToCards = new TrackedArray<RenderedLinksToCard>([]);
   @tracked selectedCards = new TrackedArray<Card>([]);
   @service declare cardService: CardService;
+  @tracked isHoverOnRealmIcon = false;
 
   get styleForStackedCard(): SafeString {
     let itemsOnStackCount = this.args.stackItems.length;
@@ -124,14 +125,37 @@ export default class OperatorModeStackItem extends Component<Signature> {
     await navigator.clipboard.writeText(cardUrl);
   }
 
-  fetchIconURL = trackedFunction(this, async () => {
+  fetchRealmInfo = trackedFunction(this, async () => {
     let card = this.args.item.card;
     let realmInfo = await this.cardService.getRealmInfo(card);
-    return realmInfo?.iconURL;
+    return realmInfo;
   });
 
   get iconURL() {
-    return this.fetchIconURL.value ?? '/default-realm-icon.png';
+    return this.fetchRealmInfo.value?.iconURL ?? '/default-realm-icon.png';
+  }
+
+  get realmName() {
+    return this.fetchRealmInfo.value?.name;
+  }
+
+  @action
+  hoverOnRealmIcon() {
+    this.isHoverOnRealmIcon = !this.isHoverOnRealmIcon;
+  }
+
+  get headerIcon() {
+    return {
+      URL: this.iconURL,
+      onMouseEnter: this.hoverOnRealmIcon,
+      onMouseLeave: this.hoverOnRealmIcon,
+    };
+  }
+
+  get headerTitle() {
+    return this.isHoverOnRealmIcon && this.realmName
+      ? `In ${this.realmName}`
+      : cardTypeDisplayName(this.args.item.card);
   }
 
   <template>
@@ -143,8 +167,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
     >
       <CardContainer class={{cn 'card' edit=(eq @item.format 'edit')}}>
         <Header
-          @iconURL={{this.iconURL}}
-          @title={{cardTypeDisplayName @item.card}}
+          @icon={{this.headerIcon}}
+          @title={{this.headerTitle}}
           class='header'
           {{on
             'click'
@@ -153,6 +177,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
           style={{cssVar
             boxel-header-icon-width='30px'
             boxel-header-icon-height='30px'
+            boxel-header-text-color=(if this.isHoverOnRealmIcon 'var(--boxel-cyan)' 'var(--boxel-dark)')
           }}
           data-test-stack-card-header
         >
