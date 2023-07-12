@@ -40,6 +40,7 @@ class ContainsManyEditor extends GlimmerComponent<Signature> {
                   (this.args.cardTypeFor @field boxedElement)
                   @format
                   boxedElement
+                  @field
                 )
                 as |Item|
               }}

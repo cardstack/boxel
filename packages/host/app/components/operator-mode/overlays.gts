@@ -9,7 +9,7 @@ import { IconButton } from '@cardstack/boxel-ui';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import { type TrackedArray } from 'tracked-built-ins';
 import type { MiddlewareState } from '@floating-ui/dom';
-import { type Card } from 'https://cardstack.com/base/card-api';
+import type { Card } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
@@ -21,12 +21,9 @@ interface Signature {
 }
 
 export default class OperatorModeOverlays extends Component<Signature> {
-  refreshLoopStartedAt: number | null = null;
-  refreshLoopTimeout: number | null = null;
-
   <template>
     {{#each @renderedLinksToCards as |renderedCard|}}
-      {{#let renderedCard.card (this.isSelected renderedCard.card.id) as |card isSelected|}}
+      {{#let renderedCard.card (this.isSelected renderedCard.card) as |card isSelected|}}
         <div
           class={{cn 'actions-overlay' selected=isSelected}}
           {{velcro renderedCard.element middleware=(Array this.offset)}}
@@ -141,8 +138,8 @@ export default class OperatorModeOverlays extends Component<Signature> {
     }
   }
 
-  @action isSelected(id: string) {
-    return this.args.selectedCards?.some((card: any) => card.id === id);
+  @action isSelected(card: Card) {
+    return this.args.selectedCards?.some((c: Card) => c === card);
   }
 
   // TODO: actions for 'preview' and 'more-actions' buttons

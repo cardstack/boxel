@@ -333,9 +333,6 @@
   justify-items: center;
   height: 100%;
 }
-.operator-mode .cards-grid__cards > li {
-  cursor: pointer;
-}
 .operator-mode .buried .cards-grid__cards,
 .operator-mode .buried .cards-grid__add-button {
   display: none;
@@ -348,6 +345,7 @@
   position: sticky;
   left: 100%;
   bottom: var(--boxel-sp);
+  z-index: 1;
 }
 .grid-card {
   width: var(--grid-card-width);

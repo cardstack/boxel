@@ -27,7 +27,11 @@ class Isolated extends Component<typeof CardsGrid> {
       <ul class='cards-grid__cards' data-test-cards-grid-cards>
         {{#each this.request.instances as |card|}}
           <li
-            {{@context.cardComponentModifier card @context}}
+            {{@context.cardComponentModifier
+              card=card
+              format='data'
+              fieldType=undefined
+            }}
             data-test-cards-grid-item={{card.id}}
           >
             <div class='grid-card'>

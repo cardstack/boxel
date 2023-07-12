@@ -84,6 +84,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
       card,
       'embedded',
       this.args.model as Box<CardBase>,
+      this.args.field,
       this.args.context
     );
   }

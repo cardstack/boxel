@@ -1,7 +1,7 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { Card, CardContext } from 'https://cardstack.com/base/card-api';
+import type { Card, Format, FieldType } from 'https://cardstack.com/base/card-api';
 import Preview from '@cardstack/host/components/preview';
 import { fn, array } from '@ember/helper';
 
@@ -13,8 +13,6 @@ import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import { tracked } from '@glimmer/tracking';
 import { TrackedArray } from 'tracked-built-ins';
-import LinksToCardComponentModifier from '@cardstack/host/modifiers/links-to-card-component-modifier';
-import { schedule } from '@ember/runloop';
 
 import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
 import BoxelMenu from '@cardstack/boxel-ui/components/menu';
@@ -23,6 +21,7 @@ import { StackItem } from '@cardstack/host/components/operator-mode/container';
 
 import { htmlSafe, SafeString } from '@ember/template';
 import OperatorModeOverlays from '@cardstack/host/components/operator-mode/overlays';
+import ElementTracker from '../../resources/element-tracker';
 
 interface Signature {
   Args: {
@@ -42,13 +41,32 @@ interface Signature {
 export interface RenderedLinksToCard {
   element: HTMLElement;
   card: Card;
-  context: CardContext;
-  stackedAtIndex: number;
 }
 
 export default class OperatorModeStackItem extends Component<Signature> {
-  @tracked renderedLinksToCards = new TrackedArray<RenderedLinksToCard>([]);
   @tracked selectedCards = new TrackedArray<Card>([]);
+
+  cardTracker = new ElementTracker<{
+    card: Card;
+    format: Format | 'data';
+    fieldType: FieldType | undefined;
+  }>();
+
+  get renderedLinksToCards(): RenderedLinksToCard[] {
+    return this.cardTracker.elements
+      .filter((entry) => {
+        return (
+          entry.meta.format === 'data' ||
+          entry.meta.fieldType === 'linksTo' ||
+          entry.meta.fieldType === 'linksToMany'
+        );
+      })
+      // this mapping could probably be eliminated or simplified if we refactor OperatorModeOverlays to accept our type
+      .map((entry) => ({
+        element: entry.element,
+        card: entry.meta.card
+      }));
+  }
 
   get styleForStackedCard(): SafeString {
     let itemsOnStackCount = this.args.stackItems.length;
@@ -70,38 +88,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
   get context() {
     return {
       renderedIn: this as Component<any>,
-      cardComponentModifier: LinksToCardComponentModifier,
+      cardComponentModifier: this.cardTracker.trackElement,
       actions: this.args.publicAPI,
     };
   }
 
-  registerLinkedCardElement(
-    linksToCardElement: HTMLElement,
-    linksToCard: Card,
-    context: CardContext
-  ) {
-    // Without scheduling this after render, this produces the "attempted to update value, but it had already been used previously in the same computation" type error
-    schedule('afterRender', () => {
-      this.renderedLinksToCards.push({
-        element: linksToCardElement,
-        card: linksToCard,
-        stackedAtIndex: this.args.index,
-        context,
-      });
-    });
-  }
-
-  unregisterLinkedCardElement(card: Card) {
-    let index = this.renderedLinksToCards.findIndex(
-      (renderedLinksToCard) => renderedLinksToCard.card === card
-    );
-    if (index !== -1) {
-      this.renderedLinksToCards.splice(index, 1);
-    }
-  }
-
   @action toggleSelect(card: Card) {
-    let index = this.selectedCards.findIndex((c) => c.id === card.id);
+    let index = this.selectedCards.findIndex((c) => c === card);
 
     if (index === -1) {
       this.selectedCards.push(card);
