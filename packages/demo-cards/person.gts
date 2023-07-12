@@ -24,16 +24,16 @@ export class Person extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <style>
-        h3 {
-          color: pink;
-        }
-      </style>
       {{log 'person!'}}
       <div class='demo-card'>
-        <h3><@fields.firstName /> <@fields.lastName /></h3>
+        <h3>person? <@fields.firstName /> <@fields.lastName /></h3>
         {{#if @model.pet}}<div><@fields.pet /></div>{{/if}}
       </div>
+      <style>
+        h3 {
+          color: green;
+        }
+      </style>
     </template>
   };
 

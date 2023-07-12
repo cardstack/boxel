@@ -6,6 +6,7 @@ import { RealmPaths } from './paths';
 import { CardError } from './error';
 import flatMap from 'lodash/flatMap';
 import { type RunnerOpts } from './search-index';
+import { isScopedCSSRequest } from 'glimmer-scoped-css';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
@@ -118,6 +119,10 @@ export class Loader {
   private log = logger('loader');
   private modules = new Map<string, Module>();
   private urlHandlers = new Map<string, (req: Request) => Promise<Response>>();
+  private newUrlHandlers = new Map<
+    NewURLHandler,
+    (req: Request) => Promise<Response>
+  >();
   // use a tuple array instead of a map so that we can support reversing
   // different resolutions back to the same URL. the resolution that we apply
   // will be in order of precedence. consider 2 realms in the same server
@@ -125,12 +130,20 @@ export class Loader {
   // that talks to the realm (we need to reverse the resolution in the server.ts
   // to figure out which realm the request is talking to)
   private urlMappings: [string, string][] = [];
+  private handlers: Handler[] = [];
   private moduleShims = new Map<string, Record<string, any>>();
   private identities = new WeakMap<
     Function,
     { module: string; name: string }
   >();
   private consumptionCache = new WeakMap<object, string[]>();
+
+  constructor() {
+    this.handlers.push(new ScopedCSSHandler());
+    this.newUrlHandlers.set(new NewScopedCSSHandler(), () => {
+      return Promise.resolve(new Response('// a response'));
+    });
+  }
 
   static #instance: Loader | undefined;
   static loaders = new WeakMap<Function, Loader>();
@@ -149,6 +162,7 @@ export class Loader {
     let loader = new Loader();
     loader.urlHandlers = globalLoader.urlHandlers;
     loader.urlMappings = globalLoader.urlMappings;
+    loader.handlers = globalLoader.handlers;
     for (let [moduleIdentifier, module] of globalLoader.moduleShims) {
       loader.shimModule(moduleIdentifier, module);
     }
@@ -159,6 +173,7 @@ export class Loader {
     let clone = new Loader();
     clone.urlHandlers = loader.urlHandlers;
     clone.urlMappings = loader.urlMappings;
+    clone.handlers = loader.handlers;
     for (let [moduleIdentifier, module] of loader.moduleShims) {
       clone.shimModule(moduleIdentifier, module);
     }
@@ -205,7 +220,11 @@ export class Loader {
   }
 
   addURLMapping(from: URL, to: URL) {
-    this.urlMappings.push([from.href, to.href]);
+    console.log(
+      `adding url mapping from ${from.toString()} to ${to.toString()}`
+    );
+    // this.urlMappings.push([from.href, to.href]);
+    this.handlers.push(new URLHandler(from, to));
   }
 
   static registerURLHandler(
@@ -217,7 +236,9 @@ export class Loader {
   }
 
   registerURLHandler(url: URL, handler: (req: Request) => Promise<Response>) {
+    console.log('registering url handler', url.toString());
     this.urlHandlers.set(url.href, handler);
+    this.newUrlHandlers.set(new NewRealmHandler(url.href), handler);
   }
 
   static shimModule(moduleIdentifier: string, module: Record<string, any>) {
@@ -313,7 +334,10 @@ export class Loader {
   }
 
   async import<T extends object>(moduleIdentifier: string): Promise<T> {
-    console.log(`importing ${moduleIdentifier}`);
+    console.log(`import ${moduleIdentifier}`);
+    if (moduleIdentifier.includes('booking')) {
+      debugger;
+    }
     let resolvedModule = this.resolve(moduleIdentifier);
     let resolvedModuleIdentifier = resolvedModule.href;
     let shimmed = this.moduleShims.get(moduleIdentifier);
@@ -538,10 +562,11 @@ export class Loader {
         ? urlOrRequest
         : urlOrRequest.href
     );
+    console.log(`fetch ${requestURL}`);
     if (urlOrRequest instanceof Request) {
-      for (let [url, handle] of this.urlHandlers) {
-        let path = new RealmPaths(new URL(url));
-        if (path.inRealm(requestURL)) {
+      // Here and below “handler” is not a good name, handle is the handler!
+      for (let [handler, handle] of this.newUrlHandlers) {
+        if (handler.handles(requestURL)) {
           let request = urlOrRequest as MaybeLocalRequest;
           request.isLocal = true;
           return await handle(request);
@@ -560,9 +585,8 @@ export class Loader {
           : isResolvedURL(urlOrRequest)
           ? this.reverseResolution(urlOrRequest)
           : urlOrRequest;
-      for (let [url, handle] of this.urlHandlers) {
-        let path = new RealmPaths(new URL(url));
-        if (path.inRealm(unresolvedURL)) {
+      for (let [handler, handle] of this.newUrlHandlers) {
+        if (handler.handles(unresolvedURL)) {
           let request = new Request(
             unresolvedURL.href,
             init
@@ -576,22 +600,28 @@ export class Loader {
   }
 
   resolve(moduleIdentifier: string | URL, relativeTo?: URL): ResolvedURL {
+    console.log(`resolve ${moduleIdentifier.toString()}`);
     let absoluteURL = new URL(moduleIdentifier, relativeTo);
-    for (let [sourceURL, to] of this.urlMappings) {
-      let sourcePath = new RealmPaths(new URL(sourceURL));
-      if (sourcePath.inRealm(absoluteURL)) {
-        let toPath = new RealmPaths(new URL(to));
-        if (absoluteURL.href.endsWith('/')) {
-          return makeResolvedURL(
-            toPath.directoryURL(sourcePath.local(absoluteURL))
-          );
+    console.log(
+      `absolute url: ${absoluteURL.toString()}, handlers: ${
+        this.handlers.length
+      }`
+    );
+    if (absoluteURL.toString().includes('glimmer-scoped')) {
+      debugger;
+    }
+    for (let handler of this.handlers) {
+      console.log(`checking handler ${handler}`);
+      if (handler.handles(absoluteURL)) {
+        console.log('handles!');
+        if (handler.resolves()) {
+          console.log('resolves!');
+          return (handler as unknown as URLHandler).resolve(absoluteURL);
         } else {
-          return makeResolvedURL(
-            toPath.fileURL(
-              sourcePath.local(absoluteURL, { preserveQuerystring: true })
-            )
-          );
+          console.log('DOES NOT RESOLVE!');
         }
+      } else {
+        console.log('does not handle');
       }
     }
     return makeResolvedURL(absoluteURL);
@@ -602,17 +632,9 @@ export class Loader {
     relativeTo?: URL
   ): URL {
     let absoluteURL = new URL(moduleIdentifier, relativeTo);
-    for (let [sourceURL, to] of this.urlMappings) {
-      let sourcePath = new RealmPaths(new URL(sourceURL));
-      let destinationPath = new RealmPaths(to);
-      if (destinationPath.inRealm(absoluteURL)) {
-        if (absoluteURL.href.endsWith('/')) {
-          return sourcePath.directoryURL(destinationPath.local(absoluteURL));
-        } else {
-          return sourcePath.fileURL(
-            destinationPath.local(absoluteURL, { preserveQuerystring: true })
-          );
-        }
+    for (let handler of this.handlers) {
+      if (handler.handlesReverse(absoluteURL)) {
+        return (handler as unknown as URLHandler).resolveReverse(absoluteURL);
       }
     }
     return absoluteURL;
@@ -690,10 +712,6 @@ export class Loader {
     let dependencyList: UnregisteredDep[];
     let implementation: Function;
 
-    if (src.includes('glimmer-scoped')) {
-      src = 'console.log("hello!");';
-    }
-
     // this local is here for the evals to see
     // @ts-ignore
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -716,7 +734,7 @@ export class Loader {
     };
 
     try {
-      eval(src); // + "\n//# sourceURL=" + moduleIdentifier);
+      eval(src); // + "\n//# this.from=" + moduleIdentifier);
     } catch (exception) {
       this.setModule(moduleIdentifier, {
         state: 'broken',
@@ -816,10 +834,6 @@ export class Loader {
 
   private async load(moduleURL: ResolvedURL): Promise<string> {
     console.log(`loading ${moduleURL}`);
-    if (moduleURL.toString().includes('glimmer-scoped')) {
-      console.log('returning unfetched module URL');
-      return Promise.resolve(moduleURL.toString());
-    }
     let response: Response;
     try {
       response = await this.fetch(moduleURL);
@@ -904,4 +918,103 @@ function isEvaluatable(
     return false;
   }
   return stateOrder[module.state] >= stateOrder['registered-completing-deps'];
+}
+
+interface Handler {
+  handles(url: URL): boolean;
+  handlesReverse(url: URL): boolean;
+  resolves(): boolean;
+}
+
+class URLHandler implements Handler {
+  private from: URL;
+  private to: URL;
+
+  constructor(from: URL, to: URL) {
+    this.from = from;
+    this.to = to;
+  }
+
+  handles(absoluteURL: URL) {
+    let sourcePath = new RealmPaths(new URL(this.from));
+    return sourcePath.inRealm(absoluteURL);
+  }
+
+  handlesReverse(absoluteURL: URL) {
+    let destinationPath = new RealmPaths(this.to);
+    return destinationPath.inRealm(absoluteURL);
+  }
+
+  resolves() {
+    return true;
+  }
+
+  resolve(absoluteURL: URL): ResolvedURL {
+    console.log(`resolve(${absoluteURL.toString()})`);
+    let sourcePath = new RealmPaths(new URL(this.from));
+    let toPath = new RealmPaths(new URL(this.to));
+    if (absoluteURL.href.endsWith('/')) {
+      return makeResolvedURL(
+        toPath.directoryURL(sourcePath.local(absoluteURL))
+      );
+    } else {
+      return makeResolvedURL(
+        toPath.fileURL(
+          sourcePath.local(absoluteURL, { preserveQuerystring: true })
+        )
+      );
+    }
+  }
+
+  resolveReverse(absoluteURL: URL): URL {
+    let sourcePath = new RealmPaths(new URL(this.from));
+    let destinationPath = new RealmPaths(this.to);
+    if (absoluteURL.href.endsWith('/')) {
+      return sourcePath.directoryURL(destinationPath.local(absoluteURL));
+    } else {
+      return sourcePath.fileURL(
+        destinationPath.local(absoluteURL, { preserveQuerystring: true })
+      );
+    }
+  }
+}
+
+class ScopedCSSHandler implements Handler {
+  handles(url: URL) {
+    let handles = isScopedCSSRequest(url.toString());
+    console.log(`scoped css handler handles ${url.toString()}? ${handles}`);
+    return handles;
+  }
+
+  handlesReverse(_url: URL) {
+    return false;
+  }
+
+  resolves() {
+    return false;
+  }
+}
+
+interface NewURLHandler {
+  handles(url: URL): boolean;
+}
+
+class NewRealmHandler implements NewURLHandler {
+  private realmPaths: RealmPaths;
+
+  constructor(realmUrl: string) {
+    this.realmPaths = new RealmPaths(new URL(realmUrl));
+  }
+
+  handles(url: URL) {
+    return this.realmPaths.inRealm(url);
+  }
+}
+
+class NewScopedCSSHandler implements NewURLHandler {
+  handles(url: URL) {
+    let handles = isScopedCSSRequest(url.toString());
+    console.log(`new scoped css handler handles ${url.toString()}? ${handles}`);
+    return handles;
+  }
 }

@@ -288,6 +288,9 @@ export class CurrentRun {
       log.warn(
         `encountered error loading module "${url.href}": ${err.message}`
       );
+      if (err.message.includes('glimmer-scoped')) {
+        debugger;
+      }
       let deps = await (
         await this.loader.getConsumedModules(url.href)
       ).filter((u) => u !== url.href);
