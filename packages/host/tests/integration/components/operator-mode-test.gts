@@ -1475,7 +1475,7 @@ module('Integration | operator-mode', function (hooks) {
       .dom(`[data-test-boxel-input-validation-state="invalid"]`)
       .doesNotExist('invalid state is not shown');
   });
-
+  
   test('displays realm name as header title when hovering realm icon', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
@@ -1498,5 +1498,20 @@ module('Integration | operator-mode', function (hooks) {
       .hasText('In Operator Mode Workspace');
     await triggerEvent(`[data-test-boxel-header-icon]`, 'mouseleave');
     assert.dom('[data-test-boxel-header-title]').hasText('Person');
+  });
+  
+  test(`it has an option to copy the card url`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+    await click('[data-test-edit-button]');
+    await click('[data-test-boxel-menu-item-text="Copy Card URL"]');
+    assert.dom('[data-test-boxel-menu-item]').doesNotExist();
   });
 });

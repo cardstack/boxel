@@ -26,6 +26,7 @@ import { StackItem } from '@cardstack/host/components/operator-mode/container';
 
 import { htmlSafe, SafeString } from '@ember/template';
 import OperatorModeOverlays from '@cardstack/host/components/operator-mode/overlays';
+import config from '@cardstack/host/config/environment';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 
 interface Signature {
@@ -116,6 +117,14 @@ export default class OperatorModeStackItem extends Component<Signature> {
     }
   }
 
+  @action async copyToClipboard(cardUrl: string) {
+    if (config.environment === 'test') {
+      return; // navigator.clipboard is not available in test environment
+    }
+
+    await navigator.clipboard.writeText(cardUrl);
+  }
+
   fetchRealmInfo = trackedFunction(this, async () => {
     let card = this.args.item.card;
     let realmInfo = await this.cardService.getRealmInfo(card);
@@ -165,8 +174,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
             'click'
             (optional (if this.isBuried (fn @dismissStackedCardsAbove @index)))
           }}
-          style={{cssVar 
-            boxel-header-icon-width='30px' 
+          style={{cssVar
+            boxel-header-icon-width='30px'
             boxel-header-icon-height='30px'
             boxel-header-text-color=(if this.isHoverOnRealmIcon 'var(--boxel-cyan)' 'var(--boxel-dark)')
           }}
@@ -201,6 +210,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
                       )
                     )
                     (array
+                      (menuItem
+                        'Copy Card URL'
+                        (fn this.copyToClipboard @item.card.id)
+                        icon='icon-link'
+                      )
                       (menuItem
                         'Edit' (fn @edit @item @index) icon='icon-pencil'
                       )
