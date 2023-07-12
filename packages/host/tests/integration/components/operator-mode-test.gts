@@ -500,7 +500,7 @@ module('Integration | operator-mode', function (hooks) {
       ...Object.fromEntries(personCards),
     });
     realm = await TestRealm.createWithAdapter(adapter, this.owner);
-    loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
+    loader.registerURLHandler(realm.maybeHandle.bind(realm));
     await realm.ready;
 
     setCardInOperatorModeState = async (cardURL: string) => {
@@ -1475,7 +1475,7 @@ module('Integration | operator-mode', function (hooks) {
       .dom(`[data-test-boxel-input-validation-state="invalid"]`)
       .doesNotExist('invalid state is not shown');
   });
-  
+
   test('displays realm name as header title when hovering realm icon', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
@@ -1499,7 +1499,7 @@ module('Integration | operator-mode', function (hooks) {
     await triggerEvent(`[data-test-boxel-header-icon]`, 'mouseleave');
     assert.dom('[data-test-boxel-header-title]').hasText('Person');
   });
-  
+
   test(`it has an option to copy the card url`, async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
     await renderComponent(

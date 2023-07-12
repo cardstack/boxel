@@ -136,7 +136,7 @@ module('Acceptance | basic tests', function (hooks) {
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
-    loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
+    loader.registerURLHandler(realm.maybeHandle.bind(realm));
     await realm.ready;
   });
 

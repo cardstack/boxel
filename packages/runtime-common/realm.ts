@@ -5,7 +5,7 @@ import {
   type RunnerOptionsManager,
 } from './search-index';
 import { type SingleCardDocument } from './card-document';
-import { Loader, type MaybeLocalRequest } from './loader';
+import { Loader } from './loader';
 import { RealmPaths, LocalPath, join } from './paths';
 import {
   systemError,
@@ -152,7 +152,7 @@ export class Realm {
     this.paths = new RealmPaths(url);
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
-    Loader.registerURLHandler(new URL(url), this.handle.bind(this));
+    Loader.registerURLHandler(this.maybeHandle.bind(this));
     this.#adapter = adapter;
     this.#searchIndex = new SearchIndex(
       this,
@@ -277,9 +277,23 @@ export class Realm {
     return this.#startedUp.promise;
   }
 
-  async handle(request: MaybeLocalRequest): Promise<ResponseWithNodeStream> {
+  async maybeHandle(request: Request): Promise<Response | null> {
+    if (!this.paths.inRealm(new URL(request.url))) {
+      return null;
+    }
+    return await this.internalHandle(request, true);
+  }
+
+  async handle(request: Request): Promise<ResponseWithNodeStream> {
+    return this.internalHandle(request, false);
+  }
+
+  private async internalHandle(
+    request: Request,
+    isLocal: boolean
+  ): Promise<ResponseWithNodeStream> {
     // local requests are allowed to query the realm as the index is being built up
-    if (!request.isLocal) {
+    if (!isLocal) {
       await this.ready;
     }
     if (!this.searchIndex) {
@@ -808,8 +822,7 @@ export class Realm {
         realmInfo.name = realmConfigJson.name ?? realmInfo.name;
         realmInfo.backgroundURL =
           realmConfigJson.backgroundURL ?? realmInfo.backgroundURL;
-        realmInfo.iconURL = 
-          realmConfigJson.iconURL ?? realmInfo.iconURL;
+        realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
       } catch (e) {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }
