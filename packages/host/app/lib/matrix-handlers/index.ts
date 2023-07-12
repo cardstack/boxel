@@ -11,7 +11,6 @@ import type {
 import type { RoomObjectiveCard } from 'https://cardstack.com/base/room-objective';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { type LooseCardResource, baseRealm } from '@cardstack/runtime-common';
-import type * as MatrixSDK from 'matrix-js-sdk';
 
 export * as Membership from './membership';
 export * as Timeline from './timeline';
@@ -41,7 +40,6 @@ export interface Context {
   timelineQueue: MatrixEvent[];
   cardAPI: typeof CardAPI;
   client: MatrixClient;
-  matrixSDK: typeof MatrixSDK;
   handleMessage?: (
     context: Context,
     event: Event,

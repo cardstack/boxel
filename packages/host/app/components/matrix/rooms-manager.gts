@@ -13,10 +13,10 @@ import {
   LoadingIndicator,
   BoxelInputValidationState,
   Button,
+  IconButton,
   FieldContainer,
 } from '@cardstack/boxel-ui';
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
-import { LinkTo } from '@ember/routing';
 import { eventDebounceMs } from '@cardstack/host/lib/matrix-utils';
 import {
   getRoomCard,
@@ -24,6 +24,7 @@ import {
 } from '@cardstack/host/resources/room-card';
 import { TrackedMap } from 'tracked-built-ins';
 import RouterService from '@ember/routing/router-service';
+import Room from './room';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type { RoomCard, RoomMemberCard } from 'https://cardstack.com/base/room';
 
@@ -31,21 +32,19 @@ const TRUE = true;
 
 export default class RoomsManager extends Component {
   <template>
-    <BoxelHeader class='matrix' @title='Rooms' @hasBackground={{TRUE}}>
-      <:actions>
-        <Button
-          data-test-create-room-mode-btn
-          {{on 'click' this.showCreateRoomMode}}
-          @disabled={{this.isCreateRoomMode}}
-        >Create Room</Button>
-      </:actions>
-    </BoxelHeader>
+    <div class="header-wrapper">
+      <BoxelHeader class='matrix' @title={{this.headerTitle}} @hasBackground={{TRUE}}/>
+      <IconButton class="toggle-btn"
+        @icon={{this.toggleIcon}}
+        {{on 'click' this.toggleRooms}}
+      />
+    </div>
     {{#if this.isCreateRoomMode}}
       {{#if this.doCreateRoom.isRunning}}
         <LoadingIndicator />
       {{else}}
-        <fieldset>
-          <FieldContainer @label='Room Name:' @tag='label'>
+        <div class="create-room">
+          <FieldContainer @label='Room Name:' @tag='label' class="create-room__field">
             <BoxelInputValidationState
               data-test-room-name-field
               @id=''
@@ -55,7 +54,7 @@ export default class RoomsManager extends Component {
               @onInput={{this.setNewRoomName}}
             />
           </FieldContainer>
-          <FieldContainer @label='Invite:' @tag='label'>
+          <FieldContainer @label='Invite:' @tag='label' class="create-room__field">
             <BoxelInput
               data-test-room-invite-field
               type='text'
@@ -63,78 +62,98 @@ export default class RoomsManager extends Component {
               @onInput={{this.setNewRoomInvite}}
             />
           </FieldContainer>
+        </div>
+        <div class="create-button-wrapper">
           <Button
             data-test-create-room-cancel-btn
+            class='room__button'
             {{on 'click' this.cancelCreateRoom}}
           >Cancel</Button>
           <Button
             data-test-create-room-btn
+            class='room__button'
             @kind='primary'
             @disabled={{not this.newRoomName}}
             {{on 'click' this.createRoom}}
           >Create</Button>
-        </fieldset>
+        </div>
       {{/if}}
     {{/if}}
     {{#if this.loadRooms.isRunning}}
       <LoadingIndicator />
     {{else}}
-      <div class='room-list' data-test-invites-list>
-        <h3>Invites</h3>
-        {{#each this.sortedInvites as |invite|}}
-          <div class='room' data-test-invited-room={{invite.room.name}}>
-            <span class='room-item'>
-              {{invite.room.name}}
-              (from:
-              <span
-                data-test-invite-sender={{niceName
-                  invite.member.membershipInitiator
-                }}
-              >{{niceName invite.member.membershipInitiator}})</span>
-            </span>
+      {{#unless this.isCollapsed}}
+        {{#unless this.isCreateRoomMode}}
+          <div class="create-button-wrapper">
             <Button
-              data-test-decline-room-btn={{invite.room.name}}
-              {{on 'click' (fn this.leaveRoom invite.room.roomId)}}
-            >Decline</Button>
-            <Button
-              data-test-join-room-btn={{invite.room.name}}
-              {{on 'click' (fn this.joinRoom invite.room.roomId)}}
-            >Join</Button>
-            {{#if (eq invite.room.roomId this.roomIdForCurrentAction)}}
-              <LoadingIndicator />
-            {{/if}}
+              data-test-create-room-mode-btn
+              class='room__button'
+              {{on 'click' this.showCreateRoomMode}}
+              @disabled={{this.isCreateRoomMode}}
+            >Create Room</Button>
           </div>
-        {{else}}
-          (No invites)
-        {{/each}}
-      </div>
-      <div class='room-list' data-test-rooms-list>
-        <h3>Rooms</h3>
-        {{#each this.sortedJoinedRooms as |joined|}}
-          <div class='room' data-test-joined-room={{joined.room.name}}>
-            <span class='room-item'>
-              <LinkTo
-                class='link'
-                data-test-enter-room={{joined.room.name}}
-                @route='chat.room'
-                @model={{joined.room.roomId}}
-              >
-                {{joined.room.name}}
-              </LinkTo>
-            </span>
-            <Button
-              data-test-leave-room-btn={{joined.room.name}}
-              {{on 'click' (fn this.leaveRoom joined.room.roomId)}}
-            >Leave</Button>
-            {{#if (eq joined.room.roomId this.roomIdForCurrentAction)}}
-              <LoadingIndicator />
-            {{/if}}
-          </div>
-        {{else}}
-          (No rooms)
-        {{/each}}
-      </div>
+        {{/unless}}
+        <div class='room-list' data-test-invites-list>
+          <h3>Invites</h3>
+          {{#each this.sortedInvites as |invite|}}
+            <div class='room' data-test-invited-room={{invite.room.name}}>
+              <span class='room-item'>
+                {{invite.room.name}}
+                (from:
+                <span
+                  data-test-invite-sender={{niceName
+                    invite.member.membershipInitiator
+                  }}
+                >{{niceName invite.member.membershipInitiator}})</span>
+              </span>
+              <Button
+                data-test-decline-room-btn={{invite.room.name}}
+                {{on 'click' (fn this.leaveRoom invite.room.roomId)}}
+              >Decline</Button>
+              <Button
+                data-test-join-room-btn={{invite.room.name}}
+                {{on 'click' (fn this.joinRoom invite.room.roomId)}}
+              >Join</Button>
+              {{#if (eq invite.room.roomId this.roomIdForCurrentAction)}}
+                <LoadingIndicator />
+              {{/if}}
+            </div>
+          {{else}}
+            (No invites)
+          {{/each}}
+        </div>
+        <div class='room-list' data-test-rooms-list>
+          <h3>Rooms</h3>
+          {{#each this.sortedJoinedRooms as |joined|}}
+            <div class='room' data-test-joined-room={{joined.room.name}}>
+              <span class='room-item'>
+                <a class="link"
+                  data-test-enter-room={{joined.room.name}}
+                  {{on 'click' (fn this.enterRoom joined.room.roomId)}}
+                >
+                  {{joined.room.name}}
+                </a>
+              </span>
+              <Button
+                data-test-leave-room-btn={{joined.room.name}}
+                {{on 'click' (fn this.leaveRoom joined.room.roomId)}}
+              >Leave</Button>
+              {{#if (eq joined.room.roomId this.roomIdForCurrentAction)}}
+                <LoadingIndicator />
+              {{/if}}
+            </div>
+          {{else}}
+            (No rooms)
+          {{/each}}
+        </div>
+        <hr/>
+      {{/unless}}
     {{/if}}
+
+    {{#if this.currentRoomId}}
+      <Room @roomId={{this.currentRoomId}}/>
+    {{/if}}
+
     <style>
       .room-list {
         padding: 0 var(--boxel-sp);
@@ -142,16 +161,46 @@ export default class RoomsManager extends Component {
       }
 
       .room {
+        display: flex;
         margin-top: var(--boxel-sp-sm);
+        flex-wrap: nowrap
       }
 
       .room-item {
         display: inline-block;
-        min-width: 30rem;
+        flex-grow: 1;
       }
 
       .room button {
         margin-left: var(--boxel-sp-xs);
+      }
+
+      .header-wrapper {
+        position: relative;
+      }
+
+      .toggle-btn {
+        position: absolute;
+        z-index: 1;
+        margin-top: calc(-2 * var(--boxel-sp-xl) + 2px)
+      }
+
+      .create-room {
+        padding: 0 var(--boxel-sp);
+      }
+
+      .create-button-wrapper {
+        display: flex;
+        justify-content: flex-end;
+        padding: var(--boxel-sp) var(--boxel-sp) 0;
+      }
+
+      .create-button-wrapper button {
+        margin-left: var(--boxel-sp-xs);
+      }
+
+      .create-room__field {
+        margin-top: var(--boxel-sp-sm);
       }
     </style>
   </template>
@@ -163,6 +212,9 @@ export default class RoomsManager extends Component {
   @tracked private newRoomInvite: string[] = [];
   @tracked private roomNameError: string | undefined;
   @tracked private roomIdForCurrentAction: string | undefined;
+  @tracked private currentRoomId: string | undefined;
+  @tracked private isCollapsed = false;
+  private currentRoomCardResource = getRoomCard(this, () => this.currentRoomId);
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -232,6 +284,14 @@ export default class RoomsManager extends Component {
   private get newRoomInviteFormatted() {
     return this.newRoomInvite.join(', ');
   }
+  
+  private get headerTitle() {
+    return `${this.currentRoomCard ? this.currentRoomCard.name: 'Rooms'}`;
+  }
+  
+  private get currentRoomCard() {
+    return this.currentRoomCardResource.roomCard;
+  }
 
   private get cleanNewRoomName() {
     return this.newRoomName ?? '';
@@ -239,6 +299,15 @@ export default class RoomsManager extends Component {
 
   private get roomNameInputState() {
     return this.roomNameError ? 'invalid' : 'initial';
+  }
+
+  private get toggleIcon() {
+    return this.isCollapsed ? 'icon-plus-circle' : 'icon-minus-circle';
+  }
+
+  @action
+  private toggleRooms() {
+    this.isCollapsed = !this.isCollapsed;
   }
 
   @action
@@ -275,6 +344,12 @@ export default class RoomsManager extends Component {
   @action
   private joinRoom(roomId: string) {
     this.doJoinRoom.perform(roomId);
+  }
+
+  @action
+  private enterRoom(roomId: string) {
+    this.currentRoomId = roomId;
+    this.isCollapsed = true;
   }
 
   private doCreateRoom = restartableTask(async () => {

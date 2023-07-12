@@ -8,7 +8,7 @@ import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import type CardService from '@cardstack/host/services/card-service';
 
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { Modal } from '@cardstack/boxel-ui';
+import { Modal, Button } from '@cardstack/boxel-ui';
 import SearchSheet, {
   SearchSheetMode,
 } from '@cardstack/host/components/search-sheet';
@@ -24,6 +24,7 @@ import {
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
+import { htmlSafe } from '@ember/template';
 
 import { registerDestructor } from '@ember/destroyable';
 import type { Query } from '@cardstack/runtime-common/query';
@@ -35,6 +36,8 @@ import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import perform from 'ember-concurrency/helpers/perform';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import OperatorModeStack from '@cardstack/host/components/operator-mode/stack';
+import type MatrixService from '../../services/matrix-service';
+import ChatSidebar from '../matrix/chat-sidebar';
 
 interface Signature {
   Args: {
@@ -72,8 +75,10 @@ export default class OperatorModeContainer extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
+  @service declare matrixService: MatrixService;
   @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
   @tracked searchSheetTrigger: SearchSheetTrigger | null = null;
+  @tracked isChatVisible = false;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -92,6 +97,11 @@ export default class OperatorModeContainer extends Component<Signature> {
   @action
   getCards(query: Query): Search {
     return getSearchResults(this, () => query);
+  }
+
+  @action
+  toggleChat() {
+    this.isChatVisible = !this.isChatVisible;
   }
 
   @action onFocusSearchInput(searchSheetTrigger?: SearchSheetTrigger) {
@@ -387,6 +397,10 @@ export default class OperatorModeContainer extends Component<Signature> {
     );
   }
 
+  get gridCss() {
+    return htmlSafe(this.isChatVisible ? `grid-template-columns: 1.5fr 0.5fr;`: `grid-template-columns: 1fr;`);
+  }
+
   <template>
     <Modal
       class='operator-mode'
@@ -399,68 +413,95 @@ export default class OperatorModeContainer extends Component<Signature> {
 
       <CardCatalogModal />
 
-      {{#if this.canCreateNeighborStack}}
-        <button
-          data-test-add-card-left-stack
-          class='add-card-to-neighbor-stack add-card-to-neighbor-stack--left {{if (eq this.searchSheetTrigger SearchSheetTrigger.DropCardToLeftNeighborStackButton) 'add-card-to-neighbor-stack--active'}}'
-          {{on
-            'click'
-            (fn
-              this.onFocusSearchInput
-              SearchSheetTrigger.DropCardToLeftNeighborStackButton
-            )
-          }}
-        >
-          {{svgJar 'download' width='30px' height='30px'}}
-        </button>
-      {{/if}}
+      <div class='operator-mode__with-chat' style={{this.gridCss}}>
+        <div class='operator-mode__main'>
+          {{#if this.canCreateNeighborStack}}
+            <button
+              data-test-add-card-left-stack
+              class='add-card-to-neighbor-stack add-card-to-neighbor-stack--left
+                {{if
+                  (eq
+                    this.searchSheetTrigger
+                    SearchSheetTrigger.DropCardToLeftNeighborStackButton
+                  )
+                  "add-card-to-neighbor-stack--active"
+                }}'
+              {{on
+                'click'
+                (fn
+                  this.onFocusSearchInput
+                  SearchSheetTrigger.DropCardToLeftNeighborStackButton
+                )
+              }}
+            >
+              {{svgJar 'download' width='30px' height='30px'}}
+            </button>
+          {{/if}}
 
-      {{#if (eq this.allStackItems.length 0)}}
-        <div class='no-cards'>
-          <p class='add-card-title'>
-            Add a card to get started
-          </p>
+          {{#if (eq this.allStackItems.length 0)}}
+            <div class='no-cards'>
+              <p class='add-card-title'>
+                Add a card to get started
+              </p>
 
-          <button
-            class='add-card-button icon-button'
-            {{on 'click' (fn (perform this.addCard))}}
-            data-test-add-card-button
-          >
-            {{svgJar 'icon-plus' width='50px' height='50px'}}
-          </button>
+              <button
+                class='add-card-button icon-button'
+                {{on 'click' (fn (perform this.addCard))}}
+                data-test-add-card-button
+              >
+                {{svgJar 'icon-plus' width='50px' height='50px'}}
+              </button>
+            </div>
+          {{else}}
+            {{#each this.stacks as |stack stackIndex|}}
+              <OperatorModeStack
+                data-test-operator-mode-stack={{stackIndex}}
+                class='operator-mode-stack'
+                @stackItems={{stack.items}}
+                @stackIndex={{stackIndex}}
+                @publicAPI={{this.publicAPI this stackIndex}}
+                @close={{this.close}}
+                @cancel={{this.cancel}}
+                @edit={{this.edit}}
+                @delete={{this.delete}}
+                @save={{this.save}}
+              />
+            {{/each}}
+          {{/if}}
+
+          {{#if this.canCreateNeighborStack}}
+            <button
+              data-test-add-card-right-stack
+              class='add-card-to-neighbor-stack add-card-to-neighbor-stack--right
+                {{if
+                  (eq
+                    this.searchSheetTrigger
+                    SearchSheetTrigger.DropCardToRightNeighborStackButton
+                  )
+                  "add-card-to-neighbor-stack--active"
+                }}'
+              {{on
+                'click'
+                (fn
+                  this.onFocusSearchInput
+                  SearchSheetTrigger.DropCardToRightNeighborStackButton
+                )
+              }}
+            >
+              {{svgJar 'download' width='30px' height='30px'}}
+            </button>
+          {{/if}}
         </div>
-      {{else}}
-        {{#each this.stacks as |stack stackIndex|}}
-          <OperatorModeStack
-            data-test-operator-mode-stack={{stackIndex}}
-            class='operator-mode-stack'
-            @stackItems={{stack.items}}
-            @stackIndex={{stackIndex}}
-            @publicAPI={{this.publicAPI this stackIndex}}
-            @close={{this.close}}
-            @cancel={{this.cancel}}
-            @edit={{this.edit}}
-            @delete={{this.delete}}
-            @save={{this.save}}
-          />
-        {{/each}}
-      {{/if}}
 
-      {{#if this.canCreateNeighborStack}}
-        <button
-          data-test-add-card-right-stack
-          class='add-card-to-neighbor-stack add-card-to-neighbor-stack--right {{if (eq this.searchSheetTrigger SearchSheetTrigger.DropCardToRightNeighborStackButton) 'add-card-to-neighbor-stack--active'}}'
-          {{on
-            'click'
-            (fn
-              this.onFocusSearchInput
-              SearchSheetTrigger.DropCardToRightNeighborStackButton
-            )
-          }}
-        >
-          {{svgJar 'download' width='30px' height='30px'}}
-        </button>
-      {{/if}}
+        {{#if this.isChatVisible}}
+          <ChatSidebar @onClose={{this.toggleChat}}/>
+        {{else}}
+          <Button
+            class="chat-btn"
+            {{on 'click' this.toggleChat}}
+          >Chat</Button>
+        {{/if}}
+      </div>
 
       <SearchSheet
         @mode={{this.searchSheetMode}}
@@ -521,6 +562,29 @@ export default class OperatorModeContainer extends Component<Signature> {
       }
       .add-card-to-neighbor-stack--right {
         right: 0;
+        margin-right: var(--boxel-sp-lg);
+      }
+
+      .operator-mode__with-chat {
+        display: grid; 
+        grid-template-rows: 1fr;
+        grid-template-columns: 1.5fr 0.5fr;
+        gap: 0px;
+        height: 100%;
+      }
+
+      .operator-mode__main {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        position: relative;
+      }
+
+      .chat-btn {
+        position: absolute;
+        background-color: white;
+        bottom: calc(var(--search-sheet-closed-height) + var(--boxel-sp));
+        right: var(--boxel-sp);
         margin-right: var(--boxel-sp-lg);
       }
     </style>
