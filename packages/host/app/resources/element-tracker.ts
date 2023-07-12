@@ -12,10 +12,18 @@ export default class ElementTracker<Meta = unknown> {
       modify(element: HTMLElement, _pos: unknown, meta: Meta) {
         // Without scheduling this after render, this produces the "attempted to update value, but it had already been used previously in the same computation" type error
         schedule('afterRender', () => {
-          tracker.elements.push({
-            element,
-            meta: { ...meta },
-          });
+          let found = tracker.elements.find((e) => e.element === element);
+          if (found) {
+            tracker.elements.splice(tracker.elements.indexOf(found), 1, {
+              element,
+              meta: { ...meta },
+            });
+          } else {
+            tracker.elements.push({
+              element,
+              meta: { ...meta },
+            });
+          }
         });
 
         registerDestructor(this, () => {
