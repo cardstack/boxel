@@ -222,6 +222,10 @@ export default class Room extends Component<RoomArgs> {
         justify-content: flex-end;
         padding-top: var(--boxel-sp-xs);
       }
+
+      .invite-btn {
+        margin-top: var(--boxel-sp-xs);
+      }
     </style>
   </template>
 

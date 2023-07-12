@@ -30,7 +30,7 @@ export default class ChatSidebar extends Component<Args> {
             data-test-close-chat-button
           />
         </div>
-        {{#if this.matrixService.isLoggedIn}}
+        {{#if this.showLoggedInMode}}
           <UserProfile />
           <RoomsManager />
         {{else}}
@@ -70,6 +70,10 @@ export default class ChatSidebar extends Component<Args> {
 
   @service declare matrixService: MatrixService;
   @tracked isRegistrationMode = false;
+
+  get showLoggedInMode() {
+    return this.matrixService.isLoggedIn && !this.isRegistrationMode;
+  }
 
   @action
   toggleRegistrationMode() {

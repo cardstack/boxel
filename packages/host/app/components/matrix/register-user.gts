@@ -293,10 +293,7 @@ export default class RegisterUser extends Component<Args> {
 
     if (auth) {
       await this.matrixService.start(auth);
-      let preparedKey = await this.matrixService.client.prepareKeyBackupVersion(
-        this.password
-      );
-      await this.matrixService.client.createKeyBackupVersion(preparedKey);
+      this.args.onCancel();
     }
   });
 
