@@ -78,8 +78,6 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build host dist/ for fastboot
         run: pnpm build
-        env:
-          NODE_OPTIONS: --max_old_space_size=4096
         working-directory: packages/host
       - name: Start realm servers
         run: pnpm start:all &
@@ -102,8 +100,6 @@ jobs:
         working-directory: packages/matrix
       - name: Build host dist/ for fastboot
         run: pnpm build
-        env:
-          NODE_OPTIONS: --max_old_space_size=4096
         working-directory: packages/host
       - name: Start realm servers
         run: pnpm start:all &
@@ -127,8 +123,6 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build host dist/ for fastboot
         run: pnpm build
-        env:
-          NODE_OPTIONS: --max_old_space_size=4096
         working-directory: packages/host
       - name: Start base realm server
         run: pnpm start:all &
