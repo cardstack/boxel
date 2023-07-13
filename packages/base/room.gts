@@ -376,10 +376,7 @@ export class RoomCard extends Card {
         }
         let event_id = event.event_id;
         let update = false;
-        if (
-          event.content['m.relates_to'] &&
-          event.content['m.relates_to'].rel_type === 'm.replace'
-        ) {
+        if (event.content['m.relates_to']?.rel_type === 'm.replace') {
           event_id = event.content['m.relates_to'].event_id;
           console.log('Updating', event_id);
           update = true;
@@ -532,6 +529,10 @@ interface LeaveEvent extends RoomStateEvent {
 interface MessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: {
+    'm.relates_to'?: {
+      rel_type: string;
+      event_id: string;
+    };
     msgtype: 'm.text';
     format: 'org.matrix.custom.html';
     body: string;
@@ -548,6 +549,10 @@ interface MessageEvent extends BaseMatrixEvent {
 interface CardMessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: {
+    'm.relates_to'?: {
+      rel_type: string;
+      event_id: string;
+    };
     msgtype: 'org.boxel.card';
     format: 'org.matrix.custom.html';
     body: string;
@@ -565,6 +570,10 @@ interface CardMessageEvent extends BaseMatrixEvent {
 interface ObjectiveEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: {
+    'm.relates_to'?: {
+      rel_type: string;
+      event_id: string;
+    };
     msgtype: 'org.boxel.objective';
     body: string;
     ref: CardRef;

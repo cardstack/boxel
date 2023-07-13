@@ -19,14 +19,14 @@ export default class ChatSidebar extends Component<Args> {
   <template>
     <div class='chat-sidebar'>
       <div class='chat-sidebar__inner'>
-        <div class="close-chat-wrapper">
+        <div class='close-chat-wrapper'>
           <IconButton
             @icon='icon-x'
             @width='20px'
             @height='20px'
             class='icon-button'
             aria-label='Close'
-            {{on 'click' this.args.onClose}}
+            {{on 'click' @onClose}}
             data-test-close-chat-button
           />
         </div>
@@ -35,15 +35,14 @@ export default class ChatSidebar extends Component<Args> {
           <RoomsManager />
         {{else}}
           {{#if this.isRegistrationMode}}
-            <RegisterUser @onCancel={{this.toggleRegistrationMode}}/>
+            <RegisterUser @onCancel={{this.toggleRegistrationMode}} />
           {{else}}
             <Login />
-            <a class="link registration-link"
+            <button
+              class='link registration-link'
               data-test-register-user
               {{on 'click' this.toggleRegistrationMode}}
-            >
-              Register new user
-            </a>
+            >Register new user</button>
           {{/if}}
         {{/if}}
       </div>
@@ -64,6 +63,11 @@ export default class ChatSidebar extends Component<Args> {
       .close-chat-wrapper {
         display: flex;
         justify-content: flex-end;
+      }
+      .registration-link {
+        background: none;
+        padding: 0;
+        border: none;
       }
     </style>
   </template>

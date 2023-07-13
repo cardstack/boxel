@@ -12,13 +12,35 @@ interface LoginOptions {
   expectFailure?: true;
 }
 
+export async function reloadAndOpenChat(page: Page) {
+  await page.reload();
+  await openChat(page);
+}
+
+export async function toggleOperatorMode(page: Page) {
+  await page.locator('[data-test-operator-mode-btn]').click();
+}
+
+export async function openChat(page: Page) {
+  await page.locator('[data-test-open-chat]').click();
+}
+
+export async function gotoRegistration(page: Page) {
+  await page.goto(rootPath);
+  await toggleOperatorMode(page);
+  await openChat(page);
+  await page.locator('[data-test-register-user]').click();
+}
+
 export async function login(
   page: Page,
   username: string,
   password: string,
   opts?: LoginOptions
 ) {
-  await page.goto(`${rootPath}/chat`);
+  await page.goto(rootPath);
+  await toggleOperatorMode(page);
+  await openChat(page);
   await page.locator('[data-test-username-field]').fill(username);
   await page.locator('[data-test-password-field]').fill(password);
   await page.locator('[data-test-login-btn]').click();
@@ -59,6 +81,7 @@ export async function leaveRoom(page: Page, roomName: string) {
 
 export async function openRoom(page: Page, roomName: string) {
   await page.locator(`[data-test-enter-room="${roomName}"]`).click();
+  await page.locator(`[data-test-toggle-rooms-view]`).click();
 }
 
 export async function setObjective(page: Page, objectiveURI: string) {
@@ -93,16 +116,6 @@ export async function inviteToRoom(page: Page, invites: string[]) {
   await page.locator(`[data-test-invite-mode-btn]`).click();
   await page.locator('[data-test-room-invite-field]').fill(invites.join(', '));
   await page.locator('[data-test-room-invite-btn]').click();
-}
-
-export async function scrollToTopOfMessages(page: Page) {
-  await page.evaluate(() => {
-    let messages = document.querySelector('.room__messages-wrapper');
-    if (!messages) {
-      throw new Error(`Can't find messages element`);
-    }
-    messages.scrollTop = 0;
-  });
 }
 
 export async function assertMessages(
@@ -204,7 +217,6 @@ export async function assertRooms(page: Page, rooms: RoomAssertions) {
 }
 
 export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
-  await page.waitForURL(`${testHost}/chat`);
   await expect(
     page.locator('[data-test-username-field]'),
     'username field is not displayed'
@@ -222,7 +234,6 @@ export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
 }
 
 export async function assertLoggedOut(page: Page) {
-  await page.waitForURL(`${testHost}/chat`);
   await expect(
     page.locator('[data-test-username-field]'),
     'username field is displayed'

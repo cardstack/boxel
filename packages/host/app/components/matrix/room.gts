@@ -34,7 +34,7 @@ interface RoomArgs {
 }
 export default class Room extends Component<RoomArgs> {
   <template>
-    <div>Number of cards: {{this.cards.length}}</div>
+    <div>Number of cards: {{this.currentCards.size}}</div>
     <div class='room-members'>
       <div data-test-room-members class='members'><b>Members:</b>
         {{this.memberNames}}

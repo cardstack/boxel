@@ -28,6 +28,37 @@ test.describe('Room objectives', () => {
     await synapseStop(synapse.synapseId);
   });
 
+  test('room objective updates milestones as they are completed', async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass');
+    await createRoom(page, { name: 'Room 1', invites: ['user2'] });
+    await openRoom(page, 'Room 1');
+    await setObjective(page, 'https://cardstack.com/base/types/room-objective');
+
+    await logout(page);
+    await login(page, 'user2', 'pass');
+    await joinRoom(page, 'Room 1');
+    await openRoom(page, 'Room 1');
+
+    await sendMessage(page, `I'm not saying Hello yet...`);
+
+    await expect(page.locator(`[data-test-objective-progress]`)).toContainText(
+      `Completed 0 of 2 (0%)`
+    );
+    await expect(page.locator(`[data-test-objective-remaining]`)).toContainText(
+      `user1, user2`
+    );
+
+    await sendMessage(page, `_Hello_`);
+    await expect(page.locator(`[data-test-objective-progress]`)).toContainText(
+      `Completed 1 of 2 (50%)`
+    );
+    await expect(page.locator(`[data-test-objective-remaining]`)).toContainText(
+      `user1`
+    );
+  });
+
   test('room creator can set a room objective', async ({ page }) => {
     await login(page, 'user1', 'pass');
     await createRoom(page, { name: 'Room 1' });
@@ -58,36 +89,6 @@ test.describe('Room objectives', () => {
       page.locator(`[data-test-set-objective-btn]`),
       'The set objective button does not appear'
     ).toHaveCount(0);
-  });
-
-  test('room objective updates milestones as they are completed', async ({
-    page,
-  }) => {
-    await login(page, 'user1', 'pass');
-    await createRoom(page, { name: 'Room 1', invites: ['user2'] });
-    await openRoom(page, 'Room 1');
-    await setObjective(page, 'https://cardstack.com/base/types/room-objective');
-
-    await logout(page);
-    await login(page, 'user2', 'pass');
-    await joinRoom(page, 'Room 1');
-    await openRoom(page, 'Room 1');
-
-    await sendMessage(page, `I'm not saying Hello yet...`);
-    await expect(page.locator(`[data-test-objective-progress]`)).toContainText(
-      `Completed 0 of 2 (0%)`
-    );
-    await expect(page.locator(`[data-test-objective-remaining]`)).toContainText(
-      `user1, user2`
-    );
-
-    await sendMessage(page, `_Hello_`);
-    await expect(page.locator(`[data-test-objective-progress]`)).toContainText(
-      `Completed 1 of 2 (50%)`
-    );
-    await expect(page.locator(`[data-test-objective-remaining]`)).toContainText(
-      `user1`
-    );
   });
 
   test('room objective updates milestones as members join the room', async ({

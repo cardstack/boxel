@@ -5,7 +5,13 @@ import {
   registerUser,
   type SynapseInstance,
 } from '../docker/synapse';
-import { login, logout, assertRooms, createRoom } from '../helpers';
+import {
+  login,
+  logout,
+  assertRooms,
+  createRoom,
+  reloadAndOpenChat,
+} from '../helpers';
 
 test.describe('Room creation', () => {
   let synapse: SynapseInstance;
@@ -32,9 +38,6 @@ test.describe('Room creation', () => {
 
     await page.locator('[data-test-create-room-mode-btn]').click();
 
-    await expect(
-      page.locator('[data-test-create-room-mode-btn]')
-    ).toBeDisabled();
     await expect(page.locator('[data-test-create-room-btn]')).toBeDisabled();
     await expect(
       page.locator('[data-test-create-room-cancel-btn]')
@@ -48,7 +51,7 @@ test.describe('Room creation', () => {
       joinedRooms: [{ name: 'Room 1' }],
     });
 
-    await page.reload();
+    await reloadAndOpenChat(page);
     await assertRooms(page, {
       joinedRooms: [{ name: 'Room 1' }],
     });

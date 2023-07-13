@@ -8,7 +8,8 @@ import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import type CardService from '@cardstack/host/services/card-service';
 
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { Modal, Button } from '@cardstack/boxel-ui';
+import { Modal, IconButton } from '@cardstack/boxel-ui';
+import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import SearchSheet, {
   SearchSheetMode,
 } from '@cardstack/host/components/search-sheet';
@@ -500,11 +501,18 @@ export default class OperatorModeContainer extends Component<Signature> {
         {{#if this.isChatVisible}}
           <ChatSidebar @onClose={{this.toggleChat}} />
         {{else}}
-          <Button
+          <IconButton
             data-test-open-chat
             class='chat-btn'
+            @icon='sparkle'
+            @width='40'
+            @height='40'
             {{on 'click' this.toggleChat}}
-          >Chat</Button>
+            style={{cssVar
+              boxel-icon-button-width="60px"
+              boxel-icon-button-height="60px"
+            }}
+          />
         {{/if}}
       </div>
 
@@ -587,10 +595,14 @@ export default class OperatorModeContainer extends Component<Signature> {
 
       .chat-btn {
         position: absolute;
-        background-color: white;
         bottom: calc(var(--search-sheet-closed-height) + var(--boxel-sp));
         right: var(--boxel-sp);
         margin-right: var(--boxel-sp-lg);
+        border-radius: var(--boxel-border-radius);
+        background-color: rgba(255, 255, 255, 0.25);
+      }
+      .chat-btn:hover {
+        background: var(--boxel-light);
       }
     </style>
   </template>
