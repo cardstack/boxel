@@ -23,12 +23,16 @@ import {
 import MatrixSDK from 'matrix-js-sdk';
 import type LoaderService from './loader-service';
 import { type Card } from 'https://cardstack.com/base/card-api';
-import type { RoomCard } from 'https://cardstack.com/base/room';
+import type {
+  RoomCard,
+  MatrixEvent as DiscreteMatrixEvent,
+} from 'https://cardstack.com/base/room';
 import type { RoomObjectiveCard } from 'https://cardstack.com/base/room-objective';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 const { matrixURL } = ENV;
 const SET_OBJECTIVE_POWER_LEVEL = 50;
+const DEFAULT_PAGE_SIZE = 25;
 
 export type Event = Partial<IEvent>;
 
@@ -271,6 +275,34 @@ export default class MatrixService extends Service {
     }
   }
 
+  async allRoomMessages(roomId: string, opts?: MessageOptions) {
+    let messages: DiscreteMatrixEvent[] = [];
+    let from: string | undefined;
+
+    do {
+      let response = await fetch(
+        `${matrixURL}/_matrix/client/v3/rooms/${roomId}/messages?dir=${
+          opts?.direction ? opts.direction.slice(0, 1) : 'f'
+        }&limit=${opts?.pageSize ?? DEFAULT_PAGE_SIZE}${
+          from ? '&from=' + from : ''
+        }`,
+        {
+          headers: {
+            Authorization: `Bearer ${this.client.getAccessToken()}`,
+          },
+        }
+      );
+      let { chunk, end } = await response.json();
+      from = end;
+      let events: DiscreteMatrixEvent[] = chunk;
+      if (opts?.onMessages) {
+        await opts.onMessages(events);
+      }
+      messages.push(...events);
+    } while (!from);
+    return messages;
+  }
+
   private resetState() {
     this.roomCards = new TrackedMap();
     this.roomMembershipQueue = [];
@@ -317,4 +349,10 @@ function getAuth(): IAuthData | undefined {
     return;
   }
   return JSON.parse(auth) as IAuthData;
+}
+
+interface MessageOptions {
+  direction?: 'forward' | 'backward';
+  onMessages?: (messages: DiscreteMatrixEvent[]) => Promise<void>;
+  pageSize: number;
 }

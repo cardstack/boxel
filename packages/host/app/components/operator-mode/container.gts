@@ -398,7 +398,11 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   get gridCss() {
-    return htmlSafe(this.isChatVisible ? `grid-template-columns: 1.5fr 0.5fr;`: `grid-template-columns: 1fr;`);
+    return htmlSafe(
+      this.isChatVisible
+        ? `grid-template-columns: 1.5fr 0.5fr;`
+        : `grid-template-columns: 1fr;`
+    );
   }
 
   <template>
@@ -494,10 +498,11 @@ export default class OperatorModeContainer extends Component<Signature> {
         </div>
 
         {{#if this.isChatVisible}}
-          <ChatSidebar @onClose={{this.toggleChat}}/>
+          <ChatSidebar @onClose={{this.toggleChat}} />
         {{else}}
           <Button
-            class="chat-btn"
+            data-test-open-chat
+            class='chat-btn'
             {{on 'click' this.toggleChat}}
           >Chat</Button>
         {{/if}}
