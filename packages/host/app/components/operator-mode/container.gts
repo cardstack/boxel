@@ -505,12 +505,12 @@ export default class OperatorModeContainer extends Component<Signature> {
             data-test-open-chat
             class='chat-btn'
             @icon='sparkle'
-            @width='40'
-            @height='40'
+            @width='30px'
+            @height='30px'
             {{on 'click' this.toggleChat}}
             style={{cssVar
-              boxel-icon-button-width="60px"
-              boxel-icon-button-height="60px"
+              boxel-icon-button-width="50px"
+              boxel-icon-button-height="50px"
             }}
           />
         {{/if}}
@@ -595,11 +595,13 @@ export default class OperatorModeContainer extends Component<Signature> {
 
       .chat-btn {
         position: absolute;
-        bottom: calc(var(--search-sheet-closed-height) + var(--boxel-sp));
-        right: var(--boxel-sp);
-        margin-right: var(--boxel-sp-lg);
+        bottom: 6px;
+        right: 6px;
+        margin-right: 0;
         border-radius: var(--boxel-border-radius);
         background-color: rgba(255, 255, 255, 0.25);
+        border: solid 1px rgba(255, 255, 255, 0.5);
+        box-shadow: var(--boxel-box-shadow);
       }
       .chat-btn:hover {
         background: var(--boxel-light);

@@ -235,23 +235,14 @@ export default class MatrixService extends Service {
     }
   }
 
-  canSetObjective(roomId: string): boolean {
-    let room = this.client.getRoom(roomId);
-    if (!room) {
-      throw new Error(`bug: cannot get room for ${roomId}`);
-    }
+  async canSetObjective(roomId: string): Promise<boolean> {
+    let powerLevels = await this.getPowerLevels(roomId);
     let myUserId = this.client.getUserId();
     if (!myUserId) {
       throw new Error(`bug: cannot get user ID for current matrix client`);
     }
 
-    let myself = room.getMember(myUserId);
-    if (!myself) {
-      throw new Error(
-        `bug: cannot get room member '${myUserId}' in room '${roomId}'`
-      );
-    }
-    return myself.powerLevel >= SET_OBJECTIVE_POWER_LEVEL;
+    return (powerLevels[myUserId] ?? 0) >= SET_OBJECTIVE_POWER_LEVEL;
   }
 
   async setObjective(roomId: string, ref: CardRef): Promise<void> {
@@ -303,6 +294,19 @@ export default class MatrixService extends Service {
       messages.push(...events);
     } while (!from);
     return messages;
+  }
+
+  async getPowerLevels(roomId: string): Promise<{ [userId: string]: number }> {
+    let response = await fetch(
+      `${matrixURL}/_matrix/client/v3/rooms/${roomId}/state/m.room.power_levels/`,
+      {
+        headers: {
+          Authorization: `Bearer ${this.client.getAccessToken()}`,
+        },
+      }
+    );
+    let { users } = await response.json();
+    return users;
   }
 
   private resetState() {
