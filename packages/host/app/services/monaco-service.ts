@@ -7,6 +7,13 @@ import {
   extendConfig,
   languageConfigs,
 } from '@cardstack/host/utils/editor-language';
+import { FileResource } from '../resources/file';
+
+export interface MonacoContext {
+  sdk: typeof MonacoSDK;
+  language?: string;
+  onEditorSetup?(editor: MonacoSDK.editor.IStandaloneCodeEditor): void;
+}
 
 export default class MonacoService extends Service {
   #sdk: typeof MonacoSDK | undefined;
@@ -40,6 +47,24 @@ export default class MonacoService extends Service {
       throw new Error(`cannot use monaco SDK before it has loaded`);
     }
     return this.#sdk;
+  }
+  // === context ===
+  // A context is needed to pass a loaded sdk into components and modifiers
+  // The monaco sdk is dyanmically loaded when visiting /code route
+  async getMonacoContext(
+    openFile?: FileResource,
+    onEditorSetup?: (editor: MonacoSDK.editor.IStandaloneCodeEditor) => void
+  ): Promise<MonacoContext> {
+    let language: string | undefined;
+    let sdk = this.sdk;
+    if (openFile && openFile.state == 'ready') {
+      language = await this.getLangFromFileExtension(openFile.name);
+    }
+    return {
+      sdk,
+      language,
+      onEditorSetup,
+    };
   }
 
   // ==== languages ====
