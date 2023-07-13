@@ -46,7 +46,6 @@ In order to run the realm server hosted app:
 
 1. `pnpm start:build` in the host/ workspace to re-build the host app (this step can be omitted if you do not want host app re-builds)
 2. `pnpm start:all` in the realm-server/ to serve the base and demo realms
-3. `pnpm start:synapse` in the matrix/ workspace to run the matrix server.
 
 You can visit the URL of each realm server to view that realm's app. So for instance, the base realm's app is available at `http://localhost:4201/base` and the demo realm's app is at `http://localhost:4201/demo`.
 
@@ -64,6 +63,7 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 | :4203 | `root (/)` base realm                                 | ✅                  | 🚫                   |
 | :4204 | `root (/)` demo realm                                 | ✅                  | 🚫                   |
 | :4205 | qunit server mounting realms in iframes for testing   | ✅                  | 🚫                   |
+| :8008 | Matrix synapse server                                 | ✅                  | 🚫                   |
 
 #### Using `start:development`
 
@@ -79,11 +79,11 @@ The realm server also uses FastBoot to pre-render card html. The realm server bo
 ### Matrix Server
 The boxel platform leverages a Matrix server called Synapse in order to support identity, workflow, and chat behaviors. This project uses a dockerized Matrix server. We have multiple matrix server configurations (currently one for development that uses a persistent DB, and one for testing that uses an in-memory DB). You can find and configure these matrix servers at `packages/matrix/docker/synapse/*`. 
 
-To start the matrix server, from `packages/matrix`, execute:
+This server is automatically started as part of the `pnpm start:all` script, but if you wish to control it separately, from `packages/matrix`, execute:
 ```
 pnpm start:synapse
 ```
-The local Matrix server will be running at `http://localhost:8008`.
+The local Matrix server will be running at `http://localhost:8008`. 
 
 To stop the matrix server, from `packages/matrix`, execute:
 ```
