@@ -32,7 +32,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 const { matrixURL } = ENV;
 const SET_OBJECTIVE_POWER_LEVEL = 50;
-const DEFAULT_PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = 50;
 
 export type Event = Partial<IEvent>;
 

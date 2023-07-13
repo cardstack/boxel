@@ -118,16 +118,6 @@ export async function inviteToRoom(page: Page, invites: string[]) {
   await page.locator('[data-test-room-invite-btn]').click();
 }
 
-export async function scrollToTopOfMessages(page: Page) {
-  await page.evaluate(() => {
-    let messages = document.querySelector('.room__messages-wrapper');
-    if (!messages) {
-      throw new Error(`Can't find messages element`);
-    }
-    messages.scrollTop = 0;
-  });
-}
-
 export async function assertMessages(
   page: Page,
   messages: {
