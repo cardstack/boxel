@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { restartableTask } from 'ember-concurrency';
 import { service } from '@ember/service';
 //@ts-ignore cached not available yet in definitely typed
@@ -19,16 +20,11 @@ import type { FileResource } from '@cardstack/host/resources/file';
 import CardEditor from '@cardstack/host/components/card-editor';
 import Module from './module';
 import FileTree from './file-tree';
-import {
-  getLangFromFileExtension,
-  extendMonacoLanguage,
-  languageConfigs,
-} from '@cardstack/host/utils/editor-language';
-import monacoModifier from '@cardstack/host/modifiers/monaco';
-import type * as monaco from 'monaco-editor';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
 import momentFrom from 'ember-moment/helpers/moment-from';
+import monacoModifier from '@cardstack/host/modifiers/monaco';
+import type { MonacoContext } from '../../routes/code';
 
 const { ownRealmURL } = ENV;
 const log = logger('component:go');
@@ -38,7 +34,7 @@ interface Signature {
     openFile: FileResource | undefined;
     openDirs: string[];
     path: string | undefined;
-    onEditorSetup?(editor: monaco.editor.IStandaloneCodeEditor): void;
+    monacoContext?: MonacoContext;
   };
 }
 
@@ -69,19 +65,26 @@ export default class Go extends Component<Signature> {
             {{else if this.openFile.lastModified}}
               <li data-test-last-edit>Last edit was
                 {{momentFrom this.openFile.lastModified}}</li>
+              <li data-test-last-edit>Lang: {{@monacoContext.language}}</li>
             {{/if}}
           </menu>
-          <div
-            class='editor-container'
-            data-test-editor
-            {{monacoModifier
-              content=this.openFile.content
-              language=(getLangFromFileExtension this.openFile.name)
-              contentChanged=this.contentChanged
-              onSetup=@onEditorSetup
-            }}
-          >
-          </div>
+          {{#if @monacoContext.sdk}}
+            {{#if (eq @openFile.state 'ready')}}
+              <div
+                class='editor-container'
+                data-test-editor
+                {{monacoModifier
+                  content=this.openFile.content
+                  contentChanged=this.contentChanged
+                  monacoSDK=@monacoContext.sdk
+                  language=@monacoContext.language
+                  onSetup=@monacoContext.onEditorSetup
+                }}
+              >
+
+              </div>
+            {{/if}}
+          {{/if}}
         </div>
         <div class='main-column'>
           {{#if (isRunnable this.openFile.name)}}
@@ -143,7 +146,6 @@ export default class Go extends Component<Signature> {
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
-    languageConfigs.map((lang) => extendMonacoLanguage(lang));
   }
 
   @action

@@ -5,14 +5,23 @@ import LoaderService from '../services/loader-service';
 import type RouterService from '@ember/routing/router-service';
 import type CardService from '../services/card-service';
 import { RealmPaths, logger } from '@cardstack/runtime-common';
+import MonacoService from '../services/monaco-service';
+import type * as MonacoSDK from 'monaco-editor';
 
 const log = logger('route:code');
+
+export interface MonacoContext {
+  sdk: typeof MonacoSDK;
+  language?: string;
+  onEditorSetup?(editor: MonacoSDK.editor.IStandaloneCodeEditor): void;
+}
 
 interface Model {
   path: string | undefined;
   openFile: FileResource | undefined;
   openDirs: string[];
   isFastBoot: boolean;
+  monacoContext?: MonacoContext;
 }
 
 export default class Code extends Route<Model> {
@@ -29,6 +38,7 @@ export default class Code extends Route<Model> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare fastboot: { isFastBoot: boolean };
+  @service declare monacoService: MonacoService;
 
   async model(args: {
     path?: string;
@@ -39,6 +49,7 @@ export default class Code extends Route<Model> {
     let { isFastBoot } = this.fastboot;
 
     let openFile: FileResource | undefined;
+    let language: string | undefined;
     if (!path) {
       return { path, openFile, openDirs, isFastBoot };
     }
@@ -55,7 +66,7 @@ export default class Code extends Route<Model> {
       log.error(
         `Could not load ${url}: ${response.status}, ${response.statusText}`
       );
-      return { path, openFile, openDirs, isFastBoot };
+      return { path, openFile, openDirs, isFastBoot }; //might need to handle this here
     }
     let responseURL: URL | undefined;
     // The server may have responded with a redirect which we need to pay
@@ -89,7 +100,18 @@ export default class Code extends Route<Model> {
       }));
       await openFile.loading;
     }
+    await this.monacoService.ready;
+    let sdk = this.monacoService.sdk;
+    if (openFile?.state == 'ready') {
+      language = await this.monacoService.getLangFromFileExtension(
+        openFile.name
+      );
+    }
+    let monacoContext: MonacoContext = {
+      sdk,
+      language,
+    };
 
-    return { path, openFile, openDirs, isFastBoot };
+    return { path, openFile, openDirs, isFastBoot, monacoContext };
   }
 }
