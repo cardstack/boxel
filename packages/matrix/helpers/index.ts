@@ -12,13 +12,24 @@ interface LoginOptions {
   expectFailure?: true;
 }
 
+export async function reloadAndOpenChat(page: Page) {
+  await page.reload();
+  await openChat(page);
+}
+
+export async function openChat(page: Page) {
+  await page.locator('[data-test-open-chat]').click();
+}
+
 export async function login(
   page: Page,
   username: string,
   password: string,
   opts?: LoginOptions
 ) {
-  await page.goto(`${rootPath}/chat`);
+  await page.goto(rootPath);
+  await page.locator('[data-test-operator-mode-btn]').click();
+  await openChat(page);
   await page.locator('[data-test-username-field]').fill(username);
   await page.locator('[data-test-password-field]').fill(password);
   await page.locator('[data-test-login-btn]').click();
@@ -204,7 +215,6 @@ export async function assertRooms(page: Page, rooms: RoomAssertions) {
 }
 
 export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
-  await page.waitForURL(`${testHost}/chat`);
   await expect(
     page.locator('[data-test-username-field]'),
     'username field is not displayed'
@@ -222,7 +232,6 @@ export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
 }
 
 export async function assertLoggedOut(page: Page) {
-  await page.waitForURL(`${testHost}/chat`);
   await expect(
     page.locator('[data-test-username-field]'),
     'username field is displayed'

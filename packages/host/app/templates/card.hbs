@@ -17,3 +17,11 @@
 {{/if}}
 
 {{outlet}}
+
+{{! template-lint-disable no-inline-styles }}
+{{!-- hidden button to toggle operator mode for tests --}}
+<button
+  data-test-operator-mode-btn
+  style="position: fixed; left: -100px; opacity: 0;"
+  {{on 'click' this.toggleOperatorMode}}
+>Operator mode</button>
