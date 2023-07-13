@@ -826,13 +826,11 @@ function isEvaluatable(
 async function maybeHandleScopedCSSRequest(req: Request) {
   if (isScopedCSSRequest(req.url)) {
     if (isFastBoot) {
-      console.log('not decoding css in fastboot');
-      return Promise.resolve(new Response('console.log("skipped css")'));
+      return Promise.resolve(new Response('// skipped scoped CSS'));
     } else {
       let decodedCSS = decodeScopedCSSRequest(req.url);
       return Promise.resolve(
         new Response(`
-          console.log(\`glimmer scoped css! hey ${decodedCSS}\`);
           let styleNode = document.createElement('style');
           let styleText = document.createTextNode(\`${decodedCSS}\`);
           styleNode.appendChild(styleText);
