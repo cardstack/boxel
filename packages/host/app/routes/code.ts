@@ -61,7 +61,7 @@ export default class Code extends Route<Model> {
       log.error(
         `Could not load ${url}: ${response.status}, ${response.statusText}`
       );
-      return { path, openFile, openDirs, isFastBoot }; //might need to handle this here
+      return { path, openFile, openDirs, isFastBoot };
     }
     let responseURL: URL | undefined;
     // The server may have responded with a redirect which we need to pay

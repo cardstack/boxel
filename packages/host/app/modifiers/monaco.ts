@@ -18,7 +18,7 @@ interface Signature {
 
 export default class Monaco extends Modifier<Signature> {
   private model: MonacoSDK.editor.ITextModel | undefined;
-  private editor: MonacoSDK.editor.IStandaloneCodeEditor | undefined; //single model can map to many editors
+  private editor: MonacoSDK.editor.IStandaloneCodeEditor | undefined;
   private lastLanguage: string | undefined;
   private lastContent: string | undefined;
 
