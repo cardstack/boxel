@@ -5,16 +5,12 @@ import LoaderService from '../services/loader-service';
 import type RouterService from '@ember/routing/router-service';
 import type CardService from '../services/card-service';
 import { RealmPaths, logger } from '@cardstack/runtime-common';
-import MonacoService from '../services/monaco-service';
-import type * as MonacoSDK from 'monaco-editor';
+import {
+  default as MonacoService,
+  MonacoContext,
+} from '../services/monaco-service';
 
 const log = logger('route:code');
-
-export interface MonacoContext {
-  sdk: typeof MonacoSDK;
-  language?: string;
-  onEditorSetup?(editor: MonacoSDK.editor.IStandaloneCodeEditor): void;
-}
 
 interface Model {
   path: string | undefined;
@@ -49,7 +45,6 @@ export default class Code extends Route<Model> {
     let { isFastBoot } = this.fastboot;
 
     let openFile: FileResource | undefined;
-    let language: string | undefined;
     if (!path) {
       return { path, openFile, openDirs, isFastBoot };
     }
@@ -100,17 +95,9 @@ export default class Code extends Route<Model> {
       }));
       await openFile.loading;
     }
+    // By readying the monaco service, you dynamically load the sdk
     await this.monacoService.ready;
-    let sdk = this.monacoService.sdk;
-    if (openFile?.state == 'ready') {
-      language = await this.monacoService.getLangFromFileExtension(
-        openFile.name
-      );
-    }
-    let monacoContext: MonacoContext = {
-      sdk,
-      language,
-    };
+    let monacoContext = await this.monacoService.getMonacoContext(openFile);
 
     return { path, openFile, openDirs, isFastBoot, monacoContext };
   }

@@ -24,7 +24,7 @@ import type { Card } from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
 import momentFrom from 'ember-moment/helpers/moment-from';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
-import type { MonacoContext } from '../../routes/code';
+import type { MonacoContext } from '@cardstack/host/services/monaco-service';
 
 const { ownRealmURL } = ENV;
 const log = logger('component:go');
