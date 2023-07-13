@@ -164,7 +164,7 @@ export default class MatrixService extends Service {
       this.bindEventListeners();
 
       await this.client.startClient();
-      await this.initializeRoomStates();
+      await this.initializeRooms();
     }
   }
 
@@ -267,11 +267,13 @@ export default class MatrixService extends Service {
     });
   }
 
-  async initializeRoomStates() {
+  async initializeRooms() {
     let { joined_rooms: joinedRooms } = await this.client.getJoinedRooms();
     for (let roomId of joinedRooms) {
       let stateEvents = await this.client.roomState(roomId);
       await Promise.all(stateEvents.map((event) => addRoomEvent(this, event)));
+      let messages = await this.allRoomMessages(roomId);
+      await Promise.all(messages.map((event) => addRoomEvent(this, event)));
     }
   }
 
