@@ -6,7 +6,6 @@ import {
   type SynapseInstance,
 } from '../docker/synapse';
 import {
-  testHost,
   login,
   logout,
   assertRooms,
@@ -15,6 +14,7 @@ import {
   leaveRoom,
   openRoom,
   inviteToRoom,
+  reloadAndOpenChat,
 } from '../helpers';
 
 test.describe('Room membership', () => {
@@ -45,7 +45,7 @@ test.describe('Room membership', () => {
     await page.locator('[data-test-decline-room-btn="Room 1"]').click();
     await assertRooms(page, {});
 
-    await page.reload();
+    await reloadAndOpenChat(page);
     await assertRooms(page, {});
   });
 
@@ -66,7 +66,7 @@ test.describe('Room membership', () => {
       joinedRooms: [{ name: 'Room 1' }],
     });
 
-    await page.reload();
+    await reloadAndOpenChat(page);
     await assertRooms(page, {
       joinedRooms: [{ name: 'Room 1' }],
     });
@@ -82,7 +82,7 @@ test.describe('Room membership', () => {
     await leaveRoom(page, 'Room 1');
     await assertRooms(page, {});
 
-    await page.reload();
+    await reloadAndOpenChat(page);
     await assertRooms(page, {});
   });
 
@@ -172,28 +172,6 @@ test.describe('Room membership', () => {
     expect(
       page.locator('[data-test-room-invite-field]'),
       'the invite dialog is not displayed'
-    ).toHaveCount(0);
-  });
-
-  test('it transitions to the chat.index route if you leave a room that is the current route', async ({
-    page,
-  }) => {
-    await login(page, 'user1', 'pass');
-    await createRoom(page, {
-      name: 'Room 1',
-    });
-    await openRoom(page, 'Room 1');
-    await expect(page.url()).toContain('/chat/room/');
-    await expect(
-      page.locator('[data-test-matrix-room-header]'),
-      'the room is displayed'
-    ).toHaveCount(1);
-
-    await leaveRoom(page, 'Room 1');
-    await page.waitForURL(`${testHost}/chat`);
-    await expect(
-      page.locator('[data-test-matrix-room-header]'),
-      'no room is displayed'
     ).toHaveCount(0);
   });
 });

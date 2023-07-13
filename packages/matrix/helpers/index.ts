@@ -17,8 +17,19 @@ export async function reloadAndOpenChat(page: Page) {
   await openChat(page);
 }
 
+export async function toggleOperatorMode(page: Page) {
+  await page.locator('[data-test-operator-mode-btn]').click();
+}
+
 export async function openChat(page: Page) {
   await page.locator('[data-test-open-chat]').click();
+}
+
+export async function gotoRegistration(page: Page) {
+  await page.goto(rootPath);
+  await toggleOperatorMode(page);
+  await openChat(page);
+  await page.locator('[data-test-register-user]').click();
 }
 
 export async function login(
@@ -28,7 +39,7 @@ export async function login(
   opts?: LoginOptions
 ) {
   await page.goto(rootPath);
-  await page.locator('[data-test-operator-mode-btn]').click();
+  await toggleOperatorMode(page);
   await openChat(page);
   await page.locator('[data-test-username-field]').fill(username);
   await page.locator('[data-test-password-field]').fill(password);
@@ -70,6 +81,7 @@ export async function leaveRoom(page: Page, roomName: string) {
 
 export async function openRoom(page: Page, roomName: string) {
   await page.locator(`[data-test-enter-room="${roomName}"]`).click();
+  await page.locator(`[data-test-toggle-rooms-view]`).click();
 }
 
 export async function setObjective(page: Page, objectiveURI: string) {

@@ -32,9 +32,15 @@ const TRUE = true;
 
 export default class RoomsManager extends Component {
   <template>
-    <div class="header-wrapper">
-      <BoxelHeader class='matrix' @title={{this.headerTitle}} @hasBackground={{TRUE}}/>
-      <IconButton class="toggle-btn"
+    <div class='header-wrapper'>
+      <BoxelHeader
+        class='matrix'
+        @title={{this.headerTitle}}
+        @hasBackground={{TRUE}}
+      />
+      <IconButton
+        class='toggle-btn'
+        data-test-toggle-rooms-view
         @icon={{this.toggleIcon}}
         {{on 'click' this.toggleRooms}}
       />
@@ -43,8 +49,12 @@ export default class RoomsManager extends Component {
       {{#if this.doCreateRoom.isRunning}}
         <LoadingIndicator />
       {{else}}
-        <div class="create-room">
-          <FieldContainer @label='Room Name:' @tag='label' class="create-room__field">
+        <div class='create-room'>
+          <FieldContainer
+            @label='Room Name:'
+            @tag='label'
+            class='create-room__field'
+          >
             <BoxelInputValidationState
               data-test-room-name-field
               @id=''
@@ -54,7 +64,11 @@ export default class RoomsManager extends Component {
               @onInput={{this.setNewRoomName}}
             />
           </FieldContainer>
-          <FieldContainer @label='Invite:' @tag='label' class="create-room__field">
+          <FieldContainer
+            @label='Invite:'
+            @tag='label'
+            class='create-room__field'
+          >
             <BoxelInput
               data-test-room-invite-field
               type='text'
@@ -63,7 +77,7 @@ export default class RoomsManager extends Component {
             />
           </FieldContainer>
         </div>
-        <div class="create-button-wrapper">
+        <div class='create-button-wrapper'>
           <Button
             data-test-create-room-cancel-btn
             class='room__button'
@@ -84,7 +98,7 @@ export default class RoomsManager extends Component {
     {{else}}
       {{#unless this.isCollapsed}}
         {{#unless this.isCreateRoomMode}}
-          <div class="create-button-wrapper">
+          <div class='create-button-wrapper'>
             <Button
               data-test-create-room-mode-btn
               class='room__button'
@@ -127,7 +141,8 @@ export default class RoomsManager extends Component {
           {{#each this.sortedJoinedRooms as |joined|}}
             <div class='room' data-test-joined-room={{joined.room.name}}>
               <span class='room-item'>
-                <a class="link"
+                <a
+                  class='link'
                   data-test-enter-room={{joined.room.name}}
                   {{on 'click' (fn this.enterRoom joined.room.roomId)}}
                 >
@@ -146,62 +161,25 @@ export default class RoomsManager extends Component {
             (No rooms)
           {{/each}}
         </div>
-        <hr/>
+        <hr />
       {{/unless}}
     {{/if}}
 
     {{#if this.currentRoomId}}
-      <Room @roomId={{this.currentRoomId}}/>
+      <Room @roomId={{this.currentRoomId}} />
     {{/if}}
 
     <style>
-      .room-list {
-        padding: 0 var(--boxel-sp);
-        margin: var(--boxel-sp) 0;
-      }
-
-      .room {
-        display: flex;
-        margin-top: var(--boxel-sp-sm);
-        flex-wrap: nowrap
-      }
-
-      .room-item {
-        display: inline-block;
-        flex-grow: 1;
-      }
-
-      .room button {
-        margin-left: var(--boxel-sp-xs);
-      }
-
-      .header-wrapper {
-        position: relative;
-      }
-
-      .toggle-btn {
-        position: absolute;
-        z-index: 1;
-        margin-top: calc(-2 * var(--boxel-sp-xl) + 2px)
-      }
-
-      .create-room {
-        padding: 0 var(--boxel-sp);
-      }
-
-      .create-button-wrapper {
-        display: flex;
-        justify-content: flex-end;
-        padding: var(--boxel-sp) var(--boxel-sp) 0;
-      }
-
-      .create-button-wrapper button {
-        margin-left: var(--boxel-sp-xs);
-      }
-
-      .create-room__field {
-        margin-top: var(--boxel-sp-sm);
-      }
+      .room-list { padding: 0 var(--boxel-sp); margin: var(--boxel-sp) 0; }
+      .room { display: flex; margin-top: var(--boxel-sp-sm); flex-wrap: nowrap }
+      .room-item { display: inline-block; flex-grow: 1; } .room button {
+      margin-left: var(--boxel-sp-xs); } .header-wrapper { position: relative; }
+      .toggle-btn { position: absolute; z-index: 1; margin-top: calc(-2 *
+      var(--boxel-sp-xl) + 2px) } .create-room { padding: 0 var(--boxel-sp); }
+      .create-button-wrapper { display: flex; justify-content: flex-end;
+      padding: var(--boxel-sp) var(--boxel-sp) 0; } .create-button-wrapper
+      button { margin-left: var(--boxel-sp-xs); } .create-room__field {
+      margin-top: var(--boxel-sp-sm); }
     </style>
   </template>
 
@@ -284,11 +262,11 @@ export default class RoomsManager extends Component {
   private get newRoomInviteFormatted() {
     return this.newRoomInvite.join(', ');
   }
-  
+
   private get headerTitle() {
-    return `${this.currentRoomCard ? this.currentRoomCard.name: 'Rooms'}`;
+    return `${this.currentRoomCard ? this.currentRoomCard.name : 'Rooms'}`;
   }
-  
+
   private get currentRoomCard() {
     return this.currentRoomCardResource.roomCard;
   }

@@ -19,7 +19,7 @@ export default class ChatSidebar extends Component<Args> {
   <template>
     <div class='chat-sidebar'>
       <div class='chat-sidebar__inner'>
-        <div class="close-chat-wrapper">
+        <div class='close-chat-wrapper'>
           <IconButton
             @icon='icon-x'
             @width='20px'
@@ -35,36 +35,25 @@ export default class ChatSidebar extends Component<Args> {
           <RoomsManager />
         {{else}}
           {{#if this.isRegistrationMode}}
-            <RegisterUser @onCancel={{this.toggleRegistrationMode}}/>
+            <RegisterUser @onCancel={{this.toggleRegistrationMode}} />
           {{else}}
             <Login />
-            <a class="link registration-link"
+            <a
+              class='link registration-link'
               data-test-register-user
               {{on 'click' this.toggleRegistrationMode}}
-            >
-              Register new user
-            </a>
+            >Register new user</a>
           {{/if}}
         {{/if}}
       </div>
     </div>
 
     <style>
-      .chat-sidebar {
-        background-color: var(--boxel-light);
-        height: 100vh;
-        overflow-y: auto;
-      }
-      .chat-sidebar__inner {
-        padding-bottom: calc(var(--search-sheet-closed-height) + var(--boxel-sp));
-      }
-      .registration-link {
-        margin-left: var(--boxel-sp);
-      }
-      .close-chat-wrapper {
-        display: flex;
-        justify-content: flex-end;
-      }
+      .chat-sidebar { background-color: var(--boxel-light); height: 100vh;
+      overflow-y: auto; } .chat-sidebar__inner { padding-bottom:
+      calc(var(--search-sheet-closed-height) + var(--boxel-sp)); }
+      .registration-link { margin-left: var(--boxel-sp); } .close-chat-wrapper {
+      display: flex; justify-content: flex-end; }
     </style>
   </template>
 

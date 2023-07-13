@@ -14,6 +14,7 @@ import {
   sendMessage,
   joinRoom,
   testHost,
+  reloadAndOpenChat,
 } from '../helpers';
 
 test.describe('Room messages', () => {
@@ -48,7 +49,7 @@ test.describe('Room messages', () => {
     await expect(page.locator('[data-test-no-messages]')).toHaveCount(0);
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
 
-    await page.reload();
+    await reloadAndOpenChat(page);
     await openRoom(page, 'Room 1');
     await assertMessages(page, [{ from: 'user1', message: 'Message 1' }]);
 
@@ -86,7 +87,7 @@ test.describe('Room messages', () => {
       { from: 'user2', message: 'second message' },
     ]);
 
-    await page.reload();
+    await reloadAndOpenChat(page);
     await openRoom(page, 'Room 1');
     await assertMessages(page, [
       { from: 'user1', message: 'first message' },
@@ -281,7 +282,7 @@ test.describe('Room messages', () => {
       },
     ]);
 
-    await page.reload();
+    await reloadAndOpenChat(page);
     await openRoom(page, 'Room 1');
     await assertMessages(page, [
       {

@@ -13,6 +13,7 @@ import {
   rootPath,
   openChat,
   reloadAndOpenChat,
+  toggleOperatorMode,
 } from '../helpers';
 
 test.describe('Login', () => {
@@ -28,7 +29,7 @@ test.describe('Login', () => {
 
   test('it can login', async ({ page }) => {
     await page.goto(rootPath);
-    await page.locator('[data-test-operator-mode-btn]').click();
+    await toggleOperatorMode(page);
     await openChat(page);
 
     await assertLoggedOut(page);
@@ -70,7 +71,7 @@ test.describe('Login', () => {
     page,
   }) => {
     await page.goto(rootPath);
-    await page.locator('[data-test-operator-mode-btn]').click();
+    await toggleOperatorMode(page);
     await openChat(page);
     await page.locator('[data-test-username-field]').fill('user1');
     await page.locator('[data-test-password-field]').fill('bad pass');
