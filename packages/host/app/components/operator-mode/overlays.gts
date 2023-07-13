@@ -9,7 +9,7 @@ import { IconButton } from '@cardstack/boxel-ui';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import { type TrackedArray } from 'tracked-built-ins';
 import type { MiddlewareState } from '@floating-ui/dom';
-import { type Card } from 'https://cardstack.com/base/card-api';
+import type { Card } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
@@ -21,32 +21,27 @@ interface Signature {
 }
 
 export default class OperatorModeOverlays extends Component<Signature> {
-  refreshLoopStartedAt: number | null = null;
-  refreshLoopTimeout: number | null = null;
-
   <template>
     {{#each @renderedLinksToCards as |renderedCard|}}
-      {{#let renderedCard.card as |card|}}
+      {{#let renderedCard.card (this.isSelected renderedCard.card) as |card isSelected|}}
         <div
-          class={{cn 'actions-overlay' selected=(this.isSelected card.id)}}
+          class={{cn 'actions-overlay' selected=isSelected}}
           {{velcro renderedCard.element middleware=(Array this.offset)}}
+          data-test-overlay-selected={{if isSelected card.id}}
         >
           <button
             {{on 'click' (fn this.openOrSelectCard card)}}
             class='overlay-button'
             aria-label='open card'
-            data-test-cardstack-operator-mode-overlay-button
+            data-test-overlay-button={{card.id}}
           />
           {{#if @toggleSelect}}
             <IconButton
               {{on 'click' (fn @toggleSelect card)}}
               class='hover-button select'
-              @icon={{if
-                (this.isSelected card.id)
-                'icon-circle-selected'
-                'icon-circle'
-              }}
+              @icon={{if isSelected 'icon-circle-selected' 'icon-circle'}}
               aria-label='select card'
+              data-test-overlay-select={{card.id}}
             />
           {{/if}}
           <IconButton
@@ -121,16 +116,16 @@ export default class OperatorModeOverlays extends Component<Signature> {
   offset = {
     name: 'offset',
     fn: (state: MiddlewareState) => {
-      let padding = 20;
       let { elements, rects } = state;
       let { floating, reference } = elements;
       let { width, height } = reference.getBoundingClientRect();
-      floating.style.width = width + 2 * padding + 'px';
-      floating.style.height = height + 2 * padding + 'px';
+      
+      floating.style.width = width + 'px';
+      floating.style.height = height + 'px';
 
       return {
-        x: rects.reference.x - padding,
-        y: rects.reference.y - padding,
+        x: rects.reference.x,
+        y: rects.reference.y,
       };
     },
   };
@@ -143,8 +138,8 @@ export default class OperatorModeOverlays extends Component<Signature> {
     }
   }
 
-  @action isSelected(id: string) {
-    return this.args.selectedCards?.some((card: any) => card.id === id);
+  @action isSelected(card: Card) {
+    return this.args.selectedCards?.some((c: Card) => c === card);
   }
 
   // TODO: actions for 'preview' and 'more-actions' buttons
