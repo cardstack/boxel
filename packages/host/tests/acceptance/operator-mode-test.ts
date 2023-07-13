@@ -323,7 +323,6 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       // Click Edit on the top card
       await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
-      await click('[data-test-boxel-menu-item-text="Edit"]');
 
       // The edit format should be reflected in the URL
       assert.strictEqual(
