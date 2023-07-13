@@ -34,10 +34,10 @@ interface Args {
 export default class RegisterUser extends Component<Args> {
   <template>
     <BoxelHeader @title='Register User' @hasBackground={{TRUE}} />
-    <div class="registration-form">
-    {{#if this.doRegistrationFlow.isRunning}}
-      <LoadingIndicator />
-    {{else if (eq this.state.type 'askForToken')}}
+    <div class='registration-form'>
+      {{#if this.doRegistrationFlow.isRunning}}
+        <LoadingIndicator />
+      {{else if (eq this.state.type 'askForToken')}}
         <FieldContainer @label='Registration Token:' @tag='label'>
           <BoxelInputValidationState
             data-test-token-field
@@ -48,11 +48,8 @@ export default class RegisterUser extends Component<Args> {
             @onInput={{this.setToken}}
           />
         </FieldContainer>
-        <div class="button-wrapper">
-          <Button
-            data-test-cancel-btn
-            {{on 'click' this.args.onCancel}}
-          >Cancel</Button>
+        <div class='button-wrapper'>
+          <Button data-test-cancel-btn {{on 'click' @onCancel}}>Cancel</Button>
           <Button
             data-test-next-btn
             @kind='primary'
@@ -60,8 +57,12 @@ export default class RegisterUser extends Component<Args> {
             {{on 'click' this.sendToken}}
           >Next</Button>
         </div>
-    {{else if (eq this.state.type 'initial')}}
-        <FieldContainer @label='Username:' @tag='label' class="registration-field">
+      {{else if (eq this.state.type 'initial')}}
+        <FieldContainer
+          @label='Username:'
+          @tag='label'
+          class='registration-field'
+        >
           <BoxelInputValidationState
             data-test-username-field
             @id=''
@@ -71,7 +72,11 @@ export default class RegisterUser extends Component<Args> {
             @onInput={{this.setUsername}}
           />
         </FieldContainer>
-        <FieldContainer @label='Password:' @tag='label' class="registration-field">
+        <FieldContainer
+          @label='Password:'
+          @tag='label'
+          class='registration-field'
+        >
           <BoxelInput
             data-test-password-field
             type='password'
@@ -79,11 +84,8 @@ export default class RegisterUser extends Component<Args> {
             @onInput={{this.setPassword}}
           />
         </FieldContainer>
-        <div class="button-wrapper">
-          <Button
-            data-test-cancel-btn
-            {{on 'click' this.args.onCancel}}
-          >Cancel</Button>
+        <div class='button-wrapper'>
+          <Button data-test-cancel-btn {{on 'click' @onCancel}}>Cancel</Button>
           <Button
             data-test-register-btn
             @kind='primary'
@@ -91,7 +93,7 @@ export default class RegisterUser extends Component<Args> {
             {{on 'click' this.register}}
           >Register</Button>
         </div>
-    {{/if}}
+      {{/if}}
     </div>
 
     <style>

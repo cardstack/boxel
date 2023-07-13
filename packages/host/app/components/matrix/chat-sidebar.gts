@@ -26,7 +26,7 @@ export default class ChatSidebar extends Component<Args> {
             @height='20px'
             class='icon-button'
             aria-label='Close'
-            {{on 'click' this.args.onClose}}
+            {{on 'click' @onClose}}
             data-test-close-chat-button
           />
         </div>
@@ -38,22 +38,37 @@ export default class ChatSidebar extends Component<Args> {
             <RegisterUser @onCancel={{this.toggleRegistrationMode}} />
           {{else}}
             <Login />
-            <a
+            <button
               class='link registration-link'
               data-test-register-user
               {{on 'click' this.toggleRegistrationMode}}
-            >Register new user</a>
+            >Register new user</button>
           {{/if}}
         {{/if}}
       </div>
     </div>
 
     <style>
-      .chat-sidebar { background-color: var(--boxel-light); height: 100vh;
-      overflow-y: auto; } .chat-sidebar__inner { padding-bottom:
-      calc(var(--search-sheet-closed-height) + var(--boxel-sp)); }
-      .registration-link { margin-left: var(--boxel-sp); } .close-chat-wrapper {
-      display: flex; justify-content: flex-end; }
+      .chat-sidebar {
+        background-color: var(--boxel-light);
+        height: 100vh;
+        overflow-y: auto;
+      }
+      .chat-sidebar__inner {
+        padding-bottom: calc(var(--search-sheet-closed-height) + var(--boxel-sp));
+      }
+      .registration-link {
+        margin-left: var(--boxel-sp);
+      }
+      .close-chat-wrapper {
+        display: flex;
+        justify-content: flex-end;
+      }
+      .registration-link {
+        background: none;
+        padding: 0;
+        border: none;
+      }
     </style>
   </template>
 

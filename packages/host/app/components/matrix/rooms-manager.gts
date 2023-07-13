@@ -141,13 +141,13 @@ export default class RoomsManager extends Component {
           {{#each this.sortedJoinedRooms as |joined|}}
             <div class='room' data-test-joined-room={{joined.room.name}}>
               <span class='room-item'>
-                <a
-                  class='link'
+                <button
+                  class='enter-room link'
                   data-test-enter-room={{joined.room.name}}
                   {{on 'click' (fn this.enterRoom joined.room.roomId)}}
                 >
                   {{joined.room.name}}
-                </a>
+                </button>
               </span>
               <Button
                 data-test-leave-room-btn={{joined.room.name}}
@@ -170,16 +170,60 @@ export default class RoomsManager extends Component {
     {{/if}}
 
     <style>
-      .room-list { padding: 0 var(--boxel-sp); margin: var(--boxel-sp) 0; }
-      .room { display: flex; margin-top: var(--boxel-sp-sm); flex-wrap: nowrap }
-      .room-item { display: inline-block; flex-grow: 1; } .room button {
-      margin-left: var(--boxel-sp-xs); } .header-wrapper { position: relative; }
-      .toggle-btn { position: absolute; z-index: 1; margin-top: calc(-2 *
-      var(--boxel-sp-xl) + 2px) } .create-room { padding: 0 var(--boxel-sp); }
-      .create-button-wrapper { display: flex; justify-content: flex-end;
-      padding: var(--boxel-sp) var(--boxel-sp) 0; } .create-button-wrapper
-      button { margin-left: var(--boxel-sp-xs); } .create-room__field {
-      margin-top: var(--boxel-sp-sm); }
+      .room-list {
+        padding: 0 var(--boxel-sp);
+        margin: var(--boxel-sp) 0;
+      }
+
+      .room {
+        display: flex;
+        margin-top: var(--boxel-sp-sm);
+        flex-wrap: nowrap
+      }
+
+      .room-item {
+        display: inline-block;
+        flex-grow: 1;
+      }
+
+      .room-item .enter-room {
+        background: none;
+        padding: 0;
+        margin: 0;
+        border: none;
+      }
+
+      .room button {
+        margin-left: var(--boxel-sp-xs);
+      }
+
+      .header-wrapper {
+        position: relative;
+      }
+
+      .toggle-btn {
+        position: absolute;
+        z-index: 1;
+        margin-top: calc(-2 * var(--boxel-sp-xl) + 2px)
+      }
+
+      .create-room {
+        padding: 0 var(--boxel-sp);
+      }
+
+      .create-button-wrapper {
+        display: flex;
+        justify-content: flex-end;
+        padding: var(--boxel-sp) var(--boxel-sp) 0;
+      }
+
+      .create-button-wrapper button {
+        margin-left: var(--boxel-sp-xs);
+      }
+
+      .create-room__field {
+        margin-top: var(--boxel-sp-sm);
+      }
     </style>
   </template>
 

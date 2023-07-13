@@ -144,24 +144,90 @@ export default class Room extends Component<RoomArgs> {
       </div>
     {{/if}}
     <style>
-      .messages-wrapper { padding: var(--boxel-sp); margin: var(--boxel-sp) 0; }
-      .timeline-start { padding-bottom: var(--boxel-sp); } .notices { display:
-      flex; justify-content: center; } .messages .boundaries { margin:
-      var(--boxel-sp-sm) 0; } .send-message { display: flex; justify-content:
-      right; flex-wrap: wrap; row-gap: var(--boxel-sp-sm); margin: 0
-      var(--boxel-sp); } .send-message button, .send-message .selected-card {
-      margin-left: var(--boxel-sp-sm); } .selected-card { margin:
-      var(--boxel-sp); float: right; } .selected-card::after { content:'';
-      clear: both; } .field { font-weight: bold; } .card-wrapper { padding:
-      var(--boxel-sp); border: var(--boxel-border); border-radius:
-      var(--boxel-border-radius); } .members { font-size:
-      var(--boxel-font-size-sm); font-weight: initial; } .room-members {
-      display: flex; justify-content: space-between; flex-wrap: wrap; padding:
-      var(--boxel-sp) var(--boxel-sp) 0; } .room__objective { padding:
-      var(--boxel-sp); } .invite-form { padding: var(--boxel-sp); } .invite-form
-      button { margin-left: var(--boxel-sp-xs); } .invite-button-wrapper {
-      display: flex; justify-content: flex-end; padding-top: var(--boxel-sp-xs);
-      } .invite-btn { margin-top: var(--boxel-sp-xs); }
+      .messages-wrapper {
+        padding: var(--boxel-sp);
+        margin: var(--boxel-sp) 0;
+      }
+
+      .timeline-start {
+        padding-bottom: var(--boxel-sp);
+      }
+
+      .notices {
+        display: flex;
+        justify-content: center;
+      }
+
+      .messages .boundaries {
+        margin: var(--boxel-sp-sm) 0;
+      }
+
+      .send-message {
+        display: flex;
+        justify-content: right;
+        flex-wrap: wrap;
+        row-gap: var(--boxel-sp-sm);
+        margin: 0 var(--boxel-sp);
+      }
+
+      .send-message button,
+      .send-message .selected-card {
+        margin-left: var(--boxel-sp-sm);
+      }
+
+      .selected-card {
+        margin: var(--boxel-sp);
+        float: right;
+      }
+
+      .selected-card::after {
+        content:'';
+        clear: both;
+      }
+
+      .field {
+        font-weight: bold;
+      }
+
+      .card-wrapper {
+        padding: var(--boxel-sp);
+        border: var(--boxel-border);
+        border-radius: var(--boxel-border-radius);
+      }
+
+      .members {
+        font-size: var(--boxel-font-size-sm);
+        font-weight: initial;
+      }
+
+      .room-members {
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        padding: var(--boxel-sp) var(--boxel-sp) 0;
+      }
+
+      .room__objective {
+        padding: var(--boxel-sp);
+      }
+
+      .invite-form {
+        padding: var(--boxel-sp);
+      }
+
+      .invite-form button {
+        margin-left: var(--boxel-sp-xs);
+      }
+
+      .invite-button-wrapper {
+        display: flex;
+        justify-content: flex-end;
+        padding-top: var(--boxel-sp-xs);
+      }
+
+      .invite-btn {
+        margin-top: var(--boxel-sp-xs);
+      }
     </style>
   </template>
 
