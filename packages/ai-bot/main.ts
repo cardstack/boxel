@@ -4,10 +4,19 @@ import {
   type EmittedEvents,
   type IEvent,
   type client,
+  EventTimeline,
 } from 'matrix-js-sdk';
 import * as MatrixSDK from 'matrix-js-sdk';
-// New
 import OpenAI from 'openai';
+
+
+/***
+ * TODO:
+ * When constructing the historical cards, also get the card ones so we have that context
+ * Which model to use & system prompts
+ * interactions?
+ */
+
 
 const openai = new OpenAI();
 
@@ -107,12 +116,19 @@ Example card received
 */
 // 
 // Full card data: ${JSON.stringify(card.data)}
-function getUserMessage(request, card) {
-  return `
+function getUserMessage(event: MatrixEvent) {
+  if (event.content.msgtype === "org.boxel.card") {
+    let card = event.content.instance.data;
+    let request = event.content.body;
+    return `
     User request: ${request}
     Full data: ${JSON.stringify(card)}
     You may only patch the following fields: ${JSON.stringify(card.attributes)}
     `
+  } else {
+    return event.content.body;
+  }
+
 }
 
 async function sendMessage(client, room, content, previous) {
@@ -220,14 +236,16 @@ async function sendStream(stream, client, room) {
 function constructHistory(history: MatrixEvent[]) {
   const events = new Map<string, MatrixEvent[]>();
   for (let event of history) {
-    let event_id = event.getId();
-    if (event.getRelation()?.rel_type === "m.replace") {
-      event_id = event.getRelation()!.event_id;
-    }
-    if (!events.get(event_id)) {
-      events.set(event_id, [event]);
-    } else {
-      events.get(event_id).push(event);
+    if (event.type == "m.room.message") {
+      let event_id = event.event_id;
+      if (event.content['m.relates_to']?.rel_type === "m.replace") {
+        event_id = event.content['m.relates_to']!.event_id;
+      }
+      if (!events.get(event_id)) {
+        events.set(event_id, [event]);
+      } else {
+        events.get(event_id).push(event);
+      }
     }
   }
   //console.log(events);
@@ -236,12 +254,12 @@ function constructHistory(history: MatrixEvent[]) {
   events.forEach((event_list, event_id) => {
     //console.log(event_list);
     event_list = event_list.sort((a, b) => {
-      return a.getTs() - b.getTs();
+      return a.origin_server_ts - b.origin_server_ts;
     });
     latest_events.push(event_list[event_list.length - 1]);
   });
   latest_events = latest_events.sort((a, b) => {
-    return a.getTs() - b.getTs();
+    return a.origin_server_ts - b.origin_server_ts;
   });
   return latest_events;
   //console.log(latest_events);
@@ -250,52 +268,34 @@ function constructHistory(history: MatrixEvent[]) {
 async function getResponse(event: MatrixEvent, history: MatrixEvent[]) {
   let historical_messages = []
   console.log(history);
-  history.pop();
   for (let event of history) {
-    console.log(event.sender?.name, event.getContent().body);
-    if (event.getContent().body) {
+    console.log(event.sender?.name, event.content.body);
+    if (event.content.body) {
       if (event.sender?.name === "aibot") {
         historical_messages.push({
           "role": "assistant",
-          "content": event.getContent().body
+          "content": event.content.body
         });
       } else {
-        console.log(event.sender?.name, event.getContent());
         historical_messages.push({
           "role": "user",
-          "content": event.getContent().body
+          "content": getUserMessage(event)
         });
       }
     }
   }
-  if (event.getContent().msgtype === "org.boxel.card") {
-    let card = event.getContent().instance.data;
-    console.log("Processing card: " + event);
-    let messages = [
-      {
-        "role": "system", "content": MODIFY_SYSTEM_MESSAGE
-      }];
+  let messages = [
+    {
+      "role": "system", "content": MODIFY_SYSTEM_MESSAGE
+    }];
 
-    messages = messages.concat(historical_messages);
-    messages.push({
-      "role": "user", "content": getUserMessage(event.getContent().body, card)
-    })
-    return await openai.chat.completions.create({
-      model: "gpt-4-0613",
-      messages: messages,
-      stream: true,
-    });
-  } else {
-    let messages = historical_messages;
-
-    messages.push({ "role": "user", "content": event.getContent().body });
-    console.log(messages);
-    return await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: messages,
-      stream: true,
-    });
-  }
+  messages = messages.concat(historical_messages);
+  console.log(messages);
+  return await openai.chat.completions.create({
+    model: "gpt-4-0613",
+    messages: messages,
+    stream: true,
+  });
 }
 
 (async () => {
@@ -317,11 +317,8 @@ async function getResponse(event: MatrixEvent, history: MatrixEvent[]) {
 
   // SCARY WARNING ABOUT ASYNC, THIS SHOULD BE SYNC AND USE A QUEUE
   client.on(MatrixSDK.RoomEvent.Timeline, async function (event, room, toStartOfTimeline) {
-    let eventList = room!.getLiveTimeline().getEvents();
-    if (event.event.origin_server_ts! < startTime) {
-      //console.log(eventList);
 
-      constructHistory(eventList)
+    if (event.event.origin_server_ts! < startTime) {
       return;
     }
     if (toStartOfTimeline) {
@@ -333,28 +330,17 @@ async function getResponse(event: MatrixEvent, history: MatrixEvent[]) {
     if (event.getSender() === user_id) {
       return;
     }
-    let history: MatrixEvent[] = constructHistory(eventList);
+    let initial = await client.roomInitialSync(room!.roomId, 1000);
+    let eventList = initial!.messages?.chunk;
+    console.log(eventList);
 
-    let initialMessage = await client.sendHtmlMessage(room.roomId, "Thinking...", "Thinking...");
+    console.log("Total event list", eventList.length);
+    let history: MatrixEvent[] = constructHistory(eventList);
+    console.log("Compressed into just the history that's ", history.length);
 
 
     const stream = await getResponse(event, history);
     await sendStream(stream, client, room);
-    //await sendStream(stream, client, room, sentId);
-
-    //let content = chunks.map(part => part.choices[0].delta?.content).join('');
-    //await client.sendHtmlMessage(room.roomId, content, content);
-    //MatrixSDK.
-    //let fullcontent = total.map(part => part.choices[0].delta?.content).join('');
-    //await client.sendHtmlMessage(room.roomId, fullcontent, fullcontent);
-
-    console.log(
-      // the room name will update with m.room.name events automatically
-      "(%s) %s :: %s",
-      room?.name,
-      event.getSender(),
-      event.getContent().body,
-    );
   });
 
   await client.startClient();
