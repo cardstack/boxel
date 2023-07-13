@@ -235,7 +235,7 @@ export default class Room extends Component<RoomArgs> {
   @service private declare cardService: CardService;
   @tracked private isInviteMode = false;
   @tracked private membersToInvite: string[] = [];
-  @tracked private canSetObjective: boolean | undefined;
+  @tracked private allowedToSetObjective: boolean | undefined;
   private messagesToSend: TrackedMap<string, string | undefined> =
     new TrackedMap();
   private cardsToSend: TrackedMap<string, Card | undefined> = new TrackedMap();
@@ -324,6 +324,10 @@ export default class Room extends Component<RoomArgs> {
     return this.cardsToSend.get(this.args.roomId);
   }
 
+  private get canSetObjective() {
+    return !this.objective && this.allowedToSetObjective;
+  }
+
   private get cardToSendComponent() {
     if (this.cardtoSend) {
       return this.cardtoSend.constructor.getComponent(
@@ -405,7 +409,7 @@ export default class Room extends Component<RoomArgs> {
     await this.matrixService.flushMembership;
     await this.matrixService.flushTimeline;
     await this.roomCardResource.loading;
-    this.canSetObjective = await this.matrixService.canSetObjective(
+    this.allowedToSetObjective = await this.matrixService.allowedToSetObjective(
       this.args.roomId
     );
   });

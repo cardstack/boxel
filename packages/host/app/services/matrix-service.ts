@@ -254,7 +254,7 @@ export default class MatrixService extends Service {
     }
   }
 
-  async canSetObjective(roomId: string): Promise<boolean> {
+  async allowedToSetObjective(roomId: string): Promise<boolean> {
     let powerLevels = await this.getPowerLevels(roomId);
     let myUserId = this.client.getUserId();
     if (!myUserId) {
@@ -265,7 +265,7 @@ export default class MatrixService extends Service {
   }
 
   async setObjective(roomId: string, ref: CardRef): Promise<void> {
-    if (!this.canSetObjective(roomId)) {
+    if (!this.allowedToSetObjective(roomId)) {
       throw new Error(
         `The user '${this.client.getUserId()}' is not permitted to set an objective in room '${roomId}'`
       );
