@@ -6,7 +6,6 @@ import { RealmPaths } from './paths';
 import { CardError } from './error';
 import flatMap from 'lodash/flatMap';
 import { type RunnerOpts } from './search-index';
-import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
@@ -131,7 +130,6 @@ export class Loader {
     { module: string; name: string }
   >();
   private consumptionCache = new WeakMap<object, string[]>();
-  private static loaders = new WeakMap<Function, Loader>();
 
   static cloneLoader(loader: Loader): Loader {
     let clone = new Loader();
@@ -209,33 +207,12 @@ export class Loader {
     return [];
   }
 
-  static identify(
-    value: unknown
-  ): { module: string; name: string } | undefined {
-    if (typeof value !== 'function') {
-      return undefined;
-    }
-    let loader = Loader.loaders.get(value);
-    if (loader) {
-      return loader.identify(value);
-    } else {
-      return undefined;
-    }
-  }
-
   identify(value: unknown): { module: string; name: string } | undefined {
     if (typeof value === 'function') {
       return this.identities.get(value);
     } else {
       return undefined;
     }
-  }
-
-  static getLoaderFor(value: unknown): Loader | undefined {
-    if (typeof value === 'function') {
-      return Loader.loaders.get(value);
-    }
-    return undefined;
   }
 
   async import<T extends object>(moduleIdentifier: string): Promise<T> {
@@ -565,7 +542,6 @@ export class Loader {
               : moduleIdentifier,
             name: property,
           });
-          Loader.loaders.set(value, this);
         }
         return value;
       },
@@ -821,24 +797,4 @@ function isEvaluatable(
     return false;
   }
   return stateOrder[module.state] >= stateOrder['registered-completing-deps'];
-}
-
-async function maybeHandleScopedCSSRequest(req: Request) {
-  if (isScopedCSSRequest(req.url)) {
-    if (isFastBoot) {
-      return Promise.resolve(new Response('// skipped scoped CSS'));
-    } else {
-      let decodedCSS = decodeScopedCSSRequest(req.url);
-      return Promise.resolve(
-        new Response(`
-          let styleNode = document.createElement('style');
-          let styleText = document.createTextNode(\`${decodedCSS}\`);
-          styleNode.appendChild(styleText);
-          document.body.appendChild(styleNode);
-        `)
-      );
-    }
-  } else {
-    return Promise.resolve(null);
-  }
 }
