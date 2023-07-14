@@ -21,6 +21,7 @@ import {
   type CardRef,
   LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
+import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
@@ -233,10 +234,12 @@ export default class OperatorModeContainer extends Component<Signature> {
         let doc: LooseSingleCardDocument = opts?.doc ?? {
           data: { meta: { adoptsFrom: ref } },
         };
+        // using RealmPaths API to correct for the trailing `/`
+        let realmPath = new RealmPaths(relativeTo ?? here.cardService.defaultURL);
         let newCard = await here.cardService.createFromSerialized(
           doc.data,
           doc,
-          relativeTo ?? here.cardService.defaultURL
+          new URL(realmPath.url)
         );
         let newItem: StackItem = {
           card: newCard,
