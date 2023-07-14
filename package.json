@@ -20,7 +20,7 @@
       "jsesc": "^3.0.0",
       "ember-concurrency": "github:machty/ember-concurrency#c6ed562",
       "ember-modifier": "^4.1.0",
-      "prettier": "file:./vendor/prettier-2.8.8-glimmer-patch.1.tgz"
+      "prettier": "github:ef4/prettier#8c4a6ad"
     },
     "peerDependencyRules": {
       "allowedVersions": {
