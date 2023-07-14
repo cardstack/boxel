@@ -119,7 +119,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
       let { elements, rects } = state;
       let { floating, reference } = elements;
       let { width, height } = reference.getBoundingClientRect();
-      
+
       floating.style.width = width + 'px';
       floating.style.height = height + 'px';
 

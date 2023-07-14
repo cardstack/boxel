@@ -10,7 +10,7 @@ import {
   relativeTo,
   type CardBase,
 } from './card-api';
-import { IconButton } from '@cardstack/boxel-ui';
+import { IconButton, Tooltip } from '@cardstack/boxel-ui';
 import {
   chooseCard,
   catalogEntryRef,
@@ -61,17 +61,20 @@ class Isolated extends Component<typeof CardsGrid> {
       </ul>
 
       {{#if @context.actions.createCard}}
-        <div class='cards-grid__add-button'>
-          <IconButton
-            @icon='icon-plus-circle'
-            @width='40px'
-            @height='40px'
-            @tooltip='Add a new card to this collection'
-            @tooltipPosition='left'
-            class='add-button'
-            {{on 'click' this.createNew}}
-            data-test-create-new-card-button
-          />
+        <div class='cards-grid__add-button'> 
+          <Tooltip 
+            @content='Add a new card to this collection'
+            @placement='left'
+            @offset={{6}}>
+            <IconButton
+              @icon='icon-plus-circle'
+              @width='40px'
+              @height='40px'
+              class='add-button'
+              {{on 'click' this.createNew}}
+              data-test-create-new-card-button
+            />
+          </Tooltip>
         </div>
       {{/if}}
     </div>
