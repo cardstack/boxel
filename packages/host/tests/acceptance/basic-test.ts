@@ -60,6 +60,7 @@ const personCardSource = `
         <style>
           div {
             color: green;
+            content: '';
           }
         </style>
       </template>

@@ -66,10 +66,10 @@ import { parseQueryString } from './query';
 import type { Readable } from 'stream';
 import { type Card } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
-import type { LoaderType } from 'https://cardstack.com/base/card-api';
-import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
+import scopedCSSTransform from 'glimmer-scoped-css/ast-transform';
 
 export type RealmInfo = {
   name: string;
@@ -157,7 +157,6 @@ export class Realm {
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.#loader = loader;
     this.#loader.registerURLHandler(this.maybeHandle.bind(this));
-    this.#loader.registerURLHandler(maybeHandleScopedCSSRequest);
     this.#adapter = adapter;
     this.#searchIndex = new SearchIndex(
       this,
@@ -458,6 +457,7 @@ export class Realm {
 
     let templateOptions: EmberTemplatePluginOptions = {
       compiler: etc as unknown as EmberTemplateCompiler,
+      transforms: [scopedCSSTransform],
     };
 
     let src = babel.transformSync(content, {
@@ -985,26 +985,4 @@ function sseToChunkData(type: string, data: string, id?: string): string {
     info.push(`id: ${id}`);
   }
   return info.join('\n') + '\n\n';
-}
-
-const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
-
-async function maybeHandleScopedCSSRequest(req: Request) {
-  if (isScopedCSSRequest(req.url)) {
-    if (isFastBoot) {
-      return Promise.resolve(new Response('// skipped scoped CSS'));
-    } else {
-      let decodedCSS = decodeScopedCSSRequest(req.url);
-      return Promise.resolve(
-        new Response(`
-          let styleNode = document.createElement('style');
-          let styleText = document.createTextNode(\`${decodedCSS}\`);
-          styleNode.appendChild(styleText);
-          document.body.appendChild(styleNode);
-        `)
-      );
-    }
-  } else {
-    return Promise.resolve(null);
-  }
 }
