@@ -1,4 +1,8 @@
-lockfileVersion: '6.0'
+lockfileVersion: '6.1'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
 
 overrides:
   '@types/eslint': 8.4.1
@@ -87,7 +91,7 @@ importers:
         specifier: ^1.0.3
         version: 1.0.3
       prettier:
-        specifier: file:/Users/edward/hacking/boxel-motion/vendor/prettier-2.8.8-glimmer-patch.1.tgz
+        specifier: file:/Users/jurgen/development/boxel/vendor/prettier-2.8.8-glimmer-patch.1.tgz
         version: file:vendor/prettier-2.8.8-glimmer-patch.1.tgz
       prettier-plugin-ember-template-tag:
         specifier: ^0.3.2
@@ -239,7 +243,7 @@ importers:
         specifier: ^4.1.5
         version: 4.1.5
       prettier:
-        specifier: file:/Users/edward/hacking/boxel-motion/vendor/prettier-2.8.8-glimmer-patch.1.tgz
+        specifier: file:/Users/jurgen/development/boxel/vendor/prettier-2.8.8-glimmer-patch.1.tgz
         version: file:vendor/prettier-2.8.8-glimmer-patch.1.tgz
       typescript:
         specifier: ^4.7.0
@@ -414,7 +418,7 @@ importers:
         specifier: ^8.0.1
         version: 8.0.1
       prettier:
-        specifier: file:/Users/edward/hacking/boxel-motion/vendor/prettier-2.8.8-glimmer-patch.1.tgz
+        specifier: file:/Users/jurgen/development/boxel/vendor/prettier-2.8.8-glimmer-patch.1.tgz
         version: file:vendor/prettier-2.8.8-glimmer-patch.1.tgz
       qunit:
         specifier: ^2.19.4
@@ -580,7 +584,7 @@ importers:
         specifier: ^4.7.0
         version: 4.7.0
       prettier:
-        specifier: file:/Users/edward/hacking/boxel-motion/vendor/prettier-2.8.8-glimmer-patch.1.tgz
+        specifier: file:/Users/jurgen/development/boxel/vendor/prettier-2.8.8-glimmer-patch.1.tgz
         version: file:vendor/prettier-2.8.8-glimmer-patch.1.tgz
       qunit:
         specifier: ^2.19.4
@@ -806,7 +810,7 @@ importers:
         specifier: ^4.7.0
         version: 4.7.0
       prettier:
-        specifier: file:/Users/edward/hacking/boxel-motion/vendor/prettier-2.8.8-glimmer-patch.1.tgz
+        specifier: file:/Users/jurgen/development/boxel/vendor/prettier-2.8.8-glimmer-patch.1.tgz
         version: file:vendor/prettier-2.8.8-glimmer-patch.1.tgz
       prettier-plugin-ember-template-tag:
         specifier: ^0.3.2
@@ -1137,7 +1141,7 @@ importers:
         specifier: ^1.0.1
         version: 1.0.1
       prettier:
-        specifier: file:/Users/edward/hacking/boxel-motion/vendor/prettier-2.8.8-glimmer-patch.1.tgz
+        specifier: file:/Users/jurgen/development/boxel/vendor/prettier-2.8.8-glimmer-patch.1.tgz
         version: file:vendor/prettier-2.8.8-glimmer-patch.1.tgz
       qs:
         specifier: ^6.10.5
@@ -1304,7 +1308,7 @@ importers:
         specifier: ^4.1.5
         version: 4.1.5
       prettier:
-        specifier: file:/Users/edward/hacking/boxel-motion/vendor/prettier-2.8.8-glimmer-patch.1.tgz
+        specifier: file:/Users/jurgen/development/boxel/vendor/prettier-2.8.8-glimmer-patch.1.tgz
         version: file:vendor/prettier-2.8.8-glimmer-patch.1.tgz
       prettier-plugin-ember-template-tag:
         specifier: ^0.3.2
@@ -1627,7 +1631,7 @@ importers:
         specifier: ^4.1.5
         version: 4.1.5
       prettier:
-        specifier: file:/Users/edward/hacking/boxel-motion/vendor/prettier-2.8.8-glimmer-patch.1.tgz
+        specifier: file:/Users/jurgen/development/boxel/vendor/prettier-2.8.8-glimmer-patch.1.tgz
         version: file:vendor/prettier-2.8.8-glimmer-patch.1.tgz
       qunit:
         specifier: ^2.14.0
@@ -8032,7 +8036,6 @@ packages:
       make-dir: 3.1.0
       schema-utils: 2.7.1
       webpack: 5.75.0
-    dev: false
 
   /babel-loader@8.3.0(@babel/core@7.21.0)(webpack@5.84.0):
     resolution: {integrity: sha512-H8SvsMF+m9t15HNLMipppzkC+Y2Yq+v3SonZyU70RBL/h1gxPkH08Ot8pEE9Z4Kd+czyWJClmFS8qzIP9OZ04Q==}
@@ -11749,7 +11752,6 @@ packages:
       - '@glint/template'
       - supports-color
       - webpack
-    dev: false
 
   /ember-auto-import@2.6.3(@glint/template@1.0.2)(webpack@5.84.0):
     resolution: {integrity: sha512-uLhrRDJYWCRvQ4JQ1e64XlSrqAKSd6PXaJ9ZsZI6Tlms9T4DtQFxNXasqji2ZRJBVrxEoLCRYX3RTldsQ0vNGQ==}
@@ -12918,7 +12920,7 @@ packages:
       '@embroider/addon-shim': 1.8.5
       ember-cli-normalize-entity-name: 1.0.0
       ember-cli-string-utils: 1.1.0
-      ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0)
+      ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.75.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -13187,7 +13189,6 @@ packages:
       - '@glint/template'
       - supports-color
       - webpack
-    dev: false
 
   /ember-source@4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0):
     resolution: {integrity: sha512-h0lV902A4Mny2eiqXPy15uXXoCc7BnUegE4axLAy4IoxEkJ1o5h0aLJFiB4Tzb1htx8vgHjJz//Y5Jig7NSDTw==}
@@ -25824,11 +25825,7 @@ packages:
       ember-cli-htmlbars: 6.2.0
       ember-compatibility-helpers: 1.2.6(@babel/core@7.20.2)
       ember-destroyable-polyfill: 2.0.3(@babel/core@7.20.2)
-      ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0)
+      ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.75.0)
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
-
-settings:
-  autoInstallPeers: true
-  excludeLinksFromLockfile: false
