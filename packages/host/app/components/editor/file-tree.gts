@@ -34,16 +34,20 @@ export default class FileTree extends Component<Args> {
       />
     </nav>
     <Tooltip
-      @content='Create a new card'
       @placement='left'>
-      <IconButton
-        @icon='icon-plus-circle'
-        @width='40px'
-        @height='40px'
-        class='add-button'
-        {{on 'click' this.createNew}}
-        data-test-create-new-card-button
-      />
+      <:trigger>
+        <IconButton
+          @icon='icon-plus-circle'
+          @width='40px'
+          @height='40px'
+          class='add-button'
+          {{on 'click' this.createNew}}
+          data-test-create-new-card-button
+        />
+      </:trigger>
+      <:content>
+        Create a new card
+      </:content>
     </Tooltip>
   </template>
 
