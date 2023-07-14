@@ -106,12 +106,36 @@ export default class Go extends Component<Signature> {
       {{/if}}
     </div>
     <style>
-      .main { position: relative; display: grid; grid-template-columns: 15rem
-      1fr 1fr; min-height: 100vh; } .main-column { padding: var(--boxel-sp); }
-      .main-column > * + * { margin-top: var(--boxel-sp); } .editor-column {
-      display: flex; flex-direction: column; } .editor-menu { list-style-type:
-      none; padding: 0; display: flex; gap: var(--boxel-sp-sm); }
-      .editor-container { flex: 1; }
+      .main {
+          position: relative;
+          display: grid;
+          grid-template-columns: 15rem 1fr 1fr;
+          min-height: 100vh;
+        }
+
+        .main-column {
+          padding: var(--boxel-sp);
+        }
+
+        .main-column > * + * {
+          margin-top: var(--boxel-sp);
+        }
+
+        .editor-column {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .editor-menu {
+          list-style-type: none;
+          padding: 0;
+          display: flex;
+          gap: var(--boxel-sp-sm);
+        }
+
+        .editor-container {
+          flex: 1;
+        }
     </style>
   </template>
 
