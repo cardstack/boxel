@@ -219,9 +219,8 @@ export default class MatrixService extends Service {
     let serializedCard: LooseSingleCardDocument | undefined;
     if (card) {
       serializedCard = await this.cardService.serializeCard(card);
-      body = `${body ?? ''} (Card: ${card.title ?? 'Untitled'}, ${
-        card.id
-      })`.trim();
+      body = `${body ?? ''} (Card: ${card.title ?? 'Untitled'}, ${card.id
+        })`.trim();
     }
     if (card) {
       await this.client.sendEvent(roomId, 'm.room.message', {
@@ -238,6 +237,8 @@ export default class MatrixService extends Service {
   canSetObjective(roomId: string): boolean {
     let room = this.client.getRoom(roomId);
     if (!room) {
+      console.log(this.client, this.client.getRooms());
+      return false;
       throw new Error(`bug: cannot get room for ${roomId}`);
     }
     let myUserId = this.client.getUserId();
@@ -283,10 +284,8 @@ export default class MatrixService extends Service {
 
     do {
       let response = await fetch(
-        `${matrixURL}/_matrix/client/v3/rooms/${roomId}/messages?dir=${
-          opts?.direction ? opts.direction.slice(0, 1) : 'f'
-        }&limit=${opts?.pageSize ?? DEFAULT_PAGE_SIZE}${
-          from ? '&from=' + from : ''
+        `${matrixURL}/_matrix/client/v3/rooms/${roomId}/messages?dir=${opts?.direction ? opts.direction.slice(0, 1) : 'f'
+        }&limit=${opts?.pageSize ?? DEFAULT_PAGE_SIZE}${from ? '&from=' + from : ''
         }`,
         {
           headers: {

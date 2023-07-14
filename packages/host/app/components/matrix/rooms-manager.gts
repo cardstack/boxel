@@ -29,8 +29,14 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type { RoomCard, RoomMemberCard } from 'https://cardstack.com/base/room';
 
 const TRUE = true;
-
-export default class RoomsManager extends Component {
+interface Args {
+  Args: {
+    onCommand: (command: any) => void;
+    onPreviewCommand: (command: any) => void;
+    onCancelPreviewCommand: (command: any) => void;
+  };
+}
+export default class RoomsManager extends Component<Args> {
   <template>
     <div class='header-wrapper'>
       <BoxelHeader
@@ -166,7 +172,7 @@ export default class RoomsManager extends Component {
     {{/if}}
 
     {{#if this.currentRoomId}}
-      <Room @roomId={{this.currentRoomId}} />
+      <Room @roomId={{this.currentRoomId}} @onCommand={{this.onCommand}}  @onPreviewCommand={{this.onPreviewCommand}} @onCancelPreviewCommand={{this.onCancelPreviewCommand}}/>
     {{/if}}
 
     <style>
@@ -243,6 +249,25 @@ export default class RoomsManager extends Component {
     this.loadRooms.perform();
   }
 
+  @action
+  private onCommand(command: any) {
+    this.args.onCommand(command);
+  }
+
+
+  @action
+  private onPreviewCommand(command: any) {
+    this.args.onPreviewCommand(command);
+  }
+  
+
+
+  @action
+  private onCancelPreviewCommand(command: any) {
+    this.args.onCancelPreviewCommand(command);
+  }
+  
+  
   @cached
   private get roomResources() {
     let resources = new TrackedMap<string, RoomCardResource>();

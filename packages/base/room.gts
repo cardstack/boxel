@@ -167,6 +167,7 @@ class MessageCard extends Card {
   @field created = contains(DateTimeCard);
   @field attachedCard = contains(Card);
   @field index = contains(NumberCard);
+  @field command = contains(StringCard);
 
   static embedded = class Embedded extends Component<typeof this> {
     // TODO need to add the message specific CSS here
@@ -397,6 +398,7 @@ export class RoomCard extends Card {
           formattedMessage,
           index,
           attachedCard: null,
+          command: event.content.command
         };
         if (event.content.msgtype === 'org.boxel.card') {
           let cardDoc = event.content.instance;

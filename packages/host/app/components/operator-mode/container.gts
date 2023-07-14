@@ -128,6 +128,63 @@ export default class OperatorModeContainer extends Component<Signature> {
     return await this.operatorModeStateService.constructRecentCards();
   });
 
+  @action async onCommand(command: any) {
+    // apply patch
+    if (command.type == "patch") {
+      let topOfStack = this.stacks[0].items[this.stacks[0].items.length-1];
+      await this.save(topOfStack)
+    }
+    // save
+    console.log("Clicked a command! Saved!", command);
+    //this.stacks[0].items[0]
+  }
+
+  @action async onPreviewCommand(command: any) {
+    // apply patch
+    console.log("Previewed a command!", command);
+    if (command.type == "patch") {
+      let topOfStack = this.stacks[0].items[this.stacks[0].items.length-1];
+      await this.saveCardFieldValues(topOfStack.card);
+      await this.setFieldValues(topOfStack.card, command.patch.attributes);
+    }
+  }
+
+  @action async onCancelPreviewCommand(command: any) {
+    // reset field values
+    console.log("Cancelled preview of a command!", command);
+    if (command.type == "patch") {
+      let topOfStack = this.stacks[0].items[this.stacks[0].items.length-1];
+      console.log("Rolling back!")
+      console.log(this.cardFieldValues.get(topOfStack.card));
+      await this.cancel(topOfStack);
+    }
+  }
+
+  private async setFieldValues(card: Card, values: StringMap) {
+    let fields = await this.cardService.getFields(card);
+    for (let fieldName of Object.keys(values)) {
+      let field = fields[fieldName];
+      console.log('Setting field', fieldName, 'on card', card, 'to', values[fieldName])
+      if (fieldName === 'id') continue;
+      try {
+        if (
+          (field.fieldType === 'contains' ||
+            field.fieldType === 'containsMany') &&
+          !(await this.cardService.isPrimitive(field.card))
+        ) {
+          // This does not work
+          console.log('Nested change', (card as any)[fieldName] , values[fieldName]);
+          await this.setFieldValues((card as any)[fieldName] , values[fieldName]);     
+        } else {
+          console.log('Setting', fieldName, values[fieldName], 'on card', card);
+          (card as any)[fieldName] = values[fieldName];
+        }
+      } catch (e) {
+        console.log(e);
+      }
+    }
+  }
+
   @action onCancelSearchSheet() {
     this.searchSheetMode = SearchSheetMode.Closed;
     this.searchSheetTrigger = null;
@@ -499,7 +556,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         </div>
 
         {{#if this.isChatVisible}}
-          <ChatSidebar @onClose={{this.toggleChat}} />
+          <ChatSidebar @onClose={{this.toggleChat}} @onCommand={{this.onCommand}} @onPreviewCommand={{this.onPreviewCommand}} @onCancelPreviewCommand={{this.onCancelPreviewCommand}} />
         {{else}}
           <IconButton
             data-test-open-chat

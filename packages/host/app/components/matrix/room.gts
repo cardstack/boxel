@@ -30,8 +30,56 @@ const TRUE = true;
 interface RoomArgs {
   Args: {
     roomId: string;
+    onCommand: (command: any) => void;
+    onPreviewCommand: (command: any) => void;
+    onCancelPreviewCommand: (command: any) => void;
   };
 }
+
+interface CommandArgs {
+  Args: {
+    command: any;
+    onCommand: (command: any) => void;
+    onPreviewCommand: (command: any) => void;
+    onCancelPreviewCommand: (command: any) => void;
+  };
+}
+
+class CommandMessage extends Component<CommandArgs> {
+  <template>
+    <div>
+      {{ this.label }}
+    </div>
+    <Button {{on 'click' this.clicked}} {{on 'mouseenter' this.mouseEnter}} {{on 'mouseleave' this.mouseLeave}}>Apply</Button>
+  </template>
+
+  private get label() {
+    return JSON.stringify(this.args.command);
+  }
+
+  @action
+  private clicked(){
+    this.args.onCommand(this.args.command);
+    console.log("Clicked", this.args);
+  }
+
+  @action
+  private mouseEnter(){
+    console.log("Mouse Enter", this.args.onPreviewCommand);
+    this.args.onPreviewCommand(this.args.command);
+  }
+
+  @action
+  private mouseLeave(){
+    this.args.onCancelPreviewCommand(this.args.command);
+  }
+
+  constructor(owner: unknown, args: any) {
+    super(owner, args);
+  }
+}
+
+
 export default class Room extends Component<RoomArgs> {
   <template>
     <div>Number of cards: {{this.currentCards.size}}</div>
@@ -95,6 +143,13 @@ export default class Room extends Component<RoomArgs> {
           </div>
         {{/each}}
       </div>
+      {{#each this.commands as |command|}}
+          <CommandMessage @command={{command}} @onCommand={{this.onCommand}} @onPreviewCommand={{this.onPreviewCommand}} @onCancelPreviewCommand={{this.onCancelPreviewCommand}}/>
+        {{else}}
+          <div data-test-no-commands>
+            (No commands)
+          </div>
+        {{/each}}
     </div>
 
     <div class='send-message'>
@@ -261,6 +316,34 @@ export default class Room extends Component<RoomArgs> {
     return this.roomCard.messages
       .filter((m) => m.attachedCard)
       .map((m) => m.attachedCard);
+  }
+
+  @action
+  private onCommand(command: any) {
+    console.log("onCommand", this.args.onCommand);
+    this.args.onCommand(command);
+  }
+
+    @action
+  private onPreviewCommand(command: any) {
+    console.log("onPreviewCommand", this.args.onPreviewCommand);
+    this.args.onPreviewCommand(command);
+  }
+
+    @action
+  private onCancelPreviewCommand(command: any) {
+    console.log("onCancelPreviewCommand", this.args.onCancelPreviewCommand);
+    this.args.onCancelPreviewCommand(command);
+  }
+
+  @cached
+  private get commands() {
+    if (!this.roomCard) {
+      return [];
+    }
+    return this.roomCard.messages
+      .filter((m) => m.command)
+      .map((m) => m.command);
   }
 
   @cached

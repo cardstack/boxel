@@ -28,20 +28,36 @@ const MODIFY_SYSTEM_MESSAGE = "\
 You are able to modify content according to user requests as well as answer questions for them. You may ask any followup questions you may need.\
 If a user may be requesting a change, respond politely but not ingratiatingly to the user. The more complex the request, the more you can explain what you're about to do.\
 \
+Along with the changes you want to make, you must include the card ID of the card being changed. The original card. \
 Return up to 3 options for the user to select from, exploring a range of things the user may want. If the request has only one sensible option or they ask for something very directly you don't need to return more than one. The format of your response should be\
 ```\
 Explanatory text\
 Option 1: Description\
 <option>\
-{changed content}\
+{\
+  \"id\": \"originalCardID\",\
+  \"patch\": {\
+    ...\
+  }\
+}\
 </option>\
 Option 2: Description\
 <option>\
-{changed content}\
+{\
+  \"id\": \"originalCardID\",\
+  \"patch\": {\
+    ...\
+  }\
+}\
 </option>\
 Option 3: Description\
 <option>\
-{changed content}\
+{\
+  \"id\": \"originalCardID\",\
+  \"patch\": {\
+    ...\
+  }\
+}\
 </option>\
 ```\
 The data in the option block will be used to update things for the user behind a button so they will not see the content directly - you must give a short text summary before the option block. The option block should not contain the description. Make sure you use the option xml tags.\
@@ -157,27 +173,28 @@ async function sendMessage(client, room, content, previous) {
 }
 
 async function sendOption(client, room, content) {
+  console.log(content);
+  let parsedContent = JSON.parse(content);
+  let patch = parsedContent["patch"];
+  if (patch["attributes"]) {
+    patch = patch["attributes"];
+  }
+  let id = parsedContent["id"];
+
   let messageObject = {
     "body": content,
-    "msgtype": "org.boxel.card",
-    "formatted_body": "Option",
+    "msgtype": "m.org.boxel.command",
+    "formatted_body": "A patch",
     "format": "org.matrix.custom.html",
-    "instance": {
-      "data": {
-        "type": "card",
-        "id": "http://localhost:4201/demo/Option/" + Math.random().toString(36).substring(7),
-        "attributes": {
-          "changes": content
-        },
-        "meta": {
-          "adoptsFrom": {
-            "module": "../option",
-            "name": "Option"
-          }
-        }
+    "command": {
+      "type": "patch",
+      "id": id,
+      "patch": {
+        "attributes": patch
       }
     }
   };
+  console.log(JSON.stringify(messageObject, null, 2));
   console.log("Sending", messageObject);
   return await client.sendEvent(room.roomId, "m.room.message", messageObject);
 }
@@ -330,6 +347,27 @@ async function getResponse(event: MatrixEvent, history: MatrixEvent[]) {
     if (event.getSender() === user_id) {
       return;
     }
+
+    if (event.getContent().body.includes("test")) {
+      let messageObject = {
+        "body": "some response, a patch",
+        "msgtype": "m.org.boxel.command",
+        "formatted_body": "some response, a patch",
+        "format": "org.matrix.custom.html",
+        "command": {
+          "type": "patch",
+          "id": "http://localhost:4201/demo/BlogPost/1",
+          "patch": {
+            "attributes": {
+              "title": "My edit " + Math.random().toString(36).substring(7),
+              "slug": "mad-as-a-hatter",
+            }
+          }
+        }
+      };
+      return await client.sendEvent(room.roomId, "m.room.message", messageObject);
+    }
+
     let initial = await client.roomInitialSync(room!.roomId, 1000);
     let eventList = initial!.messages?.chunk;
     console.log(eventList);
