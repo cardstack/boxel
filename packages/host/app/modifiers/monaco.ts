@@ -59,9 +59,8 @@ export default class Monaco extends Modifier<Signature> {
       // To be consistent call this immediately since the initial content
       // was set before we had a chance to register our listener
       this.onContentChanged.perform(contentChanged);
-
-      this.lastLanguage = language;
     }
+    this.lastLanguage = language;
   }
 
   private onContentChanged = restartableTask(
