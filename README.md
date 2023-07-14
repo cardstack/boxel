@@ -21,7 +21,9 @@
 
 `packages/boxel-motion-demo-app` is the demo app for boxel-motion
 
-`packages/matrix` ***TODO***
+`packages/matrix` is the docker container for running the matrix server: synapse, as well as tests that involve running a matrix client.
+
+`packages/ai-bot` is a node app that runs a matrix client session and an OpenAI session. Matrix message queries sent to the AI bot are packaged with an OpenAI system prompt and operator mode context and sent to OpenAI. The ai bot enriches the OpenAI response and posts the response back into the matrix room.
 
 ## Running the Host App
 
@@ -32,7 +34,6 @@ In order to run the ember-cli hosted app:
 
 1. `pnpm start` in the host/ workspace to serve the ember app. Note that this script includes the environment variable `OWN_REALM_URL=http://localhost:4201/demo/` which configures the host to point to the demo cards realm by default.
 2. `pnpm start:all` in the realm-server/ to serve the base realm and demo realms -- this will also allow you to switch between the app and the tests without having to restart servers)
-3. `pnpm start:synapse` in the matrix/ workspace to run the matrix server.
 
 The app is available at http://localhost:4200. It will serve the demo cards realm (configurable with OWN_REALM_URL, as mentioned above). You can open the base and demo cards workspace directly by entering http://localhost:4201/base or http://localhost:4201/demo in the browser.
 
@@ -174,6 +175,15 @@ Visit `http://localhost:4205` after the realms have finished starting up
 This test suite contains tests that exercise matrix functionality. These tests are located at `packages/matrix/tests`, and are executed using the [Playwright](https://playwright.dev/) test runner. To run the tests from the command line, first make sure that the matrix server is not already running. You can stop the matrix server by executing the following from `packages/matrix`
 ```
 pnpm stop:synapse
+```
+
+The matrix client relies upon the host app and the realm servers. Start the host app from the `packages/host` folder:
+```
+pnpm start
+```
+Then start the realm server (minus the matrix server). From the `packages/realm-server` folder:
+```
+pnpm start:without-matrix
 ```
 
 Then to run the tests from the CLI execute the following from `packages/matrix`:
