@@ -1,7 +1,11 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type { Card, Format, FieldType } from 'https://cardstack.com/base/card-api';
+import type {
+  Card,
+  Format,
+  FieldType,
+} from 'https://cardstack.com/base/card-api';
 import Preview from '@cardstack/host/components/preview';
 import { trackedFunction } from 'ember-resources/util/function';
 import { fn, array } from '@ember/helper';
@@ -60,19 +64,21 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }>();
 
   get renderedLinksToCards(): RenderedLinksToCard[] {
-    return this.cardTracker.elements
-      .filter((entry) => {
-        return (
-          entry.meta.format === 'data' ||
-          entry.meta.fieldType === 'linksTo' ||
-          entry.meta.fieldType === 'linksToMany'
-        );
-      })
-      // this mapping could probably be eliminated or simplified if we refactor OperatorModeOverlays to accept our type
-      .map((entry) => ({
-        element: entry.element,
-        card: entry.meta.card
-      }));
+    return (
+      this.cardTracker.elements
+        .filter((entry) => {
+          return (
+            entry.meta.format === 'data' ||
+            entry.meta.fieldType === 'linksTo' ||
+            entry.meta.fieldType === 'linksToMany'
+          );
+        })
+        // this mapping could probably be eliminated or simplified if we refactor OperatorModeOverlays to accept our type
+        .map((entry) => ({
+          element: entry.element,
+          card: entry.meta.card,
+        }))
+    );
   }
 
   get styleForStackedCard(): SafeString {
@@ -172,8 +178,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
             boxel-header-icon-height='30px'
             boxel-header-text-size=(if this.isHoverOnRealmIcon 'var(--boxel-font)' 'var(--boxel-font-lg)')
             boxel-header-text-color=(if this.isHoverOnRealmIcon 'var(--boxel-teal)' 'var(--boxel-dark)')
-            boxel-header-padding='var(--boxel-sp-xs)'
-            boxel-header-action-padding='var(--boxel-sp-xs)'
+            boxel-header-padding='var(--boxel-sp-xs) var(--boxel-sp)'
+            boxel-header-action-padding='var(--boxel-sp-xs) var(--boxel-sp)'
           }}
           data-test-stack-card-header
         >
@@ -396,7 +402,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         justify-content: center;
 
         font: var(--boxel-font-sm);
-        margin-right: var(--boxel-sp-xxxs);
+        margin-left: var(--boxel-sp-xxxs);
         z-index: 1;
       }
 
