@@ -8,12 +8,12 @@ import { action } from '@ember/object';
 interface Signature {
   Element: HTMLElement;
   Args: {
-    content: string;
     placement?: MiddlewareState['placement'];
     offset?: number;
   };
   Blocks: {
-    default: [];
+    trigger: [];
+    content: [];
   };
 }
 export default class Tooltip extends Component<Signature> {
@@ -32,11 +32,11 @@ export default class Tooltip extends Component<Signature> {
   <template>
     <Velcro @placement={{if @placement @placement 'top'}} @offsetOptions={{if @offset @offset 5}} as |velcro|>
       <div class='hook' {{velcro.hook}} {{on 'mouseenter' this.onMouseEnter}} {{on 'mouseleave' this.onMouseLeave}}>
-        {{yield}}
+        {{yield to='trigger'}}
       </div>
       {{#if this.isHoverOnHook}}
         <div class='tooltip' {{velcro.loop}}>
-            {{@content}}
+            {{yield to='content'}}
         </div>
       {{/if}}
     </Velcro>

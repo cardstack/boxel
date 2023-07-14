@@ -63,17 +63,21 @@ class Isolated extends Component<typeof CardsGrid> {
       {{#if @context.actions.createCard}}
         <div class='cards-grid__add-button'> 
           <Tooltip 
-            @content='Add a new card to this collection'
             @placement='left'
             @offset={{6}}>
-            <IconButton
-              @icon='icon-plus-circle'
-              @width='40px'
-              @height='40px'
-              class='add-button'
-              {{on 'click' this.createNew}}
-              data-test-create-new-card-button
-            />
+            <:trigger>
+              <IconButton
+                @icon='icon-plus-circle'
+                @width='40px'
+                @height='40px'
+                class='add-button'
+                {{on 'click' this.createNew}}
+                data-test-create-new-card-button
+              />
+            </:trigger>
+            <:content>
+              Add a new card to this collection
+            </:content>
           </Tooltip>
         </div>
       {{/if}}

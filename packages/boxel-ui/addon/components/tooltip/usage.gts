@@ -10,7 +10,6 @@ import { array, fn } from '@ember/helper';
 import { MiddlewareState } from '@floating-ui/dom';
 
 export default class TooltipUsage extends Component {
-  @tracked content = 'Tooltip for icon button';
   @tracked placement: MiddlewareState['placement'] = 'bottom';
   @tracked offset = 6;
 
@@ -23,25 +22,23 @@ export default class TooltipUsage extends Component {
     <FreestyleUsage @name='Tooltip'>
       <:example>
         <BoxelTooltip
-          @content={{this.content}}
           @placement={{this.placement}}
           @offset={{this.offset}}>
-          <BoxelButton
-            {{on 'click' (fn this.log 'button clicked')}}
-            id='button'
-          >
-            Button With Tooltip
-          </BoxelButton>
+          <:trigger>
+            <BoxelButton
+              {{on 'click' (fn this.log 'button clicked')}}
+              id='button'
+            >
+              Button With Tooltip
+            </BoxelButton>
+          </:trigger>
+          <:content>
+            Tooltip Content
+          </:content>
         </BoxelTooltip>
       </:example>
 
       <:api as |Args|>
-        <Args.String
-          @name='content'
-          @description='The text or information displayed in the tooltip.'
-          @value={{this.content}}
-          @onInput={{fn (mut this.content)}}
-        />
         <Args.String
           @name='placement'
           @optional={{true}}
