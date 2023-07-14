@@ -1,7 +1,10 @@
-import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import Component from '@glimmer/component';
 import { svgJar } from '../../helpers/svg-jar';
 import { concat } from '@ember/helper';
 import cn from '../../helpers/cn';
+import { Velcro } from 'ember-velcro';
+import { tracked } from '@glimmer/tracking';
+import { on } from '@ember/modifier';
 
 export interface Signature {
   Element: HTMLButtonElement;
@@ -12,119 +15,109 @@ export interface Signature {
     width?: string;
     height?: string;
     tooltip?: string;
-    tooltipPosition?: 'right' | 'left' | 'above' | 'below';
+    tooltipPosition?: 'right' | 'left' | 'top' | 'bottom';
+    tooltipOffset?: number;
   };
   Blocks: {
     default: [];
   };
 }
 
-const IconButton: TemplateOnlyComponent<Signature> = <template>
-  <button
-    class={{cn
-      (if @variant (concat @variant))
-      (if
-        @tooltip
-        (concat
-          'tooltip tooltip__'
-          (if @tooltipPosition @tooltipPosition 'right')
-        )
-      )
-      @class
-    }}
-    data-hover={{@tooltip}}
-    ...attributes
-  >
-    {{#if @icon}}
-      {{svgJar
-        @icon
-        width=(if @width @width '16px')
-        height=(if @height @height '16px')
-      }}
-    {{/if}}
-  </button>
-  <style>
-    button {
-      --boxel-icon-button-width: 40px;
-      --boxel-icon-button-height: 40px;
+class IconButton extends Component<Signature> {
+  @tracked isHoverOnButton = false;
 
-      width: var(--boxel-icon-button-width);
-      height: var(--boxel-icon-button-height);
-      padding: 0;
-      background: none;
-      border: 1px solid transparent;
-      z-index: 0;
-    }
+  onMouseEnterButton = (_e: MouseEvent) => {
+    this.isHoverOnButton = true;
+  };
 
-    button:hover {
-      cursor: pointer;
-    }
+  onMouseLeaveButton = (_e: MouseEvent) => {
+    this.isHoverOnButton = false;
+  };
 
-    .primary {
-      --icon-bg: var(--boxel-highlight);
-      --icon-border: var(--boxel-highlight);
-    }
+  get showTooltip() {
+    return this.args.tooltip && this.isHoverOnButton;
+  }
 
-    .secondary {
-      --icon-color: var(--boxel-highlight);
+  <template>
+    <Velcro @placement={{if @tooltipPosition @tooltipPosition 'top'}}  @offsetOptions={{if @tooltipOffset @tooltipOffset 5}} as |velcro|>
+      <button
+        {{velcro.hook}}
+        class={{cn
+          (if @variant (concat @variant))
+          @class
+        }}
+        data-hover={{@tooltip}}
+        {{on 'mouseenter' this.onMouseEnterButton}}
+        {{on 'mouseleave' this.onMouseLeaveButton}}
+        ...attributes
+      >
+        {{#if @icon}}
+          {{svgJar
+            @icon
+            width=(if @width @width '16px')
+            height=(if @height @height '16px')
+          }}
+        {{/if}}
+      </button>
+      {{#if this.showTooltip}}
+          <div {{velcro.loop}} class='tooltip'>
+            {{@tooltip}}
+          </div>
+      {{/if}}
+    </Velcro>
+    <style>
+      button {
+        --boxel-icon-button-width: 40px;
+        --boxel-icon-button-height: 40px;
 
-      border: 1px solid rgb(255 255 255 / 35%);
-      border-radius: 100px;
-      background-color: #41404d;
-    }
+        width: var(--boxel-icon-button-width);
+        height: var(--boxel-icon-button-height);
+        padding: 0;
+        background: none;
+        border: 1px solid transparent;
+        z-index: 0;
+      }
 
-    .secondary:hover {
-      background-color: var(--boxel-purple-800);
-    }
+      button:hover {
+        cursor: pointer;
+      }
 
-    button > svg {
-      display: block;
-      margin: auto;
-    }
+      .primary {
+        --icon-bg: var(--boxel-highlight);
+        --icon-border: var(--boxel-highlight);
+      }
 
-    .tooltip {
-      pointer-events: unset !important;
-      position: relative;
-    }
+      .secondary {
+        --icon-color: var(--boxel-highlight);
 
-    .tooltip::after {
-      content: attr(data-hover);
-      opacity: 0;
-      background-color: rgb(0 0 0 / 80%);
-      box-shadow: 0 0 0 1px var(--boxel-light-500);
-      color: var(--boxel-light);
-      text-align: center;
-      border-radius: var(--boxel-border-radius-sm);
-      padding: var(--boxel-sp-xxxs) var(--boxel-sp-sm);
-      width: max-content;
-      transition: opacity 1s ease-in-out;
-      position: absolute;
-      z-index: 1;
-    }
+        border: 1px solid rgb(255 255 255 / 35%);
+        border-radius: 100px;
+        background-color: #41404d;
+      }
 
-    .tooltip:hover::after {
-      opacity: 1;
-      visibility: visible;
-    }
+      .secondary:hover {
+        background-color: var(--boxel-purple-800);
+      }
 
-    .tooltip__right::after {
-      left: 140%;
-      top: 10%;
-    }
+      button > svg {
+        display: block;
+        margin: auto;
+      }
 
-    .tooltip__left::after {
-      right: 140%;
-      top: 10%;
-    }
-
-    .tooltip__above::after {
-      bottom: 110%;
-    }
-
-    .tooltip__below::after {
-      top: 110%;
-    }
-  </style>
-</template>;
+      .tooltip {
+        background-color: rgb(0 0 0 / 80%);
+        box-shadow: 0 0 0 1px var(--boxel-light-500);
+        color: var(--boxel-light);
+        text-align: center;
+        border-radius: var(--boxel-border-radius-sm);
+        padding: var(--boxel-sp-xxxs) var(--boxel-sp-sm);
+        width: max-content;
+        position: absolute;
+        font: var(--boxel-font-xs);
+        z-index: 5;
+      }
+    </style>
+  </template>
+}
 
 export default IconButton;

@@ -1,7 +1,11 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type { Card, Format, FieldType } from 'https://cardstack.com/base/card-api';
+import type {
+  Card,
+  Format,
+  FieldType,
+} from 'https://cardstack.com/base/card-api';
 import Preview from '@cardstack/host/components/preview';
 import { trackedFunction } from 'ember-resources/util/function';
 import { fn, array } from '@ember/helper';
@@ -60,19 +64,21 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }>();
 
   get renderedLinksToCards(): RenderedLinksToCard[] {
-    return this.cardTracker.elements
-      .filter((entry) => {
-        return (
-          entry.meta.format === 'data' ||
-          entry.meta.fieldType === 'linksTo' ||
-          entry.meta.fieldType === 'linksToMany'
-        );
-      })
-      // this mapping could probably be eliminated or simplified if we refactor OperatorModeOverlays to accept our type
-      .map((entry) => ({
-        element: entry.element,
-        card: entry.meta.card
-      }));
+    return (
+      this.cardTracker.elements
+        .filter((entry) => {
+          return (
+            entry.meta.format === 'data' ||
+            entry.meta.fieldType === 'linksTo' ||
+            entry.meta.fieldType === 'linksToMany'
+          );
+        })
+        // this mapping could probably be eliminated or simplified if we refactor OperatorModeOverlays to accept our type
+        .map((entry) => ({
+          element: entry.element,
+          card: entry.meta.card,
+        }))
+    );
   }
 
   get styleForStackedCard(): SafeString {
@@ -170,56 +176,83 @@ export default class OperatorModeStackItem extends Component<Signature> {
           style={{cssVar
             boxel-header-icon-width='30px'
             boxel-header-icon-height='30px'
-            boxel-header-text-color=(if this.isHoverOnRealmIcon 'var(--boxel-cyan)' 'var(--boxel-dark)')
+            boxel-header-text-size=(if this.isHoverOnRealmIcon 'var(--boxel-font)' 'var(--boxel-font-lg)')
+            boxel-header-text-color=(if this.isHoverOnRealmIcon 'var(--boxel-teal)' 'var(--boxel-dark)')
+            boxel-header-padding='var(--boxel-sp-xs) var(--boxel-sp)'
+            boxel-header-action-padding='var(--boxel-sp-xs) var(--boxel-sp)'
           }}
           data-test-stack-card-header
         >
           <:actions>
-            <BoxelDropdown>
-              <:trigger as |bindings|>
-                <IconButton
-                  @icon='icon-horizontal-three-dots'
-                  @width='20px'
-                  @height='20px'
-                  class='icon-button'
-                  aria-label='Options'
+            {{#if (eq @item.format 'isolated')}}
+              <IconButton
+                @icon='icon-pencil'
+                @width='24px'
+                @height='24px'
+                @tooltip='Edit'
+                class='icon-button'
+                aria-label='Edit'
+                {{on 'click' (fn @edit @item)}}
+                data-test-edit-button
+              />
+            {{else}}
+              <IconButton
+                  @icon='icon-pencil'
+                  @width='24px'
+                  @height='24px'
+                  @tooltip='Finish Editing'
+                  class='icon-save'
+                  aria-label='Finish Editing'
+                  {{on 'click' (fn @save @item)}}
                   data-test-edit-button
-                  {{bindings}}
                 />
-              </:trigger>
-              <:content as |dd|>
-                <BoxelMenu
-                  @closeMenu={{dd.close}}
-                  @items={{if
-                    (eq @item.format 'edit')
-                    (array
-                      (menuItem
-                        'Finish Editing'
-                        (fn @save @item @index)
-                        icon='icon-check-mark'
+            {{/if}}
+            <div>
+              <BoxelDropdown>
+                <:trigger as |bindings|>
+                  <IconButton
+                    @icon='icon-horizontal-three-dots'
+                    @width='20px'
+                    @height='20px'
+                    @tooltip='More Options'
+                    class='icon-button'
+                    aria-label='Options'
+                    data-test-more-options-button
+                    {{bindings}}
+                  />
+                </:trigger>
+                <:content as |dd|>
+                  <BoxelMenu
+                    @closeMenu={{dd.close}}
+                    @items={{if
+                      (eq @item.format 'edit')
+                      (array
+                        (menuItem
+                          'Copy Card URL'
+                          (fn this.copyToClipboard @item.card.id)
+                          icon='icon-link'
+                        )
+                        (menuItem
+                          'Delete' (fn @delete @item @index) icon='icon-trash'
+                        )
                       )
-                      (menuItem
-                        'Delete' (fn @delete @item @index) icon='icon-trash'
+                      (array
+                        (menuItem
+                          'Copy Card URL'
+                          (fn this.copyToClipboard @item.card.id)
+                          icon='icon-link'
+                        )
                       )
-                    )
-                    (array
-                      (menuItem
-                        'Copy Card URL'
-                        (fn this.copyToClipboard @item.card.id)
-                        icon='icon-link'
-                      )
-                      (menuItem
-                        'Edit' (fn @edit @item @index) icon='icon-pencil'
-                      )
-                    )
                   }}
                 />
-              </:content>
-            </BoxelDropdown>
+                </:content>
+              </BoxelDropdown>
+            </div>
             <IconButton
               @icon='icon-x'
               @width='20px'
               @height='20px'
+              @tooltip={{if (eq @item.format 'isolated') 'Close' 'Cancel & Close'}}
               class='icon-button'
               aria-label='Close'
               {{on 'click' (fn @close @item)}}
@@ -283,10 +316,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .card {
-        position: relative;
+        position: relative; 
         height: 100%;
         display: grid;
-        grid-template-rows: 7.5rem auto;
+        grid-template-rows: 3.5rem auto;
         box-shadow: 0 15px 30px 0 rgb(0 0 0 / 35%);
         pointer-events: auto;
       }
@@ -337,12 +370,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
       .buried .header {
         cursor: pointer;
-        font: 500 var(--boxel-font-sm);
+        font: 700 var(--boxel-font);
         padding: 0 var(--boxel-sp-xs);
       }
 
       .edit .header {
-        background: var(--boxel-cyan);
+        background: var(--boxel-teal);
         color: var(--boxel-light);
       }
 
@@ -350,6 +383,55 @@ export default class OperatorModeStackItem extends Component<Signature> {
         --icon-bg: var(--boxel-light);
         --icon-border: none;
         --icon-color: var(--boxel-light);
+      }
+
+      .edit .icon-button:hover {
+        --icon-bg: var(--boxel-teal);
+        --icon-border: none;
+        --icon-color: var(--boxel-teal);
+        background: var(--boxel-light);
+      }
+
+      .icon-button {
+        --boxel-icon-button-width: 28px;
+        --boxel-icon-button-height: 28px;
+        border-radius: 4px;
+
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        font: var(--boxel-font-sm);
+        margin-left: var(--boxel-sp-xxxs);
+        z-index: 1;
+      }
+
+      .icon-button:hover {
+        --icon-bg: var(--boxel-light);
+        --icon-border: none;
+        --icon-color: var(--boxel-light);
+        background: var(--boxel-teal);
+      }
+
+      .icon-save {
+        --icon-bg: var(--boxel-teal);
+        background: var(--boxel-light);
+
+        --boxel-icon-button-width: 28px;
+        --boxel-icon-button-height: 28px;
+        border-radius: 4px;
+
+        display: flex;
+        align-items: center;
+        justify-content: center;
+
+        font: var(--boxel-font-sm);
+        margin-right: var(--boxel-sp-xxxs);
+        z-index: 1;
+      }
+
+      .icon-save:hover {
+        --icon-bg: var(--boxel-dark);
       }
     </style>
   </template>

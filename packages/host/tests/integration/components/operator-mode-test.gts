@@ -562,7 +562,6 @@ module('Integration | operator-mode', function (hooks) {
     );
     await waitFor('[data-test-person]');
     await click('[data-test-edit-button]');
-    await click('[data-test-boxel-menu-item-text="Edit"]');
     await fillIn('[data-test-boxel-input]', 'EditedName');
     await fillIn(
       '[data-test-boxel-input-city] [data-test-boxel-input]',
@@ -593,7 +592,6 @@ module('Integration | operator-mode', function (hooks) {
     );
     await waitFor('[data-test-person]');
     await click('[data-test-edit-button]');
-    await click('[data-test-boxel-menu-item-text="Edit"]');
     await fillIn('[data-test-boxel-input]', 'EditedName');
     await fillIn(
       '[data-test-boxel-input-city] [data-test-boxel-input]',
@@ -859,7 +857,6 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/1"]`);
     await click('[data-test-edit-button]');
-    await click('[data-test-boxel-menu-item-text="Edit"]');
     assert.dom('[data-test-field="authorBio"]').containsText('Alien Bob');
     assert.dom('[data-test-choose-card]').doesNotExist();
     assert.dom('[data-test-create-new]').doesNotExist();
@@ -890,7 +887,6 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
     await click('[data-test-edit-button]');
-    await click('[data-test-boxel-menu-item-text="Edit"]');
 
     assert.dom('[data-test-choose-card]').exists();
     assert.dom('[data-test-create-new]').exists();
@@ -924,7 +920,6 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
     await click('[data-test-edit-button]');
-    await click('[data-test-boxel-menu-item-text="Edit"]');
 
     assert.dom('[data-test-choose-card]').exists();
     assert.dom('[data-test-create-new]').exists();
@@ -970,7 +965,6 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/1"]`);
     await click('[data-test-edit-button]');
-    await click('[data-test-boxel-menu-item-text="Edit"]');
 
     assert.dom('[data-test-field="authorBio"]').containsText('Alien Bob');
     await click('[data-test-field="authorBio"] [data-test-remove-card]');
@@ -995,7 +989,6 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/burcu"]`);
     await click('[data-test-edit-button]');
-    await click('[data-test-boxel-menu-item-text="Edit"]');
 
     assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
     assert.dom('[data-test-field="friends"] [data-test-add-new]').exists();
@@ -1025,7 +1018,6 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-edit-button]');
-    await click('[data-test-boxel-menu-item-text="Edit"]');
 
     assert.dom('[data-test-field="friends"] [data-test-pet]').doesNotExist();
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
@@ -1050,7 +1042,6 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/burcu"]`);
     await click('[data-test-edit-button]');
-    await click('[data-test-boxel-menu-item-text="Edit"]');
 
     assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
     await click(
@@ -1081,7 +1072,6 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-edit-button]');
-    await click('[data-test-boxel-menu-item-text="Edit"]');
 
     assert.dom('[data-test-field="friends"] [data-test-pet]').doesNotExist();
     await click('[data-test-links-to-many="friends"] [data-test-create-new]');
@@ -1111,7 +1101,6 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/burcu"]`);
     await click('[data-test-edit-button]');
-    await click('[data-test-boxel-menu-item-text="Edit"]');
 
     assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
 
@@ -1145,7 +1134,6 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/burcu"]`);
     assert.dom(`[data-test-plural-view-item]`).exists({ count: 2 });
     await click('[data-test-edit-button]');
-    await click('[data-test-boxel-menu-item-text="Edit"]');
     assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
 
     await click(
@@ -1543,7 +1531,7 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       }
     );
-    await click('[data-test-edit-button]');
+    await click('[data-test-more-options-button]');
     await click('[data-test-boxel-menu-item-text="Copy Card URL"]');
     assert.dom('[data-test-boxel-menu-item]').doesNotExist();
   });

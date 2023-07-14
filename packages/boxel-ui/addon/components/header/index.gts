@@ -79,7 +79,7 @@ class Header extends Component<Signature> {
         color: var(--boxel-header-text-color, var(--boxel-dark));
         border-top-right-radius: calc(var(--boxel-border-radius) - 1px);
         border-top-left-radius: calc(var(--boxel-border-radius) - 1px);
-        font: 600 var(--boxel-header-text-size, --boxel-font-xs);
+        font: 600 var(--boxel-header-text-size, var(--boxel-font-xs));
         letter-spacing: var(--boxel-lsp-xl);
         text-transform: uppercase;
         transition: background-color var(--boxel-transition),
@@ -87,8 +87,8 @@ class Header extends Component<Signature> {
         gap: var(--boxel-sp-xs);
       }
       .large {
-        padding: var(--boxel-sp-xl);
-        font: 700 var(--boxel-font-lg);
+        padding: var(--boxel-header-padding, var(--boxel-sp-xl));
+        font: 700 var(--boxel-header-text-size, var(--boxel-font-lg));
         letter-spacing: normal;
         text-transform: none;
       }
@@ -102,8 +102,10 @@ class Header extends Component<Signature> {
         position: absolute;
         top: 0;
         right: 0;
+
         display: flex;
         align-items: center;
+        padding: var(--boxel-header-action-padding, 0);
       }
       .icon {
         width: var(--boxel-header-icon-width, 20px);
