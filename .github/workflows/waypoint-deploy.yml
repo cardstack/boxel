@@ -1,0 +1,92 @@
+name: Waypoint Deploy
+
+on:
+  workflow_call:
+    inputs:
+      app:
+        required: true
+        type: string
+      retain:
+        required: false
+        default: "1"
+        type: string
+      waypoint_version:
+        required: false
+        default: "0.8.1"
+        type: string
+      environment:
+        required: true
+        type: string
+    secrets:
+      DISCORD_WEBHOOK:
+        required: true
+      PRODUCTION_WAYPOINT_SERVER_ADDR:
+        required: true
+      PRODUCTION_WAYPOINT_SERVER_TOKEN:
+        required: true
+      STAGING_WAYPOINT_SERVER_ADDR:
+        required: true
+      STAGING_WAYPOINT_SERVER_TOKEN:
+        required: true
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up env
+        shell: bash
+        env:
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          if [ "$INPUT_ENVIRONMENT" = "production" ]; then
+            echo "AWS_ROLE_ARN=arn:aws:iam::120317779495:role/waypoint" >> $GITHUB_ENV
+            echo "WAYPOINT_SERVER_ADDR=${{ secrets.PRODUCTION_WAYPOINT_SERVER_ADDR }}" >> $GITHUB_ENV
+            echo "WAYPOINT_SERVER_TOKEN=${{ secrets.PRODUCTION_WAYPOINT_SERVER_TOKEN }}" >> $GITHUB_ENV
+            cp waypoint.prod.hcl waypoint.hcl
+          elif [ "$INPUT_ENVIRONMENT" = "staging" ]; then
+            echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/waypoint" >> $GITHUB_ENV
+            echo "WAYPOINT_SERVER_ADDR=${{ secrets.STAGING_WAYPOINT_SERVER_ADDR }}" >> $GITHUB_ENV
+            echo "WAYPOINT_SERVER_TOKEN=${{ secrets.STAGING_WAYPOINT_SERVER_TOKEN }}" >> $GITHUB_ENV
+          else
+            echo "unrecognized environment"
+            exit 1;
+          fi
+
+      - uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Install dependencies
+        run: |
+          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
+          sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+          sudo apt-get install awscli waypoint=${{ inputs.waypoint_version }}
+          pnpm install --frozen-lockfile
+
+      - name: Deploy app
+        run: waypoint deploy -app=${{ inputs.app }} -plain -release
+
+      - uses: ./.github/actions/waypoint-ecs-failsafe
+        with:
+          app: ${{ inputs.app }}
+
+      - name: Prune dangling resources
+        uses: ./.github/actions/waypoint-prune-dangling-resources
+        with:
+          app: ${{ inputs.app }}
+          retain: ${{ inputs.retain }}
+
+      - name: Send notification to Discord
+        if: ${{ always() }}
+        uses: ./.github/actions/discord-notification-deploy
+        with:
+          app: ${{ inputs.app }}
+          status: ${{ github.action_status }}
+          environment: ${{ inputs.environment }}
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          is_ecs: "true"

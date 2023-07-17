@@ -158,6 +158,7 @@ jobs:
               - '.github/actions/deploy-ember-preview/**'
               - '.github/actions/deploy-realm-server/**'
               - '.github/actions/waypoint-deploy/**'
+              - '.github/workflows/waypoint-deploy.yml'
               - '.github/workflows/ci.yaml'
               - 'packages/base/**'
               - 'packages/boxel-ui/**'
