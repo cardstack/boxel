@@ -17,32 +17,32 @@ interface Signature {
   };
 }
 export default class Tooltip extends Component<Signature> {
-  @tracked isHoverOnHook = false;
+  @tracked isHoverOnTrigger = false;
 
   @action
   onMouseEnter() {
-    this.isHoverOnHook = true;
+    this.isHoverOnTrigger = true;
   }
 
   @action
   onMouseLeave() {
-    this.isHoverOnHook = false;
+    this.isHoverOnTrigger = false;
   }
 
   <template>
-    <Velcro @placement={{if @placement @placement 'top'}} @offsetOptions={{if @offset @offset 5}} as |velcro|>
-      <div class='hook' {{velcro.hook}} {{on 'mouseenter' this.onMouseEnter}} {{on 'mouseleave' this.onMouseLeave}}>
+    <Velcro @placement={{if @placement @placement 'top'}} @offsetOptions={{if @offset @offset 6}} as |velcro|>
+      <div class='trigger' {{velcro.hook}} {{on 'mouseenter' this.onMouseEnter}} {{on 'mouseleave' this.onMouseLeave}}>
         {{yield to='trigger'}}
       </div>
-      {{#if this.isHoverOnHook}}
+      {{#if this.isHoverOnTrigger}}
         <div class='tooltip' {{velcro.loop}}>
-            {{yield to='content'}}
+          {{yield to='content'}}
         </div>
       {{/if}}
     </Velcro>
     
     <style>
-      .hook {
+      .trigger {
         width: max-content;
       }
 

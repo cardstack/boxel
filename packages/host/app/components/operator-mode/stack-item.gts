@@ -192,8 +192,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
           <:actions>
             {{#if (eq @item.format 'isolated')}}
               <Tooltip
-                @placement='top'
-                @offset={{6}}>
+                @placement='top'>
                 <:trigger>
                   <IconButton
                     @icon='icon-pencil'
@@ -211,8 +210,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               </Tooltip>
             {{else}}
               <Tooltip
-                @placement='top'
-                @offset={{6}}>
+                @placement='top'>
                 <:trigger>
                   <IconButton
                     @icon='icon-pencil'
@@ -233,8 +231,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               <BoxelDropdown>
                 <:trigger as |bindings|>
                   <Tooltip
-                    @placement='top'
-                    @offset={{6}}>
+                    @placement='top'>
                     <:trigger>
                       <IconButton
                           @icon='icon-horizontal-three-dots'
@@ -279,8 +276,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               </BoxelDropdown>
             </div>
             <Tooltip
-              @placement='top'
-              @offset={{6}}>
+              @placement='top'>
               <:trigger>
                 <IconButton
                   @icon='icon-x'
