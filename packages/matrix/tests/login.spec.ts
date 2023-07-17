@@ -11,6 +11,9 @@ import {
   login,
   logout,
   rootPath,
+  openChat,
+  reloadAndOpenChat,
+  toggleOperatorMode,
 } from '../helpers';
 
 test.describe('Login', () => {
@@ -25,7 +28,9 @@ test.describe('Login', () => {
   });
 
   test('it can login', async ({ page }) => {
-    await page.goto(`${rootPath}/chat`);
+    await page.goto(rootPath);
+    await toggleOperatorMode(page);
+    await openChat(page);
 
     await assertLoggedOut(page);
     await expect(page.locator('[data-test-login-btn]')).toBeDisabled();
@@ -46,7 +51,7 @@ test.describe('Login', () => {
     ).toContainText('New Name');
 
     // reload to page to show that the access token persists
-    await page.reload();
+    await reloadAndOpenChat(page);
     await assertLoggedIn(page, { displayName: 'New Name' });
   });
 
@@ -58,14 +63,16 @@ test.describe('Login', () => {
     await assertLoggedOut(page);
 
     // reload to page to show that the logout state persists
-    await page.reload();
+    await reloadAndOpenChat(page);
     await assertLoggedOut(page);
   });
 
   test('it shows an error when invalid credentials are provided', async ({
     page,
   }) => {
-    await page.goto(`${rootPath}/chat`);
+    await page.goto(rootPath);
+    await toggleOperatorMode(page);
+    await openChat(page);
     await page.locator('[data-test-username-field]').fill('user1');
     await page.locator('[data-test-password-field]').fill('bad pass');
     await expect(
