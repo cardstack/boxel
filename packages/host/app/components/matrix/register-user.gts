@@ -113,6 +113,7 @@ export default class RegisterUser extends Component<Args> {
       .registration-field {
         margin-top: var(--boxel-sp-sm);
       }
+
     </style>
   </template>
 

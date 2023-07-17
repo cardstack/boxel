@@ -511,8 +511,8 @@ export default class OperatorModeContainer extends Component<Signature> {
             @height='30px'
             {{on 'click' this.toggleChat}}
             style={{cssVar
-              boxel-icon-button-width="50px"
-              boxel-icon-button-height="50px"
+              boxel-icon-button-width='50px'
+              boxel-icon-button-height='50px'
             }}
           />
         {{/if}}
@@ -563,11 +563,12 @@ export default class OperatorModeContainer extends Component<Signature> {
         width: 60px;
         height: 60px;
         border-radius: 50%;
-        background: #AEABBA;
-        fill: #3295A2;
+        background: #aeabba;
+        fill: #3295a2;
         border-color: transparent;
       }
-      .add-card-to-neighbor-stack:hover, .add-card-to-neighbor-stack--active {
+      .add-card-to-neighbor-stack:hover,
+      .add-card-to-neighbor-stack--active {
         background: var(--boxel-light);
         fill: var(--boxel-teal);
       }
@@ -581,7 +582,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       }
 
       .operator-mode__with-chat {
-        display: grid; 
+        display: grid;
         grid-template-rows: 1fr;
         grid-template-columns: 1.5fr 0.5fr;
         gap: 0px;
@@ -608,6 +609,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       .chat-btn:hover {
         background: var(--boxel-light);
       }
+
     </style>
   </template>
 }

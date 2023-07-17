@@ -41,22 +41,22 @@ export default class UserProfile extends Component {
         {{/if}}
       </FieldContainer>
     </div>
-    <div class="button-container">
+    <div class='button-container'>
       {{#if this.isEditMode}}
         <Button
-          class="user-button"
+          class='user-button'
           data-test-profile-save-btn
           @disabled={{not this.displayName}}
           {{on 'click' this.save}}
         >Save</Button>
       {{else}}
         <Button
-          class="user-button"
+          class='user-button'
           data-test-profile-edit-btn
           {{on 'click' this.doEdit}}
         >Edit</Button>
-        <Button 
-          class="user-button"
+        <Button
+          class='user-button'
           data-test-logout-btn
           {{on 'click' this.logout}}
         >Logout</Button>
@@ -68,7 +68,7 @@ export default class UserProfile extends Component {
         margin: var(--boxel-sp) 0;
       }
 
-      .wrapper label{
+      .wrapper label {
         margin-top: var(--boxel-sp-sm);
       }
 
@@ -79,8 +79,8 @@ export default class UserProfile extends Component {
       }
       .user-button {
         margin-left: var(--boxel-sp-xs);
-
       }
+
     </style>
   </template>
 

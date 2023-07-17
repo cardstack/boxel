@@ -55,7 +55,9 @@ export default class ChatSidebar extends Component<Args> {
         overflow-y: auto;
       }
       .chat-sidebar__inner {
-        padding-bottom: calc(var(--search-sheet-closed-height) + var(--boxel-sp));
+        padding-bottom: calc(
+          var(--search-sheet-closed-height) + var(--boxel-sp)
+        );
       }
       .registration-link {
         margin-left: var(--boxel-sp);
@@ -69,6 +71,7 @@ export default class ChatSidebar extends Component<Args> {
         padding: 0;
         border: none;
       }
+
     </style>
   </template>
 

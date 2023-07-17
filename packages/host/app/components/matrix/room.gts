@@ -181,7 +181,7 @@ export default class Room extends Component<RoomArgs> {
       }
 
       .selected-card::after {
-        content:'';
+        content: '';
         clear: both;
       }
 
@@ -228,6 +228,7 @@ export default class Room extends Component<RoomArgs> {
       .invite-btn {
         margin-top: var(--boxel-sp-xs);
       }
+
     </style>
   </template>
 

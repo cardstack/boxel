@@ -26,8 +26,8 @@ export default class Login extends Component {
     {{#if this.doLogin.isRunning}}
       <LoadingIndicator />
     {{else}}
-      <div class="login">
-        <FieldContainer @label='Username:' @tag='label' class="login__field">
+      <div class='login'>
+        <FieldContainer @label='Username:' @tag='label' class='login__field'>
           <BoxelInput
             data-test-username-field
             type='text'
@@ -35,7 +35,7 @@ export default class Login extends Component {
             @onInput={{this.setUsername}}
           />
         </FieldContainer>
-        <FieldContainer @label='Password:' @tag='label' class="login__field">
+        <FieldContainer @label='Password:' @tag='label' class='login__field'>
           <BoxelInput
             data-test-password-field
             type='password'
@@ -44,7 +44,7 @@ export default class Login extends Component {
           />
         </FieldContainer>
         <Button
-          class="login__button"
+          class='login__button'
           data-test-login-btn
           @kind='primary'
           @disabled={{this.isLoginButtonDisabled}}
@@ -66,6 +66,7 @@ export default class Login extends Component {
         position: absolute;
         right: var(--boxel-sp);
       }
+
     </style>
   </template>
 
