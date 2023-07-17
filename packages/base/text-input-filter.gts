@@ -32,17 +32,15 @@ export class TextInputFilter<T> {
     private deserialize: (
       inputValue: string | null | undefined
     ) => DeserializedResult<T>,
-    private serialize: (val: T | null | undefined) => string | undefined = (
-      v
-    ) => (!v ? undefined : String(v))
+    private serialize: (val: T) => string = (v) => String(v)
   ) {}
   @tracked _lastEditedInputValue: string | undefined;
   @tracked _errorMessage: string | undefined;
 
   get asString(): string {
-    let serialized = this.serialize(this.getValue());
-    if (serialized) {
-      return serialized;
+    let modelValue = this.getValue();
+    if (modelValue) {
+      return this.serialize(modelValue);
     }
     return this._lastEditedInputValue || '';
   }
