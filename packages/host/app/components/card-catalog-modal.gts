@@ -103,11 +103,6 @@ export default class CardCatalogModal extends Component<Signature> {
                       @icon='eye'
                       aria-label='preview'
                     />
-                    <IconButton
-                      class='hover-button more-actions'
-                      @icon='more-actions'
-                      aria-label='more actions'
-                    />
                   </li>
                 {{else}}
                   <p>No cards available</p>
@@ -180,7 +175,6 @@ export default class CardCatalogModal extends Component<Signature> {
       .card-catalog {
         list-style-type: none;
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(16.25rem, 1fr));
         gap: var(--boxel-sp);
         padding-left: 0;
         margin: 0;
@@ -192,7 +186,6 @@ export default class CardCatalogModal extends Component<Signature> {
 
       .item {
         position: relative;
-        height: 6.25rem;
       }
 
       .item > :deep(.boxel-card-container) {
@@ -221,25 +214,22 @@ export default class CardCatalogModal extends Component<Signature> {
       .item > .hover-button {
         display: none;
         width: 30px;
-        height: 30px;
+        height: 100%;
       }
       .hover-button:not(:disabled):hover {
         --icon-color: var(--boxel-highlight);
       }
       .item:hover > .hover-button:not(:disabled) {
-        display: block;
         position: absolute;
+        display: flex;
+        justify-content: center;
+        align-items: center;
       }
       .preview {
-        top: 0;
-        left: 0;
-      }
-      .more-actions {
-        bottom: 0;
         right: 0;
+        top: 0;
       }
-      .preview > svg,
-      .more-actions > svg {
+      .preview > svg {
         height: 100%;
       }
     </style>
