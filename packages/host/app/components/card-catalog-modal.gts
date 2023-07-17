@@ -20,7 +20,7 @@ import {
   IconButton,
   BoxelInputValidationState,
 } from '@cardstack/boxel-ui';
-import { eq, gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { eq, gt, lt } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import debounce from 'lodash/debounce';
 import { service } from '@ember/service';
@@ -65,49 +65,51 @@ export default class CardCatalogModal extends Component<Signature> {
                   data-test-create-new
                 >Create New</Button>
               {{/if}}
-              {{#let
-                this.currentRequest.search.instances.length
-                as |numResults|
-              }}
-                <div class='results-length'>
-                  {{#if (gt numResults 1)}}
-                    {{numResults}}
-                    results
-                  {{else if (eq numResults 1)}}
-                    1 result
-                  {{/if}}
-                </div>
-              {{/let}}
-              <ul class='card-catalog' data-test-card-catalog>
-                {{#each this.currentRequest.search.instances as |card|}}
-                  <li
-                    class={{cn
-                      'item'
-                      selected=(eq this.selectedCard.id card.id)
-                    }}
-                    data-test-card-catalog-item={{card.id}}
-                  >
-                    <Preview
-                      @card={{card}}
-                      @format='embedded'
-                      @context={{@context}}
-                    />
-                    <button
-                      class='select'
-                      {{on 'click' (fn this.toggleSelect card)}}
-                      data-test-select={{card.id}}
-                      aria-label='Select'
-                    />
-                    <IconButton
-                      class='hover-button preview'
-                      @icon='eye'
-                      aria-label='preview'
-                    />
-                  </li>
+              <div class='card-catalog' data-test-card-catalog>
+                {{#each-in this.results as |realmName cards|}}
+                  <div>
+                    <span class="realm-name" data-test-realm-name>{{realmName}}</span>
+                    <span class="results-count">
+                      {{#if (gt cards.length 1)}}
+                        {{cards.length}}
+                        results
+                      {{else if (eq cards.length 1)}}
+                        1 result
+                      {{/if}}
+                    </span>
+                  </div>
+                  <ul class="card-catalog__group">
+                    {{#each cards as |card i|}}
+                      <li
+                        class={{cn
+                          'item'
+                          selected=(eq this.selectedCard.id card.id)
+                        }}
+                        data-test-card-catalog-item={{card.id}}
+                      >
+                        <Preview
+                          @card={{card}}
+                          @format='embedded'
+                          @context={{@context}}
+                        />
+                        <button
+                          class='select'
+                          {{on 'click' (fn this.toggleSelect card)}}
+                          data-test-select={{card.id}}
+                          aria-label='Select'
+                        />
+                        <IconButton
+                          class='hover-button preview'
+                          @icon='eye'
+                          aria-label='preview'
+                        />
+                      </li>
+                    {{/each}}
+                  </ul>
                 {{else}}
                   <p>No cards available</p>
-                {{/each}}
-              </ul>
+                {{/each-in}}
+              </div>
             {{/if}}
           </div>
           <footer class='dialog-box__footer footer'>
@@ -203,17 +205,30 @@ export default class CardCatalogModal extends Component<Signature> {
         padding: 0 var(--boxel-sp);
       }
 
+      .realm-name {
+        display: inline-block;
+        font: 700 var(--boxel-font);
+      }
+      .results-count {
+        display: inline-block;
+        font: var(--boxel-font);
+      }
+      .realm-name + .results-count {
+        margin-left: var(--boxel-sp-xs);
+      }
+
       .card-catalog {
+        display: grid;
+        gap: var(--boxel-sp-lg);
+      }
+      .card-catalog__group {
         list-style-type: none;
+        padding-left: var(--boxel-sp);
+        margin: 0;
         display: grid;
         gap: var(--boxel-sp);
-        padding-left: 0;
-        margin: 0;
       }
-      .results-length {
-        font: 700 var(--boxel-font);
-        height: var(--boxel-sp-xxl);
-      }
+      
 
       .item {
         position: relative;
@@ -286,6 +301,18 @@ export default class CardCatalogModal extends Component<Signature> {
     registerDestructor(this, () => {
       delete (globalThis as any)._CARDSTACK_CARD_CHOOSER;
     });
+  }
+
+  get results () {
+    if (this.currentRequest.search.instances.length) {
+      let res = {};
+      for (let item of this.currentRequest.search.instances) {
+        let realmItems = res[item.realmName] ?? [];
+        realmItems.push(item);
+        res[item.realmName] = realmItems;
+      }
+      return res;
+    }
   }
 
   get styleString() {

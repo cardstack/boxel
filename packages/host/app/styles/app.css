@@ -15,7 +15,7 @@
 }
 
 .dialog-box__content {
-  padding: 0 var(--boxel-sp-xxl) var(--boxel-sp-xl);
+  padding: 0 var(--boxel-sp-xl) var(--boxel-sp-xl);
   height: 100%;
   overflow: auto;
 }
