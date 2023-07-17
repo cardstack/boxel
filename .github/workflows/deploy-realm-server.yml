@@ -10,6 +10,9 @@ on:
         default: "0.8.1"
         type: string
 
+env:
+  VOLTA_FEATURE_PNPM: 1
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -56,6 +59,7 @@ jobs:
         run: waypoint build -app=${{ inputs.app }} -plain -push
 
   deploy:
+    needs: [build]
     uses: ./.github/workflows/waypoint-deploy.yml
     with:
       app: "realm-demo"

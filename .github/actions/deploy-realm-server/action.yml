@@ -24,9 +24,6 @@ inputs:
     description: Staging Waypoint server address
     required: true
 
-env:
-  VOLTA_FEATURE_PNPM: 1
-
 runs:
   using: composite
   steps:
