@@ -1,19 +1,14 @@
 import {
-  type IAuthData, MatrixEvent,
-  type RoomMember,
-  type EmittedEvents,
-  type IEvent,
-  type client,
+  RoomEvent,
+  RoomMemberEvent,
+  createClient
 } from 'matrix-js-sdk';
-import * as MatrixSDK from 'matrix-js-sdk';
-// New
+
 import OpenAI from 'openai';
 
 const openai = new OpenAI();
 
 let startTime = Date.now();
-
-
 
 const MODIFY_SYSTEM_MESSAGE = "\
 You are able to modify content according to user requests.\
@@ -244,14 +239,14 @@ async function getResponse(event) {
 }
 
 (async () => {
-  let client = MatrixSDK.createClient({ baseUrl: 'http://localhost:8008' });
+  let client = createClient({ baseUrl: 'http://localhost:8008' });
   let auth = await client.loginWithPassword(
     'aibot',
     'pass'
   );
   let { access_token, user_id, device_id } = auth;
   console.log(JSON.stringify(auth, null, 2));
-  client.on(MatrixSDK.RoomMemberEvent.Membership, function (event, member) {
+  client.on(RoomMemberEvent.Membership, function (event, member) {
     if (member.membership === "invite" && member.userId === user_id) {
       client.joinRoom(member.roomId).then(function () {
         console.log("Auto-joined %s", member.roomId);
@@ -259,7 +254,7 @@ async function getResponse(event) {
     }
   });
   // SCARY WARNING ABOUT ASYNC, THIS SHOULD BE SYNC AND USE A QUEUE
-  client.on(MatrixSDK.RoomEvent.Timeline, async function (event, room, toStartOfTimeline) {
+  client.on(RoomEvent.Timeline, async function (event, room, toStartOfTimeline) {
 
     if (event.event.origin_server_ts! < startTime) {
       return;
