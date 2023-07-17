@@ -3,9 +3,6 @@ name: CI
 on:
   pull_request:
 
-env:
-  VOLTA_FEATURE_PNPM: 1
-
 permissions:
   contents: read
   id-token: write
