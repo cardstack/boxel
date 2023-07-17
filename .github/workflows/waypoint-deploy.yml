@@ -79,13 +79,3 @@ jobs:
         with:
           app: ${{ inputs.app }}
           retain: ${{ inputs.retain }}
-
-      - name: Send notification to Discord
-        if: ${{ always() }}
-        uses: ./.github/actions/discord-notification-deploy
-        with:
-          app: ${{ inputs.app }}
-          status: ${{ github.action_status }}
-          environment: ${{ inputs.environment }}
-          webhook: ${{ secrets.DISCORD_WEBHOOK }}
-          is_ecs: "true"
