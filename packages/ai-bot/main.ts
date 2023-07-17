@@ -6,7 +6,7 @@ import {
   createClient,
   ISendEventResponse,
   Room,
-  MatrixClient
+  MatrixClient,
 } from 'matrix-js-sdk';
 
 import OpenAI from 'openai';
@@ -18,7 +18,8 @@ const openai = new OpenAI();
 
 let startTime = Date.now();
 
-const MODIFY_SYSTEM_MESSAGE = "\
+const MODIFY_SYSTEM_MESSAGE =
+  "\
 You are able to modify content according to user requests.\
 If a user may be requesting a change, respond politely but not ingratiatingly to the user. The more complex the request, the more you can explain what you're about to do.\
 \
@@ -39,14 +40,13 @@ Option 3: Description\
 </option>\
 ```\
 The data in the option block will be used to update things for the user behind a button so they will not see the content directly - you must give a short text summary before the option block. The option block should not contain the description. Make sure you use the option xml tags.\
-Return only JSON inside each option block, in a compatible format as as the one you receive. The contents of any field will be automatically replaced with your changes, and must follow a subset of the same format - you may miss out fields but cannot add new ones. Do not add new nested components, it will fail validation.\
+Return only JSON inside each option block, in a compatible format with the one you receive. The contents of any field will be automatically replaced with your changes, and must follow a subset of the same format - you may miss out fields but cannot add new ones. Do not add new nested components, it will fail validation.\
 Modify only the parts you are asked to. Only return modified fields.\
 You must not return any fields that you do not see in the input data..";
 
-
 enum ParsingMode {
   Text,
-  Command
+  Command,
 }
 
 function getUserMessage(request: string, card: any) {
@@ -54,56 +54,65 @@ function getUserMessage(request: string, card: any) {
     User request: ${request}
     Full data: ${JSON.stringify(card)}
     You may only patch the following fields: ${JSON.stringify(card.attributes)}
-    `
+    `;
 }
 
-async function sendMessage(client: MatrixClient, room: Room, content: string, previous: string | undefined) {
+async function sendMessage(
+  client: MatrixClient,
+  room: Room,
+  content: string,
+  previous: string | undefined
+) {
   if (content.startsWith('option>')) {
     content = content.replace('option>', '');
   }
   let messageObject: IContent = {
-    "body": content,
-    "msgtype": "m.text",
-    "formatted_body": content,
-    "format": "org.matrix.custom.html",
-    "m.new_content": {
-      "body": content,
-      "msgtype": "m.text",
-      "formatted_body": content,
-      "format": "org.matrix.custom.html"
-    }
+    body: content,
+    msgtype: 'm.text',
+    formatted_body: content,
+    format: 'org.matrix.custom.html',
+    'm.new_content': {
+      body: content,
+      msgtype: 'm.text',
+      formatted_body: content,
+      format: 'org.matrix.custom.html',
+    },
   };
   if (previous) {
-    messageObject["m.relates_to"] = {
-      "rel_type": "m.replace",
-      "event_id": previous,
-    }
+    messageObject['m.relates_to'] = {
+      rel_type: 'm.replace',
+      event_id: previous,
+    };
   }
-  return await client.sendEvent(room.roomId, "m.room.message", messageObject);
+  return await client.sendEvent(room.roomId, 'm.room.message', messageObject);
 }
 
 async function sendOption(client: MatrixClient, room: Room, content: string) {
   let messageObject = {
-    "body": content,
-    "msgtype": "m.text",
-    "formatted_body": content,
-    "format": "org.matrix.custom.html",
+    body: content,
+    msgtype: 'm.text',
+    formatted_body: content,
+    format: 'org.matrix.custom.html',
   };
-  console.log("Sending", messageObject);
-  return await client.sendEvent(room.roomId, "m.room.message", messageObject);
+  console.log('Sending', messageObject);
+  return await client.sendEvent(room.roomId, 'm.room.message', messageObject);
 }
 
-
-async function sendStream(stream: APIResponse<Stream<ChatCompletionChunk>>, client: MatrixClient, room: Room, append_to?: string) {
-  let content = "";
+async function sendStream(
+  stream: APIResponse<Stream<ChatCompletionChunk>>,
+  client: MatrixClient,
+  room: Room,
+  append_to?: string
+) {
+  let content = '';
   let unsent = 0;
   let currentParsingMode: ParsingMode = ParsingMode.Text;
   for await (const part of stream) {
-    console.log("Token: ", part.choices[0].delta?.content);
+    console.log('Token: ', part.choices[0].delta?.content);
     // If we've not got a current message to edit and we're processing text
     // rather than structured data, start a new message to update.
     if (!append_to && currentParsingMode == ParsingMode.Text) {
-      let placeholder = await sendMessage(client, room, "...", undefined);
+      let placeholder = await sendMessage(client, room, '...', undefined);
       append_to = placeholder.event_id;
     }
     let token = part.choices[0].delta?.content;
@@ -112,7 +121,7 @@ async function sendStream(stream: APIResponse<Stream<ChatCompletionChunk>>, clie
       break;
     }
 
-    // The parsing here has to deal with a streaming response that 
+    // The parsing here has to deal with a streaming response that
     // alternates between sections of text (to stream back to the client)
     // and structured data (to batch and send in one block)
     if (token.includes('</')) {
@@ -126,7 +135,7 @@ async function sendStream(stream: APIResponse<Stream<ChatCompletionChunk>>, clie
       content += token.split('</')[0];
       // Now we need to drop into card mode for the stream
       await sendOption(client, room, content);
-      content = "";
+      content = '';
       currentParsingMode = ParsingMode.Text;
       unsent = 0;
     } else if (token.includes('<')) {
@@ -153,28 +162,29 @@ async function sendStream(stream: APIResponse<Stream<ChatCompletionChunk>>, clie
   }
 }
 
-
-
 async function getResponse(event: MatrixEvent) {
   const content: IContent = event.getContent();
-  if (content.msgtype === "org.boxel.card") {
+  if (content.msgtype === 'org.boxel.card') {
     let card = content.instance.data;
-    console.log("Processing card: " + event);
+    console.log('Processing card: ' + event);
     return await openai.chat.completions.create({
-      model: "gpt-4-0613",
+      model: 'gpt-4-0613',
       messages: [
         {
-          "role": "system", "content": MODIFY_SYSTEM_MESSAGE
+          role: 'system',
+          content: MODIFY_SYSTEM_MESSAGE,
         },
         {
-          "role": "user", "content": getUserMessage(content.body, card)
-        }],
+          role: 'user',
+          content: getUserMessage(content.body, card),
+        },
+      ],
       stream: true,
     });
   } else {
     return await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [{ "role": "user", "content": content.body }],
+      model: 'gpt-3.5-turbo',
+      messages: [{ role: 'user', content: content.body }],
       stream: true,
     });
   }
@@ -182,50 +192,53 @@ async function getResponse(event: MatrixEvent) {
 
 (async () => {
   let client = createClient({ baseUrl: 'http://localhost:8008' });
-  let auth = await client.loginWithPassword(
-    'aibot',
-    'pass'
-  );
+  let auth = await client.loginWithPassword('aibot', 'pass');
   let { user_id } = auth;
   client.on(RoomMemberEvent.Membership, function (_event, member) {
-    if (member.membership === "invite" && member.userId === user_id) {
+    if (member.membership === 'invite' && member.userId === user_id) {
       client.joinRoom(member.roomId).then(function () {
-        console.log("Auto-joined %s", member.roomId);
+        console.log('Auto-joined %s', member.roomId);
       });
     }
   });
   // TODO: Set this up to use a queue that gets drained
-  client.on(RoomEvent.Timeline, async function (event, room, toStartOfTimeline) {
-    console.log(
-      "(%s) %s :: %s",
-      room?.name,
-      event.getSender(),
-      event.getContent().body,
-    );
+  client.on(
+    RoomEvent.Timeline,
+    async function (event, room, toStartOfTimeline) {
+      console.log(
+        '(%s) %s :: %s',
+        room?.name,
+        event.getSender(),
+        event.getContent().body
+      );
 
-    if (event.event.origin_server_ts! < startTime) {
-      return;
-    }
-    if (toStartOfTimeline) {
-      return; // don't print paginated results
-    }
-    if (event.getType() !== "m.room.message") {
-      return; // only print messages
-    }
-    if (event.getSender() === user_id) {
-      return;
-    }
-    let initialMessage: ISendEventResponse = await client.sendHtmlMessage(room!.roomId, "Thinking...", "Thinking...");
+      if (event.event.origin_server_ts! < startTime) {
+        return;
+      }
+      if (toStartOfTimeline) {
+        return; // don't print paginated results
+      }
+      if (event.getType() !== 'm.room.message') {
+        return; // only print messages
+      }
+      if (event.getSender() === user_id) {
+        return;
+      }
+      let initialMessage: ISendEventResponse = await client.sendHtmlMessage(
+        room!.roomId,
+        'Thinking...',
+        'Thinking...'
+      );
 
-
-    const stream = await getResponse(event);
-    console.log("Receiving response", stream);
-    await sendStream(stream, client, room!, initialMessage.event_id);
-  });
+      const stream = await getResponse(event);
+      console.log('Receiving response', stream);
+      await sendStream(stream, client, room!, initialMessage.event_id);
+    }
+  );
 
   await client.startClient();
   console.log('client started');
-})().catch(e => {
+})().catch((e) => {
   console.error(e);
   process.exit(1);
 });
