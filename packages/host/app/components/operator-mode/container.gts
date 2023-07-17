@@ -25,7 +25,6 @@ import {
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-import { htmlSafe } from '@ember/template';
 
 import { registerDestructor } from '@ember/destroyable';
 import type { Query } from '@cardstack/runtime-common/query';
@@ -400,12 +399,8 @@ export default class OperatorModeContainer extends Component<Signature> {
     );
   }
 
-  get gridCss() {
-    return htmlSafe(
-      this.isChatVisible
-        ? `grid-template-columns: 1.5fr 0.5fr;`
-        : `grid-template-columns: 1fr;`
-    );
+  get chatVisibilityClass() {
+    return this.isChatVisible ? 'chat-open' : 'chat-closed';
   }
 
   <template>
@@ -420,7 +415,7 @@ export default class OperatorModeContainer extends Component<Signature> {
 
       <CardCatalogModal />
 
-      <div class='operator-mode__with-chat' style={{this.gridCss}}>
+      <div class='operator-mode__with-chat {{this.chatVisibilityClass}}'>
         <div class='operator-mode__main'>
           {{#if this.canCreateNeighborStack}}
             <button
@@ -587,6 +582,14 @@ export default class OperatorModeContainer extends Component<Signature> {
         grid-template-columns: 1.5fr 0.5fr;
         gap: 0px;
         height: 100%;
+      }
+
+      .chat-open {
+        grid-template-columns: 1.5fr 0.5fr;
+      }
+
+      .chat-closed {
+        grid-template-columns: 1fr;
       }
 
       .operator-mode__main {
