@@ -111,8 +111,8 @@ export default class CardCatalogModal extends Component<Signature> {
             {{/if}}
           </div>
           <footer class='dialog-box__footer footer'>
-            <label class='url-search'>
-              <span>Enter Card URL:</span>
+            <label class={{cn "url-search" url-search--visible=this.cardURL}}>
+              <span class="url-search__label">Enter Card URL</span>
               <BoxelInputValidationState
                 data-test-url-field
                 placeholder='http://'
@@ -149,11 +149,6 @@ export default class CardCatalogModal extends Component<Signature> {
       </Modal>
     {{/if}}
     <style>
-      .url-search > .boxel-input {
-        border-color: transparent;
-        padding-left: var(--boxel-sp-xxs);
-      }
-
       .footer {
         display: flex;
         justify-content: space-between;
@@ -161,15 +156,51 @@ export default class CardCatalogModal extends Component<Signature> {
         margin-bottom: var(--boxel-sp);
       }
       .url-search {
-        flex-grow: 0.5;
+        --input-visibility: hidden;
+        --input-width: 0px;
+
+        flex-grow: 0;
         display: grid;
         grid-template-columns: auto 1fr;
         align-items: center;
         justify-items: flex-start;
-        gap: var(--boxel-sp-xs);
+        border: 1px solid var(--boxel-border-color);
+        border-radius: 100px;
+        transition: border-color var(--boxel-transition),
+                    box-shadow var(--boxel-transition),
+                    flex-grow var(--boxel-transition);
       }
-      .url-search > span {
+      .url-search:hover {
+        border-color: var(--boxel-dark);
+      }
+      .url-search:focus-within {
+        border-color: var(--boxel-highlight);
+        box-shadow: 0 0 0 1px var(--boxel-highlight);
+      }
+      .url-search:hover,
+      .url-search:focus-within,
+      .url-search--visible {
+        --input-visibility: visible;
+        --input-width: 100%;
+        flex-grow: 0.5;
+      }
+      .url-search :deep(.boxel-input),
+      .url-search :deep(.boxel-input:hover),
+      .url-search :deep(.boxel-input:focus) {
+        border: none;
+        background: none;
+        box-shadow: none;
+        outline: none;
+        padding: 0;
+        
+        visibility: var(--input-visibility);
+        width: var(--input-width);
+      }
+      .url-search__label {
+        display: inline-block;
+        justify-self: center;
         font: 700 var(--boxel-font-sm);
+        padding: 0 var(--boxel-sp);
       }
 
       .card-catalog {
