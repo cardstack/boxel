@@ -1264,6 +1264,9 @@ importers:
       date-fns:
         specifier: ^2.28.0
         version: 2.29.3
+      ethers:
+        specifier: ^6.6.2
+        version: 6.6.2
       eventsource:
         specifier: ^2.0.2
         version: 2.0.2
@@ -6483,7 +6486,7 @@ packages:
     resolution: {integrity: sha512-Cn6WYCm0tXv8p6k+A8PvbDG763EDpBoTzHdA+Q/MF6H3sapGjCm9NzoaJncJS9tUKSuCoDs9XHxYYsQDgxR6kw==}
     requiresBuild: true
     dependencies:
-      '@types/node': 18.11.9
+      '@types/node': 18.15.13
     dev: true
     optional: true
 
@@ -25845,3 +25848,7 @@ packages:
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
