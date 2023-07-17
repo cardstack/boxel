@@ -7,8 +7,13 @@ import { htmlSafe } from '@ember/template';
 import { registerDestructor } from '@ember/destroyable';
 import { enqueueTask, restartableTask } from 'ember-concurrency';
 import type { Card, CardContext } from 'https://cardstack.com/base/card-api';
+import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import type { Query } from '@cardstack/runtime-common/query';
-import { createNewCard, type CardRef } from '@cardstack/runtime-common';
+import {
+  createNewCard,
+  type CardRef,
+  type RealmInfo,
+} from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { getSearchResults, Search } from '../resources/search';
 import Preview from './preview';
@@ -20,7 +25,8 @@ import {
   IconButton,
   BoxelInputValidationState,
 } from '@cardstack/boxel-ui';
-import { eq, gt, lt } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { eq, gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import debounce from 'lodash/debounce';
 import { service } from '@ember/service';
@@ -33,6 +39,12 @@ interface Signature {
     context?: CardContext;
   };
 }
+
+type CardCatalogResult = {
+  realmName: RealmInfo['name'];
+  realmIcon: RealmInfo['iconURL'];
+  cards: Card[];
+};
 
 export default class CardCatalogModal extends Component<Signature> {
   <template>
@@ -66,55 +78,78 @@ export default class CardCatalogModal extends Component<Signature> {
                 >Create New</Button>
               {{/if}}
               <div class='card-catalog' data-test-card-catalog>
-                {{#each-in this.results as |realmName cards|}}
-                  <div>
-                    <span class="realm-name" data-test-realm-name>{{realmName}}</span>
-                    <span class="results-count">
-                      {{#if (gt cards.length 1)}}
-                        {{cards.length}}
-                        results
-                      {{else if (eq cards.length 1)}}
-                        1 result
-                      {{/if}}
-                    </span>
-                  </div>
-                  <ul class="card-catalog__group">
-                    {{#each cards as |card i|}}
-                      <li
-                        class={{cn
-                          'item'
-                          selected=(eq this.selectedCard.id card.id)
-                        }}
-                        data-test-card-catalog-item={{card.id}}
-                      >
-                        <Preview
-                          @card={{card}}
-                          @format='embedded'
-                          @context={{@context}}
-                        />
-                        <button
-                          class='select'
-                          {{on 'click' (fn this.toggleSelect card)}}
-                          data-test-select={{card.id}}
-                          aria-label='Select'
-                        />
-                        <IconButton
-                          class='hover-button preview'
-                          @icon='eye'
-                          aria-label='preview'
-                        />
-                      </li>
-                    {{/each}}
-                  </ul>
+                {{#each this.results as |group|}}
+                  <section>
+                    <header class='realm-info'>
+                      <img
+                        src={{group.realmIcon}}
+                        class='realm-icon'
+                        role='presentation'
+                      />
+                      <span
+                        class='realm-name'
+                        data-test-realm-name
+                      >{{group.realmName}}</span>
+                      <span class='results-count'>
+                        {{#if (gt group.cards.length 1)}}
+                          {{group.cards.length}}
+                          results
+                        {{else if (eq group.cards.length 1)}}
+                          1 result
+                        {{/if}}
+                      </span>
+                    </header>
+                    {{#if group.cards.length}}
+                      <ul class='card-catalog__group'>
+                        {{#each group.cards as |card|}}
+                          <li
+                            class={{cn
+                              'item'
+                              selected=(eq this.selectedCard.id card.id)
+                            }}
+                            data-test-card-catalog-item={{card.id}}
+                          >
+                            <Preview
+                              @card={{card}}
+                              @format='embedded'
+                              @context={{@context}}
+                            />
+                            <button
+                              class='select'
+                              {{on 'click' (fn this.toggleSelect card)}}
+                              data-test-select={{card.id}}
+                              aria-label='Select'
+                            />
+                            <IconButton
+                              class='hover-button preview'
+                              @icon='eye'
+                              aria-label='preview'
+                            />
+                          </li>
+                        {{/each}}
+                      </ul>
+                    {{else}}
+                      <p>No cards available</p>
+                    {{/if}}
+                  </section>
                 {{else}}
                   <p>No cards available</p>
-                {{/each-in}}
+                {{/each}}
               </div>
             {{/if}}
           </div>
           <footer class='dialog-box__footer footer'>
-            <label class={{cn "url-search" url-search--visible=this.cardURL}}>
-              <span class="url-search__label">Enter Card URL</span>
+            <label class={{cn 'url-search' url-search--visible=this.cardURL}}>
+              <div class='url-search__label'>
+                {{svgJar
+                  'icon-link'
+                  width='20'
+                  height='14'
+                  class='url-search__icon'
+                  role='presentation'
+                }}
+                Enter Card URL
+              </div>
               <BoxelInputValidationState
                 data-test-url-field
                 placeholder='http://'
@@ -169,8 +204,7 @@ export default class CardCatalogModal extends Component<Signature> {
         border: 1px solid var(--boxel-border-color);
         border-radius: 100px;
         transition: border-color var(--boxel-transition),
-                    box-shadow var(--boxel-transition),
-                    flex-grow var(--boxel-transition);
+          box-shadow var(--boxel-transition), flex-grow var(--boxel-transition);
       }
       .url-search:hover {
         border-color: var(--boxel-dark);
@@ -194,7 +228,7 @@ export default class CardCatalogModal extends Component<Signature> {
         box-shadow: none;
         outline: none;
         padding: 0;
-        
+
         visibility: var(--input-visibility);
         width: var(--input-width);
       }
@@ -205,6 +239,15 @@ export default class CardCatalogModal extends Component<Signature> {
         padding: 0 var(--boxel-sp);
       }
 
+      .realm-info {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+      }
+      .realm-icon {
+        width: 1.25rem;
+        height: 1.25rem;
+      }
       .realm-name {
         display: inline-block;
         font: 700 var(--boxel-font);
@@ -213,9 +256,6 @@ export default class CardCatalogModal extends Component<Signature> {
         display: inline-block;
         font: var(--boxel-font);
       }
-      .realm-name + .results-count {
-        margin-left: var(--boxel-sp-xs);
-      }
 
       .card-catalog {
         display: grid;
@@ -223,12 +263,12 @@ export default class CardCatalogModal extends Component<Signature> {
       }
       .card-catalog__group {
         list-style-type: none;
-        padding-left: var(--boxel-sp);
+        padding-top: var(--boxel-sp);
+        padding-left: var(--boxel-sp-lg);
         margin: 0;
         display: grid;
         gap: var(--boxel-sp);
       }
-      
 
       .item {
         position: relative;
@@ -278,6 +318,7 @@ export default class CardCatalogModal extends Component<Signature> {
       .preview > svg {
         height: 100%;
       }
+
     </style>
   </template>
 
@@ -303,16 +344,24 @@ export default class CardCatalogModal extends Component<Signature> {
     });
   }
 
-  get results () {
-    if (this.currentRequest.search.instances.length) {
-      let res = {};
-      for (let item of this.currentRequest.search.instances) {
-        let realmItems = res[item.realmName] ?? [];
-        realmItems.push(item);
-        res[item.realmName] = realmItems;
+  get results(): CardCatalogResult[] {
+    let res: CardCatalogResult[] = [];
+    if (this.currentRequest?.search.instances.length) {
+      for (let item of this.currentRequest.search.instances as CatalogEntry[]) {
+        let realmInfo = res.find((r) => r.realmName === item.realmName);
+        if (realmInfo) {
+          realmInfo.cards.push(item);
+        } else {
+          realmInfo = {
+            realmName: item.realmName,
+            realmIcon: item.realmIcon,
+            cards: [],
+          };
+          res.push(realmInfo);
+        }
       }
-      return res;
     }
+    return res;
   }
 
   get styleString() {
