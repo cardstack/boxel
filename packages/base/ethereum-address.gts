@@ -60,10 +60,7 @@ class Edit extends Component<typeof EthereumAddressCard> {
   );
 }
 
-function _serialize(val: string | null | undefined): string | undefined {
-  if (!val) {
-    return;
-  }
+function _serialize(val: string): string {
   return val;
 }
 
