@@ -5,6 +5,10 @@ import LoaderService from '../services/loader-service';
 import type RouterService from '@ember/routing/router-service';
 import type CardService from '../services/card-service';
 import { RealmPaths, logger } from '@cardstack/runtime-common';
+import {
+  default as MonacoService,
+  MonacoContext,
+} from '../services/monaco-service';
 
 const log = logger('route:code');
 
@@ -13,6 +17,7 @@ interface Model {
   openFile: FileResource | undefined;
   openDirs: string[];
   isFastBoot: boolean;
+  monacoContext?: MonacoContext;
 }
 
 export default class Code extends Route<Model> {
@@ -29,6 +34,7 @@ export default class Code extends Route<Model> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare fastboot: { isFastBoot: boolean };
+  @service declare monacoService: MonacoService;
 
   async model(args: {
     path?: string;
@@ -89,7 +95,10 @@ export default class Code extends Route<Model> {
       }));
       await openFile.loading;
     }
+    // By readying the monaco service, you dynamically load the sdk
+    await this.monacoService.ready;
+    let monacoContext = await this.monacoService.getMonacoContext(openFile);
 
-    return { path, openFile, openDirs, isFastBoot };
+    return { path, openFile, openDirs, isFastBoot, monacoContext };
   }
 }
