@@ -36,10 +36,7 @@ function _deserialize(
   }
 }
 
-function _serialize(val: bigint | null | undefined): string | undefined {
-  if (!val) {
-    return;
-  }
+function _serialize(val: bigint): string {
   return val.toString();
 }
 

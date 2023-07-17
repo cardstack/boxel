@@ -25,6 +25,7 @@
     "@types/tmp": "^0.2.3",
     "@types/yargs": "^17.0.10",
     "date-fns": "^2.28.0",
+    "ethers": "^6.6.2",
     "eventsource": "^2.0.2",
     "fastboot": "^4.1.0",
     "flat": "^5.0.2",

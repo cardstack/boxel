@@ -2540,7 +2540,8 @@ posts/ignore-me.gts
       {
         '.realm.json': `{
           "name": "Example Workspace",
-          "backgroundURL": "https://example-background-url.com"
+          "backgroundURL": "https://example-background-url.com",
+          "iconURL": "https://example-icon-url.com"
         }`,
       },
       this.owner
@@ -2563,6 +2564,7 @@ posts/ignore-me.gts
           attributes: {
             name: 'Example Workspace',
             backgroundURL: 'https://example-background-url.com',
+            iconURL: 'https://example-icon-url.com',
           },
         },
       },

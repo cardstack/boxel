@@ -13,20 +13,8 @@ import {
 import { BoxelInput } from '@cardstack/boxel-ui';
 import { TextInputFilter, DeserializedResult } from './text-input-filter';
 
-function isEthAddress(address: string): boolean {
-  try {
-    return isAddress(address);
-  } catch {
-    return false;
-  }
-}
-
 function isChecksumAddress(address: string): boolean {
-  try {
-    return getAddress(address) === address;
-  } catch {
-    return false;
-  }
+  return getAddress(address) === address;
 }
 
 function _deserialize(
@@ -38,7 +26,7 @@ function _deserialize(
   const validations = [
     // desc order of priority
     {
-      validate: (address: string) => isEthAddress(address),
+      validate: (address: string) => isAddress(address),
       errorMessage: 'Not a valid Ethereum address.',
     },
     {
@@ -72,10 +60,7 @@ class Edit extends Component<typeof EthereumAddressCard> {
   );
 }
 
-function _serialize(val: string | null | undefined): string | undefined {
-  if (!val) {
-    return;
-  }
+function _serialize(val: string): string {
   return val;
 }
 

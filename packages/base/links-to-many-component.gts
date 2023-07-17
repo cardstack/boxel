@@ -51,6 +51,8 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
                   (this.args.cardTypeFor @field boxedElement)
                   'embedded'
                   boxedElement
+                  @field
+                  @context
                 )
                 as |Item|
               }}

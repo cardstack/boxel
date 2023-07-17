@@ -18,7 +18,7 @@ export default class IconButtonUsage extends Component {
   @tracked width = '40px';
   @tracked height = '40px';
   @tracked tooltip = 'Add a card to this collection';
-  @tracked tooltipPosition: 'right' | 'left' | 'above' | 'below' = 'right';
+  @tracked tooltipPosition: 'right' | 'left' | 'top' | 'bottom' = 'right';
 
   cssClassName = 'boxel-icon-button';
   @cssVariable declare boxelIconButtonWidth: CSSVariableInfo;
