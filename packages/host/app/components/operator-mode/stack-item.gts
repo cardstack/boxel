@@ -305,6 +305,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
         --buried-operator-mode-header-height: 2.5rem;
       }
 
+      .header {
+        z-index: 1;
+        background: var(--boxel-light);
+      }
+
       .item {
         justify-self: center;
         position: absolute;
