@@ -1,19 +1,22 @@
 import {
-  type IAuthData, MatrixEvent,
-  type RoomMember,
-  type EmittedEvents,
-  type IEvent,
-  type client,
+  MatrixEvent,
+  IContent,
+  RoomEvent,
+  RoomMemberEvent,
+  createClient,
+  ISendEventResponse,
+  Room,
+  MatrixClient
 } from 'matrix-js-sdk';
-import * as MatrixSDK from 'matrix-js-sdk';
-// New
+
 import OpenAI from 'openai';
+import { APIResponse } from 'openai/core';
+import { ChatCompletionChunk } from 'openai/resources/chat';
+import { Stream } from 'openai/streaming';
 
 const openai = new OpenAI();
 
 let startTime = Date.now();
-
-
 
 const MODIFY_SYSTEM_MESSAGE = "\
 You are able to modify content according to user requests.\
@@ -40,74 +43,13 @@ Return only JSON inside each option block, in a compatible format as as the one 
 Modify only the parts you are asked to. Only return modified fields.\
 You must not return any fields that you do not see in the input data..";
 
-/*
-Example card received
 
-{
-  "type": "m.room.message",
-  "sender": "@ian:localhost",
-  "content": {
-    "msgtype": "org.boxel.card",
-    "body": "What would it be like if this was about terry pratchett (Card: Mad As a Hatter, http://localhost:4201/demo/BlogPost/1)",
-    "formatted_body": "<p>What would it be like if this was about terry pratchett</p>\n",
-    "instance": {
-      "data": {
-        "type": "card",
-        "id": "http://localhost:4201/demo/BlogPost/1",
-        "attributes": {
-          "title": "Mad As a Hatter",
-          "slug": "mad-as-a-hatter",
-          "body": "## Where it all begins\n\nThis is a story of a man named [Brady](https://eightiesforbrady.com), who was bringing up three very lovely girls under the rule of the Queen of Hearts."
-        },
-        "relationships": {
-          "authorBio": {
-            "links": {
-              "self": "../Author/1"
-            },
-            "data": {
-              "type": "card",
-              "id": "http://localhost:4201/demo/Author/1"
-            }
-          }
-        },
-        "meta": {
-          "adoptsFrom": {
-            "module": "../blog-post",
-            "name": "BlogPost"
-          }
-        }
-      },
-      "included": [
-        {
-          "attributes": {
-            "firstName": "Alice",
-            "lastName": "Enwunder",
-            "photo": null,
-            "body": "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet."
-          },
-          "type": "card",
-          "meta": {
-            "adoptsFrom": {
-              "module": "../author",
-              "name": "Author"
-            }
-          },
-          "id": "http://localhost:4201/demo/Author/1"
-        }
-      ]
-    }
-  },
-  "origin_server_ts": 1689080209551,
-  "unsigned": {
-    "age": 48
-  },
-  "event_id": "$s3lLFVt5kerqMX7T_4WgW-7LezqzuzL36NFpOc-Iymw",
-  "room_id": "!cULAFCDkOVdkmOhFAE:localhost"
+enum ParsingMode {
+  Text,
+  Command
 }
-*/
-// 
-// Full card data: ${JSON.stringify(card.data)}
-function getUserMessage(request, card) {
+
+function getUserMessage(request: string, card: any) {
   return `
     User request: ${request}
     Full data: ${JSON.stringify(card)}
@@ -115,11 +57,11 @@ function getUserMessage(request, card) {
     `
 }
 
-async function sendMessage(client, room, content, previous) {
+async function sendMessage(client: MatrixClient, room: Room, content: string, previous: string | undefined) {
   if (content.startsWith('option>')) {
     content = content.replace('option>', '');
   }
-  let messageObject = {
+  let messageObject: IContent = {
     "body": content,
     "msgtype": "m.text",
     "formatted_body": content,
@@ -140,50 +82,41 @@ async function sendMessage(client, room, content, previous) {
   return await client.sendEvent(room.roomId, "m.room.message", messageObject);
 }
 
-async function sendOption(client, room, content) {
+async function sendOption(client: MatrixClient, room: Room, content: string) {
   let messageObject = {
     "body": content,
-    "msgtype": "org.boxel.card",
-    "formatted_body": "Option",
+    "msgtype": "m.text",
+    "formatted_body": content,
     "format": "org.matrix.custom.html",
-    "instance": {
-      "data": {
-        "type": "card",
-        "id": "http://localhost:4201/demo/Option/" + Math.random().toString(36).substring(7),
-        "attributes": {
-          "changes": content
-        },
-        "meta": {
-          "adoptsFrom": {
-            "module": "../option",
-            "name": "Option"
-          }
-        }
-      }
-    }
   };
   console.log("Sending", messageObject);
   return await client.sendEvent(room.roomId, "m.room.message", messageObject);
 }
 
 
-async function sendStream(stream, client, room) {
-  let append_to = undefined;
+async function sendStream(stream: APIResponse<Stream<ChatCompletionChunk>>, client: MatrixClient, room: Room, append_to?: string) {
   let content = "";
   let unsent = 0;
-  let state = "text";
+  let currentParsingMode: ParsingMode = ParsingMode.Text;
   for await (const part of stream) {
-    if (!append_to && state == "text") {
+    console.log("Token: ", part.choices[0].delta?.content);
+    // If we've not got a current message to edit and we're processing text
+    // rather than structured data, start a new message to update.
+    if (!append_to && currentParsingMode == ParsingMode.Text) {
       let placeholder = await sendMessage(client, room, "...", undefined);
       append_to = placeholder.event_id;
     }
     let token = part.choices[0].delta?.content;
+    // The final token is undefined, so we need to break out of the loop
     if (token == undefined) {
       break;
     }
 
-    console.log("TOKEN: ", token, token.includes('</'));
+    // The parsing here has to deal with a streaming response that 
+    // alternates between sections of text (to stream back to the client)
+    // and structured data (to batch and send in one block)
     if (token.includes('</')) {
+      // Content is the text we have built up so far
       if (content.startsWith('option>')) {
         content = content.replace('option>', '');
       }
@@ -192,13 +125,12 @@ async function sendStream(stream, client, room) {
       }
       content += token.split('</')[0];
       // Now we need to drop into card mode for the stream
-      console.log("Ended")
-      await sendOption(client, room, content, undefined);
+      await sendOption(client, room, content);
       content = "";
-      state = "text";
+      currentParsingMode = ParsingMode.Text;
       unsent = 0;
     } else if (token.includes('<')) {
-      state = "card";
+      currentParsingMode = ParsingMode.Command;
       // Send the last update
       let beforeTag = token.split('<')[0];
       await sendMessage(client, room, content + beforeTag, append_to);
@@ -208,20 +140,25 @@ async function sendStream(stream, client, room) {
     } else if (token) {
       unsent += 1;
       content += part.choices[0].delta?.content;
-      if (state == "text" && unsent > 20) {
+      // buffer up to 20 tokens before sending, but only when parsing text
+      if (currentParsingMode == ParsingMode.Text && unsent > 20) {
         await sendMessage(client, room, content, append_to);
         unsent = 0;
       }
     }
   }
-  await sendMessage(client, room, content, append_to);
+  // Make sure we send any remaining content at the end of the stream
+  if (content) {
+    await sendMessage(client, room, content, append_to);
+  }
 }
 
 
 
-async function getResponse(event) {
-  if (event.getContent().msgtype === "org.boxel.card") {
-    let card = event.getContent().instance.data;
+async function getResponse(event: MatrixEvent) {
+  const content: IContent = event.getContent();
+  if (content.msgtype === "org.boxel.card") {
+    let card = content.instance.data;
     console.log("Processing card: " + event);
     return await openai.chat.completions.create({
       model: "gpt-4-0613",
@@ -230,36 +167,41 @@ async function getResponse(event) {
           "role": "system", "content": MODIFY_SYSTEM_MESSAGE
         },
         {
-          "role": "user", "content": getUserMessage(event.getContent().body, card)
+          "role": "user", "content": getUserMessage(content.body, card)
         }],
       stream: true,
     });
   } else {
     return await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
-      messages: [{ "role": "user", "content": event.getContent().body }],
+      messages: [{ "role": "user", "content": content.body }],
       stream: true,
     });
   }
 }
 
 (async () => {
-  let client = MatrixSDK.createClient({ baseUrl: 'http://localhost:8008' });
+  let client = createClient({ baseUrl: 'http://localhost:8008' });
   let auth = await client.loginWithPassword(
     'aibot',
     'pass'
   );
-  let { access_token, user_id, device_id } = auth;
-  console.log(JSON.stringify(auth, null, 2));
-  client.on(MatrixSDK.RoomMemberEvent.Membership, function (event, member) {
+  let { user_id } = auth;
+  client.on(RoomMemberEvent.Membership, function (_event, member) {
     if (member.membership === "invite" && member.userId === user_id) {
       client.joinRoom(member.roomId).then(function () {
         console.log("Auto-joined %s", member.roomId);
       });
     }
   });
-  // SCARY WARNING ABOUT ASYNC, THIS SHOULD BE SYNC AND USE A QUEUE
-  client.on(MatrixSDK.RoomEvent.Timeline, async function (event, room, toStartOfTimeline) {
+  // TODO: Set this up to use a queue that gets drained
+  client.on(RoomEvent.Timeline, async function (event, room, toStartOfTimeline) {
+    console.log(
+      "(%s) %s :: %s",
+      room?.name,
+      event.getSender(),
+      event.getContent().body,
+    );
 
     if (event.event.origin_server_ts! < startTime) {
       return;
@@ -273,26 +215,12 @@ async function getResponse(event) {
     if (event.getSender() === user_id) {
       return;
     }
-    let initialMessage = await client.sendHtmlMessage(room.roomId, "Thinking...", "Thinking...");
+    let initialMessage: ISendEventResponse = await client.sendHtmlMessage(room!.roomId, "Thinking...", "Thinking...");
 
 
     const stream = await getResponse(event);
-    await sendStream(stream, client, room);
-    //await sendStream(stream, client, room, sentId);
-
-    //let content = chunks.map(part => part.choices[0].delta?.content).join('');
-    //await client.sendHtmlMessage(room.roomId, content, content);
-    //MatrixSDK.
-    //let fullcontent = total.map(part => part.choices[0].delta?.content).join('');
-    //await client.sendHtmlMessage(room.roomId, fullcontent, fullcontent);
-
-    console.log(
-      // the room name will update with m.room.name events automatically
-      "(%s) %s :: %s",
-      room?.name,
-      event.getSender(),
-      event.getContent().body,
-    );
+    console.log("Receiving response", stream);
+    await sendStream(stream, client, room!, initialMessage.event_id);
   });
 
   await client.startClient();
