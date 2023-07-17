@@ -18,7 +18,6 @@ interface Signature {
     size?: string;
     href?: string;
     class?: string;
-    tooltip?: string;
   };
   Blocks: {
     default: [];
@@ -35,7 +34,6 @@ export default class ButtonComponent extends Component<Signature> {
         @class
         (concat 'size-' (if @size @size this.defaultSize))
         (concat 'kind-' (if @kind @kind this.defaultKind))
-        (if @tooltip 'with-tooltip')
       )
       as |classes|
     }}
@@ -44,7 +42,6 @@ export default class ButtonComponent extends Component<Signature> {
           class={{cn classes (if @loading 'loading')}}
           tabindex={{if @loading -1 0}}
           disabled={{@disabled}}
-          data-hover={{@tooltip}}
           data-test-boxel-button
           ...attributes
         >
@@ -62,7 +59,6 @@ export default class ButtonComponent extends Component<Signature> {
           class={{classes}}
           href={{unless @disabled @href}}
           data-test-boxel-button
-          data-hover={{@tooltip}}
           ...attributes
         >
           {{yield}}
@@ -76,7 +72,6 @@ export default class ButtonComponent extends Component<Signature> {
           @disabled={{@disabled}}
           data-test-boxel-button
           tabindex={{if @disabled -1 0}}
-          data-hover={{@tooltip}}
           ...attributes
         >
           {{yield}}
@@ -152,32 +147,6 @@ export default class ButtonComponent extends Component<Signature> {
       /* overwrite the global style for links in global.css */
       a.boxel-button:hover {
         color: var(--boxel-button-text-color);
-      }
-
-      .with-tooltip {
-        pointer-events: unset !important;
-        position: relative;
-      }
-
-      .with-tooltip::after {
-        content: attr(data-hover);
-        opacity: 0;
-        background-color: var(--boxel-light);
-        box-shadow: 0 0 0 1px var(--boxel-light-500);
-        color: var(--boxel-dark);
-        text-align: center;
-        border-radius: var(--boxel-sp-sm);
-        padding: var(--boxel-sp-sm);
-        transition: opacity 1s ease-in-out;
-        position: absolute;
-        z-index: 1;
-        left: 0;
-        top: 110%;
-      }
-
-      .with-tooltip:hover::after {
-        opacity: 1;
-        visibility: visible;
       }
 
       /**

@@ -14,7 +14,13 @@ import type CardService from '@cardstack/host/services/card-service';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import optional from '@cardstack/boxel-ui/helpers/optional';
 import cn from '@cardstack/boxel-ui/helpers/cn';
-import { IconButton, Header, CardContainer, Button } from '@cardstack/boxel-ui';
+import {
+  IconButton,
+  Header,
+  CardContainer,
+  Button,
+  Tooltip,
+} from '@cardstack/boxel-ui';
 import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import { service } from '@ember/service';
@@ -185,41 +191,62 @@ export default class OperatorModeStackItem extends Component<Signature> {
         >
           <:actions>
             {{#if (eq @item.format 'isolated')}}
-              <IconButton
-                @icon='icon-pencil'
-                @width='24px'
-                @height='24px'
-                @tooltip='Edit'
-                class='icon-button'
-                aria-label='Edit'
-                {{on 'click' (fn @edit @item)}}
-                data-test-edit-button
-              />
+              <Tooltip
+                @placement='top'>
+                <:trigger>
+                  <IconButton
+                    @icon='icon-pencil'
+                    @width='24px'
+                    @height='24px'
+                    class='icon-button'
+                    aria-label='Edit'
+                    {{on 'click' (fn @edit @item)}}
+                    data-test-edit-button
+                  />
+                </:trigger>
+                <:content>
+                  Edit
+                </:content>
+              </Tooltip>
             {{else}}
-              <IconButton
-                  @icon='icon-pencil'
-                  @width='24px'
-                  @height='24px'
-                  @tooltip='Finish Editing'
-                  class='icon-save'
-                  aria-label='Finish Editing'
-                  {{on 'click' (fn @save @item)}}
-                  data-test-edit-button
-                />
+              <Tooltip
+                @placement='top'>
+                <:trigger>
+                  <IconButton
+                    @icon='icon-pencil'
+                    @width='24px'
+                    @height='24px'
+                    class='icon-save'
+                    aria-label='Finish Editing'
+                    {{on 'click' (fn @save @item)}}
+                    data-test-edit-button
+                  />
+                </:trigger>
+                <:content>
+                  Finish Editing
+                </:content>
+              </Tooltip>
             {{/if}}
             <div>
               <BoxelDropdown>
                 <:trigger as |bindings|>
-                  <IconButton
-                    @icon='icon-horizontal-three-dots'
-                    @width='20px'
-                    @height='20px'
-                    @tooltip='More Options'
-                    class='icon-button'
-                    aria-label='Options'
-                    data-test-more-options-button
-                    {{bindings}}
-                  />
+                  <Tooltip
+                    @placement='top'>
+                    <:trigger>
+                      <IconButton
+                          @icon='icon-horizontal-three-dots'
+                          @width='20px'
+                          @height='20px'
+                          class='icon-button'
+                          aria-label='Options'
+                          data-test-more-options-button
+                          {{bindings}}
+                        />
+                    </:trigger>
+                    <:content>
+                      More Options
+                    </:content>
+                  </Tooltip>
                 </:trigger>
                 <:content as |dd|>
                   <BoxelMenu
@@ -248,16 +275,23 @@ export default class OperatorModeStackItem extends Component<Signature> {
                 </:content>
               </BoxelDropdown>
             </div>
-            <IconButton
-              @icon='icon-x'
-              @width='20px'
-              @height='20px'
-              @tooltip={{if (eq @item.format 'isolated') 'Close' 'Cancel & Close'}}
-              class='icon-button'
-              aria-label='Close'
-              {{on 'click' (fn @close @item)}}
-              data-test-close-button
-            />
+            <Tooltip
+              @placement='top'>
+              <:trigger>
+                <IconButton
+                  @icon='icon-x'
+                  @width='20px'
+                  @height='20px'
+                  class='icon-button'
+                  aria-label='Close'
+                  {{on 'click' (fn @close @item)}}
+                  data-test-close-button
+                />
+              </:trigger>
+              <:content>
+                {{if (eq @item.format 'isolated') 'Close' 'Cancel & Close'}}
+              </:content>
+            </Tooltip>
           </:actions>
         </Header>
         <div class='content'>
