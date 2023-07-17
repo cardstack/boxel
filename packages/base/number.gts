@@ -1,6 +1,34 @@
 import { primitive, Component, CardBase, useIndexBasedKey } from './card-api';
-import { fn } from '@ember/helper';
 import { BoxelInput } from '@cardstack/boxel-ui';
+import { TextInputFilter, DeserializedResult } from './text-input-filter';
+
+function _deserialize(
+  numberString: string | null | undefined
+): DeserializedResult<number> {
+  if (!numberString) {
+    return { value: null };
+  }
+  let maybeNumber = Number(numberString);
+  if (Number.isNaN(maybeNumber)) {
+    return {
+      value: null,
+      errorMessage:
+        'Input cannot be converted to a number. Please enter a valid number',
+    };
+  }
+  if (!Number.isFinite(maybeNumber)) {
+    return {
+      value: null,
+      errorMessage:
+        'Input number is too large. Please enter a smaller number or consider using BigInteger base card.',
+    };
+  }
+  return { value: maybeNumber };
+}
+
+function _serialize(val: number): string {
+  return val.toString();
+}
 
 export default class NumberCard extends CardBase {
   static [primitive]: number;
@@ -14,11 +42,19 @@ export default class NumberCard extends CardBase {
 
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <BoxelInput @value={{@model}} @onInput={{fn this.parseInput @set}} />
+      <BoxelInput
+        @value={{this.textInputFilter.asString}}
+        @onInput={{this.textInputFilter.onInput}}
+        @errorMessage={{this.textInputFilter.errorMessage}}
+        @invalid={{this.textInputFilter.isInvalid}}
+      />
     </template>
 
-    parseInput(set: Function, value: string) {
-      return set(Number(value));
-    }
+    textInputFilter: TextInputFilter<number> = new TextInputFilter(
+      () => this.args.model,
+      (inputVal) => this.args.set(inputVal),
+      _deserialize,
+      _serialize
+    );
   };
 }
