@@ -47,9 +47,6 @@ interface CommandArgs {
 
 class CommandMessage extends Component<CommandArgs> {
   <template>
-    <div>
-      {{ this.label }}
-    </div>
     <Button {{on 'click' this.clicked}} {{on 'mouseenter' this.mouseEnter}} {{on 'mouseleave' this.mouseLeave}}>Apply</Button>
   </template>
 
@@ -136,20 +133,17 @@ export default class Room extends Component<RoomArgs> {
           </div>
         </div>
         {{#each this.messageCardComponents as |Message|}}
-          <Message />
+          {{#if Message.command}}
+            <CommandMessage @command={{Message.command}} @onCommand={{this.onCommand}} @onPreviewCommand={{this.onPreviewCommand}} @onCancelPreviewCommand={{this.onCancelPreviewCommand}}/>
+          {{else}}
+             <Message.component />
+          {{/if}}
         {{else}}
           <div data-test-no-messages>
             (No messages)
           </div>
         {{/each}}
       </div>
-      {{#each this.commands as |command|}}
-          <CommandMessage @command={{command}} @onCommand={{this.onCommand}} @onPreviewCommand={{this.onPreviewCommand}} @onCancelPreviewCommand={{this.onCancelPreviewCommand}}/>
-        {{else}}
-          <div data-test-no-commands>
-            (No commands)
-          </div>
-        {{/each}}
     </div>
 
     <div class='send-message'>
@@ -379,10 +373,15 @@ export default class Room extends Component<RoomArgs> {
     return;
   }
 
+  private getComponent(card: Card, mode: string) {
+    return {"component": card.constructor.getComponent(card, mode),
+            "command": card.command};
+  }
+
   private get messageCardComponents() {
     return this.roomCard
       ? this.roomCard.messages.map((messageCard) =>
-          messageCard.constructor.getComponent(messageCard, 'embedded')
+          this.getComponent(messageCard, 'embedded')
         )
       : [];
   }
