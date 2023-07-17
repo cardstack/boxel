@@ -57,6 +57,8 @@ jobs:
 
       - name: Deploy app
         run: waypoint build -app=${{ inputs.app }} -plain -push
+        env:
+          WAYPOINT_SERVER_TLS: "1"
 
   deploy:
     needs: [build]
