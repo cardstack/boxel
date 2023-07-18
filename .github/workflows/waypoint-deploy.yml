@@ -69,6 +69,8 @@ jobs:
 
       - name: Deploy app
         run: waypoint deploy -app=${{ inputs.app }} -plain -release
+        env:
+          WAYPOINT_SERVER_TLS: "1"
 
       - uses: ./.github/actions/waypoint-ecs-failsafe
         with:
