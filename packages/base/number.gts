@@ -12,6 +12,9 @@ import { TextInputFilter, DeserializedResult } from './text-input-filter';
 
 function _deserialize(
   numberString: string | null | undefined
+  //TODO: It turns out at runtime, number value is being passed down.
+  //Particularly, value 0 which is falsy can cause issues if not handled correctly
+  //Work has to be done to sync [deserialize] in card-api with _deserialize
 ): DeserializedResult<number> {
   if (numberString == null || numberString == undefined) {
     return { value: null };
