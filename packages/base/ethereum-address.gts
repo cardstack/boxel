@@ -20,7 +20,7 @@ function isChecksumAddress(address: string): boolean {
 function _deserialize(
   address: string | null | undefined
 ): DeserializedResult<string> {
-  if (!address) {
+  if (address == null || address == undefined) {
     return { value: null };
   }
   const validations = [
