@@ -1,5 +1,11 @@
 import { module, test } from 'qunit';
-import { visit, currentURL, click, triggerEvent } from '@ember/test-helpers';
+import {
+  visit,
+  currentURL,
+  click,
+  triggerEvent,
+  waitFor,
+} from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
@@ -293,8 +299,8 @@ module('Acceptance | operator mode tests', function (hooks) {
         )}`
       );
 
-      // Add the dog back to the stack (via overlayed linked card button)
-      await click('[data-test-overlay-button]');
+      await waitFor('[data-test-pet="Mango"]');
+      await click('[data-test-pet="Mango"]');
 
       // The stack should be reflected in the URL
       assert.strictEqual(
