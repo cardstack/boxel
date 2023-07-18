@@ -92,8 +92,14 @@ class LinksToEditor extends GlimmerComponent<Signature> {
   private chooseCard = restartableTask(async () => {
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
     let chosenCard: Card | undefined = this.args.context?.actions?.createCard
-      ? await chooseCard({ filter: { type } })
-      : await chooseCard({ filter: { type } }, { offerToCreate: type });
+      ? await chooseCard(
+          { filter: { type } },
+          { catalogTitle: 'Choose a card' }
+        )
+      : await chooseCard(
+          { filter: { type } },
+          { offerToCreate: type, catalogTitle: 'Choose a card' }
+        );
     if (chosenCard) {
       this.args.model.value = chosenCard;
     }

@@ -61,10 +61,8 @@ class Isolated extends Component<typeof CardsGrid> {
       </ul>
 
       {{#if @context.actions.createCard}}
-        <div class='cards-grid__add-button'> 
-          <Tooltip 
-            @placement='left'
-            @offset={{6}}>
+        <div class='cards-grid__add-button'>
+          <Tooltip @placement='left' @offset={{6}}>
             <:trigger>
               <IconButton
                 @icon='icon-plus-circle'
@@ -106,12 +104,15 @@ class Isolated extends Component<typeof CardsGrid> {
   }
 
   private createCard = restartableTask(async () => {
-    let card = await chooseCard<CatalogEntry>({
-      filter: {
-        on: catalogEntryRef,
-        eq: { isPrimitive: false },
+    let card = await chooseCard<CatalogEntry>(
+      {
+        filter: {
+          on: catalogEntryRef,
+          eq: { isPrimitive: false },
+        },
       },
-    });
+      { catalogTitle: 'Choose a card type' }
+    );
     if (!card) {
       return;
     }

@@ -101,13 +101,13 @@ export const assetsDir = '__boxel/';
 export interface CardChooser {
   chooseCard<T extends CardBase>(
     query: Query,
-    opts?: { offerToCreate: CardRef }
+    opts?: { offerToCreate?: CardRef; catalogTitle?: string }
   ): Promise<undefined | T>;
 }
 
 export async function chooseCard<T extends Card>(
   query: Query,
-  opts?: { offerToCreate: CardRef }
+  opts?: { offerToCreate?: CardRef; catalogTitle?: string }
 ): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CARD_CHOOSER) {

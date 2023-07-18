@@ -33,8 +33,7 @@ export default class FileTree extends Component<Args> {
         @realmURL={{@url}}
       />
     </nav>
-    <Tooltip
-      @placement='left'>
+    <Tooltip @placement='left'>
       <:trigger>
         <IconButton
           @icon='icon-plus-circle'
@@ -59,12 +58,15 @@ export default class FileTree extends Component<Args> {
   }
 
   private createNewCard = restartableTask(async () => {
-    let card = await chooseCard<CatalogEntry>({
-      filter: {
-        on: catalogEntryRef,
-        eq: { isPrimitive: false },
+    let card = await chooseCard<CatalogEntry>(
+      {
+        filter: {
+          on: catalogEntryRef,
+          eq: { isPrimitive: false },
+        },
       },
-    });
+      { catalogTitle: 'Choose a card type' }
+    );
     if (!card) {
       return;
     }

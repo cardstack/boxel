@@ -416,21 +416,27 @@ export default class Room extends Component<RoomArgs> {
   });
 
   private doChooseCard = restartableTask(async () => {
-    let chosenCard: Card | undefined = await chooseCard({
-      filter: { type: baseCardRef },
-    });
+    let chosenCard: Card | undefined = await chooseCard(
+      {
+        filter: { type: baseCardRef },
+      },
+      { catalogTitle: 'Choose a card' }
+    );
     if (chosenCard) {
       this.cardsToSend.set(this.args.roomId, chosenCard);
     }
   });
 
   private doSetObjective = restartableTask(async () => {
-    let catalogEntry = await chooseCard<CatalogEntry>({
-      filter: {
-        on: catalogEntryRef,
-        eq: { isPrimitive: false },
+    let catalogEntry = await chooseCard<CatalogEntry>(
+      {
+        filter: {
+          on: catalogEntryRef,
+          eq: { isPrimitive: false },
+        },
       },
-    });
+      { catalogTitle: 'Choose a card type' }
+    );
     if (catalogEntry) {
       await this.matrixService.setObjective(this.args.roomId, catalogEntry.ref);
     }

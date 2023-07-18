@@ -245,7 +245,9 @@ export default class OperatorModeContainer extends Component<Signature> {
           data: { meta: { adoptsFrom: ref } },
         };
         // using RealmPaths API to correct for the trailing `/`
-        let realmPath = new RealmPaths(relativeTo ?? here.cardService.defaultURL);
+        let realmPath = new RealmPaths(
+          relativeTo ?? here.cardService.defaultURL
+        );
         let newCard = await here.cardService.createFromSerialized(
           doc.data,
           doc,
@@ -308,9 +310,12 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   addCard = restartableTask(async () => {
     let type = baseCardRef;
-    let chosenCard: Card | undefined = await chooseCard({
-      filter: { type },
-    });
+    let chosenCard: Card | undefined = await chooseCard(
+      {
+        filter: { type },
+      },
+      { catalogTitle: 'Choose a card' }
+    );
 
     if (chosenCard) {
       let newItem: StackItem = {

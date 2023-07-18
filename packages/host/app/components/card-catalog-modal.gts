@@ -57,7 +57,7 @@ export default class CardCatalogModal extends Component<Signature> {
         data-test-card-catalog-modal
       >
         <CardContainer class='dialog-box' @displayBoundaries={{true}}>
-          <Header @title='Choose a card type'>
+          <Header @title={{this.catalogTitle}}>
             <button
               {{on 'click' (fn this.pick undefined)}}
               class='dialog-box__close'
@@ -333,7 +333,7 @@ export default class CardCatalogModal extends Component<Signature> {
     | {
         search: Search;
         deferred: Deferred<Card | undefined>;
-        opts?: { offerToCreate?: CardRef };
+        opts?: { offerToCreate?: CardRef; catalogTitle?: string };
       }
     | undefined = undefined;
   @tracked zIndex = 20;
@@ -370,6 +370,10 @@ export default class CardCatalogModal extends Component<Signature> {
       }
     }
     return res;
+  }
+
+  get catalogTitle() {
+    return this.currentRequest?.opts?.catalogTitle ?? 'Card Catalog';
   }
 
   get styleString() {
