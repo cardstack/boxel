@@ -9,18 +9,25 @@ function _deserialize(
     return { value: null };
   }
   let maybeNumber = Number(numberString);
-  if (Number.isNaN(maybeNumber)) {
+  if (Number.isNaN(maybeNumber) || !Number.isFinite(maybeNumber)) {
     return {
       value: null,
       errorMessage:
         'Input cannot be converted to a number. Please enter a valid number',
     };
   }
-  if (!Number.isFinite(maybeNumber)) {
+  if (maybeNumber > Number.MAX_SAFE_INTEGER) {
     return {
       value: null,
       errorMessage:
         'Input number is too large. Please enter a smaller number or consider using BigInteger base card.',
+    };
+  }
+  if (maybeNumber < Number.MIN_SAFE_INTEGER) {
+    return {
+      value: null,
+      errorMessage:
+        'Input number is too small. Please enter a more positive number or consider using BigInteger base card.',
     };
   }
   return { value: maybeNumber };
