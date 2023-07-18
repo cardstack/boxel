@@ -55,7 +55,7 @@ jobs:
           sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
           sudo apt-get install waypoint=${{ inputs.waypoint_version }}
 
-      - name: Deploy app
+      - name: Build app
         run: waypoint build -app=${{ inputs.app }} -plain -push
         env:
           WAYPOINT_SERVER_TLS: "1"
@@ -78,7 +78,7 @@ jobs:
         uses: ./.github/actions/discord-notification-deploy
         with:
           app: "realm-server"
-          status: ${{ github.action_status }}
+          status: ${{ needs.deploy.result }}
           environment: ${{ inputs.environment }}
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
           is_ecs: "true"
