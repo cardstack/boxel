@@ -6,7 +6,6 @@ import {
   deserialize,
   CardBaseConstructor,
   CardInstanceType,
-  queryableValue,
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui';
 import { TextInputFilter, DeserializedResult } from './text-input-filter';
