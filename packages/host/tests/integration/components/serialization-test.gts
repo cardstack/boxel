@@ -4442,6 +4442,7 @@ module('Integration | serialization', function (hooks) {
           @field someNull = contains(NumberCard);
           @field someString = contains(NumberCard);
           @field someDecimal = contains(NumberCard);
+          @field zeroNumber = contains(NumberCard);
           @field notANumber = contains(NumberCard);
           @field infinity = contains(NumberCard);
         }
@@ -4458,6 +4459,7 @@ module('Integration | serialization', function (hooks) {
             someNull: null,
             someString: 'some text',
             someDecimal: 0.0001,
+            zeroNumber: 0,
             notANumber: NaN,
             infinity: Infinity,
           },
@@ -4478,6 +4480,7 @@ module('Integration | serialization', function (hooks) {
         assert.strictEqual(sample.someNegativeNumber, -1);
         assert.strictEqual(sample.someNumberString, 42);
         assert.strictEqual(sample.someDecimal, 0.0001);
+        assert.strictEqual(sample.zeroNumber, 0);
 
         // failed to deserialize
         assert.strictEqual(sample.someNull, null);
