@@ -4427,6 +4427,95 @@ module('Integration | serialization', function (hooks) {
     // this module checks the custom serialization and deserialization behaviour of base cards
     // which have custom serialize and deserialize
 
+    module('NumberCard', function () {
+      test('can deserialize field', async function (assert) {
+        let { field, contains, Card, createFromSerialized } = cardApi;
+        let { default: StringCard } = string;
+        let { default: NumberCard } = number;
+        class Sample extends Card {
+          @field title = contains(StringCard);
+          @field someNumber = contains(NumberCard);
+          @field someNegativeNumber = contains(NumberCard);
+          @field someNumberString = contains(NumberCard);
+          @field someBigInt = contains(NumberCard);
+          @field someNegativeBigInt = contains(NumberCard);
+          @field someNull = contains(NumberCard);
+          @field someString = contains(NumberCard);
+          @field someDecimal = contains(NumberCard);
+        }
+        await shimModule(`${realmURL}test-cards`, { Sample });
+
+        let resource = {
+          attributes: {
+            title: 'Number Test Cases',
+            someNumber: 42,
+            someNegativeNumber: -1,
+            someNumberString: '42',
+            someBigInt: '9007199254740992',
+            someNegativeBigInt: '-9007199254740992',
+            someNull: null,
+            someString: 'some text',
+            someDecimal: 0.0001,
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Sample',
+            },
+          },
+        };
+        let sample = await createFromSerialized<typeof Sample>(
+          resource,
+          { data: resource },
+          undefined
+        );
+
+        assert.strictEqual(sample.someNumber, 42);
+        assert.strictEqual(sample.someNegativeNumber, -1);
+        assert.strictEqual(sample.someNumberString, 42);
+        assert.strictEqual(sample.someDecimal, 0.0001);
+
+        // failed to deserialize
+        assert.strictEqual(sample.someNull, null);
+        assert.strictEqual(sample.someBigInt, null);
+        assert.strictEqual(sample.someNegativeBigInt, null);
+        assert.strictEqual(sample.someString, null);
+      });
+
+      test('can serialize field', async function (assert) {
+        let { field, contains, Card, serializeCard } = cardApi;
+        let { default: StringCard } = string;
+        let { default: NumberCard } = number;
+        class Sample extends Card {
+          @field title = contains(StringCard);
+          @field someNumber = contains(NumberCard);
+          @field someNull = contains(NumberCard);
+        }
+
+        await shimModule(`${realmURL}test-cards`, { Sample });
+
+        let sample = new Sample({
+          someNumber: 42,
+          someNull: null,
+        });
+
+        let serialized = serializeCard(sample, {
+          includeUnrenderedFields: true,
+        });
+
+        assert.strictEqual(
+          typeof serialized?.data?.attributes?.someNumber === 'number',
+          true
+        );
+        assert.strictEqual(
+          typeof serialized?.data?.attributes?.someNumber !== 'string',
+          true
+        );
+        assert.strictEqual(serialized?.data?.attributes?.someNumber, 42);
+        assert.strictEqual(serialized?.data?.attributes?.someNull, null);
+      });
+    });
+
     module('BigIntegerCard', function () {
       function isBigInt(input: any) {
         return typeof input == 'bigint';
