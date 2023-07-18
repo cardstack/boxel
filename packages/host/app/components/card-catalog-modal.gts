@@ -7,7 +7,6 @@ import { htmlSafe } from '@ember/template';
 import { registerDestructor } from '@ember/destroyable';
 import { enqueueTask, restartableTask } from 'ember-concurrency';
 import type { Card, CardContext } from 'https://cardstack.com/base/card-api';
-import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import type { Query } from '@cardstack/runtime-common/query';
 import {
   createNewCard,
@@ -40,9 +39,9 @@ interface Signature {
   };
 }
 
-type CardCatalogResult = {
-  realmName: RealmInfo['name'];
-  realmIcon: RealmInfo['iconURL'];
+type RealmCards = {
+  name: RealmInfo['name'];
+  iconURL: RealmInfo['iconURL'];
   cards: Card[];
 };
 
@@ -78,30 +77,30 @@ export default class CardCatalogModal extends Component<Signature> {
                 >Create New</Button>
               {{/if}}
               <div class='card-catalog' data-test-card-catalog>
-                {{#each this.results as |group|}}
+                {{#each this.cardsByRealm as |realm|}}
                   <section>
                     <header class='realm-info'>
                       <img
-                        src={{group.realmIcon}}
+                        src={{realm.iconURL}}
                         class='realm-icon'
                         role='presentation'
                       />
                       <span
                         class='realm-name'
                         data-test-realm-name
-                      >{{group.realmName}}</span>
+                      >{{realm.name}}</span>
                       <span class='results-count'>
-                        {{#if (gt group.cards.length 1)}}
-                          {{group.cards.length}}
+                        {{#if (gt realm.cards.length 1)}}
+                          {{realm.cards.length}}
                           results
-                        {{else if (eq group.cards.length 1)}}
+                        {{else if (eq realm.cards.length 1)}}
                           1 result
                         {{/if}}
                       </span>
                     </header>
-                    {{#if group.cards.length}}
+                    {{#if realm.cards.length}}
                       <ul class='card-catalog__group'>
-                        {{#each group.cards as |card|}}
+                        {{#each realm.cards as |card|}}
                           <li
                             class={{cn
                               'item'
@@ -352,24 +351,27 @@ export default class CardCatalogModal extends Component<Signature> {
     });
   }
 
-  get results(): CardCatalogResult[] {
-    let res: CardCatalogResult[] = [];
-    if (this.currentRequest?.search.instances.length) {
-      for (let item of this.currentRequest.search.instances as CatalogEntry[]) {
-        let realmInfo = res.find((r) => r.realmName === item.realmName);
-        if (realmInfo) {
-          realmInfo.cards.push(item);
+  get cardsByRealm(): RealmCards[] {
+    let realmCards: RealmCards[] = [];
+    let instances = this.currentRequest?.search.instancesWithRealmInfo ?? [];
+
+    if (instances.length) {
+      for (let instance of instances) {
+        let realm = realmCards.find((r) => r.name === instance.realmInfo?.name);
+        if (realm) {
+          realm.cards.push(instance.card);
         } else {
-          realmInfo = {
-            realmName: item.realmName,
-            realmIcon: item.realmIcon,
+          realm = {
+            name: instance.realmInfo.name,
+            iconURL: instance.realmInfo.iconURL,
             cards: [],
           };
-          res.push(realmInfo);
+          realmCards.push(realm);
         }
       }
     }
-    return res;
+
+    return realmCards.filter((r) => r.cards.length);
   }
 
   get catalogTitle() {

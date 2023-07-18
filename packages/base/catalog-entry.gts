@@ -44,11 +44,6 @@ export class CatalogEntry extends Card {
       return this[realmInfo]?.name;
     },
   });
-  @field realmIcon = contains(StringCard, {
-    computeVia: function (this: CatalogEntry) {
-      return this[realmInfo]?.iconURL;
-    },
-  });
 
   get showDemo() {
     return !this.isPrimitive;
