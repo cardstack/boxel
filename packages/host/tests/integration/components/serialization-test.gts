@@ -4442,6 +4442,8 @@ module('Integration | serialization', function (hooks) {
           @field someNull = contains(NumberCard);
           @field someString = contains(NumberCard);
           @field someDecimal = contains(NumberCard);
+          @field notANumber = contains(NumberCard);
+          @field infinity = contains(NumberCard);
         }
         await shimModule(`${realmURL}test-cards`, { Sample });
 
@@ -4456,6 +4458,8 @@ module('Integration | serialization', function (hooks) {
             someNull: null,
             someString: 'some text',
             someDecimal: 0.0001,
+            notANumber: NaN,
+            infinity: Infinity,
           },
           meta: {
             adoptsFrom: {
@@ -4480,6 +4484,8 @@ module('Integration | serialization', function (hooks) {
         assert.strictEqual(sample.someBigInt, null);
         assert.strictEqual(sample.someNegativeBigInt, null);
         assert.strictEqual(sample.someString, null);
+        assert.strictEqual(sample.notANumber, null);
+        assert.strictEqual(sample.infinity, null);
       });
 
       test('can serialize field', async function (assert) {
