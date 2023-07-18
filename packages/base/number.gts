@@ -6,6 +6,7 @@ import {
   deserialize,
   CardBaseConstructor,
   CardInstanceType,
+  queryableValue,
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui';
 import { TextInputFilter, DeserializedResult } from './text-input-filter';
@@ -50,9 +51,9 @@ export default class NumberCard extends CardBase {
   static [useIndexBasedKey]: never;
   static async [deserialize]<T extends CardBaseConstructor>(
     this: T,
-    address: any
+    number: any
   ): Promise<CardInstanceType<T>> {
-    return _deserialize(address).value as CardInstanceType<T>;
+    return _deserialize(number).value as CardInstanceType<T>;
   }
 
   static embedded = class Embedded extends Component<typeof this> {
