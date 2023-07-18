@@ -139,7 +139,14 @@ export default class CardCatalogModal extends Component<Signature> {
             {{/if}}
           </div>
           <footer class='dialog-box__footer footer'>
-            <label class={{cn 'url-search' url-search--visible=this.cardURL}}>
+            <label
+              {{on 'click' this.displayURLSearch}}
+              {{on 'focusout' this.hideURLSearchIfBlank}}
+              class={{cn
+                'url-search'
+                url-search--visible=this.urlSearchVisible
+              }}
+            >
               <div class='url-search__label'>
                 {{svgJar
                   'icon-link'
@@ -208,12 +215,12 @@ export default class CardCatalogModal extends Component<Signature> {
       }
       .url-search:hover {
         border-color: var(--boxel-dark);
+        cursor: pointer;
       }
       .url-search:focus-within {
         border-color: var(--boxel-highlight);
         box-shadow: 0 0 0 1px var(--boxel-highlight);
       }
-      .url-search:hover,
       .url-search:focus-within,
       .url-search--visible {
         --input-visibility: visible;
@@ -236,7 +243,7 @@ export default class CardCatalogModal extends Component<Signature> {
         display: inline-block;
         justify-self: center;
         font: 700 var(--boxel-font-sm);
-        padding: 0 var(--boxel-sp);
+        padding: 0 var(--boxel-sp-lg) 0 var(--boxel-sp);
       }
 
       .realm-info {
@@ -333,6 +340,7 @@ export default class CardCatalogModal extends Component<Signature> {
   @tracked selectedCard?: Card = undefined;
   @tracked cardURL = '';
   @tracked hasCardURLError = false;
+  @tracked urlSearchVisible = false;
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
 
@@ -380,6 +388,7 @@ export default class CardCatalogModal extends Component<Signature> {
     this.cardURL = '';
     this.hasCardURLError = false;
     this.selectedCard = undefined;
+    this.urlSearchVisible = false;
   }
 
   // This is part of our public API for runtime-common to invoke the card chooser
@@ -446,6 +455,18 @@ export default class CardCatalogModal extends Component<Signature> {
     }
     this.onURLFieldUpdated();
   }, 500);
+
+  @action
+  displayURLSearch() {
+    this.urlSearchVisible = true;
+  }
+
+  @action
+  hideURLSearchIfBlank() {
+    if (!this.cardURL.trim()) {
+      this.urlSearchVisible = false;
+    }
+  }
 
   @action
   setCardURL(cardURL: string) {
