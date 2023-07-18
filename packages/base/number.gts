@@ -11,7 +11,7 @@ import { BoxelInput } from '@cardstack/boxel-ui';
 import { TextInputFilter, DeserializedResult } from './text-input-filter';
 
 function _deserialize(
-  numberString: number | string | null | undefined
+  numberString: string | null | undefined
 ): DeserializedResult<number> {
   if (numberString == null || numberString == undefined) {
     return { value: null };
