@@ -173,7 +173,6 @@ module('Integration | text-input-filter', function (hooks) {
       })
     );
     let json = await response.json();
-    console.log(JSON.stringify(json, null, 2));
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
