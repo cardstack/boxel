@@ -47,7 +47,7 @@ export class TextInputFilter<T> {
 
   get asString(): string {
     let modelValue = this.getValue();
-    if (modelValue) {
+    if (modelValue != null) {
       return this.serialize(modelValue);
     }
     return this._lastEditedInputValue || '';
