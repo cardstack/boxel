@@ -38,7 +38,7 @@ export class TextInputFilter<T> {
     private getValue: () => T | null,
     private setValue: (val: T | null | undefined) => void,
     private deserialize: (
-      inputValue: string | null | undefined
+      inputValue: number | string | null | undefined
     ) => DeserializedResult<T>,
     private serialize: (val: T) => string = (v) => String(v)
   ) {}

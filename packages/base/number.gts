@@ -11,9 +11,9 @@ import { BoxelInput } from '@cardstack/boxel-ui';
 import { TextInputFilter, DeserializedResult } from './text-input-filter';
 
 function _deserialize(
-  numberString: string | null | undefined
+  numberString: number | string | null | undefined
 ): DeserializedResult<number> {
-  if (!numberString) {
+  if (numberString == null || numberString == undefined) {
     return { value: null };
   }
   let maybeNumber = Number(numberString);
