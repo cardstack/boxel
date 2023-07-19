@@ -842,7 +842,7 @@ importers:
         specifier: ^5.78.0
         version: 5.84.0
 
-  packages/demo-cards:
+  packages/drafts-realm:
     devDependencies:
       '@cardstack/cardpay-sdk':
         specifier: ^1.0.53
@@ -1213,6 +1213,12 @@ importers:
     dependenciesMeta:
       '@cardstack/runtime-common':
         injected: true
+
+  packages/published-realm:
+    devDependencies:
+      '@types/lodash':
+        specifier: ^4.14.182
+        version: 4.14.189
 
   packages/realm-server:
     devDependencies:
@@ -6758,6 +6764,7 @@ packages:
   /@uniswap/sdk-core@3.2.4:
     resolution: {integrity: sha512-EXOrmVrz/gamEPhV0/r4N2AtyhtlzEJ8PFqDE9hX1Ba+KGfn4hOd917dVM416kOOBjAGEU1tHJvYhghKhB3u4A==}
     engines: {node: '>=10'}
+    deprecated: breaking change required major version bump
     dependencies:
       '@ethersproject/address': 5.7.0
       big.js: 5.2.2

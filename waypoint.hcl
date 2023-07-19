@@ -8,7 +8,7 @@ app "realm-demo" {
       context = "./"
 
       build_args = {
-        realm_server_script = "start:demo:staging"
+        realm_server_script = "start:staging"
       }
     }
 

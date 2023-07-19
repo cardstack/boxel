@@ -1,10 +1,9 @@
 {
-  "name": "@cardstack/demo-cards",
+  "name": "@cardstack/published-realm",
   "version": "1.0.0",
   "main": "index.js",
   "license": "MIT",
   "devDependencies": {
-    "@cardstack/cardpay-sdk": "^1.0.53",
     "@types/lodash": "^4.14.182"
   },
   "scripts": {}
