@@ -167,9 +167,46 @@ jobs:
               - 'packages/runtime-common/**'
               - 'pnpm-lock.yaml'
 
+  build-realm-server:
+    name: Build realm-server
+    needs: [change-check]
+    if: ${{ needs.change-check.outputs.boxel == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: volta-cli/action@v4
+
+      - name: Set up env
+        shell: bash
+        run: |
+          echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/waypoint" >> $GITHUB_ENV
+          echo "WAYPOINT_SERVER_ADDR=${{ secrets.STAGING_WAYPOINT_SERVER_ADDR }}" >> $GITHUB_ENV
+          echo "WAYPOINT_SERVER_TOKEN=${{ secrets.STAGING_WAYPOINT_SERVER_TOKEN }}" >> $GITHUB_ENV
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Install Dependencies
+        shell: bash
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Waypoint
+        run: |
+          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
+          sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+          sudo apt-get install waypoint=${{ inputs.waypoint_version }}
+
+      - name: Build app
+        run: waypoint build -app=realm-demo -plain -push
+        env:
+          WAYPOINT_SERVER_TLS: "1"
+
   deploy-host:
     name: Deploy host to staging
-    needs: change-check
+    needs: [boxel-ui-test, host-test, realm-server-test, change-check]
     if: ${{ needs.change-check.outputs.boxel == 'true' }}
     runs-on: ubuntu-latest
     steps:
@@ -184,15 +221,53 @@ jobs:
     name: Deploy realm server to staging
     needs: deploy-host
     runs-on: ubuntu-latest
+    env:
+      WAYPOINT_SERVER_TLS: "1"
     steps:
       - uses: actions/checkout@v3
-      - name: Deploy ${{ matrix.app }}
-        uses: ./.github/actions/deploy-realm-server
+      - uses: volta-cli/action@v4
+
+      - name: Set up env
+        shell: bash
+        run: |
+          echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/waypoint" >> $GITHUB_ENV
+          echo "WAYPOINT_SERVER_ADDR=${{ secrets.STAGING_WAYPOINT_SERVER_ADDR }}" >> $GITHUB_ENV
+          echo "WAYPOINT_SERVER_TOKEN=${{ secrets.STAGING_WAYPOINT_SERVER_TOKEN }}" >> $GITHUB_ENV
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
         with:
-          app_name: realm-demo
-          environment: staging
-          discord_webhook: ${{ secrets.DISCORD_WEBHOOK }}
-          production_waypoint_server_token: ${{ secrets.PRODUCTION_WAYPOINT_SERVER_TOKEN }}
-          production_waypoint_server_address: ${{ secrets.PRODUCTION_WAYPOINT_SERVER_ADDR }}
-          staging_waypoint_server_token: ${{ secrets.STAGING_WAYPOINT_SERVER_TOKEN }}
-          staging_waypoint_server_address: ${{ secrets.STAGING_WAYPOINT_SERVER_ADDR }}
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Install Dependencies
+        shell: bash
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Waypoint
+        run: |
+          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
+          sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+          sudo apt-get install waypoint=0.8.1
+
+      - name: Deploy app
+        run: waypoint deploy -app=realm-demo -plain -release=false
+
+      - uses: ./.github/actions/waypoint-ecs-failsafe
+        with:
+          app: "realm-demo"
+
+      - name: Prune dangling resources
+        uses: ./.github/actions/waypoint-prune-dangling-resources
+        with:
+          app: "realm-demo"
+
+      - name: Send notification to Discord
+        if: ${{ always() }}
+        uses: ./.github/actions/discord-notification-deploy
+        with:
+          app: ${{ inputs.app }}
+          status: ${{ github.action_status }}
+          environment: ${{ inputs.environment }}
+          webhook: ${{ inputs.discord_webhook }}
+          is_ecs: "true"
