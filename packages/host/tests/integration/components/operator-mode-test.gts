@@ -1554,7 +1554,7 @@ module('Integration | operator-mode', function (hooks) {
       .includesText('Address');
 
     await click('[data-test-overlay-card-display-name="Address"] button');
-    await this.pauseTest();
+
     assert.dom('[data-test-stack-card-index]').exists({ count: 2 });
     assert
       .dom('[data-test-stack-card-index="1"] [data-test-boxel-header-title]')
