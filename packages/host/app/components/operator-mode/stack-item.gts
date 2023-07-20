@@ -362,11 +362,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
         overflow: auto;
       }
 
-      .content > .boxel-card-container.boundaries {
+      :global(.content > .boxel-card-container.boundaries) {
         box-shadow: none;
       }
 
-      .content > .boxel-card-container > header {
+      :global(.content > .boxel-card-container > header) {
         display: none;
       }
 
