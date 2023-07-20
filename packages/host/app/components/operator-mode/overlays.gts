@@ -28,10 +28,11 @@ export default class OperatorModeOverlays extends Component<Signature> {
     {{#each this.renderedCardWithEvents as |renderedCard|}}
       {{#let renderedCard.card (this.isSelected renderedCard.card) as |card isSelected|}}
         <div
-          class={{cn 'actions-overlay' selected=isSelected hovered=(getValueFromWeakMap this.isHoverOnCards renderedCard)}}
+          class={{cn 'actions-overlay' selected=isSelected hovered=(getValueFromWeakMap this.isHoverOnCard renderedCard)}}
           {{velcro renderedCard.element middleware=(Array this.offset)}}
           data-test-overlay-selected={{if isSelected card.id}}
         >
+          {{!-- Add mouseenter and mouseleave events to each button, so we can maintain the hover effect. --}}
           {{#if @toggleSelect}}
             <IconButton
               {{on 'click' (fn @toggleSelect card)}}
@@ -104,7 +105,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
     </style>
   </template>
 
-  @tracked isHoverOnCards = new TrackedWeakMap<RenderedLinksToCard, boolean>();
+  @tracked isHoverOnCard = new TrackedWeakMap<RenderedLinksToCard, boolean>();
   isEventsRegistered = new TrackedWeakMap<RenderedLinksToCard, boolean>();
 
   offset = {
@@ -124,15 +125,18 @@ export default class OperatorModeOverlays extends Component<Signature> {
     },
   };
 
+  // Since we disable pointer events of this overlay component,
+  // we register events on the underlying rendered card.
+  // This ensures that we can maintain the same hover and click effects.
   get renderedCardWithEvents() {
     let renderedCards = this.args.renderedLinksToCards;
     for (const renderedCard of renderedCards) {
       if (this.isEventsRegistered.get(renderedCard)) continue;
       renderedCard.element.addEventListener('mouseenter', (_e: MouseEvent) =>
-        this.isHoverOnCards.set(renderedCard, true)
+        this.isHoverOnCard.set(renderedCard, true)
       );
       renderedCard.element.addEventListener('mouseleave', (_e: MouseEvent) =>
-        this.isHoverOnCards.set(renderedCard, false)
+        this.isHoverOnCard.set(renderedCard, false)
       );
       renderedCard.element.addEventListener('click', (_e: MouseEvent) =>
         this.openOrSelectCard(renderedCard.card)
@@ -144,7 +148,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
   }
 
   setHoverOnCards = (renderedCard: RenderedLinksToCard, status: boolean) => {
-    this.isHoverOnCards.set(renderedCard, status);
+    this.isHoverOnCard.set(renderedCard, status);
   };
 
   @action openOrSelectCard(card: Card) {
