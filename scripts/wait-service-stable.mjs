@@ -136,9 +136,7 @@ function waitTargetInService(service) {
     throw 'Targets in target group are not healthy';
   }
 
-  console.log(
-    `-> All targets in target group are in service: ${targetGroupName}`
-  );
+  console.log(`-> Targets in target group are in service: ${targetGroupName}`);
 }
 
 function main() {
