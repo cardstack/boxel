@@ -142,7 +142,6 @@ jobs:
 
   change-check:
     name: Check which packages changed
-    needs: [boxel-ui-test, host-test, realm-server-test]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
