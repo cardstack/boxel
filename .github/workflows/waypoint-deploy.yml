@@ -73,7 +73,7 @@ jobs:
           pnpm install --frozen-lockfile
 
       - name: Deploy app
-        run: waypoint deploy -app=${{ inputs.app }} -plain
+        run: waypoint deploy -app=${{ inputs.app }} -plain -release=false
         env:
           WAYPOINT_SERVER_TLS: "1"
 
