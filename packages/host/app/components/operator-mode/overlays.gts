@@ -125,9 +125,13 @@ export default class OperatorModeOverlays extends Component<Signature> {
     },
   };
 
-  // Since we disable pointer events of this overlay component,
-  // we register events on the underlying rendered card.
-  // This ensures that we can maintain the same hover and click effects.
+  // Pointer events of this overlay component 
+  // will prevent pointer events on rendered cards.
+  // This might cause broken functionality in rendered cards,
+  // such as the inability to scroll through cards in the cards-grid.
+  // Therefore, we have decided to disable pointer events for this overlay component,
+  // and instead, we register events directly to the rendered cards.
+  // This way, we can maintain the same behavior of hovering and clicking.
   get renderedCardWithEvents() {
     let renderedCards = this.args.renderedLinksToCards;
     for (const renderedCard of renderedCards) {
