@@ -46,6 +46,7 @@ jobs:
         if: always()
         run: pnpm run lint
         working-directory: packages/realm-server
+
   boxel-motion-test:
     name: Boxel Motion Tests
     runs-on: ubuntu-latest
@@ -57,6 +58,7 @@ jobs:
       - name: Run Tests
         run: pnpm run test:ember
         working-directory: packages/boxel-motion-test-app
+
   boxel-ui-test:
     name: Boxel UI Tests
     runs-on: ubuntu-latest
@@ -68,6 +70,7 @@ jobs:
       - name: Run test suite
         run: pnpm test
         working-directory: packages/boxel-ui
+
   host-test:
     name: Host Tests
     runs-on: ubuntu-latest
@@ -89,6 +92,7 @@ jobs:
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
         working-directory: packages/host
+
   matrix-client-test:
     name: Matrix Client Tests
     runs-on: ubuntu-latest
@@ -117,6 +121,7 @@ jobs:
           name: playwright-report
           path: packages/matrix/playwright-report/
           retention-days: 30
+
   realm-server-test:
     name: Realm Server Tests
     runs-on: ubuntu-latest
@@ -218,7 +223,7 @@ jobs:
 
   deploy-realm-server:
     name: Deploy realm server to staging
-    needs: deploy-host
+    needs: [deploy-host, build-realm-server]
     runs-on: ubuntu-latest
     env:
       WAYPOINT_SERVER_TLS: "1"
