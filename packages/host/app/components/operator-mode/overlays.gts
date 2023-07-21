@@ -71,23 +71,23 @@ export default class OperatorModeOverlays extends Component<Signature> {
             <IconButton
               {{! @glint-ignore (glint thinks toggleSelect is not in this scope but it actually is - we check for it in the condition above) }}
               {{on 'click' (fn @toggleSelect card)}}
-              {{on 'mouseenter' (fn this.setCurrentlyHoverCard renderedCard)}}
-              {{on 'mouseleave' (fn this.setCurrentlyHoverCard null)}}
+              {{on 'mouseenter' (fn this.setCurrentlyHoveredCard renderedCard)}}
+              {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
               class='hover-button select'
               @icon={{if isSelected 'icon-circle-selected' 'icon-circle'}}
               aria-label='select card'
               data-test-overlay-select={{card.id}}
             />
             <IconButton
-              {{on 'mouseenter' (fn this.setCurrentlyHoverCard renderedCard)}}
-              {{on 'mouseleave' (fn this.setCurrentlyHoverCard null)}}
+              {{on 'mouseenter' (fn this.setCurrentlyHoveredCard renderedCard)}}
+              {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
               class='hover-button preview'
               @icon='eye'
               aria-label='preview card'
             />
             <IconButton
-              {{on 'mouseenter' (fn this.setCurrentlyHoverCard renderedCard)}}
-              {{on 'mouseleave' (fn this.setCurrentlyHoverCard null)}}
+              {{on 'mouseenter' (fn this.setCurrentlyHoveredCard renderedCard)}}
+              {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
               class='hover-button more-actions'
               @icon='more-actions'
               aria-label='more actions'
@@ -216,7 +216,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
     return renderedCards;
   }
 
-  setCurrentlyHoverCard = (
+  setCurrentlyHoveredCard = (
     renderedCard: RenderedCardForOverlayActions | null
   ) => {
     this.currentlyHoveredCard = renderedCard;
