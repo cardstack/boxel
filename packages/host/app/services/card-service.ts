@@ -186,6 +186,10 @@ export default class CardService extends Service {
     return this.api.primitive in card;
   }
 
+  isCard(maybeCard: any): maybeCard is Card {
+    return this.api.isCard(maybeCard);
+  }
+
   async getRealmInfo(card: Card): Promise<RealmInfo | undefined> {
     await this.apiModule.loaded;
     return card[this.api.realmInfo];

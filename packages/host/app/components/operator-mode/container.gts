@@ -4,15 +4,13 @@ import { Card, Format } from 'https://cardstack.com/base/card-api';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { trackedFunction } from 'ember-resources/util/function';
-import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
-import type CardService from '@cardstack/host/services/card-service';
-
+import CardCatalogModal from '../card-catalog-modal';
+import type CardService from '../..//services/card-service';
+import get from 'lodash/get';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { Modal, IconButton } from '@cardstack/boxel-ui';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
-import SearchSheet, {
-  SearchSheetMode,
-} from '@cardstack/host/components/search-sheet';
+import SearchSheet, { SearchSheetMode } from '../search-sheet';
 import { restartableTask } from 'ember-concurrency';
 import {
   Deferred,
@@ -23,7 +21,7 @@ import {
   LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
-import type LoaderService from '@cardstack/host/services/loader-service';
+import type LoaderService from '../../services/loader-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
@@ -35,8 +33,8 @@ import {
 } from '@cardstack/host/resources/search';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import perform from 'ember-concurrency/helpers/perform';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import OperatorModeStack from '@cardstack/host/components/operator-mode/stack';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import OperatorModeStack from './stack';
 import type MatrixService from '../../services/matrix-service';
 import ChatSidebar from '../matrix/chat-sidebar';
 
@@ -46,21 +44,33 @@ interface Signature {
   };
 }
 
-export type OperatorModeState = {
+export interface OperatorModeState {
   stacks: Stack[];
-};
+}
 
-export type Stack = {
+export interface Stack {
   items: StackItem[];
-};
+}
 
-export type StackItem = {
-  card: Card;
+interface BaseItem {
   format: Format;
   request?: Deferred<Card>;
-  isLinkedCard?: boolean;
   stackIndex: number;
-};
+}
+
+export interface CardStackItem extends BaseItem {
+  type: 'card';
+  card: Card;
+  isLinkedCard?: boolean; // TODO unsure if this is necessary
+}
+
+export interface ContainedCardStackItem extends BaseItem {
+  type: 'contained';
+  fieldOfIndex: number; // index of the item in the stack that this is a field of
+  fieldName: string;
+}
+
+export type StackItem = CardStackItem | ContainedCardStackItem;
 
 enum SearchSheetTrigger {
   DropCardToLeftNeighborStackButton = 'drop-card-to-left-neighbor-stack-button',
@@ -128,6 +138,19 @@ export default class OperatorModeContainer extends Component<Signature> {
     return await this.operatorModeStateService.constructRecentCards();
   });
 
+  private getAddressableCard(item: StackItem): Card {
+    return getCardStackItem(item, this.stacks[item.stackIndex].items).card;
+  }
+
+  private getCard(item: StackItem): Card {
+    let card = this.getAddressableCard(item);
+    let path = getPathToStackItem(item, this.stacks[item.stackIndex].items);
+    if (path.length === 0) {
+      return card;
+    }
+    return get(card, path.join('.'));
+  }
+
   @action onCancelSearchSheet() {
     this.searchSheetMode = SearchSheetMode.Closed;
     this.searchSheetTrigger = null;
@@ -138,7 +161,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   @action async edit(item: StackItem) {
-    await this.saveCardFieldValues(item.card);
+    await this.saveCardFieldValues(this.getCard(item));
     this.updateItem(item, 'edit', new Deferred());
   }
 
@@ -147,45 +170,42 @@ export default class OperatorModeContainer extends Component<Signature> {
     format: Format,
     request?: Deferred<Card>
   ) {
-    let newItem = {
-      card: item.card,
-      format,
+    return this.operatorModeStateService.replaceItemInStack(
+      item,
+      this.getAddressableCard(item),
       request,
-      stackIndex: item.stackIndex,
-    };
-
-    this.replaceItemInStack(item, newItem);
-
-    return newItem;
+      format
+    );
   }
 
   @action async close(item: StackItem) {
-    await this.rollbackCardFieldValues(item.card);
+    await this.rollbackCardFieldValues(this.getCard(item));
 
     this.operatorModeStateService.removeItemFromStack(item);
   }
 
   @action async cancel(item: StackItem) {
-    await this.rollbackCardFieldValues(item.card);
+    await this.rollbackCardFieldValues(this.getCard(item));
     this.updateItem(item, 'isolated');
   }
 
   @action async save(item: StackItem) {
-    let { card, request, isLinkedCard } = item;
-    await this.saveCardFieldValues(card);
-    let updatedCard = await this.write.perform(card);
+    let { request } = item;
+    await this.saveCardFieldValues(this.getCard(item));
+    let updatedCard = await this.write.perform(this.getAddressableCard(item));
 
     if (updatedCard) {
       request?.fulfill(updatedCard);
 
-      if (isLinkedCard) {
+      if (item.type === 'card' && item.isLinkedCard) {
         this.close(item); // closes the 'create new card' editor for linked card fields
       } else {
-        this.replaceItemInStack(item, {
-          card: updatedCard,
-          format: 'isolated',
-          stackIndex: item.stackIndex,
-        });
+        this.operatorModeStateService.replaceItemInStack(
+          item,
+          updatedCard,
+          item.request,
+          'isolated'
+        );
       }
     }
   }
@@ -193,10 +213,6 @@ export default class OperatorModeContainer extends Component<Signature> {
   // TODO: Implement remove card function
   @action async delete(item: StackItem) {
     await this.close(item);
-  }
-
-  replaceItemInStack(item: StackItem, newItem: StackItem) {
-    this.operatorModeStateService.replaceItemInStack(item, newItem);
   }
 
   private write = restartableTask(async (card: Card) => {
@@ -254,6 +270,7 @@ export default class OperatorModeContainer extends Component<Signature> {
           new URL(realmPath.url)
         );
         let newItem: StackItem = {
+          type: 'card',
           card: newCard,
           format: 'edit',
           request: new Deferred(),
@@ -264,7 +281,12 @@ export default class OperatorModeContainer extends Component<Signature> {
         return await newItem.request?.promise;
       },
       viewCard: (card: Card) => {
-        return here.addToStack({ card, format: 'isolated', stackIndex });
+        return here.addToStack({
+          type: 'card',
+          card,
+          format: 'isolated',
+          stackIndex,
+        });
       },
       createCardDirectly: async (
         doc: LooseSingleCardDocument,
@@ -277,6 +299,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         );
         await here.cardService.saveModel(newCard);
         let newItem: StackItem = {
+          type: 'card',
           card: newCard,
           format: 'isolated',
           stackIndex,
@@ -316,6 +339,7 @@ export default class OperatorModeContainer extends Component<Signature> {
 
     if (chosenCard) {
       let newItem: StackItem = {
+        type: 'card',
         card: chosenCard,
         format: 'isolated',
         stackIndex: 0, // This is called when there are no cards in the stack left, so we can assume the stackIndex is 0
@@ -324,12 +348,20 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   });
 
-  // For now use the background from the 1st stack, but eventually, each stack to have its own background URL
+  // For now use the background from the 1st stack, but eventually, each stack
+  // to have its own background URL. Also need to consider how to treat adjoining
+  // stacks that have the same background image (consider 4 stacks, where 2
+  // adjacent stacks have the same background image)
   fetchBackgroundImageURL = trackedFunction(this, async () => {
-    let mostBottomCard = this.stacks[0]?.items[0]?.card;
+    let bottomMostCard = this.stacks[0]?.items[0];
     let realmInfo;
-    if (mostBottomCard) {
-      realmInfo = await this.cardService.getRealmInfo(mostBottomCard);
+    if (bottomMostCard) {
+      if (bottomMostCard.type !== 'card') {
+        throw new Error(
+          `bug: the bottom most card for a stack cannot be a contained card`
+        );
+      }
+      realmInfo = await this.cardService.getRealmInfo(bottomMostCard.card);
     }
     return realmInfo?.backgroundURL;
   });
@@ -361,22 +393,28 @@ export default class OperatorModeContainer extends Component<Signature> {
       searchSheetTrigger ===
       SearchSheetTrigger.DropCardToLeftNeighborStackButton
     ) {
-      let stackItem: StackItem = {
+      // shift all stacks over so that we don't alter the fieldOfIndex for any of the contained cards
+      for (
+        let stackIndex = this.operatorModeStateService.state.stacks.length - 1;
+        stackIndex >= 0;
+        stackIndex--
+      ) {
+        let currentStackItems =
+          this.operatorModeStateService.state.stacks[stackIndex].items;
+        currentStackItems.forEach((item) => {
+          this.operatorModeStateService.replaceItemInStack(item, {
+            ...item,
+            stackIndex: stackIndex + 1,
+          });
+        });
+      }
+
+      let stackItem: CardStackItem = {
+        type: 'card',
         card,
         format: 'isolated',
         stackIndex: 0,
       };
-
-      let currentStackItems =
-        this.operatorModeStateService.state.stacks[0].items;
-
-      currentStackItems.forEach((item) => {
-        this.operatorModeStateService.replaceItemInStack(item, {
-          ...item,
-          stackIndex: 1,
-        });
-      });
-
       this.operatorModeStateService.addItemToStack(stackItem);
 
       // In case the right button was clicked, the card will be added to stack with index 1.
@@ -385,9 +423,10 @@ export default class OperatorModeContainer extends Component<Signature> {
       SearchSheetTrigger.DropCardToRightNeighborStackButton
     ) {
       this.operatorModeStateService.addItemToStack({
+        type: 'card',
         card,
         format: 'isolated',
-        stackIndex: 1,
+        stackIndex: this.operatorModeStateService.state.stacks.length,
       });
     }
 
@@ -623,6 +662,35 @@ export default class OperatorModeContainer extends Component<Signature> {
 
     </style>
   </template>
+}
+
+export function getCardStackItem(
+  stackItem: StackItem,
+  stackItems: StackItem[]
+): CardStackItem {
+  if (stackItem.type === 'card') {
+    return stackItem;
+  }
+  if (stackItem.fieldOfIndex >= stackItems.length) {
+    throw new Error(
+      `bug: the stack item (index ${stackItem.fieldOfIndex}) that is the parent of the contained field '${stackItem.fieldName}' no longer exists in the stack`
+    );
+  }
+  return getCardStackItem(stackItems[stackItem.fieldOfIndex], stackItems);
+}
+
+export function getPathToStackItem(
+  stackItem: StackItem,
+  stackItems: StackItem[],
+  segments: string[] = []
+): string[] {
+  if (stackItem.type === 'card') {
+    return segments;
+  }
+  return getPathToStackItem(stackItems[stackItem.fieldOfIndex], stackItems, [
+    stackItem.fieldName,
+    ...segments,
+  ]);
 }
 
 declare module '@glint/environment-ember-loose/registry' {
