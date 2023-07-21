@@ -141,12 +141,14 @@ module('Integration | operator-mode', function (hooks) {
           @field country = contains(StringCard);
           static embedded = class Embedded extends Component<typeof this> {
             <template>
-              <h3 data-test-city={{@model.city}}>
-                <@fields.city/>
-              </h3>
-              <h3 data-test-country={{@model.country}}>
-                <@fields.country/>
-              </h3>
+              <div data-test-address>
+                <h3 data-test-city={{@model.city}}>
+                  <@fields.city/>
+                </h3>
+                <h3 data-test-country={{@model.country}}>
+                  <@fields.country/>
+                </h3>
+              </div>
             </template>
           }
 
@@ -1553,7 +1555,7 @@ module('Integration | operator-mode', function (hooks) {
       )
       .includesText('Address');
 
-    await click('[data-test-overlay-card-display-name="Address"] button');
+    await click('[data-test-address]');
 
     assert.dom('[data-test-stack-card-index]').exists({ count: 2 });
     assert
