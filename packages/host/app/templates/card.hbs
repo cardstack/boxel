@@ -1,19 +1,25 @@
-<div class="card-isolated-component">
+<div class='card-isolated-component'>
   <this.getIsolatedComponent />
 </div>
 
 <Editor::CodeLink />
 
 {{on-key 'Ctrl+.' this.toggleOperatorMode}}
-{{!-- Ctrl+. doesn't work in ubuntu --}}
+{{! Ctrl+. doesn't work in ubuntu }}
 {{on-key 'Ctrl+,' this.toggleOperatorMode}}
 
 {{#if this.operatorModeEnabled}}
   {{#if this.model}}
-    <OperatorMode::Container
-      @onClose={{this.closeOperatorMode}}
-    />
+    <OperatorMode::Container @onClose={{this.closeOperatorMode}} />
   {{/if}}
 {{/if}}
 
 {{outlet}}
+
+{{! template-lint-disable no-inline-styles }}
+{{!-- hidden button to toggle operator mode for tests --}}
+<button
+  data-test-operator-mode-btn
+  style="position: fixed; left: -100px; opacity: 0;"
+  {{on 'click' this.toggleOperatorMode}}
+>Operator mode</button>

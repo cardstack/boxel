@@ -26,7 +26,6 @@
       "@cardstack/host/tests/*": ["tests/*"],
       "@cardstack/host/*": ["app/*"],
       "https://cardstack.com/base/*": ["../base/*"],
-      "cards": ["../demo-cards/*"],
       "*": ["types/*"],
       "//cdn.skypack.dev/lodash": ["node_modules/@types/lodash"],
       "@cardstack/boxel-ui": ["../boxel-ui/addon"],
@@ -38,7 +37,8 @@
     "environment": ["ember-loose", "ember-template-imports"],
     "transform": {
       "include": [
-        "../demo-cards/**",
+        "../drafts-realm/**",
+        "../published-realm/**",
         "../base/**",
         "../boxel-ui/addon/**",
         "app/**",
@@ -48,7 +48,8 @@
   },
   "include": [
     "../base/**/*",
-    "../demo-cards/**/*",
+    "../drafts-realm/**/*",
+    "../published-realm/**",
     "../boxel-ui/addon/*",
     "app/**/*",
     "tests/**/*",

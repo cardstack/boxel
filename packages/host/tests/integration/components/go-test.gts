@@ -26,6 +26,7 @@ import CardPrerender from '@cardstack/host/components/card-prerender';
 import type * as monaco from 'monaco-editor';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
 import { shimExternals } from '@cardstack/host/lib/externals';
+import MonacoService from '@cardstack/host/services/monaco-service';
 
 const cardContent = `
 import { contains, field, Card, linksTo } from "https://cardstack.com/base/card-api";
@@ -57,6 +58,7 @@ class FailingTestRealmAdapter extends TestRealmAdapter {
 module('Integration | Component | go', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
+  let monacoService: MonacoService;
 
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
@@ -78,6 +80,10 @@ module('Integration | Component | go', function (hooks) {
     hooks.beforeEach(async function () {
       adapter = new TestRealmAdapter({ 'person.gts': cardContent });
       realm = await TestRealm.createWithAdapter(adapter, this.owner);
+      monacoService = this.owner.lookup(
+        'service:monaco-service'
+      ) as MonacoService;
+      await monacoService.ready;
       await realm.ready;
     });
 
@@ -101,13 +107,18 @@ module('Integration | Component | go', function (hooks) {
       ) {
         editor = receivedEditor;
       };
+      let monacoContext = {
+        sdk: monacoService.sdk,
+        language: 'plaintext',
+        onEditorSetup,
+      };
 
       await render(<template>
         <Go
           @path={{path}}
           @openFile={{openFile}}
           @openDirs={{openDirs}}
-          @onEditorSetup={{onEditorSetup}}
+          @monacoContext={{monacoContext}}
         />
         <CardPrerender />
       </template>);
@@ -115,6 +126,9 @@ module('Integration | Component | go', function (hooks) {
       assert
         .dom('[data-test-last-edit]')
         .hasText(`Last edit was ${moment(lastModified).fromNow()}`);
+      assert
+        .dom('[data-test-editor-lang]')
+        .hasText(`Lang: ${monacoContext.language}`);
 
       waitUntil(() =>
         find('[data-test-editor]')!.innerHTML?.includes('Person')
@@ -174,12 +188,18 @@ module('Integration | Component | go', function (hooks) {
         editor = receivedEditor;
       };
 
+      let monacoContext = {
+        sdk: monacoService.sdk,
+        language: 'plaintext',
+        onEditorSetup,
+      };
+
       await render(<template>
         <Go
           @path={{path}}
           @openFile={{openFile}}
           @openDirs={{openDirs}}
-          @onEditorSetup={{onEditorSetup}}
+          @monacoContext={{monacoContext}}
         />
         <CardPrerender />
       </template>);

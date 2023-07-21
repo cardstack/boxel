@@ -26,8 +26,8 @@ export default class Login extends Component {
     {{#if this.doLogin.isRunning}}
       <LoadingIndicator />
     {{else}}
-      <fieldset>
-        <FieldContainer @label='Username:' @tag='label'>
+      <div class='login'>
+        <FieldContainer @label='Username:' @tag='label' class='login__field'>
           <BoxelInput
             data-test-username-field
             type='text'
@@ -35,7 +35,7 @@ export default class Login extends Component {
             @onInput={{this.setUsername}}
           />
         </FieldContainer>
-        <FieldContainer @label='Password:' @tag='label'>
+        <FieldContainer @label='Password:' @tag='label' class='login__field'>
           <BoxelInput
             data-test-password-field
             type='password'
@@ -44,13 +44,30 @@ export default class Login extends Component {
           />
         </FieldContainer>
         <Button
+          class='login__button'
           data-test-login-btn
           @kind='primary'
           @disabled={{this.isLoginButtonDisabled}}
           {{on 'click' this.login}}
         >Login</Button>
-      </fieldset>
+      </div>
     {{/if}}
+
+    <style>
+      .login {
+        padding: var(--boxel-sp);
+      }
+      .login__field {
+        margin-top: var(--boxel-sp-sm);
+      }
+      .login__button {
+        margin-top: var(--boxel-sp-sm);
+        margin-right: var(--boxel-sp);
+        position: absolute;
+        right: var(--boxel-sp);
+      }
+
+    </style>
   </template>
 
   @tracked private error: string | undefined;

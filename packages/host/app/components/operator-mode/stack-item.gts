@@ -14,7 +14,13 @@ import type CardService from '@cardstack/host/services/card-service';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import optional from '@cardstack/boxel-ui/helpers/optional';
 import cn from '@cardstack/boxel-ui/helpers/cn';
-import { IconButton, Header, CardContainer, Button } from '@cardstack/boxel-ui';
+import {
+  IconButton,
+  Header,
+  CardContainer,
+  Button,
+  Tooltip,
+} from '@cardstack/boxel-ui';
 import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import { service } from '@ember/service';
@@ -47,9 +53,10 @@ interface Signature {
   };
 }
 
-export interface RenderedLinksToCard {
+export interface RenderedCardForOverlayActions {
   element: HTMLElement;
   card: Card;
+  fieldType: FieldType | undefined;
 }
 
 export default class OperatorModeStackItem extends Component<Signature> {
@@ -63,20 +70,22 @@ export default class OperatorModeStackItem extends Component<Signature> {
     fieldType: FieldType | undefined;
   }>();
 
-  get renderedLinksToCards(): RenderedLinksToCard[] {
+  get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
     return (
       this.cardTracker.elements
         .filter((entry) => {
           return (
             entry.meta.format === 'data' ||
             entry.meta.fieldType === 'linksTo' ||
-            entry.meta.fieldType === 'linksToMany'
+            entry.meta.fieldType === 'linksToMany' ||
+            entry.meta.fieldType === 'contains'
           );
         })
         // this mapping could probably be eliminated or simplified if we refactor OperatorModeOverlays to accept our type
         .map((entry) => ({
           element: entry.element,
           card: entry.meta.card,
+          fieldType: entry.meta.fieldType,
         }))
     );
   }
@@ -176,8 +185,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
           style={{cssVar
             boxel-header-icon-width='30px'
             boxel-header-icon-height='30px'
-            boxel-header-text-size=(if this.isHoverOnRealmIcon 'var(--boxel-font)' 'var(--boxel-font-lg)')
-            boxel-header-text-color=(if this.isHoverOnRealmIcon 'var(--boxel-teal)' 'var(--boxel-dark)')
+            boxel-header-text-size=(if
+              this.isHoverOnRealmIcon 'var(--boxel-font)' 'var(--boxel-font-lg)'
+            )
+            boxel-header-text-color=(if
+              this.isHoverOnRealmIcon 'var(--boxel-teal)' 'var(--boxel-dark)'
+            )
             boxel-header-padding='var(--boxel-sp-xs) var(--boxel-sp)'
             boxel-header-action-padding='var(--boxel-sp-xs) var(--boxel-sp)'
           }}
@@ -185,41 +198,59 @@ export default class OperatorModeStackItem extends Component<Signature> {
         >
           <:actions>
             {{#if (eq @item.format 'isolated')}}
-              <IconButton
-                @icon='icon-pencil'
-                @width='24px'
-                @height='24px'
-                @tooltip='Edit'
-                class='icon-button'
-                aria-label='Edit'
-                {{on 'click' (fn @edit @item)}}
-                data-test-edit-button
-              />
+              <Tooltip @placement='top'>
+                <:trigger>
+                  <IconButton
+                    @icon='icon-pencil'
+                    @width='24px'
+                    @height='24px'
+                    class='icon-button'
+                    aria-label='Edit'
+                    {{on 'click' (fn @edit @item)}}
+                    data-test-edit-button
+                  />
+                </:trigger>
+                <:content>
+                  Edit
+                </:content>
+              </Tooltip>
             {{else}}
-              <IconButton
-                  @icon='icon-pencil'
-                  @width='24px'
-                  @height='24px'
-                  @tooltip='Finish Editing'
-                  class='icon-save'
-                  aria-label='Finish Editing'
-                  {{on 'click' (fn @save @item)}}
-                  data-test-edit-button
-                />
+              <Tooltip @placement='top'>
+                <:trigger>
+                  <IconButton
+                    @icon='icon-pencil'
+                    @width='24px'
+                    @height='24px'
+                    class='icon-save'
+                    aria-label='Finish Editing'
+                    {{on 'click' (fn @save @item)}}
+                    data-test-edit-button
+                  />
+                </:trigger>
+                <:content>
+                  Finish Editing
+                </:content>
+              </Tooltip>
             {{/if}}
             <div>
               <BoxelDropdown>
                 <:trigger as |bindings|>
-                  <IconButton
-                    @icon='icon-horizontal-three-dots'
-                    @width='20px'
-                    @height='20px'
-                    @tooltip='More Options'
-                    class='icon-button'
-                    aria-label='Options'
-                    data-test-more-options-button
-                    {{bindings}}
-                  />
+                  <Tooltip @placement='top'>
+                    <:trigger>
+                      <IconButton
+                        @icon='icon-horizontal-three-dots'
+                        @width='20px'
+                        @height='20px'
+                        class='icon-button'
+                        aria-label='Options'
+                        data-test-more-options-button
+                        {{bindings}}
+                      />
+                    </:trigger>
+                    <:content>
+                      More Options
+                    </:content>
+                  </Tooltip>
                 </:trigger>
                 <:content as |dd|>
                   <BoxelMenu
@@ -243,21 +274,27 @@ export default class OperatorModeStackItem extends Component<Signature> {
                           icon='icon-link'
                         )
                       )
-                  }}
-                />
+                    }}
+                  />
                 </:content>
               </BoxelDropdown>
             </div>
-            <IconButton
-              @icon='icon-x'
-              @width='20px'
-              @height='20px'
-              @tooltip={{if (eq @item.format 'isolated') 'Close' 'Cancel & Close'}}
-              class='icon-button'
-              aria-label='Close'
-              {{on 'click' (fn @close @item)}}
-              data-test-close-button
-            />
+            <Tooltip @placement='top'>
+              <:trigger>
+                <IconButton
+                  @icon='icon-x'
+                  @width='20px'
+                  @height='20px'
+                  class='icon-button'
+                  aria-label='Close'
+                  {{on 'click' (fn @close @item)}}
+                  data-test-close-button
+                />
+              </:trigger>
+              <:content>
+                {{if (eq @item.format 'isolated') 'Close' 'Cancel & Close'}}
+              </:content>
+            </Tooltip>
           </:actions>
         </Header>
         <div class='content'>
@@ -267,7 +304,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             @context={{this.context}}
           />
           <OperatorModeOverlays
-            @renderedLinksToCards={{this.renderedLinksToCards}}
+            @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
             @publicAPI={{@publicAPI}}
             @toggleSelect={{this.toggleSelect}}
             @selectedCards={{this.selectedCards}}
@@ -305,6 +342,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
         --buried-operator-mode-header-height: 2.5rem;
       }
 
+      .header {
+        z-index: 1;
+        background: var(--boxel-light);
+      }
+
       .item {
         justify-self: center;
         position: absolute;
@@ -316,7 +358,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .card {
-        position: relative; 
+        position: relative;
         height: 100%;
         display: grid;
         grid-template-rows: 3.5rem auto;
@@ -328,11 +370,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
         overflow: auto;
       }
 
-      .content > .boxel-card-container.boundaries {
+      :global(.content > .boxel-card-container.boundaries) {
         box-shadow: none;
       }
 
-      .content > .boxel-card-container > header {
+      :global(.content > .boxel-card-container > header) {
         display: none;
       }
 
@@ -433,6 +475,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       .icon-save:hover {
         --icon-bg: var(--boxel-dark);
       }
+
     </style>
   </template>
 }

@@ -4,6 +4,7 @@ import {
   type MatrixClient,
   type IEvent,
 } from 'matrix-js-sdk';
+import type * as MatrixSDK from 'matrix-js-sdk';
 import type {
   RoomCard,
   MatrixEvent as DiscreteMatrixEvent,
@@ -11,7 +12,6 @@ import type {
 import type { RoomObjectiveCard } from 'https://cardstack.com/base/room-objective';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { type LooseCardResource, baseRealm } from '@cardstack/runtime-common';
-import type * as MatrixSDK from 'matrix-js-sdk';
 
 export * as Membership from './membership';
 export * as Timeline from './timeline';
