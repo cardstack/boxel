@@ -201,7 +201,7 @@ jobs:
         run: |
           curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
           sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
-          sudo apt-get install waypoint=${{ inputs.waypoint_version }}
+          sudo apt-get install waypoint=0.8.1
 
       - name: Build app
         run: waypoint build -app=realm-demo -plain -push
@@ -270,8 +270,8 @@ jobs:
         if: ${{ always() }}
         uses: ./.github/actions/discord-notification-deploy
         with:
-          app: ${{ inputs.app }}
+          app: "realm-demo"
           status: ${{ github.action_status }}
-          environment: ${{ inputs.environment }}
-          webhook: ${{ inputs.discord_webhook }}
+          environment: "staging"
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
           is_ecs: "true"
