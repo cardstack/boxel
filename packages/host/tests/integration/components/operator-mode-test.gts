@@ -141,12 +141,14 @@ module('Integration | operator-mode', function (hooks) {
           @field country = contains(StringCard);
           static embedded = class Embedded extends Component<typeof this> {
             <template>
-              <h3 data-test-city={{@model.city}}>
-                <@fields.city/>
-              </h3>
-              <h3 data-test-country={{@model.country}}>
-                <@fields.country/>
-              </h3>
+              <div data-test-address>
+                <h3 data-test-city={{@model.city}}>
+                  <@fields.city/>
+                </h3>
+                <h3 data-test-country={{@model.country}}>
+                  <@fields.country/>
+                </h3>
+              </div>
             </template>
           }
 
@@ -1534,5 +1536,30 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-more-options-button]');
     await click('[data-test-boxel-menu-item-text="Copy Card URL"]');
     assert.dom('[data-test-boxel-menu-item]').doesNotExist();
+  });
+
+  test(`composite "contains one" field has an overlay header and click on the contains card will open it on the stack`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    assert
+      .dom(
+        '[data-test-overlay-card-display-name="Address"] [data-test-overlay-header]'
+      )
+      .includesText('Address');
+
+    await click('[data-test-address]');
+
+    assert.dom('[data-test-stack-card-index]').exists({ count: 2 });
+    assert
+      .dom('[data-test-stack-card-index="1"] [data-test-boxel-header-title]')
+      .includesText('Address');
   });
 });
