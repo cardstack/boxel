@@ -200,5 +200,5 @@ jobs:
     uses: ./.github/workflows/waypoint-deploy.yml
     secrets: inherit
     with:
-      app: "realm-demp"
+      app: "realm-demo"
       environment: "staging"

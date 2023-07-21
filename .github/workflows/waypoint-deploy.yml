@@ -63,7 +63,7 @@ jobs:
           sudo apt-get install waypoint=${{ inputs.waypoint_version }}
 
       - name: Deploy app
-        run: waypoint deploy -app=${{ inputs.app }} -plain -release=false
+        run: waypoint deploy -app=${{ inputs.app }} -plain -local
         env:
           WAYPOINT_SERVER_TLS: "1"
 

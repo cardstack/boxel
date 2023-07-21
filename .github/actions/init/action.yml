@@ -26,3 +26,7 @@ runs:
     - name: Install Dependencies
       shell: bash
       run: pnpm install --frozen-lockfile
+
+    - name: Prune pnpm store
+      shell: bash
+      run: pnpm store prune
