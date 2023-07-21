@@ -26,6 +26,8 @@ jobs:
     name: Deploy
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v3
+
       - name: Init
         uses: ./.github/actions/init
 
