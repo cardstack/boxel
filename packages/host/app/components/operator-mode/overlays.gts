@@ -10,6 +10,9 @@ import cn from '@cardstack/boxel-ui/helpers/cn';
 import { type TrackedArray } from 'tracked-built-ins';
 import type { MiddlewareState } from '@floating-ui/dom';
 import type { Card } from 'https://cardstack.com/base/card-api';
+import { tracked } from '@glimmer/tracking';
+import { TrackedWeakMap } from 'tracked-built-ins';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 interface Signature {
   Args: {
@@ -22,22 +25,19 @@ interface Signature {
 
 export default class OperatorModeOverlays extends Component<Signature> {
   <template>
-    {{#each @renderedLinksToCards as |renderedCard|}}
+    {{#each this.renderedCardWithEvents as |renderedCard|}}
       {{#let renderedCard.card (this.isSelected renderedCard.card) as |card isSelected|}}
         <div
-          class={{cn 'actions-overlay' selected=isSelected}}
+          class={{cn 'actions-overlay' selected=isSelected hovered=(eq this.currentlyHoveredCard renderedCard)}}
           {{velcro renderedCard.element middleware=(Array this.offset)}}
           data-test-overlay-selected={{if isSelected card.id}}
         >
-          <button
-            {{on 'click' (fn this.openOrSelectCard card)}}
-            class='overlay-button'
-            aria-label='open card'
-            data-test-overlay-button={{card.id}}
-          />
+          {{!-- Add mouseenter and mouseleave events to each button, so we can maintain the hover effect. --}}
           {{#if @toggleSelect}}
             <IconButton
               {{on 'click' (fn @toggleSelect card)}}
+              {{on 'mouseenter' (fn this.setCurrentlyHoverCard renderedCard)}}
+              {{on 'mouseleave' (fn this.setCurrentlyHoverCard null)}}
               class='hover-button select'
               @icon={{if isSelected 'icon-circle-selected' 'icon-circle'}}
               aria-label='select card'
@@ -45,11 +45,15 @@ export default class OperatorModeOverlays extends Component<Signature> {
             />
           {{/if}}
           <IconButton
+            {{on 'mouseenter' (fn this.setCurrentlyHoverCard renderedCard)}}
+            {{on 'mouseleave' (fn this.setCurrentlyHoverCard null)}}
             class='hover-button preview'
             @icon='eye'
             aria-label='preview card'
           />
           <IconButton
+            {{on 'mouseenter' (fn this.setCurrentlyHoverCard renderedCard)}}
+            {{on 'mouseleave' (fn this.setCurrentlyHoverCard null)}}
             class='hover-button more-actions'
             @icon='more-actions'
             aria-label='more actions'
@@ -60,35 +64,23 @@ export default class OperatorModeOverlays extends Component<Signature> {
     <style>
       .actions-overlay {
         border-radius: var(--boxel-border-radius);
-      }
-      .actions-overlay:hover {
-        cursor: pointer;
-      }
-      .actions-overlay:hover {
-        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.16);
+        pointer-events: none;
       }
       .actions-overlay.selected {
         box-shadow: 0 0 0 2px var(--boxel-highlight);
       }
-      .overlay-button {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: none;
-        border: none;
-        border-radius: inherit;
-        padding: 0;
+      .hovered {
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.16);
       }
       .hover-button {
         display: none;
         position: absolute;
         width: 30px;
         height: 30px;
+        pointer-events: auto;
       }
-      .actions-overlay:hover > .hover-button:not(:disabled),
-      .actions-overlay.selected > .hover-button.select {
+      .hovered > .hover-button:not(:disabled),
+      .hovered > .hover-button.select {
         display: block;
       }
       .hover-button:not(:disabled):hover {
@@ -113,6 +105,9 @@ export default class OperatorModeOverlays extends Component<Signature> {
     </style>
   </template>
 
+  @tracked currentlyHoveredCard: RenderedLinksToCard | null = null;
+  areEventsRegistered = new TrackedWeakMap<RenderedLinksToCard, boolean>();
+
   offset = {
     name: 'offset',
     fn: (state: MiddlewareState) => {
@@ -122,12 +117,44 @@ export default class OperatorModeOverlays extends Component<Signature> {
 
       floating.style.width = width + 'px';
       floating.style.height = height + 'px';
-
+      floating.style.position = 'absolute';
       return {
         x: rects.reference.x,
         y: rects.reference.y,
       };
     },
+  };
+
+  // Pointer events of this overlay component 
+  // will prevent pointer events on rendered cards.
+  // This might cause broken functionality in rendered cards,
+  // such as the inability to scroll through cards in the cards-grid.
+  // Therefore, we have decided to disable pointer events for this overlay component,
+  // and instead, we register events directly to the rendered cards.
+  // This way, we can maintain the same behavior of hovering and clicking.
+  get renderedCardWithEvents() {
+    let renderedCards = this.args.renderedLinksToCards;
+    for (const renderedCard of renderedCards) {
+      if (this.areEventsRegistered.get(renderedCard)) continue;
+      renderedCard.element.addEventListener(
+        'mouseenter',
+        (_e: MouseEvent) => (this.currentlyHoveredCard = renderedCard)
+      );
+      renderedCard.element.addEventListener(
+        'mouseleave',
+        (_e: MouseEvent) => (this.currentlyHoveredCard = null)
+      );
+      renderedCard.element.addEventListener('click', (_e: MouseEvent) =>
+        this.openOrSelectCard(renderedCard.card)
+      );
+      renderedCard.element.style.cursor = 'pointer';
+    }
+
+    return renderedCards;
+  }
+
+  setCurrentlyHoverCard = (renderedCard: RenderedLinksToCard | null) => {
+    this.currentlyHoveredCard = renderedCard;
   };
 
   @action openOrSelectCard(card: Card) {
