@@ -68,6 +68,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
             (and (bool @toggleSelect) (not (this.isEmbeddedCard renderedCard)))
           }}
             <IconButton
+              {{! @glint-ignore (glint thinks toggleSelect is not in this scope but it actually is - we check for it in the condition above) }}
               {{on 'click' (fn @toggleSelect card)}}
               {{on 'mouseenter' (fn this.setCurrentlyHoverCard renderedCard)}}
               {{on 'mouseleave' (fn this.setCurrentlyHoverCard null)}}
