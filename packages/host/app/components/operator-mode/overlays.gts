@@ -47,6 +47,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
           }}
           {{velcro renderedCard.element middleware=(Array this.offset)}}
           data-test-overlay-selected={{if isSelected card.id}}
+          data-test-overlay-card-display-name={{cardTypeDisplayName card}}
         >
           {{! Add mouseenter and mouseleave events to each button, so we can maintain the hover effect. }}
           {{#if (this.isEmbeddedCard renderedCard)}}
