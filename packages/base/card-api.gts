@@ -936,6 +936,12 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
       instance.id ?? relativeTo // new instances may not yet have an ID, in that case fallback to the relativeTo
     ).href;
     let loader = Loader.getLoaderFor(createFromSerialized);
+
+    if (!loader) {
+      debugger;
+      throw new Error('Could not find a loader, this should not happen');
+    }
+
     let response = await loader.fetch(reference, {
       headers: { Accept: SupportedMimeType.CardJson },
     });
@@ -962,8 +968,8 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
       json.data,
       json,
       new URL(json.data.id),
+      loader,
       {
-        loader,
         identityContext,
       }
     )) as Card; // a linksTo field could only be a composite card
@@ -1266,6 +1272,12 @@ class LinksToMany<FieldT extends CardConstructor>
       (ref) => new URL(ref, instance.id ?? relativeTo).href // new instances may not yet have an ID, in that case fallback to the relativeTo
     );
     let loader = Loader.getLoaderFor(createFromSerialized);
+
+    if (!loader) {
+      debugger;
+      throw new Error('Could not find a loader, this should not happen');
+    }
+
     let errors = [];
     let fieldInstances: Card[] = [];
 
@@ -1295,8 +1307,8 @@ class LinksToMany<FieldT extends CardConstructor>
           json.data,
           json,
           new URL(json.data.id),
+          loader,
           {
-            loader,
             identityContext,
           }
         )) as Card; // A linksTo field could only be a composite card
@@ -1869,9 +1881,10 @@ export function serializeCard(
 }
 
 // you may need to use this type for the loader passed in the opts
-export type LoaderType = NonNullable<
-  NonNullable<Parameters<typeof createFromSerialized>[3]>['loader']
->;
+// FIXME still needed?
+// export type LoaderType = NonNullable<
+//   NonNullable<Parameters<typeof createFromSerialized>[3]>['loader']
+// >;
 
 // TODO Currently our deserialization process performs 2 tasks that probably
 // need to be disentangled:
@@ -1889,14 +1902,15 @@ export async function createFromSerialized<T extends CardBaseConstructor>(
   resource: LooseCardResource,
   doc: LooseSingleCardDocument | CardDocument,
   relativeTo: URL | undefined,
-  opts?: { loader?: Loader; identityContext?: IdentityContext }
+  loader: Loader,
+  opts?: { identityContext?: IdentityContext }
 ): Promise<CardInstanceType<T>> {
   let identityContext = opts?.identityContext ?? new IdentityContext();
   let {
     meta: { adoptsFrom },
   } = resource;
   let card: typeof CardBase | undefined = await loadCard(adoptsFrom, {
-    loader: opts?.loader,
+    loader,
     relativeTo,
   });
   if (!card) {
@@ -2093,6 +2107,12 @@ async function cardClassFromResource<CardT extends CardBaseConstructor>(
   }
   if (resource && !isEqual(resource.meta.adoptsFrom, cardIdentity)) {
     let loader = Loader.getLoaderFor(fallback);
+
+    if (!loader) {
+      debugger;
+      throw new Error('Could not find a loader, this should not happen');
+    }
+
     let card: typeof CardBase | undefined = await loadCard(
       resource.meta.adoptsFrom,
       { loader, relativeTo }

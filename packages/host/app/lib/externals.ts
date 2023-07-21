@@ -30,7 +30,7 @@ import * as emberDestroyable from '@ember/destroyable';
 import * as marked from 'marked';
 import * as ethers from 'ethers';
 
-export function shimExternals(loader: Loader = Loader.getLoader()) {
+export function shimExternals(loader: Loader) {
   loader.shimModule('@cardstack/runtime-common', runtime);
   loader.shimModule('@cardstack/boxel-ui', boxelUI);
   loader.shimModule('@cardstack/boxel-ui/helpers/svg-jar', boxelSvgJar);
@@ -68,5 +68,3 @@ export function shimExternals(loader: Loader = Loader.getLoader()) {
   loader.shimModule('marked', marked);
   loader.shimModule('ethers', ethers);
 }
-
-shimExternals();

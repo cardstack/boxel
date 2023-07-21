@@ -18,6 +18,7 @@ import {
 import { stringify } from 'qs';
 import { Query } from '@cardstack/runtime-common/query';
 import {
+  localBaseRealm,
   setupCardLogs,
   setupBaseRealmServer,
   runTestRealmServer,
@@ -33,14 +34,22 @@ const testRealm2Href = testRealm2URL.href;
 const distDir = resolve(join(__dirname, '..', '..', 'host', 'dist'));
 console.log(`using host dist dir: ${distDir}`);
 
-module('Realm Server', function (hooks) {
+let loader: Loader;
+
+module.only('Realm Server', function (hooks) {
   let testRealmServer: Server;
   let testRealmServer2: Server;
   let request: SuperTest<Test>;
   let dir: DirResult;
+
+  hooks.beforeEach(() => {
+    loader = new Loader();
+    loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
+  });
+
   setupCardLogs(
     hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`)
   );
 
   async function expectEvent<
@@ -69,13 +78,26 @@ module('Realm Server', function (hooks) {
     return result;
   }
 
-  setupBaseRealmServer(hooks);
+  setupBaseRealmServer(hooks, loader);
 
   hooks.beforeEach(async function () {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
 
+    let testRealmServerLoader = new Loader();
+    testRealmServerLoader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL(localBaseRealm)
+    );
+
+    let testRealmServer2Loader = new Loader();
+    testRealmServer2Loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL(localBaseRealm)
+    );
+
     testRealmServer = await runTestRealmServer(
+      testRealmServerLoader,
       dir.name,
       undefined,
       testRealmURL
@@ -83,6 +105,7 @@ module('Realm Server', function (hooks) {
     request = supertest(testRealmServer);
 
     testRealmServer2 = await runTestRealmServer(
+      testRealmServer2Loader,
       dir.name,
       undefined,
       testRealm2URL
@@ -452,7 +475,6 @@ module('Realm Server', function (hooks) {
   });
 
   test('can dynamically load a card definition from own realm', async function (assert) {
-    let loader = Loader.createLoaderFromGlobal();
     let ref = {
       module: `${testRealmHref}person`,
       name: 'Person',
@@ -472,7 +494,6 @@ module('Realm Server', function (hooks) {
   });
 
   test('can dynamically load a card definition from a different realm', async function (assert) {
-    let loader = Loader.createLoaderFromGlobal();
     let ref = {
       module: `${testRealm2Href}person`,
       name: 'Person',
@@ -492,7 +513,6 @@ module('Realm Server', function (hooks) {
   });
 
   test('can instantiate a card that uses a card-ref field', async function (assert) {
-    let loader = Loader.createLoaderFromGlobal();
     let adoptsFrom = {
       module: `${testRealm2Href}card-ref-test`,
       name: 'TestCard',
@@ -519,18 +539,31 @@ module('Realm Server serving from root', function (hooks) {
   let request: SuperTest<Test>;
 
   let dir: DirResult;
+
+  hooks.beforeEach(() => {
+    loader = new Loader();
+    loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
+  });
+
   setupCardLogs(
     hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`)
   );
 
-  setupBaseRealmServer(hooks);
+  setupBaseRealmServer(hooks, loader);
 
   hooks.beforeEach(async function () {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
 
+    let testRealmServerLoader = new Loader();
+    testRealmServerLoader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL(localBaseRealm)
+    );
+
     testRealmServer = await runTestRealmServer(
+      testRealmServerLoader,
       dir.name,
       undefined,
       testRealmURL
@@ -698,18 +731,31 @@ module('Realm Server serving from a subdirectory', function (hooks) {
   let request: SuperTest<Test>;
 
   let dir: DirResult;
+
+  hooks.beforeEach(() => {
+    loader = new Loader();
+    loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
+  });
+
   setupCardLogs(
     hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`)
   );
 
-  setupBaseRealmServer(hooks);
+  setupBaseRealmServer(hooks, loader);
 
   hooks.beforeEach(async function () {
     dir = dirSync();
     copySync(join(__dirname, 'cards'), dir.name);
 
+    let testRealmServerLoader = new Loader();
+    testRealmServerLoader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL(localBaseRealm)
+    );
+
     testRealmServer = await runTestRealmServer(
+      testRealmServerLoader,
       dir.name,
       undefined,
       new URL('http://127.0.0.1:4446/demo/')

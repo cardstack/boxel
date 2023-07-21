@@ -73,12 +73,14 @@ if (fromUrls.length < paths.length) {
 
 let log = logger('main');
 
+let loader = new Loader();
+
 let urlMappings = fromUrls.map((fromUrl, i) => [
   new URL(String(fromUrl), `http://localhost:${port}`),
   new URL(String(toUrls[i]), `http://localhost:${port}`),
 ]);
 for (let [from, to] of urlMappings) {
-  Loader.addURLMapping(from, to);
+  loader.addURLMapping(from, to);
 }
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let dist: string | URL;
@@ -100,6 +102,7 @@ if (distURL) {
       new Realm(
         hrefs[i][0],
         new NodeAdapter(resolve(String(path))),
+        loader,
         getRunner,
         manager,
         async () => readFileSync(join(distPath, 'index.html')).toString(),

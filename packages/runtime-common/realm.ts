@@ -66,7 +66,6 @@ import { parseQueryString } from './query';
 import type { Readable } from 'stream';
 import { type Card } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
 
@@ -129,6 +128,7 @@ export class Realm {
   #startedUp = new Deferred<void>();
   #searchIndex: SearchIndex;
   #adapter: RealmAdapter;
+  #loader: Loader;
   #router: Router;
   #deferStartup: boolean;
   #useTestingDomain = false;
@@ -144,6 +144,7 @@ export class Realm {
   constructor(
     url: string,
     adapter: RealmAdapter,
+    loader: Loader,
     indexRunner: IndexRunner,
     runnerOptsMgr: RunnerOptionsManager,
     getIndexHTML: () => Promise<string>,
@@ -152,7 +153,8 @@ export class Realm {
     this.paths = new RealmPaths(url);
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
-    Loader.registerURLHandler(new URL(url), this.handle.bind(this));
+    this.#loader = loader;
+    this.#loader.registerURLHandler(new URL(url), this.handle.bind(this));
     this.#adapter = adapter;
     this.#searchIndex = new SearchIndex(
       this,
@@ -237,6 +239,10 @@ export class Realm {
     await this.#searchIndex.update(this.paths.fileURL(path), {
       delete: true,
     });
+  }
+
+  get loader() {
+    return this.#loader;
   }
 
   get searchIndex() {
@@ -808,8 +814,7 @@ export class Realm {
         realmInfo.name = realmConfigJson.name ?? realmInfo.name;
         realmInfo.backgroundURL =
           realmConfigJson.backgroundURL ?? realmInfo.backgroundURL;
-        realmInfo.iconURL = 
-          realmConfigJson.iconURL ?? realmInfo.iconURL;
+        realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
       } catch (e) {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }
@@ -833,9 +838,12 @@ export class Realm {
     let api = await this.searchIndex.loader.import<typeof CardAPI>(
       'https://cardstack.com/base/card-api'
     );
-    let card = (await api.createFromSerialized(doc.data, doc, relativeTo, {
-      loader: this.searchIndex.loader as unknown as LoaderType,
-    })) as Card;
+    let card = (await api.createFromSerialized(
+      doc.data,
+      doc,
+      relativeTo,
+      this.searchIndex.loader
+    )) as Card;
     let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds
     delete data.data.id; // the ID is derived from the filename, so we don't serialize it on disk
     delete data.included;

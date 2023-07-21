@@ -26,6 +26,7 @@ import {
   queryableValue as queryableValueType,
 } from 'https://cardstack.com/base/card-api';
 import BoxelInput from '@cardstack/boxel-ui/components/input';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import format from 'date-fns/format';
 
@@ -40,30 +41,37 @@ let catalogEntry: typeof import('https://cardstack.com/base/catalog-entry');
 let primitive: typeof primitiveType;
 let queryableValue: typeof queryableValueType;
 
+let loader: Loader;
+
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
-  );
 
-  hooks.before(async function () {
-    Loader.destroy();
-    shimExternals();
-    Loader.addURLMapping(
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+    loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
-    cardApi = await Loader.import(`${baseRealm.url}card-api`);
+  });
+
+  setupCardLogs(
+    hooks,
+    async () => await loader.import(`${baseRealm.url}card-api`)
+  );
+
+  hooks.beforeEach(async function () {
+    shimExternals(loader);
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
     primitive = cardApi.primitive;
     queryableValue = cardApi.queryableValue;
-    string = await Loader.import(`${baseRealm.url}string`);
-    number = await Loader.import(`${baseRealm.url}number`);
-    date = await Loader.import(`${baseRealm.url}date`);
-    datetime = await Loader.import(`${baseRealm.url}datetime`);
-    boolean = await Loader.import(`${baseRealm.url}boolean`);
-    cardRef = await Loader.import(`${baseRealm.url}card-ref`);
-    catalogEntry = await Loader.import(`${baseRealm.url}catalog-entry`);
+    string = await loader.import(`${baseRealm.url}string`);
+    number = await loader.import(`${baseRealm.url}number`);
+    date = await loader.import(`${baseRealm.url}date`);
+    datetime = await loader.import(`${baseRealm.url}datetime`);
+    boolean = await loader.import(`${baseRealm.url}boolean`);
+    cardRef = await loader.import(`${baseRealm.url}card-ref`);
+    catalogEntry = await loader.import(`${baseRealm.url}catalog-entry`);
   });
 
   test('primitive field type checking', async function (assert) {
@@ -146,7 +154,7 @@ module('Integration | card-basics', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { Post, Person });
+    await shimModule(`${testRealmURL}test-cards`, { Post, Person }, loader);
 
     let helloWorld = new Post({
       title: 'First Post',
@@ -226,11 +234,11 @@ module('Integration | card-basics', function (hooks) {
     class Person extends Card {
       @field firstName = contains(StringCard);
     }
-    await shimModule(`${testRealmURL}test-cards`, { Person });
+    await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
 
     // deserialize a card with an ID to mark it as "saved"
     let card = new Person({ firstName: 'Mango' });
-    await saveCard(card, `${testRealmURL}Person/mango`);
+    await saveCard(card, `${testRealmURL}Person/mango`, loader);
 
     try {
       card.id = 'boom';
@@ -317,7 +325,7 @@ module('Integration | card-basics', function (hooks) {
       // @ts-expect-error Have to purposefully bypass type-checking in order to get into this runtime error state
       @field pet = linksTo(StringCard);
     }
-    await shimModule(`${testRealmURL}test-cards`, { Person });
+    await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
 
     try {
       new Person({ firstName: 'Hassan', pet: 'Mango' });
@@ -356,7 +364,11 @@ module('Integration | card-basics', function (hooks) {
       @field firstName = contains(StringCard);
       @field pet = linksTo(Pet);
     }
-    await shimModule(`${testRealmURL}test-cards`, { Person, Pet, NotAPet });
+    await shimModule(
+      `${testRealmURL}test-cards`,
+      { Person, Pet, NotAPet },
+      loader
+    );
 
     let door = new NotAPet({ firstName: 'door' });
     try {
@@ -406,13 +418,13 @@ module('Integration | card-basics', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+    await shimModule(`${testRealmURL}test-cards`, { Person, Pet }, loader);
 
     let vanGogh = new Pet({ firstName: 'Van Gogh' });
     let mango = new Pet({ firstName: 'Mango', friend: vanGogh });
     let hassan = new Person({ firstName: 'Hassan', pet: mango });
-    await saveCard(vanGogh, `${testRealmURL}Pet/vanGogh`);
-    await saveCard(mango, `${testRealmURL}Pet/mango`);
+    await saveCard(vanGogh, `${testRealmURL}Pet/vanGogh`, loader);
+    await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
     await renderCard(hassan, 'embedded');
 
     assert.dom('[data-test-person]').containsText('Hassan');
@@ -478,7 +490,7 @@ module('Integration | card-basics', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { Post, Person });
+    await shimModule(`${testRealmURL}test-cards`, { Post, Person }, loader);
 
     let helloWorld = new Post({
       author: new Person({
@@ -525,12 +537,16 @@ module('Integration | card-basics', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, {
-      Post,
-      Person,
-      TestNumber,
-      TestString,
-    });
+    await shimModule(
+      `${testRealmURL}test-cards`,
+      {
+        Post,
+        Person,
+        TestNumber,
+        TestString,
+      },
+      loader
+    );
 
     let helloWorld = new Post({
       author: new Person({ firstName: 'Arthur', number: 10 }),
@@ -559,7 +575,7 @@ module('Integration | card-basics', function (hooks) {
       @field title = contains(title);
       @field author = contains(Person);
     }
-    await shimModule(`${testRealmURL}test-cards`, { Post, Person });
+    await shimModule(`${testRealmURL}test-cards`, { Post, Person }, loader);
 
     let helloWorld = new Post({
       title: 'First Post',
@@ -636,7 +652,7 @@ module('Integration | card-basics', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { Family, Person });
+    await shimModule(`${testRealmURL}test-cards`, { Family, Person }, loader);
 
     let abdelRahmans = new Family({
       people: [
@@ -711,7 +727,7 @@ module('Integration | card-basics', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { Family, Person });
+    await shimModule(`${testRealmURL}test-cards`, { Family, Person }, loader);
 
     let abdelRahmans = new Family({
       people: [
@@ -757,15 +773,15 @@ module('Integration | card-basics', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { Family, Person });
+    await shimModule(`${testRealmURL}test-cards`, { Family, Person }, loader);
     let mango = new Person({
       firstName: 'Mango',
     });
     let vanGogh = new Person({
       firstName: 'Van Gogh',
     });
-    await saveCard(mango, `${testRealmURL}Pet/mango`);
-    await saveCard(vanGogh, `${testRealmURL}Pet/vanGogh`);
+    await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
+    await saveCard(vanGogh, `${testRealmURL}Pet/vanGogh`, loader);
     let abdelRahmanDogs = new Family({
       people: [mango, vanGogh],
     });
@@ -817,12 +833,16 @@ module('Integration | card-basics', function (hooks) {
       };
     }
 
-    await shimModule(`${testRealmURL}test-cards`, {
-      Person,
-      Employee,
-      Customer,
-      Group,
-    });
+    await shimModule(
+      `${testRealmURL}test-cards`,
+      {
+        Person,
+        Employee,
+        Customer,
+        Group,
+      },
+      loader
+    );
 
     let group = new Group({
       people: [
@@ -961,7 +981,7 @@ module('Integration | card-basics', function (hooks) {
       @field firstName = contains(StringCard);
       @field languagesSpoken = containsMany(StringCard);
     }
-    await shimModule(`${testRealmURL}test-cards`, { Person });
+    await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
     assert.throws(
       () => new Person({ languagesSpoken: 'english' }),
       /Expected array for field value languagesSpoken/
@@ -988,7 +1008,7 @@ module('Integration | card-basics', function (hooks) {
       @field title = contains(StringCard);
       @field author = contains(Person);
     }
-    await shimModule(`${testRealmURL}test-cards`, { Post, Person });
+    await shimModule(`${testRealmURL}test-cards`, { Post, Person }, loader);
 
     let helloWorld = new Post({
       title: 'My Post',
@@ -1030,7 +1050,7 @@ module('Integration | card-basics', function (hooks) {
         },
       });
     }
-    await shimModule(`${testRealmURL}test-cards`, { Person });
+    await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
 
     let mango = new Person({ firstName: 'Mango', isCool: true });
     let root = await renderCard(mango, 'isolated');
@@ -1050,7 +1070,7 @@ module('Integration | card-basics', function (hooks) {
       @field isCool = contains(BooleanCard);
       @field isHuman = contains(BooleanCard);
     }
-    await shimModule(`${testRealmURL}test-cards`, { Person });
+    await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
     let mango = new Person({
       firstName: 'Mango',
       isCool: true,
@@ -1156,7 +1176,7 @@ module('Integration | card-basics', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { Post, Person });
+    await shimModule(`${testRealmURL}test-cards`, { Post, Person }, loader);
 
     let helloWorld = new Post({
       title: 'First Post',
@@ -1546,7 +1566,7 @@ module('Integration | card-basics', function (hooks) {
 });
 
 async function testString(label: string) {
-  cardApi = await Loader.import(`${baseRealm.url}card-api`);
+  cardApi = await loader.import(`${baseRealm.url}card-api`);
   let { Card, Component } = cardApi;
   return class TestString extends Card {
     static [primitive]: string;

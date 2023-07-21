@@ -30,20 +30,31 @@ setGracefulCleanup();
 // loading of cards necessary for indexing and the ability to manipulate the
 // underlying filesystem in a manner that doesn't leak into other tests (as well
 // as to test through loader caching)
+
+let loader: Loader;
+
 module('indexing', function (hooks) {
+  hooks.beforeEach(() => {
+    loader = new Loader();
+    loader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL('http://localhost:4201/base/')
+    );
+  });
+
   setupCardLogs(
     hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`)
   );
 
   let dir: string;
   let realm: Realm;
 
-  setupBaseRealmServer(hooks);
+  setupBaseRealmServer(hooks, loader);
 
   hooks.beforeEach(async function () {
     dir = dirSync().name;
-    realm = await createRealm(dir, {
+    realm = await createRealm(loader, dir, {
       'person.gts': `
         import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";

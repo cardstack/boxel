@@ -11,25 +11,36 @@ import {
   trimCardContainer,
   setupLocalIndexing,
 } from '../helpers';
+import { RenderingTestContext } from '@ember/test-helpers';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import { setupRenderingTest } from 'ember-qunit';
 import { shimExternals } from '@cardstack/host/lib/externals';
+
+let loader: Loader;
 
 module('Integration | card-prerender', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
-  setupRenderingTest(hooks);
-  setupLocalIndexing(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
-  );
 
-  hooks.beforeEach(async function () {
-    Loader.addURLMapping(
+  setupRenderingTest(hooks);
+
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+    loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
-    shimExternals();
+  });
+
+  setupLocalIndexing(hooks);
+  setupCardLogs(
+    hooks,
+    async () => await loader.import(`${baseRealm.url}card-api`)
+  );
+
+  hooks.beforeEach(async function () {
+    shimExternals(loader);
     adapter = new TestRealmAdapter({
       'pet.gts': `
         import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
@@ -75,7 +86,7 @@ module('Integration | card-prerender', function (hooks) {
         },
       },
     });
-    realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
   });
 

@@ -10,29 +10,35 @@ import {
 } from '../../helpers';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
-import { shimExternals } from '@cardstack/host/lib/externals';
+import type LoaderService from '@cardstack/host/services/loader-service';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
 let number: typeof import('https://cardstack.com/base/number');
 
+let loader: Loader;
+
 module('Integration | computeds', function (hooks) {
   setupRenderingTest(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
-  );
 
-  hooks.beforeEach(async function () {
-    Loader.destroy();
-    shimExternals();
-    Loader.addURLMapping(
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+    loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
-    cardApi = await Loader.import(`${baseRealm.url}card-api`);
-    string = await Loader.import(`${baseRealm.url}string`);
-    number = await Loader.import(`${baseRealm.url}number`);
+  });
+
+  setupCardLogs(
+    hooks,
+    async () => await loader.import(`${baseRealm.url}card-api`)
+  );
+
+  hooks.beforeEach(async function () {
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    string = await loader.import(`${baseRealm.url}string`);
+    number = await loader.import(`${baseRealm.url}number`);
   });
 
   test('can render a synchronous computed field', async function (assert) {
@@ -101,7 +107,7 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { Post, Person });
+    await shimModule(`${testRealmURL}test-cards`, { Post, Person }, loader);
 
     let firstPost = new Post({
       title: 'First Post',
@@ -265,7 +271,7 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { Post, Person });
+    await shimModule(`${testRealmURL}test-cards`, { Post, Person }, loader);
 
     let firstPost = new Post({
       title: 'First Post',
@@ -399,7 +405,7 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { Family, Person });
+    await shimModule(`${testRealmURL}test-cards`, { Family, Person }, loader);
 
     let abdelRahmans = new Family({
       people: [
@@ -480,7 +486,7 @@ module('Integration | computeds', function (hooks) {
         return totalAge;
       }
     }
-    await shimModule(`${testRealmURL}test-cards`, { Family, Person });
+    await shimModule(`${testRealmURL}test-cards`, { Family, Person }, loader);
 
     let family = new Family({
       people: [
@@ -554,7 +560,7 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${testRealmURL}test-cards`, { Location, Person });
+    await shimModule(`${testRealmURL}test-cards`, { Location, Person }, loader);
 
     let person = new Person({
       firstName: 'Mango',
