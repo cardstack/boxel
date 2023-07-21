@@ -188,13 +188,12 @@ export default class OperatorModeOverlays extends Component<Signature> {
     },
   };
 
-  // Pointer events of this overlay component
-  // will prevent pointer events on rendered cards.
-  // This might cause broken functionality in rendered cards,
-  // such as the inability to scroll through cards in the cards-grid.
-  // Therefore, we have decided to disable pointer events for this overlay component,
-  // and instead, we register events directly to the rendered cards.
-  // This way, we can maintain the same behavior of hovering and clicking.
+  // Since we put absolutely positined overlays containing operator mode actions on top of the rendered cards,
+  // we are running into a problem where the overlays are interfering with scrolling of the container that holds the rendered cards.
+  // That means scrolling stops when the cursor gets over the overlay, which is a bug. We solved this problem by disabling pointer
+  // events on the overlay. However, that prevents the browser from detecting hover state, which is needed to show the operator mode actions, and
+  // click event, needed to open the card. To solve this, we add event listeners to the rendered cards underneath the overlay, and use those to
+  // detect hover state and click event.
   get renderedCardsForOverlayActionsWithEvents() {
     let renderedCards = this.args.renderedCardsForOverlayActions;
     for (const renderedCard of renderedCards) {
