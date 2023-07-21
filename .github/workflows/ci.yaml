@@ -147,7 +147,7 @@ jobs:
 
   change-check:
     name: Check which packages changed
-    #if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
       boxel: ${{ steps.filter.outputs.boxel }}
