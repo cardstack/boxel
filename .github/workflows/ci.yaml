@@ -255,7 +255,7 @@ jobs:
           sudo apt-get install waypoint=0.8.1
 
       - name: Deploy app
-        run: waypoint deploy -app=realm-demo -plain
+        run: waypoint deploy -app=realm-demo -plain -local
 
       - uses: ./.github/actions/waypoint-ecs-failsafe
         with:
