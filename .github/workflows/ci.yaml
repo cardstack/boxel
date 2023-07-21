@@ -171,15 +171,6 @@ jobs:
               - 'packages/runtime-common/**'
               - 'pnpm-lock.yaml'
 
-  build-realm-server:
-    name: Build realm-server
-    needs: [change-check]
-    if: ${{ needs.change-check.outputs.boxel == 'true' }}
-    uses: ./.github/workflows/waypoint-build.yml
-    with:
-      app: "realm-demo"
-      environment: "staging"
-
   deploy-host:
     name: Deploy host to staging
     needs: [boxel-ui-test, host-test, realm-server-test, change-check]
@@ -193,10 +184,21 @@ jobs:
           environment: staging
           discord_webhook: ${{ secrets.DISCORD_WEBHOOK }}
 
+  build-realm-server:
+    name: Build realm-server
+    needs: [change-check]
+    if: ${{ needs.change-check.outputs.boxel == 'true' }}
+    uses: ./.github/workflows/waypoint-build.yml
+    secrets: inherit
+    with:
+      app: "realm-demo"
+      environment: "staging"
+
   deploy-realm-server:
     name: Deploy realm server to staging
     needs: [deploy-host, build-realm-server]
     uses: ./.github/workflows/waypoint-deploy.yml
+    secrets: inherit
     with:
       app: "realm-demp"
       environment: "staging"

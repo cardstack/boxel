@@ -31,6 +31,7 @@ jobs:
   build-realm-server:
     name: Build realm-server
     uses: ./.github/workflows/waypoint-build.yml
+    secrets: inherit
     with:
       app: "realm-demo"
       environment: "staging"
@@ -39,6 +40,7 @@ jobs:
     name: Deploy realm server to staging
     needs: [build-realm-server]
     uses: ./.github/workflows/waypoint-deploy.yml
+    secrets: inherit
     with:
       app: "realm-demp"
       environment: "staging"
