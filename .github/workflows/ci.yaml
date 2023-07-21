@@ -147,7 +147,7 @@ jobs:
 
   change-check:
     name: Check which packages changed
-    if: github.ref == 'refs/heads/main'
+    #if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
       boxel: ${{ steps.filter.outputs.boxel }}
@@ -255,7 +255,7 @@ jobs:
           sudo apt-get install waypoint=0.8.1
 
       - name: Deploy app
-        run: waypoint deploy -app=realm-demo -plain -release=false
+        run: waypoint deploy -app=realm-demo -plain
 
       - uses: ./.github/actions/waypoint-ecs-failsafe
         with:
