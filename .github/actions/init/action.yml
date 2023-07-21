@@ -4,9 +4,10 @@ description: Setup common dependencies
 runs:
   using: composite
   steps:
+    - run: "echo VOLTA_FEATURE_PNPM=1 >> $GITHUB_ENV"
+      shell: bash
+
     - uses: volta-cli/action@v4
-      env:
-        VOLTA_FEATURE_PNPM: "1"
 
     - name: Get pnpm store directory
       id: pnpm-cache
