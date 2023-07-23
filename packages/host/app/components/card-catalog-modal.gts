@@ -650,13 +650,8 @@ export function suggestCardChooserTitle(
   }
   //--base case--
   if ('on' in filter && filter.on !== undefined) {
-    if ('eq' in filter && filter.eq !== undefined) {
-      let cardRefName = (filter.on as { module: string; name: string }).name;
-      return [{ suggestion: `Choose a ${cardRefName} card`, depth }];
-    } else {
-      // By checking for only 1 key, we remove cases for 'not' and 'range'
-      return [];
-    }
+    let cardRefName = (filter.on as { module: string; name: string }).name;
+    return [{ suggestion: `Choose a ${cardRefName} card`, depth }];
   }
   if (isCardTypeFilter(filter)) {
     let cardRefName = (filter.type as { module: string; name: string }).name;
