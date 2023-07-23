@@ -7,12 +7,13 @@ import { htmlSafe } from '@ember/template';
 import { registerDestructor } from '@ember/destroyable';
 import { enqueueTask, restartableTask } from 'ember-concurrency';
 import type { Card, CardContext } from 'https://cardstack.com/base/card-api';
-import type { Query } from '@cardstack/runtime-common/query';
 import {
   createNewCard,
   type CardRef,
   type RealmInfo,
 } from '@cardstack/runtime-common';
+import type { Query, Filter } from '@cardstack/runtime-common/query';
+import { isCardTypeFilter, isEveryFilter } from '@cardstack/runtime-common/query'
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { getSearchResults, Search } from '../resources/search';
 import Preview from './preview';
@@ -45,6 +46,7 @@ type RealmCards = {
   iconURL: RealmInfo['iconURL'];
   cards: Card[];
 };
+const DEFAULT_CHOOOSE_CARD_TITLE = 'Choose a Card';
 
 export default class CardCatalogModal extends Component<Signature> {
   <template>
@@ -57,9 +59,8 @@ export default class CardCatalogModal extends Component<Signature> {
         data-test-card-catalog-modal
       >
         <CardContainer class='dialog-box' @displayBoundaries={{true}}>
-          <Header @title='Choose a card type'>
-            <IconButton
-              @icon='icon-x'
+          <Header @title={{this.chooseCardTitle}}>
+            <button
               {{on 'click' (fn this.pick undefined)}}
               class='dialog-box__close'
               aria-label='close modal'
@@ -449,6 +450,7 @@ export default class CardCatalogModal extends Component<Signature> {
   @tracked cardURL = '';
   @tracked hasCardURLError = false;
   @tracked urlSearchVisible = false;
+  @tracked chooseCardTitle = DEFAULT_CHOOOSE_CARD_TITLE;
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
 
@@ -508,6 +510,7 @@ export default class CardCatalogModal extends Component<Signature> {
     opts?: { offerToCreate?: CardRef }
   ): Promise<undefined | T> {
     this.zIndex++;
+    this.chooseCardTitle = chooseCardTitle(query.filter);
     return (await this._chooseCard.perform(query, opts)) as T | undefined;
   }
 
@@ -627,6 +630,65 @@ export default class CardCatalogModal extends Component<Signature> {
     let newCard = await createNewCard(ref, undefined);
     this.pick(newCard);
   }
+}
+
+interface ChooseCardSuggestion {
+  suggestion: string; // suggests a UI text
+  depth: number;
+}
+
+export function suggestCardTitle(
+  filter: Filter,
+  depth: number = 0 //lower the depth, higher the priority
+): ChooseCardSuggestion[] {
+  if (filter === undefined) {
+    return [];
+  }
+  let MAX_RECURSION_DEPTH = 3;
+  if (depth > MAX_RECURSION_DEPTH) {
+    return [];
+  }
+  //--base case--
+  if ('on' in filter && filter.on !== undefined) {
+    if ('eq' in filter && filter.eq !== undefined) {
+      let cardRefName = (filter.on as { module: string; name: string }).name;
+      return [{ suggestion: `Choose a ${cardRefName} card`, depth }];
+    } else {
+      // By checking for only 1 key, we remove cases for 'not' and 'range'
+      return [];
+    }
+  }
+  if (isCardTypeFilter(filter)) {
+    let cardRefName = (filter.type as { module: string; name: string }).name;
+    if (cardRefName == 'Card') {
+      return [{ suggestion: `Choose a ${cardRefName} instance`, depth }];
+    } else {
+      return [{ suggestion: `Choose a ${cardRefName} card`, depth }];
+    }
+  }
+  //--inductive case--
+  if (isEveryFilter(filter)) {
+    depth++;
+    return filter.every.flatMap(suggestCardTitle);
+  }
+  return [];
+}
+
+function getSuggestionWithLowestDepth(
+  items: ChooseCardSuggestion[]
+): string | undefined {
+  items.sort((a, b) => a.depth - b.depth);
+  return items[0]?.suggestion;
+}
+
+function chooseCardTitle(filter: Filter | undefined): string {
+  if (!filter) {
+    return DEFAULT_CHOOOSE_CARD_TITLE;
+  }
+  let suggestions = suggestCardTitle(filter);
+  return (
+    getSuggestionWithLowestDepth(suggestions) ?? DEFAULT_CHOOOSE_CARD_TITLE
+  );
 }
 
 declare module '@glint/environment-ember-loose/registry' {

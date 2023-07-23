@@ -67,6 +67,25 @@ export interface RangeFilter extends TypedFilter {
   };
 }
 
+export function isCardTypeFilter(filter: Filter): filter is CardTypeFilter {
+  return (filter as CardTypeFilter).type !== undefined;
+}
+
+export function isNotFilter(filter: Filter): filter is NotFilter {
+  return (filter as NotFilter).not !== undefined;
+}
+
+export function isRangeFilter(filter: Filter): filter is RangeFilter {
+  return (filter as RangeFilter).range !== undefined;
+}
+
+export function isEveryFilter(filter: Filter): filter is EveryFilter {
+  return (filter as EveryFilter).every !== undefined;
+}
+export function isAnyFilter(filter: Filter): filter is AnyFilter {
+  return (filter as AnyFilter).any !== undefined;
+}
+
 export function parseQueryString(querystring: string): Query {
   let query = qs.parse(querystring);
   assertQuery(query);
