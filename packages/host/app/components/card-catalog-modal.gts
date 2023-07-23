@@ -637,7 +637,7 @@ interface ChooseCardSuggestion {
   depth: number;
 }
 
-export function suggestCardTitle(
+export function suggestCardChooserTitle(
   filter: Filter,
   depth: number = 0 //lower the depth, higher the priority
 ): ChooseCardSuggestion[] {
@@ -669,7 +669,7 @@ export function suggestCardTitle(
   //--inductive case--
   if (isEveryFilter(filter)) {
     depth++;
-    return filter.every.flatMap(suggestCardTitle);
+    return filter.every.flatMap(suggestCardChooserTitle);
   }
   return [];
 }
@@ -685,7 +685,7 @@ function chooseCardTitle(filter: Filter | undefined): string {
   if (!filter) {
     return DEFAULT_CHOOOSE_CARD_TITLE;
   }
-  let suggestions = suggestCardTitle(filter);
+  let suggestions = suggestCardChooserTitle(filter);
   return (
     getSuggestionWithLowestDepth(suggestions) ?? DEFAULT_CHOOOSE_CARD_TITLE
   );
