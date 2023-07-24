@@ -61,7 +61,7 @@ interface BaseItem {
 export interface CardStackItem extends BaseItem {
   type: 'card';
   card: Card;
-  isLinkedCard?: boolean; // TODO unsure if this is necessary
+  isLinkedCard?: boolean; // TODO: cnsider renaming this so its clearer that we use this for being able to tell whether the card needs to be closed after saving
 }
 
 export interface ContainedCardStackItem extends BaseItem {
