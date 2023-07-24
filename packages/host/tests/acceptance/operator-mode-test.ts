@@ -435,7 +435,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-add-card-left-stack]').doesNotExist();
       assert.dom('[data-test-add-card-right-stack]').doesNotExist();
 
-      // Close the only card in the 2nd stack
+      // Close the only card in the 1st stack
       await click(
         '[data-test-operator-mode-stack="0"] [data-test-close-button]'
       );
@@ -539,7 +539,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-add-card-left-stack]').doesNotExist();
       assert.dom('[data-test-add-card-right-stack]').doesNotExist();
 
-      // Close the only card in the 2nd stack
+      // Close the only card in the 1st stack
       await click(
         '[data-test-operator-mode-stack="0"] [data-test-close-button]'
       );
