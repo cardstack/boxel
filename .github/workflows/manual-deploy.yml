@@ -15,26 +15,18 @@ permissions:
 jobs:
   build-host:
     name: Build host
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Build host
-        uses: ./.github/actions/build-host
-        with:
-          environment: ${{ inputs.environment }}
-          discord_webhook: ${{ secrets.DISCORD_WEBHOOK }}
+    uses: ./.github/workflows/build-host.yml
+    secrets: inherit
+    with:
+      environment: ${{ inputs.environment }}
 
   deploy-host:
     name: Deploy host
     needs: [build-host, build-realm-server]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Deploy host
-        uses: ./.github/actions/deploy-host
-        with:
-          environment: ${{ inputs.environment }}
-          discord_webhook: ${{ secrets.DISCORD_WEBHOOK }}
+    uses: ./.github/workflows/deploy-host.yml
+    secrets: inherit
+    with:
+      environment: ${{ inputs.environment }}
 
   build-realm-server:
     name: Build realm-server

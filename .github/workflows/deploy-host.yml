@@ -39,7 +39,7 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: host-dist
-          path: tmp/deploy-dist
+          path: packages/host/tmp/deploy-dist
 
       - name: Deploy
         run: pnpm deploy:boxel-host ci:deploy --verbose
