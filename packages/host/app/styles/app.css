@@ -149,7 +149,7 @@
   box-sizing: border-box;
   cursor: pointer;
   width: 100%;
-  height: 65px;
+  height: calc(var(--boxel-sp-xxxl) * var(--boxel-ratio));
   border: 1px solid var(--boxel-form-control-border-color);
   border-radius: var(--boxel-form-control-border-radius);
   color: var(--boxel-teal);
