@@ -178,7 +178,7 @@ jobs:
     uses: ./.github/workflows/build-host.yml
     secrets: inherit
     with:
-      environment: ${{ inputs.environment }}
+      environment: "staging"
 
   build-realm-server:
     name: Build realm-server
@@ -201,7 +201,7 @@ jobs:
     uses: ./.github/workflows/deploy-host.yml
     secrets: inherit
     with:
-      environment: ${{ inputs.environment }}
+      environment: "staging"
 
   deploy-realm-server:
     name: Deploy realm server to staging
