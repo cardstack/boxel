@@ -357,13 +357,12 @@ export default class OperatorModeContainer extends Component<Signature> {
       searchSheetTrigger ===
       SearchSheetTrigger.DropCardToLeftNeighborStackButton
     ) {
+      this.operatorModeStateService.moveStack(0);
       let stackItem: StackItem = {
         card,
         format: 'isolated',
         stackIndex: 0,
       };
-
-      this.operatorModeStateService.moveStack(0, 1);
 
       this.operatorModeStateService.addItemToStack(stackItem);
 

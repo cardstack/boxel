@@ -437,7 +437,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       // Close the only card in the 2nd stack
       await click(
-        '[data-test-operator-mode-stack="1"] [data-test-close-button]'
+        '[data-test-operator-mode-stack="0"] [data-test-close-button]'
       );
 
       // There is now only 1 stack and the buttons to add a neighbor stack are back
@@ -541,7 +541,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       // Close the only card in the 2nd stack
       await click(
-        '[data-test-operator-mode-stack="1"] [data-test-close-button]'
+        '[data-test-operator-mode-stack="0"] [data-test-close-button]'
       );
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
     });
