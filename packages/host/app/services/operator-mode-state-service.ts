@@ -54,8 +54,8 @@ export default class OperatorModeStateService extends Service {
       this.state.stacks.length > 1
     ) {
       this.state.stacks.splice(stackIndex, 1);
-      this.schedulePersist();
     }
+    this.schedulePersist();
   }
 
   replaceItemInStack(item: StackItem, newItem: StackItem) {

@@ -277,7 +277,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         .dom('[data-test-stack-card-index="1"] [data-test-boxel-header-title]')
         .includesText('Pet');
 
-      // Remove the dog from the stack
+      // Remove mango (the dog) from the stack
       await click('[data-test-stack-card-index="1"] [data-test-close-button]');
 
       // The stack should be updated in the URL
