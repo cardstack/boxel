@@ -69,7 +69,7 @@ export default class OperatorModeStateService extends Service {
   removeItemFromStack(item: StackItem) {
     let stackIndex = item.stackIndex;
     let itemIndex = this.state.stacks[stackIndex].items.indexOf(item);
-    this.state.stacks[stackIndex].items.splice(itemIndex);
+    this.state.stacks[stackIndex].items.splice(itemIndex); // Always remove anything above the item
 
     // If the additional stack is now empty, remove it from the state
     if (
@@ -80,6 +80,19 @@ export default class OperatorModeStateService extends Service {
     }
 
     this.schedulePersist();
+  }
+
+  popItemFromStack(stackIndex: number) {
+    let stack = this.state.stacks[stackIndex];
+    if (!stack) {
+      throw new Error(`No stack at index ${stackIndex}`);
+    }
+    let item = stack.items.pop();
+    if (!item) {
+      throw new Error(`No items in stack at index ${stackIndex}`);
+    }
+    this.schedulePersist();
+    return item;
   }
 
   // TODO: This seems to be doing 2 jobs: replacing cards in the stack and shifting
@@ -128,6 +141,20 @@ export default class OperatorModeStateService extends Service {
     this.state.stacks[stackIndex].items.splice(index, 1, newItem);
     this.schedulePersist();
     return newItem;
+  }
+
+  replaceItemInStack_old(item: StackItem, newItem: StackItem) {
+    let stackIndex = item.stackIndex;
+    let itemIndex = this.state.stacks[stackIndex].items.indexOf(item);
+
+    if (newItem.stackIndex !== stackIndex) {
+      this.removeItemFromStack(item);
+      this.addItemToStack(newItem);
+      return this.schedulePersist();
+    }
+
+    this.state.stacks[stackIndex].items.splice(itemIndex, 1, newItem);
+    this.schedulePersist();
   }
 
   clearStacks() {
