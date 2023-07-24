@@ -159,6 +159,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   get headerIcon() {
+    // TODO use a proper icon for contained card and fix design
+    if (this.args.item.type === 'contained') {
+      return null;
+    }
+
     return {
       URL: this.iconURL,
       onMouseEnter: this.hoverOnRealmIcon,
@@ -167,6 +172,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   get headerTitle() {
+    if (this.args.item.type === 'contained') {
+      // TODO use a proper icon for contained card and fix design
+      return `⮑ ${cardTypeDisplayName(this.card)}`;
+    }
+
     return this.isHoverOnRealmIcon && this.realmName
       ? `In ${this.realmName}`
       : cardTypeDisplayName(this.card);
