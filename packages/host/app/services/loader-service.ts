@@ -1,6 +1,7 @@
 import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { Loader } from '@cardstack/runtime-common/loader';
+import { Realm } from '@cardstack/runtime-common/realm';
 import { baseRealm } from '@cardstack/runtime-common';
 import config from '@cardstack/host/config/environment';
 import { shimExternals } from '@cardstack/host/lib/externals';
@@ -15,10 +16,12 @@ export default class LoaderService extends Service {
   }
 
   private makeInstance() {
-    // FIXME still needed?
-    // if (this.fastboot.isFastBoot) {
-    //   return Loader.createLoaderFromGlobal();
-    // }
+    // FIXME how to get the loader without a global one?
+    if (this.fastboot.isFastBoot) {
+      let loader = Loader.createLoaderFromGlobalFIXME();
+      shimExternals(loader);
+      return loader;
+    }
 
     let loader = new Loader();
     loader.addURLMapping(
