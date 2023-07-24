@@ -25,6 +25,7 @@
 }
 
 .dialog-box__close {
+  --icon-bg: var(--boxel-dark);
   border: none;
   background: none;
   font: var(--boxel-font-lg);

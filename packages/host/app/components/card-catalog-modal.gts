@@ -58,10 +58,12 @@ export default class CardCatalogModal extends Component<Signature> {
       >
         <CardContainer class='dialog-box' @displayBoundaries={{true}}>
           <Header @title={{this.catalogTitle}}>
-            <button
+            <IconButton
+              @icon='icon-x'
               {{on 'click' (fn this.pick undefined)}}
               class='dialog-box__close'
-            >⨯</button>
+              aria-label='close modal'
+            />
             <div class='boxel-searchbox'>
               <span class='boxel-searchbox__search-icon'>
                 {{svgJar 'search' class='search-icon'}}
@@ -74,6 +76,23 @@ export default class CardCatalogModal extends Component<Signature> {
                   @placeholder='Search for a card type'
                 />
               </label>
+            </div>
+            <div class='tags'>
+              <IconButton
+                class='add-tag-button'
+                @icon='icon-plus'
+                @width='20'
+                @height='20'
+                aria-label='add tag'
+              />
+              <ul class='tag-list'>
+                <li>
+                  <div class='tag'>
+                    Realm: All
+                    <IconButton @icon='icon-x' class='remove-tag-button' />
+                  </div>
+                </li>
+              </ul>
             </div>
           </Header>
           <div class='dialog-box__content'>
@@ -209,7 +228,8 @@ export default class CardCatalogModal extends Component<Signature> {
       .boxel-searchbox {
         position: relative;
         width: 100%;
-        margin-top: var(--boxel-sp);
+        margin-top: var(--boxel-sp-xs);
+        margin-bottom: var(--boxel-sp-xs);
       }
       .boxel-searchbox__search-icon {
         --icon-color: var(--boxel-highlight);
@@ -226,6 +246,59 @@ export default class CardCatalogModal extends Component<Signature> {
         padding-right: var(--boxel-sp-xl);
         background-color: var(--boxel-100);
         border-color: #707070;
+      }
+      .tags {
+        --tag-height: 30px;
+        display: flex;
+        gap: var(--boxel-sp-xs);
+        font: 500 var(--boxel-font-sm);
+      }
+      .add-tag-button {
+        --icon-color: var(--boxel-highlight);
+        border: 1px solid var(--boxel-400);
+        border-radius: 100px;
+        width: var(--tag-height);
+        height: var(--tag-height);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      .add-tag-button:hover {
+        border-color: var(--boxel-dark);
+      }
+      .tag-list {
+        list-style-type: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-flow: row wrap;
+        gap: var(--boxel-sp-xs);
+      }
+      .tag {
+        position: relative;
+        height: var(--tag-height);
+        border: 1px solid var(--boxel-400);
+        border-radius: 20px;
+        padding-right: var(--boxel-sp-xl);
+        padding-left: var(--boxel-sp-sm);
+        display: flex;
+        align-items: center;
+      }
+      .remove-tag-button {
+        --icon-bg: var(--boxel-400);
+        position: absolute;
+        right: 0;
+        width: var(--boxel-sp-lg);
+        height: var(--tag-height);
+        background: none;
+        border: none;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .remove-tag-button:hover {
+        --icon-bg: var(--boxel-dark);
       }
       .footer {
         display: flex;
