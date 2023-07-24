@@ -144,6 +144,9 @@ importers:
       '@types/marked':
         specifier: ^4.3.0
         version: 4.3.1
+      '@types/pluralize':
+        specifier: ^0.0.30
+        version: 0.0.30
       ember-cli-htmlbars:
         specifier: ^6.2.0
         version: 6.2.0
@@ -156,6 +159,9 @@ importers:
       ethers:
         specifier: ^6.6.2
         version: 6.6.2
+      pluralize:
+        specifier: ^8.0.0
+        version: 8.0.0
       tracked-built-ins:
         specifier: ^2.0.1
         version: 2.0.1
@@ -950,6 +956,9 @@ importers:
       '@types/matrix-js-sdk':
         specifier: ^11.0.1
         version: 11.0.1
+      '@types/pluralize':
+        specifier: ^0.0.30
+        version: 0.0.30
       '@types/qs':
         specifier: ^6.9.7
         version: 6.9.7
@@ -1154,6 +1163,9 @@ importers:
       path-browserify:
         specifier: ^1.0.1
         version: 1.0.1
+      pluralize:
+        specifier: ^8.0.0
+        version: 8.0.0
       prettier:
         specifier: github:ef4/prettier#8c4a6ad
         version: github.com/ef4/prettier/8c4a6ad
@@ -6383,6 +6395,10 @@ packages:
     resolution: {integrity: sha512-Cf63Rv7jCQ0LaL8tNXmEyqTHuIJxRdlS5vMh1mj5voN4+QFhVZnlZruezqpWYDiJ8UTzhP0VmeLXCmBk66YrMQ==}
     dependencies:
       '@types/node': 18.15.13
+    dev: true
+
+  /@types/pluralize@0.0.30:
+    resolution: {integrity: sha512-kVww6xZrW/db5BR9OqiT71J9huRdQ+z/r+LbDuT7/EK50mCmj5FoaIARnVv0rvjUS/YpDox0cDU9lpQT011VBA==}
     dev: true
 
   /@types/q@1.5.5:
@@ -20501,6 +20517,11 @@ packages:
     resolution: {integrity: sha512-gQR3WpIgNIKwBMVLkpMUeR3e1/E1y42bqDQZfql+kDeXd8COYfM8PQA4X6y7a8u9Ua9FHmsrrmirW2vHs45hWg==}
     dependencies:
       semver-compare: 1.0.0
+
+  /pluralize@8.0.0:
+    resolution: {integrity: sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA==}
+    engines: {node: '>=4'}
+    dev: true
 
   /portfinder@1.0.32:
     resolution: {integrity: sha512-on2ZJVVDXRADWE6jnQaX0ioEylzgBpQk8r55NE4wjXW1ZxO+BgDlY6DXwj20i0V8eB4SenDQ00WEaxfiIQPcxg==}

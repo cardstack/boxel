@@ -29,6 +29,7 @@ import * as emberResourcesCore from 'ember-resources/core';
 import * as emberDestroyable from '@ember/destroyable';
 import * as marked from 'marked';
 import * as ethers from 'ethers';
+import * as pluralize from 'pluralize';
 
 export function shimExternals(loader: Loader = Loader.getLoader()) {
   loader.shimModule('@cardstack/runtime-common', runtime);
@@ -67,6 +68,7 @@ export function shimExternals(loader: Loader = Loader.getLoader()) {
   loader.shimModule('@ember/destroyable', emberDestroyable);
   loader.shimModule('marked', marked);
   loader.shimModule('ethers', ethers);
+  loader.shimModule('pluralize', pluralize);
 }
 
 shimExternals();

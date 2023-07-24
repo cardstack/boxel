@@ -13,10 +13,12 @@
     "@types/flat": "^5.0.2",
     "@types/lodash": "^4.14.182",
     "@types/marked": "^4.3.0",
+    "@types/pluralize": "^0.0.30",
     "ember-cli-htmlbars": "^6.2.0",
     "ember-concurrency": "^3.0.0",
     "ember-modifier": "^3.2.1",
     "ethers": "^6.6.2",
+    "pluralize": "^8.0.0",
     "tracked-built-ins": "^2.0.1"
   },
   "peerDependencies": {

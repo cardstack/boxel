@@ -21,6 +21,8 @@ import {
   baseCardRef,
   identifyCard,
 } from '@cardstack/runtime-common';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import { plural } from 'pluralize';
 
 interface Signature {
   Args: {
@@ -71,14 +73,18 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
             </li>
           {{/each}}
         </ul>
-      {{/if}}
-      <Button @size='small' {{on 'click' this.add}} data-test-add-new>
-        Choose
-      </Button>
-      {{#if @context.actions.createCard}}
-        <Button @size='small' {{on 'click' this.create}} data-test-create-new>
-          Create New
+        <Button @size='small' {{on 'click' this.add}} data-test-add-new>
+          Choose
         </Button>
+        {{#if @context.actions.createCard}}
+          <Button @size='small' {{on 'click' this.create}} data-test-create-new>
+            Create New
+          </Button>
+        {{/if}}
+      {{else}}
+        <div class='empty' {{on 'click' this.add}} data-test-add-new-in-empty-state>
+          {{svgJar 'icon-plus' width='20px' height='20px'}} Add {{this.getPluralDisplayName}}
+        </div>
       {{/if}}
     </div>
   </template>
@@ -125,6 +131,10 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     cards = cards.filter((_c: Card, i: number) => i !== index);
     (this.args.model.value as any)[this.args.field.name] = cards;
   };
+
+  getPluralDisplayName = () => {
+    return plural(this.args.field.card.displayName);
+  }
 }
 
 export function getLinksToManyComponent({

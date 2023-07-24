@@ -139,6 +139,27 @@
   margin-top: var(--boxel-sp);
 }
 
+.contains-many-editor .empty {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--boxel-sp-xxxs);
+
+  background: var(--boxel-light-100);
+  box-sizing: border-box;
+  cursor: pointer;
+  width: 100%;
+  height: 65px;
+  border: 1px solid var(--boxel-form-control-border-color);
+  border-radius: var(--boxel-form-control-border-radius);
+  color: var(--boxel-teal);
+  font: var(--boxel-font-sm);
+  font-weight: 500;
+  letter-spacing: var(--boxel-lsp-xs);
+  transition: border-color var(--boxel-transition);
+  --icon-color: var(--boxel-teal);
+}
+
 /* Plural Field */
 .plural-field {
   list-style: none;

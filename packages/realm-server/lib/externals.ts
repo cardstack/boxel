@@ -96,6 +96,7 @@ export function shimExternals(loader: Loader = Loader.getLoader()) {
   loader.shimModule('@ember/destroyable', {});
   loader.shimModule('marked', { marked: () => {} });
   loader.shimModule('ethers', ethers);
+  loader.shimModule('pluralize', { pluralize() {} });
 }
 
 shimExternals();
