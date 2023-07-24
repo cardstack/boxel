@@ -8,25 +8,25 @@ on:
         required: false
         default: staging
 
-env:
-  ENVIRONMENT: ${{ inputs.environment }}
-  VOLTA_FEATURE_PNPM: 1
-
 permissions:
   contents: read
   id-token: write
 
 jobs:
+  build-host:
+    name: Build host
+    uses: ./.github/workflows/build-host.yml
+    secrets: inherit
+    with:
+      environment: ${{ inputs.environment }}
+
   deploy-host:
     name: Deploy host
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Deploy boxel-host if changes have happened
-        uses: ./.github/actions/deploy-boxel-host
-        with:
-          environment: ${{ inputs.environment }}
-          discord_webhook: ${{ secrets.DISCORD_WEBHOOK }}
+    needs: [build-host, build-realm-server]
+    uses: ./.github/workflows/deploy-host.yml
+    secrets: inherit
+    with:
+      environment: ${{ inputs.environment }}
 
   build-realm-server:
     name: Build realm-server
@@ -34,13 +34,13 @@ jobs:
     secrets: inherit
     with:
       app: "realm-demo"
-      environment: "staging"
+      environment: ${{ inputs.environment }}
 
   deploy-realm-server:
     name: Deploy realm server to staging
-    needs: [build-realm-server]
+    needs: [build-host, build-realm-server]
     uses: ./.github/workflows/waypoint-deploy.yml
     secrets: inherit
     with:
       app: "realm-demo"
-      environment: "staging"
+      environment: ${{ inputs.environment }}

@@ -1,0 +1,53 @@
+name: Deploy host with ember
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Init
+        uses: ./.github/actions/init
+
+      - name: Set up env
+        env:
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          echo "AWS_REGION=us-east-1" >> $GITHUB_ENV
+          if [ "$INPUT_ENVIRONMENT" = "production" ]; then
+            echo "AWS_ROLE_ARN=arn:aws:iam::120317779495:role/boxel-host" >> $GITHUB_ENV
+            echo "AWS_S3_BUCKET=cardstack-boxel-host-production" >> $GITHUB_ENV
+            echo "AWS_CLOUDFRONT_DISTRIBUTION=E2DDEHLJXF5LQ8" >> $GITHUB_ENV
+          elif [ "$INPUT_ENVIRONMENT" = "staging" ]; then
+            echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/boxel-host" >> $GITHUB_ENV
+            echo "AWS_S3_BUCKET=cardstack-boxel-host-staging" >> $GITHUB_ENV
+            echo "AWS_CLOUDFRONT_DISTRIBUTION=E35TXLK9HIMESQ" >> $GITHUB_ENV
+          else
+            echo "unrecognized environment"
+            exit 1;
+          fi
+
+      - name: Download dist
+        uses: actions/download-artifact@v3
+        with:
+          name: host-dist
+          path: packages/host/dist
+
+      - name: Deploy
+        run: pnpm deploy:boxel-host ci:deploy --verbose
+
+      - name: Send notification to Discord
+        uses: ./.github/actions/discord-notification-deploy
+        with:
+          app: "boxel-host"
+          status: ${{ github.action_status }}
+          environment: ${{ inputs.environment }}
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}

@@ -38,6 +38,15 @@ module.exports = function (deployTarget) {
     ENV.build.environment = 'production';
   }
 
+  if (deployTarget.startsWith('ci:build')) {
+    ENV.build.environment = 'production';
+    ENV.plugins = ['build', 'revision-data', 'compress'];
+  }
+
+  if (deployTarget.startsWith('ci:deploy')) {
+    ENV.plugins = ['s3', 'fastboot-s3', 'cloudfront'];
+  }
+
   if (
     deployTarget === 's3-preview-staging' ||
     deployTarget === 's3-preview-production'
