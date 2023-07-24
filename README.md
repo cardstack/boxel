@@ -32,10 +32,10 @@ There exists a "dev" mode in which we can use ember-cli to host the card runtime
 ### ember-cli Hosted App
 In order to run the ember-cli hosted app:
 
-1. `pnpm start` in the host/ workspace to serve the ember app. Note that this script includes the environment variable `OWN_REALM_URL=http://localhost:4201/demo/` which configures the host to point to the demo cards realm by default.
-2. `pnpm start:all` in the realm-server/ to serve the base realm and demo realms -- this will also allow you to switch between the app and the tests without having to restart servers)
+1. `pnpm start` in the host/ workspace to serve the ember app. Note that this script includes the environment variable `OWN_REALM_URL=http://localhost:4201/draft/` which configures the host to point to the draft realm's cards realm by default.
+2. `pnpm start:all` in the realm-server/ to serve the base realm, draft realm and published realm -- this will also allow you to switch between the app and the tests without having to restart servers)
 
-The app is available at http://localhost:4200. It will serve the demo cards realm (configurable with OWN_REALM_URL, as mentioned above). You can open the base and demo cards workspace directly by entering http://localhost:4201/base or http://localhost:4201/demo in the browser.
+The app is available at http://localhost:4200. It will serve the draft realm (configurable with OWN_REALM_URL, as mentioned above). You can open the base and draft cards workspace directly by entering http://localhost:4201/base or http://localhost:4201/draft in the browser (and additionally the published realm by entering http://localhost:4201/published).
 
 When you are done running the app you can stop the synapse server by running the following from the `packages/matrix` workspace:
 ```
@@ -46,9 +46,9 @@ pnpm stop:synapse
 In order to run the realm server hosted app:
 
 1. `pnpm start:build` in the host/ workspace to re-build the host app (this step can be omitted if you do not want host app re-builds)
-2. `pnpm start:all` in the realm-server/ to serve the base and demo realms
+2. `pnpm start:all` in the realm-server/ to serve the base, draft, and published realms
 
-You can visit the URL of each realm server to view that realm's app. So for instance, the base realm's app is available at `http://localhost:4201/base` and the demo realm's app is at `http://localhost:4201/demo`.
+You can visit the URL of each realm server to view that realm's app. So for instance, the base realm's app is available at `http://localhost:4201/base` and the draft realm's app is at `http://localhost:4201/draft`.
 
 Live reloads are not available in this mode, but you can just refresh the page to grab the latest code changes if you are running rebuilds (step #1 and #2 above).
 
@@ -59,10 +59,11 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 | Port  | Description                                           | Running `start:all` | Running `start:base` |
 | ----- | ----------------------------------------------------- | ------------------- | -------------------- |
 | :4201 | `/base` base realm                                    | ✅                  | ✅                   |
-| :4201 | `/demo` demo realm                                    | ✅                  | 🚫                   |
+| :4201 | `/drafts` draft realm                                 | ✅                  | 🚫                   |
+| :4201 | `/published` draft realm                              | ✅                  | 🚫                   |
 | :4202 | `/test` host test realm, `/node-test` node test realm | ✅                  | 🚫                   |
 | :4203 | `root (/)` base realm                                 | ✅                  | 🚫                   |
-| :4204 | `root (/)` demo realm                                 | ✅                  | 🚫                   |
+| :4204 | `root (/)` drafts realm                               | ✅                  | 🚫                   |
 | :4205 | qunit server mounting realms in iframes for testing   | ✅                  | 🚫                   |
 | :8008 | Matrix synapse server                                 | ✅                  | 🚫                   |
 

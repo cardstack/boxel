@@ -60,6 +60,13 @@ export default class OperatorModeStack extends Component<Signature> {
         margin-left: var(--boxel-sp-xs);
         margin-right: var(--boxel-sp-xs);
       }
+
+      :global(.operator-mode-stack .embedded-card) {
+        padding-top: calc(
+          var(--overlay-embedded-card-header-height) + var(--boxel-sp-lg)
+        );
+      }
+
     </style>
   </template>
 }

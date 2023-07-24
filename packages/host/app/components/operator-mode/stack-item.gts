@@ -53,9 +53,10 @@ interface Signature {
   };
 }
 
-export interface RenderedLinksToCard {
+export interface RenderedCardForOverlayActions {
   element: HTMLElement;
   card: Card;
+  fieldType: FieldType | undefined;
 }
 
 export default class OperatorModeStackItem extends Component<Signature> {
@@ -69,20 +70,22 @@ export default class OperatorModeStackItem extends Component<Signature> {
     fieldType: FieldType | undefined;
   }>();
 
-  get renderedLinksToCards(): RenderedLinksToCard[] {
+  get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
     return (
       this.cardTracker.elements
         .filter((entry) => {
           return (
             entry.meta.format === 'data' ||
             entry.meta.fieldType === 'linksTo' ||
-            entry.meta.fieldType === 'linksToMany'
+            entry.meta.fieldType === 'linksToMany' ||
+            entry.meta.fieldType === 'contains'
           );
         })
         // this mapping could probably be eliminated or simplified if we refactor OperatorModeOverlays to accept our type
         .map((entry) => ({
           element: entry.element,
           card: entry.meta.card,
+          fieldType: entry.meta.fieldType,
         }))
     );
   }
@@ -182,8 +185,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
           style={{cssVar
             boxel-header-icon-width='30px'
             boxel-header-icon-height='30px'
-            boxel-header-text-size=(if this.isHoverOnRealmIcon 'var(--boxel-font)' 'var(--boxel-font-lg)')
-            boxel-header-text-color=(if this.isHoverOnRealmIcon 'var(--boxel-teal)' 'var(--boxel-dark)')
+            boxel-header-text-size=(if
+              this.isHoverOnRealmIcon 'var(--boxel-font)' 'var(--boxel-font-lg)'
+            )
+            boxel-header-text-color=(if
+              this.isHoverOnRealmIcon 'var(--boxel-teal)' 'var(--boxel-dark)'
+            )
             boxel-header-padding='var(--boxel-sp-xs) var(--boxel-sp)'
             boxel-header-action-padding='var(--boxel-sp-xs) var(--boxel-sp)'
           }}
@@ -191,8 +198,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         >
           <:actions>
             {{#if (eq @item.format 'isolated')}}
-              <Tooltip
-                @placement='top'>
+              <Tooltip @placement='top'>
                 <:trigger>
                   <IconButton
                     @icon='icon-pencil'
@@ -209,8 +215,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                 </:content>
               </Tooltip>
             {{else}}
-              <Tooltip
-                @placement='top'>
+              <Tooltip @placement='top'>
                 <:trigger>
                   <IconButton
                     @icon='icon-pencil'
@@ -230,18 +235,17 @@ export default class OperatorModeStackItem extends Component<Signature> {
             <div>
               <BoxelDropdown>
                 <:trigger as |bindings|>
-                  <Tooltip
-                    @placement='top'>
+                  <Tooltip @placement='top'>
                     <:trigger>
                       <IconButton
-                          @icon='icon-horizontal-three-dots'
-                          @width='20px'
-                          @height='20px'
-                          class='icon-button'
-                          aria-label='Options'
-                          data-test-more-options-button
-                          {{bindings}}
-                        />
+                        @icon='icon-horizontal-three-dots'
+                        @width='20px'
+                        @height='20px'
+                        class='icon-button'
+                        aria-label='Options'
+                        data-test-more-options-button
+                        {{bindings}}
+                      />
                     </:trigger>
                     <:content>
                       More Options
@@ -270,13 +274,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
                           icon='icon-link'
                         )
                       )
-                  }}
-                />
+                    }}
+                  />
                 </:content>
               </BoxelDropdown>
             </div>
-            <Tooltip
-              @placement='top'>
+            <Tooltip @placement='top'>
               <:trigger>
                 <IconButton
                   @icon='icon-x'
@@ -301,7 +304,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             @context={{this.context}}
           />
           <OperatorModeOverlays
-            @renderedLinksToCards={{this.renderedLinksToCards}}
+            @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
             @publicAPI={{@publicAPI}}
             @toggleSelect={{this.toggleSelect}}
             @selectedCards={{this.selectedCards}}
@@ -339,6 +342,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
         --buried-operator-mode-header-height: 2.5rem;
       }
 
+      .header {
+        z-index: 1;
+        background: var(--boxel-light);
+      }
+
       .item {
         justify-self: center;
         position: absolute;
@@ -350,7 +358,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .card {
-        position: relative; 
+        position: relative;
         height: 100%;
         display: grid;
         grid-template-rows: 3.5rem auto;
@@ -362,11 +370,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
         overflow: auto;
       }
 
-      .content > .boxel-card-container.boundaries {
+      :global(.content > .boxel-card-container.boundaries) {
         box-shadow: none;
       }
 
-      .content > .boxel-card-container > header {
+      :global(.content > .boxel-card-container > header) {
         display: none;
       }
 
@@ -467,6 +475,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       .icon-save:hover {
         --icon-bg: var(--boxel-dark);
       }
+
     </style>
   </template>
 }

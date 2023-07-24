@@ -97,6 +97,7 @@ import type { Card, CardBase } from 'https://cardstack.com/base/card-api';
 
 export const maxLinkDepth = 5;
 export const assetsDir = '__boxel/';
+export const boxelUIAssetsDir = '@cardstack/boxel-ui/';
 
 export interface CardChooser {
   chooseCard<T extends CardBase>(

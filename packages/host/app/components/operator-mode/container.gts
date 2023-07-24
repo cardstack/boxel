@@ -613,8 +613,8 @@ export default class OperatorModeContainer extends Component<Signature> {
         right: 6px;
         margin-right: 0;
         border-radius: var(--boxel-border-radius);
-        background-color: rgba(255, 255, 255, 0.25);
-        border: solid 1px rgba(255, 255, 255, 0.5);
+        background-color: var(--boxel-400);
+        border: solid 1px var(--boxel-border-color);
         box-shadow: var(--boxel-box-shadow);
       }
       .chat-btn:hover {

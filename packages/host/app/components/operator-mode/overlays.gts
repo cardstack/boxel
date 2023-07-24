@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { RenderedLinksToCard } from './stack-item';
+import { RenderedCardForOverlayActions } from './stack-item';
 import { velcro } from 'ember-velcro';
 import { Actions } from '@cardstack/runtime-common';
 import { IconButton } from '@cardstack/boxel-ui';
@@ -10,10 +10,15 @@ import cn from '@cardstack/boxel-ui/helpers/cn';
 import { type TrackedArray } from 'tracked-built-ins';
 import type { MiddlewareState } from '@floating-ui/dom';
 import type { Card } from 'https://cardstack.com/base/card-api';
+import { tracked } from '@glimmer/tracking';
+import { TrackedWeakMap } from 'tracked-built-ins';
+import { cardTypeDisplayName } from '@cardstack/runtime-common';
+import { and, eq, not } from '@cardstack/host/helpers/truth-helpers';
+import { bool } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 interface Signature {
   Args: {
-    renderedLinksToCards: RenderedLinksToCard[];
+    renderedCardsForOverlayActions: RenderedCardForOverlayActions[];
     publicAPI: Actions;
     toggleSelect?: (card: Card) => void;
     selectedCards?: TrackedArray<Card>;
@@ -21,74 +26,99 @@ interface Signature {
 }
 
 export default class OperatorModeOverlays extends Component<Signature> {
+  isEmbeddedCard(renderedCard: RenderedCardForOverlayActions) {
+    return (
+      renderedCard.fieldType === 'contains' ||
+      renderedCard.fieldType === 'linksTo'
+    );
+  }
+
   <template>
-    {{#each @renderedLinksToCards as |renderedCard|}}
-      {{#let renderedCard.card (this.isSelected renderedCard.card) as |card isSelected|}}
+    {{#each this.renderedCardsForOverlayActionsWithEvents as |renderedCard|}}
+      {{#let
+        renderedCard.card (this.isSelected renderedCard.card)
+        as |card isSelected|
+      }}
         <div
-          class={{cn 'actions-overlay' selected=isSelected}}
+          class={{cn
+            'actions-overlay'
+            selected=isSelected
+            hovered=(eq this.currentlyHoveredCard renderedCard)
+          }}
           {{velcro renderedCard.element middleware=(Array this.offset)}}
           data-test-overlay-selected={{if isSelected card.id}}
+          data-test-overlay-card-display-name={{cardTypeDisplayName card}}
         >
-          <button
-            {{on 'click' (fn this.openOrSelectCard card)}}
-            class='overlay-button'
-            aria-label='open card'
-            data-test-overlay-button={{card.id}}
-          />
-          {{#if @toggleSelect}}
+          {{! Add mouseenter and mouseleave events to each button, so we can maintain the hover effect. }}
+          {{#if (this.isEmbeddedCard renderedCard)}}
+            <div class='overlay-embedded-card-header' data-test-overlay-header>
+              <div class='header-title'>
+                {{! TODO: Icon for linksTo field type }}
+                {{#if (eq renderedCard.fieldType 'contains')}}
+                  <span class='icon'>
+                    ⮑
+                  </span>
+                {{/if}}
+
+                {{cardTypeDisplayName card}}
+              </div>
+            </div>
+          {{/if}}
+
+          {{#if
+            (and (bool @toggleSelect) (not (this.isEmbeddedCard renderedCard)))
+          }}
             <IconButton
+              {{! @glint-ignore (glint thinks toggleSelect is not in this scope but it actually is - we check for it in the condition above) }}
               {{on 'click' (fn @toggleSelect card)}}
+              {{on 'mouseenter' (fn this.setCurrentlyHoveredCard renderedCard)}}
+              {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
               class='hover-button select'
               @icon={{if isSelected 'icon-circle-selected' 'icon-circle'}}
               aria-label='select card'
               data-test-overlay-select={{card.id}}
             />
+            <IconButton
+              {{on 'mouseenter' (fn this.setCurrentlyHoveredCard renderedCard)}}
+              {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
+              class='hover-button preview'
+              @icon='eye'
+              aria-label='preview card'
+            />
+            <IconButton
+              {{on 'mouseenter' (fn this.setCurrentlyHoveredCard renderedCard)}}
+              {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
+              class='hover-button more-actions'
+              @icon='more-actions'
+              aria-label='more actions'
+            />
           {{/if}}
-          <IconButton
-            class='hover-button preview'
-            @icon='eye'
-            aria-label='preview card'
-          />
-          <IconButton
-            class='hover-button more-actions'
-            @icon='more-actions'
-            aria-label='more actions'
-          />
         </div>
       {{/let}}
     {{/each}}
     <style>
+      :global(:root) {
+        --overlay-embedded-card-header-height: 44px;
+      }
       .actions-overlay {
         border-radius: var(--boxel-border-radius);
-      }
-      .actions-overlay:hover {
-        cursor: pointer;
-      }
-      .actions-overlay:hover {
-        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.16);
+        pointer-events: none;
       }
       .actions-overlay.selected {
         box-shadow: 0 0 0 2px var(--boxel-highlight);
       }
-      .overlay-button {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: none;
-        border: none;
-        border-radius: inherit;
-        padding: 0;
+      .hovered {
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.16);
       }
       .hover-button {
         display: none;
         position: absolute;
         width: 30px;
         height: 30px;
+        pointer-events: auto;
       }
-      .actions-overlay:hover > .hover-button:not(:disabled),
-      .actions-overlay.selected > .hover-button.select {
+      .hovered > .hover-button:not(:disabled),
+      .hovered > .hover-button.select {
         display: block;
       }
       .hover-button:not(:disabled):hover {
@@ -110,8 +140,36 @@ export default class OperatorModeOverlays extends Component<Signature> {
       .hover-button > svg {
         height: 100%;
       }
+      .overlay-embedded-card-header {
+        background: var(--boxel-light-100);
+        height: var(--overlay-embedded-card-header-height);
+      }
+      .icon-button:hover {
+        --icon-bg: var(--boxel-teal);
+        --icon-border: none;
+        --icon-color: var(--boxel-teal);
+        background: var(--boxel-light);
+      }
+      .header-title {
+        display: inline-block;
+        margin: 0;
+        padding: 13px;
+        color: var(--boxel-label-color);
+        font: 700 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-sm);
+      }
+      .header-title > .icon {
+        margin-right: var(--boxel-sp-xxxs);
+      }
+
     </style>
   </template>
+
+  @tracked currentlyHoveredCard: RenderedCardForOverlayActions | null = null;
+  areEventsRegistered = new TrackedWeakMap<
+    RenderedCardForOverlayActions,
+    boolean
+  >();
 
   offset = {
     name: 'offset',
@@ -122,12 +180,45 @@ export default class OperatorModeOverlays extends Component<Signature> {
 
       floating.style.width = width + 'px';
       floating.style.height = height + 'px';
-
+      floating.style.position = 'absolute';
       return {
         x: rects.reference.x,
         y: rects.reference.y,
       };
     },
+  };
+
+  // Since we put absolutely positined overlays containing operator mode actions on top of the rendered cards,
+  // we are running into a problem where the overlays are interfering with scrolling of the container that holds the rendered cards.
+  // That means scrolling stops when the cursor gets over the overlay, which is a bug. We solved this problem by disabling pointer
+  // events on the overlay. However, that prevents the browser from detecting hover state, which is needed to show the operator mode actions, and
+  // click event, needed to open the card. To solve this, we add event listeners to the rendered cards underneath the overlay, and use those to
+  // detect hover state and click event.
+  get renderedCardsForOverlayActionsWithEvents() {
+    let renderedCards = this.args.renderedCardsForOverlayActions;
+    for (const renderedCard of renderedCards) {
+      if (this.areEventsRegistered.get(renderedCard)) continue;
+      renderedCard.element.addEventListener(
+        'mouseenter',
+        (_e: MouseEvent) => (this.currentlyHoveredCard = renderedCard)
+      );
+      renderedCard.element.addEventListener(
+        'mouseleave',
+        (_e: MouseEvent) => (this.currentlyHoveredCard = null)
+      );
+      renderedCard.element.addEventListener('click', (_e: MouseEvent) =>
+        this.openOrSelectCard(renderedCard.card)
+      );
+      renderedCard.element.style.cursor = 'pointer';
+    }
+
+    return renderedCards;
+  }
+
+  setCurrentlyHoveredCard = (
+    renderedCard: RenderedCardForOverlayActions | null
+  ) => {
+    this.currentlyHoveredCard = renderedCard;
   };
 
   @action openOrSelectCard(card: Card) {

@@ -60,7 +60,7 @@ export default class CardCatalogModal extends Component<Signature> {
             <button
               {{on 'click' (fn this.pick undefined)}}
               class='dialog-box__close'
-            >x</button>
+            >⨯</button>
           </Header>
           <div class='dialog-box__content'>
             {{#if this.currentRequest.search.isLoading}}
