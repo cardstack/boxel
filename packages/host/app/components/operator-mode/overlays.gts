@@ -56,7 +56,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
                 {{! TODO: Icon for linksTo field type }}
                 {{#if (eq renderedCard.fieldType 'contains')}}
                   <span class='icon'>
-                    ⮑
+                    ⮡
                   </span>
                 {{/if}}
 

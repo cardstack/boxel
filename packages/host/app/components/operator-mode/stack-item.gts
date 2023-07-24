@@ -174,7 +174,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   get headerTitle() {
     if (this.args.item.type === 'contained') {
       // TODO use a proper icon for contained card and fix design
-      return `⮑ ${cardTypeDisplayName(this.card)}`;
+      return `⮡ ${cardTypeDisplayName(this.card)}`;
     }
 
     return this.isHoverOnRealmIcon && this.realmName
