@@ -170,12 +170,32 @@ export default class OperatorModeContainer extends Component<Signature> {
     format: Format,
     request?: Deferred<Card>
   ) {
-    return this.operatorModeStateService.replaceItemInStack(
-      item,
-      this.getAddressableCard(item),
-      request,
-      format
-    );
+    if (item.type === 'card') {
+      this.operatorModeStateService.replaceItemInStack_old(item, {
+        ...item,
+        request,
+        format,
+      });
+    }
+
+    if (item.type === 'contained') {
+      let addressableItem = getCardStackItem(
+        item,
+        this.stacks[item.stackIndex].items
+      );
+
+      // TODO: format has to be set to all the cards in the contain chain
+      this.operatorModeStateService.replaceItemInStack_old(addressableItem, {
+        ...addressableItem,
+        request,
+        format,
+      });
+
+      this.operatorModeStateService.replaceItemInStack_old(item, {
+        ...item,
+        format,
+      });
+    }
   }
 
   @action async close(item: StackItem) {
@@ -193,6 +213,10 @@ export default class OperatorModeContainer extends Component<Signature> {
     let { request } = item;
     await this.saveCardFieldValues(this.getCard(item));
     let updatedCard = await this.write.perform(this.getAddressableCard(item));
+    let pathSegments = getPathToStackItem(
+      item,
+      this.stacks[item.stackIndex].items
+    ); // array of path segments
 
     if (updatedCard) {
       request?.fulfill(updatedCard);
@@ -200,11 +224,20 @@ export default class OperatorModeContainer extends Component<Signature> {
       if (item.type === 'card' && item.isLinkedCard) {
         this.close(item); // closes the 'create new card' editor for linked card fields
       } else {
-        this.operatorModeStateService.replaceItemInStack(
+        let addressableItem = getCardStackItem(
           item,
-          updatedCard,
-          item.request,
-          'isolated'
+          this.stacks[item.stackIndex].items
+        );
+
+        this.operatorModeStateService.replaceItemInStack_old(addressableItem, {
+          ...addressableItem,
+          card: updatedCard,
+          request,
+          format: 'isolated',
+        });
+
+        pathSegments.forEach(() =>
+          this.operatorModeStateService.popItemFromStack(item.stackIndex)
         );
       }
     }
@@ -280,13 +313,46 @@ export default class OperatorModeContainer extends Component<Signature> {
         here.addToStack(newItem);
         return await newItem.request?.promise;
       },
-      viewCard: (card: Card) => {
-        return here.addToStack({
-          type: 'card',
-          card,
-          format: 'isolated',
-          stackIndex,
-        });
+      viewCard: async (card: Card) => {
+        let itemsCount = here.stacks[stackIndex].items.length;
+
+        let currentCardOnStack = (
+          here.stacks[stackIndex].items[itemsCount - 1]! as CardStackItem
+        ).card; // Last item on the stack
+
+        let fields = await here.cardService.getFields(currentCardOnStack);
+        let containedFieldName: string | undefined;
+
+        for (let [fieldName, field] of Object.entries(fields)) {
+          let value = (currentCardOnStack as any)[fieldName];
+          if (value !== card) {
+            continue;
+          }
+          if (field.fieldType === 'contains') {
+            containedFieldName = fieldName;
+            break;
+          }
+        }
+
+        let newItem: StackItem;
+        if (containedFieldName) {
+          newItem = {
+            type: 'contained',
+            fieldOfIndex: itemsCount - 1,
+            fieldName: containedFieldName,
+            format: 'isolated',
+            stackIndex,
+          };
+        } else {
+          newItem = {
+            type: 'card',
+            card,
+            format: 'isolated',
+            stackIndex,
+          };
+        }
+
+        here.addToStack(newItem);
       },
       createCardDirectly: async (
         doc: LooseSingleCardDocument,
