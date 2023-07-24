@@ -161,7 +161,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   get headerIcon() {
     // TODO use a proper icon for contained card and fix design
     if (this.args.item.type === 'contained') {
-      return null;
+      return;
     }
 
     return {

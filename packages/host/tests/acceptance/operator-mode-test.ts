@@ -21,6 +21,7 @@ import { shimExternals } from '@cardstack/host/lib/externals';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import percySnapshot from '@percy/ember';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import { type CardStackItem } from '@cardstack/host/components/operator-mode/container';
 
 module('Acceptance | operator mode tests', function (hooks) {
   let realm: Realm;
@@ -407,8 +408,11 @@ module('Acceptance | operator mode tests', function (hooks) {
       ) as OperatorModeStateService;
 
       // @ts-ignore Property '#private' is missing in type 'Card[]' but required in type 'TrackedArray<Card>'.glint(2741) - don't care about this error here, just stubbing
-      operatorModeStateService.recentCards =
-        operatorModeStateService.state.stacks[0].items.map((item) => item.card);
+      operatorModeStateService.recentCards = (
+        operatorModeStateService.state.stacks[0].filter(
+          (item) => item.type === 'card'
+        ) as CardStackItem[]
+      ).map((item) => item.card);
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
       assert.dom('[data-test-add-card-left-stack]').exists();

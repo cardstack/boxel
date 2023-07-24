@@ -53,15 +53,13 @@ export default class CardController extends Controller {
       // When entering operator mode, put the current card on the stack
       this.operatorModeState = JSON.stringify({
         stacks: [
-          {
-            items: [
-              {
-                type: 'card',
-                id: this.model?.id,
-                format: 'isolated',
-              },
-            ],
-          },
+          [
+            {
+              type: 'card',
+              id: this.model?.id,
+              format: 'isolated',
+            },
+          ],
         ],
       } as OperatorModeSerializedState);
     } else {

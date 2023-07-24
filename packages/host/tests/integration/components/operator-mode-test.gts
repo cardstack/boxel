@@ -509,16 +509,13 @@ module('Integration | operator-mode', function (hooks) {
 
       await operatorModeStateService.restore({
         stacks: [
-          {
-            items: [
-              {
-                card: {
-                  id: cardURL,
-                },
-                format: 'isolated',
-              },
-            ],
-          },
+          [
+            {
+              type: 'card',
+              id: cardURL,
+              format: 'isolated',
+            },
+          ],
         ],
       });
     };

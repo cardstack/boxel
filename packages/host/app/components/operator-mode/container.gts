@@ -48,9 +48,7 @@ export interface OperatorModeState {
   stacks: Stack[];
 }
 
-export interface Stack {
-  items: StackItem[];
-}
+export type Stack = StackItem[];
 
 interface BaseItem {
   format: Format;
@@ -139,12 +137,12 @@ export default class OperatorModeContainer extends Component<Signature> {
   });
 
   private getAddressableCard(item: StackItem): Card {
-    return getCardStackItem(item, this.stacks[item.stackIndex].items).card;
+    return getCardStackItem(item, this.stacks[item.stackIndex]).card;
   }
 
   private getCard(item: StackItem): Card {
     let card = this.getAddressableCard(item);
-    let path = getPathToStackItem(item, this.stacks[item.stackIndex].items);
+    let path = getPathToStackItem(item, this.stacks[item.stackIndex]);
     if (path.length === 0) {
       return card;
     }
@@ -171,7 +169,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     request?: Deferred<Card>
   ) {
     if (item.type === 'card') {
-      this.operatorModeStateService.replaceItemInStack_old(item, {
+      this.operatorModeStateService.replaceItemInStack(item, {
         ...item,
         request,
         format,
@@ -181,19 +179,22 @@ export default class OperatorModeContainer extends Component<Signature> {
     if (item.type === 'contained') {
       let addressableItem = getCardStackItem(
         item,
-        this.stacks[item.stackIndex].items
+        this.stacks[item.stackIndex]
       );
 
-      // TODO: format has to be set to all the cards in the contain chain
-      this.operatorModeStateService.replaceItemInStack_old(addressableItem, {
+      let pathSegments = getPathToStackItem(item, this.stacks[item.stackIndex]);
+      this.operatorModeStateService.replaceItemInStack(addressableItem, {
         ...addressableItem,
         request,
         format,
       });
-
-      this.operatorModeStateService.replaceItemInStack_old(item, {
-        ...item,
-        format,
+      pathSegments.forEach((_, index) => {
+        let stack = this.stacks[item.stackIndex];
+        let currentItem = stack[stack.length - index - 1];
+        this.operatorModeStateService.replaceItemInStack(currentItem, {
+          ...currentItem,
+          format,
+        });
       });
     }
   }
@@ -213,10 +214,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     let { request } = item;
     await this.saveCardFieldValues(this.getCard(item));
     let updatedCard = await this.write.perform(this.getAddressableCard(item));
-    let pathSegments = getPathToStackItem(
-      item,
-      this.stacks[item.stackIndex].items
-    ); // array of path segments
+    let pathSegments = getPathToStackItem(item, this.stacks[item.stackIndex]);
 
     if (updatedCard) {
       request?.fulfill(updatedCard);
@@ -226,10 +224,10 @@ export default class OperatorModeContainer extends Component<Signature> {
       } else {
         let addressableItem = getCardStackItem(
           item,
-          this.stacks[item.stackIndex].items
+          this.stacks[item.stackIndex]
         );
 
-        this.operatorModeStateService.replaceItemInStack_old(addressableItem, {
+        this.operatorModeStateService.replaceItemInStack(addressableItem, {
           ...addressableItem,
           card: updatedCard,
           request,
@@ -314,10 +312,10 @@ export default class OperatorModeContainer extends Component<Signature> {
         return await newItem.request?.promise;
       },
       viewCard: async (card: Card) => {
-        let itemsCount = here.stacks[stackIndex].items.length;
+        let itemsCount = here.stacks[stackIndex].length;
 
         let currentCardOnStack = (
-          here.stacks[stackIndex].items[itemsCount - 1]! as CardStackItem
+          here.stacks[stackIndex][itemsCount - 1]! as CardStackItem
         ).card; // Last item on the stack
 
         let fields = await here.cardService.getFields(currentCardOnStack);
@@ -419,7 +417,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   // stacks that have the same background image (consider 4 stacks, where 2
   // adjacent stacks have the same background image)
   fetchBackgroundImageURL = trackedFunction(this, async () => {
-    let bottomMostCard = this.stacks[0]?.items[0];
+    let bottomMostCard = this.stacks[0]?.[0];
     let realmInfo;
     if (bottomMostCard) {
       if (bottomMostCard.type !== 'card') {
@@ -437,11 +435,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   get allStackItems() {
-    return (
-      this.operatorModeStateService.state?.stacks
-        .map((stack) => stack.items)
-        .flat() ?? []
-    );
+    return this.operatorModeStateService.state?.stacks.flat() ?? [];
   }
 
   @action onCardSelectFromSearch(card: Card) {
@@ -466,13 +460,10 @@ export default class OperatorModeContainer extends Component<Signature> {
         stackIndex--
       ) {
         let currentStackItems =
-          this.operatorModeStateService.state.stacks[stackIndex].items;
-        currentStackItems.forEach((item) => {
-          this.operatorModeStateService.replaceItemInStack(item, {
-            ...item,
-            stackIndex: stackIndex + 1,
-          });
-        });
+          this.operatorModeStateService.state.stacks[stackIndex];
+        currentStackItems.forEach((item) =>
+          this.operatorModeStateService.shiftToStack(item, stackIndex + 1)
+        );
       }
 
       let stackItem: CardStackItem = {
@@ -569,7 +560,7 @@ export default class OperatorModeContainer extends Component<Signature> {
               <OperatorModeStack
                 data-test-operator-mode-stack={{stackIndex}}
                 class='operator-mode-stack'
-                @stackItems={{stack.items}}
+                @stackItems={{stack}}
                 @stackIndex={{stackIndex}}
                 @publicAPI={{this.publicAPI this stackIndex}}
                 @close={{this.close}}

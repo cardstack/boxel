@@ -2,7 +2,6 @@ import {
   type OperatorModeState,
   type Stack,
   type StackItem,
-  getCardStackItem,
 } from '../components/operator-mode/container';
 import Service from '@ember/service';
 import type CardService from '../services/card-service';
@@ -11,8 +10,7 @@ import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { getOwner } from '@ember/application';
 import { scheduleOnce } from '@ember/runloop';
-import type { Card, Format } from 'https://cardstack.com/base/card-api';
-import { type Deferred } from '@cardstack/runtime-common';
+import type { Card } from 'https://cardstack.com/base/card-api';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
@@ -34,9 +32,7 @@ type SerializedItem = CardItem | ContainedCardItem;
 //TODO: If we don't plan on hanging other things off this, then make
 // SerializedStack just an alias for an array of StackItems--the "items"
 // property is awkward
-interface SerializedStack {
-  items: SerializedItem[];
-}
+type SerializedStack = SerializedItem[];
 
 export type SerializedState = { stacks: SerializedStack[] };
 
@@ -55,11 +51,9 @@ export default class OperatorModeStateService extends Service {
   addItemToStack(item: StackItem) {
     let stackIndex = item.stackIndex;
     if (!this.state.stacks[stackIndex]) {
-      this.state.stacks[stackIndex] = new TrackedObject({
-        items: new TrackedArray([]),
-      });
+      this.state.stacks[stackIndex] = new TrackedArray([]);
     }
-    this.state.stacks[stackIndex].items.push(item);
+    this.state.stacks[stackIndex].push(item);
     if (item.type === 'card') {
       this.addRecentCards(item.card);
     }
@@ -68,12 +62,12 @@ export default class OperatorModeStateService extends Service {
 
   removeItemFromStack(item: StackItem) {
     let stackIndex = item.stackIndex;
-    let itemIndex = this.state.stacks[stackIndex].items.indexOf(item);
-    this.state.stacks[stackIndex].items.splice(itemIndex); // Always remove anything above the item
+    let itemIndex = this.state.stacks[stackIndex].indexOf(item);
+    this.state.stacks[stackIndex].splice(itemIndex); // Always remove anything above the item
 
     // If the additional stack is now empty, remove it from the state
     if (
-      this.state.stacks[stackIndex].items.length === 0 &&
+      this.state.stacks[stackIndex].length === 0 &&
       this.state.stacks.length > 1
     ) {
       this.state.stacks.splice(stackIndex, 1);
@@ -87,7 +81,7 @@ export default class OperatorModeStateService extends Service {
     if (!stack) {
       throw new Error(`No stack at index ${stackIndex}`);
     }
-    let item = stack.items.pop();
+    let item = stack.pop();
     if (!item) {
       throw new Error(`No items in stack at index ${stackIndex}`);
     }
@@ -95,66 +89,23 @@ export default class OperatorModeStateService extends Service {
     return item;
   }
 
-  // TODO: This seems to be doing 2 jobs: replacing cards in the stack and shifting
-  // cards to a different stack. probably we should break this out into
-  // different methods
-  replaceItemInStack(item: StackItem, newItem: StackItem): StackItem;
-  replaceItemInStack(
-    item: StackItem,
-    addressableCard: Card,
-    deferred: Deferred<Card> | undefined,
-    format: Format
-  ): StackItem;
-  replaceItemInStack(
-    item: StackItem,
-    newItemOrCard: Card | StackItem,
-    deferred?: Deferred<Card>,
-    format?: Format
-  ) {
-    let card: Card | undefined;
-    let newItem: StackItem | undefined;
-    if (this.cardService.isCard(newItemOrCard)) {
-      card = newItemOrCard;
-    } else {
-      newItem = newItemOrCard;
-    }
-
+  replaceItemInStack(item: StackItem, newItem: StackItem) {
     let stackIndex = item.stackIndex;
-    let cardStackItem = getCardStackItem(
-      item,
-      this.state.stacks[stackIndex].items
-    );
-
-    if (newItem && newItem.stackIndex !== stackIndex) {
-      this.removeItemFromStack(item);
-      this.addItemToStack(newItem);
-      this.schedulePersist();
-      return newItem;
-    }
-
-    if (card && format) {
-      newItem = { ...cardStackItem, card, format, request: deferred };
-    } else {
-      newItem = { ...cardStackItem };
-    }
-    let index = this.state.stacks[stackIndex].items.indexOf(cardStackItem);
-    this.state.stacks[stackIndex].items.splice(index, 1, newItem);
-    this.schedulePersist();
-    return newItem;
-  }
-
-  replaceItemInStack_old(item: StackItem, newItem: StackItem) {
-    let stackIndex = item.stackIndex;
-    let itemIndex = this.state.stacks[stackIndex].items.indexOf(item);
+    let itemIndex = this.state.stacks[stackIndex].indexOf(item);
 
     if (newItem.stackIndex !== stackIndex) {
-      this.removeItemFromStack(item);
-      this.addItemToStack(newItem);
-      return this.schedulePersist();
+      // this could be a smell that the stack index should not live in the item
+      throw new Error('call shiftToStack() instead');
     }
 
-    this.state.stacks[stackIndex].items.splice(itemIndex, 1, newItem);
+    this.state.stacks[stackIndex].splice(itemIndex, 1, newItem);
     this.schedulePersist();
+  }
+
+  shiftToStack(item: StackItem, newStackIndex: number) {
+    this.removeItemFromStack(item);
+    this.addItemToStack({ ...item, stackIndex: newStackIndex });
+    return this.schedulePersist();
   }
 
   clearStacks() {
@@ -190,14 +141,14 @@ export default class OperatorModeStateService extends Service {
     let state: SerializedState = { stacks: [] };
 
     for (let stack of this.state.stacks) {
-      let serializedStack: SerializedStack = { items: [] };
-      for (let item of stack.items) {
+      let serializedStack: SerializedStack = [];
+      for (let item of stack) {
         if (item.format !== 'isolated' && item.format !== 'edit') {
           throw new Error(`Unknown format for card on stack ${item.format}`);
         }
         if (item.type === 'card') {
           if (item.card.id) {
-            serializedStack.items.push({
+            serializedStack.push({
               type: 'card',
               id: item.card.id,
               format: item.format,
@@ -205,7 +156,7 @@ export default class OperatorModeStateService extends Service {
           }
         } else {
           let { fieldName, fieldOfIndex } = item;
-          serializedStack.items.push({
+          serializedStack.push({
             type: 'contained',
             fieldName,
             fieldOfIndex,
@@ -233,12 +184,12 @@ export default class OperatorModeStateService extends Service {
 
     let stackIndex = 0;
     for (let stack of rawState.stacks) {
-      let newStack: Stack = { items: new TrackedArray([]) };
-      for (let item of stack.items) {
+      let newStack: Stack = new TrackedArray([]);
+      for (let item of stack) {
         let { format } = item;
         if (item.type === 'card') {
           let card = await this.cardService.loadModel(new URL(item.id));
-          newStack.items.push({
+          newStack.push({
             type: 'card',
             card,
             format,
@@ -246,7 +197,7 @@ export default class OperatorModeStateService extends Service {
           });
         } else {
           let { fieldName, fieldOfIndex } = item;
-          newStack.items.push({
+          newStack.push({
             type: 'contained',
             fieldName,
             fieldOfIndex,
