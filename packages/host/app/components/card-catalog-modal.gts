@@ -23,6 +23,7 @@ import {
   Button,
   IconButton,
   BoxelInputValidationState,
+  BoxelInput,
 } from '@cardstack/boxel-ui';
 import { eq, gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
@@ -61,6 +62,19 @@ export default class CardCatalogModal extends Component<Signature> {
               {{on 'click' (fn this.pick undefined)}}
               class='dialog-box__close'
             >⨯</button>
+            <div class='boxel-searchbox'>
+              <span class='boxel-searchbox__search-icon'>
+                {{svgJar 'search' class='search-icon'}}
+              </span>
+              <label>
+                <span class='boxel-sr-only'>Search</span>
+                <BoxelInput
+                  class='boxel-searchbox__input'
+                  @value=''
+                  @placeholder='Search for a card type'
+                />
+              </label>
+            </div>
           </Header>
           <div class='dialog-box__content'>
             {{#if this.currentRequest.search.isLoading}}
@@ -192,6 +206,27 @@ export default class CardCatalogModal extends Component<Signature> {
       </Modal>
     {{/if}}
     <style>
+      .boxel-searchbox {
+        position: relative;
+        width: 100%;
+        margin-top: var(--boxel-sp);
+      }
+      .boxel-searchbox__search-icon {
+        --icon-color: var(--boxel-highlight);
+        position: absolute;
+        top: 0;
+        right: 0;
+        height: 100%;
+        width: var(--boxel-sp-xl);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      .boxel-searchbox__input {
+        padding-right: var(--boxel-sp-xl);
+        background-color: var(--boxel-100);
+        border-color: #707070;
+      }
       .footer {
         display: flex;
         justify-content: space-between;
