@@ -192,7 +192,12 @@ jobs:
 
   deploy-host:
     name: Deploy host
-    needs: [build-host, build-realm-server]
+    needs:
+      - boxel-ui-test
+      - host-test
+      - realm-server-test
+      - build-host
+      - build-realm-server
     uses: ./.github/workflows/deploy-host.yml
     secrets: inherit
     with:
@@ -200,7 +205,12 @@ jobs:
 
   deploy-realm-server:
     name: Deploy realm server to staging
-    needs: [build-host, build-realm-server]
+    needs:
+      - boxel-ui-test
+      - host-test
+      - realm-server-test
+      - build-host
+      - build-realm-server
     uses: ./.github/workflows/waypoint-deploy.yml
     secrets: inherit
     with:
