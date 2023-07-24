@@ -1,0 +1,44 @@
+name: Build host
+description: Build host with ember
+
+inputs:
+  environment:
+    description: Deployment environment
+    required: true
+  discord_webhook:
+    description: Discord webhook URL
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Init
+      uses: ./.github/actions/init
+
+    - name: Set up env
+      shell: bash
+      env:
+        INPUT_ENVIRONMENT: ${{ inputs.environment }}
+      run: |
+        if [ "$INPUT_ENVIRONMENT" = "production" ]; then
+          echo "OWN_REALM_URL=https://realms.cardstack.com/demo/" >> $GITHUB_ENV
+          echo "RESOLVED_BASE_REALM_URL=https://realms.cardstack.com/base/" >> $GITHUB_ENV
+          echo "MATRIX_URL=https://matrix.cardstack.com" >> $GITHUB_ENV
+        elif [ "$INPUT_ENVIRONMENT" = "staging" ]; then
+          echo "OWN_REALM_URL=https://realms-staging.stack.cards/demo/" >> $GITHUB_ENV
+          echo "RESOLVED_BASE_REALM_URL=https://realms-staging.stack.cards/base/" >> $GITHUB_ENV
+          echo "MATRIX_URL=https://matrix-staging.stack.cards" >> $GITHUB_ENV
+        else
+          echo "unrecognized environment"
+          exit 1;
+        fi
+
+    - name: Build
+      shell: bash
+      run: pnpm deploy:boxel-host ci:build --verbose
+
+    - name: Save dist
+      uses: actions/upload-artifact@v3
+      with:
+        name: host-dist
+        path: tmp/deploy-dist
