@@ -56,7 +56,8 @@ export default class CardController extends Controller {
           {
             items: [
               {
-                card: { id: this.model!.id },
+                type: 'card',
+                id: this.model?.id,
                 format: 'isolated',
               },
             ],
