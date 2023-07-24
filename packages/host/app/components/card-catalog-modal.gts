@@ -111,7 +111,7 @@ export default class CardCatalogModal extends Component<Signature> {
               {{/if}}
               <div class='card-catalog' data-test-card-catalog>
                 {{#each this.cardsByRealm as |realm|}}
-                  <section>
+                  <section data-test-realm={{realm.name}}>
                     <header class='realm-info'>
                       <img
                         src={{realm.iconURL}}
@@ -472,7 +472,7 @@ export default class CardCatalogModal extends Component<Signature> {
           realm = {
             name: instance.realmInfo.name,
             iconURL: instance.realmInfo.iconURL,
-            cards: [],
+            cards: [instance.card],
           };
           realmCards.push(realm);
         }

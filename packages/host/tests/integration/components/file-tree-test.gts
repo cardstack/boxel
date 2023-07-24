@@ -144,6 +144,11 @@ module('Integration | file-tree', function (hooks) {
       }
     );
     await click('[data-test-create-new-card-button]');
+
+    assert
+      .dom(`[data-test-card-catalog-modal] [data-test-boxel-header-title]`)
+      .hasText('Choose a card type');
+
     await waitFor('[data-test-card-catalog-modal] [data-test-realm-name]');
 
     assert
