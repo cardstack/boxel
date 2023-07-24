@@ -40,11 +40,7 @@ module.exports = function (deployTarget) {
 
   if (deployTarget.startsWith('ci:build')) {
     ENV.build.environment = 'production';
-    ENV.plugins = ['build', 'revision-data', 'compress'];
-  }
-
-  if (deployTarget.startsWith('ci:deploy')) {
-    ENV.plugins = ['s3', 'fastboot-s3', 'cloudfront'];
+    ENV.plugins = ['build'];
   }
 
   if (
