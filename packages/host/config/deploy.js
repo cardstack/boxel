@@ -38,7 +38,7 @@ module.exports = function (deployTarget) {
     ENV.build.environment = 'production';
   }
 
-  if (deployTarget.startsWith('ci:build')) {
+  if (deployTarget === 'build-only') {
     ENV.build.environment = 'production';
     ENV.plugins = ['build'];
   }

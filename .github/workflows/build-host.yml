@@ -35,7 +35,7 @@ jobs:
           fi
 
       - name: Build
-        run: pnpm deploy:boxel-host ci:build --verbose
+        run: pnpm deploy:boxel-host build-only --verbose
 
       - name: Save dist
         uses: actions/upload-artifact@v3
