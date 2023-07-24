@@ -12,7 +12,6 @@ import { tracked } from '@glimmer/tracking';
 import { getOwner } from '@ember/application';
 import { scheduleOnce } from '@ember/runloop';
 import type { Card } from 'https://cardstack.com/base/card-api';
-import cloneDeep from 'lodash/cloneDeep';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
