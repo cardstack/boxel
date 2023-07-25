@@ -446,8 +446,21 @@ module('Integration | schema', function (hooks) {
     await waitFor('[data-test-card-id]');
     await fillIn('[data-test-new-field-name]', 'author');
     await click('[data-test-add-field]');
-    await waitFor('[data-test-card-catalog] [data-test-realm-name]');
+    await waitFor('[data-test-card-catalog] [data-test-realm]');
 
+    assert
+      .dom('[data-test-card-catalog] [data-test-realm]')
+      .exists({ count: 2 });
+    assert
+      .dom(
+        '[data-test-card-catalog] [data-test-realm="Base Workspace"] [data-test-card-catalog-item]'
+      )
+      .exists({ count: 12 });
+    assert
+      .dom(
+        '[data-test-card-catalog] [data-test-realm="Unnamed Workspace"] [data-test-card-catalog-item]'
+      )
+      .exists({ count: 1 });
     assert
       .dom(
         `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"]`
@@ -488,10 +501,9 @@ module('Integration | schema', function (hooks) {
         `[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/string-field`
       )
       .exists('base realm primitive field displayed');
-
     assert
       .dom(
-        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"] [data-test-realm-name]`
+        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"]`
       )
       .exists();
 
@@ -694,10 +706,6 @@ module('Integration | schema', function (hooks) {
 
     await waitFor('[data-test-save-card]');
     await click(`[data-test-save-card]`);
-    await waitFor(`[data-test-catalog-entry-editor] [data-test-realm-name]`);
-    assert
-      .dom(`[data-test-catalog-entry-editor] [data-test-realm-name]`)
-      .containsText(`in Unnamed Workspace`);
 
     let fileRef = await adapter.openFile('pet.gts');
     let src = fileRef?.content as string;

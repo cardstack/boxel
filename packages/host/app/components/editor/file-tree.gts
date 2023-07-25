@@ -33,8 +33,7 @@ export default class FileTree extends Component<Args> {
         @realmURL={{@url}}
       />
     </nav>
-    <Tooltip
-      @placement='left'>
+    <Tooltip @placement='left'>
       <:trigger>
         <IconButton
           @icon='icon-plus-circle'

@@ -44,13 +44,14 @@ class Header extends Component<Signature> {
       ...attributes
     >
       {{#if @icon}}
-        <img 
-          class="icon" 
-          src={{@icon.URL}} 
-          data-test-boxel-header-icon={{@icon.URL}} 
-          alt="Header icon"
-          {{on 'mouseenter' this.onMouseEnterIcon}} 
-          {{on 'mouseleave' this.onMouseLeaveIcon}} />
+        <img
+          class='icon'
+          src={{@icon.URL}}
+          data-test-boxel-header-icon={{@icon.URL}}
+          alt='Header icon'
+          {{on 'mouseenter' this.onMouseEnterIcon}}
+          {{on 'mouseleave' this.onMouseLeaveIcon}}
+        />
       {{/if}}
       {{#if (or @label @title)}}
         <div data-test-boxel-header-title>
@@ -73,6 +74,7 @@ class Header extends Component<Signature> {
       header {
         position: relative;
         display: flex;
+        flex-flow: row wrap;
         align-items: center;
         padding: 0 var(--boxel-sp-xxxs) 0 var(--boxel-sp-sm);
         min-height: var(--boxel-header-min-height, 1.875rem); /* 30px */
@@ -93,7 +95,10 @@ class Header extends Component<Signature> {
         text-transform: none;
       }
       .has-background {
-        background-color: var(--boxel-header-background-color, var(--boxel-100));
+        background-color: var(
+          --boxel-header-background-color,
+          var(--boxel-100)
+        );
       }
       .highlighted {
         background-color: var(--boxel-highlight);
@@ -111,6 +116,7 @@ class Header extends Component<Signature> {
         width: var(--boxel-header-icon-width, 20px);
         height: var(--boxel-header-icon-height, 20px);
       }
+
     </style>
   </template>
 }
