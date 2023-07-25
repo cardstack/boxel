@@ -166,7 +166,7 @@ module('Unit | text-suggestion | card-chooser-title', function () {
         suggestion: 'Choose a Post card',
       },
     ]);
-    assert.equal(
+    assert.strictEqual(
       getSuggestionWithLowestDepth(suggestions),
       'Choose a Card instance'
     );
