@@ -316,9 +316,9 @@ export default class OperatorModeContainer extends Component<Signature> {
       viewCard: async (card: Card) => {
         let itemsCount = here.stacks[stackIndex].items.length;
 
-        let currentCardOnStack = (
-          here.stacks[stackIndex].items[itemsCount - 1]! as CardStackItem
-        ).card; // Last item on the stack
+        let currentCardOnStack = here.getCard(
+          here.stacks[stackIndex].items[itemsCount - 1]!
+        ); // Last item on the stack
 
         let fields = await here.cardService.getFields(currentCardOnStack);
         let containedFieldName: string | undefined;
