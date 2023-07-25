@@ -13,7 +13,9 @@ import {
   type RealmInfo,
 } from '@cardstack/runtime-common';
 import type { Query, Filter } from '@cardstack/runtime-common/query';
-import { isCardTypeFilter, isEveryFilter } from '@cardstack/runtime-common/query'
+import { suggestCardChooserTitle,
+  getSuggestionWithLowestDepth,
+} from '@cardstack/runtime-common/text-suggestion';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { getSearchResults, Search } from '../resources/search';
 import Preview from './preview';
@@ -630,50 +632,6 @@ export default class CardCatalogModal extends Component<Signature> {
     let newCard = await createNewCard(ref, undefined);
     this.pick(newCard);
   }
-}
-
-interface ChooseCardSuggestion {
-  suggestion: string; // suggests a UI text
-  depth: number;
-}
-
-export function suggestCardChooserTitle(
-  filter: Filter,
-  depth: number = 0 //lower the depth, higher the priority
-): ChooseCardSuggestion[] {
-  if (filter === undefined) {
-    return [];
-  }
-  let MAX_RECURSION_DEPTH = 3;
-  if (depth > MAX_RECURSION_DEPTH) {
-    return [];
-  }
-  //--base case--
-  if ('on' in filter && filter.on !== undefined) {
-    let cardRefName = (filter.on as { module: string; name: string }).name;
-    return [{ suggestion: `Choose a ${cardRefName} card`, depth }];
-  }
-  if (isCardTypeFilter(filter)) {
-    let cardRefName = (filter.type as { module: string; name: string }).name;
-    if (cardRefName == 'Card') {
-      return [{ suggestion: `Choose a ${cardRefName} instance`, depth }];
-    } else {
-      return [{ suggestion: `Choose a ${cardRefName} card`, depth }];
-    }
-  }
-  //--inductive case--
-  if (isEveryFilter(filter)) {
-    depth++;
-    return filter.every.flatMap(suggestCardChooserTitle);
-  }
-  return [];
-}
-
-function getSuggestionWithLowestDepth(
-  items: ChooseCardSuggestion[]
-): string | undefined {
-  items.sort((a, b) => a.depth - b.depth);
-  return items[0]?.suggestion;
 }
 
 function chooseCardTitle(filter: Filter | undefined): string {
