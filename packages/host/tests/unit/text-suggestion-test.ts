@@ -178,15 +178,17 @@ module('Unit | text-suggestion | card-chooser-title', function () {
           type: { module: `https://my.realm/cards-api`, name: 'Card' },
         },
         {
+          on: {
+            module: `https://my.realm/post`,
+            name: 'Post',
+          },
           every: [
             {
-              on: {
-                module: `https://my.realm/post`,
-                name: 'Post',
+              type: {
+                module: `https://my.realm/some-type`,
+                name: 'SomeCardType',
               },
             },
-            { eq: { title: 'Card 1' } },
-            { not: { eq: { 'author.firstName': 'Cardy' } } },
           ],
         },
       ],
@@ -196,6 +198,10 @@ module('Unit | text-suggestion | card-chooser-title', function () {
       {
         depth: 1,
         suggestion: 'Choose a Card instance',
+      },
+      {
+        depth: 1,
+        suggestion: 'Choose a Post card',
       },
     ]);
     assert.strictEqual(
