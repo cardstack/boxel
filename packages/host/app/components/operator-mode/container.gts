@@ -5,7 +5,7 @@ import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { trackedFunction } from 'ember-resources/util/function';
 import CardCatalogModal from '../card-catalog-modal';
-import type CardService from '../..//services/card-service';
+import type CardService from '../../services/card-service';
 import get from 'lodash/get';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { Modal, IconButton } from '@cardstack/boxel-ui';
@@ -318,39 +318,31 @@ export default class OperatorModeContainer extends Component<Signature> {
           here.stacks[stackIndex][itemsCount - 1]!
         ); // Last item on the stack
 
-        let fields = await here.cardService.getFields(currentCardOnStack);
-        let containedFieldName: string | undefined;
-
-        for (let [fieldName, field] of Object.entries(fields)) {
-          let value = (currentCardOnStack as any)[fieldName];
-          if (value !== card) {
-            continue;
+        let containedPath = await findContainedCardPath(
+          currentCardOnStack,
+          card,
+          here.cardService
+        );
+        if (containedPath.length > 0) {
+          let currentIndex = itemsCount - 1;
+          // add the nested contained cards in teh correct order
+          for (let fieldName of containedPath) {
+            here.addToStack({
+              type: 'contained',
+              fieldOfIndex: currentIndex++,
+              fieldName,
+              format: 'isolated',
+              stackIndex,
+            });
           }
-          if (field.fieldType === 'contains') {
-            containedFieldName = fieldName;
-            break;
-          }
-        }
-
-        let newItem: StackItem;
-        if (containedFieldName) {
-          newItem = {
-            type: 'contained',
-            fieldOfIndex: itemsCount - 1,
-            fieldName: containedFieldName,
-            format: 'isolated',
-            stackIndex,
-          };
         } else {
-          newItem = {
+          here.addToStack({
             type: 'card',
             card,
             format: 'isolated',
             stackIndex,
-          };
+          });
         }
-
-        here.addToStack(newItem);
       },
       createCardDirectly: async (
         doc: LooseSingleCardDocument,
@@ -748,6 +740,36 @@ export function getPathToStackItem(
     stackItem.fieldName,
     ...segments,
   ]);
+}
+
+async function findContainedCardPath(
+  possibleParent: Card,
+  maybeContained: Card,
+  cardService: CardService,
+  path: string[] = []
+): Promise<string[]> {
+  let fields = await cardService.getFields(possibleParent);
+
+  for (let [fieldName, field] of Object.entries(fields)) {
+    let value = (possibleParent as any)[fieldName];
+    if (value === maybeContained && field.fieldType === 'contains') {
+      return [...path, fieldName];
+    }
+    if (
+      cardService.isCard(value) &&
+      value !== maybeContained &&
+      field.fieldType === 'contains'
+    ) {
+      path = await findContainedCardPath(value, maybeContained, cardService, [
+        ...path,
+        fieldName,
+      ]);
+      if (path.length > 0) {
+        return path;
+      }
+    }
+  }
+  return [];
 }
 
 declare module '@glint/environment-ember-loose/registry' {

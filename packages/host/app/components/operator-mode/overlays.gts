@@ -208,9 +208,12 @@ export default class OperatorModeOverlays extends Component<Signature> {
         'mouseleave',
         (_e: MouseEvent) => (this.currentlyHoveredCard = null)
       );
-      renderedCard.element.addEventListener('click', (_e: MouseEvent) =>
-        this.openOrSelectCard(renderedCard.card)
-      );
+      renderedCard.element.addEventListener('click', (e: MouseEvent) => {
+        // prevent nested contains fields from triggering when inner most
+        //contained field was clicked
+        e.stopPropagation();
+        this.openOrSelectCard(renderedCard.card);
+      });
       renderedCard.element.style.cursor = 'pointer';
     }
 

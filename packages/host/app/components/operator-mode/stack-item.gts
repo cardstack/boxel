@@ -151,7 +151,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   get cardIdentifier() {
     let path = getPathToStackItem(this.args.item, this.args.stackItems);
-    return `${this.card.id}${path.length > 0 ? '/' + path.join('/') : ''}`;
+    return `${this.addressableCard.id}${
+      path.length > 0 ? '/' + path.join('/') : ''
+    }`;
   }
 
   @action
