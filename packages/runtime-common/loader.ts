@@ -133,26 +133,6 @@ export class Loader {
   private consumptionCache = new WeakMap<object, string[]>();
   private static loaders = new WeakMap<Function, Loader>();
 
-  static #instanceFIXME: Loader | undefined;
-
-  static getLoader() {
-    if (!Loader.#instanceFIXME) {
-      Loader.#instanceFIXME = new Loader();
-    }
-    return Loader.#instanceFIXME;
-  }
-
-  // this will return a new loader instance that has the same file loaders and
-  // url mappings as the global loader
-  static createLoaderFromGlobalFIXME(): Loader {
-    let globalLoader = Loader.getLoader();
-    let loader = new Loader();
-    loader.urlHandlers = globalLoader.urlHandlers;
-    loader.urlMappings = globalLoader.urlMappings;
-    for (let [moduleIdentifier, module] of globalLoader.moduleShims) {
-      loader.shimModule(moduleIdentifier, module);
-    }
-    return loader;
   }
 
   static cloneLoader(loader: Loader): Loader {
