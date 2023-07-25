@@ -1589,6 +1589,8 @@ export class StringCard extends CardBase {
 export class Card extends CardBase {
   @field id = contains(IDCard);
   @field title = contains(StringCard);
+  @field description = contains(StringCard);
+  @field thumbnailURL = contains(StringCard);
 }
 
 export type CardBaseConstructor = typeof CardBase;

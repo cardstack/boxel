@@ -19,7 +19,7 @@ import {
 } from '../utils/text-suggestion';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { getSearchResults, Search } from '../resources/search';
-import Preview from './preview';
+import CardCatalogItem from './card-catalog-item';
 import {
   Modal,
   CardContainer,
@@ -147,9 +147,10 @@ export default class CardCatalogModal extends Component<Signature> {
                             }}
                             data-test-card-catalog-item={{card.id}}
                           >
-                            <Preview
-                              @card={{card}}
-                              @format='embedded'
+                            <CardCatalogItem
+                              @title={{card.title}}
+                              @description={{card.description}}
+                              @thumbnailURL={{card.thumbnailURL}}
                               @context={{@context}}
                             />
                             <button
