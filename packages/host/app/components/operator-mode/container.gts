@@ -451,10 +451,9 @@ export default class OperatorModeContainer extends Component<Signature> {
         stackIndex >= 0;
         stackIndex--
       ) {
-        let currentStackItems =
-          this.operatorModeStateService.state.stacks[stackIndex];
-        currentStackItems.forEach((item) =>
-          this.operatorModeStateService.shiftToStack(item, stackIndex + 1)
+        this.operatorModeStateService.shiftStack(
+          this.operatorModeStateService.state.stacks[stackIndex],
+          stackIndex + 1
         );
       }
 

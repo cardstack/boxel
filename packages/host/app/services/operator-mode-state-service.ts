@@ -96,16 +96,20 @@ export default class OperatorModeStateService extends Service {
 
     if (newItem.stackIndex !== stackIndex) {
       // this could be a smell that the stack index should not live in the item
-      throw new Error('call shiftToStack() instead');
+      throw new Error(
+        'cannot move stack item to different stack--this can destabilize contained card pointers'
+      );
     }
 
     this.state.stacks[stackIndex].splice(itemIndex, 1, newItem);
     this.schedulePersist();
   }
 
-  shiftToStack(item: StackItem, newStackIndex: number) {
-    this.removeItemFromStack(item);
-    this.addItemToStack({ ...item, stackIndex: newStackIndex });
+  shiftStack(stackItems: StackItem[], destinationIndex: number) {
+    stackItems.forEach((item) => {
+      this.removeItemFromStack(item);
+      this.addItemToStack({ ...item, stackIndex: destinationIndex });
+    });
     return this.schedulePersist();
   }
 
