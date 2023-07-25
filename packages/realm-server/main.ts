@@ -8,6 +8,7 @@ import { resolve, join } from 'path';
 import { makeFastBootIndexRunner } from './fastboot';
 import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
 import { readFileSync } from 'fs-extra';
+import { shimExternals } from './lib/externals';
 
 let {
   port,
@@ -74,6 +75,7 @@ if (fromUrls.length < paths.length) {
 let log = logger('main');
 
 let loader = new Loader();
+shimExternals(loader);
 
 let urlMappings = fromUrls.map((fromUrl, i) => [
   new URL(String(fromUrl), `http://localhost:${port}`),
