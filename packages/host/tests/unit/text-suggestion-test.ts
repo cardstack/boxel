@@ -171,4 +171,36 @@ module('Unit | text-suggestion | card-chooser-title', function () {
       'Choose a Card instance'
     );
   });
+  test('filter -- nested one that exceeds recursion depth', function (assert) {
+    let filter = {
+      every: [
+        {
+          type: { module: `https://my.realm/cards-api`, name: 'Card' },
+        },
+        {
+          every: [
+            {
+              on: {
+                module: `https://my.realm/post`,
+                name: 'Post',
+              },
+            },
+            { eq: { title: 'Card 1' } },
+            { not: { eq: { 'author.firstName': 'Cardy' } } },
+          ],
+        },
+      ],
+    };
+    let suggestions = suggestCardChooserTitle(filter);
+    assert.deepEqual(suggestions, [
+      {
+        depth: 1,
+        suggestion: 'Choose a Card instance',
+      },
+    ]);
+    assert.strictEqual(
+      getSuggestionWithLowestDepth(suggestions),
+      'Choose a Card instance'
+    );
+  });
 });

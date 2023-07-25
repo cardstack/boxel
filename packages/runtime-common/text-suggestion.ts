@@ -8,8 +8,8 @@ export function suggestCardChooserTitle(
   filter: Filter,
   depth: number = 0 //lower the depth, higher the priority
 ): ChooseCardSuggestion[] {
-  let MAX_RECURSION_DEPTH = 3;
-  if (filter === undefined || depth > MAX_RECURSION_DEPTH) {
+  let MAX_RECURSION_DEPTH = 2;
+  if (filter === undefined || depth + 1 > MAX_RECURSION_DEPTH) {
     return [];
   }
   let suggestions: ChooseCardSuggestion[] = [];
