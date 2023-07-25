@@ -67,7 +67,7 @@ async function processDecryptedEvent(context: Context, event: Event) {
       }
       objective = await context.cardAPI.createFromSerialized<
         typeof RoomObjectiveCard
-      >(doc.data, doc, undefined);
+      >(doc.data, doc, undefined, context.loaderService.loader);
       objective.room = roomCard;
       context.roomObjectives.set(roomId, objective);
     }

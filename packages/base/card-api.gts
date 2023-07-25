@@ -1882,9 +1882,9 @@ export function serializeCard(
 
 // you may need to use this type for the loader passed in the opts
 // FIXME still needed?
-// export type LoaderType = NonNullable<
-//   NonNullable<Parameters<typeof createFromSerialized>[3]>['loader']
-// >;
+export type LoaderType = NonNullable<
+  NonNullable<Parameters<typeof createFromSerialized>[3]>
+>;
 
 // TODO Currently our deserialization process performs 2 tasks that probably
 // need to be disentangled:

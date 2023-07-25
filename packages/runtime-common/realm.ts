@@ -68,6 +68,7 @@ import { type Card } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
+import type { LoaderType } from 'https://cardstack.com/base/card-api';
 
 export type RealmInfo = {
   name: string;
@@ -842,7 +843,7 @@ export class Realm {
       doc.data,
       doc,
       relativeTo,
-      this.searchIndex.loader
+      this.searchIndex.loader as unknown as LoaderType
     )) as Card;
     let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds
     delete data.data.id; // the ID is derived from the filename, so we don't serialize it on disk

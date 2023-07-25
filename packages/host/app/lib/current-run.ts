@@ -367,9 +367,9 @@ export class CurrentRun {
         res,
         { data: res },
         new URL(fileURL),
+        this.#loader as unknown as LoaderType,
         {
           identityContext,
-          loader: this.#loader as unknown as LoaderType,
         }
       );
       html = await this.#renderCard({
