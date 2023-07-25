@@ -39,6 +39,7 @@ import OperatorModeOverlays from './overlays';
 import ElementTracker from '../../resources/element-tracker';
 import config from '@cardstack/host/config/environment';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
 interface Signature {
   Args: {
@@ -159,11 +160,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   get headerIcon() {
-    // TODO use a proper icon for contained card and fix design
-    if (this.args.item.type === 'contained') {
-      return;
-    }
-
     return {
       URL: this.iconURL,
       onMouseEnter: this.hoverOnRealmIcon,
@@ -172,14 +168,14 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   get headerTitle() {
-    if (this.args.item.type === 'contained') {
-      // TODO use a proper icon for contained card and fix design
-      return `⮡ ${cardTypeDisplayName(this.card)}`;
-    }
-
     return this.isHoverOnRealmIcon && this.realmName
       ? `In ${this.realmName}`
       : cardTypeDisplayName(this.card);
+  }
+
+  @cached
+  get isContainedItem() {
+    return this.args.item.type === 'contained';
   }
 
   @cached
@@ -205,7 +201,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     >
       <CardContainer class={{cn 'card' edit=(eq @item.format 'edit')}}>
         <Header
-          @icon={{this.headerIcon}}
           @title={{this.headerTitle}}
           class='header'
           {{on
@@ -226,6 +221,20 @@ export default class OperatorModeStackItem extends Component<Signature> {
           }}
           data-test-stack-card-header
         >
+          <:icon>
+            {{#if this.isContainedItem}}
+              {{svgJar 'icon-turn-down-right' width='22px' height='18px'}}
+            {{else if this.headerIcon}}
+              <img
+                class='header-icon'
+                src={{this.headerIcon.URL}}
+                data-test-boxel-header-icon={{this.headerIcon.URL}}
+                alt='Header icon'
+                {{on 'mouseenter' this.headerIcon.onMouseEnter}}
+                {{on 'mouseleave' this.headerIcon.onMouseLeave}}
+              />
+            {{/if}}
+          </:icon>
           <:actions>
             {{#if (eq @item.format 'isolated')}}
               <Tooltip @placement='top'>
@@ -504,6 +513,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
       .icon-save:hover {
         --icon-bg: var(--boxel-dark);
+      }
+
+      .header-icon {
+        width: var(--boxel-header-icon-width, 20px);
+        height: var(--boxel-header-icon-height, 20px);
       }
 
     </style>
