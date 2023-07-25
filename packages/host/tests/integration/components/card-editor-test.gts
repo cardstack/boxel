@@ -21,10 +21,10 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import { Card } from 'https://cardstack.com/base/card-api';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import CardPrerender from '@cardstack/host/components/card-prerender';
+import { RenderingTestContext } from '@ember/test-helpers';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
-let updateFromSerialized: (typeof cardApi)['updateFromSerialized'];
 
 let loader: Loader;
 
@@ -67,7 +67,6 @@ module('Integration | card-editor', function (hooks) {
   hooks.beforeEach(async function () {
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
-    updateFromSerialized = cardApi.updateFromSerialized;
 
     adapter = new TestRealmAdapter({
       'pet.gts': `
@@ -236,11 +235,7 @@ module('Integration | card-editor', function (hooks) {
     }
     await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
     let card = new TestCard({ firstName: 'Mango', lastName: 'Abdel-Rahman' });
-    await saveCard(
-      card,
-      `${testRealmURL}test-cards/test-card`,
-      Loader.getLoaderFor(updateFromSerialized)
-    );
+    await saveCard(card, `${testRealmURL}test-cards/test-card`, loader);
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -284,11 +279,7 @@ module('Integration | card-editor', function (hooks) {
     await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
 
     let card = new TestCard({ firstName: 'Mango' });
-    await saveCard(
-      card,
-      `${testRealmURL}test-cards/test-card`,
-      Loader.getLoaderFor(updateFromSerialized)
-    );
+    await saveCard(card, `${testRealmURL}test-cards/test-card`, loader);
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -337,11 +328,7 @@ module('Integration | card-editor', function (hooks) {
     }
     await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
     let card = new TestCard({ firstName: 'Mango' });
-    await saveCard(
-      card,
-      `${testRealmURL}test-cards/test-card`,
-      Loader.getLoaderFor(updateFromSerialized)
-    );
+    await saveCard(card, `${testRealmURL}test-cards/test-card`, loader);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
