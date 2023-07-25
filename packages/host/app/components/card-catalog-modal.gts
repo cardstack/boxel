@@ -57,7 +57,7 @@ export default class CardCatalogModal extends Component<Signature> {
         data-test-card-catalog-modal
       >
         <CardContainer class='dialog-box' @displayBoundaries={{true}}>
-          <Header @title={{this.catalogTitle}}>
+          <Header @title='Choose a card type'>
             <IconButton
               @icon='icon-x'
               {{on 'click' (fn this.pick undefined)}}
@@ -441,7 +441,7 @@ export default class CardCatalogModal extends Component<Signature> {
     | {
         search: Search;
         deferred: Deferred<Card | undefined>;
-        opts?: { offerToCreate?: CardRef; catalogTitle?: string };
+        opts?: { offerToCreate?: CardRef };
       }
     | undefined = undefined;
   @tracked zIndex = 20;
@@ -481,10 +481,6 @@ export default class CardCatalogModal extends Component<Signature> {
     }
 
     return realmCards.filter((r) => r.cards.length);
-  }
-
-  get catalogTitle() {
-    return this.currentRequest?.opts?.catalogTitle ?? 'Card Catalog';
   }
 
   get styleString() {

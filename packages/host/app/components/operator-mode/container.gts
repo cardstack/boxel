@@ -310,12 +310,9 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   addCard = restartableTask(async () => {
     let type = baseCardRef;
-    let chosenCard: Card | undefined = await chooseCard(
-      {
-        filter: { type },
-      },
-      { catalogTitle: 'Choose a card' }
-    );
+    let chosenCard: Card | undefined = await chooseCard({
+      filter: { type },
+    });
 
     if (chosenCard) {
       let newItem: StackItem = {

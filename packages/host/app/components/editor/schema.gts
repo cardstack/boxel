@@ -321,12 +321,7 @@ export default class Schema extends Component<Signature> {
               eq: { ref: this.ref },
             },
           };
-    let fieldEntry: CatalogEntry | undefined = await chooseCard(
-      {
-        filter,
-      },
-      { catalogTitle: 'Choose a field type' }
-    );
+    let fieldEntry: CatalogEntry | undefined = await chooseCard({ filter });
     if (!fieldEntry) {
       return;
     }

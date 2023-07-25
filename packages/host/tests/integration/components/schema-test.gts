@@ -449,9 +449,6 @@ module('Integration | schema', function (hooks) {
     await waitFor('[data-test-card-catalog] [data-test-realm]');
 
     assert
-      .dom(`[data-test-card-catalog-modal] [data-test-boxel-header-title]`)
-      .hasText('Choose a field type');
-    assert
       .dom('[data-test-card-catalog] [data-test-realm]')
       .exists({ count: 2 });
     assert

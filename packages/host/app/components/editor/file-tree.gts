@@ -58,15 +58,12 @@ export default class FileTree extends Component<Args> {
   }
 
   private createNewCard = restartableTask(async () => {
-    let card = await chooseCard<CatalogEntry>(
-      {
-        filter: {
-          on: catalogEntryRef,
-          eq: { isPrimitive: false },
-        },
+    let card = await chooseCard<CatalogEntry>({
+      filter: {
+        on: catalogEntryRef,
+        eq: { isPrimitive: false },
       },
-      { catalogTitle: 'Choose a card type' }
-    );
+    });
     if (!card) {
       return;
     }
