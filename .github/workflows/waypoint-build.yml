@@ -13,6 +13,10 @@ on:
       environment:
         required: true
         type: string
+      restore-mtime:
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -20,6 +24,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+        if: ${{ ! inputs.restore-mtime }}
+
+      # for certain packages that requires timestamp during their build step
+      # https://github.com/cardstack/boxel/pull/276
+      - uses: actions/checkout@v3
+        if: ${{ inputs.restore-mtime }}
+        with:
+          fetch-depth: 0
+
+      - uses: chetan/git-restore-mtime-action@v2
+        if: ${{ inputs.restore-mtime }}
 
       - name: Init
         uses: ./.github/actions/init
