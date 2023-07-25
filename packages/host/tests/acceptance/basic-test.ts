@@ -126,7 +126,6 @@ module('Acceptance | basic tests', function (hooks) {
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
-    loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
 
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
       isAcceptanceTest: true,
