@@ -7,8 +7,6 @@ import {
   waitFor,
 } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
-import { Loader } from '@cardstack/runtime-common/loader';
-import { baseRealm } from '@cardstack/runtime-common';
 import {
   TestRealm,
   TestRealmAdapter,
@@ -17,7 +15,6 @@ import {
   testRealmURL,
 } from '../helpers';
 import { Realm } from '@cardstack/runtime-common/realm';
-import { shimExternals } from '@cardstack/host/lib/externals';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import percySnapshot from '@percy/ember';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
