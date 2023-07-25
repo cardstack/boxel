@@ -376,14 +376,23 @@ export default class OperatorModeContainer extends Component<Signature> {
         format: 'isolated',
         stackIndex: 1,
       });
-      // In case, that the search was accessed directly without clicking right and left buttons,
-      // the stack with index 0 will be replaced by the selection
     } else {
-      this.operatorModeStateService.addItemToStack({
+      // In case, that the search was accessed directly without clicking right and left buttons,
+      // the stack with index 0 will be REPLACED by the selection
+      let stackItem: StackItem = {
         card,
         format: 'isolated',
         stackIndex: 0,
-      });
+      };
+      let bottomMostItem =
+        this.operatorModeStateService.state.stacks[0].items[0];
+      debugger;
+      if (bottomMostItem) {
+        this.operatorModeStateService.popOffStackAndAdd(
+          bottomMostItem,
+          stackItem
+        );
+      }
     }
 
     // Close the search sheet

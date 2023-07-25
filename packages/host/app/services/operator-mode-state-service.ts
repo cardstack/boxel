@@ -21,6 +21,10 @@ type SerializedItem = { card: { id: string }; format: 'isolated' | 'edit' };
 type SerializedStack = { items: SerializedItem[] };
 export type SerializedState = { stacks: SerializedStack[] };
 
+interface StackOpts {
+  keepIfEmpty?: boolean; // we want to keep the stack although items.length == 0
+}
+
 export default class OperatorModeStateService extends Service {
   @tracked state: OperatorModeState = new TrackedObject({
     stacks: new TrackedArray([]),
@@ -45,15 +49,16 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
-  removeItemFromStack(item: StackItem) {
+  removeItemFromStack(item: StackItem, opts?: StackOpts) {
     let stackIndex = item.stackIndex;
     let itemIndex = this.state.stacks[stackIndex].items.indexOf(item);
-    this.state.stacks[stackIndex].items.splice(itemIndex, 1);
+    this.state.stacks[stackIndex].items.splice(itemIndex);
     if (
-      this.state.stacks[stackIndex].items.length === 0 &&
+      !opts?.keepIfEmpty &&
+      this.stackIsEmpty(stackIndex) &&
       this.state.stacks.length > 1
     ) {
-      this.state.stacks.splice(stackIndex, 1);
+      this.clearStack(stackIndex);
     }
     this.schedulePersist();
   }
@@ -63,7 +68,7 @@ export default class OperatorModeStateService extends Service {
     let itemIndex = this.state.stacks[stackIndex].items.indexOf(item);
 
     if (newItem.stackIndex !== stackIndex) {
-      this.removeItemFromStack(item);
+      this.removeItemFromStack(item, { keepIfEmpty: true });
       this.addItemToStack(newItem);
       return this.schedulePersist();
     } else {
@@ -72,12 +77,25 @@ export default class OperatorModeStateService extends Service {
     }
   }
 
-  removeItemsIf(condition: (item: StackItem) => boolean, stackIndex = 0) {
+  popOffStackAndAdd(lowestItem: StackItem, newItem: StackItem) {
+    this.removeItemFromStack(lowestItem, { keepIfEmpty: true });
+    this.addItemToStack(newItem);
+    return this.schedulePersist();
+  }
+
+  private removeItemsIf(
+    condition: (item: StackItem) => boolean,
+    stackIndex = 0,
+    opts?: StackOpts
+  ) {
     this.state.stacks[stackIndex].items = this.state.stacks[
       stackIndex
     ].items.filter((item: StackItem) => {
       return !condition(item);
     });
+    if (!opts?.keepIfEmpty && this.stackIsEmpty(stackIndex)) {
+      this.clearStack;
+    }
     this.schedulePersist();
   }
 
@@ -90,6 +108,15 @@ export default class OperatorModeStateService extends Service {
       });
     });
     this.removeItemsIf(() => true, oldStackIndex);
+    this.schedulePersist();
+  }
+
+  stackIsEmpty(stackIndex: number) {
+    return this.state.stacks[stackIndex].items.length === 0;
+  }
+
+  clearStack(stackIndex: number) {
+    this.state.stacks.splice(stackIndex, 1);
     this.schedulePersist();
   }
 
