@@ -386,7 +386,6 @@ export default class OperatorModeContainer extends Component<Signature> {
       };
       let bottomMostItem =
         this.operatorModeStateService.state.stacks[0].items[0];
-      debugger;
       if (bottomMostItem) {
         this.operatorModeStateService.popOffStackAndAdd(
           bottomMostItem,
