@@ -230,35 +230,35 @@ module('Acceptance | operator mode tests', function (hooks) {
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
           JSON.stringify({
             stacks: [
-              {
-                items: [
-                  {
-                    card: { id: 'http://test-realm/test/index' },
-                    format: 'isolated',
-                  },
-                ],
-              },
+              [
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/index',
+                  format: 'isolated',
+                },
+              ],
             ],
           })
         )}`
       );
     });
 
+    // TODO include query param for contains card
     test('restoring the stack from query param', async function (assert) {
       let operatorModeStateParam = JSON.stringify({
         stacks: [
-          {
-            items: [
-              {
-                card: { id: 'http://test-realm/test/Person/fadhlan' },
-                format: 'isolated',
-              },
-              {
-                card: { id: 'http://test-realm/test/Pet/mango' },
-                format: 'isolated',
-              },
-            ],
-          },
+          [
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Person/fadhlan',
+              format: 'isolated',
+            },
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Pet/mango',
+              format: 'isolated',
+            },
+          ],
         ],
       });
 
@@ -287,14 +287,13 @@ module('Acceptance | operator mode tests', function (hooks) {
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
           JSON.stringify({
             stacks: [
-              {
-                items: [
-                  {
-                    card: { id: 'http://test-realm/test/Person/fadhlan' },
-                    format: 'isolated',
-                  },
-                ],
-              },
+              [
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/Person/fadhlan',
+                  format: 'isolated',
+                },
+              ],
             ],
           })
         )}`
@@ -309,18 +308,18 @@ module('Acceptance | operator mode tests', function (hooks) {
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
           JSON.stringify({
             stacks: [
-              {
-                items: [
-                  {
-                    card: { id: 'http://test-realm/test/Person/fadhlan' },
-                    format: 'isolated',
-                  },
-                  {
-                    card: { id: 'http://test-realm/test/Pet/mango' },
-                    format: 'isolated',
-                  },
-                ],
-              },
+              [
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/Person/fadhlan',
+                  format: 'isolated',
+                },
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/Pet/mango',
+                  format: 'isolated',
+                },
+              ],
             ],
           })
         )}`
@@ -335,18 +334,18 @@ module('Acceptance | operator mode tests', function (hooks) {
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
           JSON.stringify({
             stacks: [
-              {
-                items: [
-                  {
-                    card: { id: 'http://test-realm/test/Person/fadhlan' },
-                    format: 'isolated',
-                  },
-                  {
-                    card: { id: 'http://test-realm/test/Pet/mango' },
-                    format: 'edit',
-                  },
-                ],
-              },
+              [
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/Person/fadhlan',
+                  format: 'isolated',
+                },
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/Pet/mango',
+                  format: 'edit',
+                },
+              ],
             ],
           })
         )}`
@@ -356,14 +355,13 @@ module('Acceptance | operator mode tests', function (hooks) {
     test('restoring the stack from query param when card is in edit format', async function (assert) {
       let operatorModeStateParam = JSON.stringify({
         stacks: [
-          {
-            items: [
-              {
-                card: { id: 'http://test-realm/test/Person/fadhlan' },
-                format: 'edit',
-              },
-            ],
-          },
+          [
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Person/fadhlan',
+              format: 'edit',
+            },
+          ],
         ],
       });
 
@@ -382,18 +380,18 @@ module('Acceptance | operator mode tests', function (hooks) {
     test('click left or right add card button will open the search panel and then click on a recent card will open a new stack on the left or right', async function (assert) {
       let operatorModeStateParam = JSON.stringify({
         stacks: [
-          {
-            items: [
-              {
-                card: { id: 'http://test-realm/test/Person/fadhlan' },
-                format: 'isolated',
-              },
-              {
-                card: { id: 'http://test-realm/test/Pet/mango' },
-                format: 'edit',
-              },
-            ],
-          },
+          [
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Person/fadhlan',
+              format: 'isolated',
+            },
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Pet/mango',
+              format: 'edit',
+            },
+          ],
         ],
       });
 
@@ -475,22 +473,20 @@ module('Acceptance | operator mode tests', function (hooks) {
     test('restoring the stacks from query param', async function (assert) {
       let operatorModeStateParam = JSON.stringify({
         stacks: [
-          {
-            items: [
-              {
-                card: { id: 'http://test-realm/test/Person/fadhlan' },
-                format: 'isolated',
-              },
-            ],
-          },
-          {
-            items: [
-              {
-                card: { id: 'http://test-realm/test/Pet/mango' },
-                format: 'isolated',
-              },
-            ],
-          },
+          [
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Person/fadhlan',
+              format: 'isolated',
+            },
+          ],
+          [
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Pet/mango',
+              format: 'isolated',
+            },
+          ],
         ],
       });
 
@@ -520,14 +516,13 @@ module('Acceptance | operator mode tests', function (hooks) {
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
           JSON.stringify({
             stacks: [
-              {
-                items: [
-                  {
-                    card: { id: 'http://test-realm/test/Person/fadhlan' },
-                    format: 'isolated',
-                  },
-                ],
-              },
+              [
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/Person/fadhlan',
+                  format: 'isolated',
+                },
+              ],
             ],
           })
         )}`
