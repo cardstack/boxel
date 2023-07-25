@@ -459,13 +459,13 @@ module('Acceptance | operator mode tests', function (hooks) {
       // There are now 2 stacks
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
       assert.dom('[data-test-operator-mode-stack="0"]').includesText('Fadhlan');
-      assert.dom('[data-test-operator-mode-stack="1"]').includesText('Mango'); // Fadhlan goes on the right stack
+      assert.dom('[data-test-operator-mode-stack="1"]').includesText('Mango'); // Mango gets move onto the right stack
 
       // Buttons to add a neighbor stack are gone
       assert.dom('[data-test-add-card-left-stack]').doesNotExist();
       assert.dom('[data-test-add-card-right-stack]').doesNotExist();
     });
-    test('Clicking search panel directly allows you to open card on existing stack', async function (assert) {
+    test('Clicking search panel (without left and right buttons activated) replaces open card on existing stack', async function (assert) {
       let operatorModeStateParam = JSON.stringify({
         stacks: [
           {
@@ -514,36 +514,18 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
-      // The recent card moved onto current stack
+      // The recent card REPLACES onto on current stack
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
-      assert.dom('[data-test-operator-mode-stack="0"]').includesText('Mango'); // Mango goes on the left stack
-
-      // Click on search-input
-      await click('[data-test-search-input]');
-
-      assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
-
-      // Click on a recent search
-      await click('[data-test-add-card-left-stack]');
-      await click(
-        '[data-test-search-result="http://test-realm/test/Person/fadhlan"]'
-      );
-      assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
-
-      // There are now 2 stacks
-      assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
-      assert.dom('[data-test-operator-mode-stack="0"]').includesText('Fadhlan');
-      assert.dom('[data-test-operator-mode-stack="1"]').includesText('Mango'); // Fadhlan goes on the right stack
-
-      // Buttons to add a neighbor stack are gone
-      assert.dom('[data-test-add-card-left-stack]').doesNotExist();
-      assert.dom('[data-test-add-card-right-stack]').doesNotExist();
-
-      // Close the only card in the 1st stack
-      await click(
-        '[data-test-operator-mode-stack="0"] [data-test-close-button]'
-      );
-      assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
+      assert
+        .dom(
+          '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="0"]'
+        )
+        .includesText('Mango');
+      assert
+        .dom(
+          '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"]'
+        )
+        .doesNotExist();
     });
   });
 
@@ -615,6 +597,74 @@ module('Acceptance | operator mode tests', function (hooks) {
       );
 
       assert.dom('.no-cards').includesText('Add a card to get started');
+    });
+
+    test('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
+      let operatorModeStateParam = JSON.stringify({
+        stacks: [
+          {
+            items: [
+              {
+                card: { id: 'http://test-realm/test/Person/fadhlan' },
+                format: 'isolated',
+              },
+            ],
+          },
+          {
+            items: [
+              {
+                card: { id: 'http://test-realm/test/index' },
+                format: 'isolated',
+              },
+              {
+                card: { id: 'http://test-realm/test/Pet/mango' },
+                format: 'isolated',
+              },
+            ],
+          },
+        ],
+      });
+
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam
+        )}`
+      );
+
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
+
+      // Click on search-input
+      await click('[data-test-search-input]');
+
+      assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
+
+      // Click on a recent search
+      await click(
+        '[data-test-search-result="http://test-realm/test/Person/fadhlan"]'
+      );
+      assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
+
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
+      assert
+        .dom(
+          '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="0"]'
+        )
+        .includesText('Fadhlan');
+      assert
+        .dom(
+          '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"]'
+        )
+        .doesNotExist();
+      assert
+        .dom(
+          '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="0"]'
+        )
+        .includesText('Fadhlan');
+      assert
+        .dom(
+          '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="1"]'
+        )
+        .doesNotExist();
     });
   });
 });
