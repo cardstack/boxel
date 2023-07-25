@@ -378,19 +378,25 @@ export default class OperatorModeContainer extends Component<Signature> {
       });
     } else {
       // In case, that the search was accessed directly without clicking right and left buttons,
-      // the stack with index 0 will be REPLACED by the selection
-      let stackItem: StackItem = {
-        card,
-        format: 'isolated',
-        stackIndex: 0,
-      };
-      let bottomMostItem =
-        this.operatorModeStateService.state.stacks[0].items[0];
-      if (bottomMostItem) {
-        this.operatorModeStateService.popOffStackAndAdd(
-          bottomMostItem,
-          stackItem
-        );
+      // the rightmost stack will be REPLACED by the selection
+      let numberOfStacks = this.operatorModeStateService.numberOfStacks();
+      if (numberOfStacks > 0) {
+        //there will always be 1 stack
+        let stack = this.operatorModeStateService.rightMostStack();
+        if (stack) {
+          let bottomMostItem = stack.items[0];
+          if (bottomMostItem) {
+            let stackItem: StackItem = {
+              card,
+              format: 'isolated',
+              stackIndex: numberOfStacks - 1, //rightMost stack index
+            };
+            this.operatorModeStateService.popOffStackAndAdd(
+              bottomMostItem,
+              stackItem
+            );
+          }
+        }
       }
     }
 

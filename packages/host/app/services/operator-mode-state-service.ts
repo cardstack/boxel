@@ -111,6 +111,24 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
+  numberOfStacks() {
+    return this.state.stacks.length;
+  }
+
+  leftMostStack() {
+    if (this.numberOfStacks() > 0) {
+      return this.state.stacks[0];
+    }
+    return;
+  }
+
+  rightMostStack() {
+    if (this.numberOfStacks() > 0) {
+      return this.state.stacks[this.state.stacks.length - 1];
+    }
+    return;
+  }
+
   stackIsEmpty(stackIndex: number) {
     return this.state.stacks[stackIndex].items.length === 0;
   }
