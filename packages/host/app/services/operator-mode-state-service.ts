@@ -10,6 +10,7 @@ import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { getOwner } from '@ember/application';
 import { scheduleOnce } from '@ember/runloop';
+import stringify from 'safe-stable-stringify';
 import type { Card } from 'https://cardstack.com/base/card-api';
 
 // Below types form a raw POJO representation of operator mode state.
@@ -172,7 +173,7 @@ export default class OperatorModeStateService extends Service {
 
   // Stringified JSON version of state, with only cards that have been saved, used for the query param
   serialize(): string {
-    return JSON.stringify(this.rawStateWithSavedCardsOnly());
+    return stringify(this.rawStateWithSavedCardsOnly())!;
   }
 
   // Deserialize a stringified JSON version of OperatorModeState into a Glimmer tracked object

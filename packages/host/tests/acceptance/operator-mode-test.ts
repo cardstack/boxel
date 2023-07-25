@@ -16,6 +16,7 @@ import {
   setupMockMessageService,
   testRealmURL,
 } from '../helpers';
+import stringify from 'safe-stable-stringify';
 import { Realm } from '@cardstack/runtime-common/realm';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -59,15 +60,37 @@ module('Acceptance | operator mode tests', function (hooks) {
           }
         }
       `,
+      'shipping-info.gts': `
+        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        export class ShippingInfo extends Card {
+          static displayName = 'Shipping Info';
+          @field preferredCarrier = contains(StringCard);
+          @field remarks = contains(StringCard);
+          @field title = contains(StringCard, {
+            computeVia: function (this: ShippingInfo) {
+              return this.preferredCarrier;
+            },
+          });
+          static embedded = class Embedded extends Component<typeof this> {
+            <template>
+              <span data-test-preferredCarrier={{@model.preferredCarrier}}></span>
+              <@fields.preferredCarrier/>
+            </template>
+          }
+        }
+      `,
       'address.gts': `
         import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
+        import { ShippingInfo } from "./shipping-info";
         import { FieldContainer } from '@cardstack/boxel-ui';
 
         export class Address extends Card {
           static displayName = 'Address';
           @field city = contains(StringCard);
           @field country = contains(StringCard);
+          @field shippingInfo = contains(ShippingInfo);
           static embedded = class Embedded extends Component<typeof this> {
             <template>
               <h3 data-test-city={{@model.city}}>
@@ -76,6 +99,7 @@ module('Acceptance | operator mode tests', function (hooks) {
               <h3 data-test-country={{@model.country}}>
                 <@fields.country/>
               </h3>
+              <div data-test-shippingInfo-field><@fields.shippingInfo/></div>
             </template>
           }
 
@@ -87,6 +111,7 @@ module('Acceptance | operator mode tests', function (hooks) {
               <FieldContainer @label='country' @tag='label' data-test-boxel-input-country>
                 <@fields.country />
               </FieldContainer>
+              <div data-test-shippingInfo-field><@fields.shippingInfo/></div>
             </template>
           };
         }
@@ -153,6 +178,10 @@ module('Acceptance | operator mode tests', function (hooks) {
             address: {
               city: 'Bandung',
               country: 'Indonesia',
+              shippingInfo: {
+                preferredCarrier: 'DHL',
+                remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+              },
             },
           },
           relationships: {
@@ -228,7 +257,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.strictEqual(
         currentURL(),
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          JSON.stringify({
+          stringify({
             stacks: [
               [
                 {
@@ -238,14 +267,13 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
-          })
+          })!
         )}`
       );
     });
 
-    // TODO include query param for contains card
     test('restoring the stack from query param', async function (assert) {
-      let operatorModeStateParam = JSON.stringify({
+      let operatorModeStateParam = stringify({
         stacks: [
           [
             {
@@ -260,7 +288,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
           ],
         ],
-      });
+      })!;
 
       await visit(
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
@@ -285,7 +313,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.strictEqual(
         currentURL(),
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          JSON.stringify({
+          stringify({
             stacks: [
               [
                 {
@@ -295,7 +323,7 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
-          })
+          })!
         )}`
       );
 
@@ -306,7 +334,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.strictEqual(
         currentURL(),
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          JSON.stringify({
+          stringify({
             stacks: [
               [
                 {
@@ -321,7 +349,7 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
-          })
+          })!
         )}`
       );
 
@@ -332,7 +360,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.strictEqual(
         currentURL(),
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          JSON.stringify({
+          stringify({
             stacks: [
               [
                 {
@@ -347,13 +375,153 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
-          })
+          })!
+        )}`
+      );
+    });
+
+    test('restoring the stack from query param with nested contained cards', async function (assert) {
+      let operatorModeStateParam = stringify({
+        stacks: [
+          [
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Person/fadhlan',
+              format: 'isolated',
+            },
+            {
+              type: 'contained',
+              fieldOfIndex: 0,
+              fieldName: 'address',
+              format: 'isolated',
+            },
+            {
+              type: 'contained',
+              fieldOfIndex: 1,
+              fieldName: 'shippingInfo',
+              format: 'isolated',
+            },
+          ],
+        ],
+      })!;
+
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam
+        )}`
+      );
+
+      await percySnapshot(assert);
+
+      assert
+        .dom('[data-test-stack-card-index="0"] [data-test-boxel-header-title]')
+        .includesText('Person');
+      assert
+        .dom('[data-test-stack-card-index="1"] [data-test-boxel-header-title]')
+        .includesText('Address');
+      assert
+        .dom('[data-test-stack-card-index="2"] [data-test-boxel-header-title]')
+        .includesText('Shipping Info');
+
+      await click('[data-test-stack-card-index="2"] [data-test-close-button]');
+
+      // The stack should be updated in the URL
+      assert.strictEqual(
+        currentURL(),
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          stringify({
+            stacks: [
+              [
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/Person/fadhlan',
+                  format: 'isolated',
+                },
+                {
+                  type: 'contained',
+                  fieldName: 'address',
+                  fieldOfIndex: 0,
+                  format: 'isolated',
+                },
+              ],
+            ],
+          })!
+        )}`
+      );
+
+      await waitFor(
+        '[data-test-shippinginfo-field] [data-test-field-component-card]'
+      );
+      await click(
+        '[data-test-shippinginfo-field] [data-test-field-component-card]'
+      );
+
+      // The stack should be reflected in the URL
+      assert.strictEqual(
+        currentURL(),
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          stringify({
+            stacks: [
+              [
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/Person/fadhlan',
+                  format: 'isolated',
+                },
+                {
+                  type: 'contained',
+                  fieldOfIndex: 0,
+                  fieldName: 'address',
+                  format: 'isolated',
+                },
+                {
+                  type: 'contained',
+                  fieldOfIndex: 1,
+                  fieldName: 'shippingInfo',
+                  format: 'isolated',
+                },
+              ],
+            ],
+          })!
+        )}`
+      );
+
+      // Click Edit on the top card
+      await click('[data-test-stack-card-index="2"] [data-test-edit-button]');
+
+      // The edit format should be reflected in the URL
+      assert.strictEqual(
+        currentURL(),
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          stringify({
+            stacks: [
+              [
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/Person/fadhlan',
+                  format: 'edit',
+                },
+                {
+                  type: 'contained',
+                  fieldOfIndex: 0,
+                  fieldName: 'address',
+                  format: 'edit',
+                },
+                {
+                  type: 'contained',
+                  fieldOfIndex: 1,
+                  fieldName: 'shippingInfo',
+                  format: 'edit',
+                },
+              ],
+            ],
+          })!
         )}`
       );
     });
 
     test('restoring the stack from query param when card is in edit format', async function (assert) {
-      let operatorModeStateParam = JSON.stringify({
+      let operatorModeStateParam = stringify({
         stacks: [
           [
             {
@@ -363,7 +531,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
           ],
         ],
-      });
+      })!;
 
       await visit(
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
@@ -378,7 +546,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
 
     test('click left or right add card button will open the search panel and then click on a recent card will open a new stack on the left or right', async function (assert) {
-      let operatorModeStateParam = JSON.stringify({
+      let operatorModeStateParam = stringify({
         stacks: [
           [
             {
@@ -393,7 +561,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
           ],
         ],
-      });
+      })!;
 
       await visit(
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
@@ -471,7 +639,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
   module('2 stacks', function () {
     test('restoring the stacks from query param', async function (assert) {
-      let operatorModeStateParam = JSON.stringify({
+      let operatorModeStateParam = stringify({
         stacks: [
           [
             {
@@ -488,7 +656,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
           ],
         ],
-      });
+      })!;
 
       await visit(
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
@@ -514,7 +682,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.strictEqual(
         currentURL(),
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          JSON.stringify({
+          stringify({
             stacks: [
               [
                 {
@@ -524,7 +692,7 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
-          })
+          })!
         )}`
       );
 

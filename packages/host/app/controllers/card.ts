@@ -3,8 +3,8 @@ import { withPreventDefault } from '../helpers/with-prevent-default';
 import { service } from '@ember/service';
 import type RouterService from '@ember/routing/router-service';
 import { action } from '@ember/object';
-
 import { tracked } from '@glimmer/tracking';
+import stringify from 'safe-stable-stringify';
 import { ComponentLike } from '@glint/template';
 import { Model } from '@cardstack/host/routes/card';
 import { registerDestructor } from '@ember/destroyable';
@@ -51,7 +51,7 @@ export default class CardController extends Controller {
 
     if (this.operatorModeEnabled) {
       // When entering operator mode, put the current card on the stack
-      this.operatorModeState = JSON.stringify({
+      this.operatorModeState = stringify({
         stacks: [
           [
             {
@@ -61,7 +61,7 @@ export default class CardController extends Controller {
             },
           ],
         ],
-      } as OperatorModeSerializedState);
+      } as OperatorModeSerializedState)!;
     } else {
       this.operatorModeState = null;
     }
