@@ -116,6 +116,7 @@ export default class CardCatalogModal extends Component<Signature> {
                       <img
                         src={{realm.iconURL}}
                         class='realm-icon'
+                        alt=''
                         role='presentation'
                       />
                       <span
