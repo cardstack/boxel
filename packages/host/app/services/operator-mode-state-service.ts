@@ -29,10 +29,6 @@ interface ContainedCardItem {
   format: 'isolated' | 'edit';
 }
 type SerializedItem = CardItem | ContainedCardItem;
-
-//TODO: If we don't plan on hanging other things off this, then make
-// SerializedStack just an alias for an array of StackItems--the "items"
-// property is awkward
 type SerializedStack = SerializedItem[];
 
 export type SerializedState = { stacks: SerializedStack[] };

@@ -53,7 +53,6 @@ export default class OperatorModeOverlays extends Component<Signature> {
           {{! Add mouseenter and mouseleave events to each button, so we can maintain the hover effect. }}
           {{#if (this.isEmbeddedCard renderedCard)}}
             <div class='overlay-embedded-card-header' data-test-overlay-header>
-              {{! TODO: Icon for linksTo field type }}
               {{#if (eq renderedCard.fieldType 'contains')}}
                 <div class='header-icon'>
                   {{svgJar 'icon-turn-down-right' width='22px' height='18px'}}
@@ -209,8 +208,8 @@ export default class OperatorModeOverlays extends Component<Signature> {
         (_e: MouseEvent) => (this.currentlyHoveredCard = null)
       );
       renderedCard.element.addEventListener('click', (e: MouseEvent) => {
-        // prevent nested contains fields from triggering when inner most
-        //contained field was clicked
+        // prevent outer nested contains fields from triggering when inner most
+        // contained field was clicked
         e.stopPropagation();
         this.openOrSelectCard(renderedCard.card);
       });

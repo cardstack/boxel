@@ -445,7 +445,6 @@ export default class OperatorModeContainer extends Component<Signature> {
       searchSheetTrigger ===
       SearchSheetTrigger.DropCardToLeftNeighborStackButton
     ) {
-      // shift all stacks over so that we don't alter the fieldOfIndex for any of the contained cards
       for (
         let stackIndex = this.operatorModeStateService.state.stacks.length - 1;
         stackIndex >= 0;
