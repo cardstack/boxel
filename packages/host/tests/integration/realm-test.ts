@@ -20,13 +20,25 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 
+let loader: Loader;
+
 module('Integration | realm', function (hooks) {
   setupRenderingTest(hooks);
+
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+  });
+
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`)
   );
+
+  hooks.beforeEach(function () {
+    shimExternals(loader);
+  });
 
   function getUpdateData(message: string) {
     let [type, data] = message.split('\n');
@@ -77,15 +89,6 @@ module('Integration | realm', function (hooks) {
     adapter.unsubscribe();
     return result;
   }
-
-  hooks.beforeEach(async function () {
-    Loader.destroy();
-    shimExternals();
-    Loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
-  });
 
   test('realm can serve GET card requests', async function (assert) {
     let adapter = new TestRealmAdapter({

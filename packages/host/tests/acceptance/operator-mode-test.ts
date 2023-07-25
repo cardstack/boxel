@@ -31,11 +31,6 @@ module('Acceptance | operator mode tests', function (hooks) {
   setupMockMessageService(hooks);
 
   hooks.beforeEach(async function () {
-    Loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
-    shimExternals();
     adapter = new TestRealmAdapter({
       'pet.gts': `
         import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
@@ -195,13 +190,12 @@ module('Acceptance | operator mode tests', function (hooks) {
       },
     });
 
-    realm = await TestRealm.createWithAdapter(adapter, this.owner, {
-      isAcceptanceTest: true,
-    });
-
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
-    loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
+
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
+      isAcceptanceTest: true,
+    });
     await realm.ready;
   });
 
