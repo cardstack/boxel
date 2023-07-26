@@ -518,8 +518,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .header-icon {
-        width: var(--boxel-header-icon-width, 20px);
-        height: var(--boxel-header-icon-height, 20px);
+        width: var(--boxel-header-icon-width);
+        height: var(--boxel-header-icon-height);
       }
 
     </style>

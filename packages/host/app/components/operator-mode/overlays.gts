@@ -143,7 +143,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
         background: var(--boxel-light-100);
         height: var(--overlay-embedded-card-header-height);
         display: flex;
-        padding: 13px;
+        padding: 1em;
       }
       .icon-button:hover {
         --icon-bg: var(--boxel-teal);
