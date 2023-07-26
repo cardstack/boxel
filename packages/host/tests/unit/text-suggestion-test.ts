@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import {
   suggestCardChooserTitle,
   getSuggestionWithLowestDepth,
-} from '../../app/utils/text-suggestion';
+} from '@cardstack/host/utils/text-suggestion';
 
 module('Unit | text-suggestion | card-chooser-title', function () {
   test('filter on', function (assert) {
