@@ -94,7 +94,7 @@ module('Unit | text-suggestion | card-chooser-title', function () {
       },
       {
         depth: 1,
-        suggestion: 'Choose a Article card',
+        suggestion: 'Choose an Article card',
       },
       {
         depth: 1,
@@ -112,7 +112,7 @@ module('Unit | text-suggestion | card-chooser-title', function () {
     assert.deepEqual(suggestions, [
       {
         depth: 0,
-        suggestion: 'Choose a Article card',
+        suggestion: 'Choose an Article card',
       },
     ]);
   });
@@ -218,7 +218,7 @@ module('Unit | text-suggestion | card-chooser-title', function () {
     assert.deepEqual(suggestions, [
       {
         depth: 0,
-        suggestion: 'Choose one or more Booking card',
+        suggestion: 'Choose one or more Booking cards',
       },
     ]);
   });
@@ -227,7 +227,7 @@ module('Unit | text-suggestion | card-chooser-title', function () {
       on: { module: `https://my.realm/article`, name: 'Article' },
       eq: { 'author.firstName': 'Kafka' },
     };
-    let suggestions = suggestCardChooserTitle(filter, 0, { multiSelect: true });
+    let suggestions = suggestCardChooserTitle(filter, 0);
     assert.deepEqual(suggestions, [
       {
         depth: 0,

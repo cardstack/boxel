@@ -956,6 +956,9 @@ importers:
       '@types/matrix-js-sdk':
         specifier: ^11.0.1
         version: 11.0.1
+      '@types/pluralize':
+        specifier: ^0.0.30
+        version: 0.0.30
       '@types/qs':
         specifier: ^6.9.7
         version: 6.9.7
@@ -1160,6 +1163,9 @@ importers:
       path-browserify:
         specifier: ^1.0.1
         version: 1.0.1
+      pluralize:
+        specifier: ^8.0.0
+        version: 8.0.0
       prettier:
         specifier: github:ef4/prettier#8c4a6ad
         version: github.com/ef4/prettier/8c4a6ad
@@ -6393,6 +6399,10 @@ packages:
     resolution: {integrity: sha512-Cf63Rv7jCQ0LaL8tNXmEyqTHuIJxRdlS5vMh1mj5voN4+QFhVZnlZruezqpWYDiJ8UTzhP0VmeLXCmBk66YrMQ==}
     dependencies:
       '@types/node': 18.15.13
+    dev: true
+
+  /@types/pluralize@0.0.30:
+    resolution: {integrity: sha512-kVww6xZrW/db5BR9OqiT71J9huRdQ+z/r+LbDuT7/EK50mCmj5FoaIARnVv0rvjUS/YpDox0cDU9lpQT011VBA==}
     dev: true
 
   /@types/q@1.5.5:
@@ -20517,6 +20527,11 @@ packages:
     dependencies:
       semver-compare: 1.0.0
 
+  /pluralize@8.0.0:
+    resolution: {integrity: sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA==}
+    engines: {node: '>=4'}
+    dev: true
+
   /portfinder@1.0.32:
     resolution: {integrity: sha512-on2ZJVVDXRADWE6jnQaX0ioEylzgBpQk8r55NE4wjXW1ZxO+BgDlY6DXwj20i0V8eB4SenDQ00WEaxfiIQPcxg==}
     engines: {node: '>= 0.12.0'}
@@ -25885,7 +25900,7 @@ packages:
       - supports-color
 
   github.com/ef4/prettier/8c4a6ad:
-    resolution: {tarball: https://codeload.github.com/ef4/prettier/tar.gz/8c4a6ad}
+    resolution: {commit: 8c4a6ad, repo: git+ssh://git@github.com/ef4/prettier.git, type: git}
     name: prettier
     version: 2.8.8-glimmer-patch.1
     engines: {node: '>=14'}
@@ -25978,7 +25993,7 @@ packages:
     version: 1.0.2
 
   github.com/machty/ember-concurrency/c6ed562(@babel/core@7.20.2)(ember-source@4.12.0):
-    resolution: {tarball: https://codeload.github.com/machty/ember-concurrency/tar.gz/c6ed562}
+    resolution: {commit: c6ed562, repo: git+ssh://git@github.com/machty/ember-concurrency.git, type: git}
     id: github.com/machty/ember-concurrency/c6ed562
     name: ember-concurrency
     version: 3.0.0

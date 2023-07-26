@@ -4,6 +4,7 @@ import {
   type Filter,
 } from '@cardstack/runtime-common/query';
 import a from 'indefinite';
+import pluralize from 'pluralize';
 
 interface ChooseCardSuggestion {
   suggestion: string; // suggests a UI text
@@ -61,7 +62,7 @@ function titleText(
 ) {
   let object = `${cardRefName} ${cardNoun}`;
   if (textOpts?.multiSelect) {
-    return `Choose one or more ${object}`;
+    return `Choose one or more ${pluralize(object)}`;
   } else {
     return `Choose ${a(object)}`;
   }
