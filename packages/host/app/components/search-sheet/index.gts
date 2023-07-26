@@ -115,6 +115,7 @@ export default class SearchSheet extends Component<Signature> {
           new URL(maybeCardDoc.data.id)
         );
         this.operatorModeStateService.addItemToStack({
+          type: 'card',
           card,
           format: 'isolated',
           stackIndex: 0,

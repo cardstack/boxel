@@ -386,6 +386,9 @@ module('Integration | card-editor', function (hooks) {
     );
 
     assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Choose a Pet card');
+    assert
       .dom('[data-test-card-catalog-modal] [data-test-card-catalog-item]')
       .exists({ count: 3 });
     assert.dom(`[data-test-select="${testRealmURL}Pet/vangogh"]`).exists();
@@ -418,6 +421,9 @@ module('Integration | card-editor', function (hooks) {
     assert.dom('button[data-test-remove-card]').doesNotExist();
 
     await click('[data-test-choose-card]');
+    assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Choose a Pet card');
     await waitFor(
       '[data-test-card-catalog-modal] [data-test-card-catalog-item]'
     );

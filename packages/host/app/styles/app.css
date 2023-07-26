@@ -15,7 +15,7 @@
 }
 
 .dialog-box__content {
-  padding: 0 var(--boxel-sp-xxl) var(--boxel-sp-xl);
+  padding: 0 var(--boxel-sp-xl) var(--boxel-sp-xl);
   height: 100%;
   overflow: auto;
 }
@@ -25,6 +25,7 @@
 }
 
 .dialog-box__close {
+  --icon-bg: var(--boxel-dark);
   border: none;
   background: none;
   font: var(--boxel-font-lg);
@@ -73,7 +74,8 @@
 /* Catalog Entry */
 .catalog-entry {
   display: grid;
-  gap: var(--boxel-sp-xxxs);
+  gap: 3px;
+  font: var(--boxel-font-sm);
 }
 
 .catalog-entry--embedded > * {
@@ -82,8 +84,18 @@
   text-overflow: ellipsis;
 }
 
+.catalog-entry--embedded__title {
+  font: 700 var(--boxel-font-sm);
+}
+
 .catalog-entry__realm-name {
   color: var(--boxel-teal);
+  font-size: var(--boxel-font-size-xs);
+}
+
+.catalog-entry-embedded__description {
+  margin: 0;
+  color: var(--boxel-500);
   font-size: var(--boxel-font-size-xs);
 }
 

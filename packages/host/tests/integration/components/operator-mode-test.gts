@@ -130,15 +130,37 @@ module('Integration | operator-mode', function (hooks) {
           }
         }
       `,
+      'shipping-info.gts': `
+        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        export class ShippingInfo extends Card {
+          static displayName = 'Shipping Info';
+          @field preferredCarrier = contains(StringCard);
+          @field remarks = contains(StringCard);
+          @field title = contains(StringCard, {
+            computeVia: function (this: ShippingInfo) {
+              return this.preferredCarrier;
+            },
+          });
+          static embedded = class Embedded extends Component<typeof this> {
+            <template>
+              <span data-test-preferredCarrier={{@model.preferredCarrier}}></span>
+              <@fields.preferredCarrier/>
+            </template>
+          }
+        }
+      `,
       'address.gts': `
         import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
+        import { ShippingInfo } from "./shipping-info";
         import { FieldContainer } from '@cardstack/boxel-ui';
 
         export class Address extends Card {
           static displayName = 'Address';
           @field city = contains(StringCard);
           @field country = contains(StringCard);
+          @field shippingInfo = contains(ShippingInfo);
           static embedded = class Embedded extends Component<typeof this> {
             <template>
               <div data-test-address>
@@ -148,6 +170,7 @@ module('Integration | operator-mode', function (hooks) {
                 <h3 data-test-country={{@model.country}}>
                   <@fields.country/>
                 </h3>
+                <div data-test-shippingInfo-field><@fields.shippingInfo/></div>
               </div>
             </template>
           }
@@ -160,6 +183,7 @@ module('Integration | operator-mode', function (hooks) {
               <FieldContainer @label='country' @tag='label' data-test-boxel-input-country>
                 <@fields.country />
               </FieldContainer>
+              <div data-test-shippingInfo-field><@fields.shippingInfo/></div>
             </template>
           };
         }
@@ -255,6 +279,10 @@ module('Integration | operator-mode', function (hooks) {
             address: {
               city: 'Bandung',
               country: 'Indonesia',
+              shippingInfo: {
+                preferredCarrier: 'DHL',
+                remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+              },
             },
           },
           relationships: {
@@ -509,16 +537,13 @@ module('Integration | operator-mode', function (hooks) {
 
       await operatorModeStateService.restore({
         stacks: [
-          {
-            items: [
-              {
-                card: {
-                  id: cardURL,
-                },
-                format: 'isolated',
-              },
-            ],
-          },
+          [
+            {
+              type: 'card',
+              id: cardURL,
+              format: 'isolated',
+            },
+          ],
         ],
       });
     };
@@ -705,6 +730,9 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
 
     await click('[data-test-create-new-card-button]');
+    assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Choose a CatalogEntry card');
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`
     );
@@ -771,6 +799,9 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`
     );
+    assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Choose a CatalogEntry card');
     assert.dom('[data-test-card-catalog-item]').exists({ count: 2 });
 
     await click(
@@ -844,6 +875,153 @@ module('Integration | operator-mode', function (hooks) {
       .containsText(
         'Everyone knows that Alice ran the show in the Brady household.'
       );
+  });
+
+  test('can open a nested contained card field in the stack', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor('[data-test-person]');
+    await click(
+      '[data-test-shippinginfo-field] [data-test-field-component-card]'
+    );
+    await waitFor('[data-test-stack-card-index="2"]');
+
+    assert
+      .dom(
+        `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Person/fadhlan/address"]`
+      )
+      .exists('Address contained card stack item exists');
+    assert
+      .dom(
+        `[data-test-stack-card-index="2"][data-test-stack-card="${testRealmURL}Person/fadhlan/address/shippingInfo"]`
+      )
+      .exists('Shipping Info contained card stack item exists');
+    assert
+      .dom(
+        `[data-test-stack-card-index="2"][data-test-stack-card="${testRealmURL}Person/fadhlan/address/shippingInfo"]`
+      )
+      .containsText(
+        `Don't let bob deliver the package--he's always bringing it to the wrong address`
+      );
+  });
+
+  test('can edit a nested contained card field', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor('[data-test-person]');
+    await click(
+      '[data-test-shippinginfo-field] [data-test-field-component-card]'
+    );
+    await waitFor('[data-test-stack-card-index="2"]');
+    await click(`[data-test-stack-card-index="2"] [data-test-edit-button]`);
+
+    // the entire chain of contained fields and the parent card should be put into edit mode
+    assert
+      .dom(
+        `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}Person/fadhlan"] > .card.edit`
+      )
+      .exists('Person card is in edit mode');
+    assert
+      .dom(
+        `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Person/fadhlan/address"] > .card.edit`
+      )
+      .exists('Address contained card header in edit mode');
+    assert
+      .dom(
+        `[data-test-stack-card-index="2"][data-test-stack-card="${testRealmURL}Person/fadhlan/address/shippingInfo"] > .card.edit`
+      )
+      .exists('Shipping Info contained card header in edit mode');
+
+    await fillIn(`[data-test-field="preferredCarrier"] input`, `FedEx`);
+    await click('[data-test-stack-card-index="2"] [data-test-save-button]');
+
+    // all the nested contains fields are popped from the stack
+    await waitUntil(
+      () =>
+        !document.querySelector('[data-test-stack-card-index="1"]') &&
+        !document.querySelector('[data-test-stack-card-index="2"]')
+    );
+    assert
+      .dom('.operator-mode [data-test-preferredCarrier="FedEx"]')
+      .exists('changed contained card reflected in parent card');
+    assert
+      .dom(
+        `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}Person/fadhlan"] > .card.edit`
+      )
+      .doesNotExist('Person card is not in edit mode');
+  });
+
+  test('can cancel editing of a nested contained card field', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor('[data-test-person]');
+    await click(
+      '[data-test-shippinginfo-field] [data-test-field-component-card]'
+    );
+    await waitFor('[data-test-stack-card-index="2"]');
+    await click(`[data-test-stack-card-index="2"] [data-test-edit-button]`);
+
+    await fillIn(`[data-test-field="preferredCarrier"] input`, `FedEx`);
+    await click('[data-test-stack-card-index="2"] [data-test-cancel-button]');
+
+    // the entire chain of contained fields and the parent card should be put into edit mode
+    assert
+      .dom(
+        `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}Person/fadhlan"] > .card`
+      )
+      .exists('Person card is in stack');
+    assert
+      .dom(
+        `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}Person/fadhlan"] > .card.edit`
+      )
+      .doesNotExist('Person card is not in edit mode');
+    assert
+      .dom(
+        `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Person/fadhlan/address"] > .card`
+      )
+      .exists('Address contained card is in stack');
+    assert
+      .dom(
+        `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Person/fadhlan/address"] > .card.edit`
+      )
+      .doesNotExist('Address contained card header is not in edit mode');
+    assert
+      .dom(
+        `[data-test-stack-card-index="2"][data-test-stack-card="${testRealmURL}Person/fadhlan/address/shippingInfo"] > .card`
+      )
+      .exists('Shipping Info contained card is in stack');
+    assert
+      .dom(
+        `[data-test-stack-card-index="2"][data-test-stack-card="${testRealmURL}Person/fadhlan/address/shippingInfo"] > .card.edit`
+      )
+      .doesNotExist('Shipping Info contained card header is not in edit mode');
+    assert
+      .dom('.operator-mode [data-test-preferredCarrier="DHL"]')
+      .exists('changed field is reverted');
   });
 
   test('can choose a card for a linksTo field that has an existing value', async function (assert) {

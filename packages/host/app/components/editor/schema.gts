@@ -204,6 +204,7 @@ export default class Schema extends Component<Signature> {
       .add-new-field > * + * {
         margin-top: var(--boxel-sp);
       }
+
     </style>
   </template>
 
@@ -320,9 +321,7 @@ export default class Schema extends Component<Signature> {
               eq: { ref: this.ref },
             },
           };
-    let fieldEntry: CatalogEntry | undefined = await chooseCard({
-      filter,
-    });
+    let fieldEntry: CatalogEntry | undefined = await chooseCard({ filter });
     if (!fieldEntry) {
       return;
     }
