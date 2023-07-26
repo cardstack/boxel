@@ -258,7 +258,7 @@ function constructHistory(history: IRoomEvent[]) {
   return latest_events;
 }
 
-async function getResponse(event: MatrixEvent, history: IRoomEvent[]) {
+async function getResponse(history: IRoomEvent[]) {
   let historical_messages: Message[] = [];
   log.info(history);
   for (let event of history) {
@@ -373,7 +373,7 @@ async function getResponse(event: MatrixEvent, history: IRoomEvent[]) {
       let history: IRoomEvent[] = constructHistory(eventList);
       log.info("Compressed into just the history that's ", history.length);
 
-      const stream = await getResponse(event, history);
+      const stream = await getResponse(history);
       return await sendStream(stream, client, room, initialMessage.event_id);
     }
   );
