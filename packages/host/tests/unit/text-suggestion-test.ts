@@ -2,7 +2,7 @@ import { module, test } from 'qunit';
 import {
   suggestCardChooserTitle,
   getSuggestionWithLowestDepth,
-} from '@cardstack/runtime-common/text-suggestion';
+} from '../../app/utils/text-suggestion';
 
 module('Unit | text-suggestion | card-chooser-title', function () {
   test('filter on', function (assert) {
@@ -47,7 +47,7 @@ module('Unit | text-suggestion | card-chooser-title', function () {
     assert.deepEqual(suggestions, [
       {
         depth: 1,
-        suggestion: 'Choose a Article card',
+        suggestion: 'Choose an Article card',
       },
       {
         depth: 1,
@@ -208,5 +208,18 @@ module('Unit | text-suggestion | card-chooser-title', function () {
       getSuggestionWithLowestDepth(suggestions),
       'Choose a Card instance'
     );
+  });
+  test('filter with multiSelect', function (assert) {
+    let filter = {
+      on: { module: `https://my.realm/booking`, name: 'Booking' },
+      eq: { 'hosts.firstName': 'Arthur' },
+    };
+    let suggestions = suggestCardChooserTitle(filter, 0, { multiSelect: true });
+    assert.deepEqual(suggestions, [
+      {
+        depth: 0,
+        suggestion: 'Choose one or more Booking card',
+      },
+    ]);
   });
 });
