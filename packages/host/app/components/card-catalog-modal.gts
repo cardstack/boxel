@@ -62,7 +62,8 @@ export default class CardCatalogModal extends Component<Signature> {
       >
         <CardContainer class='dialog-box' @displayBoundaries={{true}}>
           <Header @title={{this.chooseCardTitle}}>
-            <button
+            <IconButton
+              @icon='icon-x'
               {{on 'click' (fn this.pick undefined)}}
               class='dialog-box__close'
               aria-label='close modal'
