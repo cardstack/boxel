@@ -34,7 +34,7 @@ type SerializedStack = SerializedItem[];
 export type SerializedState = { stacks: SerializedStack[] };
 
 interface StackOpts {
-  keepIfEmpty?: boolean; // we want to keep the stack although items.length == 0
+  keepIfEmpty?: boolean; // we want to keep the stack although stack is empty
 }
 
 export default class OperatorModeStateService extends Service {
@@ -114,13 +114,6 @@ export default class OperatorModeStateService extends Service {
 
   numberOfStacks() {
     return this.state.stacks.length;
-  }
-
-  leftMostStack() {
-    if (this.numberOfStacks() > 0) {
-      return this.state.stacks[0];
-    }
-    return;
   }
 
   rightMostStack() {
