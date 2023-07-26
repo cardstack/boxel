@@ -260,6 +260,9 @@ module('Acceptance | basic tests', function (hooks) {
   test('can create a new card', async function (assert) {
     await visit('/code');
     await click('[data-test-create-new-card-button]');
+    assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Choose a CatalogEntry card');
     await waitFor('[data-test-card-catalog-modal] [data-test-realm-name]');
 
     await click(`[data-test-select="${testRealmURL}person-entry"]`);
