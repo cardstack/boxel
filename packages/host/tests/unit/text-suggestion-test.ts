@@ -209,7 +209,7 @@ module('Unit | text-suggestion | card-chooser-title', function () {
       'Choose a Card instance'
     );
   });
-  test('filter with multiSelect', function (assert) {
+  test('filter with on specifying multiSelect option', function (assert) {
     let filter = {
       on: { module: `https://my.realm/booking`, name: 'Booking' },
       eq: { 'hosts.firstName': 'Arthur' },
@@ -219,6 +219,19 @@ module('Unit | text-suggestion | card-chooser-title', function () {
       {
         depth: 0,
         suggestion: 'Choose one or more Booking card',
+      },
+    ]);
+  });
+  test('filter with on but checking for "an"', function (assert) {
+    let filter = {
+      on: { module: `https://my.realm/article`, name: 'Article' },
+      eq: { 'author.firstName': 'Kafka' },
+    };
+    let suggestions = suggestCardChooserTitle(filter, 0, { multiSelect: true });
+    assert.deepEqual(suggestions, [
+      {
+        depth: 0,
+        suggestion: 'Choose an Article card',
       },
     ]);
   });
