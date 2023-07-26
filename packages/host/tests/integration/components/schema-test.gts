@@ -30,7 +30,7 @@ module('Integration | schema', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function (this: TestContext) {
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
     loader.addURLMapping(
       new URL(baseRealm.url),
@@ -47,9 +47,6 @@ module('Integration | schema', function (hooks) {
   hooks.beforeEach(async function () {
     adapter = new TestRealmAdapter({});
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
-    loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
     await realm.ready;
   });
 
