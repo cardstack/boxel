@@ -22,12 +22,8 @@ module('Integration | computeds', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
-    loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
   });
 
   setupCardLogs(
