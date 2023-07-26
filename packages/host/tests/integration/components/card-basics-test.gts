@@ -308,6 +308,71 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-type-display-name]').containsText(`Driver`);
   });
 
+  test('can subscribe and unsubscribe to card instance changes', async function (assert) {
+    let { field, contains, Card, subscribeToChanges, unsubscribeFromChanges } =
+      cardApi;
+    let { default: StringCard } = string;
+
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field favoriteColor = contains(StringCard);
+    }
+
+    let mango = new Person({
+      firstName: 'Mango',
+      favoriteColor: 'brown',
+    });
+
+    let changeEvent: { fieldName: string; value: any } | undefined;
+    let eventCount = 0;
+    let subscriber = (fieldName: string, value: any) => {
+      eventCount++;
+      changeEvent = {
+        fieldName,
+        value,
+      };
+    };
+    subscribeToChanges(mango, subscriber);
+
+    try {
+      mango.firstName = 'Van Gogh';
+      assert.strictEqual(
+        eventCount,
+        1,
+        'the change event was fired the correct amount of times'
+      );
+      assert.strictEqual(
+        changeEvent?.fieldName,
+        'firstName',
+        'the fieldName was correctly specified in change event'
+      );
+      assert.strictEqual(
+        changeEvent?.value,
+        'Van Gogh',
+        'the field value was correctly specified in change event'
+      );
+    } finally {
+      unsubscribeFromChanges(mango, subscriber);
+    }
+
+    mango.firstName = 'Paper';
+    assert.strictEqual(
+      eventCount,
+      1,
+      'the change event was fired the correct amount of times'
+    );
+    assert.strictEqual(
+      changeEvent?.fieldName,
+      'firstName',
+      'the fieldName was correctly specified in change event'
+    );
+    assert.strictEqual(
+      changeEvent?.value,
+      'Van Gogh',
+      'the field value was correctly specified in change event'
+    );
+  });
+
   test('throws when assigning a value to a linksTo field with a primitive card', async function (assert) {
     let { field, contains, linksTo, Card } = cardApi;
     let { default: StringCard } = string;

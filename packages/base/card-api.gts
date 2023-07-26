@@ -150,6 +150,8 @@ interface StaleValue {
   staleValue: any;
 }
 
+type CardChangeSubscriber = (fieldName: string, fieldValue: any) => void;
+
 function isStaleValue(value: any): value is StaleValue {
   if (value && typeof value === 'object') {
     return 'type' in value && value.type === 'stale' && 'staleValue' in value;
@@ -160,6 +162,7 @@ function isStaleValue(value: any): value is StaleValue {
 const deserializedData = new WeakMap<CardBase, Map<string, any>>();
 const recomputePromises = new WeakMap<CardBase, Promise<any>>();
 const identityContexts = new WeakMap<CardBase, IdentityContext>();
+const subscribers = new WeakMap<CardBase, Set<CardChangeSubscriber>>();
 
 // our place for notifying Glimmer when a card is ready to re-render (which will
 // involve rerunning async computed fields)
@@ -1594,6 +1597,29 @@ export class Card extends CardBase {
 export type CardBaseConstructor = typeof CardBase;
 export type CardConstructor = typeof Card;
 
+export function subscribeToChanges(
+  card: Card,
+  subscriber: CardChangeSubscriber
+) {
+  let changeSubscribers = subscribers.get(card);
+  if (!changeSubscribers) {
+    changeSubscribers = new Set();
+    subscribers.set(card, changeSubscribers);
+  }
+  changeSubscribers.add(subscriber);
+}
+
+export function unsubscribeFromChanges(
+  card: Card,
+  subscriber: CardChangeSubscriber
+) {
+  let changeSubscribers = subscribers.get(card);
+  if (!changeSubscribers) {
+    return;
+  }
+  changeSubscribers.delete(subscriber);
+}
+
 function getDataBucket<T extends CardBase>(instance: T): Map<string, any> {
   let deserialized = deserializedData.get(instance);
   if (!deserialized) {
@@ -2145,6 +2171,12 @@ function makeDescriptor<
               staleValue: currentValue,
             } as StaleValue);
           }
+        }
+      }
+      let changeSubscribers = subscribers.get(this);
+      if (changeSubscribers) {
+        for (let subscriber of changeSubscribers) {
+          subscriber(field.name, value);
         }
       }
       logger.log(recompute(this));
