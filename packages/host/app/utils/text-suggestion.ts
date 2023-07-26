@@ -15,7 +15,7 @@ interface TextOpts {
 }
 export function suggestCardChooserTitle(
   filter: Filter,
-  depth: number = 0, //lower the depth, higher the priority
+  depth = 0, //lower the depth, higher the priority
   textOpts?: TextOpts
 ): ChooseCardSuggestion[] {
   let MAX_RECURSION_DEPTH = 2;
