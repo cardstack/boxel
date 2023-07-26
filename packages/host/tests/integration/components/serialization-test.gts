@@ -99,7 +99,7 @@ module('Integration | serialization', function (hooks) {
       undefined,
       loader
     );
-    let root = await renderCard(firstPost, 'isolated');
+    let root = await renderCard(loader, firstPost, 'isolated');
 
     // the template value 'Apr 22, 2022' can only be realized when the card has
     // correctly deserialized it's static data property
@@ -418,7 +418,7 @@ module('Integration | serialization', function (hooks) {
       undefined,
       loader
     );
-    let root = await renderCard(firstPost, 'isolated');
+    let root = await renderCard(loader, firstPost, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
       'First Post created [no date] published [no date-time]'
@@ -1616,7 +1616,7 @@ module('Integration | serialization', function (hooks) {
       undefined,
       loader
     );
-    let root = await renderCard(firstPost, 'isolated');
+    let root = await renderCard(loader, firstPost, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
       'birthdate Oct 30, 2019 last login Apr 27, 2022, 4:58 PM'
@@ -1678,7 +1678,7 @@ module('Integration | serialization', function (hooks) {
       undefined,
       loader
     );
-    await renderCard(firstPost, 'isolated');
+    await renderCard(loader, firstPost, 'isolated');
     assert
       .dom('[data-test]')
       .hasText(
@@ -1834,7 +1834,7 @@ module('Integration | serialization', function (hooks) {
         firstName: 'Arthur',
       }),
     });
-    await renderCard(helloWorld, 'edit');
+    await renderCard(loader, helloWorld, 'edit');
     await fillIn('[data-test-field="firstName"] input', 'Carl Stack');
 
     assert.deepEqual(
@@ -2261,7 +2261,7 @@ module('Integration | serialization', function (hooks) {
       undefined,
       loader
     );
-    let root = await renderCard(classSchedule, 'isolated');
+    let root = await renderCard(loader, classSchedule, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
       'Apr 1, 2022 Apr 4, 2022'
@@ -2329,7 +2329,7 @@ module('Integration | serialization', function (hooks) {
       undefined,
       loader
     );
-    await renderCard(classSchedule, 'isolated');
+    await renderCard(loader, classSchedule, 'isolated');
     assert.deepEqual(
       [...this.element.querySelectorAll('[data-test="appointment"]')].map(
         (element) => cleanWhiteSpace(element.textContent!)
@@ -3308,7 +3308,7 @@ module('Integration | serialization', function (hooks) {
     await shimModule(`${realmURL}test-cards`, { Person }, loader);
 
     let mango = new Person({ birthdate: p('2019-10-30') });
-    await renderCard(mango, 'isolated');
+    await renderCard(loader, mango, 'isolated');
     let withoutComputeds = serializeCard(mango, {
       includeUnrenderedFields: true,
     });

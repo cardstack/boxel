@@ -162,7 +162,7 @@ module('Integration | card-basics', function (hooks) {
       }),
     });
 
-    let cardRoot = await renderCard(helloWorld, 'isolated');
+    let cardRoot = await renderCard(loader, helloWorld, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(cardRoot.textContent!),
       'First Post by Arthur speaks english japanese 5 subscribers is cool true'
@@ -202,7 +202,7 @@ module('Integration | card-basics', function (hooks) {
 
     let arthur = new Person({ firstName: 'Arthur', number: 10 });
 
-    await renderCard(arthur, 'embedded');
+    await renderCard(loader, arthur, 'embedded');
     assert.dom('[data-test="name"]').containsText('Arthur');
     assert.dom('[data-test="number"]').containsText('10');
   });
@@ -264,7 +264,7 @@ module('Integration | card-basics', function (hooks) {
     let ref = { module: `http://localhost:4202/test/person`, name: 'Person' };
     let driver = new DriverCard({ ref });
 
-    await renderCard(driver, 'embedded');
+    await renderCard(loader, driver, 'embedded');
     assert
       .dom('[data-test-ref]')
       .containsText(`Module: http://localhost:4202/test/person Name: Person`);
@@ -292,7 +292,7 @@ module('Integration | card-basics', function (hooks) {
     let ref = { module: `http://localhost:4202/test/person`, name: 'Person' };
     let driver = new DriverCard({ ref });
 
-    await renderCard(driver, 'edit');
+    await renderCard(loader, driver, 'edit');
     assert.dom('input').doesNotExist('no input fields exist');
     assert
       .dom('[data-test-ref')
@@ -421,7 +421,7 @@ module('Integration | card-basics', function (hooks) {
     let hassan = new Person({ firstName: 'Hassan', pet: mango });
     await saveCard(vanGogh, `${testRealmURL}Pet/vanGogh`, loader);
     await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
-    await renderCard(hassan, 'embedded');
+    await renderCard(loader, hassan, 'embedded');
 
     assert.dom('[data-test-person]').containsText('Hassan');
     assert.dom('[data-test-pet="Mango"]').containsText('Mango');
@@ -495,7 +495,7 @@ module('Integration | card-basics', function (hooks) {
         number: 10,
       }),
     });
-    await renderCard(helloWorld, 'isolated');
+    await renderCard(loader, helloWorld, 'isolated');
     assert.dom('[data-test-embedded-person]').containsText('Mr Arthur 10');
   });
 
@@ -548,7 +548,7 @@ module('Integration | card-basics', function (hooks) {
       author: new Person({ firstName: 'Arthur', number: 10 }),
     });
 
-    await renderCard(helloWorld, 'isolated');
+    await renderCard(loader, helloWorld, 'isolated');
     assert.dom('[data-test="string"]').containsText('Arthur');
     assert.dom('[data-test="number"]').containsText('10');
   });
@@ -578,7 +578,7 @@ module('Integration | card-basics', function (hooks) {
       author: new Person({ firstName: 'Arthur' }),
     });
 
-    await renderCard(helloWorld, 'isolated');
+    await renderCard(loader, helloWorld, 'isolated');
     assert.dom('[data-test="first-name"]').containsText('Arthur');
     assert.dom('[data-test="title"]').containsText('First Post');
   });
@@ -601,7 +601,7 @@ module('Integration | card-basics', function (hooks) {
       languagesSpoken: ['english', 'japanese'],
     });
 
-    let root = await renderCard(mango, 'isolated');
+    let root = await renderCard(loader, mango, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
       'Mango speaks english japanese'
@@ -661,7 +661,7 @@ module('Integration | card-basics', function (hooks) {
       ],
     });
 
-    await renderCard(abdelRahmans, 'isolated');
+    await renderCard(loader, abdelRahmans, 'isolated');
     assert.deepEqual(
       [...this.element.querySelectorAll('[data-test-person-firstName]')].map(
         (element) => element.textContent?.trim()
@@ -692,7 +692,7 @@ module('Integration | card-basics', function (hooks) {
       languagesSpoken: ['english', 'japanese'],
     });
 
-    let root = await renderCard(mango, 'isolated');
+    let root = await renderCard(loader, mango, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
       'Mango speaks english japanese'
@@ -736,7 +736,7 @@ module('Integration | card-basics', function (hooks) {
       ],
     });
 
-    await renderCard(abdelRahmans, 'isolated');
+    await renderCard(loader, abdelRahmans, 'isolated');
     assert.deepEqual(
       [...this.element.querySelectorAll('[data-test-person-firstName]')].map(
         (element) => element.textContent?.trim()
@@ -781,7 +781,7 @@ module('Integration | card-basics', function (hooks) {
     let abdelRahmanDogs = new Family({
       people: [mango, vanGogh],
     });
-    await renderCard(abdelRahmanDogs, 'isolated');
+    await renderCard(loader, abdelRahmanDogs, 'isolated');
     assert.deepEqual(
       [...this.element.querySelectorAll('[data-test-person-firstName]')].map(
         (element) => element.textContent?.trim()
@@ -852,7 +852,7 @@ module('Integration | card-basics', function (hooks) {
         }),
       ],
     });
-    await renderCard(group, 'isolated');
+    await renderCard(loader, group, 'isolated');
     assert.dom('[data-test-employee-firstName]').containsText('Mango');
     assert.dom('[data-test-employee-department]').containsText('begging');
     assert.dom('[data-test-customer-firstName]').containsText('Van Gogh');
@@ -871,7 +871,7 @@ module('Integration | card-basics', function (hooks) {
       };
     }
     let child = new Person({ firstName: 'Arthur' });
-    let root = await renderCard(child, 'embedded');
+    let root = await renderCard(loader, child, 'embedded');
     assert.dom(root.children[0]).containsText('Arthur');
     child.firstName = 'Quint';
     await waitUntil(() => cleanWhiteSpace(root.textContent!) === 'Quint');
@@ -889,7 +889,7 @@ module('Integration | card-basics', function (hooks) {
       };
     }
     let person = new Person({ pets: ['Mango', 'Van Gogh'] });
-    let root = await renderCard(person, 'embedded');
+    let root = await renderCard(loader, person, 'embedded');
     assert.strictEqual(cleanWhiteSpace(root.textContent!), 'Mango Van Gogh');
     person.pets = ['Van Gogh', 'Mango', 'Peachy'];
     await waitUntil(
@@ -909,7 +909,7 @@ module('Integration | card-basics', function (hooks) {
       };
     }
     let person = new Person({ pets: ['Mango', 'Van Gogh'] });
-    let root = await renderCard(person, 'embedded');
+    let root = await renderCard(loader, person, 'embedded');
     assert.strictEqual(cleanWhiteSpace(root.textContent!), 'Mango Van Gogh');
     person.pets[1] = 'Peachy';
     await waitUntil(
@@ -929,7 +929,7 @@ module('Integration | card-basics', function (hooks) {
       };
     }
     let person = new Person({ pets: ['Mango', 'Van Gogh'] });
-    let root = await renderCard(person, 'embedded');
+    let root = await renderCard(loader, person, 'embedded');
     assert.strictEqual(cleanWhiteSpace(root.textContent!), 'Mango Van Gogh');
     person.pets.push('Peachy');
     await waitUntil(
@@ -1011,7 +1011,7 @@ module('Integration | card-basics', function (hooks) {
       author: new Person({ firstName: 'Arthur' }),
     });
 
-    await renderCard(helloWorld, 'edit');
+    await renderCard(loader, helloWorld, 'edit');
     assert.dom('[data-test-field="title"]').hasText('Title');
     assert.dom('[data-test-field="title"] input').hasValue('My Post');
     assert
@@ -1049,7 +1049,7 @@ module('Integration | card-basics', function (hooks) {
     await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
 
     let mango = new Person({ firstName: 'Mango', isCool: true });
-    let root = await renderCard(mango, 'isolated');
+    let root = await renderCard(loader, mango, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
       'First Name Mango Is Cool true Title Mango'
@@ -1075,7 +1075,7 @@ module('Integration | card-basics', function (hooks) {
 
     const TRUE = 'label:first-child input';
     const FALSE = 'label:last-child input';
-    await renderCard(mango, 'edit');
+    await renderCard(loader, mango, 'edit');
     assert
       .dom(`[data-test-radio-group="isCool"] > ${TRUE}`)
       .isChecked('the isCool true radio has correct state');
@@ -1134,7 +1134,7 @@ module('Integration | card-basics', function (hooks) {
 
     let hassan = new Person({ firstName: 'Hassan', species: 'Homo Sapiens' });
 
-    await renderCard(hassan, 'embedded');
+    await renderCard(loader, hassan, 'embedded');
     assert.dom('[data-test="first-name"]').containsText('Hassan');
     assert.dom('[data-test="species"]').containsText('Homo Sapiens');
   });
@@ -1180,7 +1180,7 @@ module('Integration | card-basics', function (hooks) {
       author: new Person({ firstName: 'Arthur' }),
     });
 
-    await renderCard(helloWorld, 'edit');
+    await renderCard(loader, helloWorld, 'edit');
     assert.dom('[data-test-field="title"] input').hasValue('First Post');
     assert.dom('[data-test-field="reviews"] input').hasValue('1');
     assert.dom('[data-test-field="firstName"] input').hasValue('Arthur');
@@ -1235,7 +1235,7 @@ module('Integration | card-basics', function (hooks) {
       languagesSpoken: ['english', 'japanese'],
     });
 
-    await renderCard(card, 'edit');
+    await renderCard(loader, card, 'edit');
     assert
       .dom('[data-test-item="0"] [data-counter]')
       .hasAttribute('data-counter', '0');
@@ -1270,7 +1270,7 @@ module('Integration | card-basics', function (hooks) {
 
     let card = new Person();
 
-    await renderCard(card, 'edit');
+    await renderCard(loader, card, 'edit');
     assert.dom('[data-test-item]').doesNotExist();
 
     // add english
@@ -1318,7 +1318,7 @@ module('Integration | card-basics', function (hooks) {
 
     let card = new Blog();
 
-    await renderCard(card, 'edit');
+    await renderCard(loader, card, 'edit');
     assert.dom('[data-test-item]').doesNotExist();
 
     await click('[data-test-add-new]');
@@ -1377,7 +1377,7 @@ module('Integration | card-basics', function (hooks) {
       ],
     });
 
-    await renderCard(card, 'edit');
+    await renderCard(loader, card, 'edit');
     assert
       .dom('[data-test-contains-many="dates"] [data-test-item]')
       .exists({ count: 3 });

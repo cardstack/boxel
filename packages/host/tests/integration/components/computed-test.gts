@@ -56,7 +56,7 @@ module('Integration | computeds', function (hooks) {
     }
 
     let mango = new Person({ firstName: 'Mango', lastName: 'Abdel-Rahman' });
-    let root = await renderCard(mango, 'isolated');
+    let root = await renderCard(loader, mango, 'isolated');
     assert.strictEqual(root.textContent!.trim(), 'Mango Abdel-Rahman');
   });
 
@@ -78,7 +78,7 @@ module('Integration | computeds', function (hooks) {
     }
 
     let mango = new Person({ firstName: 'Mango', lastName: 'Abdel-Rahman' });
-    let root = await renderCard(mango, 'isolated');
+    let root = await renderCard(loader, mango, 'isolated');
     assert.strictEqual(root.textContent!.trim(), 'Mango Abdel-Rahman');
   });
 
@@ -109,7 +109,7 @@ module('Integration | computeds', function (hooks) {
       title: 'First Post',
       author: new Person({ firstName: 'Mango' }),
     });
-    let root = await renderCard(firstPost, 'isolated');
+    let root = await renderCard(loader, firstPost, 'isolated');
     assert.strictEqual(root.textContent!.trim(), 'First Post by Mango');
   });
 
@@ -141,7 +141,7 @@ module('Integration | computeds', function (hooks) {
       };
     }
     let firstPost = new Post({ title: 'First Post' });
-    await renderCard(firstPost, 'isolated');
+    await renderCard(loader, firstPost, 'isolated');
     assert.dom('[data-test="title"]').hasText('First Post');
     assert.dom('[data-test="firstName"]').hasText('Mango');
   });
@@ -164,7 +164,7 @@ module('Integration | computeds', function (hooks) {
     }
 
     let mango = new Person({ firstName: 'Mango' });
-    let root = await renderCard(mango, 'isolated');
+    let root = await renderCard(loader, mango, 'isolated');
     assert.strictEqual(root.textContent!.trim(), 'Mango');
   });
 
@@ -187,7 +187,7 @@ module('Integration | computeds', function (hooks) {
     }
 
     let mango = new Person({ firstName: 'Mango' });
-    let root = await renderCard(mango, 'isolated');
+    let root = await renderCard(loader, mango, 'isolated');
     assert.strictEqual(root.textContent!.trim(), 'Mango');
   });
 
@@ -214,7 +214,7 @@ module('Integration | computeds', function (hooks) {
     }
 
     let mango = new Person({ firstName: 'Mango' });
-    let root = await renderCard(mango, 'isolated');
+    let root = await renderCard(loader, mango, 'isolated');
     assert.strictEqual(root.textContent!.trim(), 'Mango');
   });
 
@@ -242,7 +242,7 @@ module('Integration | computeds', function (hooks) {
       };
     }
     let mango = new Person({ firstName: 'Mango' });
-    let root = await renderCard(mango, 'isolated');
+    let root = await renderCard(loader, mango, 'isolated');
     assert.strictEqual(root.textContent!.trim(), 'Mango');
   });
 
@@ -273,7 +273,7 @@ module('Integration | computeds', function (hooks) {
       title: 'First Post',
       author: new Person({ firstName: 'Mango' }),
     });
-    let root = await renderCard(firstPost, 'isolated');
+    let root = await renderCard(loader, firstPost, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
       'First Post by Mango'
@@ -308,7 +308,7 @@ module('Integration | computeds', function (hooks) {
       };
     }
     let firstPost = new Post({ title: 'First Post' });
-    await renderCard(firstPost, 'isolated');
+    await renderCard(loader, firstPost, 'isolated');
     assert.dom('[data-test="title"]').hasText('First Post');
     assert.dom('[data-test="firstName"]').hasText('Mango');
   });
@@ -338,7 +338,7 @@ module('Integration | computeds', function (hooks) {
       languagesSpoken: ['english', 'japanese'],
     });
 
-    let root = await renderCard(mango, 'isolated');
+    let root = await renderCard(loader, mango, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
       'Mango speaks english japanese'
@@ -366,7 +366,7 @@ module('Integration | computeds', function (hooks) {
     }
 
     let mango = new Person({ firstName: 'Mango' });
-    await renderCard(mango, 'isolated'); // just using to absorb asynchronicity
+    await renderCard(loader, mango, 'isolated'); // just using to absorb asynchronicity
     assert.deepEqual(
       mango.slowLanguagesSpoken,
       [],
@@ -414,7 +414,7 @@ module('Integration | computeds', function (hooks) {
       ],
     });
 
-    await renderCard(abdelRahmans, 'isolated');
+    await renderCard(loader, abdelRahmans, 'isolated');
     assert.deepEqual(
       [...this.element.querySelectorAll('[data-test-firstName]')].map(
         (element) => element.textContent?.trim()
@@ -451,7 +451,7 @@ module('Integration | computeds', function (hooks) {
       };
     }
     let abdelRahmans = new Family();
-    await renderCard(abdelRahmans, 'isolated'); // just using to absorb asynchronicity
+    await renderCard(loader, abdelRahmans, 'isolated'); // just using to absorb asynchronicity
     assert.deepEqual(
       abdelRahmans.slowPeople,
       [],
@@ -512,7 +512,7 @@ module('Integration | computeds', function (hooks) {
     }
 
     let person = new Person({ firstName: 'Mango' });
-    await renderCard(person, 'edit');
+    await renderCard(loader, person, 'edit');
     assert.dom('[data-test-field=alias]').containsText('Mango');
     assert
       .dom('[data-test-field=alias] input')
@@ -563,7 +563,7 @@ module('Integration | computeds', function (hooks) {
       homeTown: new Location({ city: 'Bronxville' }),
     });
 
-    await renderCard(person, 'edit');
+    await renderCard(loader, person, 'edit');
     assert.dom('[data-test-field="slowName"]').containsText('Mango');
     await fillIn('[data-test-field="firstName"] input', 'Van Gogh');
     // We want to ensure data consistency, so that when the template rerenders,
@@ -624,7 +624,7 @@ module('Integration | computeds', function (hooks) {
     let author = new Person({ firstName: 'Mango', bestFriend: friend });
     let firstPost = new Post({ title: 'First Post', author });
 
-    await renderCard(firstPost, 'isolated');
+    await renderCard(loader, firstPost, 'isolated');
     assert.dom('[data-test-field="title"]').hasText('Title First Post');
     assert
       .dom('[data-test-field="author"] [data-test="firstName"]')
@@ -671,7 +671,7 @@ module('Integration | computeds', function (hooks) {
     let author = new Person({ firstName: 'Mango', bestFriend: friend });
     let firstPost = new Post({ title: 'First Post', author });
 
-    await renderCard(firstPost, 'isolated');
+    await renderCard(loader, firstPost, 'isolated');
     assert.dom('[data-test-field="title"]').hasText('Title First Post');
     assert
       .dom('[data-test-field="author"] [data-test="firstName"]')
@@ -726,7 +726,7 @@ module('Integration | computeds', function (hooks) {
       factCheckers: [f1, f2, f3],
     });
 
-    await renderCard(firstPost, 'isolated');
+    await renderCard(loader, firstPost, 'isolated');
     assert.dom('[data-test-field="title"]').hasText('Title First Post');
     assert
       .dom('[data-test-field="author"] [data-test="firstName"]')
@@ -787,7 +787,7 @@ module('Integration | computeds', function (hooks) {
       factCheckers: [f1, f2, f3],
     });
 
-    await renderCard(firstPost, 'isolated');
+    await renderCard(loader, firstPost, 'isolated');
     assert.dom('[data-test-field="title"]').hasText('Title First Post');
     assert
       .dom('[data-test-field="author"] [data-test="firstName"]')
