@@ -1,5 +1,9 @@
-import { isCardTypeFilter, isEveryFilter, type Filter } from './query';
-import * as a from 'indefinite';
+import {
+  isCardTypeFilter,
+  isEveryFilter,
+  type Filter,
+} from '@cardstack/runtime-common/query';
+import a from 'indefinite';
 
 interface ChooseCardSuggestion {
   suggestion: string; // suggests a UI text
@@ -7,7 +11,7 @@ interface ChooseCardSuggestion {
 }
 
 interface TextOpts {
-  multipleSelection: boolean;
+  multiSelect?: boolean;
 }
 export function suggestCardChooserTitle(
   filter: Filter,
@@ -41,7 +45,7 @@ export function suggestCardChooserTitle(
   //--inductive case--
   if (isEveryFilter(filter)) {
     let nestedSuggestions = filter.every.flatMap((f) =>
-      suggestCardChooserTitle(f, depth + 1)
+      suggestCardChooserTitle(f, depth + 1, textOpts)
     );
     suggestions = [...suggestions, ...nestedSuggestions];
   }
@@ -56,7 +60,7 @@ function titleText(
   textOpts?: TextOpts
 ) {
   let object = `${cardRefName} ${cardNoun}`;
-  if (textOpts?.multipleSelection) {
+  if (textOpts?.multiSelect) {
     return `Choose one or more ${object}`;
   } else {
     return `Choose ${a(object)}`;

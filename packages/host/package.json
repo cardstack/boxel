@@ -163,5 +163,9 @@
     "paths": [
       "lib/setup-ast-transforms"
     ]
+  },
+  "dependencies": {
+    "@types/indefinite": "^2.3.1",
+    "indefinite": "^2.4.3"
   }
 }

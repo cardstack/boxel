@@ -13,9 +13,10 @@ import {
   type RealmInfo,
 } from '@cardstack/runtime-common';
 import type { Query, Filter } from '@cardstack/runtime-common/query';
-import { suggestCardChooserTitle,
+import {
+  suggestCardChooserTitle,
   getSuggestionWithLowestDepth,
-} from '@cardstack/runtime-common/text-suggestion';
+} from '../utils/text-suggestion';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { getSearchResults, Search } from '../resources/search';
 import Preview from './preview';
@@ -510,10 +511,10 @@ export default class CardCatalogModal extends Component<Signature> {
   // This is part of our public API for runtime-common to invoke the card chooser
   async chooseCard<T extends Card>(
     query: Query,
-    opts?: { offerToCreate?: CardRef }
+    opts?: { offerToCreate?: CardRef; multiSelect?: boolean }
   ): Promise<undefined | T> {
     this.zIndex++;
-    this.chooseCardTitle = chooseCardTitle(query.filter);
+    this.chooseCardTitle = chooseCardTitle(query.filter, opts?.multiSelect);
     return (await this._chooseCard.perform(query, opts)) as T | undefined;
   }
 
@@ -635,11 +636,14 @@ export default class CardCatalogModal extends Component<Signature> {
   }
 }
 
-function chooseCardTitle(filter: Filter | undefined): string {
+function chooseCardTitle(
+  filter: Filter | undefined,
+  multiSelect?: boolean
+): string {
   if (!filter) {
     return DEFAULT_CHOOOSE_CARD_TITLE;
   }
-  let suggestions = suggestCardChooserTitle(filter);
+  let suggestions = suggestCardChooserTitle(filter, 0, { multiSelect });
   return (
     getSuggestionWithLowestDepth(suggestions) ?? DEFAULT_CHOOOSE_CARD_TITLE
   );
