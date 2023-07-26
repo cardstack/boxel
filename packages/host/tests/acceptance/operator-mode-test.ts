@@ -636,20 +636,22 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-add-card-right-stack]').doesNotExist();
     });
     test('Clicking search panel (without left and right buttons activated) replaces open card on existing stack', async function (assert) {
-      let operatorModeStateParam = JSON.stringify({
+      let operatorModeStateParam = stringify({
         stacks: [
           [
             {
-              card: { id: 'http://test-realm/test/Person/fadhlan' },
+              type: 'card',
+              id: 'http://test-realm/test/Person/fadhlan',
               format: 'isolated',
             },
             {
-              card: { id: 'http://test-realm/test/Pet/mango' },
-              format: 'edit',
+              type: 'card',
+              id: 'http://test-realm/test/Pet/mango',
+              format: 'isolated',
             },
           ],
         ],
-      });
+      })!;
 
       await visit(
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
@@ -768,29 +770,29 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
 
     test('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
-      let operatorModeStateParam = JSON.stringify({
+      let operatorModeStateParam = stringify({
         stacks: [
           [
             {
               type: 'card',
-              card: { id: 'http://test-realm/test/Person/fadhlan' },
+              id: 'http://test-realm/test/Person/fadhlan',
               format: 'isolated',
             },
           ],
           [
             {
               type: 'card',
-              card: { id: 'http://test-realm/test/index' },
+              id: 'http://test-realm/test/index',
               format: 'isolated',
             },
             {
               type: 'card',
-              card: { id: 'http://test-realm/test/Pet/mango' },
+              id: 'http://test-realm/test/Pet/mango',
               format: 'isolated',
             },
           ],
         ],
-      });
+      })!;
 
       await visit(
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
