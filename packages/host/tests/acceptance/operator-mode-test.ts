@@ -638,18 +638,16 @@ module('Acceptance | operator mode tests', function (hooks) {
     test('Clicking search panel (without left and right buttons activated) replaces open card on existing stack', async function (assert) {
       let operatorModeStateParam = JSON.stringify({
         stacks: [
-          {
-            items: [
-              {
-                card: { id: 'http://test-realm/test/Person/fadhlan' },
-                format: 'isolated',
-              },
-              {
-                card: { id: 'http://test-realm/test/Pet/mango' },
-                format: 'edit',
-              },
-            ],
-          },
+          [
+            {
+              card: { id: 'http://test-realm/test/Person/fadhlan' },
+              format: 'isolated',
+            },
+            {
+              card: { id: 'http://test-realm/test/Pet/mango' },
+              format: 'edit',
+            },
+          ],
         ],
       });
 
@@ -772,26 +770,25 @@ module('Acceptance | operator mode tests', function (hooks) {
     test('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
       let operatorModeStateParam = JSON.stringify({
         stacks: [
-          {
-            items: [
-              {
-                card: { id: 'http://test-realm/test/Person/fadhlan' },
-                format: 'isolated',
-              },
-            ],
-          },
-          {
-            items: [
-              {
-                card: { id: 'http://test-realm/test/index' },
-                format: 'isolated',
-              },
-              {
-                card: { id: 'http://test-realm/test/Pet/mango' },
-                format: 'isolated',
-              },
-            ],
-          },
+          [
+            {
+              type: 'card',
+              card: { id: 'http://test-realm/test/Person/fadhlan' },
+              format: 'isolated',
+            },
+          ],
+          [
+            {
+              type: 'card',
+              card: { id: 'http://test-realm/test/index' },
+              format: 'isolated',
+            },
+            {
+              type: 'card',
+              card: { id: 'http://test-realm/test/Pet/mango' },
+              format: 'isolated',
+            },
+          ],
         ],
       });
 
