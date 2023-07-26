@@ -1,5 +1,4 @@
 import {
-  MatrixEvent,
   IContent,
   RoomMemberEvent,
   createClient,
@@ -15,7 +14,6 @@ import { ChatCompletionChunk } from 'openai/resources/chat';
 import { Stream } from 'openai/streaming';
 import { logger } from '@cardstack/runtime-common';
 import { makeLogDefinitions } from '@cardstack/runtime-common';
-import { ro } from 'date-fns/locale';
 (globalThis as any)._logDefinitions = makeLogDefinitions(
   process.env.LOG_LEVELS || '*=info'
 );
