@@ -994,7 +994,6 @@ module('Integration | operator-mode', function (hooks) {
 
     assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
     assert.dom('[data-test-field="friends"] [data-test-add-new]').exists();
-    assert.dom('[data-test-field="friends"] [data-test-create-new]').exists();
 
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
@@ -1022,8 +1021,8 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-edit-button]');
 
     assert.dom('[data-test-field="friends"] [data-test-pet]').doesNotExist();
-    assert.dom('[data-test-add-new-in-empty-state]').hasText('Add Pets');
-    await click('[data-test-add-new-in-empty-state]');
+    assert.dom('[data-test-add-new]').hasText('Add Pets');
+    await click('[data-test-add-new]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
     await click(`[data-test-select="${testRealmURL}Pet/jackie"]`);
     await click('[data-test-card-catalog-go-button]');
@@ -1060,67 +1059,6 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
     assert.dom('[data-test-field="friends"]').containsText('Mango');
-  });
-
-  skip('can create a new card to add to a linksToMany field with no existing value', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      }
-    );
-
-    await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
-    await click('[data-test-edit-button]');
-
-    assert.dom('[data-test-field="friends"] [data-test-pet]').doesNotExist();
-    await click('[data-test-links-to-many="friends"] [data-test-create-new]');
-
-    await waitFor(`[data-test-stack-card-index="1"]`);
-    await fillIn(
-      '[data-test-stack-card-index="1"] [data-test-field="name"] [data-test-boxel-input]',
-      'Woodster'
-    );
-    await click('[data-test-stack-card-index="1"] [data-test-save-button]');
-    await waitUntil(
-      () => !document.querySelector('[data-test-stack-card-index="1"]')
-    );
-    assert.dom('[data-test-field="friends"]').containsText('Woodster');
-  });
-
-  test('can create a new card to add to a linksToMany field with existing values', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      }
-    );
-
-    await waitFor(`[data-test-stack-card="${testRealmURL}Person/burcu"]`);
-    await click('[data-test-edit-button]');
-
-    assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
-
-    await click('[data-test-links-to-many="friends"] [data-test-create-new]');
-
-    await waitFor(`[data-test-stack-card-index="1"]`);
-    await fillIn(
-      '[data-test-stack-card-index="1"] [data-test-field="name"] [data-test-boxel-input]',
-      'Woodster'
-    );
-    await click('[data-test-stack-card-index="1"] [data-test-save-button]');
-    await waitUntil(
-      () => !document.querySelector('[data-test-stack-card-index="1"]')
-    );
-    assert
-      .dom('[data-test-field="friends"]')
-      .containsText('Jackie Woody Woodster');
   });
 
   test('can remove all items of a linksToMany field', async function (assert) {

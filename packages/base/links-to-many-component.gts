@@ -11,7 +11,7 @@ import {
 } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
 import type { ComponentLike } from '@glint/template';
-import { Button, IconButton } from '@cardstack/boxel-ui';
+import { IconButton } from '@cardstack/boxel-ui';
 import {
   restartableTask,
   type EncapsulatedTaskDescriptor as Descriptor,
@@ -73,28 +73,15 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
             </li>
           {{/each}}
         </ul>
-        <Button @size='small' {{on 'click' this.add}} data-test-add-new>
-          Choose
-        </Button>
-        {{#if @context.actions.createCard}}
-          <Button @size='small' {{on 'click' this.create}} data-test-create-new>
-            Create New
-          </Button>
-        {{/if}}
-      {{else}}
-        <div class='empty' {{on 'click' this.add}} data-test-add-new-in-empty-state>
-          {{svgJar 'icon-plus' width='20px' height='20px'}} Add {{this.getPluralDisplayName}}
-        </div>
       {{/if}}
+      <div class='add-new' {{on 'click' this.add}} data-test-add-new>
+        {{svgJar 'icon-plus' width='20px' height='20px'}} Add {{this.getPluralDisplayName}}
+      </div>
     </div>
   </template>
 
   add = () => {
     (this.chooseCard as unknown as Descriptor<any, any[]>).perform();
-  };
-
-  create = () => {
-    (this.createCard as unknown as Descriptor<any, any[]>).perform();
   };
 
   private chooseCard = restartableTask(async () => {
@@ -110,19 +97,6 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     if (chosenCard) {
       selectedCards = [...selectedCards, chosenCard];
       (this.args.model.value as any)[this.args.field.name] = selectedCards;
-    }
-  });
-
-  private createCard = restartableTask(async () => {
-    let cards = (this.args.model.value as any)[this.args.field.name];
-    let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let newCard: Card | undefined =
-      await this.args.context?.actions?.createCard(type, undefined, {
-        isLinkedCard: true,
-      });
-    if (newCard) {
-      cards = [...cards, newCard];
-      (this.args.model.value as any)[this.args.field.name] = cards;
     }
   });
 

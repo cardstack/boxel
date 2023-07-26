@@ -139,7 +139,7 @@
   margin-top: var(--boxel-sp);
 }
 
-.contains-many-editor .empty {
+.contains-many-editor .add-new {
   display: flex;
   justify-content: center;
   align-items: center;
