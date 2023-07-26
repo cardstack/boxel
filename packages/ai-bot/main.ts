@@ -6,15 +6,21 @@ import {
   ISendEventResponse,
   Room,
   MatrixClient,
-  IEvent,
   IRoomEvent,
 } from 'matrix-js-sdk';
 import * as MatrixSDK from 'matrix-js-sdk';
 import OpenAI from 'openai';
 import { APIResponse } from 'openai/core';
 import { ChatCompletionChunk } from 'openai/resources/chat';
-import { CompletionCreateParams } from 'openai/resources/completions';
 import { Stream } from 'openai/streaming';
+import { logger } from '@cardstack/runtime-common';
+import { makeLogDefinitions } from '@cardstack/runtime-common';
+import { ro } from 'date-fns/locale';
+(globalThis as any)._logDefinitions = makeLogDefinitions(
+  process.env.LOG_LEVELS || '*=info'
+);
+
+let log = logger('ai-bot');
 
 /***
  * TODO:
@@ -87,8 +93,6 @@ enum ParsingMode {
   Command,
 }
 
-//
-// Full card data: ${JSON.stringify(card.data)}
 function getUserMessage(event: IRoomEvent) {
   const content = event.content;
   if (content.msgtype === 'org.boxel.card') {
@@ -135,7 +139,7 @@ async function sendMessage(
 }
 
 async function sendOption(client: MatrixClient, room: Room, content: string) {
-  console.log(content);
+  log.info(content);
   let parsedContent = JSON.parse(content);
   let patch = parsedContent['patch'];
   if (patch['attributes']) {
@@ -156,8 +160,8 @@ async function sendOption(client: MatrixClient, room: Room, content: string) {
       },
     },
   };
-  console.log(JSON.stringify(messageObject, null, 2));
-  console.log('Sending', messageObject);
+  log.info(JSON.stringify(messageObject, null, 2));
+  log.info('Sending', messageObject);
   return await client.sendEvent(room.roomId, 'm.room.message', messageObject);
 }
 
@@ -171,7 +175,7 @@ async function sendStream(
   let unsent = 0;
   let currentParsingMode: ParsingMode = ParsingMode.Text;
   for await (const part of stream) {
-    console.log('Token: ', part.choices[0].delta?.content);
+    log.info('Token: ', part.choices[0].delta?.content);
     // If we've not got a current message to edit and we're processing text
     // rather than structured data, start a new message to update.
     if (!append_to && currentParsingMode == ParsingMode.Text) {
@@ -241,11 +245,8 @@ function constructHistory(history: IRoomEvent[]) {
       }
     }
   }
-  //console.log(events);
-  //console.log("SHOULD ITERATE");
   let latest_events: IRoomEvent[] = [];
   events.forEach((event_list, _event_id) => {
-    //console.log(event_list);
     event_list = event_list.sort((a, b) => {
       return a.origin_server_ts - b.origin_server_ts;
     });
@@ -255,15 +256,14 @@ function constructHistory(history: IRoomEvent[]) {
     return a.origin_server_ts - b.origin_server_ts;
   });
   return latest_events;
-  //console.log(latest_events);
 }
 
 async function getResponse(event: MatrixEvent, history: IRoomEvent[]) {
   let historical_messages: Message[] = [];
-  console.log(history);
+  log.info(history);
   for (let event of history) {
     let body = event.content.body;
-    console.log(event.sender, body);
+    log.info(event.sender, body);
     if (body) {
       if (event.sender === 'aibot') {
         historical_messages.push({
@@ -286,7 +286,7 @@ async function getResponse(event: MatrixEvent, history: IRoomEvent[]) {
   ];
 
   messages = messages.concat(historical_messages);
-  console.log(messages);
+  log.info(messages);
   return await openai.chat.completions.create({
     model: 'gpt-4-0613',
     messages: messages,
@@ -301,7 +301,7 @@ async function getResponse(event: MatrixEvent, history: IRoomEvent[]) {
   client.on(RoomMemberEvent.Membership, function (_event, member) {
     if (member.membership === 'invite' && member.userId === user_id) {
       client.joinRoom(member.roomId).then(function () {
-        console.log('Auto-joined %s', member.roomId);
+        log.info('Auto-joined %s', member.roomId);
       });
     }
   });
@@ -330,7 +330,21 @@ async function getResponse(event: MatrixEvent, history: IRoomEvent[]) {
         'Thinking...',
         'Thinking...'
       );
-      if (event.getContent().body.includes('test')) {
+      // While developing the frontend it can be handy to skip GPT and just return some data
+      if (event.getContent().body.startsWith('debugpatch:')) {
+        let attributes = {};
+        try {
+          attributes = JSON.parse(
+            event.getContent().body.split('debugpatch:')[1]
+          );
+        } catch (error) {
+          await sendMessage(
+            client,
+            room,
+            'Error parsing as JSON',
+            initialMessage.event_id
+          );
+        }
         let messageObject = {
           body: 'some response, a patch',
           msgtype: 'm.org.boxel.command',
@@ -338,12 +352,9 @@ async function getResponse(event: MatrixEvent, history: IRoomEvent[]) {
           format: 'org.matrix.custom.html',
           command: {
             type: 'patch',
-            id: 'http://localhost:4201/demo/BlogPost/1',
+            id: 'unknown',
             patch: {
-              attributes: {
-                title: 'My edit ' + Math.random().toString(36).substring(7),
-                slug: 'mad-as-a-hatter',
-              },
+              attributes: attributes,
             },
           },
         };
@@ -356,20 +367,20 @@ async function getResponse(event: MatrixEvent, history: IRoomEvent[]) {
 
       let initial = await client.roomInitialSync(room!.roomId, 1000);
       let eventList = initial!.messages?.chunk || [];
-      console.log(eventList);
+      log.info(eventList);
 
-      console.log('Total event list', eventList.length);
+      log.info('Total event list', eventList.length);
       let history: IRoomEvent[] = constructHistory(eventList);
-      console.log("Compressed into just the history that's ", history.length);
+      log.info("Compressed into just the history that's ", history.length);
 
       const stream = await getResponse(event, history);
-      await sendStream(stream, client, room, initialMessage.event_id);
+      return await sendStream(stream, client, room, initialMessage.event_id);
     }
   );
 
   await client.startClient();
-  console.log('client started');
+  log.info('client started');
 })().catch((e) => {
-  console.error(e);
+  log.error(e);
   process.exit(1);
 });
