@@ -436,7 +436,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     // This logic assumes there is currently one stack when this method is called (i.e. the stack with index 0)
 
     // In case the left button was clicked, whatever is currently in stack with index 0 will be moved to stack with index 1,
-    // and the card will be added to stack with index 0. moveStack executes this logic.
+    // and the card will be added to stack with index 0. shiftStack executes this logic.
     if (
       searchSheetTrigger ===
       SearchSheetTrigger.DropCardToLeftNeighborStackButton
@@ -487,7 +487,7 @@ export default class OperatorModeContainer extends Component<Signature> {
               format: 'isolated',
               stackIndex: numberOfStacks - 1, //rightMost stack index
             };
-            this.operatorModeStateService.popOffStackAndAdd(
+            this.operatorModeStateService.trimStackAndAdd(
               bottomMostItem,
               stackItem
             );

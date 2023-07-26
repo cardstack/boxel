@@ -105,7 +105,8 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
-  popOffStackAndAdd(lowestItem: StackItem, newItem: StackItem) {
+  trimStackAndAdd(lowestItem: StackItem, newItem: StackItem) {
+    // Note: this function maintains the stack in place -- it doesn't delete it even if its empty
     this.trimItemsFromStack(lowestItem, { keepIfEmpty: true });
     this.addItemToStack(newItem);
     return this.schedulePersist();
