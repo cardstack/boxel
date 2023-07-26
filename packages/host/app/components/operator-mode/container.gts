@@ -202,7 +202,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   @action async close(item: StackItem) {
     await this.rollbackCardFieldValues(this.getCard(item));
 
-    this.operatorModeStateService.removeItemFromStack(item);
+    this.operatorModeStateService.trimItemsFromStack(item);
   }
 
   @action async cancel(item: StackItem) {
@@ -713,28 +713,28 @@ export default class OperatorModeContainer extends Component<Signature> {
 
 export function getCardStackItem(
   stackItem: StackItem,
-  stackItems: StackItem[]
+  stack: StackItem[]
 ): CardStackItem {
   if (stackItem.type === 'card') {
     return stackItem;
   }
-  if (stackItem.fieldOfIndex >= stackItems.length) {
+  if (stackItem.fieldOfIndex >= stack.length) {
     throw new Error(
       `bug: the stack item (index ${stackItem.fieldOfIndex}) that is the parent of the contained field '${stackItem.fieldName}' no longer exists in the stack`
     );
   }
-  return getCardStackItem(stackItems[stackItem.fieldOfIndex], stackItems);
+  return getCardStackItem(stack[stackItem.fieldOfIndex], stack);
 }
 
 export function getPathToStackItem(
   stackItem: StackItem,
-  stackItems: StackItem[],
+  stack: StackItem[],
   segments: string[] = []
 ): string[] {
   if (stackItem.type === 'card') {
     return segments;
   }
-  return getPathToStackItem(stackItems[stackItem.fieldOfIndex], stackItems, [
+  return getPathToStackItem(stack[stackItem.fieldOfIndex], stack, [
     stackItem.fieldName,
     ...segments,
   ]);

@@ -57,12 +57,12 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
-  removeItemFromStack(item: StackItem) {
+  trimItemsFromStack(item: StackItem) {
     let stackIndex = item.stackIndex;
     let itemIndex = this.state.stacks[stackIndex].indexOf(item);
     this.state.stacks[stackIndex].splice(itemIndex); // Always remove anything above the item
 
-    // If the additional stack is now empty, remove it from the state
+    // If the resulting stack is now empty, remove it from the state
     if (
       this.state.stacks[stackIndex].length === 0 &&
       this.state.stacks.length > 1
@@ -101,9 +101,9 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
-  shiftStack(stackItems: StackItem[], destinationIndex: number) {
-    stackItems.forEach((item) => {
-      this.removeItemFromStack(item);
+  shiftStack(stack: StackItem[], destinationIndex: number) {
+    stack.forEach((item) => {
+      this.trimItemsFromStack(item);
       this.addItemToStack({ ...item, stackIndex: destinationIndex });
     });
     return this.schedulePersist();
