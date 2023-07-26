@@ -15,6 +15,7 @@ import { TrackedWeakMap } from 'tracked-built-ins';
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
 import { and, eq, not } from '@cardstack/host/helpers/truth-helpers';
 import { bool } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
 interface Signature {
   Args: {
@@ -52,14 +53,12 @@ export default class OperatorModeOverlays extends Component<Signature> {
           {{! Add mouseenter and mouseleave events to each button, so we can maintain the hover effect. }}
           {{#if (this.isEmbeddedCard renderedCard)}}
             <div class='overlay-embedded-card-header' data-test-overlay-header>
-              <div class='header-title'>
-                {{! TODO: Icon for linksTo field type }}
-                {{#if (eq renderedCard.fieldType 'contains')}}
-                  <span class='icon'>
-                    ⮑
-                  </span>
-                {{/if}}
-
+              {{#if (eq renderedCard.fieldType 'contains')}}
+                <div class='header-icon'>
+                  {{svgJar 'icon-turn-down-right' width='22px' height='18px'}}
+                </div>
+              {{/if}}
+              <div class='header-text'>
                 {{cardTypeDisplayName card}}
               </div>
             </div>
@@ -143,6 +142,8 @@ export default class OperatorModeOverlays extends Component<Signature> {
       .overlay-embedded-card-header {
         background: var(--boxel-light-100);
         height: var(--overlay-embedded-card-header-height);
+        display: flex;
+        padding: 1em;
       }
       .icon-button:hover {
         --icon-bg: var(--boxel-teal);
@@ -150,15 +151,15 @@ export default class OperatorModeOverlays extends Component<Signature> {
         --icon-color: var(--boxel-teal);
         background: var(--boxel-light);
       }
-      .header-title {
+      .header-text {
         display: inline-block;
         margin: 0;
-        padding: 13px;
         color: var(--boxel-label-color);
         font: 700 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-sm);
       }
-      .header-title > .icon {
+      .header-icon {
+        display: flex;
         margin-right: var(--boxel-sp-xxxs);
       }
 
@@ -206,9 +207,12 @@ export default class OperatorModeOverlays extends Component<Signature> {
         'mouseleave',
         (_e: MouseEvent) => (this.currentlyHoveredCard = null)
       );
-      renderedCard.element.addEventListener('click', (_e: MouseEvent) =>
-        this.openOrSelectCard(renderedCard.card)
-      );
+      renderedCard.element.addEventListener('click', (e: MouseEvent) => {
+        // prevent outer nested contains fields from triggering when inner most
+        // contained field was clicked
+        e.stopPropagation();
+        this.openOrSelectCard(renderedCard.card);
+      });
       renderedCard.element.style.cursor = 'pointer';
     }
 

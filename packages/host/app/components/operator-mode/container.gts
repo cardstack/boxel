@@ -4,15 +4,13 @@ import { Card, Format } from 'https://cardstack.com/base/card-api';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { trackedFunction } from 'ember-resources/util/function';
-import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
-import type CardService from '@cardstack/host/services/card-service';
-
+import CardCatalogModal from '../card-catalog-modal';
+import type CardService from '../../services/card-service';
+import get from 'lodash/get';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { Modal, IconButton } from '@cardstack/boxel-ui';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
-import SearchSheet, {
-  SearchSheetMode,
-} from '@cardstack/host/components/search-sheet';
+import SearchSheet, { SearchSheetMode } from '../search-sheet';
 import { restartableTask } from 'ember-concurrency';
 import {
   Deferred,
@@ -23,7 +21,7 @@ import {
   LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
-import type LoaderService from '@cardstack/host/services/loader-service';
+import type LoaderService from '../../services/loader-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
@@ -35,8 +33,8 @@ import {
 } from '@cardstack/host/resources/search';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import perform from 'ember-concurrency/helpers/perform';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import OperatorModeStack from '@cardstack/host/components/operator-mode/stack';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import OperatorModeStack from './stack';
 import type MatrixService from '../../services/matrix-service';
 import ChatSidebar from '../matrix/chat-sidebar';
 
@@ -46,21 +44,31 @@ interface Signature {
   };
 }
 
-export type OperatorModeState = {
+export interface OperatorModeState {
   stacks: Stack[];
-};
+}
 
-export type Stack = {
-  items: StackItem[];
-};
+export type Stack = StackItem[];
 
-export type StackItem = {
-  card: Card;
+interface BaseItem {
   format: Format;
   request?: Deferred<Card>;
-  isLinkedCard?: boolean;
   stackIndex: number;
-};
+}
+
+export interface CardStackItem extends BaseItem {
+  type: 'card';
+  card: Card;
+  isLinkedCard?: boolean; // TODO: cnsider renaming this so its clearer that we use this for being able to tell whether the card needs to be closed after saving
+}
+
+export interface ContainedCardStackItem extends BaseItem {
+  type: 'contained';
+  fieldOfIndex: number; // index of the item in the stack that this is a field of
+  fieldName: string;
+}
+
+export type StackItem = CardStackItem | ContainedCardStackItem;
 
 enum SearchSheetTrigger {
   DropCardToLeftNeighborStackButton = 'drop-card-to-left-neighbor-stack-button',
@@ -128,6 +136,19 @@ export default class OperatorModeContainer extends Component<Signature> {
     return await this.operatorModeStateService.constructRecentCards();
   });
 
+  private getAddressableCard(item: StackItem): Card {
+    return getCardStackItem(item, this.stacks[item.stackIndex]).card;
+  }
+
+  private getCard(item: StackItem): Card {
+    let card = this.getAddressableCard(item);
+    let path = getPathToStackItem(item, this.stacks[item.stackIndex]);
+    if (path.length === 0) {
+      return card;
+    }
+    return get(card, path.join('.'));
+  }
+
   @action onCancelSearchSheet() {
     this.searchSheetMode = SearchSheetMode.Closed;
     this.searchSheetTrigger = null;
@@ -138,7 +159,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   @action async edit(item: StackItem) {
-    await this.saveCardFieldValues(item.card);
+    await this.saveCardFieldValues(this.getCard(item));
     this.updateItem(item, 'edit', new Deferred());
   }
 
@@ -147,45 +168,75 @@ export default class OperatorModeContainer extends Component<Signature> {
     format: Format,
     request?: Deferred<Card>
   ) {
-    let newItem = {
-      card: item.card,
-      format,
-      request,
-      stackIndex: item.stackIndex,
-    };
+    if (item.type === 'card') {
+      this.operatorModeStateService.replaceItemInStack(item, {
+        ...item,
+        request,
+        format,
+      });
+    }
 
-    this.replaceItemInStack(item, newItem);
+    if (item.type === 'contained') {
+      let addressableItem = getCardStackItem(
+        item,
+        this.stacks[item.stackIndex]
+      );
 
-    return newItem;
+      let pathSegments = getPathToStackItem(item, this.stacks[item.stackIndex]);
+      this.operatorModeStateService.replaceItemInStack(addressableItem, {
+        ...addressableItem,
+        request,
+        format,
+      });
+      pathSegments.forEach((_, index) => {
+        let stack = this.stacks[item.stackIndex];
+        let currentItem = stack[stack.length - index - 1];
+        this.operatorModeStateService.replaceItemInStack(currentItem, {
+          ...currentItem,
+          format,
+        });
+      });
+    }
   }
 
   @action async close(item: StackItem) {
-    await this.rollbackCardFieldValues(item.card);
+    await this.rollbackCardFieldValues(this.getCard(item));
 
-    this.operatorModeStateService.removeItemFromStack(item);
+    this.operatorModeStateService.trimItemsFromStack(item);
   }
 
   @action async cancel(item: StackItem) {
-    await this.rollbackCardFieldValues(item.card);
+    await this.rollbackCardFieldValues(this.getCard(item));
     this.updateItem(item, 'isolated');
   }
 
   @action async save(item: StackItem) {
-    let { card, request, isLinkedCard } = item;
-    await this.saveCardFieldValues(card);
-    let updatedCard = await this.write.perform(card);
+    let { request } = item;
+    await this.saveCardFieldValues(this.getCard(item));
+    let updatedCard = await this.write.perform(this.getAddressableCard(item));
+    let pathSegments = getPathToStackItem(item, this.stacks[item.stackIndex]);
 
     if (updatedCard) {
       request?.fulfill(updatedCard);
 
-      if (isLinkedCard) {
+      if (item.type === 'card' && item.isLinkedCard) {
         this.close(item); // closes the 'create new card' editor for linked card fields
       } else {
-        this.replaceItemInStack(item, {
+        let addressableItem = getCardStackItem(
+          item,
+          this.stacks[item.stackIndex]
+        );
+
+        this.operatorModeStateService.replaceItemInStack(addressableItem, {
+          ...addressableItem,
           card: updatedCard,
+          request,
           format: 'isolated',
-          stackIndex: item.stackIndex,
         });
+
+        pathSegments.forEach(() =>
+          this.operatorModeStateService.popItemFromStack(item.stackIndex)
+        );
       }
     }
   }
@@ -193,10 +244,6 @@ export default class OperatorModeContainer extends Component<Signature> {
   // TODO: Implement remove card function
   @action async delete(item: StackItem) {
     await this.close(item);
-  }
-
-  replaceItemInStack(item: StackItem, newItem: StackItem) {
-    this.operatorModeStateService.replaceItemInStack(item, newItem);
   }
 
   private write = restartableTask(async (card: Card) => {
@@ -254,6 +301,7 @@ export default class OperatorModeContainer extends Component<Signature> {
           new URL(realmPath.url)
         );
         let newItem: StackItem = {
+          type: 'card',
           card: newCard,
           format: 'edit',
           request: new Deferred(),
@@ -263,8 +311,38 @@ export default class OperatorModeContainer extends Component<Signature> {
         here.addToStack(newItem);
         return await newItem.request?.promise;
       },
-      viewCard: (card: Card) => {
-        return here.addToStack({ card, format: 'isolated', stackIndex });
+      viewCard: async (card: Card) => {
+        let itemsCount = here.stacks[stackIndex].length;
+
+        let currentCardOnStack = here.getCard(
+          here.stacks[stackIndex][itemsCount - 1]!
+        ); // Last item on the stack
+
+        let containedPath = await findContainedCardPath(
+          currentCardOnStack,
+          card,
+          here.cardService
+        );
+        if (containedPath.length > 0) {
+          let currentIndex = itemsCount - 1;
+          // add the nested contained cards in teh correct order
+          for (let fieldName of containedPath) {
+            here.addToStack({
+              type: 'contained',
+              fieldOfIndex: currentIndex++,
+              fieldName,
+              format: 'isolated',
+              stackIndex,
+            });
+          }
+        } else {
+          here.addToStack({
+            type: 'card',
+            card,
+            format: 'isolated',
+            stackIndex,
+          });
+        }
       },
       createCardDirectly: async (
         doc: LooseSingleCardDocument,
@@ -277,6 +355,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         );
         await here.cardService.saveModel(newCard);
         let newItem: StackItem = {
+          type: 'card',
           card: newCard,
           format: 'isolated',
           stackIndex,
@@ -316,6 +395,7 @@ export default class OperatorModeContainer extends Component<Signature> {
 
     if (chosenCard) {
       let newItem: StackItem = {
+        type: 'card',
         card: chosenCard,
         format: 'isolated',
         stackIndex: 0, // This is called when there are no cards in the stack left, so we can assume the stackIndex is 0
@@ -324,12 +404,20 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   });
 
-  // For now use the background from the 1st stack, but eventually, each stack to have its own background URL
+  // For now use the background from the 1st stack, but eventually, each stack
+  // to have its own background URL. Also need to consider how to treat adjoining
+  // stacks that have the same background image (consider 4 stacks, where 2
+  // adjacent stacks have the same background image)
   fetchBackgroundImageURL = trackedFunction(this, async () => {
-    let mostBottomCard = this.stacks[0]?.items[0]?.card;
+    let bottomMostCard = this.stacks[0]?.[0];
     let realmInfo;
-    if (mostBottomCard) {
-      realmInfo = await this.cardService.getRealmInfo(mostBottomCard);
+    if (bottomMostCard) {
+      if (bottomMostCard.type !== 'card') {
+        throw new Error(
+          `bug: the bottom most card for a stack cannot be a contained card`
+        );
+      }
+      realmInfo = await this.cardService.getRealmInfo(bottomMostCard.card);
     }
     return realmInfo?.backgroundURL;
   });
@@ -339,11 +427,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   get allStackItems() {
-    return (
-      this.operatorModeStateService.state?.stacks
-        .map((stack) => stack.items)
-        .flat() ?? []
-    );
+    return this.operatorModeStateService.state?.stacks.flat() ?? [];
   }
 
   @action onCardSelectFromSearch(card: Card) {
@@ -361,22 +445,23 @@ export default class OperatorModeContainer extends Component<Signature> {
       searchSheetTrigger ===
       SearchSheetTrigger.DropCardToLeftNeighborStackButton
     ) {
-      let stackItem: StackItem = {
+      for (
+        let stackIndex = this.operatorModeStateService.state.stacks.length - 1;
+        stackIndex >= 0;
+        stackIndex--
+      ) {
+        this.operatorModeStateService.shiftStack(
+          this.operatorModeStateService.state.stacks[stackIndex],
+          stackIndex + 1
+        );
+      }
+
+      let stackItem: CardStackItem = {
+        type: 'card',
         card,
         format: 'isolated',
         stackIndex: 0,
       };
-
-      let currentStackItems =
-        this.operatorModeStateService.state.stacks[0].items;
-
-      currentStackItems.forEach((item) => {
-        this.operatorModeStateService.replaceItemInStack(item, {
-          ...item,
-          stackIndex: 1,
-        });
-      });
-
       this.operatorModeStateService.addItemToStack(stackItem);
 
       // In case the right button was clicked, the card will be added to stack with index 1.
@@ -385,9 +470,10 @@ export default class OperatorModeContainer extends Component<Signature> {
       SearchSheetTrigger.DropCardToRightNeighborStackButton
     ) {
       this.operatorModeStateService.addItemToStack({
+        type: 'card',
         card,
         format: 'isolated',
-        stackIndex: 1,
+        stackIndex: this.operatorModeStateService.state.stacks.length,
       });
     }
 
@@ -464,7 +550,7 @@ export default class OperatorModeContainer extends Component<Signature> {
               <OperatorModeStack
                 data-test-operator-mode-stack={{stackIndex}}
                 class='operator-mode-stack'
-                @stackItems={{stack.items}}
+                @stackItems={{stack}}
                 @stackIndex={{stackIndex}}
                 @publicAPI={{this.publicAPI this stackIndex}}
                 @close={{this.close}}
@@ -623,6 +709,65 @@ export default class OperatorModeContainer extends Component<Signature> {
 
     </style>
   </template>
+}
+
+export function getCardStackItem(
+  stackItem: StackItem,
+  stack: StackItem[]
+): CardStackItem {
+  if (stackItem.type === 'card') {
+    return stackItem;
+  }
+  if (stackItem.fieldOfIndex >= stack.length) {
+    throw new Error(
+      `bug: the stack item (index ${stackItem.fieldOfIndex}) that is the parent of the contained field '${stackItem.fieldName}' no longer exists in the stack`
+    );
+  }
+  return getCardStackItem(stack[stackItem.fieldOfIndex], stack);
+}
+
+export function getPathToStackItem(
+  stackItem: StackItem,
+  stack: StackItem[],
+  segments: string[] = []
+): string[] {
+  if (stackItem.type === 'card') {
+    return segments;
+  }
+  return getPathToStackItem(stack[stackItem.fieldOfIndex], stack, [
+    stackItem.fieldName,
+    ...segments,
+  ]);
+}
+
+async function findContainedCardPath(
+  possibleParent: Card,
+  maybeContained: Card,
+  cardService: CardService,
+  path: string[] = []
+): Promise<string[]> {
+  let fields = await cardService.getFields(possibleParent);
+
+  for (let [fieldName, field] of Object.entries(fields)) {
+    let value = (possibleParent as any)[fieldName];
+    if (value === maybeContained && field.fieldType === 'contains') {
+      return [...path, fieldName];
+    }
+    if (
+      cardService.isCard(value) &&
+      value !== maybeContained &&
+      field.fieldType === 'contains'
+    ) {
+      path = await findContainedCardPath(value, maybeContained, cardService, [
+        ...path,
+        fieldName,
+      ]);
+      if (path.length > 0) {
+        return path;
+      }
+    }
+  }
+  return [];
 }
 
 declare module '@glint/environment-ember-loose/registry' {
