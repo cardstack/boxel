@@ -1,5 +1,11 @@
 import { module, test } from 'qunit';
-import { visit, currentURL, click, triggerEvent } from '@ember/test-helpers';
+import {
+  visit,
+  currentURL,
+  click,
+  triggerEvent,
+  waitFor,
+} from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
@@ -45,11 +51,9 @@ module('Acceptance | operator mode tests', function (hooks) {
           });
           static embedded = class Embedded extends Component<typeof this> {
             <template>
-              <div ...attributes>
-                <h3 data-test-pet={{@model.name}}>
-                  <@fields.name/>
-                </h3>
-              </div>
+              <h3 data-test-pet={{@model.name}}>
+                <@fields.name/>
+              </h3>
             </template>
           }
         }
@@ -295,8 +299,8 @@ module('Acceptance | operator mode tests', function (hooks) {
         )}`
       );
 
-      // Add the dog back to the stack (via overlayed linked card button)
-      await click('[data-test-cardstack-operator-mode-overlay-button]');
+      await waitFor('[data-test-pet="Mango"]');
+      await click('[data-test-pet="Mango"]');
 
       // The stack should be reflected in the URL
       assert.strictEqual(
@@ -323,7 +327,6 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       // Click Edit on the top card
       await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
-      await click('[data-test-boxel-menu-item-text="Edit"]');
 
       // The edit format should be reflected in the URL
       assert.strictEqual(

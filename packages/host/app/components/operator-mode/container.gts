@@ -22,10 +22,10 @@ import {
   type CardRef,
   LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
+import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-import { htmlSafe } from '@ember/template';
 
 import { registerDestructor } from '@ember/destroyable';
 import type { Query } from '@cardstack/runtime-common/query';
@@ -301,10 +301,14 @@ export default class OperatorModeContainer extends Component<Signature> {
         let doc: LooseSingleCardDocument = opts?.doc ?? {
           data: { meta: { adoptsFrom: ref } },
         };
+        // using RealmPaths API to correct for the trailing `/`
+        let realmPath = new RealmPaths(
+          relativeTo ?? here.cardService.defaultURL
+        );
         let newCard = await here.cardService.createFromSerialized(
           doc.data,
           doc,
-          relativeTo ?? here.cardService.defaultURL
+          new URL(realmPath.url)
         );
         let newItem: StackItem = {
           card: newCard,
@@ -380,9 +384,11 @@ export default class OperatorModeContainer extends Component<Signature> {
   // For now use the background from the 1st stack, but eventually, each stack to have its own background URL
   fetchBackgroundImageURL = trackedFunction(this, async () => {
     let mostBottomCard = this.stacks[0]?.items[0]?.card;
-    let realmInfoSymbol = await this.cardService.realmInfoSymbol();
-    // @ts-ignore allows using Symbol as an index
-    return mostBottomCard?.[realmInfoSymbol]?.backgroundURL;
+    let realmInfo;
+    if (mostBottomCard) {
+      realmInfo = await this.cardService.getRealmInfo(mostBottomCard);
+    }
+    return realmInfo?.backgroundURL;
   });
 
   get backgroundImageURL() {
@@ -455,12 +461,8 @@ export default class OperatorModeContainer extends Component<Signature> {
     );
   }
 
-  get gridCss() {
-    return htmlSafe(
-      this.isChatVisible
-        ? `grid-template-columns: 1.5fr 0.5fr;`
-        : `grid-template-columns: 1fr;`
-    );
+  get chatVisibilityClass() {
+    return this.isChatVisible ? 'chat-open' : 'chat-closed';
   }
 
   <template>
@@ -475,7 +477,7 @@ export default class OperatorModeContainer extends Component<Signature> {
 
       <CardCatalogModal />
 
-      <div class='operator-mode__with-chat' style={{this.gridCss}}>
+      <div class='operator-mode__with-chat {{this.chatVisibilityClass}}'>
         <div class='operator-mode__main'>
           {{#if this.canCreateNeighborStack}}
             <button
@@ -562,12 +564,12 @@ export default class OperatorModeContainer extends Component<Signature> {
             data-test-open-chat
             class='chat-btn'
             @icon='sparkle'
-            @width='40'
-            @height='40'
+            @width='30px'
+            @height='30px'
             {{on 'click' this.toggleChat}}
             style={{cssVar
-              boxel-icon-button-width="60px"
-              boxel-icon-button-height="60px"
+              boxel-icon-button-width='50px'
+              boxel-icon-button-height='50px'
             }}
           />
         {{/if}}
@@ -618,11 +620,12 @@ export default class OperatorModeContainer extends Component<Signature> {
         width: 60px;
         height: 60px;
         border-radius: 50%;
-        background: #AEABBA;
-        fill: #3295A2;
+        background: #aeabba;
+        fill: #3295a2;
         border-color: transparent;
       }
-      .add-card-to-neighbor-stack:hover, .add-card-to-neighbor-stack--active {
+      .add-card-to-neighbor-stack:hover,
+      .add-card-to-neighbor-stack--active {
         background: var(--boxel-light);
         fill: var(--boxel-teal);
       }
@@ -636,11 +639,19 @@ export default class OperatorModeContainer extends Component<Signature> {
       }
 
       .operator-mode__with-chat {
-        display: grid; 
+        display: grid;
         grid-template-rows: 1fr;
         grid-template-columns: 1.5fr 0.5fr;
         gap: 0px;
         height: 100%;
+      }
+
+      .chat-open {
+        grid-template-columns: 1.5fr 0.5fr;
+      }
+
+      .chat-closed {
+        grid-template-columns: 1fr;
       }
 
       .operator-mode__main {
@@ -652,15 +663,18 @@ export default class OperatorModeContainer extends Component<Signature> {
 
       .chat-btn {
         position: absolute;
-        bottom: calc(var(--search-sheet-closed-height) + var(--boxel-sp));
-        right: var(--boxel-sp);
-        margin-right: var(--boxel-sp-lg);
+        bottom: 6px;
+        right: 6px;
+        margin-right: 0;
         border-radius: var(--boxel-border-radius);
-        background-color: rgba(255, 255, 255, 0.25);
+        background-color: var(--boxel-400);
+        border: solid 1px var(--boxel-border-color);
+        box-shadow: var(--boxel-box-shadow);
       }
       .chat-btn:hover {
         background: var(--boxel-light);
       }
+
     </style>
   </template>
 }

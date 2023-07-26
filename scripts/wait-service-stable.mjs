@@ -104,15 +104,39 @@ function waitTargetInService(service) {
   const targetGroupSuffixPattern = /\/[^/]*$/;
   const targetGroupArn = service.loadBalancers[0].targetGroupArn;
   const targetGroupName = targetGroupArn.split('/')[1];
+
   console.log(
-    `-> Waiting until all the targets in target group are in service: ${targetGroupName}`
+    `-> Waiting until targets in target group are in service: ${targetGroupName}`
   );
-  execute(
-    `aws elbv2 wait target-in-service --target-group-arn ${targetGroupArn}`
-  );
-  console.log(
-    `-> All targets in target group are in service: ${targetGroupName}`
-  );
+
+  let retries = 40;
+  let healthy = false;
+
+  while (!healthy && retries > 0) {
+    const responseJson = execute(
+      `aws elbv2 describe-target-health --target-group-arn ${targetGroupArn}`
+    );
+    const response = JSON.parse(responseJson);
+
+    for (const target of response.TargetHealthDescriptions) {
+      if (target.TargetHealth.State === 'healthy') {
+        healthy = true;
+        break;
+      }
+    }
+
+    if (!healthy) {
+      execute(`sleep 15`);
+      retries--;
+    }
+  }
+
+  if (!healthy) {
+    console.log(`-> Targets not healthy after 10 minutes: ${targetGroupName}`);
+    throw 'Targets in target group are not healthy';
+  }
+
+  console.log(`-> Targets in target group are in service: ${targetGroupName}`);
 }
 
 function main() {

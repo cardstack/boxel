@@ -428,9 +428,7 @@ export class RoomCard extends Card {
       // and cache may have changed
       let updatedCache = messageCache.get(this)!; // this should always have an entry as we initialized it at the beginning of the computed
       for (let [eventId, message] of newMessages) {
-        //if (!updatedCache.has(eventId)) {
         updatedCache.set(eventId, message);
-        //}
       }
       // this sort should hopefully be very optimized since events will
       // be close to chronological order

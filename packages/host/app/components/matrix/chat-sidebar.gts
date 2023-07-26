@@ -6,8 +6,9 @@ import UserProfile from './user-profile';
 import Login from './login';
 import RegisterUser from './register-user';
 import RoomsManager from './rooms-manager';
-import { IconButton } from '@cardstack/boxel-ui';
+import { IconButton, LoadingIndicator } from '@cardstack/boxel-ui';
 import { tracked } from '@glimmer/tracking';
+import { task } from 'ember-concurrency';
 import type MatrixService from '../../services/matrix-service';
 
 interface Args {
@@ -33,19 +34,31 @@ export default class ChatSidebar extends Component<Args> {
             data-test-close-chat-button
           />
         </div>
-        {{#if this.showLoggedInMode}}
-          <UserProfile />
-          <RoomsManager @onCommand={{this.onCommand}} @onPreviewCommand={{this.onPreviewCommand}} @onCancelPreviewCommand={{this.onCancelPreviewCommand}}/>
+        {{#if this.loadMatrix.isRunning}}
+          <div class='loading'>
+            <LoadingIndicator />
+            <span class='loading__message'>Initializing chat...</span>
+          </div>
         {{else}}
-          {{#if this.isRegistrationMode}}
-            <RegisterUser @onCancel={{this.toggleRegistrationMode}} />
+          <span data-test-matrix-ready></span>
+          {{#if this.showLoggedInMode}}
+            <UserProfile />
+            <RoomsManager
+              @onCommand={{this.onCommand}}
+              @onPreviewCommand={{this.onPreviewCommand}}
+              @onCancelPreviewCommand={{this.onCancelPreviewCommand}}
+            />
           {{else}}
-            <Login />
-            <button
-              class='link registration-link'
-              data-test-register-user
-              {{on 'click' this.toggleRegistrationMode}}
-            >Register new user</button>
+            {{#if this.isRegistrationMode}}
+              <RegisterUser @onCancel={{this.toggleRegistrationMode}} />
+            {{else}}
+              <Login />
+              <button
+                class='link registration-link'
+                data-test-register-user
+                {{on 'click' this.toggleRegistrationMode}}
+              >Register new user</button>
+            {{/if}}
           {{/if}}
         {{/if}}
       </div>
@@ -58,7 +71,9 @@ export default class ChatSidebar extends Component<Args> {
         overflow-y: auto;
       }
       .chat-sidebar__inner {
-        padding-bottom: calc(var(--search-sheet-closed-height) + var(--boxel-sp));
+        padding-bottom: calc(
+          var(--search-sheet-closed-height) + var(--boxel-sp)
+        );
       }
       .registration-link {
         margin-left: var(--boxel-sp);
@@ -72,11 +87,24 @@ export default class ChatSidebar extends Component<Args> {
         padding: 0;
         border: none;
       }
+      .loading {
+        display: flex;
+        padding: var(--boxel-sp);
+      }
+      .loading__message {
+        margin-left: var(--boxel-sp-xs);
+      }
+
     </style>
   </template>
 
   @service declare matrixService: MatrixService;
   @tracked isRegistrationMode = false;
+
+  constructor(owner: unknown, args: any) {
+    super(owner, args);
+    this.loadMatrix.perform();
+  }
 
   get showLoggedInMode() {
     return this.matrixService.isLoggedIn && !this.isRegistrationMode;
@@ -99,6 +127,11 @@ export default class ChatSidebar extends Component<Args> {
   toggleRegistrationMode() {
     this.isRegistrationMode = !this.isRegistrationMode;
   }
+
+  private loadMatrix = task(async () => {
+    await this.matrixService.ready;
+    await this.matrixService.start();
+  });
 }
 
 declare module '@glint/environment-ember-loose/registry' {

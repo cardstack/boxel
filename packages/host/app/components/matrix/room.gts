@@ -230,7 +230,7 @@ export default class Room extends Component<RoomArgs> {
       }
 
       .selected-card::after {
-        content:'';
+        content: '';
         clear: both;
       }
 
@@ -277,6 +277,7 @@ export default class Room extends Component<RoomArgs> {
       .invite-btn {
         margin-top: var(--boxel-sp-xs);
       }
+
     </style>
   </template>
 
@@ -284,6 +285,7 @@ export default class Room extends Component<RoomArgs> {
   @service private declare cardService: CardService;
   @tracked private isInviteMode = false;
   @tracked private membersToInvite: string[] = [];
+  @tracked private allowedToSetObjective: boolean | undefined;
   private messagesToSend: TrackedMap<string, string | undefined> =
     new TrackedMap();
   private cardsToSend: TrackedMap<string, Card | undefined> = new TrackedMap();
@@ -406,9 +408,7 @@ export default class Room extends Component<RoomArgs> {
   }
 
   private get canSetObjective() {
-    return (
-      !this.objective && this.matrixService.canSetObjective(this.args.roomId)
-    );
+    return !this.objective && this.allowedToSetObjective;
   }
 
   private get cardToSendComponent() {
@@ -492,6 +492,9 @@ export default class Room extends Component<RoomArgs> {
     await this.matrixService.flushMembership;
     await this.matrixService.flushTimeline;
     await this.roomCardResource.loading;
+    this.allowedToSetObjective = await this.matrixService.allowedToSetObjective(
+      this.args.roomId
+    );
   });
 
   private doChooseCard = restartableTask(async () => {

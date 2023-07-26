@@ -184,7 +184,7 @@ export default class RoomsManager extends Component<Args> {
       .room {
         display: flex;
         margin-top: var(--boxel-sp-sm);
-        flex-wrap: nowrap
+        flex-wrap: nowrap;
       }
 
       .room-item {
@@ -210,7 +210,7 @@ export default class RoomsManager extends Component<Args> {
       .toggle-btn {
         position: absolute;
         z-index: 1;
-        margin-top: calc(-2 * var(--boxel-sp-xl) + 2px)
+        margin-top: calc(-2 * var(--boxel-sp-xl) + 2px);
       }
 
       .create-room {
@@ -230,6 +230,7 @@ export default class RoomsManager extends Component<Args> {
       .create-room__field {
         margin-top: var(--boxel-sp-sm);
       }
+
     </style>
   </template>
 

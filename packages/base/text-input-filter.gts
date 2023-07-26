@@ -24,26 +24,33 @@ export type DeserializedResult<T> = {
  *
  * Examples:
  * See the implementation in `ethereum-address.ts` and `big-integer.ts` for practical usage.
+ *
+ * Common Pitfall:
+ * Be mindful that a common issue is having an INCOMPLETE deserialize function
+ * For example, user input = "9999999999999999999999", if our deserialize function uses Number(<user input>) to deserialize,
+ * what will occur is that the input text box will show "1e22" because Number() is unopiniated and incomplete;
+ * it allows "9999999999999999999999" to be parsed despite being outside the range of 9007199254740991 (Number.MAX_SAFE_INTEGER)
+ * The result is bad UI since the user has his input transformed into scientific notation
+ * We must ensure that our deserialize function considers what the user expects by checking <user input> > MAX_SAFE_INTEGER
  */
 export class TextInputFilter<T> {
   constructor(
     private getValue: () => T | null,
     private setValue: (val: T | null | undefined) => void,
     private deserialize: (
-      value: string | null | undefined
+      inputValue: string | null | undefined
     ) => DeserializedResult<T>,
-    private serialize: (val: T | null | undefined) => string | undefined = (
-      v
-    ) => (!v ? undefined : String(v))
+    private serialize: (val: T) => string = (v) => String(v)
   ) {}
-  @tracked result: DeserializedResult<string> | undefined;
+  @tracked _lastEditedInputValue: string | undefined;
+  @tracked _errorMessage: string | undefined;
 
   get asString(): string {
-    let serialized = this.serialize(this.getValue());
-    if (serialized != null && this.result?.value !== serialized) {
-      return serialized;
+    let modelValue = this.getValue();
+    if (modelValue != null) {
+      return this.serialize(modelValue);
     }
-    return this.result?.value || '';
+    return this._lastEditedInputValue || '';
   }
 
   get isInvalid() {
@@ -52,7 +59,7 @@ export class TextInputFilter<T> {
 
   get errorMessage(): string | undefined {
     if (this.isInvalid) {
-      return this.result?.errorMessage;
+      return this._errorMessage;
     }
     return;
   }
@@ -60,6 +67,7 @@ export class TextInputFilter<T> {
   onInput = async (inputVal: string) => {
     let deserialized = this.deserialize(inputVal);
     this.setValue(deserialized.value);
-    this.result = { value: inputVal, errorMessage: deserialized.errorMessage };
+    this._lastEditedInputValue = inputVal;
+    this._errorMessage = deserialized.errorMessage;
   };
 }

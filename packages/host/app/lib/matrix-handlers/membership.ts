@@ -3,7 +3,6 @@ import { type MatrixEvent, type RoomMember } from 'matrix-js-sdk';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
 import { type Context, addRoomEvent, recomputeRoomObjective } from './index';
 import { eventDebounceMs } from '../matrix-utils';
-import MatrixSDK from 'matrix-js-sdk';
 
 export function onMembership(context: Context) {
   return (event: MatrixEvent, member: RoomMember) => {
@@ -61,7 +60,7 @@ async function drainMembership(context: Context) {
       if (event.content.membership === 'invite') {
         let stateEvents = room
           .getLiveTimeline()
-          .getState(MatrixSDK.EventTimeline.FORWARDS)?.events;
+          .getState(context.matrixSDK.EventTimeline.FORWARDS)?.events;
         if (!stateEvents) {
           throw new Error(`bug: cannot get state events for room ${roomId}`);
         }

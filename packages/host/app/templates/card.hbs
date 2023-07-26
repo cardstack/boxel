@@ -1,18 +1,16 @@
-<div class="card-isolated-component">
+<div class='card-isolated-component'>
   <this.getIsolatedComponent />
 </div>
 
 <Editor::CodeLink />
 
 {{on-key 'Ctrl+.' this.toggleOperatorMode}}
-{{!-- Ctrl+. doesn't work in ubuntu --}}
+{{! Ctrl+. doesn't work in ubuntu }}
 {{on-key 'Ctrl+,' this.toggleOperatorMode}}
 
 {{#if this.operatorModeEnabled}}
   {{#if this.model}}
-    <OperatorMode::Container
-      @onClose={{this.closeOperatorMode}}
-    />
+    <OperatorMode::Container @onClose={{this.closeOperatorMode}} />
   {{/if}}
 {{/if}}
 

@@ -12,6 +12,7 @@ import LoadingIndicator from './components/loading-indicator';
 import Message from './components/message';
 import Modal from './components/modal';
 import BoxelDropdown from './components/dropdown';
+import Tooltip from './components/tooltip';
 
 export {
   BoxelHeader,
@@ -28,4 +29,5 @@ export {
   Message,
   Modal,
   BoxelDropdown,
+  Tooltip,
 };

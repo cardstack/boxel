@@ -31,9 +31,8 @@ export default class SearchResult extends Component<Signature> {
   @service declare cardService: CardService;
 
   fetchRealmName = trackedFunction(this, async () => {
-    let realmInfoSymbol = await this.cardService.realmInfoSymbol();
-    // @ts-ignore allows using Symbol as an index
-    return this.args.card[realmInfoSymbol]?.name;
+    let realmInfoSymbol = await this.cardService.getRealmInfo(this.args.card);
+    return realmInfoSymbol?.name;
   });
 
   get realmName() {

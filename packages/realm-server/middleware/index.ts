@@ -2,6 +2,7 @@ import proxy from 'koa-proxies';
 import {
   Loader,
   assetsDir,
+  boxelUIAssetsDir,
   logger as getLogger,
   type Realm,
 } from '@cardstack/runtime-common';
@@ -84,6 +85,11 @@ export function assetRedirect(
         ctxt.redirect(redirectURL);
         return;
       }
+    }
+    if (ctxt.path.startsWith(`/${boxelUIAssetsDir}`)) {
+      let redirectURL = new URL(`.${ctxt.path}`, assetsURL).href;
+      ctxt.redirect(redirectURL);
+      return;
     }
     return next();
   };

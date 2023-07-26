@@ -4,6 +4,7 @@ import {
   type MatrixClient,
   type IEvent,
 } from 'matrix-js-sdk';
+import type * as MatrixSDK from 'matrix-js-sdk';
 import type {
   RoomCard,
   MatrixEvent as DiscreteMatrixEvent,
@@ -40,6 +41,7 @@ export interface Context {
   timelineQueue: MatrixEvent[];
   cardAPI: typeof CardAPI;
   client: MatrixClient;
+  matrixSDK: typeof MatrixSDK;
   handleMessage?: (
     context: Context,
     event: Event,
