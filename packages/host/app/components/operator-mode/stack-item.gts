@@ -6,12 +6,12 @@ import type {
   Format,
   FieldType,
 } from 'https://cardstack.com/base/card-api';
-import Preview from '@cardstack/host/components/preview';
+import Preview from '../preview';
 import { trackedFunction } from 'ember-resources/util/function';
 import { fn, array } from '@ember/helper';
-import type CardService from '@cardstack/host/services/card-service';
+import type CardService from '../../services/card-service';
 
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { eq, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import optional from '@cardstack/boxel-ui/helpers/optional';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import {
@@ -21,22 +21,25 @@ import {
   Button,
   Tooltip,
 } from '@cardstack/boxel-ui';
+import get from 'lodash/get';
 import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
+//@ts-expect-error cached type not available yet
+import { tracked, cached } from '@glimmer/tracking';
 import { TrackedArray } from 'tracked-built-ins';
 
 import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
 import BoxelMenu from '@cardstack/boxel-ui/components/menu';
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
-import { StackItem } from '@cardstack/host/components/operator-mode/container';
+import { StackItem, getCardStackItem, getPathToStackItem } from './container';
 
 import { htmlSafe, SafeString } from '@ember/template';
-import OperatorModeOverlays from '@cardstack/host/components/operator-mode/overlays';
+import OperatorModeOverlays from './overlays';
 import ElementTracker from '../../resources/element-tracker';
 import config from '@cardstack/host/config/environment';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
 interface Signature {
   Args: {
@@ -134,8 +137,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   fetchRealmInfo = trackedFunction(this, async () => {
-    let card = this.args.item.card;
-    let realmInfo = await this.cardService.getRealmInfo(card);
+    let realmInfo = await this.cardService.getRealmInfo(this.card);
     return realmInfo;
   });
 
@@ -145,6 +147,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   get realmName() {
     return this.fetchRealmInfo.value?.name;
+  }
+
+  get cardIdentifier() {
+    let path = getPathToStackItem(this.args.item, this.args.stackItems);
+    return `${this.addressableCard.id}${
+      path.length > 0 ? '/' + path.join('/') : ''
+    }`;
   }
 
   @action
@@ -163,19 +172,37 @@ export default class OperatorModeStackItem extends Component<Signature> {
   get headerTitle() {
     return this.isHoverOnRealmIcon && this.realmName
       ? `In ${this.realmName}`
-      : cardTypeDisplayName(this.args.item.card);
+      : cardTypeDisplayName(this.card);
+  }
+
+  @cached
+  get isContainedItem() {
+    return this.args.item.type === 'contained';
+  }
+
+  @cached
+  get addressableCard() {
+    return getCardStackItem(this.args.item, this.args.stackItems).card;
+  }
+
+  @cached
+  get card(): Card {
+    let path = getPathToStackItem(this.args.item, this.args.stackItems);
+    if (path.length === 0) {
+      return this.addressableCard;
+    }
+    return get(this.addressableCard, path.join('.'));
   }
 
   <template>
     <div
       class='item {{if this.isBuried "buried"}}'
       data-test-stack-card-index={{@index}}
-      data-test-stack-card={{@item.card.id}}
+      data-test-stack-card={{this.cardIdentifier}}
       style={{this.styleForStackedCard}}
     >
       <CardContainer class={{cn 'card' edit=(eq @item.format 'edit')}}>
         <Header
-          @icon={{this.headerIcon}}
           @title={{this.headerTitle}}
           class='header'
           {{on
@@ -196,6 +223,20 @@ export default class OperatorModeStackItem extends Component<Signature> {
           }}
           data-test-stack-card-header
         >
+          <:icon>
+            {{#if this.isContainedItem}}
+              {{svgJar 'icon-turn-down-right' width='22px' height='18px'}}
+            {{else if this.headerIcon}}
+              <img
+                class='header-icon'
+                src={{this.headerIcon.URL}}
+                data-test-boxel-header-icon={{this.headerIcon.URL}}
+                alt='Header icon'
+                {{on 'mouseenter' this.headerIcon.onMouseEnter}}
+                {{on 'mouseleave' this.headerIcon.onMouseLeave}}
+              />
+            {{/if}}
+          </:icon>
           <:actions>
             {{#if (eq @item.format 'isolated')}}
               <Tooltip @placement='top'>
@@ -256,11 +297,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
                   <BoxelMenu
                     @closeMenu={{dd.close}}
                     @items={{if
-                      (eq @item.format 'edit')
+                      (and (eq @item.format 'edit') (eq @item.type 'card'))
                       (array
                         (menuItem
                           'Copy Card URL'
-                          (fn this.copyToClipboard @item.card.id)
+                          (fn this.copyToClipboard this.card.id)
                           icon='icon-link'
                         )
                         (menuItem
@@ -270,7 +311,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                       (array
                         (menuItem
                           'Copy Card URL'
-                          (fn this.copyToClipboard @item.card.id)
+                          (fn this.copyToClipboard this.card.id)
                           icon='icon-link'
                         )
                       )
@@ -299,7 +340,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         </Header>
         <div class='content'>
           <Preview
-            @card={{@item.card}}
+            @card={{this.card}}
             @format={{@item.format}}
             @context={{this.context}}
           />
@@ -474,6 +515,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
       .icon-save:hover {
         --icon-bg: var(--boxel-dark);
+      }
+
+      .header-icon {
+        width: var(--boxel-header-icon-width);
+        height: var(--boxel-header-icon-height);
       }
 
     </style>

@@ -1178,6 +1178,9 @@ importers:
       qunit-dom:
         specifier: ^2.0.0
         version: 2.0.0
+      safe-stable-stringify:
+        specifier: ^2.4.3
+        version: 2.4.3
       start-server-and-test:
         specifier: ^1.14.0
         version: 1.14.0
@@ -13353,7 +13356,7 @@ packages:
       ember-cli-babel: 7.26.11
       ember-cli-htmlbars: 5.7.2
       lodash: 4.17.21
-      safe-stable-stringify: 2.4.1
+      safe-stable-stringify: 2.4.3
     transitivePeerDependencies:
       - supports-color
     dev: false
@@ -21839,11 +21842,6 @@ packages:
     dependencies:
       ret: 0.1.15
     dev: true
-
-  /safe-stable-stringify@2.4.1:
-    resolution: {integrity: sha512-dVHE6bMtS/bnL2mwualjc6IxEv1F+OCUpA46pKUj6F8uDbUM0jCCulPqRNPSnWwGNKx5etqMjZYdXtrm5KJZGA==}
-    engines: {node: '>=10'}
-    dev: false
 
   /safe-stable-stringify@2.4.3:
     resolution: {integrity: sha512-e2bDA2WJT0wxseVd4lsDP4+3ONX6HpMXQa1ZhFQ7SU+GjvORCmShbCMltrtIDfkYhVHrOcPtj+KhmDBdPdZD1g==}
