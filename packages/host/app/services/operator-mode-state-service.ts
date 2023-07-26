@@ -33,6 +33,10 @@ type SerializedStack = SerializedItem[];
 
 export type SerializedState = { stacks: SerializedStack[] };
 
+interface StackOpts {
+  keepIfEmpty?: boolean; // we want to keep the stack although stack is empty
+}
+
 export default class OperatorModeStateService extends Service {
   @tracked state: OperatorModeState = new TrackedObject({
     stacks: new TrackedArray([]),
@@ -57,19 +61,19 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
-  trimItemsFromStack(item: StackItem) {
+  trimItemsFromStack(item: StackItem, opts?: StackOpts) {
     let stackIndex = item.stackIndex;
     let itemIndex = this.state.stacks[stackIndex].indexOf(item);
     this.state.stacks[stackIndex].splice(itemIndex); // Always remove anything above the item
 
     // If the resulting stack is now empty, remove it from the state
     if (
-      this.state.stacks[stackIndex].length === 0 &&
+      !opts?.keepIfEmpty &&
+      this.stackIsEmpty(stackIndex) &&
       this.state.stacks.length > 1
     ) {
       this.state.stacks.splice(stackIndex, 1);
     }
-
     this.schedulePersist();
   }
 
@@ -99,6 +103,28 @@ export default class OperatorModeStateService extends Service {
 
     this.state.stacks[stackIndex].splice(itemIndex, 1, newItem);
     this.schedulePersist();
+  }
+
+  trimStackAndAdd(lowestItem: StackItem, newItem: StackItem) {
+    // Note: this function maintains the stack in place -- it doesn't delete it even if its empty
+    this.trimItemsFromStack(lowestItem, { keepIfEmpty: true });
+    this.addItemToStack(newItem);
+    return this.schedulePersist();
+  }
+
+  numberOfStacks() {
+    return this.state.stacks.length;
+  }
+
+  rightMostStack() {
+    if (this.numberOfStacks() > 0) {
+      return this.state.stacks[this.state.stacks.length - 1];
+    }
+    return;
+  }
+
+  stackIsEmpty(stackIndex: number) {
+    return this.state.stacks[stackIndex].length === 0;
   }
 
   shiftStack(stack: StackItem[], destinationIndex: number) {
