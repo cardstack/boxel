@@ -29,7 +29,8 @@ import {
   BoxelInputValidationState,
   BoxelInput,
 } from '@cardstack/boxel-ui';
-import { eq, gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { cssURL } from '@cardstack/boxel-ui/helpers/css-url';
+import { eq, gt, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import debounce from 'lodash/debounce';
@@ -118,11 +119,15 @@ export default class CardCatalogModal extends Component<Signature> {
                 {{#each this.cardsByRealm as |realm|}}
                   <section data-test-realm={{realm.name}}>
                     <header class='realm-info'>
-                      <img
-                        src={{realm.iconURL}}
-                        class='realm-icon'
-                        alt=''
-                        role='presentation'
+                      <div
+                        style={{if
+                          realm.iconURL
+                          (cssURL 'background-image' realm.iconURL)
+                        }}
+                        class={{cn
+                          'realm-icon'
+                          realm-icon--empty=(not realm.iconURL)
+                        }}
                       />
                       <span
                         class='realm-name'
@@ -364,13 +369,20 @@ export default class CardCatalogModal extends Component<Signature> {
       }
 
       .realm-info {
+        --realm-icon-size: 1.25rem;
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xs);
       }
       .realm-icon {
-        width: 1.25rem;
-        height: 1.25rem;
+        width: var(--realm-icon-size);
+        height: var(--realm-icon-size);
+        background-size: contain;
+        background-position: center;
+      }
+      .realm-icon--empty {
+        border: 1px solid var(--boxel-dark);
+        border-radius: 100px;
       }
       .realm-name {
         display: inline-block;
@@ -482,7 +494,10 @@ export default class CardCatalogModal extends Component<Signature> {
         } else {
           realm = {
             name: instance.realmInfo.name,
-            iconURL: instance.realmInfo.iconURL,
+            iconURL: instance.realmInfo.iconURL
+              ? new URL(instance.realmInfo.iconURL, this.cardService.defaultURL)
+                  .href
+              : null,
             cards: [instance.card],
           };
           realmCards.push(realm);
