@@ -62,7 +62,7 @@ export default class CardCatalogModal extends Component<Signature> {
         data-test-card-catalog-modal
       >
         <CardContainer class='dialog-box' @displayBoundaries={{true}}>
-          <Header @title={{this.chooseCardTitle}}>
+          <Header class='dialog-box__header' @title={{this.chooseCardTitle}}>
             <IconButton
               @icon='icon-x'
               {{on 'click' (fn this.pick undefined)}}
@@ -231,11 +231,14 @@ export default class CardCatalogModal extends Component<Signature> {
       </Modal>
     {{/if}}
     <style>
+      .dialog-box__header {
+        display: block;
+      }
+      .dialog-box__header > * + *:not(button) {
+        margin-top: var(--boxel-sp);
+      }
       .boxel-searchbox {
         position: relative;
-        width: 100%;
-        margin-top: var(--boxel-sp-xs);
-        margin-bottom: var(--boxel-sp-xs);
       }
       .boxel-searchbox__search-icon {
         --icon-color: var(--boxel-highlight);
