@@ -60,6 +60,7 @@ export interface RenderedCardForOverlayActions {
   element: HTMLElement;
   card: Card;
   fieldType: FieldType | undefined;
+  stackItem: StackItem;
 }
 
 export default class OperatorModeStackItem extends Component<Signature> {
@@ -89,6 +90,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
           element: entry.element,
           card: entry.meta.card,
           fieldType: entry.meta.fieldType,
+          stackItem: this.args.item,
         }))
     );
   }

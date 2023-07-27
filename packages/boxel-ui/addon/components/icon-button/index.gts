@@ -32,19 +32,18 @@ class IconButton extends Component<Signature> {
 
   <template>
     <button
-      class={{cn
-        (if @variant (concat @variant))
-        @class
-      }}
+      class={{cn (if @variant (concat @variant)) @class}}
       {{on 'mouseenter' this.onMouseEnterButton}}
       {{on 'mouseleave' this.onMouseLeaveButton}}
       ...attributes
     >
+      {{! Using inline style attribute because targeting the svg using <style> does not work - css scoping works incorrectly }}
       {{#if @icon}}
         {{svgJar
           @icon
           width=(if @width @width '16px')
           height=(if @height @height '16px')
+          style='margin: auto; display: block;'
         }}
       {{/if}}
     </button>
@@ -82,10 +81,6 @@ class IconButton extends Component<Signature> {
         background-color: var(--boxel-purple-800);
       }
 
-      button > svg {
-        display: block;
-        margin: auto;
-      }
     </style>
   </template>
 }
