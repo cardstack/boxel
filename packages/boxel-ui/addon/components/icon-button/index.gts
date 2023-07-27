@@ -43,7 +43,7 @@ class IconButton extends Component<Signature> {
           @icon
           width=(if @width @width '16px')
           height=(if @height @height '16px')
-          style='margin: auto; display: block;'
+          style='margin: auto;'
         }}
       {{/if}}
     </button>
