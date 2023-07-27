@@ -1,3 +1,4 @@
+import './setup-logger'; // This should be first
 import {
   IContent,
   RoomMemberEvent,
@@ -13,10 +14,6 @@ import { APIResponse } from 'openai/core';
 import { ChatCompletionChunk } from 'openai/resources/chat';
 import { Stream } from 'openai/streaming';
 import { logger } from '@cardstack/runtime-common';
-import { makeLogDefinitions } from '@cardstack/runtime-common';
-(globalThis as any)._logDefinitions = makeLogDefinitions(
-  process.env.LOG_LEVELS || '*=info'
-);
 
 let log = logger('ai-bot');
 
@@ -164,7 +161,7 @@ async function sendOption(client: MatrixClient, room: Room, content: string) {
 }
 
 async function sendStream(
-  stream: APIResponse<Stream<ChatCompletionChunk>>,
+  stream: AsyncIterable<ChatCompletionChunk>,
   client: MatrixClient,
   room: Room,
   append_to?: string
