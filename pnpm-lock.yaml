@@ -102,12 +102,21 @@ importers:
         specifier: ^3.12.7
         version: 3.12.7
     devDependencies:
+      '@cardstack/runtime-common':
+        specifier: workspace:*
+        version: link:../runtime-common
+      '@types/qunit':
+        specifier: ^2.11.3
+        version: 2.19.3
       matrix-js-sdk:
         specifier: ^25.0.0
         version: 25.0.0(patch_hash=vlqn3jrrd7zoh7xnqjj35ihq2i)
       openai:
         specifier: 4.0.0-beta.4
         version: 4.0.0-beta.4
+      qunit:
+        specifier: ^2.18.0
+        version: 2.19.4
       ts-node:
         specifier: ^10.9.1
         version: 10.9.1(@types/node@18.15.13)(typescript@4.9.3)
@@ -24119,6 +24128,17 @@ packages:
     dependencies:
       tslib: 1.14.1
       typescript: 5.0.2
+
+  /tsx@3.12.7:
+    resolution: {integrity: sha512-C2Ip+jPmqKd1GWVQDvz/Eyc6QJbGfE7NrR3fx5BpEHMZsEHoIxHL1j+lKdGobr8ovEyqeNkPLSKp6SCSOt7gmw==}
+    hasBin: true
+    dependencies:
+      '@esbuild-kit/cjs-loader': 2.4.2
+      '@esbuild-kit/core-utils': 3.1.0
+      '@esbuild-kit/esm-loader': 2.5.5
+    optionalDependencies:
+      fsevents: 2.3.2
+    dev: false
 
   /tty-browserify@0.0.0:
     resolution: {integrity: sha512-JVa5ijo+j/sOoHGjw0sxw734b1LhBkQ3bvUGNdxnVXDCX81Yx7TFgnZygxrIIWn23hbfTaMYLwRmAxFyDuFmIw==}
