@@ -311,7 +311,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         here.addToStack(newItem);
         return await newItem.request?.promise;
       },
-      viewCard: async (card: Card) => {
+      viewCard: async (card: Card, format: Format = 'isolated') => {
         let itemsCount = here.stacks[stackIndex].length;
 
         let currentCardOnStack = here.getCard(
@@ -331,7 +331,7 @@ export default class OperatorModeContainer extends Component<Signature> {
               type: 'contained',
               fieldOfIndex: currentIndex++,
               fieldName,
-              format: 'isolated',
+              format,
               stackIndex,
             });
           }
@@ -339,7 +339,7 @@ export default class OperatorModeContainer extends Component<Signature> {
           here.addToStack({
             type: 'card',
             card,
-            format: 'isolated',
+            format,
             stackIndex,
           });
         }

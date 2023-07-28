@@ -913,6 +913,48 @@ module('Integration | operator-mode', function (hooks) {
       );
   });
 
+  test('contained card action headers', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor('[data-test-person]');
+
+    assert
+      .dom('[data-test-embedded-card-edit-button]')
+      .doesNotExist(
+        "Contained card header has no 'edit' button when parent card is not in edit mode"
+      );
+
+    await click('[data-test-edit-button]');
+
+    await click(
+      '[data-test-overlay-card-display-name="Address"] [data-test-embedded-card-edit-button]'
+    );
+
+    assert
+      .dom(`[data-test-stack-card-index="1"] .card.edit`)
+      .exists('Address card opened in edit mode');
+
+    await click('[data-test-stack-card-index="1"] [data-test-close-button]');
+    await click(
+      '[data-test-overlay-card-display-name="Address"] [data-test-embedded-card-options-button]'
+    );
+    await click('[data-test-boxel-menu-item-text="View card"]');
+
+    assert
+      .dom(`[data-test-stack-card-index="1"]`)
+      .exists(
+        'Address card opened in view mode after clicking on View Card in options menu'
+      );
+  });
+
   test('can edit a nested contained card field', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
