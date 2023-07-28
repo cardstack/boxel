@@ -308,7 +308,7 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-type-display-name]').containsText(`Driver`);
   });
 
-  test('can subscribe and unsubscribe to card instance changes', async function (assert) {
+  test('can subscribe and unsubscribe to card instance contains field changes', async function (assert) {
     let { field, contains, Card, subscribeToChanges, unsubscribeFromChanges } =
       cardApi;
     let { default: StringCard } = string;
@@ -369,6 +369,259 @@ module('Integration | card-basics', function (hooks) {
     assert.strictEqual(
       changeEvent?.value,
       'Van Gogh',
+      'the field value was correctly specified in change event'
+    );
+  });
+
+  test('can subscribe and unsubscribe to card instance containsMany field changes', async function (assert) {
+    let {
+      field,
+      contains,
+      containsMany,
+      Card,
+      subscribeToChanges,
+      unsubscribeFromChanges,
+      flushLogs,
+    } = cardApi;
+    let { default: StringCard } = string;
+
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field favoriteColors = containsMany(StringCard);
+    }
+
+    let mango = new Person({
+      firstName: 'Mango',
+      favoriteColors: ['brown'],
+    });
+
+    let changeEvent: { fieldName: string; value: any } | undefined;
+    let eventCount = 0;
+    let subscriber = (fieldName: string, value: any) => {
+      eventCount++;
+      changeEvent = {
+        fieldName,
+        value,
+      };
+    };
+    subscribeToChanges(mango, subscriber);
+
+    try {
+      mango.favoriteColors.push('green');
+      await flushLogs();
+      assert.strictEqual(
+        eventCount,
+        1,
+        'the change event was fired the correct amount of times'
+      );
+      assert.strictEqual(
+        changeEvent?.fieldName,
+        'favoriteColors',
+        'the fieldName was correctly specified in change event'
+      );
+      assert.deepEqual(
+        changeEvent?.value,
+        ['brown', 'green'],
+        'the field value was correctly specified in change event'
+      );
+    } finally {
+      unsubscribeFromChanges(mango, subscriber);
+    }
+
+    mango.favoriteColors.push('red');
+    await flushLogs();
+    assert.strictEqual(
+      eventCount,
+      1,
+      'the change event was fired the correct amount of times'
+    );
+    assert.strictEqual(
+      changeEvent?.fieldName,
+      'favoriteColors',
+      'the fieldName was correctly specified in change event'
+    );
+    assert.deepEqual(
+      changeEvent?.value,
+      ['brown', 'green'],
+      'the field value was correctly specified in change event'
+    );
+  });
+
+  test('can subscribe and unsubscribe to card instance linksTo field changes', async function (assert) {
+    let {
+      field,
+      contains,
+      linksTo,
+      Card,
+      subscribeToChanges,
+      unsubscribeFromChanges,
+    } = cardApi;
+    let { default: StringCard } = string;
+
+    class Pet extends Card {
+      @field firstName = contains(StringCard);
+    }
+
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field pet = linksTo(Pet);
+    }
+    await shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+
+    let mango = new Pet({
+      firstName: 'Mango',
+    });
+    let vanGogh = new Pet({
+      firstName: 'Van Gogh',
+    });
+    let paper = new Pet({
+      firstName: 'Paper',
+    });
+    let hassan = new Person({
+      firstName: 'Hassan',
+      pet: mango,
+    });
+    await saveCard(mango, `${testRealmURL}Pet/mango`);
+    await saveCard(vanGogh, `${testRealmURL}Pet/vanGogh`);
+    await saveCard(paper, `${testRealmURL}Pet/paper`);
+
+    let changeEvent: { fieldName: string; value: any } | undefined;
+    let eventCount = 0;
+    let subscriber = (fieldName: string, value: any) => {
+      eventCount++;
+      changeEvent = {
+        fieldName,
+        value,
+      };
+    };
+    subscribeToChanges(hassan, subscriber);
+
+    try {
+      hassan.pet = vanGogh;
+      assert.strictEqual(
+        eventCount,
+        1,
+        'the change event was fired the correct amount of times'
+      );
+      assert.strictEqual(
+        changeEvent?.fieldName,
+        'pet',
+        'the fieldName was correctly specified in change event'
+      );
+      assert.strictEqual(
+        changeEvent?.value,
+        vanGogh,
+        'the field value was correctly specified in change event'
+      );
+    } finally {
+      unsubscribeFromChanges(hassan, subscriber);
+    }
+
+    hassan.pet = paper;
+    assert.strictEqual(
+      eventCount,
+      1,
+      'the change event was fired the correct amount of times'
+    );
+    assert.strictEqual(
+      changeEvent?.fieldName,
+      'pet',
+      'the fieldName was correctly specified in change event'
+    );
+    assert.strictEqual(
+      changeEvent?.value,
+      vanGogh,
+      'the field value was correctly specified in change event'
+    );
+  });
+
+  test('can subscribe and unsubscribe to card instance linksToMany field changes', async function (assert) {
+    let {
+      field,
+      contains,
+      linksToMany,
+      Card,
+      subscribeToChanges,
+      unsubscribeFromChanges,
+      flushLogs,
+    } = cardApi;
+    let { default: StringCard } = string;
+
+    class Pet extends Card {
+      @field firstName = contains(StringCard);
+    }
+
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field pets = linksToMany(Pet);
+    }
+    await shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+
+    let mango = new Pet({
+      firstName: 'Mango',
+    });
+    let vanGogh = new Pet({
+      firstName: 'Van Gogh',
+    });
+    let paper = new Pet({
+      firstName: 'Paper',
+    });
+    let hassan = new Person({
+      firstName: 'Hassan',
+      pets: [mango],
+    });
+    await saveCard(mango, `${testRealmURL}Pet/mango`);
+    await saveCard(vanGogh, `${testRealmURL}Pet/vanGogh`);
+    await saveCard(paper, `${testRealmURL}Pet/paper`);
+
+    let changeEvent: { fieldName: string; value: any } | undefined;
+    let eventCount = 0;
+    let subscriber = (fieldName: string, value: any) => {
+      eventCount++;
+      changeEvent = {
+        fieldName,
+        value,
+      };
+    };
+    subscribeToChanges(hassan, subscriber);
+
+    try {
+      hassan.pets.push(vanGogh);
+      await flushLogs();
+      assert.strictEqual(
+        eventCount,
+        1,
+        'the change event was fired the correct amount of times'
+      );
+      assert.strictEqual(
+        changeEvent?.fieldName,
+        'pets',
+        'the fieldName was correctly specified in change event'
+      );
+      assert.deepEqual(
+        (changeEvent?.value as Pet[]).map((p) => p.firstName),
+        ['Mango', 'Van Gogh'],
+        'the field value was correctly specified in change event'
+      );
+    } finally {
+      unsubscribeFromChanges(hassan, subscriber);
+    }
+
+    hassan.pets.push(paper);
+    await flushLogs();
+    assert.strictEqual(
+      eventCount,
+      1,
+      'the change event was fired the correct amount of times'
+    );
+    assert.strictEqual(
+      changeEvent?.fieldName,
+      'pets',
+      'the fieldName was correctly specified in change event'
+    );
+    assert.deepEqual(
+      (changeEvent?.value as Pet[]).map((p) => p.firstName),
+      ['Mango', 'Van Gogh'],
       'the field value was correctly specified in change event'
     );
   });

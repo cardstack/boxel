@@ -488,7 +488,11 @@ class ContainsMany<FieldT extends CardBaseConstructor>
     }
     let metas: Partial<Meta>[] = fieldMeta ?? [];
     return new WatchedArray(
-      () => instancePromise.then((instance) => logger.log(recompute(instance))),
+      (arrayValue) =>
+        instancePromise.then((instance) => {
+          notifySubscribers(instance, field.name, arrayValue);
+          logger.log(recompute(instance));
+        }),
       await Promise.all(
         value.map(async (entry, index) => {
           if (primitive in this.card) {
@@ -526,14 +530,20 @@ class ContainsMany<FieldT extends CardBaseConstructor>
   }
 
   emptyValue(instance: CardBase) {
-    return new WatchedArray(() => logger.log(recompute(instance)));
+    return new WatchedArray((value) => {
+      notifySubscribers(instance, this.name, value);
+      logger.log(recompute(instance));
+    });
   }
 
   validate(instance: CardBase, value: any) {
     if (value && !Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
-    return new WatchedArray(() => logger.log(recompute(instance)), value);
+    return new WatchedArray((value) => {
+      notifySubscribers(instance, this.name, value);
+      logger.log(recompute(instance));
+    }, value);
   }
 
   async handleNotLoadedError<T extends CardBase>(instance: T, _e: NotLoaded) {
@@ -1171,13 +1181,20 @@ class LinksToMany<FieldT extends CardConstructor>
       });
 
     return new WatchedArray(
-      () => instancePromise.then((instance) => logger.log(recompute(instance))),
+      (value) =>
+        instancePromise.then((instance) => {
+          notifySubscribers(instance, this.name, value);
+          logger.log(recompute(instance));
+        }),
       await Promise.all(resources)
     );
   }
 
   emptyValue(instance: CardBase) {
-    return new WatchedArray(() => logger.log(recompute(instance)));
+    return new WatchedArray((value) => {
+      notifySubscribers(instance, this.name, value);
+      logger.log(recompute(instance));
+    });
   }
 
   validate(instance: CardBase, values: any[] | null) {
@@ -1203,7 +1220,10 @@ class LinksToMany<FieldT extends CardConstructor>
       }
     }
 
-    return new WatchedArray(() => logger.log(recompute(instance)), values);
+    return new WatchedArray((value) => {
+      notifySubscribers(instance, this.name, value);
+      logger.log(recompute(instance));
+    }, values);
   }
 
   async handleNotLoadedError<T extends Card>(
@@ -2173,17 +2193,21 @@ function makeDescriptor<
           }
         }
       }
-      let changeSubscribers = subscribers.get(this);
-      if (changeSubscribers) {
-        for (let subscriber of changeSubscribers) {
-          subscriber(field.name, value);
-        }
-      }
+      notifySubscribers(this, field.name, value);
       logger.log(recompute(this));
     };
   }
   (descriptor.get as any)[isField] = field;
   return descriptor;
+}
+
+function notifySubscribers(card: CardBase, fieldName: string, value: any) {
+  let changeSubscribers = subscribers.get(card);
+  if (changeSubscribers) {
+    for (let subscriber of changeSubscribers) {
+      subscriber(fieldName, value);
+    }
+  }
 }
 
 function cardThunk<CardT extends CardBaseConstructor>(
