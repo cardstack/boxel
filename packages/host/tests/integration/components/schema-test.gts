@@ -447,6 +447,10 @@ module('Integration | schema', function (hooks) {
     await fillIn('[data-test-new-field-name]', 'author');
     await click('[data-test-add-field]');
     await waitFor('[data-test-card-catalog] [data-test-realm]');
+    await waitFor('[data-test-card-catalog] [data-test-realm-name]');
+    assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Choose a CatalogEntry card');
 
     assert
       .dom('[data-test-card-catalog] [data-test-realm]')
@@ -573,6 +577,9 @@ module('Integration | schema', function (hooks) {
     await click('[data-test-new-field-containsMany]');
     await click('[data-test-add-field]');
     await waitFor('[data-test-card-catalog-modal] [data-test-realm-name]');
+    assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Choose a CatalogEntry card');
 
     await click(`[data-test-select="${baseRealm.url}fields/string-field"]`);
     await click('[data-test-card-catalog-go-button]');
@@ -690,6 +697,9 @@ module('Integration | schema', function (hooks) {
 
     await click('[data-test-add-field]');
     await waitFor('[data-test-card-catalog-modal] [data-test-realm-name]');
+    assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Choose a CatalogEntry card');
     assert.dom(`[data-test-select="${testRealmURL}appointment"]`).exists();
 
     await click(`[data-test-select="${testRealmURL}appointment"]`);
@@ -801,6 +811,9 @@ module('Integration | schema', function (hooks) {
 
     await click('[data-test-add-field]');
     await waitFor('[data-test-card-catalog-modal] [data-test-realm-name]');
+    assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Choose a CatalogEntry card');
     assert.dom(`[data-test-select="${testRealmURL}pet"]`).exists();
     assert
       .dom('[data-test-select]')
@@ -898,6 +911,9 @@ module('Integration | schema', function (hooks) {
 
     await click('[data-test-add-field]');
     await waitFor('[data-test-card-catalog-modal] [data-test-realm-name]');
+    assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Choose a CatalogEntry card');
     await click(`[data-test-select="${testRealmURL}person"]`);
     await click('[data-test-card-catalog-go-button]');
     await waitFor('[data-test-field="friend"]');
@@ -1065,6 +1081,9 @@ module('Integration | schema', function (hooks) {
 
     await click('[data-test-add-field]');
     await waitFor('[data-test-card-catalog-modal] [data-test-realm-name]');
+    assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Choose a CatalogEntry card');
     assert.dom(`[data-test-select="${testRealmURL}pet"]`).exists();
     assert
       .dom('[data-test-select]')
@@ -1161,6 +1180,9 @@ module('Integration | schema', function (hooks) {
 
     await click('[data-test-add-field]');
     await waitFor('[data-test-card-catalog-modal] [data-test-realm-name]');
+    assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Choose a CatalogEntry card');
     assert.dom(`[data-test-select="${testRealmURL}person"]`).exists();
     assert
       .dom('[data-test-select]')

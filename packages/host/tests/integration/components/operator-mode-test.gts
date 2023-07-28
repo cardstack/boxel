@@ -730,6 +730,9 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
 
     await click('[data-test-create-new-card-button]');
+    assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Choose a CatalogEntry card');
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`
     );
@@ -796,6 +799,9 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`
     );
+    assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Choose a CatalogEntry card');
     assert.dom('[data-test-card-catalog-item]').exists({ count: 2 });
 
     await click(

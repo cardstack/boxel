@@ -189,6 +189,7 @@ jobs:
     with:
       app: "realm-demo"
       environment: "staging"
+      restore-mtime: true
 
   deploy-host:
     name: Deploy host

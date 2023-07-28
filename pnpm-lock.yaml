@@ -941,6 +941,9 @@ importers:
       '@types/htmlbars-inline-precompile':
         specifier: ^3.0.0
         version: 3.0.0
+      '@types/indefinite':
+        specifier: ^2.3.1
+        version: 2.3.1
       '@types/lodash':
         specifier: ^4.14.182
         version: 4.14.189
@@ -950,6 +953,9 @@ importers:
       '@types/matrix-js-sdk':
         specifier: ^11.0.1
         version: 11.0.1
+      '@types/pluralize':
+        specifier: ^0.0.30
+        version: 0.0.30
       '@types/qs':
         specifier: ^6.9.7
         version: 6.9.7
@@ -1124,6 +1130,9 @@ importers:
       ignore:
         specifier: ^5.2.0
         version: 5.2.0
+      indefinite:
+        specifier: ^2.4.3
+        version: 2.4.3
       loader.js:
         specifier: ^4.7.0
         version: 4.7.0
@@ -1154,6 +1163,9 @@ importers:
       path-browserify:
         specifier: ^1.0.1
         version: 1.0.1
+      pluralize:
+        specifier: ^8.0.0
+        version: 8.0.0
       prettier:
         specifier: github:ef4/prettier#8c4a6ad
         version: github.com/ef4/prettier/8c4a6ad
@@ -6246,6 +6258,10 @@ packages:
     resolution: {integrity: sha512-/K3ds8TRAfBvi5vfjuz8y6+GiAYBZ0x4tXv1Av6CWBWn0IlADc+ZX9pMq7oU0fNQPnBwIZl3rmeLp6SBApbxSQ==}
     dev: true
 
+  /@types/indefinite@2.3.1:
+    resolution: {integrity: sha512-rRQndOl5JIImsT8iQLdMIcJ/+APtqZ9Gt2FztFiPtVHiSePDDbsWAR+2k7TEVq+a5s/trDzKtV/RmaW+/FVgTw==}
+    dev: true
+
   /@types/js-levenshtein@1.1.1:
     resolution: {integrity: sha512-qC4bCqYGy1y/NP7dDVr7KJarn+PbX1nSpwA7JXdu0HxT3QYjO8MJ+cntENtHFVy2dRAyBV23OZ6MxsW1AM1L8g==}
     dev: true
@@ -6386,6 +6402,10 @@ packages:
     resolution: {integrity: sha512-Cf63Rv7jCQ0LaL8tNXmEyqTHuIJxRdlS5vMh1mj5voN4+QFhVZnlZruezqpWYDiJ8UTzhP0VmeLXCmBk66YrMQ==}
     dependencies:
       '@types/node': 18.15.13
+    dev: true
+
+  /@types/pluralize@0.0.30:
+    resolution: {integrity: sha512-kVww6xZrW/db5BR9OqiT71J9huRdQ+z/r+LbDuT7/EK50mCmj5FoaIARnVv0rvjUS/YpDox0cDU9lpQT011VBA==}
     dev: true
 
   /@types/q@1.5.5:
@@ -16923,6 +16943,11 @@ packages:
     engines: {node: '>=0.8.19'}
     dev: true
 
+  /indefinite@2.4.3:
+    resolution: {integrity: sha512-tLgivPQiMY76i93YKhjV5cMiORWfrk3FHdD1mREBNKlWbHmBrObLfOz6xlTk+beboj/JJSlhuCpCMmChR5Sgng==}
+    engines: {node: '>=6.0.0'}
+    dev: true
+
   /indent-string@4.0.0:
     resolution: {integrity: sha512-EdDDZu4A2OyIK7Lr/2zG+w5jmbuk1DVBnEwREQvBzspBJkCEbRa8GxU1lghYcaGJCnRWibjDXlq779X1/y5xwg==}
     engines: {node: '>=8'}
@@ -20504,6 +20529,11 @@ packages:
     resolution: {integrity: sha512-gQR3WpIgNIKwBMVLkpMUeR3e1/E1y42bqDQZfql+kDeXd8COYfM8PQA4X6y7a8u9Ua9FHmsrrmirW2vHs45hWg==}
     dependencies:
       semver-compare: 1.0.0
+
+  /pluralize@8.0.0:
+    resolution: {integrity: sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA==}
+    engines: {node: '>=4'}
+    dev: true
 
   /portfinder@1.0.32:
     resolution: {integrity: sha512-on2ZJVVDXRADWE6jnQaX0ioEylzgBpQk8r55NE4wjXW1ZxO+BgDlY6DXwj20i0V8eB4SenDQ00WEaxfiIQPcxg==}

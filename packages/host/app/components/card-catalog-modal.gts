@@ -7,12 +7,16 @@ import { htmlSafe } from '@ember/template';
 import { registerDestructor } from '@ember/destroyable';
 import { enqueueTask, restartableTask } from 'ember-concurrency';
 import type { Card, CardContext } from 'https://cardstack.com/base/card-api';
-import type { Query } from '@cardstack/runtime-common/query';
 import {
   createNewCard,
   type CardRef,
   type RealmInfo,
 } from '@cardstack/runtime-common';
+import type { Query, Filter } from '@cardstack/runtime-common/query';
+import {
+  suggestCardChooserTitle,
+  getSuggestionWithLowestDepth,
+} from '../utils/text-suggestion';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { getSearchResults, Search } from '../resources/search';
 import Preview from './preview';
@@ -45,6 +49,7 @@ type RealmCards = {
   iconURL: RealmInfo['iconURL'];
   cards: Card[];
 };
+const DEFAULT_CHOOOSE_CARD_TITLE = 'Choose a Card';
 
 export default class CardCatalogModal extends Component<Signature> {
   <template>
@@ -57,7 +62,7 @@ export default class CardCatalogModal extends Component<Signature> {
         data-test-card-catalog-modal
       >
         <CardContainer class='dialog-box' @displayBoundaries={{true}}>
-          <Header @title='Choose a card type'>
+          <Header class='dialog-box__header' @title={{this.chooseCardTitle}}>
             <IconButton
               @icon='icon-x'
               {{on 'click' (fn this.pick undefined)}}
@@ -226,11 +231,14 @@ export default class CardCatalogModal extends Component<Signature> {
       </Modal>
     {{/if}}
     <style>
+      .dialog-box__header {
+        display: block;
+      }
+      .dialog-box__header > * + *:not(button) {
+        margin-top: var(--boxel-sp);
+      }
       .boxel-searchbox {
         position: relative;
-        width: 100%;
-        margin-top: var(--boxel-sp-xs);
-        margin-bottom: var(--boxel-sp-xs);
       }
       .boxel-searchbox__search-icon {
         --icon-color: var(--boxel-highlight);
@@ -449,6 +457,7 @@ export default class CardCatalogModal extends Component<Signature> {
   @tracked cardURL = '';
   @tracked hasCardURLError = false;
   @tracked urlSearchVisible = false;
+  @tracked chooseCardTitle = DEFAULT_CHOOOSE_CARD_TITLE;
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
 
@@ -505,9 +514,10 @@ export default class CardCatalogModal extends Component<Signature> {
   // This is part of our public API for runtime-common to invoke the card chooser
   async chooseCard<T extends Card>(
     query: Query,
-    opts?: { offerToCreate?: CardRef }
+    opts?: { offerToCreate?: CardRef; multiSelect?: boolean }
   ): Promise<undefined | T> {
     this.zIndex++;
+    this.chooseCardTitle = chooseCardTitle(query.filter, opts?.multiSelect);
     return (await this._chooseCard.perform(query, opts)) as T | undefined;
   }
 
@@ -627,6 +637,19 @@ export default class CardCatalogModal extends Component<Signature> {
     let newCard = await createNewCard(ref, undefined);
     this.pick(newCard);
   }
+}
+
+function chooseCardTitle(
+  filter: Filter | undefined,
+  multiSelect?: boolean
+): string {
+  if (!filter) {
+    return DEFAULT_CHOOOSE_CARD_TITLE;
+  }
+  let suggestions = suggestCardChooserTitle(filter, 0, { multiSelect });
+  return (
+    getSuggestionWithLowestDepth(suggestions) ?? DEFAULT_CHOOOSE_CARD_TITLE
+  );
 }
 
 declare module '@glint/environment-ember-loose/registry' {
