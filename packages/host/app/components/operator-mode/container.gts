@@ -205,16 +205,13 @@ export default class OperatorModeContainer extends Component<Signature> {
     this.operatorModeStateService.trimItemsFromStack(item);
   }
 
-  @action async cancel(item: StackItem) {
-    await this.rollbackCardFieldValues(this.getCard(item));
-    this.updateItem(item, 'isolated');
-  }
-
-  @action async save(item: StackItem) {
+  @action async save(item: StackItem, dismissStackItem = false) {
     let { request } = item;
     await this.saveCardFieldValues(this.getCard(item));
     let updatedCard = await this.write.perform(this.getAddressableCard(item));
-    let pathSegments = getPathToStackItem(item, this.stacks[item.stackIndex]);
+    if (!dismissStackItem) {
+      return;
+    }
 
     if (updatedCard) {
       request?.fulfill(updatedCard);
@@ -234,7 +231,7 @@ export default class OperatorModeContainer extends Component<Signature> {
           format: 'isolated',
         });
 
-        pathSegments.forEach(() =>
+        getPathToStackItem(item, this.stacks[item.stackIndex]).forEach(() =>
           this.operatorModeStateService.popItemFromStack(item.stackIndex)
         );
       }
@@ -573,7 +570,6 @@ export default class OperatorModeContainer extends Component<Signature> {
                 @stackIndex={{stackIndex}}
                 @publicAPI={{this.publicAPI this stackIndex}}
                 @close={{this.close}}
-                @cancel={{this.cancel}}
                 @edit={{this.edit}}
                 @delete={{this.delete}}
                 @save={{this.save}}

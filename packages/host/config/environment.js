@@ -23,6 +23,7 @@ module.exports = function (environment) {
     },
     logLevels: process.env.LOG_LEVELS || '*=info,current-run=error',
     matrixURL: process.env.MATRIX_URL || 'http://localhost:8008',
+    autoSaveDelayMs: 5 * 1000,
 
     // the fields below may be rewritten by the realm server
     ownRealmURL:
@@ -56,6 +57,7 @@ module.exports = function (environment) {
 
     ENV.APP.rootElement = '#ember-testing';
     ENV.APP.autoboot = false;
+    ENV.autoSaveDelayMs = 10;
   }
 
   if (environment === 'production') {

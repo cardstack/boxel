@@ -16,6 +16,7 @@ interface Signature {
     default: [];
     actions: [];
     icon: [];
+    detail: [];
   };
 }
 
@@ -40,6 +41,10 @@ const Header: TemplateOnlyComponent<Signature> = <template>
           >{{@label}}</Label>{{/if}}
         {{#if @title}}{{@title}}{{/if}}
       </div>
+    {{/if}}
+
+    {{#if (has-block 'detail')}}
+      {{yield to='detail'}}
     {{/if}}
 
     {{yield}}

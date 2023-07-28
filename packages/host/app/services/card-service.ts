@@ -46,6 +46,10 @@ export default class CardService extends Service {
     return this.apiModule.module as typeof CardAPI;
   }
 
+  get ready() {
+    return this.apiModule.loaded;
+  }
+
   // Note that this should be the unresolved URL and that we need to rely on our
   // fetch to do any URL resolution.
   get defaultURL(): URL {
@@ -193,5 +197,23 @@ export default class CardService extends Service {
   async getRealmInfo(card: Card): Promise<RealmInfo | undefined> {
     await this.apiModule.loaded;
     return card[this.api.realmInfo];
+  }
+
+  // intentionally not async so that this can run in a destructor--this means
+  // that callers need to await this.ready
+  unsubscribeFromCard(
+    card: Card,
+    subscriber: (fieldName: string, value: any) => void
+  ) {
+    this.api.unsubscribeFromChanges(card, subscriber);
+  }
+
+  // also not async to reflect the fact the unsubscribe is not async. Callers
+  // needs to await this.ready
+  subscribeToCard(
+    card: Card,
+    subscriber: (fieldName: string, value: any) => void
+  ) {
+    this.api.subscribeToChanges(card, subscriber);
   }
 }
