@@ -11,6 +11,7 @@ import {
   createNewCard,
   type CardRef,
   type RealmInfo,
+  type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import type { Query, Filter } from '@cardstack/runtime-common/query';
 import {
@@ -27,9 +28,8 @@ import {
   Button,
   IconButton,
   BoxelInputValidationState,
-  BoxelInput,
 } from '@cardstack/boxel-ui';
-import { eq, gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { and, eq, gt, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import debounce from 'lodash/debounce';
@@ -53,7 +53,9 @@ const DEFAULT_CHOOOSE_CARD_TITLE = 'Choose a Card';
 
 export default class CardCatalogModal extends Component<Signature> {
   <template>
-    {{#if this.currentRequest}}
+    {{!-- @glint-ignore Argument of type boolean 
+          is not assignable to currentRequest's params. --}}
+    {{#if (and this.currentRequest (not this.dismissModal))}}
       <Modal
         @size='large'
         @isOpen={{true}}
@@ -62,7 +64,7 @@ export default class CardCatalogModal extends Component<Signature> {
         data-test-card-catalog-modal
       >
         <CardContainer class='dialog-box' @displayBoundaries={{true}}>
-          <Header @title={{this.chooseCardTitle}}>
+          <Header @title={{this.chooseCardTitle}} class='dialog-box__header'>
             <IconButton
               @icon='icon-x'
               {{on 'click' (fn this.pick undefined)}}
@@ -75,10 +77,15 @@ export default class CardCatalogModal extends Component<Signature> {
               </span>
               <label>
                 <span class='boxel-sr-only'>Search</span>
-                <BoxelInput
+                <BoxelInputValidationState
                   class='boxel-searchbox__input'
-                  @value=''
-                  @placeholder='Search for a card type'
+                  @value={{this.searchKey}}
+                  @onInput={{this.setSearchKey}}
+                  @onKeyPress={{this.onSearchFieldKeypress}}
+                  @state={{this.searchFieldState}}
+                  @errorMessage={{this.searchFieldState}}
+                  @placeholder='Search for a card type or enter card URL'
+                  data-test-search-field
                 />
               </label>
             </div>
@@ -104,16 +111,6 @@ export default class CardCatalogModal extends Component<Signature> {
             {{#if this.currentRequest.search.isLoading}}
               Loading...
             {{else}}
-              {{#if this.currentRequest.opts.offerToCreate}}
-                <Button
-                  @size='small'
-                  {{on
-                    'click'
-                    (fn this.createNew this.currentRequest.opts.offerToCreate)
-                  }}
-                  data-test-create-new
-                >Create New</Button>
-              {{/if}}
               <div class='card-catalog' data-test-card-catalog>
                 {{#each this.cardsByRealm as |realm|}}
                   <section data-test-realm={{realm.name}}>
@@ -177,34 +174,26 @@ export default class CardCatalogModal extends Component<Signature> {
             {{/if}}
           </div>
           <footer class='dialog-box__footer footer'>
-            <label
-              {{on 'click' this.displayURLSearch}}
-              {{on 'focusout' this.hideURLSearchIfBlank}}
-              class={{cn
-                'url-search'
-                url-search--visible=this.urlSearchVisible
-              }}
-            >
-              <div class='url-search__label'>
+            {{#if this.currentRequest.opts.offerToCreate}}
+              <Button 
+                @kind='secondary-light'
+                @size='tall'
+                class='create-new-button'
+                {{on
+                  'click'
+                  (fn this.createNew this.currentRequest.opts.offerToCreate)
+                }}
+                data-test-card-catalog-create-new-button
+              >
                 {{svgJar
-                  'icon-link'
+                  'icon-plus'
                   width='20'
-                  height='14'
-                  class='url-search__icon'
+                  height='20'
                   role='presentation'
                 }}
-                Enter Card URL
-              </div>
-              <BoxelInputValidationState
-                data-test-url-field
-                placeholder='http://'
-                @value={{this.cardURL}}
-                @onInput={{this.setCardURL}}
-                @onKeyPress={{this.onURLFieldKeypress}}
-                @state={{this.cardURLFieldState}}
-                @errorMessage={{this.cardURLErrorMessage}}
-              />
-            </label>
+                Create New {{this.cardRefName}}
+              </Button>
+            {{/if}}
             <div>
               <Button
                 @kind='secondary-light'
@@ -231,6 +220,11 @@ export default class CardCatalogModal extends Component<Signature> {
       </Modal>
     {{/if}}
     <style>
+      .dialog-box__header {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+      }
       .boxel-searchbox {
         position: relative;
         width: 100%;
@@ -248,10 +242,17 @@ export default class CardCatalogModal extends Component<Signature> {
         justify-content: center;
         align-items: center;
       }
-      .boxel-searchbox__input {
+      :global(.boxel-searchbox__input .boxel-input) {
         padding-right: var(--boxel-sp-xl);
-        background-color: var(--boxel-100);
+        background-color: var(--boxel-600);
         border-color: #707070;
+        color: var(--boxel-light);
+        font: var(--boxel-font-sm);
+        font-weight: 400;
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      :global(.boxel-searchbox__input .boxel-input::placeholder) {
+        color: var(--boxel-300);
       }
       .tags {
         --tag-height: 30px;
@@ -312,51 +313,13 @@ export default class CardCatalogModal extends Component<Signature> {
         /* This bottom margin is neccesary to show card URL error messages */
         margin-bottom: var(--boxel-sp);
       }
-      .url-search {
-        --input-visibility: hidden;
-        --input-width: 0px;
-
-        flex-grow: 0;
-        display: grid;
-        grid-template-columns: auto 1fr;
+      .create-new-button {
+        --icon-color: var(--boxel-highlight);
+        display: flex;
+        justify-content: center;
         align-items: center;
-        justify-items: flex-start;
-        border: 1px solid var(--boxel-border-color);
-        border-radius: 100px;
-        transition: border-color var(--boxel-transition),
-          box-shadow var(--boxel-transition), flex-grow var(--boxel-transition);
-      }
-      .url-search:hover {
-        border-color: var(--boxel-dark);
-        cursor: pointer;
-      }
-      .url-search:focus-within {
-        border-color: var(--boxel-highlight);
-        box-shadow: 0 0 0 1px var(--boxel-highlight);
-      }
-      .url-search:focus-within,
-      .url-search--visible {
-        --input-visibility: visible;
-        --input-width: 100%;
-        flex-grow: 0.5;
-      }
-      .url-search :deep(.boxel-input),
-      .url-search :deep(.boxel-input:hover),
-      .url-search :deep(.boxel-input:focus) {
-        border: none;
-        background: none;
-        box-shadow: none;
-        outline: none;
-        padding: 0;
 
-        visibility: var(--input-visibility);
-        width: var(--input-width);
-      }
-      .url-search__label {
-        display: inline-block;
-        justify-self: center;
-        font: 700 var(--boxel-font-sm);
-        padding: 0 var(--boxel-sp-lg) 0 var(--boxel-sp);
+        gap: var(--boxel-sp-xxs);
       }
 
       .realm-info {
@@ -446,15 +409,23 @@ export default class CardCatalogModal extends Component<Signature> {
     | {
         search: Search;
         deferred: Deferred<Card | undefined>;
-        opts?: { offerToCreate?: CardRef };
+        opts?: {
+          offerToCreate?: CardRef;
+          createNewCard?: (
+            ref: CardRef,
+            relativeTo: URL | undefined,
+            opts?: { isLinkedCard?: boolean; doc?: LooseSingleCardDocument }
+          ) => Promise<Card | undefined>;
+        };
       }
     | undefined = undefined;
   @tracked zIndex = 20;
   @tracked selectedCard?: Card = undefined;
-  @tracked cardURL = '';
-  @tracked hasCardURLError = false;
+  @tracked searchKey = '';
+  @tracked hasSearchError = false;
   @tracked urlSearchVisible = false;
   @tracked chooseCardTitle = DEFAULT_CHOOOSE_CARD_TITLE;
+  @tracked dismissModal = false;
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
 
@@ -493,25 +464,41 @@ export default class CardCatalogModal extends Component<Signature> {
     return htmlSafe(`z-index: ${this.zIndex}`);
   }
 
-  get cardURLFieldState() {
-    return this.hasCardURLError ? 'invalid' : 'initial';
+  get searchFieldState() {
+    return this.hasSearchError ? 'invalid' : 'initial';
   }
 
-  get cardURLErrorMessage() {
-    return this.hasCardURLError ? 'Not a valid Card URL' : undefined;
+  get searchErrorMessage() {
+    return this.hasSearchError ? 'Not a valid search key' : undefined;
+  }
+
+  get cardRefName() {
+    return (
+      (
+        this.currentRequest?.opts?.offerToCreate as {
+          module: string;
+          name: string;
+        }
+      ).name ?? 'Card'
+    );
   }
 
   private resetState() {
-    this.cardURL = '';
-    this.hasCardURLError = false;
+    this.searchKey = '';
+    this.hasSearchError = false;
     this.selectedCard = undefined;
     this.urlSearchVisible = false;
+    this.dismissModal = false;
   }
 
   // This is part of our public API for runtime-common to invoke the card chooser
   async chooseCard<T extends Card>(
     query: Query,
-    opts?: { offerToCreate?: CardRef; multiSelect?: boolean }
+    opts?: {
+      offerToCreate?: CardRef;
+      multiSelect?: boolean;
+      createNewCard?: any;
+    }
   ): Promise<undefined | T> {
     this.zIndex++;
     this.chooseCardTitle = chooseCardTitle(query.filter, opts?.multiSelect);
@@ -537,8 +524,9 @@ export default class CardCatalogModal extends Component<Signature> {
     }
   );
 
-  private getCard = restartableTask(async (cardURL: string) => {
-    let response = await this.loaderService.loader.fetch(cardURL, {
+  private getCard = restartableTask(async (searchKey: string) => {
+    //TODO: Handle fetching card using non-URL search key
+    let response = await this.loaderService.loader.fetch(searchKey, {
       headers: {
         Accept: 'application/vnd.card+json',
       },
@@ -555,23 +543,24 @@ export default class CardCatalogModal extends Component<Signature> {
       }
     }
     this.selectedCard = undefined;
-    this.hasCardURLError = true;
+    this.hasSearchError = true;
   });
 
-  debouncedURLFieldUpdate = debounce(() => {
-    if (!this.cardURL) {
+  debouncedSearchFieldUpdate = debounce(() => {
+    if (!this.searchKey) {
       this.selectedCard = undefined;
       return;
     }
+    //TODO: Remove this URL validation after implementing search feature with non-URL.
     try {
-      new URL(this.cardURL);
+      new URL(this.searchKey);
     } catch (e: any) {
       if (e instanceof TypeError && e.message.includes('Invalid URL')) {
         return;
       }
       throw e;
     }
-    this.onURLFieldUpdated();
+    this.onSearchFieldUpdated();
   }, 500);
 
   @action
@@ -581,36 +570,36 @@ export default class CardCatalogModal extends Component<Signature> {
 
   @action
   hideURLSearchIfBlank() {
-    if (!this.cardURL.trim()) {
+    if (!this.searchKey.trim()) {
       this.urlSearchVisible = false;
     }
   }
 
   @action
-  setCardURL(cardURL: string) {
-    this.hasCardURLError = false;
+  setSearchKey(searchKey: string) {
+    this.hasSearchError = false;
     this.selectedCard = undefined;
-    this.cardURL = cardURL;
-    this.debouncedURLFieldUpdate();
+    this.searchKey = searchKey;
+    this.debouncedSearchFieldUpdate();
   }
 
   @action
-  onURLFieldKeypress(e: KeyboardEvent) {
-    if (e.key === 'Enter' && this.cardURL) {
-      this.getCard.perform(this.cardURL);
+  onSearchFieldKeypress(e: KeyboardEvent) {
+    if (e.key === 'Enter' && this.searchKey) {
+      this.getCard.perform(this.searchKey);
     }
   }
 
   @action
-  onURLFieldUpdated() {
-    if (this.cardURL) {
+  onSearchFieldUpdated() {
+    if (this.searchKey) {
       this.selectedCard = undefined;
-      this.getCard.perform(this.cardURL);
+      this.getCard.perform(this.searchKey);
     }
   }
 
   @action toggleSelect(card?: Card): void {
-    this.cardURL = '';
+    this.searchKey = '';
     if (this.selectedCard?.id === card?.id) {
       this.selectedCard = undefined;
       return;
@@ -631,7 +620,15 @@ export default class CardCatalogModal extends Component<Signature> {
   }
 
   @action async createNew(ref: CardRef): Promise<void> {
-    let newCard = await createNewCard(ref, undefined);
+    let newCard;
+    this.dismissModal = true;
+    if (this.currentRequest?.opts?.createNewCard) {
+      newCard = await this.currentRequest?.opts?.createNewCard(ref, undefined, {
+        isLinkedCard: true,
+      });
+    } else {
+      newCard = await createNewCard(ref, undefined);
+    }
     this.pick(newCard);
   }
 }
