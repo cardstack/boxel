@@ -1590,6 +1590,7 @@ export class Card extends CardBase {
   @field id = contains(IDCard);
   @field title = contains(StringCard);
   @field description = contains(StringCard);
+  // TODO: change field type to Image card when we have it
   @field thumbnailURL = contains(StringCard);
 }
 

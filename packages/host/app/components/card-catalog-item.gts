@@ -1,5 +1,6 @@
 import Component from '@glimmer/component';
 import { service } from '@ember/service';
+import cn from '@cardstack/boxel-ui/helpers/cn';
 import { cssURL } from '@cardstack/boxel-ui/helpers/css-url';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type { CardContext } from 'https://cardstack.com/base/card-api';
@@ -17,40 +18,46 @@ interface Signature {
 
 export default class CardCatalogItem extends Component<Signature> {
   <template>
-    <div class='catalog-item'>
-      <div
-        class='catalog-item__thumbnail'
-        style={{if
-          this.thumbnailURL
-          (cssURL 'background-image' this.thumbnailURL)
-        }}
-      />
+    <div
+      class={{cn 'catalog-item' catalog-item--has-thumbnail=this.thumbnailURL}}
+    >
+      {{#if this.thumbnailURL}}
+        <div
+          class='catalog-item__thumbnail'
+          style={{cssURL 'background-image' this.thumbnailURL}}
+        />
+      {{/if}}
       <div>
         <header class='catalog-item__title'>
           {{@title}}
         </header>
-        <p class='catalog-item__description' data-test-description>
-          {{@description}}
-        </p>
+        {{#if @description}}
+          <p class='catalog-item__description' data-test-description>
+            {{@description}}
+          </p>
+        {{/if}}
       </div>
     </div>
 
     <style>
       .catalog-item {
         --catalog-item-thumbnail-size: 2.5rem;
+        --catalog-item-height: 3.75rem;
+        min-height: var(--catalog-item-height);
         display: grid;
-        grid-template-columns: var(--catalog-item-thumbnail-size) 1fr;
         align-items: center;
-        gap: var(--boxel-sp);
-        padding: var(--boxel-sp-xs);
+        padding: 0 var(--boxel-sp);
         border: 1px solid var(--boxel-200);
         border-radius: var(--boxel-border-radius);
         background-color: var(--boxel-light);
       }
+      .catalog-item--has-thumbnail {
+        grid-template-columns: var(--catalog-item-thumbnail-size) 1fr;
+        gap: var(--boxel-sp);
+      }
       .catalog-item__thumbnail {
         width: var(--catalog-item-thumbnail-size);
         height: var(--catalog-item-thumbnail-size);
-        border: 1px solid var(--boxel-border-color);
         border-radius: 100px;
         background-size: contain;
         background-position: center;
@@ -74,9 +81,8 @@ export default class CardCatalogItem extends Component<Signature> {
   get thumbnailURL() {
     let path = this.args.thumbnailURL;
     if (!path) {
-      return null;
+      return;
     }
-
     let realmPath = new RealmPaths(this.cardService.defaultURL.href);
 
     if (/^(\.\.\/)+/.test(path)) {
