@@ -64,7 +64,7 @@ function titleText(
   if (textOpts?.multiSelect) {
     return `Select 1 or more ${pluralize(object)}`;
   } else {
-    return `Select ${a(object)}`;
+    return `Choose ${a(object)}`;
   }
 }
 
