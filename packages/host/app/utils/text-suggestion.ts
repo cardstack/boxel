@@ -62,9 +62,9 @@ function titleText(
 ) {
   let object = `${cardRefName} ${cardNoun}`;
   if (textOpts?.multiSelect) {
-    return `Choose 1 or more ${pluralize(object)}`;
+    return `Select 1 or more ${pluralize(object)}`;
   } else {
-    return `Choose ${a(object)}`;
+    return `Select ${a(object)}`;
   }
 }
 
