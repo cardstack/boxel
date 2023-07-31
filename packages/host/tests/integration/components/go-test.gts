@@ -188,12 +188,6 @@ module('Integration | Component | go', function (hooks) {
         editor = receivedEditor;
       };
 
-      let monacoContext = {
-        sdk: monacoService.sdk,
-        language: 'plaintext',
-        onEditorSetup,
-      };
-
       await render(<template>
         <Go
           @path={{path}}

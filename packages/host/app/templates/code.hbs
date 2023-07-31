@@ -4,12 +4,7 @@
   <CardCatalogModal />
   <CreateCardModal />
 
-  <Editor::Go
-    @path={{this.model.path}}
-    @openFile={{this.model.openFile}}
-    @openDirs={{this.model.openDirs}}
-    @monacoContext={{this.model.monacoContext}}
-  />
+  <Editor::Go @openFiles={{this.codeParams}} @monaco={{this.model.monaco}} />
 
   {{outlet}}
 {{/unless}}
