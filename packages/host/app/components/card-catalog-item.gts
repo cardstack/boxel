@@ -1,7 +1,8 @@
 import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import cn from '@cardstack/boxel-ui/helpers/cn';
-import { cssURL } from '@cardstack/boxel-ui/helpers/css-url';
+//@ts-ignore no types available
+import cssUrl from 'ember-css-url';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type { CardContext } from 'https://cardstack.com/base/card-api';
 import type CardService from '../services/card-service';
@@ -24,7 +25,7 @@ export default class CardCatalogItem extends Component<Signature> {
       {{#if this.thumbnailURL}}
         <div
           class='catalog-item__thumbnail'
-          style={{cssURL 'background-image' this.thumbnailURL}}
+          style={{cssUrl 'background-image' this.thumbnailURL}}
         />
       {{/if}}
       <div>

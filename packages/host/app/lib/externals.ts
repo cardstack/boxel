@@ -3,7 +3,6 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import * as runtime from '@cardstack/runtime-common';
 import * as boxelUI from '@cardstack/boxel-ui';
 import * as boxelCssVar from '@cardstack/boxel-ui/helpers/css-var';
-import * as boxelCssURL from '@cardstack/boxel-ui/helpers/css-url';
 import * as boxelSvgJar from '@cardstack/boxel-ui/helpers/svg-jar';
 import * as boxelPickHelper from '@cardstack/boxel-ui/helpers/pick';
 import * as boxelTruthHelpers from '@cardstack/boxel-ui/helpers/truth-helpers';
@@ -36,7 +35,6 @@ export function shimExternals(loader: Loader = Loader.getLoader()) {
   loader.shimModule('@cardstack/boxel-ui', boxelUI);
   loader.shimModule('@cardstack/boxel-ui/helpers/svg-jar', boxelSvgJar);
   loader.shimModule('@cardstack/boxel-ui/helpers/css-var', boxelCssVar);
-  loader.shimModule('@cardstack/boxel-ui/helpers/css-url', boxelCssURL);
   loader.shimModule('@cardstack/boxel-ui/helpers/pick', boxelPickHelper);
   loader.shimModule(
     '@cardstack/boxel-ui/helpers/truth-helpers',

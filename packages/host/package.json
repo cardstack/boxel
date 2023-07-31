@@ -94,6 +94,7 @@
     "ember-cli-terser": "^4.0.2",
     "ember-cli-typescript-blueprints": "^3.0.0",
     "ember-concurrency": "^3.0.0",
+    "ember-css-url": "^1.0.0",
     "ember-focus-trap": "^1.0.1",
     "ember-freestyle": "^0.17.0",
     "ember-functions-as-helper-polyfill": "^2.0.1",

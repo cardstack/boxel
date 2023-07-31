@@ -29,7 +29,8 @@ import {
   BoxelInputValidationState,
   BoxelInput,
 } from '@cardstack/boxel-ui';
-import { cssURL } from '@cardstack/boxel-ui/helpers/css-url';
+// @ts-ignore no types
+import cssUrl from 'ember-css-url';
 import { eq, gt, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import cn from '@cardstack/boxel-ui/helpers/cn';
@@ -122,7 +123,7 @@ export default class CardCatalogModal extends Component<Signature> {
                       <div
                         style={{if
                           realm.iconURL
-                          (cssURL 'background-image' realm.iconURL)
+                          (cssUrl 'background-image' realm.iconURL)
                         }}
                         class={{cn
                           'realm-icon'

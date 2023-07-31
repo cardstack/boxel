@@ -18,10 +18,6 @@ export function shimExternals(loader: Loader = Loader.getLoader()) {
   loader.shimModule('@cardstack/boxel-ui/helpers/css-var', {
     cssVar() {},
   });
-  // import * as boxelCssURL from '@cardstack/boxel-ui/helpers/css-url';
-  loader.shimModule('@cardstack/boxel-ui/helpers/css-url', {
-    cssURL() {},
-  });
   // import * as boxelPickHelper from "@cardstack/boxel-ui/helpers/pick";
   loader.shimModule('@cardstack/boxel-ui/helpers/pick', {
     default() {},
