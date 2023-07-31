@@ -2494,7 +2494,6 @@ module('Integration | search-index', function (hooks) {
         'http://localhost:4201/base/watched-array',
         'http://localhost:4202/test/person',
         'lodash',
-        'pluralize',
         'tracked-built-ins',
       ],
       'the card references for the instance are correct'

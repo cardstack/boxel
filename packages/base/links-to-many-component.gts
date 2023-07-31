@@ -20,9 +20,9 @@ import {
   chooseCard,
   baseCardRef,
   identifyCard,
+  getPlural,
 } from '@cardstack/runtime-common';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { plural } from 'pluralize';
 
 interface Signature {
   Args: {
@@ -75,7 +75,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         </ul>
       {{/if}}
       <div class='add-new' {{on 'click' this.add}} data-test-add-new>
-        {{svgJar 'icon-plus' width='20px' height='20px'}} Add {{this.getPluralDisplayName}}
+        {{svgJar 'icon-plus' width='20px' height='20px'}} Add {{getPlural @field.card.displayName}}
       </div>
     </div>
   </template>
@@ -108,10 +108,6 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     cards = cards.filter((_c: Card, i: number) => i !== index);
     (this.args.model.value as any)[this.args.field.name] = cards;
   };
-
-  getPluralDisplayName = () => {
-    return plural(this.args.field.card.displayName);
-  }
 }
 
 export function getLinksToManyComponent({

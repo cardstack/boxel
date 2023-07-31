@@ -92,6 +92,7 @@ export {
   isSingleCardDocument,
 } from './card-document';
 export { sanitizeHtml } from './dompurify';
+export { getPlural } from './pluralize';
 
 import type {
   Card,
