@@ -19,6 +19,10 @@ import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import BoxelMenu from '@cardstack/boxel-ui/components/menu';
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
 
+import { service } from '@ember/service';
+import CardService from '@cardstack/host/services/card-service';
+import { load } from 'ember-async-data';
+
 interface Signature {
   Args: {
     renderedCardsForOverlayActions: RenderedCardForOverlayActions[];
@@ -29,11 +33,17 @@ interface Signature {
 }
 
 export default class OperatorModeOverlays extends Component<Signature> {
+  @service declare cardService: CardService;
+
   isEmbeddedCard(renderedCard: RenderedCardForOverlayActions) {
     return (
       renderedCard.fieldType === 'contains' ||
       renderedCard.fieldType === 'linksTo'
     );
+  }
+
+  @action async getRealmInfo(card: Card) {
+    return this.cardService.getRealmInfo(card);
   }
 
   <template>
@@ -52,17 +62,18 @@ export default class OperatorModeOverlays extends Component<Signature> {
           data-test-overlay-selected={{if isSelected card.id}}
           data-test-overlay-card-display-name={{cardTypeDisplayName card}}
         >
-          {{! Add mouseenter and mouseleave events to each button, so we can maintain the hover effect. }}
           {{#if (this.isEmbeddedCard renderedCard)}}
             <div class='overlay-embedded-card-header' data-test-overlay-header>
-
-              {{! TODO: Icon for linksTo field type }}
               <div class='header-title'>
-                {{#if (eq renderedCard.fieldType 'contains')}}
-                  <div class='header-icon'>
+                <div class='header-icon'>
+                  {{#if (eq renderedCard.fieldType 'contains')}}
                     {{svgJar 'icon-turn-down-right' width='22px' height='18px'}}
-                  </div>
-                {{/if}}
+                  {{else}}
+                    {{#let (load (this.getRealmInfo card)) as |result|}}
+                      <img src={{result.value.iconURL}} />
+                    {{/let}}
+                  {{/if}}
+                </div>
                 <div class='header-text'>
                   {{cardTypeDisplayName card}}
                 </div>

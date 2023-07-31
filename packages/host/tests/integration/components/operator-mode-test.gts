@@ -1782,4 +1782,27 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-stack-card-index="1"] [data-test-boxel-header-title]')
       .includesText('Address');
   });
+
+  test(`"links to" field has an overlay header and click on the contains card will open it on the stack`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    // Linked cards have the realm's icon in the overlaid header title
+    assert
+      .dom('[data-test-overlay-card-display-name="Author"] .header-icon img')
+      .hasAttribute('src', 'https://example-icon.test');
+
+    await click('[data-test-author');
+    assert.dom('[data-test-stack-card-index]').exists({ count: 2 });
+    assert
+      .dom('[data-test-stack-card-index="1"] [data-test-boxel-header-title]')
+      .includesText('Author');
+  });
 });

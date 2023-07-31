@@ -856,6 +856,9 @@ importers:
       '@glint/environment-ember-loose':
         specifier: ^1.0.0
         version: 1.0.2(@glimmer/component@1.1.2)(@glint/template@1.0.2)(ember-cli-htmlbars@6.2.0)(ember-modifier@4.1.0)
+      ember-async-data:
+        specifier: ^1.0.1
+        version: 1.0.1(ember-source@4.12.0)
     devDependencies:
       '@babel/core':
         specifier: ^7.17.8
@@ -4273,7 +4276,6 @@ packages:
       semver: 7.3.8
     transitivePeerDependencies:
       - supports-color
-    dev: true
 
   /@embroider/addon-shim@0.50.2:
     resolution: {integrity: sha512-a+pFlXZPovcCNFo05HxXBW9ole43mPyFZnkhvZlLF0f1sHEn9j0sD1Ld2BM/NCERmHcYz9eXQnX1FPNLCDoGEA==}
@@ -11725,6 +11727,18 @@ packages:
       - supports-color
       - webpack
     dev: true
+
+  /ember-async-data@1.0.1(ember-source@4.12.0):
+    resolution: {integrity: sha512-R9nBxCZ9WDPMJpuGBODs8wV1PHXUbkSbrzVmL34R4aOWbx237yLBllJghQOwfJs1+D72wdzgxg/+J3DY43xz3g==}
+    peerDependencies:
+      ember-source: ^4.8.4
+    dependencies:
+      '@ember/test-waiters': 3.0.2
+      '@embroider/addon-shim': 1.8.5
+      ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0)
+    transitivePeerDependencies:
+      - supports-color
+    dev: false
 
   /ember-auto-import@1.12.2:
     resolution: {integrity: sha512-gLqML2k77AuUiXxWNon1FSzuG1DV7PEPpCLCU5aJvf6fdL6rmFfElsZRh+8ELEB/qP9dT+LHjNEunVzd2dYc8A==}

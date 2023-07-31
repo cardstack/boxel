@@ -168,5 +168,8 @@
     "paths": [
       "lib/setup-ast-transforms"
     ]
+  },
+  "dependencies": {
+    "ember-async-data": "^1.0.1"
   }
 }
