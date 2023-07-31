@@ -12,7 +12,7 @@ import type {
 import type { RoomObjectiveCard } from 'https://cardstack.com/base/room-objective';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { type LooseCardResource, baseRealm } from '@cardstack/runtime-common';
-import type LoaderService from '../services/loader-service';
+import type LoaderService from '../../services/loader-service';
 
 export * as Membership from './membership';
 export * as Timeline from './timeline';
