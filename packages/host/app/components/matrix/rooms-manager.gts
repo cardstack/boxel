@@ -172,7 +172,12 @@ export default class RoomsManager extends Component<Args> {
     {{/if}}
 
     {{#if this.currentRoomId}}
-      <Room @roomId={{this.currentRoomId}} @onCommand={{this.onCommand}}  @onPreviewCommand={{this.onPreviewCommand}} @onCancelPreviewCommand={{this.onCancelPreviewCommand}}/>
+      <Room
+        @roomId={{this.currentRoomId}}
+        @onCommand={{this.onCommand}}
+        @onPreviewCommand={{this.onPreviewCommand}}
+        @onCancelPreviewCommand={{this.onCancelPreviewCommand}}
+      />
     {{/if}}
 
     <style>
@@ -255,20 +260,16 @@ export default class RoomsManager extends Component<Args> {
     this.args.onCommand(command);
   }
 
-
   @action
   private onPreviewCommand(command: any) {
     this.args.onPreviewCommand(command);
   }
-  
-
 
   @action
   private onCancelPreviewCommand(command: any) {
     this.args.onCancelPreviewCommand(command);
   }
-  
-  
+
   @cached
   private get roomResources() {
     let resources = new TrackedMap<string, RoomCardResource>();
