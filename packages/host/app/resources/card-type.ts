@@ -1,4 +1,4 @@
-import { Resource } from 'ember-resources/core';
+import { Resource } from 'ember-resources';
 import { restartableTask } from 'ember-concurrency';
 import { tracked } from '@glimmer/tracking';
 import {
@@ -111,7 +111,7 @@ export class CardType extends Resource<Args> {
   }
 }
 
-export function getCardType(parent: object, card: () => typeof CardBase) {
+export function getCardType(parent: object, card: () => typeof Card) {
   return CardType.from(parent, () => ({
     named: {
       card: card(),
