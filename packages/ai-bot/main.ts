@@ -345,16 +345,18 @@ async function getResponse(history: IRoomEvent[]) {
 
       // While developing the frontend it can be handy to skip GPT and just return some data
       if (event.getContent().body.startsWith('debugpatch:')) {
+        let body = event.getContent().body;
+        let patchMessage = body.split('debugpatch:')[1];
+        // If there's a card attached, we need to split it off to parse the json
+        patchMessage = patchMessage.split('(Card')[0];
         let attributes = {};
         try {
-          attributes = JSON.parse(
-            event.getContent().body.split('debugpatch:')[1]
-          );
+          attributes = JSON.parse(patchMessage);
         } catch (error) {
           await sendMessage(
             client,
             room,
-            'Error parsing as JSON',
+            'Error parsing your debug patch as JSON: ' + patchMessage,
             initialMessage.event_id
           );
         }
