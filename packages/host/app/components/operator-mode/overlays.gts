@@ -126,6 +126,14 @@ export default class OperatorModeOverlays extends Component<Signature> {
               </div>
 
             </div>
+
+            <IconButton
+              {{on 'mouseenter' (fn this.setCurrentlyHoveredCard renderedCard)}}
+              {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
+              class='hover-button hover-button-embedded-card preview'
+              @icon='eye'
+              aria-label='preview card'
+            />
           {{/if}}
 
           {{#if
@@ -180,8 +188,8 @@ export default class OperatorModeOverlays extends Component<Signature> {
         height: 30px;
         pointer-events: auto;
       }
-      .hovered > .hover-button:not(:disabled),
-      .hovered > .hover-button.select {
+      .hovered .hover-button:not(:disabled),
+      .hovered .hover-button.select {
         display: block;
       }
       .hover-button:not(:disabled):hover {
@@ -199,6 +207,14 @@ export default class OperatorModeOverlays extends Component<Signature> {
       .hover-button.more-actions {
         bottom: 0;
         right: 0;
+      }
+      .hover-button.hover-button-embedded-card {
+        left: calc(100% - var(--boxel-sp-xl));
+        top: calc(
+          (100% - var(--overlay-embedded-card-header-height)) / 2 +
+            var(--overlay-embedded-card-header-height) - 1em
+        );
+        position: absolute;
       }
       .hover-button > svg {
         height: 100%;
