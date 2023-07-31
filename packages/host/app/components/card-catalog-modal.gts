@@ -154,6 +154,7 @@ export default class CardCatalogModal extends Component<Signature> {
                             data-test-card-catalog-item={{card.id}}
                           >
                             <CardCatalogItem
+                              @isSelected={{eq this.selectedCard.id card.id}}
                               @title={{card.title}}
                               @description={{card.description}}
                               @thumbnailURL={{card.thumbnailURL}}
@@ -409,15 +410,6 @@ export default class CardCatalogModal extends Component<Signature> {
 
       .item {
         position: relative;
-      }
-
-      .item > :deep(.boxel-card-container) {
-        display: flex;
-        align-items: center;
-        height: 100%;
-      }
-      .item.selected > :deep(.boxel-card-container) {
-        box-shadow: 0 0 0 2px var(--boxel-highlight);
       }
 
       .select {

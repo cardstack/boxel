@@ -10,6 +10,7 @@ import type LoaderService from '../services/loader-service';
 
 interface Signature {
   Args: {
+    isSelected: boolean;
     title: string | null;
     description: string | null;
     thumbnailURL: string | null;
@@ -20,7 +21,11 @@ interface Signature {
 export default class CardCatalogItem extends Component<Signature> {
   <template>
     <div
-      class={{cn 'catalog-item' catalog-item--has-thumbnail=this.thumbnailURL}}
+      class={{cn
+        'catalog-item'
+        catalog-item--has-thumbnail=this.thumbnailURL
+        catalog-item--selected=@isSelected
+      }}
     >
       {{#if this.thumbnailURL}}
         <div
@@ -55,6 +60,10 @@ export default class CardCatalogItem extends Component<Signature> {
       .catalog-item--has-thumbnail {
         grid-template-columns: var(--catalog-item-thumbnail-size) 1fr;
         gap: var(--boxel-sp);
+      }
+      .catalog-item--selected {
+        border-color: var(--boxel-highlight);
+        box-shadow: 0 0 0 1px var(--boxel-highlight);
       }
       .catalog-item__thumbnail {
         width: var(--catalog-item-thumbnail-size);
