@@ -1,21 +1,23 @@
 import Component from '@glimmer/component';
-import { fn } from '@ember/helper';
+import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { RenderedCardForOverlayActions } from './stack-item';
 import { velcro } from 'ember-velcro';
 import { Actions } from '@cardstack/runtime-common';
-import { IconButton } from '@cardstack/boxel-ui';
+import { BoxelDropdown, IconButton } from '@cardstack/boxel-ui';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import { type TrackedArray } from 'tracked-built-ins';
 import type { MiddlewareState } from '@floating-ui/dom';
-import type { Card } from 'https://cardstack.com/base/card-api';
+import type { Card, Format } from 'https://cardstack.com/base/card-api';
 import { tracked } from '@glimmer/tracking';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
 import { and, eq, not } from '@cardstack/host/helpers/truth-helpers';
 import { bool } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import BoxelMenu from '@cardstack/boxel-ui/components/menu';
+import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
 
 interface Signature {
   Args: {
@@ -53,14 +55,62 @@ export default class OperatorModeOverlays extends Component<Signature> {
           {{! Add mouseenter and mouseleave events to each button, so we can maintain the hover effect. }}
           {{#if (this.isEmbeddedCard renderedCard)}}
             <div class='overlay-embedded-card-header' data-test-overlay-header>
-              {{#if (eq renderedCard.fieldType 'contains')}}
-                <div class='header-icon'>
-                  {{svgJar 'icon-turn-down-right' width='22px' height='18px'}}
+
+              {{! TODO: Icon for linksTo field type }}
+              <div class='header-title'>
+                {{#if (eq renderedCard.fieldType 'contains')}}
+                  <div class='header-icon'>
+                    {{svgJar 'icon-turn-down-right' width='22px' height='18px'}}
+                  </div>
+                {{/if}}
+                <div class='header-text'>
+                  {{cardTypeDisplayName card}}
                 </div>
-              {{/if}}
-              <div class='header-text'>
-                {{cardTypeDisplayName card}}
               </div>
+
+              <div class='header-actions'>
+                {{! Offer to edit embedded card only when the stack item is in edit mode  }}
+                {{#if (eq renderedCard.stackItem.format 'edit')}}
+                  <IconButton
+                    @icon='icon-pencil'
+                    @width='24px'
+                    @height='24px'
+                    class='icon-button'
+                    aria-label='Edit'
+                    data-test-embedded-card-edit-button
+                    {{on
+                      'click'
+                      (fn this.openOrSelectCard renderedCard.card 'edit')
+                    }}
+                  />
+                {{/if}}
+
+                <BoxelDropdown>
+                  <:trigger as |bindings|>
+                    <IconButton
+                      @icon='icon-horizontal-three-dots'
+                      @width='20px'
+                      @height='20px'
+                      class='icon-button icon-options'
+                      aria-label='Options'
+                      data-test-embedded-card-options-button
+                      {{bindings}}
+                    />
+                  </:trigger>
+                  <:content as |dd|>
+                    <BoxelMenu
+                      @closeMenu={{dd.close}}
+                      @items={{array
+                        (menuItem
+                          'View card'
+                          (fn this.openOrSelectCard renderedCard.card)
+                        )
+                      }}
+                    />
+                  </:content>
+                </BoxelDropdown>
+              </div>
+
             </div>
           {{/if}}
 
@@ -139,11 +189,13 @@ export default class OperatorModeOverlays extends Component<Signature> {
       .hover-button > svg {
         height: 100%;
       }
+      .icon-button {
+        margin: auto;
+      }
       .overlay-embedded-card-header {
         background: var(--boxel-light-100);
         height: var(--overlay-embedded-card-header-height);
         display: flex;
-        padding: 1em;
       }
       .icon-button:hover {
         --icon-bg: var(--boxel-teal);
@@ -161,6 +213,31 @@ export default class OperatorModeOverlays extends Component<Signature> {
       .header-icon {
         display: flex;
         margin-right: var(--boxel-sp-xxxs);
+      }
+      .header-actions {
+        margin-left: auto;
+        display: flex;
+        margin-right: var(--boxel-sp-xs);
+      }
+      .header-actions > button {
+        margin-left: var(--boxel-sp-xxxs);
+        pointer-events: auto; /* pointer events are disabled in the overlay, we re-enable it here for header actions */
+        display: flex;
+        border-radius: 4px;
+        height: calc(
+          var(--overlay-embedded-card-header-height) - 2 * var(--boxel-sp-xxs)
+        );
+        width: calc(
+          var(--overlay-embedded-card-header-height) - 2 * var(--boxel-sp-xxs)
+        );
+      }
+      .header-title {
+        padding: 1em;
+        display: flex;
+      }
+      .header-actions > button:hover {
+        --icon-bg: var(--boxel-light);
+        background: var(--boxel-teal);
       }
 
     </style>
@@ -225,11 +302,11 @@ export default class OperatorModeOverlays extends Component<Signature> {
     this.currentlyHoveredCard = renderedCard;
   };
 
-  @action openOrSelectCard(card: Card) {
+  @action openOrSelectCard(card: Card, format: Format = 'isolated') {
     if (this.args.toggleSelect && this.args.selectedCards?.length) {
       this.args.toggleSelect(card);
     } else {
-      this.args.publicAPI.viewCard(card);
+      this.args.publicAPI.viewCard(card, format);
     }
   }
 

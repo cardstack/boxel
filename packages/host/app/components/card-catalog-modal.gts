@@ -225,11 +225,11 @@ export default class CardCatalogModal extends Component<Signature> {
         flex-direction: column;
         align-items: flex-start;
       }
+      .dialog-box__header > * + *:not(button) {
+        margin-top: var(--boxel-sp);
+      }
       .boxel-searchbox {
         position: relative;
-        width: 100%;
-        margin-top: var(--boxel-sp-xs);
-        margin-bottom: var(--boxel-sp-xs);
       }
       .boxel-searchbox__search-icon {
         --icon-color: var(--boxel-highlight);

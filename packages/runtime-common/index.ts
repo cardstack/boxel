@@ -93,7 +93,11 @@ export {
 } from './card-document';
 export { sanitizeHtml } from './dompurify';
 
-import type { Card, CardBase } from 'https://cardstack.com/base/card-api';
+import type {
+  Card,
+  CardBase,
+  Format,
+} from 'https://cardstack.com/base/card-api';
 
 export const maxLinkDepth = 5;
 export const assetsDir = '__boxel/';
@@ -164,7 +168,7 @@ export interface Actions {
     relativeTo: URL | undefined,
     opts?: { isLinkedCard?: boolean; doc?: LooseSingleCardDocument }
   ) => Promise<Card | undefined>;
-  viewCard: (card: Card) => void;
+  viewCard: (card: Card, format?: Format) => void;
   createCardDirectly: (
     doc: LooseSingleCardDocument,
     relativeTo: URL | undefined
