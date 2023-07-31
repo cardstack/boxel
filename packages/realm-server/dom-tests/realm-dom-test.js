@@ -114,11 +114,21 @@ QUnit.module(
       );
 
       let fields = [...querySelectorAll('[data-test-field]')];
-      assert.strictEqual(fields.length, 1, 'number of fields is correct');
+      assert.strictEqual(fields.length, 3, 'number of fields is correct');
       assert.strictEqual(
         cleanWhiteSpace(fields[0].textContent),
         `Delete firstName - contains - field card ID: https://cardstack.com/base/string/default`,
         'field is correct'
+      );
+      assert.strictEqual(
+        cleanWhiteSpace(fields[1].textContent),
+        `description - contains - field card ID: https://cardstack.com/base/string/default`,
+        'description field is correct'
+      );
+      assert.strictEqual(
+        cleanWhiteSpace(fields[2].textContent),
+        `thumbnailURL - contains - field card ID: https://cardstack.com/base/string/default`,
+        'thumbnailURL field is correct'
       );
     });
 
@@ -210,11 +220,21 @@ QUnit.module(
       );
 
       let fields = [...querySelectorAll('[data-test-field]')];
-      assert.strictEqual(fields.length, 1, 'number of fields is correct');
+      assert.strictEqual(fields.length, 3, 'number of fields is correct');
       assert.strictEqual(
         cleanWhiteSpace(fields[0].textContent),
         `Delete firstName - contains - field card ID: https://cardstack.com/base/string/default`,
         'field is correct'
+      );
+      assert.strictEqual(
+        cleanWhiteSpace(fields[1].textContent),
+        `description - contains - field card ID: https://cardstack.com/base/string/default`,
+        'description field is correct'
+      );
+      assert.strictEqual(
+        cleanWhiteSpace(fields[2].textContent),
+        `thumbnailURL - contains - field card ID: https://cardstack.com/base/string/default`,
+        'thumbnailURL field is correct'
       );
     });
   }
