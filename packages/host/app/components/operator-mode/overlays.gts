@@ -70,7 +70,10 @@ export default class OperatorModeOverlays extends Component<Signature> {
                     {{svgJar 'icon-turn-down-right' width='22px' height='18px'}}
                   {{else}}
                     {{#let (load (this.getRealmInfo card)) as |result|}}
-                      <img src={{result.value.iconURL}} />
+                      <img
+                        src={{result.value.iconURL}}
+                        alt="Card's realm icon"
+                      />
                     {{/let}}
                   {{/if}}
                 </div>
