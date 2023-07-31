@@ -47,7 +47,11 @@ interface CommandArgs {
 
 class CommandMessage extends Component<CommandArgs> {
   <template>
-    <Button {{on 'click' this.clicked}} {{on 'mouseenter' this.mouseEnter}} {{on 'mouseleave' this.mouseLeave}}>Apply</Button>
+    <Button
+      {{on 'click' this.clicked}}
+      {{on 'mouseenter' this.mouseEnter}}
+      {{on 'mouseleave' this.mouseLeave}}
+    >Apply</Button>
   </template>
 
   private get label() {
@@ -55,19 +59,17 @@ class CommandMessage extends Component<CommandArgs> {
   }
 
   @action
-  private clicked(){
+  private clicked() {
     this.args.onCommand(this.args.command);
-    console.log("Clicked", this.args);
   }
 
   @action
-  private mouseEnter(){
-    console.log("Mouse Enter", this.args.onPreviewCommand);
+  private mouseEnter() {
     this.args.onPreviewCommand(this.args.command);
   }
 
   @action
-  private mouseLeave(){
+  private mouseLeave() {
     this.args.onCancelPreviewCommand(this.args.command);
   }
 
@@ -75,7 +77,6 @@ class CommandMessage extends Component<CommandArgs> {
     super(owner, args);
   }
 }
-
 
 export default class Room extends Component<RoomArgs> {
   <template>
@@ -134,9 +135,14 @@ export default class Room extends Component<RoomArgs> {
         </div>
         {{#each this.messageCardComponents as |Message|}}
           {{#if Message.command}}
-            <CommandMessage @command={{Message.command}} @onCommand={{this.onCommand}} @onPreviewCommand={{this.onPreviewCommand}} @onCancelPreviewCommand={{this.onCancelPreviewCommand}}/>
+            <CommandMessage
+              @command={{Message.command}}
+              @onCommand={{this.onCommand}}
+              @onPreviewCommand={{this.onPreviewCommand}}
+              @onCancelPreviewCommand={{this.onCancelPreviewCommand}}
+            />
           {{else}}
-             <Message.component />
+            <Message.component />
           {{/if}}
         {{else}}
           <div data-test-no-messages>
@@ -316,19 +322,16 @@ export default class Room extends Component<RoomArgs> {
 
   @action
   private onCommand(command: any) {
-    console.log("onCommand", this.args.onCommand);
     this.args.onCommand(command);
   }
 
-    @action
+  @action
   private onPreviewCommand(command: any) {
-    console.log("onPreviewCommand", this.args.onPreviewCommand);
     this.args.onPreviewCommand(command);
   }
 
-    @action
+  @action
   private onCancelPreviewCommand(command: any) {
-    console.log("onCancelPreviewCommand", this.args.onCancelPreviewCommand);
     this.args.onCancelPreviewCommand(command);
   }
 
@@ -376,8 +379,10 @@ export default class Room extends Component<RoomArgs> {
   }
 
   private getComponent(card: Card, mode: string) {
-    return {"component": card.constructor.getComponent(card, mode),
-            "command": card.command};
+    return {
+      component: card.constructor.getComponent(card, mode),
+      command: card.command,
+    };
   }
 
   private get messageCardComponents() {
