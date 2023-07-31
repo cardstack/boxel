@@ -10,9 +10,7 @@ import {
 } from 'matrix-js-sdk';
 import * as MatrixSDK from 'matrix-js-sdk';
 import OpenAI from 'openai';
-import { APIResponse } from 'openai/core';
 import { ChatCompletionChunk } from 'openai/resources/chat';
-import { Stream } from 'openai/streaming';
 import { logger } from '@cardstack/runtime-common';
 
 let log = logger('ai-bot');
@@ -253,6 +251,17 @@ function constructHistory(history: IRoomEvent[]) {
   return latest_events;
 }
 
+function getLastUploadedCardID(history: IRoomEvent[]): String | undefined {
+  for (let event of history.slice().reverse()) {
+    const content = event.content;
+    if (content.msgtype === 'org.boxel.card') {
+      let card = content.instance.data;
+      return card.id;
+    }
+  }
+  return undefined;
+}
+
 async function getResponse(history: IRoomEvent[]) {
   let historical_messages: Message[] = [];
   log.info(history);
@@ -325,6 +334,15 @@ async function getResponse(history: IRoomEvent[]) {
         'Thinking...',
         'Thinking...'
       );
+
+      let initial = await client.roomInitialSync(room!.roomId, 1000);
+      let eventList = initial!.messages?.chunk || [];
+      log.info(eventList);
+
+      log.info('Total event list', eventList.length);
+      let history: IRoomEvent[] = constructHistory(eventList);
+      log.info("Compressed into just the history that's ", history.length);
+
       // While developing the frontend it can be handy to skip GPT and just return some data
       if (event.getContent().body.startsWith('debugpatch:')) {
         let attributes = {};
@@ -347,7 +365,7 @@ async function getResponse(history: IRoomEvent[]) {
           format: 'org.matrix.custom.html',
           command: {
             type: 'patch',
-            id: 'unknown',
+            id: getLastUploadedCardID(history),
             patch: {
               attributes: attributes,
             },
@@ -359,14 +377,6 @@ async function getResponse(history: IRoomEvent[]) {
           messageObject
         );
       }
-
-      let initial = await client.roomInitialSync(room!.roomId, 1000);
-      let eventList = initial!.messages?.chunk || [];
-      log.info(eventList);
-
-      log.info('Total event list', eventList.length);
-      let history: IRoomEvent[] = constructHistory(eventList);
-      log.info("Compressed into just the history that's ", history.length);
 
       const stream = await getResponse(history);
       return await sendStream(stream, client, room, initialMessage.event_id);
