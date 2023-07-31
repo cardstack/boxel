@@ -1630,7 +1630,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-card-catalog-item]`);
 
     assert
-      .dom(`[data-test-boxel-input-validation-state="invalid"]`)
+      .dom(`[data-test-boxel-input-validation-state="Not a valid Card URL"]`)
       .doesNotExist('invalid state is not shown');
 
     await fillIn(
@@ -1746,7 +1746,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-boxel-input-validation-state="invalid"]`);
     assert
       .dom(`[data-test-boxel-input-error-message]`)
-      .containsText('Not a valid search key');
+      .containsText('Not a valid Card URL');
     await fillIn(
       `[data-test-url-field] input`,
       `http://localhost:4202/test/mango`

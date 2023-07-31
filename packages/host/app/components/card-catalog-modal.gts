@@ -83,7 +83,7 @@ export default class CardCatalogModal extends Component<Signature> {
                   @onInput={{this.setSearchKey}}
                   @onKeyPress={{this.onSearchFieldKeypress}}
                   @state={{this.searchFieldState}}
-                  @errorMessage={{this.searchFieldState}}
+                  @errorMessage={{this.searchErrorMessage}}
                   @placeholder='Search for a card type or enter card URL'
                   data-test-search-field
                 />
@@ -465,6 +465,7 @@ export default class CardCatalogModal extends Component<Signature> {
   }
 
   get searchErrorMessage() {
+    console.log('here');
     return this.hasSearchError ? 'Not a valid search key' : undefined;
   }
 
