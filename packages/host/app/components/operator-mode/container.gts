@@ -139,20 +139,25 @@ export default class OperatorModeContainer extends Component<Signature> {
   @action async onCommand(command: any) {
     // apply patch
     if (command.type == 'patch') {
-      let topOfStack = this.stacks[0].items[this.stacks[0].items.length - 1];
-      await this.save(topOfStack);
+      const cardId = command.id;
+      for (let item of this.allStackItems) {
+        if (item.card.id == command.id) {
+          return await this.save(item);
+        }
+      }
     }
-    // save
-    console.log('Clicked a command! Saved!', command);
   }
 
   @action async onPreviewCommand(command: any) {
     // apply patch
     console.log('Previewed a command!', command);
     if (command.type == 'patch') {
-      let topOfStack = this.stacks[0].items[this.stacks[0].items.length - 1];
-      await this.saveCardFieldValues(topOfStack.card);
-      await this.setFieldValues(topOfStack.card, command.patch.attributes);
+      for (let item of this.allStackItems) {
+        if (item.card.id == command.id) {
+          await this.saveCardFieldValues(item.card);
+          await this.setFieldValues(item.card, command.patch.attributes);
+        }
+      }
     }
   }
 
@@ -160,10 +165,11 @@ export default class OperatorModeContainer extends Component<Signature> {
     // reset field values
     console.log('Cancelled preview of a command!', command);
     if (command.type == 'patch') {
-      let topOfStack = this.stacks[0].items[this.stacks[0].items.length - 1];
-      console.log('Rolling back!');
-      console.log(this.cardFieldValues.get(topOfStack.card));
-      await this.cancel(topOfStack);
+      for (let item of this.allStackItems) {
+        if (item.card.id == command.id) {
+          return await this.cancel(item);
+        }
+      }
     }
   }
 
