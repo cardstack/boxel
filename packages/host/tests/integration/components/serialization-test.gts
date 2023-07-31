@@ -3861,16 +3861,16 @@ module('Integration | serialization', function (hooks) {
           attributes: { firstName: 'Hassan' },
           relationships: {
             'friends.0': {
-              links: { self: `${realmURL}Person/mango` },
+              links: { self: `./mango` },
               data: { id: `${realmURL}Person/mango`, type: 'card' },
             },
             'friends.1': {
-              links: { self: `${realmURL}Person/vanGogh` },
+              links: { self: `./vanGogh` },
               data: { id: `${realmURL}Person/vanGogh`, type: 'card' },
             },
           },
           meta: {
-            adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+            adoptsFrom: { module: `/test-cards`, name: 'Person' },
           },
         },
         included: [
@@ -3882,7 +3882,7 @@ module('Integration | serialization', function (hooks) {
               friends: { links: { self: null } },
             },
             meta: {
-              adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+              adoptsFrom: { module: `/test-cards`, name: 'Person' },
             },
           },
           {
@@ -3893,7 +3893,7 @@ module('Integration | serialization', function (hooks) {
               friends: { links: { self: null } },
             },
             meta: {
-              adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+              adoptsFrom: { module: `/test-cards`, name: 'Person' },
             },
           },
         ],

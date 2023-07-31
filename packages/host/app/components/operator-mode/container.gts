@@ -11,7 +11,7 @@ import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { Modal, IconButton } from '@cardstack/boxel-ui';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import SearchSheet, { SearchSheetMode } from '../search-sheet';
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, enqueueTask } from 'ember-concurrency';
 import {
   Deferred,
   baseCardRef,
@@ -208,32 +208,41 @@ export default class OperatorModeContainer extends Component<Signature> {
   @action async save(item: StackItem, dismissStackItem = false) {
     let { request } = item;
     await this.saveCardFieldValues(this.getCard(item));
-    let updatedCard = await this.write.perform(this.getAddressableCard(item));
-    if (!dismissStackItem) {
-      return;
-    }
+    let stack = this.stacks[item.stackIndex];
+    let addressableItem = getCardStackItem(item, stack);
+    let updatedCard = await this.write.perform(addressableItem.card);
 
     if (updatedCard) {
-      request?.fulfill(updatedCard);
+      await request?.fulfill(updatedCard);
+      if (!dismissStackItem) {
+        // if this is a newly created card from auto-save then we
+        // need to replace the stack item to account for the new card's ID
+        if (!addressableItem.card.id && updatedCard.id) {
+          this.operatorModeStateService.replaceItemInStack(addressableItem, {
+            ...addressableItem,
+            card: updatedCard,
+          });
+        }
+        return;
+      }
 
       if (item.type === 'card' && item.isLinkedCard) {
         this.close(item); // closes the 'create new card' editor for linked card fields
       } else {
-        let addressableItem = getCardStackItem(
-          item,
-          this.stacks[item.stackIndex]
-        );
+        if (!addressableItem.card.id && updatedCard.id) {
+          this.operatorModeStateService.trimItemsFromStack(addressableItem);
+        } else {
+          this.operatorModeStateService.replaceItemInStack(addressableItem, {
+            ...addressableItem,
+            card: updatedCard,
+            request,
+            format: 'isolated',
+          });
 
-        this.operatorModeStateService.replaceItemInStack(addressableItem, {
-          ...addressableItem,
-          card: updatedCard,
-          request,
-          format: 'isolated',
-        });
-
-        getPathToStackItem(item, this.stacks[item.stackIndex]).forEach(() =>
-          this.operatorModeStateService.popItemFromStack(item.stackIndex)
-        );
+          getPathToStackItem(item, this.stacks[item.stackIndex]).forEach(() =>
+            this.operatorModeStateService.popItemFromStack(item.stackIndex)
+          );
+        }
       }
     }
   }

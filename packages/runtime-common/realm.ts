@@ -808,8 +808,7 @@ export class Realm {
         realmInfo.name = realmConfigJson.name ?? realmInfo.name;
         realmInfo.backgroundURL =
           realmConfigJson.backgroundURL ?? realmInfo.backgroundURL;
-        realmInfo.iconURL = 
-          realmConfigJson.iconURL ?? realmInfo.iconURL;
+        realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
       } catch (e) {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }

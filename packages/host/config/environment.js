@@ -57,7 +57,7 @@ module.exports = function (environment) {
 
     ENV.APP.rootElement = '#ember-testing';
     ENV.APP.autoboot = false;
-    ENV.autoSaveDelayMs = 10;
+    ENV.autoSaveDelayMs = 0;
   }
 
   if (environment === 'production') {

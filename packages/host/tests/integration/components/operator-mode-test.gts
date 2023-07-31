@@ -1,7 +1,11 @@
 import { module, test, skip } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
-import { baseRealm, cardTypeDisplayName } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  cardTypeDisplayName,
+  LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 import { Loader } from '@cardstack/runtime-common/loader';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -576,7 +580,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-stack-card-index="1"]').includesText('Mango');
   });
 
-  test("it doesn't change the field value if user clicks cancel in edit view", async function (assert) {
+  test('it auto saves the field value', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
 
     await renderComponent(
@@ -590,55 +594,53 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-person]');
     await click('[data-test-edit-button]');
     await fillIn('[data-test-boxel-input]', 'EditedName');
-    await fillIn(
-      '[data-test-boxel-input-city] [data-test-boxel-input]',
-      'EditedCity'
-    );
-    await fillIn(
-      '[data-test-boxel-input-country] [data-test-boxel-input]',
-      'EditedCountry'
-    );
 
-    await click('[aria-label="Cancel"]');
-    assert.dom('[data-test-person]').hasText('Fadhlan');
-    assert.dom('[data-test-first-letter-of-the-name]').hasText('F');
-    assert.dom('[data-test-city]').hasText('Bandung');
-    assert.dom('[data-test-country]').hasText('Indonesia');
-  });
+    await waitFor(`[data-test-last-saved]`);
+    let fileRef = await adapter.openFile('Person/fadhlan.json');
+    let json = JSON.parse(
+      fileRef?.content as string
+    ) as LooseSingleCardDocument;
+    assert.strictEqual(json.data.attributes?.firstName, 'EditedName');
 
-  test('it changes the field value if user clicks save in edit view', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      }
-    );
-    await waitFor('[data-test-person]');
-    await click('[data-test-edit-button]');
-    await fillIn('[data-test-boxel-input]', 'EditedName');
-    await fillIn(
-      '[data-test-boxel-input-city] [data-test-boxel-input]',
-      'EditedCity'
-    );
-    await fillIn(
-      '[data-test-boxel-input-country] [data-test-boxel-input]',
-      'EditedCountry'
-    );
-    await click('[aria-label="Save"]');
 
     await waitFor('[data-test-person="EditedName"]');
-    await waitFor('[data-test-city="EditedCity"]');
-    await waitFor('[data-test-country="EditedCountry"]');
     assert.dom('[data-test-person]').hasText('EditedName');
     assert.dom('[data-test-first-letter-of-the-name]').hasText('E');
+  });
 
-    await waitFor('[data-test-city="EditedCity"]');
-    assert.dom('[data-test-city]').hasText('EditedCity');
-    assert.dom('[data-test-country]').hasText('EditedCountry');
+  test('it auto saves changes made to nested contains card', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor('[data-test-person]');
+    await click(
+      '[data-test-shippinginfo-field] [data-test-field-component-card]'
+    );
+    await waitFor('[data-test-stack-card-index="2"]');
+    await click(`[data-test-stack-card-index="2"] [data-test-edit-button]`);
+
+    await fillIn(`[data-test-field="preferredCarrier"] input`, `FedEx`);
+    await waitFor(`[data-test-last-saved]`);
+    let fileRef = await adapter.openFile('Person/fadhlan.json');
+    let json = JSON.parse(
+      fileRef?.content as string
+    ) as LooseSingleCardDocument;
+    assert.strictEqual(
+      json.data.attributes?.address?.shippingInfo?.preferredCarrier,
+      'FedEx'
+    );
+
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await waitFor('[data-test-preferredcarrier]');
+    assert.dom('data-test-preferredcarrier="FedEx"');
   });
 
   test('displays add card button if user closes the only card in the stack and opens a card from card chooser', async function (assert) {
@@ -747,7 +749,10 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
       .exists();
 
-    await click('[data-test-save-button]');
+    await fillIn(`[data-test-field="title"] input`, 'New Post');
+    await waitFor(`[data-test-last-saved]`);
+    await setCardInOperatorModeState(`${testRealmURL}PublishingPacket/1`);
+
     await waitFor(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`);
     assert
       .dom(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`)
@@ -833,12 +838,16 @@ module('Integration | operator-mode', function (hooks) {
       '[data-test-field="firstName"] [data-test-boxel-input]',
       'Alice'
     );
+    await waitFor(
+      `[data-test-stack-card-index="3"][data-test-stack-card="${testRealmURL}Author/3"]`
+    );
     await fillIn(
       '[data-test-field="lastName"] [data-test-boxel-input]',
       'Enwunder'
     );
+    await waitFor(`[data-test-last-saved]`);
 
-    await click('[data-test-stack-card-index="3"] [data-test-save-button]');
+    await click('[data-test-stack-card-index="3"] [data-test-close-button]');
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="3"]')
     );
@@ -851,7 +860,8 @@ module('Integration | operator-mode', function (hooks) {
       '[data-test-stack-card-index="2"] [data-test-field="title"] [data-test-boxel-input]',
       'Mad As a Hatter'
     );
-    await click('[data-test-stack-card-index="2"] [data-test-save-button]');
+    await waitFor(`[data-test-last-saved]`);
+    await click('[data-test-stack-card-index="2"] [data-test-close-button]');
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="2"]')
     );
@@ -863,13 +873,33 @@ module('Integration | operator-mode', function (hooks) {
       .dom(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`)
       .doesNotExist();
 
+    await waitFor(
+      `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}PublishingPacket/1"]`
+    );
+    let saveTime = document
+      .querySelector('[data-test-last-saved]')!
+      .getAttribute('data-test-last-saved');
     await fillIn(
       '[data-test-stack-card-index="1"] [data-test-field="socialBlurb"] [data-test-boxel-input]',
       `Everyone knows that Alice ran the show in the Brady household. But when Alice’s past comes to light, things get rather topsy turvy…`
     );
-    await click('[data-test-stack-card-index="1"] [data-test-save-button]');
-    await waitFor(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`);
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-last-saved]')!
+          .getAttribute('data-test-last-saved') !== saveTime
+    );
+    let fileRef = await adapter.openFile(`PublishingPacket/1.json`);
+    let json = JSON.parse(
+      fileRef?.content as string
+    ) as LooseSingleCardDocument;
+    assert.strictEqual(
+      json.data.attributes!.socialBlurb,
+      `Everyone knows that Alice ran the show in the Brady household. But when Alice’s past comes to light, things get rather topsy turvy…`
+    );
 
+    await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
+    await waitUntil(() => !document.querySelector('[data-test-last-saved]'));
     assert
       .dom(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`)
       .containsText(

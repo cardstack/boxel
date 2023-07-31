@@ -194,7 +194,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   @cached
   get addressableCard() {
-    return getCardStackItem(this.args.item, this.args.stackItems).card;
+    let card = getCardStackItem(this.args.item, this.args.stackItems).card;
+    return card;
   }
 
   @cached
@@ -221,7 +222,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
     clearInterval(this.refreshSaveMsg);
   };
 
-  private onCardChange = () => {
+  private onCardChange = (fieldName: string, value: any) => {
+    console.log(
+      `card ${this.card.constructor.name}.${fieldName} changed, updated value:`,
+      value
+    );
     this.doWhenCardChanges.perform();
   };
 
@@ -385,7 +390,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             </Tooltip>
           </:actions>
           <:detail>
-            <div class='save-indicator'>
+            <div class='save-indicator' data-test-last-saved={{this.lastSaved}}>
               {{#if this.isSaving}}
                 Saving…
               {{else if this.lastSavedMsg}}

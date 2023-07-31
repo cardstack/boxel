@@ -251,6 +251,7 @@ export interface Field<
     fieldMeta: CardFields[string] | undefined,
     identityContext: IdentityContext | undefined,
     instancePromise: Promise<CardBase>,
+    loadedValue: any,
     relativeTo: URL | undefined
   ): Promise<any>;
   emptyValue(instance: CardBase): any;
@@ -474,6 +475,7 @@ class ContainsMany<FieldT extends CardBaseConstructor>
     fieldMeta: CardFields[string] | undefined,
     _identityContext: undefined,
     instancePromise: Promise<CardBase>,
+    _loadedValue: any,
     relativeTo: URL | undefined
   ): Promise<CardInstanceType<FieldT>[]> {
     if (!Array.isArray(value)) {
@@ -655,6 +657,7 @@ class Contains<CardT extends CardBaseConstructor> implements Field<CardT, any> {
     fieldMeta: CardFields[string] | undefined,
     _identityContext: undefined,
     _instancePromise: Promise<CardBase>,
+    _loadedValue: any,
     relativeTo: URL | undefined
   ): Promise<CardInstanceType<CardT>> {
     if (primitive in this.card) {
@@ -853,6 +856,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     _fieldMeta: undefined,
     identityContext: IdentityContext,
     _instancePromise: Promise<Card>,
+    loadedValue: any,
     relativeTo: URL | undefined
   ): Promise<CardInstanceType<CardT> | null | NotLoadedValue> {
     if (!isRelationship(value)) {
@@ -872,6 +876,9 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     let resourceId = new URL(value.links.self, relativeTo).href;
     let resource = resourceFrom(doc, resourceId);
     if (!resource) {
+      if (loadedValue !== undefined) {
+        return loadedValue;
+      }
       return {
         type: 'not-loaded',
         reference: value.links.self,
@@ -1143,6 +1150,7 @@ class LinksToMany<FieldT extends CardConstructor>
     _fieldMeta: undefined,
     identityContext: IdentityContext,
     instancePromise: Promise<CardBase>,
+    loadedValues: any,
     relativeTo: URL | undefined
   ): Promise<(CardInstanceType<FieldT> | NotLoadedValue)[]> {
     if (!Array.isArray(values) && values.links.self === null) {
@@ -1170,6 +1178,14 @@ class LinksToMany<FieldT extends CardConstructor>
         let resourceId = new URL(value.links.self, relativeTo).href;
         let resource = resourceFrom(doc, resourceId);
         if (!resource) {
+          if (loadedValues && Array.isArray(loadedValues)) {
+            let loadedValue = loadedValues.find(
+              (v) => isCard(v) && v.id === resourceId
+            );
+            if (loadedValue) {
+              return loadedValue;
+            }
+          }
           return {
             type: 'not-loaded',
             reference: value.links.self,
@@ -1457,7 +1473,6 @@ export function linksToMany<CardT extends CardConstructor>(
   } as any;
 }
 linksToMany[fieldType] = 'linksToMany' as FieldType;
-
 export class CardBase {
   // this is here because CardBase has no public instance methods, so without it
   // typescript considers everything a valid card.
@@ -1804,6 +1819,7 @@ function serializedGet<CardT extends CardBaseConstructor>(
 
 async function getDeserializedValue<CardT extends CardBaseConstructor>({
   card,
+  loadedValue,
   fieldName,
   value,
   resource,
@@ -1813,6 +1829,7 @@ async function getDeserializedValue<CardT extends CardBaseConstructor>({
   relativeTo,
 }: {
   card: CardT;
+  loadedValue: any;
   fieldName: string;
   value: any;
   resource: LooseCardResource;
@@ -1832,6 +1849,7 @@ async function getDeserializedValue<CardT extends CardBaseConstructor>({
     resource.meta.fields?.[fieldName],
     identityContext,
     modelPromise,
+    loadedValue,
     relativeTo
   );
   return result;
@@ -1961,7 +1979,20 @@ export async function updateFromSerialized<T extends CardBaseConstructor>(
   instance: CardInstanceType<T>,
   doc: LooseSingleCardDocument
 ): Promise<CardInstanceType<T>> {
-  let identityContext = identityContexts.get(instance) ?? new IdentityContext();
+  let identityContext = identityContexts.get(instance);
+  if (!identityContext) {
+    identityContext = new IdentityContext();
+    identityContexts.set(instance, identityContext);
+  }
+  if (!instance[relativeTo] && doc.data.id) {
+    instance[relativeTo] = new URL(doc.data.id);
+  }
+  if (!instance[realmInfo] && doc.data.meta.realmInfo) {
+    instance[realmInfo] = doc.data.meta.realmInfo;
+  }
+  if (!instance[realmURL] && doc.data.meta.realmURL) {
+    instance[realmURL] = new URL(doc.data.meta.realmURL);
+  }
   return await _updateFromSerialized(instance, doc.data, doc, identityContext);
 }
 
@@ -2041,6 +2072,7 @@ async function _updateFromSerialized<T extends CardBaseConstructor>(
       return result;
     }, Object.create(null));
 
+  let loadedValues = getDataBucket(instance);
   let values = (await Promise.all(
     Object.entries(
       {
@@ -2060,6 +2092,7 @@ async function _updateFromSerialized<T extends CardBaseConstructor>(
         fieldName,
         await getDeserializedValue({
           card,
+          loadedValue: loadedValues.get(fieldName),
           fieldName,
           value,
           resource,
