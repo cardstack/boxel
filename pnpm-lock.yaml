@@ -947,6 +947,9 @@ importers:
       '@types/htmlbars-inline-precompile':
         specifier: ^3.0.0
         version: 3.0.0
+      '@types/indefinite':
+        specifier: ^2.3.1
+        version: 2.3.1
       '@types/lodash':
         specifier: ^4.14.182
         version: 4.14.189
@@ -1133,6 +1136,9 @@ importers:
       ignore:
         specifier: ^5.2.0
         version: 5.2.0
+      indefinite:
+        specifier: ^2.4.3
+        version: 2.4.3
       loader.js:
         specifier: ^4.7.0
         version: 4.7.0
@@ -1178,6 +1184,9 @@ importers:
       qunit-dom:
         specifier: ^2.0.0
         version: 2.0.0
+      safe-stable-stringify:
+        specifier: ^2.4.3
+        version: 2.4.3
       start-server-and-test:
         specifier: ^1.14.0
         version: 1.14.0
@@ -6253,6 +6262,10 @@ packages:
 
   /@types/http-errors@2.0.1:
     resolution: {integrity: sha512-/K3ds8TRAfBvi5vfjuz8y6+GiAYBZ0x4tXv1Av6CWBWn0IlADc+ZX9pMq7oU0fNQPnBwIZl3rmeLp6SBApbxSQ==}
+    dev: true
+
+  /@types/indefinite@2.3.1:
+    resolution: {integrity: sha512-rRQndOl5JIImsT8iQLdMIcJ/+APtqZ9Gt2FztFiPtVHiSePDDbsWAR+2k7TEVq+a5s/trDzKtV/RmaW+/FVgTw==}
     dev: true
 
   /@types/js-levenshtein@1.1.1:
@@ -11826,7 +11839,7 @@ packages:
       lodash: 4.17.21
       mini-css-extract-plugin: 2.7.0(webpack@5.75.0)
       parse5: 6.0.1
-      resolve: 1.22.1
+      resolve: 1.22.3
       resolve-package-path: 4.0.3
       semver: 7.3.8
       style-loader: 2.0.0(patch_hash=xqjji5denmqrswdovljl2t3yv4)(webpack@5.75.0)
@@ -11867,7 +11880,7 @@ packages:
       lodash: 4.17.21
       mini-css-extract-plugin: 2.7.0(webpack@5.84.0)
       parse5: 6.0.1
-      resolve: 1.22.1
+      resolve: 1.22.3
       resolve-package-path: 4.0.3
       semver: 7.3.8
       style-loader: 2.0.0(patch_hash=xqjji5denmqrswdovljl2t3yv4)(webpack@5.84.0)
@@ -13349,7 +13362,7 @@ packages:
       ember-cli-babel: 7.26.11
       ember-cli-htmlbars: 5.7.2
       lodash: 4.17.21
-      safe-stable-stringify: 2.4.1
+      safe-stable-stringify: 2.4.3
     transitivePeerDependencies:
       - supports-color
     dev: false
@@ -16934,6 +16947,11 @@ packages:
   /imurmurhash@0.1.4:
     resolution: {integrity: sha512-JmXMZ6wuvDmLiHEml9ykzqO6lwFbof0GG4IkcGaENdCRDDmMVnny7s5HsIgHCbaq0w2MyPhDqkhTUgS2LU2PHA==}
     engines: {node: '>=0.8.19'}
+    dev: true
+
+  /indefinite@2.4.3:
+    resolution: {integrity: sha512-tLgivPQiMY76i93YKhjV5cMiORWfrk3FHdD1mREBNKlWbHmBrObLfOz6xlTk+beboj/JJSlhuCpCMmChR5Sgng==}
+    engines: {node: '>=6.0.0'}
     dev: true
 
   /indent-string@4.0.0:
@@ -21830,11 +21848,6 @@ packages:
     dependencies:
       ret: 0.1.15
     dev: true
-
-  /safe-stable-stringify@2.4.1:
-    resolution: {integrity: sha512-dVHE6bMtS/bnL2mwualjc6IxEv1F+OCUpA46pKUj6F8uDbUM0jCCulPqRNPSnWwGNKx5etqMjZYdXtrm5KJZGA==}
-    engines: {node: '>=10'}
-    dev: false
 
   /safe-stable-stringify@2.4.3:
     resolution: {integrity: sha512-e2bDA2WJT0wxseVd4lsDP4+3ONX6HpMXQa1ZhFQ7SU+GjvORCmShbCMltrtIDfkYhVHrOcPtj+KhmDBdPdZD1g==}

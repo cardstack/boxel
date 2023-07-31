@@ -61,10 +61,8 @@ class Isolated extends Component<typeof CardsGrid> {
       </ul>
 
       {{#if @context.actions.createCard}}
-        <div class='cards-grid__add-button'> 
-          <Tooltip 
-            @placement='left'
-            @offset={{6}}>
+        <div class='cards-grid__add-button'>
+          <Tooltip @placement='left' @offset={{6}}>
             <:trigger>
               <IconButton
                 @icon='icon-plus-circle'

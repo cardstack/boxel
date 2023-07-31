@@ -115,6 +115,7 @@ export default class SearchSheet extends Component<Signature> {
           new URL(maybeCardDoc.data.id)
         );
         this.operatorModeStateService.addItemToStack({
+          type: 'card',
           card,
           format: 'isolated',
           stackIndex: 0,
@@ -242,7 +243,8 @@ export default class SearchSheet extends Component<Signature> {
         flex-direction: column;
         left: 3.5%;
         position: absolute;
-        transition: height var(--boxel-transition), padding var(--boxel-transition);
+        transition: height var(--boxel-transition),
+          padding var(--boxel-transition);
         width: 93%;
       }
 
@@ -267,7 +269,8 @@ export default class SearchSheet extends Component<Signature> {
         flex: 1;
         justify-content: space-between;
         opacity: 1;
-        transition: flex var(--boxel-transition), opacity var(--boxel-transition);
+        transition: flex var(--boxel-transition),
+          opacity var(--boxel-transition);
       }
 
       .closed .header,
@@ -297,8 +300,16 @@ export default class SearchSheet extends Component<Signature> {
         overflow: hidden;
       }
 
-      .search-sheet-content { display: flex; flex-direction: column; }
-      .search-sheet-content__recent-access { display: flex; flex-direction: column; padding: var(--boxel-sp); width: 100%; }
+      .search-sheet-content {
+        display: flex;
+        flex-direction: column;
+      }
+      .search-sheet-content__recent-access {
+        display: flex;
+        flex-direction: column;
+        padding: var(--boxel-sp);
+        width: 100%;
+      }
       .search-sheet-content__recent-access .boxel-label {
         font: 700 var(--boxel-font);
       }
