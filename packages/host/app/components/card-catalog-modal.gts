@@ -230,6 +230,7 @@ export default class CardCatalogModal extends Component<Signature> {
       }
       .boxel-searchbox {
         position: relative;
+        width: 100%;
       }
       .boxel-searchbox__search-icon {
         --icon-color: var(--boxel-highlight);
@@ -465,7 +466,6 @@ export default class CardCatalogModal extends Component<Signature> {
   }
 
   get searchErrorMessage() {
-    console.log('here');
     return this.hasSearchError ? 'Not a valid search key' : undefined;
   }
 
