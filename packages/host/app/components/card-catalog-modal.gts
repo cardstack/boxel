@@ -11,7 +11,7 @@ import {
   createNewCard,
   type CardRef,
   type RealmInfo,
-  type LooseSingleCardDocument,
+  type CreateNewCard,
 } from '@cardstack/runtime-common';
 import type { Query, Filter } from '@cardstack/runtime-common/query';
 import {
@@ -411,11 +411,7 @@ export default class CardCatalogModal extends Component<Signature> {
         deferred: Deferred<Card | undefined>;
         opts?: {
           offerToCreate?: CardRef;
-          createNewCard?: (
-            ref: CardRef,
-            relativeTo: URL | undefined,
-            opts?: { isLinkedCard?: boolean; doc?: LooseSingleCardDocument }
-          ) => Promise<Card | undefined>;
+          createNewCard?: CreateNewCard;
         };
       }
     | undefined = undefined;
@@ -497,7 +493,7 @@ export default class CardCatalogModal extends Component<Signature> {
     opts?: {
       offerToCreate?: CardRef;
       multiSelect?: boolean;
-      createNewCard?: any;
+      createNewCard?: CreateNewCard;
     }
   ): Promise<undefined | T> {
     this.zIndex++;
