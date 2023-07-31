@@ -73,6 +73,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @tracked lastSaved: number | undefined;
   @tracked lastSavedMsg: string | undefined;
   private refreshSaveMsg: number | undefined;
+  private subscribedCard: Card;
 
   cardTracker = new ElementTracker<{
     card: Card;
@@ -83,6 +84,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   constructor(owner: unknown, args: any) {
     super(owner, args);
     this.subscribeToCard.perform();
+    this.subscribedCard = this.card;
   }
 
   get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
@@ -210,7 +212,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private subscribeToCard = task(async () => {
     await this.cardService.ready;
     registerDestructor(this, this.cleanup);
-    this.cardService.subscribeToCard(this.card, this.onCardChange);
+    this.cardService.subscribeToCard(this.subscribedCard, this.onCardChange);
     this.refreshSaveMsg = setInterval(
       () => this.calculateLastSavedMsg(),
       10 * 1000
@@ -218,15 +220,14 @@ export default class OperatorModeStackItem extends Component<Signature> {
   });
 
   private cleanup = () => {
-    this.cardService.unsubscribeFromCard(this.card, this.onCardChange);
+    this.cardService.unsubscribeFromCard(
+      this.subscribedCard,
+      this.onCardChange
+    );
     clearInterval(this.refreshSaveMsg);
   };
 
-  private onCardChange = (fieldName: string, value: any) => {
-    console.log(
-      `card ${this.card.constructor.name}.${fieldName} changed, updated value:`,
-      value
-    );
+  private onCardChange = () => {
     this.doWhenCardChanges.perform();
   };
 

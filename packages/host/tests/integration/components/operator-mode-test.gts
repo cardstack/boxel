@@ -68,6 +68,10 @@ module('Integration | operator-mode', function (hooks) {
     return card;
   }
 
+  hooks.afterEach(async function () {
+    await waitFor('[data-test-save-idle]');
+  });
+
   hooks.beforeEach(async function () {
     localStorage.removeItem('recent-cards');
     Loader.addURLMapping(
@@ -979,7 +983,9 @@ module('Integration | operator-mode', function (hooks) {
       .exists('Shipping Info contained card header in edit mode');
 
     await fillIn(`[data-test-field="preferredCarrier"] input`, `FedEx`);
-    await click('[data-test-stack-card-index="2"] [data-test-save-button]');
+    await waitFor('[data-test-last-saved]');
+    await click(' [data-test-stack-card-index="2"] [data-test-edit-button]');
+    await waitUntil(() => !document.querySelector('[data-test-last-saved]'));
 
     // all the nested contains fields are popped from the stack
     await waitUntil(
@@ -995,63 +1001,15 @@ module('Integration | operator-mode', function (hooks) {
         `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}Person/fadhlan"] > .card.edit`
       )
       .doesNotExist('Person card is not in edit mode');
-  });
 
-  test('can cancel editing of a nested contained card field', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      }
+    let fileRef = await adapter.openFile('Person/fadhlan.json');
+    let json = JSON.parse(
+      fileRef?.content as string
+    ) as LooseSingleCardDocument;
+    assert.strictEqual(
+      json.data.attributes?.address.shippingInfo.preferredCarrier,
+      'FedEx'
     );
-
-    await waitFor('[data-test-person]');
-    await click(
-      '[data-test-shippinginfo-field] [data-test-field-component-card]'
-    );
-    await waitFor('[data-test-stack-card-index="2"]');
-    await click(`[data-test-stack-card-index="2"] [data-test-edit-button]`);
-
-    await fillIn(`[data-test-field="preferredCarrier"] input`, `FedEx`);
-    await click('[data-test-stack-card-index="2"] [data-test-cancel-button]');
-
-    // the entire chain of contained fields and the parent card should be put into edit mode
-    assert
-      .dom(
-        `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}Person/fadhlan"] > .card`
-      )
-      .exists('Person card is in stack');
-    assert
-      .dom(
-        `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}Person/fadhlan"] > .card.edit`
-      )
-      .doesNotExist('Person card is not in edit mode');
-    assert
-      .dom(
-        `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Person/fadhlan/address"] > .card`
-      )
-      .exists('Address contained card is in stack');
-    assert
-      .dom(
-        `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Person/fadhlan/address"] > .card.edit`
-      )
-      .doesNotExist('Address contained card header is not in edit mode');
-    assert
-      .dom(
-        `[data-test-stack-card-index="2"][data-test-stack-card="${testRealmURL}Person/fadhlan/address/shippingInfo"] > .card`
-      )
-      .exists('Shipping Info contained card is in stack');
-    assert
-      .dom(
-        `[data-test-stack-card-index="2"][data-test-stack-card="${testRealmURL}Person/fadhlan/address/shippingInfo"] > .card.edit`
-      )
-      .doesNotExist('Shipping Info contained card header is not in edit mode');
-    assert
-      .dom('.operator-mode [data-test-preferredCarrier="DHL"]')
-      .exists('changed field is reverted');
   });
 
   test('can choose a card for a linksTo field that has an existing value', async function (assert) {
@@ -1109,7 +1067,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
     assert.dom('[data-test-field="authorBio"]').containsText('R2-D2');
 
-    await click('[data-test-save-button]');
+    await click('[data-test-edit-button]');
     await waitFor('.operator-mode [data-test-blog-post-isolated]');
 
     assert
@@ -1145,21 +1103,22 @@ module('Integration | operator-mode', function (hooks) {
       'Alice'
     );
 
-    await click('[data-test-stack-card-index="1"] [data-test-save-button]');
+    await waitFor(
+      `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Author/3"]`
+    );
+
+    await click('[data-test-stack-card-index="1"] [data-test-close-button]');
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="1"]')
     );
+    await waitFor('[data-test-last-saved]');
     assert.dom('[data-test-choose-card]').doesNotExist();
     assert.dom('[data-test-create-new]').doesNotExist();
     assert.dom('[data-test-field="authorBio"]').containsText('Alice');
 
-    await click('[data-test-stack-card-index="0"] [data-test-save-button]');
-    await waitFor(
-      '.operator-mode [data-test-blog-post-isolated] [data-test-author="Alice"]'
-    );
-    assert
-      .dom('.operator-mode [data-test-blog-post-isolated]')
-      .hasText('Beginnings by Alice');
+    await click('[data-test-stack-card-index="0"] [data-test-edit-button]');
+    await waitFor('[data-test-save-idle]');
+    assert.dom('[data-test-blog-post-isolated]').hasText('Beginnings by Alice');
   });
 
   test('can remove the link for a linksTo field', async function (assert) {
@@ -1178,7 +1137,8 @@ module('Integration | operator-mode', function (hooks) {
 
     assert.dom('[data-test-field="authorBio"]').containsText('Alien Bob');
     await click('[data-test-field="authorBio"] [data-test-remove-card]');
-    await click('[data-test-save-button]');
+    await click('[data-test-edit-button]');
+    await waitFor('[data-test-save-idle]');
 
     await waitFor('.operator-mode [data-test-blog-post-isolated]');
     assert
@@ -1291,7 +1251,10 @@ module('Integration | operator-mode', function (hooks) {
       '[data-test-stack-card-index="1"] [data-test-field="name"] [data-test-boxel-input]',
       'Woodster'
     );
-    await click('[data-test-stack-card-index="1"] [data-test-save-button]');
+    await waitFor(
+      `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Pet/1"]`
+    );
+    await click('[data-test-stack-card-index="1"] [data-test-close-button]');
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="1"]')
     );
@@ -1321,7 +1284,10 @@ module('Integration | operator-mode', function (hooks) {
       '[data-test-stack-card-index="1"] [data-test-field="name"] [data-test-boxel-input]',
       'Woodster'
     );
-    await click('[data-test-stack-card-index="1"] [data-test-save-button]');
+    await waitFor(
+      `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Pet/1"]`
+    );
+    await click('[data-test-stack-card-index="1"] [data-test-close-button]');
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="1"]')
     );
@@ -1349,10 +1315,21 @@ module('Integration | operator-mode', function (hooks) {
     await click(
       '[data-test-links-to-many="friends"] [data-test-item="1"] [data-test-remove-card]'
     );
+    await waitFor('[data-test-last-saved]');
     await click(
       '[data-test-links-to-many="friends"] [data-test-item="0"] [data-test-remove-card]'
     );
-    await click('[data-test-save-button]');
+    let saveTime = document
+      .querySelector('[data-test-last-saved]')!
+      .getAttribute('data-test-last-saved');
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-last-saved]')!
+          .getAttribute('data-test-last-saved') !== saveTime
+    );
+    await click('[data-test-edit-button]');
+    await waitFor('[data-test-save-idle]');
 
     await waitFor(`[data-test-person="Burcu"]`);
     assert

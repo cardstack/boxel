@@ -11,7 +11,7 @@ import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { Modal, IconButton } from '@cardstack/boxel-ui';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import SearchSheet, { SearchSheetMode } from '../search-sheet';
-import { restartableTask, enqueueTask } from 'ember-concurrency';
+import { restartableTask } from 'ember-concurrency';
 import {
   Deferred,
   baseCardRef,
@@ -532,7 +532,10 @@ export default class OperatorModeContainer extends Component<Signature> {
       <CardCatalogModal />
 
       <div class='operator-mode__with-chat {{this.chatVisibilityClass}}'>
-        <div class='operator-mode__main'>
+        <div
+          class='operator-mode__main'
+          data-test-save-idle={{this.write.isIdle}}
+        >
           {{#if this.canCreateNeighborStack}}
             <button
               data-test-add-card-left-stack
