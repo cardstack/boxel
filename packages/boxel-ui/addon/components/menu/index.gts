@@ -23,10 +23,10 @@ class MenuItemRenderer extends Component<{
     return this.args.menuItem as MenuItem;
   }
   <template>
-    {{#if (eq @menuItem.type "divider")}}
-      {{yield to="divider"}}
+    {{#if (eq @menuItem.type 'divider')}}
+      {{yield to='divider'}}
     {{else}}
-      {{yield this.asMenuItem to="item"}}
+      {{yield this.asMenuItem to='item'}}
     {{/if}}
   </template>
 }
@@ -57,18 +57,21 @@ export default class Menu extends Component<Signature> {
 
   <template>
     {{! template-lint-disable no-invalid-role }}
-    <ul role="menu" class={{cn "boxel-menu" @class}} ...attributes>
+    <ul role='menu' class={{cn 'boxel-menu' @class}} ...attributes>
       {{#if @items}}
         {{#each (compact @items) as |menuItem|}}
           <MenuItemRenderer @menuItem={{menuItem}}>
             <:divider>
-              <hr class="boxel-menu__separator" data-test-boxel-menu-separator />
+              <hr
+                class='boxel-menu__separator'
+                data-test-boxel-menu-separator
+              />
             </:divider>
             <:item as |menuItem|>
               <li
-                role="none"
+                role='none'
                 class={{cn
-                  "boxel-menu__item"
+                  'boxel-menu__item'
                   @itemClass
                   boxel-menu__item--dangerous=menuItem.dangerous
                   boxel-menu__item--has-icon=menuItem.icon
@@ -77,20 +80,21 @@ export default class Menu extends Component<Signature> {
                 }}
                 data-test-boxel-menu-item
               >
-                {{!-- template-lint-disable require-context-role --}}
+                {{! template-lint-disable require-context-role }}
                 <div
-                  class="boxel-menu__item__content"
-                  role="menuitem"
-                  href="#"
+                  class='boxel-menu__item__content'
+                  role='menuitem'
+                  href='#'
                   data-test-boxel-menu-item-text={{menuItem.text}}
                   tabindex={{menuItem.tabindex}}
-                  {{on "click" (fn this.invokeMenuItemAction menuItem.action)}}
+                  {{on 'click' (fn this.invokeMenuItemAction menuItem.action)}}
+                  disabled={{menuItem.disabled}}
                 >
                   {{#if menuItem.icon}}
                     {{svgJar
                       menuItem.icon
-                      width="16"
-                      height="16"
+                      width='16'
+                      height='16'
                       data-test-boxel-menu-item-icon=true
                     }}
                   {{/if}}
@@ -141,14 +145,14 @@ export default class Menu extends Component<Signature> {
       .boxel-menu__item > .boxel-menu__item__content {
         width: max-content;
         padding: var(--boxel-sp-xs) var(--boxel-sp);
-        
+
         display: flex;
         align-items: center;
         gap: 10px;
       }
 
       .boxel-menu__item--disabled .boxel-menu__item__content {
-        cursor: default;
+        pointer-events: none;
       }
 
       .boxel-menu__item > .boxel-menu__item__content:hover {
@@ -176,6 +180,7 @@ export default class Menu extends Component<Signature> {
         height: 0;
         border-bottom: 1px solid var(--boxel-purple-300);
       }
+
     </style>
   </template>
 }
