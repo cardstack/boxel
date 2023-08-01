@@ -36,6 +36,7 @@ import {
   Label,
 } from '@cardstack/boxel-ui';
 import type { Filter } from '@cardstack/runtime-common/query';
+import { isReady } from '@cardstack/host/resources/file';
 
 interface Signature {
   Args: {
@@ -47,142 +48,147 @@ interface Signature {
 
 export default class Schema extends Component<Signature> {
   <template>
-    {{#if this.cardType.type}}
-      <CardContainer @displayBoundaries={{true}} class='schema'>
-        <FieldContainer @label='Card ID:' data-test-card-id>
-          {{this.cardType.type.id}}
-        </FieldContainer>
-        <FieldContainer @label='Adopts From:' data-test-adopts-from>
-          {{this.cardType.type.super.id}}
-        </FieldContainer>
-        <FieldContainer @label='Display Name:' data-test-display-name>
-          {{this.cardType.type.displayName}}
-        </FieldContainer>
-        <section>
-          <Label>Fields:</Label>
-          <ul>
-            {{#each this.cardType.type.fields as |field|}}
-              <li data-test-field={{field.name}}>
-                {{#if (this.isOwnField field.name)}}
-                  <button
-                    type='button'
-                    {{on 'click' (fn this.deleteField field.name)}}
-                    data-test-delete
-                  >Delete</button>
-                {{/if}}
-                {{field.name}}
-                -
-                {{field.type}}
-                - field card ID:
-                {{#if (this.isThisCard field.card)}}
-                  {{cardId field.card}}
-                  (this card)
-                {{else if (this.inRealm (cardModule field.card))}}
-                  <LinkTo
-                    @route='code'
-                    @query={{hash
-                      path=(this.modulePath (cardModule field.card))
-                    }}
-                  >
+    {{#if (isReady @file)}}
+      {{#if this.cardType.type}}
+        <CardContainer @displayBoundaries={{true}} class='schema'>
+          <FieldContainer @label='Card ID:' data-test-card-id>
+            {{this.cardType.type.id}}
+          </FieldContainer>
+          <FieldContainer @label='Adopts From:' data-test-adopts-from>
+            {{this.cardType.type.super.id}}
+          </FieldContainer>
+          <FieldContainer @label='Display Name:' data-test-display-name>
+            {{this.cardType.type.displayName}}
+          </FieldContainer>
+          <section>
+            <Label>Fields:</Label>
+            <ul>
+              {{#each this.cardType.type.fields as |field|}}
+                <li data-test-field={{field.name}}>
+                  {{#if (this.isOwnField field.name)}}
+                    <button
+                      type='button'
+                      {{on 'click' (fn this.deleteField field.name)}}
+                      data-test-delete
+                    >Delete</button>
+                  {{/if}}
+                  {{field.name}}
+                  -
+                  {{field.type}}
+                  - field card ID:
+                  {{#if (this.isThisCard field.card)}}
                     {{cardId field.card}}
-                  </LinkTo>
-                {{else}}
-                  <a
-                    href={{this.moduleSchemaURL (cardModule field.card)}}
-                  >{{cardId field.card}}</a>
+                    (this card)
+                  {{else if (this.inRealm (cardModule field.card))}}
+                    <LinkTo
+                      @route='code'
+                      @query={{hash
+                        path=(this.modulePath (cardModule field.card))
+                      }}
+                    >
+                      {{cardId field.card}}
+                    </LinkTo>
+                  {{else}}
+                    <a
+                      href={{this.moduleSchemaURL (cardModule field.card)}}
+                    >{{cardId field.card}}</a>
+                  {{/if}}
+                </li>
+              {{/each}}
+              <p>
+                {{#if this.errorMsg}}
+                  <div class='error' data-test-error-msg>{{this.errorMsg}}</div>
                 {{/if}}
-              </li>
-            {{/each}}
-            <p>
-              {{#if this.errorMsg}}
-                <div class='error' data-test-error-msg>{{this.errorMsg}}</div>
-              {{/if}}
-            </p>
-          </ul>
-        </section>
-        <fieldset class='add-new-field'>
-          <legend>Add New Field</legend>
-          <FieldContainer @label='Field Name:' @tag='label'>
-            <BoxelInput
-              data-test-new-field-name
-              type='text'
-              @value={{this.newFieldName}}
-              @onInput={{this.setNewFieldName}}
-            />
-          </FieldContainer>
-          <FieldContainer @label='Field Type:'>
-            <ul class='new-field-type'>
-              <li>
-                <label>
-                  <input
-                    data-test-new-field-contains
-                    {{RadioInitializer (eq this.newFieldType 'contains') true}}
-                    type='radio'
-                    checked={{eq this.newFieldType 'contains'}}
-                    {{on 'change' (fn this.setNewFieldType 'contains')}}
-                    name='field-type'
-                  />
-                  contains
-                </label>
-              </li>
-              <li>
-                <label>
-                  <input
-                    data-test-new-field-containsMany
-                    {{RadioInitializer
-                      (eq this.newFieldType 'containsMany')
-                      true
-                    }}
-                    type='radio'
-                    checked={{eq this.newFieldType 'containsMany'}}
-                    {{on 'change' (fn this.setNewFieldType 'containsMany')}}
-                    name='field-type'
-                  />
-                  containsMany
-                </label>
-              </li>
-              <li>
-                <label>
-                  <input
-                    data-test-new-field-linksTo
-                    {{RadioInitializer (eq this.newFieldType 'linksTo') true}}
-                    type='radio'
-                    checked={{eq this.newFieldType 'linksTo'}}
-                    {{on 'change' (fn this.setNewFieldType 'linksTo')}}
-                    name='field-type'
-                  />
-                  linksTo
-                </label>
-              </li>
-              <li>
-                <label>
-                  <input
-                    data-test-new-field-linksToMany
-                    {{RadioInitializer
-                      (eq this.newFieldType 'linksToMany')
-                      true
-                    }}
-                    type='radio'
-                    checked={{eq this.newFieldType 'linksToMany'}}
-                    {{on 'change' (fn this.setNewFieldType 'linksToMany')}}
-                    name='field-type'
-                  />
-                  linksToMany
-                </label>
-              </li>
+              </p>
             </ul>
-          </FieldContainer>
-          <Button
-            @size='small'
-            data-test-add-field
-            disabled={{this.isNewFieldDisabled}}
-            {{on 'click' this.addField}}
-          >
-            Add Field
-          </Button>
-        </fieldset>
-      </CardContainer>
-      <CatalogEntryEditor @ref={{this.ref}} />
+          </section>
+          <fieldset class='add-new-field'>
+            <legend>Add New Field</legend>
+            <FieldContainer @label='Field Name:' @tag='label'>
+              <BoxelInput
+                data-test-new-field-name
+                type='text'
+                @value={{this.newFieldName}}
+                @onInput={{this.setNewFieldName}}
+              />
+            </FieldContainer>
+            <FieldContainer @label='Field Type:'>
+              <ul class='new-field-type'>
+                <li>
+                  <label>
+                    <input
+                      data-test-new-field-contains
+                      {{RadioInitializer
+                        (eq this.newFieldType 'contains')
+                        true
+                      }}
+                      type='radio'
+                      checked={{eq this.newFieldType 'contains'}}
+                      {{on 'change' (fn this.setNewFieldType 'contains')}}
+                      name='field-type'
+                    />
+                    contains
+                  </label>
+                </li>
+                <li>
+                  <label>
+                    <input
+                      data-test-new-field-containsMany
+                      {{RadioInitializer
+                        (eq this.newFieldType 'containsMany')
+                        true
+                      }}
+                      type='radio'
+                      checked={{eq this.newFieldType 'containsMany'}}
+                      {{on 'change' (fn this.setNewFieldType 'containsMany')}}
+                      name='field-type'
+                    />
+                    containsMany
+                  </label>
+                </li>
+                <li>
+                  <label>
+                    <input
+                      data-test-new-field-linksTo
+                      {{RadioInitializer (eq this.newFieldType 'linksTo') true}}
+                      type='radio'
+                      checked={{eq this.newFieldType 'linksTo'}}
+                      {{on 'change' (fn this.setNewFieldType 'linksTo')}}
+                      name='field-type'
+                    />
+                    linksTo
+                  </label>
+                </li>
+                <li>
+                  <label>
+                    <input
+                      data-test-new-field-linksToMany
+                      {{RadioInitializer
+                        (eq this.newFieldType 'linksToMany')
+                        true
+                      }}
+                      type='radio'
+                      checked={{eq this.newFieldType 'linksToMany'}}
+                      {{on 'change' (fn this.setNewFieldType 'linksToMany')}}
+                      name='field-type'
+                    />
+                    linksToMany
+                  </label>
+                </li>
+              </ul>
+            </FieldContainer>
+            <Button
+              @size='small'
+              data-test-add-field
+              disabled={{this.isNewFieldDisabled}}
+              {{on 'click' this.addField}}
+            >
+              Add Field
+            </Button>
+          </fieldset>
+        </CardContainer>
+        <CatalogEntryEditor @ref={{this.ref}} />
+      {{/if}}
     {{/if}}
     <style>
       .schema {
@@ -339,13 +345,12 @@ export default class Schema extends Component<Signature> {
   });
 
   private write = restartableTask(async (src: string) => {
-    if (this.args.file.state !== 'ready') {
-      throw new Error(`the file ${this.args.file.url} is not open`);
+    if (this.args.file.state == 'ready') {
+      // note that this write will cause the component to rerender, so
+      // any code after this write will not be executed since the component will
+      // get torn down before subsequent code can execute
+      this.args.file.write(src, true);
     }
-    // note that this write will cause the component to rerender, so
-    // any code after this write will not be executed since the component will
-    // get torn down before subsequent code can execute
-    this.args.file.writeTask.perform(src, true);
   });
 }
 

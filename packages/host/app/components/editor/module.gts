@@ -6,6 +6,7 @@ import { cached } from '@glimmer/tracking';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import type { FileResource } from '@cardstack/host/resources/file';
 import type { Card } from 'https://cardstack.com/base/card-api';
+import { isReady } from '@cardstack/host/resources/file';
 
 interface Signature {
   Args: {
@@ -15,25 +16,30 @@ interface Signature {
 
 export default class Module extends Component<Signature> {
   <template>
-    <ImportModule @url={{@file.url}}>
-      <:ready as |module|>
-        {{#each (cardsFromModule module) as |card|}}
-          <Schema
-            @card={{card}}
-            @file={{@file}}
-            @moduleSyntax={{this.moduleSyntax}}
-          />
-        {{/each}}
-      </:ready>
-      <:error as |error|>
-        <h2>Encountered {{error.type}} error</h2>
-        <pre>{{error.message}}</pre>
-      </:error>
-    </ImportModule>
+    {{#if (isReady @file)}}
+      <ImportModule @url={{@file.url}}>
+        <:ready as |module|>
+          {{#each (cardsFromModule module) as |card|}}
+            <Schema
+              @card={{card}}
+              @file={{@file}}
+              @moduleSyntax={{this.moduleSyntax}}
+            />
+          {{/each}}
+        </:ready>
+        <:error as |error|>
+          <h2>Encountered {{error.type}} error</h2>
+          <pre>{{error.message}}</pre>
+        </:error>
+      </ImportModule>
+    {{/if}}
   </template>
 
   @cached
   get moduleSyntax() {
+    if (this.args.file.state == 'loading') {
+      throw new Error(`the file is loading`);
+    }
     if (this.args.file.state !== 'ready') {
       throw new Error(`the file ${this.args.file.url} is not open`);
     }
