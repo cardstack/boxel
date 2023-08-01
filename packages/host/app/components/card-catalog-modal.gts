@@ -173,7 +173,10 @@ export default class CardCatalogModal extends Component<Signature> {
               </div>
             {{/if}}
           </div>
-          <footer class='dialog-box__footer footer'>
+          <footer class={{cn 
+            'dialog-box__footer footer' 
+            (if this.currentRequest.opts.offerToCreate 'with-create-button')
+          }}>
             {{#if this.currentRequest.opts.offerToCreate}}
               <Button 
                 @kind='secondary-light'
@@ -310,9 +313,12 @@ export default class CardCatalogModal extends Component<Signature> {
       }
       .footer {
         display: flex;
-        justify-content: space-between;
+        justify-content: flex-end;
         /* This bottom margin is neccesary to show card URL error messages */
         margin-bottom: var(--boxel-sp);
+      }
+      .footer.with-create-button {
+        justify-content: space-between;
       }
       .create-new-button {
         --icon-color: var(--boxel-highlight);
