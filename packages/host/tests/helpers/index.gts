@@ -225,10 +225,6 @@ export async function shimModule(
   module: Record<string, any>,
   loader: Loader
 ) {
-  // this allows the current run's loader to pick up the shimmed value as well
-  // which is seeded from the global loader
-  loader.shimModule(moduleURL, module);
-
   if (loader) {
     loader.shimModule(moduleURL, module);
   }
