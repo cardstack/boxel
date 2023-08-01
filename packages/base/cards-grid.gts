@@ -31,6 +31,7 @@ class Isolated extends Component<typeof CardsGrid> {
               card=card
               format='data'
               fieldType=undefined
+              fieldName=undefined
             }}
             data-test-cards-grid-item={{card.id}}
           >

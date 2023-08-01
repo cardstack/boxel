@@ -104,6 +104,7 @@ export interface CardContext {
         card: Card;
         format: Format | 'data';
         fieldType: FieldType | undefined;
+        fieldName: string | undefined;
       };
     };
   }>;

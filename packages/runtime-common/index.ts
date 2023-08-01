@@ -164,7 +164,11 @@ export interface Actions {
     relativeTo: URL | undefined,
     opts?: { isLinkedCard?: boolean; doc?: LooseSingleCardDocument }
   ) => Promise<Card | undefined>;
-  viewCard: (card: Card) => void;
+  viewCard: (
+    card: Card,
+    fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
+    fieldName?: string
+  ) => void;
   createCardDirectly: (
     doc: LooseSingleCardDocument,
     relativeTo: URL | undefined

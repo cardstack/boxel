@@ -335,12 +335,37 @@ export default class OperatorModeContainer extends Component<Signature> {
         here.addToStack(newItem);
         return await newItem.request?.promise;
       },
-      viewCard: async (card: Card) => {
-        let itemsCount = here.stacks[stackIndex].length;
+      viewCard: async (
+        card: Card,
+        fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
+        fieldName?: string
+      ) => {
+        let stack = here.stacks[stackIndex];
+        let itemsCount = stack.length;
 
-        let currentCardOnStack = here.getCard(
-          here.stacks[stackIndex][itemsCount - 1]!
-        ); // Last item on the stack
+        let currentCardOnStack = here.getCard(stack[itemsCount - 1]!); // Last item on the stack
+
+        // TODO this is a hack until contained cards go away
+        // this lets us handle a contained card that is part of a card that has been auto-saved.
+        // the deserialization from the auto save actually breaks object equality for contained cards.
+        if (
+          fieldType === 'contains' &&
+          fieldName &&
+          [
+            ...Object.keys(
+              await here.cardService.getFields(currentCardOnStack)
+            ),
+          ].includes(fieldName)
+        ) {
+          here.addToStack({
+            type: 'contained',
+            fieldOfIndex: itemsCount - 1,
+            fieldName,
+            format: 'isolated',
+            stackIndex,
+          });
+          return;
+        }
 
         let containedPath = await findContainedCardPath(
           currentCardOnStack,

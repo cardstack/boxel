@@ -211,7 +211,11 @@ export default class OperatorModeOverlays extends Component<Signature> {
         // prevent outer nested contains fields from triggering when inner most
         // contained field was clicked
         e.stopPropagation();
-        this.openOrSelectCard(renderedCard.card);
+        this.openOrSelectCard(
+          renderedCard.card,
+          renderedCard.fieldType,
+          renderedCard.fieldName
+        );
       });
       renderedCard.element.style.cursor = 'pointer';
     }
@@ -225,11 +229,15 @@ export default class OperatorModeOverlays extends Component<Signature> {
     this.currentlyHoveredCard = renderedCard;
   };
 
-  @action openOrSelectCard(card: Card) {
+  @action openOrSelectCard(
+    card: Card,
+    fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
+    fieldName?: string
+  ) {
     if (this.args.toggleSelect && this.args.selectedCards?.length) {
       this.args.toggleSelect(card);
     } else {
-      this.args.publicAPI.viewCard(card);
+      this.args.publicAPI.viewCard(card, fieldType, fieldName);
     }
   }
 
