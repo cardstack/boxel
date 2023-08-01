@@ -22,6 +22,12 @@ module('Integration | card-prerender', function (hooks) {
   let realm: Realm;
 
   setupRenderingTest(hooks);
+
+  hooks.beforeEach(function () {
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+  });
+
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
@@ -75,12 +81,7 @@ module('Integration | card-prerender', function (hooks) {
       },
     });
 
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
-
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
-      isAcceptanceTest: true,
-    });
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
   });
 
