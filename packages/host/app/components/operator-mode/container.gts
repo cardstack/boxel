@@ -139,9 +139,8 @@ export default class OperatorModeContainer extends Component<Signature> {
   @action async onCommand(command: any) {
     // apply patch
     if (command.type == 'patch') {
-      const cardId = command.id;
       for (let item of this.allStackItems) {
-        if (item.card.id == command.id) {
+        if ('card' in item && item.card.id == command.id) {
           return await this.save(item);
         }
       }
@@ -150,10 +149,9 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   @action async onPreviewCommand(command: any) {
     // apply patch
-    console.log('Previewed a command!', command);
     if (command.type == 'patch') {
       for (let item of this.allStackItems) {
-        if (item.card.id == command.id) {
+        if ('card' in item && item.card.id == command.id) {
           await this.saveCardFieldValues(item.card);
           await this.setFieldValues(item.card, command.patch.attributes);
         }
@@ -163,28 +161,19 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   @action async onCancelPreviewCommand(command: any) {
     // reset field values
-    console.log('Cancelled preview of a command!', command);
     if (command.type == 'patch') {
       for (let item of this.allStackItems) {
-        if (item.card.id == command.id) {
+        if ('card' in item && item.card.id == command.id) {
           return await this.cancel(item);
         }
       }
     }
   }
 
-  private async setFieldValues(card: Card, values: StringMap) {
+  private async setFieldValues(card: Card, values: any) {
     let fields = await this.cardService.getFields(card);
     for (let fieldName of Object.keys(values)) {
       let field = fields[fieldName];
-      console.log(
-        'Setting field',
-        fieldName,
-        'on card',
-        card,
-        'to',
-        values[fieldName]
-      );
       if (fieldName === 'id') continue;
       try {
         if (
@@ -192,18 +181,11 @@ export default class OperatorModeContainer extends Component<Signature> {
             field.fieldType === 'containsMany') &&
           !(await this.cardService.isPrimitive(field.card))
         ) {
-          // This does not work
-          console.log(
-            'Nested change',
-            (card as any)[fieldName],
-            values[fieldName]
-          );
           await this.setFieldValues(
             (card as any)[fieldName],
             values[fieldName]
           );
         } else {
-          console.log('Setting', fieldName, values[fieldName], 'on card', card);
           (card as any)[fieldName] = values[fieldName];
         }
       } catch (e) {

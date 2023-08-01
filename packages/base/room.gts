@@ -160,7 +160,7 @@ class ScrollIntoView extends Modifier {
   }
 }
 
-class MessageCard extends Card {
+export class MessageCard extends Card {
   @field author = contains(RoomMemberCard);
   @field message = contains(MarkdownCard);
   @field formattedMessage = contains(StringCard);
@@ -398,8 +398,11 @@ export class RoomCard extends Card {
           formattedMessage,
           index,
           attachedCard: null,
-          command: event.content.command
+          command: null
         };
+        if (event.content.msgtype === 'org.boxel.command') {
+          cardArgs['command'] = event.content.command;
+        }
         if (event.content.msgtype === 'org.boxel.card') {
           let cardDoc = event.content.instance;
           if (cardDoc.data.id == null) {
@@ -546,6 +549,28 @@ interface MessageEvent extends BaseMatrixEvent {
   };
 }
 
+interface CommandEvent extends BaseMatrixEvent {
+  type: 'm.room.message';
+  content: {
+    command: any;
+    'm.relates_to'?: {
+      rel_type: string;
+      event_id: string;
+    };
+    msgtype: 'org.boxel.command';
+    format: 'org.matrix.custom.html';
+    body: string;
+    formatted_body: string;
+  };
+  unsigned: {
+    age: number;
+    transaction_id: string;
+    prev_content?: any;
+    prev_sender?: string;
+  };
+}
+
+
 interface CardMessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: {
@@ -589,6 +614,7 @@ interface ObjectiveEvent extends BaseMatrixEvent {
 export type MatrixEvent =
   | RoomCreateEvent
   | MessageEvent
+  | CommandEvent
   | CardMessageEvent
   | ObjectiveEvent
   | RoomNameEvent

@@ -362,7 +362,7 @@ async function getResponse(history: IRoomEvent[]) {
         }
         let messageObject = {
           body: 'some response, a patch',
-          msgtype: 'm.org.boxel.command',
+          msgtype: 'org.boxel.command',
           formatted_body: 'some response, a patch',
           format: 'org.matrix.custom.html',
           command: {

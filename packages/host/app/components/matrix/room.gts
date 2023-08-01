@@ -20,8 +20,8 @@ import {
   catalogEntryRef,
 } from '@cardstack/runtime-common';
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import { type Card } from 'https://cardstack.com/base/card-api';
-import { type RoomCard } from 'https://cardstack.com/base/room';
+import { type Card, type Format } from 'https://cardstack.com/base/card-api';
+import { type RoomCard, type MessageCard } from 'https://cardstack.com/base/room';
 import type CardService from '@cardstack/host/services/card-service';
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
@@ -53,10 +53,6 @@ class CommandMessage extends Component<CommandArgs> {
       {{on 'mouseleave' this.mouseLeave}}
     >Apply</Button>
   </template>
-
-  private get label() {
-    return JSON.stringify(this.args.command);
-  }
 
   @action
   private clicked() {
@@ -336,16 +332,6 @@ export default class Room extends Component<RoomArgs> {
   }
 
   @cached
-  private get commands() {
-    if (!this.roomCard) {
-      return [];
-    }
-    return this.roomCard.messages
-      .filter((m) => m.command)
-      .map((m) => m.command);
-  }
-
-  @cached
   private get currentCards() {
     if (!this.roomCard) {
       return new Map();
@@ -378,7 +364,7 @@ export default class Room extends Component<RoomArgs> {
     return;
   }
 
-  private getComponent(card: Card, mode: string) {
+  private getComponent(card: MessageCard, mode: Format) {
     return {
       component: card.constructor.getComponent(card, mode),
       command: card.command,

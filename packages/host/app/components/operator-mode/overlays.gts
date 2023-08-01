@@ -302,11 +302,11 @@ export default class OperatorModeOverlays extends Component<Signature> {
     this.currentlyHoveredCard = renderedCard;
   };
 
-  @action openOrSelectCard(card: Card, format: Format = 'isolated') {
+  @action openOrSelectCard(card: Card, _format: Format = 'isolated') {
     if (this.args.toggleSelect && this.args.selectedCards?.length) {
       this.args.toggleSelect(card);
     } else {
-      this.args.publicAPI.viewCard(card, format);
+      this.args.publicAPI.viewCard(card);
     }
   }
 
