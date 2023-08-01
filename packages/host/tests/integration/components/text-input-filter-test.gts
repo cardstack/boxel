@@ -37,9 +37,28 @@ let loader: Loader;
 module('Integration | text-input-filter', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
-
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
+
+  async function loadCard(url: string): Promise<Card> {
+    let { createFromSerialized, recompute } = cardApi;
+    let result = await realm.searchIndex.card(new URL(url));
+    if (!result || result.type === 'error') {
+      throw new Error(
+        `cannot get instance ${url} from the index: ${
+          result ? result.error.detail : 'not found'
+        }`
+      );
+    }
+    let card = await createFromSerialized<typeof Card>(
+      result.doc.data,
+      result.doc,
+      new URL(result.doc.data.id),
+      loader
+    );
+    await recompute(card, { loadFields: true });
+    return card;
+  }
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
@@ -81,7 +100,6 @@ module('Integration | text-input-filter', function (hooks) {
       },
     });
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    // loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
     await realm.ready;
   });
 
@@ -89,26 +107,6 @@ module('Integration | text-input-filter', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`)
   );
-
-  async function loadCard(url: string): Promise<Card> {
-    let { createFromSerialized, recompute } = cardApi;
-    let result = await realm.searchIndex.card(new URL(url));
-    if (!result || result.type === 'error') {
-      throw new Error(
-        `cannot get instance ${url} from the index: ${
-          result ? result.error.detail : 'not found'
-        }`
-      );
-    }
-    let card = await createFromSerialized<typeof Card>(
-      result.doc.data,
-      result.doc,
-      new URL(result.doc.data.id),
-      loader
-    );
-    await recompute(card, { loadFields: true });
-    return card;
-  }
 
   test('when user fills field with invalid values, the input box should show invalid state', async function (assert) {
     let card = await loadCard(`${testRealmURL}Sample/1`);
