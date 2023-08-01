@@ -11,7 +11,7 @@ import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { Modal, IconButton } from '@cardstack/boxel-ui';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import SearchSheet, { SearchSheetMode } from '../search-sheet';
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
 import {
   Deferred,
   baseCardRef,
@@ -199,17 +199,29 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   }
 
+  // TODO probably close needs to save--not revert, since with auto save
+  // it's not obvious what you are reverting to
   @action async close(item: StackItem) {
     await this.rollbackCardFieldValues(this.getCard(item));
 
     this.operatorModeStateService.trimItemsFromStack(item);
   }
 
+  // TODO I'm a little suspicious of all the async actions in this component.
+  // there is the possibility that this component could be destroyed during
+  // interior await's within these async actions. perferably we should be
+  // using ember concurrency to perform any async which addresses this situation
+  // directly.
   @action async save(item: StackItem, dismissStackItem = false) {
+    debugger;
     let { request } = item;
     await this.saveCardFieldValues(this.getCard(item));
     let stack = this.stacks[item.stackIndex];
     let addressableItem = getCardStackItem(item, stack);
+    // TODO Do not cast the task to a promise by awaiting it
+    // https://ember-concurrency.com/docs/task-cancelation-help
+    // if this was a EC task instead of an action then we could await here without
+    // casting the task to a promise
     let updatedCard = await this.write.perform(addressableItem.card);
 
     if (updatedCard) {
@@ -252,10 +264,16 @@ export default class OperatorModeContainer extends Component<Signature> {
     await this.close(item);
   }
 
-  private write = restartableTask(async (card: Card) => {
+  // we debounce saves in the stack item--by the time they reach
+  // this level we need to handle every request (so not restartable). otherwise
+  // we might drop writes from different stack items that want to save
+  // at the same time
+  private write = task(async (card: Card) => {
     return await this.cardService.saveModel(card);
   });
 
+  // TODO this really needs to be ember concurrency task--if this component is
+  // destroyed bad things happen here
   private async saveCardFieldValues(card: Card) {
     let fields = await this.cardService.getFields(card);
     for (let fieldName of Object.keys(fields)) {
@@ -372,6 +390,8 @@ export default class OperatorModeContainer extends Component<Signature> {
     };
   }
 
+  // TODO this really needs to be ember concurrency task--if this component is
+  // destroyed bad things happen here
   private async rollbackCardFieldValues(card: Card) {
     let fields = await this.cardService.getFields(card);
     for (let fieldName of Object.keys(fields)) {
