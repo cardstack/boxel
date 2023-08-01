@@ -31,7 +31,6 @@ setGracefulCleanup();
 // loading of cards necessary for indexing and the ability to manipulate the
 // underlying filesystem in a manner that doesn't leak into other tests (as well
 // as to test through loader caching)
-
 module('indexing', function (hooks) {
   let loader = new Loader();
   loader.addURLMapping(
