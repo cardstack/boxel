@@ -1,4 +1,4 @@
-import { Resource } from 'ember-resources/core';
+import { Resource } from 'ember-resources';
 import { tracked } from '@glimmer/tracking';
 import { service } from '@ember/service';
 import { restartableTask } from 'ember-concurrency';
@@ -109,7 +109,7 @@ export class DirectoryResource extends Resource<Args> {
 
 export function directory(
   parent: object,
-  relativePath: () => string | undefined,
+  relativePath: () => string,
   realmURL: () => string
 ) {
   return DirectoryResource.from(parent, () => ({

@@ -47,7 +47,7 @@
     "@typescript-eslint/eslint-plugin": "^5.17.0",
     "@typescript-eslint/parser": "^5.17.0",
     "ember-cli-htmlbars": "^6.2.0",
-    "ember-resources": "^4.4.0",
+    "ember-resources": "^6.3.1",
     "ember-source": "~4.12.0",
     "ember-template-imports": "^3.0.1",
     "eslint": "^7.32.0",
