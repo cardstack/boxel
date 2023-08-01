@@ -220,7 +220,7 @@ module('Integration | operator-mode', function (hooks) {
               </p>
               Pet: <@fields.pet/>
               Friends: <@fields.friends/>
-              Address: <@fields.address/>
+              <div data-test-addresses>Address: <@fields.address/></div>
             </template>
           }
         }
@@ -1773,6 +1773,25 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-more-options-button]');
     await click('[data-test-boxel-menu-item-text="Copy Card URL"]');
     assert.dom('[data-test-boxel-menu-item]').doesNotExist();
+
+    await click(
+      '[data-test-addresses] > [data-test-boxel-card-container] > [data-test-field-component-card]'
+    );
+
+    await waitFor(
+      `[data-test-stack-card='${testRealmURL}Person/burcu/address']`
+    );
+    await click(
+      `[data-test-stack-card='${testRealmURL}Person/burcu/address'] [data-test-more-options-button]`
+    );
+    assert
+      .dom('[data-test-boxel-menu-item-text="Copy Card URL"]')
+      .hasAttribute('disabled');
+
+    await click(`[data-test-boxel-menu-item]`);
+    assert
+      .dom('[data-test-boxel-menu-item]')
+      .exists('can not copy url of a contained card');
   });
 
   test(`composite "contains one" field has an overlay header and click on the contains card will open it on the stack`, async function (assert) {
