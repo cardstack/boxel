@@ -25,7 +25,7 @@ app "realm-demo" {
     use "aws-ecs" {
       region              = "us-east-1"
       memory              = 4096
-      cpu                 = 2048 # 2 vCPU's
+      cpu                 = 2048                                                     # 2 vCPU's
       cluster             = "realm-demo-production"
       count               = 1
       subnets             = ["subnet-06c640c2bc3b46c6a", "subnet-0ca4ab0b29849bfff"]
@@ -34,24 +34,15 @@ app "realm-demo" {
       security_group_ids  = ["sg-0086ae7f442318880"]
 
       alb {
-        subnets     = ["subnet-06c640c2bc3b46c6a", "subnet-0ca4ab0b29849bfff"]
-        certificate = "arn:aws:acm:us-east-1:120317779495:certificate/55a995ef-6f98-4834-a953-e1517cc74fb7"
+        subnets           = ["subnet-06c640c2bc3b46c6a", "subnet-0ca4ab0b29849bfff"]
+        load_balancer_arn = "arn:aws:elasticloadbalancing:us-east-1:120317779495:loadbalancer/app/waypoint-ecs-realm-demo/68a96299c568e68e"
+        certificate       = "arn:aws:acm:us-east-1:120317779495:certificate/55a995ef-6f98-4834-a953-e1517cc74fb7"
       }
     }
 
     hook {
       when    = "after"
-      command = ["node", "./scripts/waypoint-ecs-add-tags.mjs", "realm-demo"]
-    }
-
-    hook {
-      when    = "after"
       command = ["node", "./scripts/waypoint-ecs-add-efs.mjs", "realm-demo", "realm-server-storage", "fs-01beb05ea57cb4894", "fsap-0e1180270a9526966", "/persistent"]
-    }
-
-    hook {
-      when    = "after"
-      command = ["node", "./scripts/wait-service-stable.mjs", "realm-demo"]
     }
   }
 

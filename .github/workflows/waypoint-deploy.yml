@@ -12,7 +12,7 @@ on:
         type: string
       waypoint_version:
         required: false
-        default: "0.8.1"
+        default: "0.11.3"
         type: string
       environment:
         required: true
@@ -56,26 +56,14 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: us-east-1
 
-      - name: Install Waypoint
-        run: |
-          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
-          sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
-          sudo apt-get install waypoint=${{ inputs.waypoint_version }}
+      - uses: lucasmelin/setup-waypoint@v1
+        with:
+          version: ${{ inputs.waypoint_version }}
 
       - name: Deploy app
         run: waypoint deploy -app=${{ inputs.app }} -plain -local
         env:
           WAYPOINT_SERVER_TLS: "1"
-
-      - uses: ./.github/actions/waypoint-ecs-failsafe
-        with:
-          app: ${{ inputs.app }}
-
-      - name: Prune dangling resources
-        uses: ./.github/actions/waypoint-prune-dangling-resources
-        with:
-          app: ${{ inputs.app }}
-          retain: ${{ inputs.retain }}
 
       - name: Send notification to Discord
         uses: ./.github/actions/discord-notification-deploy
