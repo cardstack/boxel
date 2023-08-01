@@ -1052,7 +1052,7 @@ module('Integration | card-basics', function (hooks) {
     let root = await renderCard(loader, mango, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
-      'First Name Mango Is Cool true Title Mango'
+      'First Name Mango Is Cool true Title Mango Description Thumbnail URL'
     );
   });
 

@@ -65,6 +65,8 @@ module('Integration | search-index', function (hooks) {
         type: 'card',
         attributes: {
           title: null,
+          description: null,
+          thumbnailURL: null,
         },
         meta: {
           adoptsFrom: {
@@ -885,6 +887,8 @@ module('Integration | search-index', function (hooks) {
               title: 'Vet visit',
               contact: { firstName: 'Burcu' },
             },
+            description: 'Dog',
+            thumbnailURL: './jackie.jpg',
           },
           meta: { adoptsFrom: { module: `./pet-card`, name: 'PetCard' } },
           relationships: {
@@ -922,6 +926,8 @@ module('Integration | search-index', function (hooks) {
               title: 'Vet visit',
               contact: { firstName: 'Burcu' },
             },
+            description: 'Dog',
+            thumbnailURL: `./jackie.jpg`,
           },
           meta: {
             adoptsFrom: {
@@ -1034,6 +1040,8 @@ module('Integration | search-index', function (hooks) {
           attributes: {
             name: 'Acme Industries',
             title: 'Acme Industries',
+            description: 'Vendor',
+            thumbnailURL: null,
             paymentMethods: [
               {
                 type: 'crypto',
@@ -1092,6 +1100,8 @@ module('Integration | search-index', function (hooks) {
               name: 'Ethereum Mainnet',
               title: 'Ethereum Mainnet',
               chainId: 1,
+              description: `Chain 1`,
+              thumbnailURL: `Ethereum Mainnet-icon.png`,
             },
 
             meta: {
@@ -1116,6 +1126,8 @@ module('Integration | search-index', function (hooks) {
               name: 'Polygon',
               title: 'Polygon',
               chainId: 137,
+              description: `Chain 137`,
+              thumbnailURL: `Polygon-icon.png`,
             },
             meta: {
               adoptsFrom: {
@@ -1353,7 +1365,12 @@ module('Integration | search-index', function (hooks) {
         id: `${testRealmURL}PetPerson/hassan`,
         type: 'card',
         links: { self: `${testRealmURL}PetPerson/hassan` },
-        attributes: { firstName: 'Hassan', title: 'Hassan Pet Person' },
+        attributes: {
+          firstName: 'Hassan',
+          title: 'Hassan Pet Person',
+          description: 'A person with pets',
+          thumbnailURL: null,
+        },
         relationships: {
           friend: {
             links: {
@@ -1438,6 +1455,8 @@ module('Integration | search-index', function (hooks) {
         ],
         friend: null,
         title: 'Hassan Pet Person',
+        description: 'A person with pets',
+        thumbnailURL: null,
       });
     } else {
       assert.ok(
@@ -1476,7 +1495,12 @@ module('Integration | search-index', function (hooks) {
           id: `${testRealmURL}PetPerson/burcu`,
           type: 'card',
           links: { self: `${testRealmURL}PetPerson/burcu` },
-          attributes: { firstName: 'Burcu', title: 'Burcu Pet Person' },
+          attributes: {
+            firstName: 'Burcu',
+            title: 'Burcu Pet Person',
+            description: 'A person with pets',
+            thumbnailURL: null,
+          },
           relationships: {
             pets: { links: { self: null } },
             friend: { links: { self: null } },
@@ -1508,6 +1532,8 @@ module('Integration | search-index', function (hooks) {
         pets: [],
         friend: null,
         title: 'Burcu Pet Person',
+        description: 'A person with pets',
+        thumbnailURL: null,
       });
     } else {
       assert.ok(
@@ -1719,6 +1745,7 @@ module('Integration | search-index', function (hooks) {
           id: `${testRealmURL}Friend/hassan`,
           attributes: {
             firstName: 'Hassan',
+            description: 'Friend of dogs',
           },
           relationships: {
             friend: {
@@ -1740,6 +1767,7 @@ module('Integration | search-index', function (hooks) {
           id: `${testRealmURL}Friend/mango`,
           attributes: {
             firstName: 'Mango',
+            description: 'Dog friend',
           },
           relationships: {
             friend: {
@@ -1761,6 +1789,8 @@ module('Integration | search-index', function (hooks) {
           id: `${testRealmURL}Friend/vanGogh`,
           attributes: {
             firstName: 'Van Gogh',
+            description: 'Dog friend',
+            thumbnailURL: 'van-gogh.jpg',
           },
           relationships: {
             friend: {
@@ -1792,6 +1822,8 @@ module('Integration | search-index', function (hooks) {
         attributes: {
           firstName: 'Hassan',
           title: 'Hassan',
+          description: 'Friend of dogs',
+          thumbnailURL: null,
         },
         relationships: {
           friend: {
@@ -1824,15 +1856,21 @@ module('Integration | search-index', function (hooks) {
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
         title: 'Hassan',
+        description: 'Friend of dogs',
+        thumbnailURL: undefined,
         friend: {
           id: `${testRealmURL}Friend/mango`,
           firstName: 'Mango',
           title: 'Mango',
+          description: 'Dog friend',
+          thumbnailURL: undefined,
           friend: {
             id: `${testRealmURL}Friend/vanGogh`,
             firstName: 'Van Gogh',
             title: 'Van Gogh',
             friend: null,
+            description: 'Dog friend',
+            thumbnailURL: 'van-gogh.jpg',
           },
         },
       });
@@ -1851,6 +1889,7 @@ module('Integration | search-index', function (hooks) {
           id: `${testRealmURL}Friend/hassan`,
           attributes: {
             firstName: 'Hassan',
+            description: 'Dog owner',
           },
           relationships: {
             friend: {
@@ -1872,6 +1911,7 @@ module('Integration | search-index', function (hooks) {
           id: `${testRealmURL}Friend/mango`,
           attributes: {
             firstName: 'Mango',
+            description: 'Dog friend',
           },
           relationships: {
             friend: {
@@ -1904,6 +1944,8 @@ module('Integration | search-index', function (hooks) {
           attributes: {
             firstName: 'Hassan',
             title: 'Hassan',
+            description: 'Dog owner',
+            thumbnailURL: null,
           },
           relationships: {
             friend: {
@@ -1936,6 +1978,8 @@ module('Integration | search-index', function (hooks) {
             attributes: {
               firstName: 'Mango',
               title: 'Mango',
+              description: 'Dog friend',
+              thumbnailURL: null,
             },
             relationships: {
               friend: {
@@ -1974,6 +2018,8 @@ module('Integration | search-index', function (hooks) {
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
         title: 'Hassan',
+        description: 'Dog owner',
+        thumbnailURL: undefined,
         friend: {
           id: `${testRealmURL}Friend/mango`,
           firstName: 'Mango',
@@ -1981,6 +2027,8 @@ module('Integration | search-index', function (hooks) {
           friend: {
             id: `${testRealmURL}Friend/hassan`,
           },
+          description: 'Dog friend',
+          thumbnailURL: undefined,
         },
       });
     } else {
@@ -2002,6 +2050,8 @@ module('Integration | search-index', function (hooks) {
           attributes: {
             firstName: 'Mango',
             title: 'Mango',
+            description: 'Dog friend',
+            thumbnailURL: null,
           },
           relationships: {
             friend: {
@@ -2034,6 +2084,8 @@ module('Integration | search-index', function (hooks) {
             attributes: {
               firstName: 'Hassan',
               title: 'Hassan',
+              description: 'Dog owner',
+              thumbnailURL: null,
             },
             relationships: {
               friend: {
@@ -2072,12 +2124,15 @@ module('Integration | search-index', function (hooks) {
         id: `${testRealmURL}Friend/mango`,
         firstName: 'Mango',
         title: 'Mango',
+        description: 'Dog friend',
+        thumbnailURL: undefined,
         friend: {
           id: `${testRealmURL}Friend/hassan`,
           firstName: 'Hassan',
           friend: {
             id: `${testRealmURL}Friend/mango`,
           },
+          description: 'Dog owner',
         },
       });
     } else {
@@ -2140,7 +2195,12 @@ module('Integration | search-index', function (hooks) {
           id: hassanID,
           type: 'card',
           links: { self: hassanID },
-          attributes: { firstName: 'Hassan', title: 'Hassan' },
+          attributes: {
+            firstName: 'Hassan',
+            title: 'Hassan',
+            description: null,
+            thumbnailURL: null,
+          },
           relationships: {
             'friends.0': {
               links: { self: './mango' },
@@ -2168,7 +2228,12 @@ module('Integration | search-index', function (hooks) {
             id: mangoID,
             type: 'card',
             links: { self: mangoID },
-            attributes: { firstName: 'Mango', title: 'Mango' },
+            attributes: {
+              firstName: 'Mango',
+              title: 'Mango',
+              description: null,
+              thumbnailURL: null,
+            },
             relationships: {
               'friends.0': {
                 links: { self: './hassan' },
@@ -2189,6 +2254,8 @@ module('Integration | search-index', function (hooks) {
             attributes: {
               firstName: 'Van Gogh',
               title: 'Van Gogh',
+              description: null,
+              thumbnailURL: null,
             },
             relationships: {
               'friends.0': {
@@ -2218,12 +2285,16 @@ module('Integration | search-index', function (hooks) {
           id: hassanID,
           firstName: 'Hassan',
           title: 'Hassan',
+          description: undefined,
+          thumbnailURL: undefined,
           friends: [
             {
               id: mangoID,
               firstName: 'Mango',
               title: 'Mango',
               friends: [{ id: hassanID }],
+              description: undefined,
+              thumbnailURL: undefined,
             },
             {
               id: vanGoghID,
@@ -2249,6 +2320,8 @@ module('Integration | search-index', function (hooks) {
           attributes: {
             firstName: 'Mango',
             title: 'Mango',
+            description: null,
+            thumbnailURL: null,
           },
           relationships: {
             'friends.0': {
@@ -2275,6 +2348,8 @@ module('Integration | search-index', function (hooks) {
             attributes: {
               firstName: 'Hassan',
               title: 'Hassan',
+              description: null,
+              thumbnailURL: null,
             },
             relationships: {
               'friends.0': {
@@ -2300,6 +2375,8 @@ module('Integration | search-index', function (hooks) {
             attributes: {
               firstName: 'Van Gogh',
               title: 'Van Gogh',
+              description: null,
+              thumbnailURL: null,
             },
             relationships: {
               'friends.0': {
@@ -2329,6 +2406,8 @@ module('Integration | search-index', function (hooks) {
           id: mangoID,
           firstName: 'Mango',
           title: 'Mango',
+          description: undefined,
+          thumbnailURL: undefined,
           friends: [
             {
               id: hassanID,
@@ -2361,6 +2440,8 @@ module('Integration | search-index', function (hooks) {
           attributes: {
             firstName: 'Van Gogh',
             title: 'Van Gogh',
+            description: null,
+            thumbnailURL: null,
           },
           relationships: {
             'friends.0': {
@@ -2387,6 +2468,8 @@ module('Integration | search-index', function (hooks) {
             attributes: {
               firstName: 'Hassan',
               title: 'Hassan',
+              description: null,
+              thumbnailURL: null,
             },
             relationships: {
               'friends.0': {
@@ -2412,6 +2495,8 @@ module('Integration | search-index', function (hooks) {
             attributes: {
               firstName: 'Mango',
               title: 'Mango',
+              description: null,
+              thumbnailURL: null,
             },
             relationships: {
               'friends.0': {
@@ -2441,17 +2526,23 @@ module('Integration | search-index', function (hooks) {
           id: vanGoghID,
           firstName: 'Van Gogh',
           title: 'Van Gogh',
+          description: undefined,
+          thumbnailURL: undefined,
           friends: [
             {
               id: hassanID,
               firstName: 'Hassan',
               title: 'Hassan',
+              description: undefined,
+              thumbnailURL: undefined,
               friends: [
                 {
                   id: mangoID,
                   firstName: 'Mango',
                   title: 'Mango',
                   friends: [{ id: hassanID }],
+                  description: undefined,
+                  thumbnailURL: undefined,
                 },
                 { id: vanGoghID },
               ],
@@ -2494,6 +2585,7 @@ module('Integration | search-index', function (hooks) {
       [
         '@cardstack/boxel-ui',
         '@cardstack/boxel-ui/helpers/pick',
+        '@cardstack/boxel-ui/helpers/svg-jar',
         '@cardstack/boxel-ui/helpers/truth-helpers',
         '@cardstack/runtime-common',
         '@ember/component',

@@ -59,6 +59,8 @@ module('Integration | file-tree', function (hooks) {
               return this.nickName;
             },
           });
+          @field description = contains(StringCard, { computeVia: () => 'Person' });
+          @field thumbnailURL = contains(StringCard, { computeVia: () => null });
           static isolated = class Isolated extends Component<typeof this> {
             <template><h1><@fields.firstName/></h1></template>
           }

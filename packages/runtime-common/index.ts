@@ -92,6 +92,7 @@ export {
   isSingleCardDocument,
 } from './card-document';
 export { sanitizeHtml } from './dompurify';
+export { getPlural } from './pluralize';
 
 import type {
   Card,
@@ -103,16 +104,22 @@ export const maxLinkDepth = 5;
 export const assetsDir = '__boxel/';
 export const boxelUIAssetsDir = '@cardstack/boxel-ui/';
 
+export type CreateNewCard = (
+  ref: CardRef,
+  relativeTo: URL | undefined,
+  opts?: { isLinkedCard?: boolean; doc?: LooseSingleCardDocument }
+) => Promise<Card | undefined>;
+
 export interface CardChooser {
   chooseCard<T extends CardBase>(
     query: Query,
-    opts?: { offerToCreate?: CardRef; multiSelect?: boolean }
+    opts?: { offerToCreate?: CardRef; multiSelect?: boolean, createNewCard?: CreateNewCard }
   ): Promise<undefined | T>;
 }
 
 export async function chooseCard<T extends Card>(
   query: Query,
-  opts?: { offerToCreate?: CardRef; multiSelect?: boolean }
+  opts?: { offerToCreate?: CardRef; multiSelect?: boolean, createNewCard?: CreateNewCard }
 ): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CARD_CHOOSER) {

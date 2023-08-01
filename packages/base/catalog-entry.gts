@@ -54,6 +54,7 @@ export class CatalogEntry extends Card {
       return this[realmInfo]?.name;
     },
   });
+  @field thumbnailURL = contains(StringCard, { computeVia: () => null }); // remove this if we want card type entries to have images
 
   get showDemo() {
     return !this.isPrimitive;

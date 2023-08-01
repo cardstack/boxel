@@ -166,6 +166,8 @@ module('Integration | serialization', function (hooks) {
           return this.firstName;
         },
       });
+      @field description = contains(StringCard, { computeVia: () => 'Person' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     await shimModule(`${realmURL}test-cards`, { Person }, loader);
 
@@ -430,12 +432,12 @@ module('Integration | serialization', function (hooks) {
     let { default: StringCard } = string;
 
     class Toy extends Card {
-      @field description = contains(StringCard);
       @field title = contains(StringCard, {
         computeVia: function (this: Toy) {
           return this.description;
         },
       });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     class Pet extends Card {
       @field firstName = contains(StringCard);
@@ -445,6 +447,8 @@ module('Integration | serialization', function (hooks) {
           return this.firstName;
         },
       });
+      @field description = contains(StringCard, { computeVia: () => 'Pet' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     class Person extends Card {
       @field firstName = contains(StringCard);
@@ -454,6 +458,8 @@ module('Integration | serialization', function (hooks) {
           return this.firstName;
         },
       });
+      @field description = contains(StringCard, { computeVia: () => 'Person' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy }, loader);
 
@@ -703,6 +709,8 @@ module('Integration | serialization', function (hooks) {
           return this.firstName;
         },
       });
+      @field description = contains(StringCard, { computeVia: () => 'Pet' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     class Person extends Card {
       @field firstName = contains(StringCard);
@@ -712,6 +720,8 @@ module('Integration | serialization', function (hooks) {
           return this.firstName;
         },
       });
+      @field description = contains(StringCard, { computeVia: () => 'Person' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
     let doc: LooseSingleCardDocument = {
@@ -813,6 +823,8 @@ module('Integration | serialization', function (hooks) {
           return this.firstName;
         },
       });
+      @field description = contains(StringCard, { computeVia: () => 'Person' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
 
@@ -1052,6 +1064,8 @@ module('Integration | serialization', function (hooks) {
           return this.firstName;
         },
       });
+      @field description = contains(StringCard, { computeVia: () => 'Person' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     await shimModule(`${realmURL}test-cards`, { Person }, loader);
 
@@ -1221,12 +1235,12 @@ module('Integration | serialization', function (hooks) {
     let { default: StringCard } = string;
 
     class Toy extends Card {
-      @field description = contains(StringCard);
       @field title = contains(StringCard, {
         computeVia: function (this: Toy) {
           return this.description;
         },
       });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     class Pet extends Card {
       @field firstName = contains(StringCard);
@@ -1236,6 +1250,8 @@ module('Integration | serialization', function (hooks) {
           return this.firstName;
         },
       });
+      @field description = contains(StringCard, { computeVia: () => 'Pet' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     class Person extends Card {
       @field firstName = contains(StringCard);
@@ -1245,6 +1261,8 @@ module('Integration | serialization', function (hooks) {
           return this.firstName;
         },
       });
+      @field description = contains(StringCard, { computeVia: () => 'Person' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy }, loader);
 
@@ -1356,6 +1374,7 @@ module('Integration | serialization', function (hooks) {
           return this.description;
         },
       });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     class Pet extends Card {
       @field firstName = contains(StringCard);
@@ -1365,6 +1384,8 @@ module('Integration | serialization', function (hooks) {
           return this.firstName;
         },
       });
+      @field description = contains(StringCard, { computeVia: () => 'Pet' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     class Person extends Card {
       @field firstName = contains(StringCard);
@@ -1374,6 +1395,8 @@ module('Integration | serialization', function (hooks) {
           return this.firstName;
         },
       });
+      @field description = contains(StringCard, { computeVia: () => 'Person' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy }, loader);
 
@@ -1718,7 +1741,11 @@ module('Integration | serialization', function (hooks) {
         firstName: 'Mango',
         birthdate: p('2019-10-30'),
         lastLogin: parseISO('2022-04-27T16:30+00:00'),
+        description: 'Author',
+        thumbnailURL: './mango.png',
       }),
+      description: 'Post by Mango',
+      thumbnailURL: './post.jpg',
     });
 
     let serialized = serializeCard(firstPost, {
@@ -1729,7 +1756,11 @@ module('Integration | serialization', function (hooks) {
         birthdate: '2019-10-30',
         firstName: 'Mango',
         lastLogin: '2022-04-27T16:30:00.000Z',
+        description: 'Author',
+        thumbnailURL: './mango.png',
       },
+      description: 'Post by Mango',
+      thumbnailURL: './post.jpg',
     });
     // this means the field card for the value is the same as the field's card
     assert.deepEqual(serialized.data.meta.fields, undefined);
@@ -1798,6 +1829,8 @@ module('Integration | serialization', function (hooks) {
           return this.firstName;
         },
       });
+      @field description = contains(StringCard, { computeVia: () => 'Person' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <@fields.firstName />
@@ -1809,6 +1842,8 @@ module('Integration | serialization', function (hooks) {
       @field title = contains(StringCard);
       @field reviews = contains(NumberCard);
       @field author = contains(Person);
+      @field description = contains(StringCard, { computeVia: () => 'Post' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
       static edit = class Edit extends Component<typeof this> {
         <template>
           <fieldset>
@@ -1890,6 +1925,10 @@ module('Integration | serialization', function (hooks) {
       let { default: StringCard } = string;
       class Pet extends Card {
         @field name = contains(StringCard);
+        @field description = contains(StringCard, { computeVia: () => 'Pet' });
+        @field thumbnailURL = contains(StringCard, {
+          computeVia: () => '../pet.svg',
+        });
       }
       class Person extends Card {
         @field firstName = contains(StringCard);
@@ -1899,6 +1938,12 @@ module('Integration | serialization', function (hooks) {
           computeVia: function (this: Person) {
             return this.friend?.pet;
           },
+        });
+        @field description = contains(StringCard, {
+          computeVia: () => 'Person',
+        });
+        @field thumbnailURL = contains(StringCard, {
+          computeVia: () => '../../person.svg',
         });
       }
       await shimModule(`${realmURL}test-cards`, { Pet, Person }, loader);
@@ -1913,7 +1958,12 @@ module('Integration | serialization', function (hooks) {
       });
       assert.deepEqual(serialized.data, {
         type: 'card',
-        attributes: { firstName: 'Burcu', title: null },
+        attributes: {
+          firstName: 'Burcu',
+          title: null,
+          description: 'Person',
+          thumbnailURL: '../../person.svg',
+        },
         relationships: {
           pet: { links: { self: null } },
           friend: {
@@ -1934,7 +1984,12 @@ module('Integration | serialization', function (hooks) {
         {
           id: `${realmURL}Pet/mango`,
           type: 'card',
-          attributes: { name: 'Mango', title: null },
+          attributes: {
+            name: 'Mango',
+            title: null,
+            description: 'Pet',
+            thumbnailURL: '../pet.svg',
+          },
           meta: {
             adoptsFrom: { module: `${realmURL}test-cards`, name: 'Pet' },
           },
@@ -1942,7 +1997,12 @@ module('Integration | serialization', function (hooks) {
         {
           id: `${realmURL}Person/hassan`,
           type: 'card',
-          attributes: { firstName: 'Hassan', title: null },
+          attributes: {
+            firstName: 'Hassan',
+            title: null,
+            description: 'Person',
+            thumbnailURL: '../../person.svg',
+          },
           relationships: {
             pet: {
               links: { self: `${realmURL}Pet/mango` },
@@ -2092,7 +2152,12 @@ module('Integration | serialization', function (hooks) {
       assert.deepEqual(serialized, {
         data: {
           type: 'card',
-          attributes: { firstName: 'Burcu', title: null },
+          attributes: {
+            firstName: 'Burcu',
+            title: null,
+            description: null,
+            thumbnailURL: null,
+          },
           relationships: {
             pet: { links: { self: null } },
             friend: { links: { self: null } },
@@ -2365,9 +2430,14 @@ module('Integration | serialization', function (hooks) {
       @field date = contains(DateCard);
       @field location = contains(StringCard);
       @field title = contains(StringCard);
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     class Schedule extends Card {
       @field appointments = containsMany(Appointment);
+      @field description = contains(StringCard, {
+        computeVia: () => 'Schedule',
+      });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     await shimModule(
       `${realmURL}test-cards`,
@@ -2381,11 +2451,13 @@ module('Integration | serialization', function (hooks) {
           date: p('2022-4-1'),
           location: 'Room 332',
           title: 'Biology',
+          description: 'Class',
         }),
         new Appointment({
           date: p('2022-4-4'),
           location: 'Room 102',
           title: 'Civics',
+          description: 'Class',
         }),
       ],
     });
@@ -2398,11 +2470,13 @@ module('Integration | serialization', function (hooks) {
         date: '2022-04-01',
         location: 'Room 332',
         title: 'Biology',
+        description: 'Class',
       },
       {
         date: '2022-04-04',
         location: 'Room 102',
         title: 'Civics',
+        description: 'Class',
       },
     ]);
     assert.deepEqual(serialized.data.meta?.fields?.appointments, undefined); // this means the field card for the value is the same as the field's card
@@ -2424,6 +2498,8 @@ module('Integration | serialization', function (hooks) {
       title: 'First Post',
       created: p('2022-04-22'),
       published: parseISO('2022-04-27T16:30+00:00'),
+      description: 'Introductory post',
+      thumbnailURL: './intro.png',
     });
     await recompute(firstPost);
     let payload = serializeCard(firstPost, { includeUnrenderedFields: true });
@@ -2436,6 +2512,8 @@ module('Integration | serialization', function (hooks) {
             title: 'First Post',
             created: '2022-04-22',
             published: '2022-04-27T16:30:00.000Z',
+            description: 'Introductory post',
+            thumbnailURL: './intro.png',
           },
           meta: {
             adoptsFrom: {
@@ -2455,14 +2533,19 @@ module('Integration | serialization', function (hooks) {
     let { default: DateCard } = date;
     class Animal extends Card {
       @field species = contains(StringCard);
+      @field description = contains(StringCard, { computeVia: () => 'Animal' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     class Person extends Animal {
       @field firstName = contains(StringCard);
       @field birthdate = contains(DateCard);
+      @field description = contains(StringCard);
     }
     class Post extends Card {
       @field title = contains(StringCard);
       @field author = contains(Person);
+      @field description = contains(StringCard, { computeVia: () => 'Post' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     await shimModule(`${realmURL}test-cards`, { Post, Person, Animal }, loader);
 
@@ -2472,6 +2555,7 @@ module('Integration | serialization', function (hooks) {
         firstName: 'Mango',
         birthdate: p('2019-10-30'),
         species: 'canis familiaris',
+        description: 'A dog',
       }),
     });
     let payload = serializeCard(firstPost, { includeUnrenderedFields: true });
@@ -2484,6 +2568,7 @@ module('Integration | serialization', function (hooks) {
             firstName: 'Mango',
             birthdate: '2019-10-30',
             species: 'canis familiaris',
+            description: 'A dog',
           },
         },
         meta: {
@@ -2505,6 +2590,8 @@ module('Integration | serialization', function (hooks) {
     class Person extends Card {
       @field firstName = contains(StringCard);
       @field birthdate = contains(DateCard);
+      @field description = contains(StringCard, { computeVia: () => 'Person' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
 
     class Employee extends Person {
@@ -2514,6 +2601,8 @@ module('Integration | serialization', function (hooks) {
     class Post extends Card {
       @field title = contains(StringCard);
       @field author = contains(Person);
+      @field description = contains(StringCard, { computeVia: () => 'Post' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
 
     await shimModule(
@@ -2584,6 +2673,8 @@ module('Integration | serialization', function (hooks) {
       @field firstName = contains(StringCard);
       @field birthdate = contains(DateCard);
       @field loves = contains(Card);
+      @field description = contains(StringCard, { computeVia: () => 'Person' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
 
     class Pet extends Card {
@@ -2597,6 +2688,8 @@ module('Integration | serialization', function (hooks) {
     class Post extends Card {
       @field title = contains(StringCard);
       @field author = contains(Person);
+      @field description = contains(StringCard, { computeVia: () => 'Post' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
 
     await shimModule(
@@ -2698,6 +2791,8 @@ module('Integration | serialization', function (hooks) {
           return this.firstName;
         },
       });
+      @field description = contains(StringCard, { computeVia: () => 'Person' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
 
     class Employee extends Person {
@@ -2720,6 +2815,10 @@ module('Integration | serialization', function (hooks) {
           return 'Group';
         },
       });
+      @field description = contains(StringCard, {
+        computeVia: () => 'A group of people',
+      });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
 
     await shimModule(
@@ -2831,6 +2930,8 @@ module('Integration | serialization', function (hooks) {
           return this.firstName;
         },
       });
+      @field description = contains(StringCard, { computeVia: () => 'Person' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
 
     class Role extends Card {
@@ -2840,6 +2941,8 @@ module('Integration | serialization', function (hooks) {
           return this.roleName;
         },
       });
+      @field description = contains(StringCard, { computeVia: () => 'Role' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
 
     class DogWalker extends Role {
@@ -2852,11 +2955,11 @@ module('Integration | serialization', function (hooks) {
 
     class Group extends Card {
       @field people = containsMany(Person);
-      @field title = contains(StringCard, {
-        computeVia: function (this: Group) {
-          return 'Group';
-        },
+      @field title = contains(StringCard, { computeVia: () => 'Group' });
+      @field description = contains(StringCard, {
+        computeVia: () => 'A group of people',
       });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
 
     await shimModule(
@@ -3067,6 +3170,8 @@ module('Integration | serialization', function (hooks) {
           return this.firstName;
         },
       });
+      @field description = contains(StringCard, { computeVia: () => 'Person' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     await shimModule(`${realmURL}person`, { Person }, loader);
 
@@ -3118,10 +3223,14 @@ module('Integration | serialization', function (hooks) {
 
     class Person extends Card {
       @field firstName = contains(StringCard);
+      @field description = contains(StringCard, { computeVia: () => 'Person' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     class Post extends Card {
       @field title = contains(StringCard);
       @field author = contains(Person);
+      @field description = contains(StringCard, { computeVia: () => 'Post' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
 
     await shimModule(`${realmURL}person`, { Person }, loader);
@@ -3193,18 +3302,24 @@ module('Integration | serialization', function (hooks) {
           return this.firstName;
         },
       });
+      @field description = contains(StringCard, {
+        computeVia: () => 'A person',
+      });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     class Post extends Card {
       @field title = contains(StringCard);
       @field author = contains(Person);
+      @field description = contains(StringCard, { computeVia: () => 'A post' });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     class Blog extends Card {
       @field posts = containsMany(Post);
-      @field _metadata = contains(StringCard, {
-        computeVia: function (this: Blog) {
-          return 'Blog';
-        },
+      @field _metadata = contains(StringCard, { computeVia: () => 'Blog' });
+      @field description = contains(StringCard, {
+        computeVia: () => 'A blog post',
       });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     await shimModule(`${realmURL}person`, { Person }, loader);
     await shimModule(`${realmURL}post`, { Post }, loader);
@@ -3299,11 +3414,11 @@ module('Integration | serialization', function (hooks) {
           );
         },
       });
-      @field title = contains(StringCard, {
-        computeVia: function (this: Person) {
-          return 'Person';
-        },
+      @field title = contains(StringCard, { computeVia: () => 'Person' });
+      @field description = contains(StringCard, {
+        computeVia: () => 'A person with birthdate',
       });
+      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
     }
     await shimModule(`${realmURL}test-cards`, { Person }, loader);
 
@@ -3338,6 +3453,8 @@ module('Integration | serialization', function (hooks) {
           birthdate: '2019-10-30',
           firstBirthday: '2020-10-30',
           title: 'Person',
+          description: 'A person with birthdate',
+          thumbnailURL: null,
         },
         meta: {
           adoptsFrom: {
@@ -3689,6 +3806,12 @@ module('Integration | serialization', function (hooks) {
             return this.firstName;
           },
         });
+        @field description = contains(StringCard, {
+          computeVia: () => 'Person',
+        });
+        @field thumbnailURL = contains(StringCard, {
+          computeVia: () => 'person.svg',
+        });
       }
       await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
 
@@ -3792,6 +3915,10 @@ module('Integration | serialization', function (hooks) {
             return this.firstName;
           },
         });
+        @field description = contains(StringCard, { computeVia: () => 'Pet' });
+        @field thumbnailURL = contains(StringCard, {
+          computeVia: () => 'pet.svg',
+        });
       }
       class Person extends Card {
         @field firstName = contains(StringCard);
@@ -3800,6 +3927,12 @@ module('Integration | serialization', function (hooks) {
           computeVia: function (this: Person) {
             return this.firstName;
           },
+        });
+        @field description = contains(StringCard, {
+          computeVia: () => 'Person',
+        });
+        @field thumbnailURL = contains(StringCard, {
+          computeVia: () => 'person.svg',
         });
       }
       await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
@@ -3923,6 +4056,12 @@ module('Integration | serialization', function (hooks) {
           computeVia: function (this: Person) {
             return this.firstName;
           },
+        });
+        @field description = contains(StringCard, {
+          computeVia: () => 'Person',
+        });
+        @field thumbnailURL = contains(StringCard, {
+          computeVia: () => 'person.svg',
         });
       }
       await shimModule(`${realmURL}test-cards`, { Person }, loader);
@@ -4116,7 +4255,12 @@ module('Integration | serialization', function (hooks) {
       });
       assert.deepEqual(serialized.data, {
         type: 'card',
-        attributes: { firstName: 'Burcu', title: null },
+        attributes: {
+          firstName: 'Burcu',
+          title: null,
+          description: null,
+          thumbnailURL: null,
+        },
         relationships: {
           friend: {
             links: { self: `${realmURL}Friend/hassan` },
@@ -4140,7 +4284,12 @@ module('Integration | serialization', function (hooks) {
         {
           id: `${realmURL}Pet/mango`,
           type: 'card',
-          attributes: { name: 'Mango', title: null },
+          attributes: {
+            name: 'Mango',
+            title: null,
+            description: null,
+            thumbnailURL: null,
+          },
           meta: {
             adoptsFrom: { module: `${realmURL}test-cards`, name: 'Pet' },
           },
@@ -4148,7 +4297,12 @@ module('Integration | serialization', function (hooks) {
         {
           id: `${realmURL}Pet/van-gogh`,
           type: 'card',
-          attributes: { name: 'Van Gogh', title: null },
+          attributes: {
+            name: 'Van Gogh',
+            title: null,
+            description: null,
+            thumbnailURL: null,
+          },
           meta: {
             adoptsFrom: { module: `${realmURL}test-cards`, name: 'Pet' },
           },
@@ -4156,7 +4310,12 @@ module('Integration | serialization', function (hooks) {
         {
           id: `${realmURL}Friend/hassan`,
           type: 'card',
-          attributes: { firstName: 'Hassan', title: null },
+          attributes: {
+            firstName: 'Hassan',
+            title: null,
+            description: null,
+            thumbnailURL: null,
+          },
           relationships: {
             'pets.0': {
               links: { self: `${realmURL}Pet/mango` },
@@ -4331,7 +4490,12 @@ module('Integration | serialization', function (hooks) {
       assert.deepEqual(serialized, {
         data: {
           type: 'card',
-          attributes: { firstName: 'Burcu', title: null },
+          attributes: {
+            firstName: 'Burcu',
+            title: null,
+            description: null,
+            thumbnailURL: null,
+          },
           relationships: {
             friend: { links: { self: null } },
             friendPets: { links: { self: null } },

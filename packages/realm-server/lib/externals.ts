@@ -92,7 +92,7 @@ export function shimExternals(loader: Loader) {
   });
   loader.shimModule('lodash', lodash);
   loader.shimModule('date-fns', dateFns);
-  loader.shimModule('ember-resources/core', { Resource: class {} });
+  loader.shimModule('ember-resources', { Resource: class {} });
   loader.shimModule('@ember/destroyable', {});
   loader.shimModule('marked', { marked: () => {} });
   loader.shimModule('ethers', ethers);

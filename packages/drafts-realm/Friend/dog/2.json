@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "firstName": "Mango",
-      "thumbnailURL": "../logo.png"
+      "firstName": "Dog in a Cup",
+      "thumbnailURL": "https://images.pexels.com/photos/39317/chihuahua-dog-puppy-cute-39317.jpeg"
     },
     "relationships": {
       "friend": {
@@ -14,7 +14,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../friend",
+        "module": "../../friend",
         "name": "Friend"
       }
     }

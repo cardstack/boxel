@@ -25,7 +25,6 @@ import * as flat from 'flat';
 import * as lodash from 'lodash';
 import * as tracked from 'tracked-built-ins';
 import * as dateFns from 'date-fns';
-import * as emberResourcesCore from 'ember-resources/core';
 import * as emberDestroyable from '@ember/destroyable';
 import * as marked from 'marked';
 import * as ethers from 'ethers';
@@ -63,7 +62,6 @@ export function shimExternals(loader: Loader) {
   loader.shimModule('lodash', lodash);
   loader.shimModule('tracked-built-ins', tracked);
   loader.shimModule('date-fns', dateFns);
-  loader.shimModule('ember-resources/core', emberResourcesCore);
   loader.shimModule('@ember/destroyable', emberDestroyable);
   loader.shimModule('marked', marked);
   loader.shimModule('ethers', ethers);
