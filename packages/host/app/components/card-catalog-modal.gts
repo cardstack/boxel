@@ -20,7 +20,7 @@ import {
 } from '../utils/text-suggestion';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { getSearchResults, Search } from '../resources/search';
-import Preview from './preview';
+import CardCatalogItem from './card-catalog-item';
 import {
   Modal,
   CardContainer,
@@ -29,6 +29,8 @@ import {
   IconButton,
   BoxelInputValidationState,
 } from '@cardstack/boxel-ui';
+// @ts-ignore no types
+import cssUrl from 'ember-css-url';
 import { and, eq, gt, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import cn from '@cardstack/boxel-ui/helpers/cn';
@@ -53,8 +55,8 @@ const DEFAULT_CHOOOSE_CARD_TITLE = 'Choose a Card';
 
 export default class CardCatalogModal extends Component<Signature> {
   <template>
-    {{!-- @glint-ignore Argument of type boolean 
-          is not assignable to currentRequest's params. --}}
+    {{! @glint-ignore Argument of type boolean
+          is not assignable to currentRequest's params. }}
     {{#if (and this.currentRequest (not this.dismissModal))}}
       <Modal
         @size='large'
@@ -115,11 +117,15 @@ export default class CardCatalogModal extends Component<Signature> {
                 {{#each this.cardsByRealm as |realm|}}
                   <section data-test-realm={{realm.name}}>
                     <header class='realm-info'>
-                      <img
-                        src={{realm.iconURL}}
-                        class='realm-icon'
-                        alt=''
-                        role='presentation'
+                      <div
+                        style={{if
+                          realm.iconURL
+                          (cssUrl 'background-image' realm.iconURL)
+                        }}
+                        class={{cn
+                          'realm-icon'
+                          realm-icon--empty=(not realm.iconURL)
+                        }}
                       />
                       <span
                         class='realm-name'
@@ -144,9 +150,11 @@ export default class CardCatalogModal extends Component<Signature> {
                             }}
                             data-test-card-catalog-item={{card.id}}
                           >
-                            <Preview
-                              @card={{card}}
-                              @format='embedded'
+                            <CardCatalogItem
+                              @isSelected={{eq this.selectedCard.id card.id}}
+                              @title={{card.title}}
+                              @description={{card.description}}
+                              @thumbnailURL={{card.thumbnailURL}}
                               @context={{@context}}
                             />
                             <button
@@ -173,12 +181,14 @@ export default class CardCatalogModal extends Component<Signature> {
               </div>
             {{/if}}
           </div>
-          <footer class={{cn 
-            'dialog-box__footer footer' 
-            (if this.currentRequest.opts.offerToCreate 'with-create-button')
-          }}>
+          <footer
+            class={{cn
+              'dialog-box__footer footer'
+              (if this.currentRequest.opts.offerToCreate 'with-create-button')
+            }}
+          >
             {{#if this.currentRequest.opts.offerToCreate}}
-              <Button 
+              <Button
                 @kind='secondary-light'
                 @size='tall'
                 class='create-new-button'
@@ -194,7 +204,8 @@ export default class CardCatalogModal extends Component<Signature> {
                   height='20'
                   role='presentation'
                 }}
-                Create New {{this.cardRefName}}
+                Create New
+                {{this.cardRefName}}
               </Button>
             {{/if}}
             <div>
@@ -330,13 +341,20 @@ export default class CardCatalogModal extends Component<Signature> {
       }
 
       .realm-info {
+        --realm-icon-size: 1.25rem;
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xs);
       }
       .realm-icon {
-        width: 1.25rem;
-        height: 1.25rem;
+        width: var(--realm-icon-size);
+        height: var(--realm-icon-size);
+        background-size: contain;
+        background-position: center;
+      }
+      .realm-icon--empty {
+        border: 1px solid var(--boxel-dark);
+        border-radius: 100px;
       }
       .realm-name {
         display: inline-block;
@@ -362,15 +380,6 @@ export default class CardCatalogModal extends Component<Signature> {
 
       .item {
         position: relative;
-      }
-
-      .item > :deep(.boxel-card-container) {
-        display: flex;
-        align-items: center;
-        height: 100%;
-      }
-      .item.selected > :deep(.boxel-card-container) {
-        box-shadow: 0 0 0 2px var(--boxel-highlight);
       }
 
       .select {
@@ -452,7 +461,10 @@ export default class CardCatalogModal extends Component<Signature> {
         } else {
           realm = {
             name: instance.realmInfo.name,
-            iconURL: instance.realmInfo.iconURL,
+            iconURL: instance.realmInfo.iconURL
+              ? new URL(instance.realmInfo.iconURL, this.cardService.defaultURL)
+                  .href
+              : null,
             cards: [instance.card],
           };
           realmCards.push(realm);

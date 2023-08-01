@@ -18,6 +18,12 @@ export class Booking extends Card {
   @field hosts = containsMany(Person);
   @field sponsors = containsMany(StringCard);
   @field posts = containsMany(Post);
+  @field description = contains(StringCard, {
+    computeVia: function (this: Booking) {
+      return this.venue;
+    },
+  });
+  @field thumbnailURL = contains(StringCard, { computeVia: () => null });
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>

@@ -2,8 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "firstName": "Mango",
-      "thumbnailURL": "../logo.png"
+      "firstName": "Mango Mango",
+      "thumbnailURL": "./logo.png"
     },
     "relationships": {
       "friend": {
@@ -14,7 +14,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../friend",
+        "module": "./friend",
         "name": "Friend"
       }
     }

@@ -119,6 +119,8 @@ module('Integration | realm', function (hooks) {
         id: `${testRealmURL}dir/empty`,
         attributes: {
           title: null,
+          description: null,
+          thumbnailURL: null,
         },
         meta: {
           adoptsFrom: {
@@ -889,6 +891,8 @@ module('Integration | realm', function (hooks) {
           ],
           sponsors: ['Burton'],
           posts: [],
+          description: 'Gore Mountain',
+          thumbnailURL: null,
         },
         meta: {
           adoptsFrom: {
@@ -1025,7 +1029,12 @@ module('Integration | realm', function (hooks) {
         type: 'card',
         id: `${testRealmURL}jackie`,
         links: { self: `${testRealmURL}jackie` },
-        attributes: { firstName: 'Jackie', title: 'Jackie Pet Person' },
+        attributes: {
+          firstName: 'Jackie',
+          title: 'Jackie Pet Person',
+          description: 'A person with pets',
+          thumbnailURL: null,
+        },
         relationships: {
           'pets.0': {
             links: { self: `./dir/van-gogh` },
@@ -1208,7 +1217,12 @@ module('Integration | realm', function (hooks) {
       type: 'card',
       id: `${testRealmURL}jackie`,
       links: { self: `${testRealmURL}jackie` },
-      attributes: { firstName: 'Jackie', title: 'Jackie Pet Person' },
+      attributes: {
+        firstName: 'Jackie',
+        title: 'Jackie Pet Person',
+        description: 'A person with pets',
+        thumbnailURL: null,
+      },
       relationships: {
         'pets.0': {
           links: { self: `./dir/mango` },
@@ -1323,7 +1337,12 @@ module('Integration | realm', function (hooks) {
       type: 'card',
       id: `${testRealmURL}jackie`,
       links: { self: `${testRealmURL}jackie` },
-      attributes: { firstName: 'Jackie', title: 'Jackie Pet Person' },
+      attributes: {
+        firstName: 'Jackie',
+        title: 'Jackie Pet Person',
+        description: 'A person with pets',
+        thumbnailURL: null,
+      },
       relationships: {
         'pets.0': {
           links: { self: `./dir/mango` },
@@ -1424,7 +1443,12 @@ module('Integration | realm', function (hooks) {
       type: 'card',
       id: `${testRealmURL}jackie`,
       links: { self: `${testRealmURL}jackie` },
-      attributes: { firstName: 'Jackie', title: 'Jackie Pet Person' },
+      attributes: {
+        firstName: 'Jackie',
+        title: 'Jackie Pet Person',
+        description: 'A person with pets',
+        thumbnailURL: null,
+      },
       relationships: {
         pets: { links: { self: null } },
         friend: { links: { self: null } },
@@ -1534,7 +1558,12 @@ module('Integration | realm', function (hooks) {
       type: 'card',
       id: `${testRealmURL}jackie`,
       links: { self: `${testRealmURL}jackie` },
-      attributes: { firstName: 'Jackie', title: 'Jackie Pet Person' },
+      attributes: {
+        firstName: 'Jackie',
+        title: 'Jackie Pet Person',
+        description: 'A person with pets',
+        thumbnailURL: null,
+      },
       relationships: {
         'pets.0': {
           links: { self: `./dir/van-gogh` },
@@ -1665,7 +1694,12 @@ module('Integration | realm', function (hooks) {
       type: 'card',
       id: `${testRealmURL}jackie`,
       links: { self: `${testRealmURL}jackie` },
-      attributes: { firstName: 'Jackie', title: 'Jackie Pet Person' },
+      attributes: {
+        firstName: 'Jackie',
+        title: 'Jackie Pet Person',
+        description: 'A person with pets',
+        thumbnailURL: null,
+      },
       relationships: {
         pets: {
           links: { self: null },

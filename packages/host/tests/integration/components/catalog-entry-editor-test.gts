@@ -44,6 +44,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
               return this.firstName;
             },
           });
+          @field description = contains(StringCard, { computeVia: () => 'Person' });
+          @field thumbnailURL = contains(StringCard, { computeVia: () => './person.svg' });
           static embedded = class Embedded extends Component<typeof this> {
             <template><@fields.firstName/></template>
           }
@@ -65,7 +67,6 @@ module('Integration | catalog-entry-editor', function (hooks) {
               return this.name;
             },
           });
-
           static embedded = class Embedded extends Component<typeof this> {
             <template>
               <h2 data-test-pet-name><@fields.name/></h2>
@@ -137,6 +138,14 @@ module('Integration | catalog-entry-editor', function (hooks) {
 
     await fillIn('[data-test-field="title"] input', 'Pet test');
     await fillIn('[data-test-field="description"] input', 'Test description');
+    await fillIn(
+      '[data-test-field="demo"] [data-test-field="description"] input',
+      'Beagle'
+    );
+    await fillIn(
+      '[data-test-field="demo"] [data-test-field="thumbnailURL"] input',
+      './jackie.png'
+    );
     await fillIn('[data-test-field="name"] input', 'Jackie');
     await click('[data-test-field="lovesWalks"] label:nth-of-type(1) input');
     await fillIn('[data-test-field="firstName"] input', 'BN');
@@ -172,6 +181,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
               owner: {
                 firstName: 'BN',
               },
+              description: 'Beagle',
+              thumbnailURL: './jackie.png',
             },
           },
           meta: {
@@ -506,6 +517,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
               owner: {
                 firstName: null,
               },
+              description: null,
+              thumbnailURL: null,
             },
           },
           meta: {
@@ -732,11 +745,13 @@ module('Integration | catalog-entry-editor', function (hooks) {
       import StringCard from "https://cardstack.com/base/string";
       class Vendor extends Card {
         @field company = contains(StringCard);
-        @field title =  contains(StringCard, {
+        @field title = contains(StringCard, {
           computeVia: function (this: Vendor) {
             return this.company;
           },
         });
+        @field description = contains(StringCard, { computeVia: () => 'Vendor' });
+        @field thumbnailURL = contains(StringCard, { computeVia: () => null });
         static embedded = class Embedded extends Component<typeof this> {
           <template><div data-test-company><@fields.company/></div></template>
         };
@@ -749,6 +764,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
             return this.name + ' ' + this.price;
           },
         });
+        @field description = contains(StringCard, { computeVia: () => null });
+        @field thumbnailURL = contains(StringCard, { computeVia: () => null });
       }
       class LineItem extends Item {
         @field quantity = contains(NumberCard);
@@ -767,6 +784,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
             return this.vendor ? 'Invoice from ' + this.vendor.title : 'Invoice'
           },
         });
+        @field description = contains(StringCard, { computeVia: () => 'Invoice' });
+        @field thumbnailURL = contains(StringCard, { computeVia: () => null });
         static embedded = class Embedded extends Component<typeof Invoice> {
           <template>
             <h3>Invoice</h3>
