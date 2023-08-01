@@ -218,7 +218,7 @@ module('Unit | text-suggestion | card-chooser-title', function () {
     assert.deepEqual(suggestions, [
       {
         depth: 0,
-        suggestion: 'Choose 1 or more Booking cards',
+        suggestion: 'Select 1 or more Booking cards',
       },
     ]);
   });

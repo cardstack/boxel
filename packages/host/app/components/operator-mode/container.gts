@@ -52,7 +52,7 @@ export type Stack = StackItem[];
 
 interface BaseItem {
   format: Format;
-  request?: Deferred<Card>;
+  request?: Deferred<Card | undefined>;
   stackIndex: number;
 }
 
@@ -166,7 +166,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   @action updateItem(
     item: StackItem,
     format: Format,
-    request?: Deferred<Card>
+    request?: Deferred<Card | undefined>
   ) {
     if (item.type === 'card') {
       this.operatorModeStateService.replaceItemInStack(item, {
@@ -203,8 +203,12 @@ export default class OperatorModeContainer extends Component<Signature> {
   // it's not obvious what you are reverting to
   @action async close(item: StackItem) {
     await this.rollbackCardFieldValues(this.getCard(item));
-
     this.operatorModeStateService.trimItemsFromStack(item);
+
+    //Ensure process that uses request is ended properly.
+    //User can directly close create a new card without save or cancel it.
+    let { request } = item;
+    request?.fulfill(undefined);
   }
 
   // TODO I'm a little suspicious of all the async actions in this component.
@@ -336,6 +340,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       },
       viewCard: async (
         card: Card,
+        format: Format = 'isolated',
         fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
         fieldName?: string
       ) => {
@@ -360,7 +365,7 @@ export default class OperatorModeContainer extends Component<Signature> {
             type: 'contained',
             fieldOfIndex: itemsCount - 1,
             fieldName,
-            format: 'isolated',
+            format,
             stackIndex,
           });
           return;
@@ -379,7 +384,7 @@ export default class OperatorModeContainer extends Component<Signature> {
               type: 'contained',
               fieldOfIndex: currentIndex++,
               fieldName,
-              format: 'isolated',
+              format,
               stackIndex,
             });
           }
@@ -387,7 +392,7 @@ export default class OperatorModeContainer extends Component<Signature> {
           here.addToStack({
             type: 'card',
             card,
-            format: 'isolated',
+            format,
             stackIndex,
           });
         }

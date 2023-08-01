@@ -279,6 +279,8 @@ module('Acceptance | basic tests', function (hooks) {
 
     await fillIn('[data-test-field="firstName"] input', 'Mango');
     await fillIn('[data-test-field="lastName"] input', 'Abdel-Rahman');
+    await fillIn('[data-test-field="description"] input', 'Person');
+    await fillIn('[data-test-field="thumbnailURL"] input', './mango.png');
     await click('[data-test-save-card]');
     await waitUntil(() => currentURL() === '/code?path=Person%2F2.json');
 
@@ -296,6 +298,8 @@ module('Acceptance | basic tests', function (hooks) {
         attributes: {
           firstName: 'Mango',
           lastName: 'Abdel-Rahman',
+          description: 'Person',
+          thumbnailURL: './mango.png',
         },
         meta: {
           adoptsFrom: {
@@ -317,6 +321,8 @@ module('Acceptance | basic tests', function (hooks) {
           attributes: {
             firstName: 'Mango',
             lastName: 'Abdel-Rahman',
+            description: 'Person',
+            thumbnailURL: './mango.png',
           },
           meta: {
             adoptsFrom: {

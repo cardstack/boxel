@@ -228,7 +228,7 @@ module('Integration | operator-mode', function (hooks) {
               </p>
               Pet: <@fields.pet/>
               Friends: <@fields.friends/>
-              Address: <@fields.address/>
+              <div data-test-addresses>Address: <@fields.address/></div>
             </template>
           }
         }
@@ -947,6 +947,48 @@ module('Integration | operator-mode', function (hooks) {
       );
   });
 
+  test('contained card action headers', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor('[data-test-person]');
+
+    assert
+      .dom('[data-test-embedded-card-edit-button]')
+      .doesNotExist(
+        "Contained card header has no 'edit' button when parent card is not in edit mode"
+      );
+
+    await click('[data-test-edit-button]');
+
+    await click(
+      '[data-test-overlay-card-display-name="Address"] [data-test-embedded-card-edit-button]'
+    );
+
+    assert
+      .dom(`[data-test-stack-card-index="1"] .card.edit`)
+      .exists('Address card opened in edit mode');
+
+    await click('[data-test-stack-card-index="1"] [data-test-close-button]');
+    await click(
+      '[data-test-overlay-card-display-name="Address"] [data-test-embedded-card-options-button]'
+    );
+    await click('[data-test-boxel-menu-item-text="View card"]');
+
+    assert
+      .dom(`[data-test-stack-card-index="1"]`)
+      .exists(
+        'Address card opened in view mode after clicking on View Card in options menu'
+      );
+  });
+
   test('can edit a nested contained card field', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
@@ -1162,7 +1204,6 @@ module('Integration | operator-mode', function (hooks) {
 
     assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
     assert.dom('[data-test-field="friends"] [data-test-add-new]').exists();
-    assert.dom('[data-test-field="friends"] [data-test-create-new]').exists();
 
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
@@ -1190,7 +1231,8 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-edit-button]');
 
     assert.dom('[data-test-field="friends"] [data-test-pet]').doesNotExist();
-    await click('[data-test-links-to-many="friends"] [data-test-add-new]');
+    assert.dom('[data-test-add-new]').hasText('Add Pets');
+    await click('[data-test-add-new]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
     await click(`[data-test-select="${testRealmURL}Pet/jackie"]`);
     await click('[data-test-card-catalog-go-button]');
@@ -1229,7 +1271,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-field="friends"]').containsText('Mango');
   });
 
-  test('can create a new card to add to a linksToMany field with no existing value', async function (assert) {
+  test('can create a new card to add to a linksToMany field from card chooser', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1244,7 +1286,13 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-edit-button]');
 
     assert.dom('[data-test-field="friends"] [data-test-pet]').doesNotExist();
-    await click('[data-test-links-to-many="friends"] [data-test-create-new]');
+    await click('[data-test-links-to-many="friends"] [data-test-add-new]');
+
+    await waitFor(`[data-test-card-catalog-modal]`);
+    assert
+      .dom('[data-test-card-catalog-create-new-button]')
+      .hasText('Create New Pet');
+    await click('[data-test-card-catalog-create-new-button]');
 
     await waitFor(`[data-test-stack-card-index="1"]`);
     await fillIn(
@@ -1261,7 +1309,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-field="friends"]').containsText('Woodster');
   });
 
-  test('can create a new card to add to a linksToMany field with existing values', async function (assert) {
+  test('does not create a new card to add to a linksToMany field from card chooser, if user cancel the edit view', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1276,8 +1324,13 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-edit-button]');
 
     assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
+    await click('[data-test-links-to-many="friends"] [data-test-add-new]');
 
-    await click('[data-test-links-to-many="friends"] [data-test-create-new]');
+    await waitFor(`[data-test-card-catalog-modal]`);
+    assert
+      .dom('[data-test-card-catalog-create-new-button]')
+      .hasText('Create New Pet');
+    await click('[data-test-card-catalog-create-new-button]');
 
     await waitFor(`[data-test-stack-card-index="1"]`);
     await fillIn(
@@ -1291,9 +1344,14 @@ module('Integration | operator-mode', function (hooks) {
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="1"]')
     );
+    assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
+
+    //Ensuring the card chooser modal doesn't get stuck
+    await click('[data-test-links-to-many="friends"] [data-test-add-new]');
+    await waitFor(`[data-test-card-catalog-modal]`);
     assert
-      .dom('[data-test-field="friends"]')
-      .containsText('Jackie Woody Woodster');
+      .dom('[data-test-card-catalog-create-new-button]')
+      .hasText('Create New Pet');
   });
 
   test('can remove all items of a linksToMany field', async function (assert) {
@@ -1484,7 +1542,7 @@ module('Integration | operator-mode', function (hooks) {
     await click(`[data-test-create-new-card-button]`);
     await waitFor(`[data-test-card-catalog-item]`);
     await fillIn(
-      `[data-test-url-field] input`,
+      `[data-test-search-field] input`,
       `https://cardstack.com/base/types/room-objective`
     );
     await waitUntil(
@@ -1517,19 +1575,19 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-card-catalog-item]`);
 
     assert
-      .dom(`[data-test-boxel-input-validation-state="invalid"]`)
+      .dom(`[data-test-boxel-input-validation-state="Not a valid Card URL"]`)
       .doesNotExist('invalid state is not shown');
 
     await fillIn(
-      `[data-test-url-field] input`,
+      `[data-test-search-field] input`,
       `https://cardstack.com/base/not-a-card`
     );
     await waitFor(`[data-test-boxel-input-validation-state="invalid"]`);
     assert
       .dom(`[data-test-boxel-input-error-message]`)
-      .containsText('Not a valid Card URL');
+      .containsText('Not a valid search key');
     await fillIn(
-      `[data-test-url-field] input`,
+      `[data-test-search-field] input`,
       `https://cardstack.com/base/types/room-objective`
     );
     assert
@@ -1562,7 +1620,7 @@ module('Integration | operator-mode', function (hooks) {
       .exists('card is selected');
 
     await fillIn(
-      `[data-test-url-field] input`,
+      `[data-test-search-field] input`,
       `https://cardstack.com/base/types/room-objective`
     );
 
@@ -1576,7 +1634,7 @@ module('Integration | operator-mode', function (hooks) {
       `[data-test-card-catalog-item="https://cardstack.com/base/types/room-objective"] button`
     );
     assert
-      .dom(`[data-test-url-field] input`)
+      .dom(`[data-test-search-field] input`)
       .hasNoValue('card URL field is cleared');
   });
 
@@ -1721,6 +1779,25 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-more-options-button]');
     await click('[data-test-boxel-menu-item-text="Copy Card URL"]');
     assert.dom('[data-test-boxel-menu-item]').doesNotExist();
+
+    await click(
+      '[data-test-addresses] > [data-test-boxel-card-container] > [data-test-field-component-card]'
+    );
+
+    await waitFor(
+      `[data-test-stack-card='${testRealmURL}Person/burcu/address']`
+    );
+    await click(
+      `[data-test-stack-card='${testRealmURL}Person/burcu/address'] [data-test-more-options-button]`
+    );
+    assert
+      .dom('[data-test-boxel-menu-item-text="Copy Card URL"]')
+      .hasAttribute('disabled');
+
+    await click(`[data-test-boxel-menu-item]`);
+    assert
+      .dom('[data-test-boxel-menu-item]')
+      .exists('can not copy url of a contained card');
   });
 
   test(`composite "contains one" field has an overlay header and click on the contains card will open it on the stack`, async function (assert) {
@@ -1746,5 +1823,28 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom('[data-test-stack-card-index="1"] [data-test-boxel-header-title]')
       .includesText('Address');
+  });
+
+  test(`"links to" field has an overlay header and click on the contains card will open it on the stack`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    // Linked cards have the realm's icon in the overlaid header title
+    assert
+      .dom('[data-test-overlay-card-display-name="Author"] .header-icon img')
+      .hasAttribute('src', 'https://example-icon.test');
+
+    await click('[data-test-author');
+    assert.dom('[data-test-stack-card-index]').exists({ count: 2 });
+    assert
+      .dom('[data-test-stack-card-index="1"] [data-test-boxel-header-title]')
+      .includesText('Author');
   });
 });

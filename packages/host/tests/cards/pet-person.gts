@@ -20,6 +20,10 @@ export class PetPerson extends Card {
       return `${this.firstName} Pet Person`;
     },
   });
+  @field description = contains(StringCard, {
+    computeVia: () => 'A person with pets',
+  });
+  @field thumbnailURL = contains(StringCard, { computeVia: () => null });
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>

@@ -59,7 +59,14 @@ export default class OperatorModeStack extends Component<Signature> {
         margin-right: var(--boxel-sp-xs);
       }
 
+      /* Add some padding to accomodate for overlaid header for embedded cards in operator mode */
       :global(.operator-mode-stack .embedded-card) {
+        padding-top: calc(
+          var(--overlay-embedded-card-header-height) + var(--boxel-sp-lg)
+        );
+      }
+      /* This is repeated for the edit-card because specifying multiple selectors in :global don't work */
+      :global(.operator-mode-stack .edit-card) {
         padding-top: calc(
           var(--overlay-embedded-card-header-height) + var(--boxel-sp-lg)
         );

@@ -64,6 +64,7 @@ export interface RenderedCardForOverlayActions {
   card: Card;
   fieldType: FieldType | undefined;
   fieldName: string | undefined;
+  stackItem: StackItem;
 }
 
 export default class OperatorModeStackItem extends Component<Signature> {
@@ -106,6 +107,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
           card: entry.meta.card,
           fieldType: entry.meta.fieldType,
           fieldName: entry.meta.fieldName,
+          stackItem: this.args.item,
         }))
     );
   }
@@ -146,10 +148,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   @action async copyToClipboard(cardUrl: string) {
+    if (!cardUrl) {
+      return;
+    }
     if (config.environment === 'test') {
       return; // navigator.clipboard is not available in test environment
     }
-
     await navigator.clipboard.writeText(cardUrl);
   }
 
@@ -359,6 +363,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                           'Copy Card URL'
                           (fn this.copyToClipboard this.card.id)
                           icon='icon-link'
+                          disabled=(eq @item.type 'contained')
                         )
                         (menuItem
                           'Delete' (fn @delete @item @index) icon='icon-trash'
@@ -369,6 +374,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                           'Copy Card URL'
                           (fn this.copyToClipboard this.card.id)
                           icon='icon-link'
+                          disabled=(eq @item.type 'contained')
                         )
                       )
                     }}
