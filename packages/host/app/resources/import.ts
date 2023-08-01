@@ -1,4 +1,4 @@
-import { Resource } from 'ember-resources/core';
+import { Resource } from 'ember-resources';
 import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
 import { Loader } from '@cardstack/runtime-common/loader';
