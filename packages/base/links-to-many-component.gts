@@ -11,7 +11,7 @@ import {
 } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
 import type { ComponentLike } from '@glint/template';
-import { Button, IconButton } from '@cardstack/boxel-ui';
+import { IconButton } from '@cardstack/boxel-ui';
 import {
   restartableTask,
   type EncapsulatedTaskDescriptor as Descriptor,
@@ -20,7 +20,9 @@ import {
   chooseCard,
   baseCardRef,
   identifyCard,
+  getPlural,
 } from '@cardstack/runtime-common';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
 interface Signature {
   Args: {
@@ -72,23 +74,14 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
           {{/each}}
         </ul>
       {{/if}}
-      <Button @size='small' {{on 'click' this.add}} data-test-add-new>
-        Choose
-      </Button>
-      {{#if @context.actions.createCard}}
-        <Button @size='small' {{on 'click' this.create}} data-test-create-new>
-          Create New
-        </Button>
-      {{/if}}
+      <div class='add-new' {{on 'click' this.add}} data-test-add-new>
+        {{svgJar 'icon-plus' width='20px' height='20px'}} Add {{getPlural @field.card.displayName}}
+      </div>
     </div>
   </template>
 
   add = () => {
     (this.chooseCard as unknown as Descriptor<any, any[]>).perform();
-  };
-
-  create = () => {
-    (this.createCard as unknown as Descriptor<any, any[]>).perform();
   };
 
   private chooseCard = restartableTask(async () => {
@@ -98,28 +91,12 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       [];
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
     let filter = { every: [{ type }, ...selectedCardsQuery] };
-    let chosenCard: Card | undefined = this.args.context?.actions?.createCard
-      ? await chooseCard({ filter }, { multiSelect: true })
-      : await chooseCard(
+    let chosenCard: Card | undefined = await chooseCard(
           { filter },
-          { offerToCreate: type, multiSelect: true }
-        );
+          { offerToCreate: type, multiSelect: true, createNewCard: this.args.context?.actions?.createCard });
     if (chosenCard) {
       selectedCards = [...selectedCards, chosenCard];
       (this.args.model.value as any)[this.args.field.name] = selectedCards;
-    }
-  });
-
-  private createCard = restartableTask(async () => {
-    let cards = (this.args.model.value as any)[this.args.field.name];
-    let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let newCard: Card | undefined =
-      await this.args.context?.actions?.createCard(type, undefined, {
-        isLinkedCard: true,
-      });
-    if (newCard) {
-      cards = [...cards, newCard];
-      (this.args.model.value as any)[this.args.field.name] = cards;
     }
   });
 

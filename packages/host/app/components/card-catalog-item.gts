@@ -52,7 +52,7 @@ export default class CardCatalogItem extends Component<Signature> {
         min-height: var(--catalog-item-height);
         display: grid;
         align-items: center;
-        padding: 0 var(--boxel-sp);
+        padding: var(--boxel-sp-xs) var(--boxel-sp);
         border: 1px solid var(--boxel-200);
         border-radius: var(--boxel-border-radius);
         background-color: var(--boxel-light);

@@ -821,9 +821,9 @@ module('Integration | catalog-entry-editor', function (hooks) {
 
     await click('[data-test-choose-card]');
     await waitFor('[data-test-card-catalog-modal]');
-    await waitFor('[data-test-card-catalog-modal] [data-test-create-new]');
+    await waitFor('[data-test-card-catalog-create-new-button]');
 
-    await click('[data-test-card-catalog-modal] [data-test-create-new]');
+    await click('[data-test-card-catalog-create-new-button]');
     await waitFor('[data-test-create-new-card="Vendor"]');
     await fillIn('[data-test-field="company"] input', 'Big Tech');
 
