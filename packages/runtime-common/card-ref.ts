@@ -64,15 +64,6 @@ export async function loadCard(
   opts: { loader: Loader; relativeTo?: URL }
 ): Promise<typeof CardBase> {
   let maybeCard: unknown;
-  // when it's possible we want to leverage the loader being used by the
-  // indexing process so that we can take advantage of the module cache when
-  // running computeds. The loader used by the indexing process (CurrentRun) is
-  // not the global loader, but rather the loader available from the host's
-  // loader service (as it needs instrumentation to reset the loader when card
-  // source changes and have that invalidate properly within the host app). To
-  // work around this we set the CurrentRun's loader globally so we can get
-  // access to it here as the card authors should not have to worry about
-  // providing it when calling this function.
   let loader = opts.loader;
   if (!('type' in ref)) {
     let module = await loader.import<Record<string, any>>(
