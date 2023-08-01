@@ -15,10 +15,8 @@ export default class LoaderService extends Service {
   }
 
   private makeInstance() {
-    // FIXME how to get the loader without a global one?
     if (this.fastboot.isFastBoot) {
       let loader = new Loader();
-      // let loader = Loader.createLoaderFromGlobalFIXME();
       shimExternals(loader);
       return loader;
     }
