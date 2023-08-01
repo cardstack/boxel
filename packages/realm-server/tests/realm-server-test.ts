@@ -25,6 +25,8 @@ import {
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
+import { shimExternals } from '../lib/externals';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
@@ -34,18 +36,15 @@ const testRealm2Href = testRealm2URL.href;
 const distDir = resolve(join(__dirname, '..', '..', 'host', 'dist'));
 console.log(`using host dist dir: ${distDir}`);
 
-let loader: Loader;
-
-module.only('Realm Server', function (hooks) {
+module('Realm Server', function (hooks) {
   let testRealmServer: Server;
   let testRealmServer2: Server;
   let request: SuperTest<Test>;
   let dir: DirResult;
 
-  hooks.beforeEach(() => {
-    loader = new Loader();
-    loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
-  });
+  let loader = new Loader();
+  loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
+  shimExternals(loader);
 
   setupCardLogs(
     hooks,
@@ -89,12 +88,14 @@ module.only('Realm Server', function (hooks) {
       new URL(baseRealm.url),
       new URL(localBaseRealm)
     );
+    shimExternals(testRealmServerLoader);
 
     let testRealmServer2Loader = new Loader();
     testRealmServer2Loader.addURLMapping(
       new URL(baseRealm.url),
       new URL(localBaseRealm)
     );
+    shimExternals(testRealmServer2Loader);
 
     testRealmServer = await runTestRealmServer(
       testRealmServerLoader,
@@ -486,10 +487,15 @@ module.only('Realm Server', function (hooks) {
         meta: { adoptsFrom: ref },
       },
     };
-    let api = await loader.import<any>('https://cardstack.com/base/card-api');
-    let person = await api.createFromSerialized(doc.data, doc, undefined, {
-      loader,
-    });
+    let api = await loader.import<typeof CardAPI>(
+      'https://cardstack.com/base/card-api'
+    );
+    let person = await api.createFromSerialized<any>(
+      doc.data,
+      doc,
+      undefined,
+      loader
+    );
     assert.strictEqual(person.firstName, 'Mango', 'card data is correct');
   });
 
@@ -505,10 +511,15 @@ module.only('Realm Server', function (hooks) {
         meta: { adoptsFrom: ref },
       },
     };
-    let api = await loader.import<any>('https://cardstack.com/base/card-api');
-    let person = await api.createFromSerialized(doc.data, doc, undefined, {
-      loader,
-    });
+    let api = await loader.import<typeof CardAPI>(
+      'https://cardstack.com/base/card-api'
+    );
+    let person = await api.createFromSerialized<any>(
+      doc.data,
+      doc,
+      undefined,
+      loader
+    );
     assert.strictEqual(person.firstName, 'Mango', 'card data is correct');
   });
 
@@ -525,10 +536,15 @@ module.only('Realm Server', function (hooks) {
         meta: { adoptsFrom },
       },
     };
-    let api = await loader.import<any>('https://cardstack.com/base/card-api');
-    let testCard = await api.createFromSerialized(doc.data, doc, undefined, {
-      loader,
-    });
+    let api = await loader.import<typeof CardAPI>(
+      'https://cardstack.com/base/card-api'
+    );
+    let testCard = await api.createFromSerialized<any>(
+      doc.data,
+      doc,
+      undefined,
+      loader
+    );
     assert.deepEqual(testCard.ref, ref, 'card data is correct');
   });
 });
@@ -540,10 +556,9 @@ module('Realm Server serving from root', function (hooks) {
 
   let dir: DirResult;
 
-  hooks.beforeEach(() => {
-    loader = new Loader();
-    loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
-  });
+  let loader = new Loader();
+  loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
+  shimExternals(loader);
 
   setupCardLogs(
     hooks,
@@ -732,10 +747,9 @@ module('Realm Server serving from a subdirectory', function (hooks) {
 
   let dir: DirResult;
 
-  hooks.beforeEach(() => {
-    loader = new Loader();
-    loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
-  });
+  let loader = new Loader();
+  loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
+  shimExternals(loader);
 
   setupCardLogs(
     hooks,

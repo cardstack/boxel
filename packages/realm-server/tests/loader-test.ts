@@ -18,19 +18,16 @@ setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealmHref = testRealmURL.href;
 
-let loader: Loader;
-
 module('loader', function (hooks) {
   let dir: DirResult;
   let testRealmServer: Server;
 
-  hooks.beforeEach(() => {
-    loader = new Loader();
-    loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
-  });
+  let loader = new Loader();
+  loader.addURLMapping(
+    new URL(baseRealm.url),
+    new URL('http://localhost:4201/base/')
+  );
+  shimExternals(loader);
 
   setupBaseRealmServer(hooks, loader);
 
@@ -94,6 +91,7 @@ module('loader', function (hooks) {
       },
       'http://example.com/'
     );
+    loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
     loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
     await realm.ready;
 

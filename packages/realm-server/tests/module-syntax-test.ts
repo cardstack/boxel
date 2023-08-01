@@ -4,17 +4,15 @@ import { dirSync } from 'tmp';
 import { Loader, baseRealm } from '@cardstack/runtime-common';
 import { testRealm, createRealm } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
+import { shimExternals } from '../lib/externals';
 
-let loader: Loader;
-
-module('module-syntax', function (hooks) {
-  hooks.beforeEach(() => {
-    loader = new Loader();
-    loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
-  });
+module('module-syntax', function () {
+  let loader = new Loader();
+  loader.addURLMapping(
+    new URL(baseRealm.url),
+    new URL('http://localhost:4201/base/')
+  );
+  shimExternals(loader);
 
   test('can get the code for a card', async function (assert) {
     let src = `

@@ -13,6 +13,7 @@ import {
   setupBaseRealmServer,
 } from './helpers';
 import isEqual from 'lodash/isEqual';
+import { shimExternals } from '../lib/externals';
 
 function cleanWhiteSpace(text: string) {
   return text.replace(/\s+/g, ' ').trim();
@@ -31,16 +32,13 @@ setGracefulCleanup();
 // underlying filesystem in a manner that doesn't leak into other tests (as well
 // as to test through loader caching)
 
-let loader: Loader;
-
 module('indexing', function (hooks) {
-  hooks.beforeEach(() => {
-    loader = new Loader();
-    loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
-  });
+  let loader = new Loader();
+  loader.addURLMapping(
+    new URL(baseRealm.url),
+    new URL('http://localhost:4201/base/')
+  );
+  shimExternals(loader);
 
   setupCardLogs(
     hooks,
