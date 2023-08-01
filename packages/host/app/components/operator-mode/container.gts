@@ -213,7 +213,6 @@ export default class OperatorModeContainer extends Component<Signature> {
   // using ember concurrency to perform any async which addresses this situation
   // directly.
   @action async save(item: StackItem, dismissStackItem = false) {
-    debugger;
     let { request } = item;
     await this.saveCardFieldValues(this.getCard(item));
     let stack = this.stacks[item.stackIndex];
