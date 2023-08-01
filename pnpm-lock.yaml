@@ -1,14 +1,9 @@
 lockfileVersion: '6.0'
 
-settings:
-  autoInstallPeers: true
-  excludeLinksFromLockfile: false
-
 overrides:
   '@types/eslint': 8.4.1
   '@embroider/util': 1.11.1
   jsesc: ^3.0.0
-  ember-concurrency: github:machty/ember-concurrency#c6ed562
   ember-modifier: ^4.1.0
   prettier: github:ef4/prettier#8c4a6ad
 
@@ -68,7 +63,7 @@ importers:
         version: 6.2.0
       ember-resources:
         specifier: ^6.3.1
-        version: 6.3.1(@glimmer/component@1.1.2)(@glimmer/tracking@1.1.2)(@glint/template@1.0.2)(ember-concurrency@3.0.0)(ember-source@4.12.0)
+        version: 6.3.1(@glimmer/component@1.1.2)(@glimmer/tracking@1.1.2)(@glint/template@1.0.2)(ember-concurrency@3.1.0)(ember-source@4.12.0)
       ember-source:
         specifier: ~4.12.0
         version: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0)
@@ -152,8 +147,8 @@ importers:
         specifier: ^6.2.0
         version: 6.2.0
       ember-concurrency:
-        specifier: github:machty/ember-concurrency#c6ed562
-        version: github.com/machty/ember-concurrency/c6ed562(@babel/core@7.20.2)(ember-source@4.12.0)
+        specifier: ^3.1.0
+        version: 3.1.0(@babel/core@7.20.2)(ember-source@4.12.0)
       ember-modifier:
         specifier: ^4.1.0
         version: 4.1.0(ember-source@4.12.0)
@@ -361,8 +356,8 @@ importers:
         specifier: ^3.0.0
         version: 3.0.0
       ember-concurrency:
-        specifier: github:machty/ember-concurrency#c6ed562
-        version: github.com/machty/ember-concurrency/c6ed562(@babel/core@7.20.2)(ember-source@4.12.0)
+        specifier: ^3.1.0
+        version: 3.1.0(@babel/core@7.20.2)(ember-source@4.12.0)
       ember-css-modules:
         specifier: ^2.0.1
         version: 2.0.1
@@ -790,7 +785,7 @@ importers:
         version: 10.1.0(@ember/string@3.1.1)(ember-source@4.12.0)
       ember-resources:
         specifier: ^6.3.1
-        version: 6.3.1(@glimmer/component@1.1.2)(@glimmer/tracking@1.1.2)(@glint/template@1.0.2)(ember-concurrency@3.0.0)(ember-source@4.12.0)
+        version: 6.3.1(@glimmer/component@1.1.2)(@glimmer/tracking@1.1.2)(@glint/template@1.0.2)(ember-concurrency@3.1.0)(ember-source@4.12.0)
       ember-source:
         specifier: ^4.12.0
         version: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0)
@@ -1051,8 +1046,8 @@ importers:
         specifier: ^3.0.0
         version: 3.0.0
       ember-concurrency:
-        specifier: github:machty/ember-concurrency#c6ed562
-        version: github.com/machty/ember-concurrency/c6ed562(@babel/core@7.20.2)(ember-source@4.12.0)
+        specifier: ^3.1.0
+        version: 3.1.0(@babel/core@7.20.2)(ember-source@4.12.0)
       ember-css-url:
         specifier: ^1.0.0
         version: 1.0.0
@@ -1088,7 +1083,7 @@ importers:
         version: 10.1.0(@ember/string@3.1.1)(ember-source@4.12.0)
       ember-resources:
         specifier: ^6.3.1
-        version: 6.3.1(@glimmer/component@1.1.2)(@glimmer/tracking@1.1.2)(@glint/template@1.0.2)(ember-concurrency@3.0.0)(ember-source@4.12.0)
+        version: 6.3.1(@glimmer/component@1.1.2)(@glimmer/tracking@1.1.2)(@glint/template@1.0.2)(ember-concurrency@3.1.0)(ember-source@4.12.0)
       ember-source:
         specifier: ~4.12.0
         version: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0)
@@ -11757,7 +11752,6 @@ packages:
       ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0)
     transitivePeerDependencies:
       - supports-color
-    dev: true
 
   /ember-auto-import@1.12.2:
     resolution: {integrity: sha512-gLqML2k77AuUiXxWNon1FSzuG1DV7PEPpCLCU5aJvf6fdL6rmFfElsZRh+8ELEB/qP9dT+LHjNEunVzd2dYc8A==}
@@ -12804,6 +12798,25 @@ packages:
       - supports-color
     dev: false
 
+  /ember-concurrency@3.1.0(@babel/core@7.20.2)(ember-source@4.12.0):
+    resolution: {integrity: sha512-vJrP+awbiYJvm2y9xYIYO96n2Jx1FXp7mbM7ucjSp+hPuNwNw9i7xXVrgxBYIuJ/0zlbSMF0P2XJoyi4A0XCrQ==}
+    engines: {node: 16.* || >= 18}
+    peerDependencies:
+      ember-source: ^3.28.0 || ^4.0.0
+    dependencies:
+      '@babel/helper-plugin-utils': 7.20.2
+      '@babel/types': 7.21.5
+      '@glimmer/tracking': 1.1.2
+      ember-cli-babel: 7.26.11
+      ember-cli-babel-plugin-helpers: 1.1.1
+      ember-cli-htmlbars: 6.2.0
+      ember-compatibility-helpers: 1.2.6(@babel/core@7.20.2)
+      ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0)
+    transitivePeerDependencies:
+      - '@babel/core'
+      - supports-color
+    dev: true
+
   /ember-css-modules@2.0.1:
     resolution: {integrity: sha512-SsWrVqmzymljS/yzpbJHAMPZaoh6xMyy2N26GWA3vnwgPE6S+jbErv+9RaSeqPlUZR1YE1LkhHleFcTSM9FOUA==}
     engines: {node: 12.* || 14.* || >= 16}
@@ -13185,7 +13198,7 @@ packages:
       - supports-color
     dev: true
 
-  /ember-resources@6.3.1(@glimmer/component@1.1.2)(@glimmer/tracking@1.1.2)(@glint/template@1.0.2)(ember-concurrency@3.0.0)(ember-source@4.12.0):
+  /ember-resources@6.3.1(@glimmer/component@1.1.2)(@glimmer/tracking@1.1.2)(@glint/template@1.0.2)(ember-concurrency@3.1.0)(ember-source@4.12.0):
     resolution: {integrity: sha512-DcLW/j/ffnPwmOunNM45gi3221kxIdiYk3pR879OWxmQXHjGk8uL5ACwD/0IrwjTpbO8/H+6fwOKg+GqFM7NBQ==}
     peerDependencies:
       '@ember/test-waiters': ^3.0.0
@@ -13209,7 +13222,7 @@ packages:
       '@glimmer/tracking': 1.1.2
       '@glint/template': 1.0.2
       ember-async-data: 1.0.1(ember-source@4.12.0)
-      ember-concurrency: github.com/machty/ember-concurrency/c6ed562(@babel/core@7.20.2)(ember-source@4.12.0)
+      ember-concurrency: 3.1.0(@babel/core@7.20.2)(ember-source@4.12.0)
       ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0)
     transitivePeerDependencies:
       - supports-color
@@ -25866,6 +25879,7 @@ packages:
     resolution: {directory: packages/base, type: directory}
     id: file:packages/base
     name: '@cardstack/base'
+    version: 1.0.0
     peerDependencies:
       ember-source: ~4.12.0
     dependencies:
@@ -25877,6 +25891,7 @@ packages:
     resolution: {directory: packages/runtime-common, type: directory}
     id: file:packages/runtime-common
     name: '@cardstack/runtime-common'
+    version: 1.0.0
     peerDependencies:
       '@babel/core': ^7.17.8
       ember-cli-htmlbars: ^6.2.0
@@ -25931,6 +25946,7 @@ packages:
     resolution: {directory: vendor/ember-template-imports, type: directory}
     id: file:vendor/ember-template-imports
     name: '@cardstack/ember-template-imports'
+    version: 2.0.1
     engines: {node: 12.* || >= 14}
     peerDependencies:
       ember-cli-htmlbars: ^6.0.0
@@ -26058,7 +26074,12 @@ packages:
       ember-cli-htmlbars: 6.2.0
       ember-compatibility-helpers: 1.2.6(@babel/core@7.20.2)
       ember-destroyable-polyfill: 2.0.3(@babel/core@7.20.2)
-      ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0)
+      ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.75.0)
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
+    dev: false
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
