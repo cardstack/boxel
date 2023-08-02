@@ -179,7 +179,9 @@ export default class SearchSheet extends Component<Signature> {
       </div>
       <SearchInput
         @bottomTreatment={{this.inputBottomTreatment}}
+        @iconPosition='start'
         @value={{this.searchInputValue}}
+        @placeholder='Enter search term or type a command'
         @onFocus={{@onFocus}}
         @onInput={{fn (mut this.searchInputValue)}}
       />
