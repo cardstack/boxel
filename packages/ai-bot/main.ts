@@ -299,8 +299,13 @@ async function getResponse(history: IRoomEvent[]) {
 }
 
 (async () => {
-  let client = createClient({ baseUrl: 'http://localhost:8008' });
-  let auth = await client.loginWithPassword('aibot', 'pass');
+  let client = createClient({
+    baseUrl: process.env.MATRIX_URL || 'http://localhost:8008',
+  });
+  let auth = await client.loginWithPassword(
+    'aibot',
+    process.env.BOXEL_AIBOT_PASSWORD || 'pass'
+  );
   let { user_id } = auth;
   client.on(RoomMemberEvent.Membership, function (_event, member) {
     if (member.membership === 'invite' && member.userId === user_id) {
