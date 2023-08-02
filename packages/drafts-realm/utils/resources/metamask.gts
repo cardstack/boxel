@@ -1,5 +1,5 @@
 import { tracked } from '@glimmer/tracking';
-import { Resource } from 'ember-resources/core';
+import { Resource } from 'ember-resources';
 // @ts-ignore
 import { enqueueTask, restartableTask } from 'ember-concurrency';
 // @ts-ignore

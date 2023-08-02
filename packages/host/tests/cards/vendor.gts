@@ -15,4 +15,5 @@ export class Vendor extends Card {
       return this.name;
     },
   });
+  @field description = contains(StringCard, { computeVia: () => 'Vendor' });
 }

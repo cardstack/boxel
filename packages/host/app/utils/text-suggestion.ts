@@ -3,8 +3,8 @@ import {
   isEveryFilter,
   type Filter,
 } from '@cardstack/runtime-common/query';
+import { getPlural } from '@cardstack/runtime-common';
 import a from 'indefinite';
-import pluralize from 'pluralize';
 
 interface ChooseCardSuggestion {
   suggestion: string; // suggests a UI text
@@ -62,7 +62,7 @@ function titleText(
 ) {
   let object = `${cardRefName} ${cardNoun}`;
   if (textOpts?.multiSelect) {
-    return `Choose 1 or more ${pluralize(object)}`;
+    return `Select 1 or more ${getPlural(object)}`;
   } else {
     return `Choose ${a(object)}`;
   }

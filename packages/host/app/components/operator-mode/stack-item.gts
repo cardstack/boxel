@@ -131,10 +131,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   @action async copyToClipboard(cardUrl: string) {
+    if (!cardUrl) {
+      return;
+    }
     if (config.environment === 'test') {
       return; // navigator.clipboard is not available in test environment
     }
-
     await navigator.clipboard.writeText(cardUrl);
   }
 
@@ -305,6 +307,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                           'Copy Card URL'
                           (fn this.copyToClipboard this.card.id)
                           icon='icon-link'
+                          disabled=(eq @item.type 'contained')
                         )
                         (menuItem
                           'Delete' (fn @delete @item @index) icon='icon-trash'
@@ -315,6 +318,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                           'Copy Card URL'
                           (fn this.copyToClipboard this.card.id)
                           icon='icon-link'
+                          disabled=(eq @item.type 'contained')
                         )
                       )
                     }}

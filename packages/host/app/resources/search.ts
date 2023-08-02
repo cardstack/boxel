@@ -1,4 +1,4 @@
-import { Resource } from 'ember-resources/core';
+import { Resource } from 'ember-resources';
 import { restartableTask } from 'ember-concurrency';
 import { tracked } from '@glimmer/tracking';
 import { baseRealm, type RealmInfo } from '@cardstack/runtime-common';

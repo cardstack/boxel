@@ -19,6 +19,10 @@ import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import BoxelMenu from '@cardstack/boxel-ui/components/menu';
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
 
+import { service } from '@ember/service';
+import CardService from '@cardstack/host/services/card-service';
+import { load } from 'ember-async-data';
+
 interface Signature {
   Args: {
     renderedCardsForOverlayActions: RenderedCardForOverlayActions[];
@@ -29,11 +33,17 @@ interface Signature {
 }
 
 export default class OperatorModeOverlays extends Component<Signature> {
+  @service declare cardService: CardService;
+
   isEmbeddedCard(renderedCard: RenderedCardForOverlayActions) {
     return (
       renderedCard.fieldType === 'contains' ||
       renderedCard.fieldType === 'linksTo'
     );
+  }
+
+  @action async getRealmInfo(card: Card) {
+    return this.cardService.getRealmInfo(card);
   }
 
   <template>
@@ -52,17 +62,21 @@ export default class OperatorModeOverlays extends Component<Signature> {
           data-test-overlay-selected={{if isSelected card.id}}
           data-test-overlay-card-display-name={{cardTypeDisplayName card}}
         >
-          {{! Add mouseenter and mouseleave events to each button, so we can maintain the hover effect. }}
           {{#if (this.isEmbeddedCard renderedCard)}}
             <div class='overlay-embedded-card-header' data-test-overlay-header>
-
-              {{! TODO: Icon for linksTo field type }}
               <div class='header-title'>
-                {{#if (eq renderedCard.fieldType 'contains')}}
-                  <div class='header-icon'>
+                <div class='header-icon'>
+                  {{#if (eq renderedCard.fieldType 'contains')}}
                     {{svgJar 'icon-turn-down-right' width='22px' height='18px'}}
-                  </div>
-                {{/if}}
+                  {{else}}
+                    {{#let (load (this.getRealmInfo card)) as |result|}}
+                      <img
+                        src={{result.value.iconURL}}
+                        alt="Card's realm icon"
+                      />
+                    {{/let}}
+                  {{/if}}
+                </div>
                 <div class='header-text'>
                   {{cardTypeDisplayName card}}
                 </div>
@@ -112,6 +126,14 @@ export default class OperatorModeOverlays extends Component<Signature> {
               </div>
 
             </div>
+
+            <IconButton
+              {{on 'mouseenter' (fn this.setCurrentlyHoveredCard renderedCard)}}
+              {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
+              class='hover-button hover-button-embedded-card preview'
+              @icon='eye'
+              aria-label='preview card'
+            />
           {{/if}}
 
           {{#if
@@ -166,8 +188,8 @@ export default class OperatorModeOverlays extends Component<Signature> {
         height: 30px;
         pointer-events: auto;
       }
-      .hovered > .hover-button:not(:disabled),
-      .hovered > .hover-button.select {
+      .hovered .hover-button:not(:disabled),
+      .hovered .hover-button.select {
         display: block;
       }
       .hover-button:not(:disabled):hover {
@@ -185,6 +207,14 @@ export default class OperatorModeOverlays extends Component<Signature> {
       .hover-button.more-actions {
         bottom: 0;
         right: 0;
+      }
+      .hover-button.hover-button-embedded-card {
+        left: calc(100% - var(--boxel-sp-xl));
+        top: calc(
+          (100% - var(--overlay-embedded-card-header-height)) / 2 +
+            var(--overlay-embedded-card-header-height) - 1em
+        );
+        position: absolute;
       }
       .hover-button > svg {
         height: 100%;

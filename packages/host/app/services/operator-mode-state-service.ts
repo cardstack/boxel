@@ -3,6 +3,7 @@ import {
   type Stack,
   type StackItem,
 } from '../components/operator-mode/container';
+import { getCardStackItem } from '../components/operator-mode/container';
 import Service from '@ember/service';
 import type CardService from '../services/card-service';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
@@ -183,12 +184,15 @@ export default class OperatorModeStateService extends Service {
           }
         } else {
           let { fieldName, fieldOfIndex } = item;
-          serializedStack.push({
-            type: 'contained',
-            fieldName,
-            fieldOfIndex,
-            format: item.format,
-          });
+          let addressableCard = getCardStackItem(item, stack).card;
+          if (addressableCard.id) {
+            serializedStack.push({
+              type: 'contained',
+              fieldName,
+              fieldOfIndex,
+              format: item.format,
+            });
+          }
         }
       }
       state.stacks.push(serializedStack);

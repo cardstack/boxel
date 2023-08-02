@@ -18,7 +18,6 @@
       "@types/eslint": "8.4.1",
       "@embroider/util": "1.11.1",
       "jsesc": "^3.0.0",
-      "ember-concurrency": "github:machty/ember-concurrency#c6ed562",
       "ember-modifier": "^4.1.0",
       "prettier": "github:ef4/prettier#8c4a6ad"
     },
@@ -47,7 +46,7 @@
     "@typescript-eslint/eslint-plugin": "^5.17.0",
     "@typescript-eslint/parser": "^5.17.0",
     "ember-cli-htmlbars": "^6.2.0",
-    "ember-resources": "^4.4.0",
+    "ember-resources": "^6.3.1",
     "ember-source": "~4.12.0",
     "ember-template-imports": "^3.0.1",
     "eslint": "^7.32.0",

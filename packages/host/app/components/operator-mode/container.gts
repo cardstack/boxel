@@ -55,7 +55,7 @@ export type Stack = StackItem[];
 
 interface BaseItem {
   format: Format;
-  request?: Deferred<Card>;
+  request?: Deferred<Card | undefined>;
   stackIndex: number;
 }
 
@@ -227,7 +227,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   @action updateItem(
     item: StackItem,
     format: Format,
-    request?: Deferred<Card>
+    request?: Deferred<Card | undefined>
   ) {
     if (item.type === 'card') {
       this.operatorModeStateService.replaceItemInStack(item, {
@@ -262,13 +262,21 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   @action async close(item: StackItem) {
     await this.rollbackCardFieldValues(this.getCard(item));
-
     this.operatorModeStateService.trimItemsFromStack(item);
+
+    //Ensure process that uses request is ended properly.
+    //User can directly close create a new card without save or cancel it.
+    let { request } = item;
+    request?.fulfill(undefined);
   }
 
   @action async cancel(item: StackItem) {
     await this.rollbackCardFieldValues(this.getCard(item));
     this.updateItem(item, 'isolated');
+
+    //Ensure process that uses request is ended properly.
+    let { request } = item;
+    request?.fulfill(undefined);
   }
 
   @action async save(item: StackItem) {
