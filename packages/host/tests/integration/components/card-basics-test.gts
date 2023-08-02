@@ -470,7 +470,7 @@ module('Integration | card-basics', function (hooks) {
       @field firstName = contains(StringCard);
       @field pet = linksTo(Pet);
     }
-    await shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+    await shimModule(`${testRealmURL}test-cards`, { Person, Pet }, loader);
 
     let mango = new Pet({
       firstName: 'Mango',
@@ -485,9 +485,9 @@ module('Integration | card-basics', function (hooks) {
       firstName: 'Hassan',
       pet: mango,
     });
-    await saveCard(mango, `${testRealmURL}Pet/mango`);
-    await saveCard(vanGogh, `${testRealmURL}Pet/vanGogh`);
-    await saveCard(paper, `${testRealmURL}Pet/paper`);
+    await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
+    await saveCard(vanGogh, `${testRealmURL}Pet/vanGogh`, loader);
+    await saveCard(paper, `${testRealmURL}Pet/paper`, loader);
 
     let changeEvent: { fieldName: string; value: any } | undefined;
     let eventCount = 0;
@@ -559,7 +559,7 @@ module('Integration | card-basics', function (hooks) {
       @field firstName = contains(StringCard);
       @field pets = linksToMany(Pet);
     }
-    await shimModule(`${testRealmURL}test-cards`, { Person, Pet });
+    await shimModule(`${testRealmURL}test-cards`, { Person, Pet }, loader);
 
     let mango = new Pet({
       firstName: 'Mango',
@@ -574,9 +574,9 @@ module('Integration | card-basics', function (hooks) {
       firstName: 'Hassan',
       pets: [mango],
     });
-    await saveCard(mango, `${testRealmURL}Pet/mango`);
-    await saveCard(vanGogh, `${testRealmURL}Pet/vanGogh`);
-    await saveCard(paper, `${testRealmURL}Pet/paper`);
+    await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
+    await saveCard(vanGogh, `${testRealmURL}Pet/vanGogh`, loader);
+    await saveCard(paper, `${testRealmURL}Pet/paper`, loader);
 
     let changeEvent: { fieldName: string; value: any } | undefined;
     let eventCount = 0;
