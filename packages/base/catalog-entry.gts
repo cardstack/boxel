@@ -25,7 +25,6 @@ export class CatalogEntry extends Card {
       let loader = Loader.getLoaderFor(Object.getPrototypeOf(this).constructor);
 
       if (!loader) {
-        debugger;
         throw new Error(
           'Could not find a loader for this instance’s class’s module'
         );

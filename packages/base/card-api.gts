@@ -938,7 +938,6 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     let loader = Loader.getLoaderFor(createFromSerialized);
 
     if (!loader) {
-      debugger;
       throw new Error('Could not find a loader, this should not happen');
     }
 
@@ -1274,7 +1273,6 @@ class LinksToMany<FieldT extends CardConstructor>
     let loader = Loader.getLoaderFor(createFromSerialized);
 
     if (!loader) {
-      debugger;
       throw new Error('Could not find a loader, this should not happen');
     }
 
@@ -2110,7 +2108,6 @@ async function cardClassFromResource<CardT extends CardBaseConstructor>(
     let loader = Loader.getLoaderFor(fallback);
 
     if (!loader) {
-      debugger;
       throw new Error('Could not find a loader, this should not happen');
     }
 
