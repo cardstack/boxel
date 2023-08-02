@@ -203,6 +203,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
       .hover-button.preview {
         top: 0;
         left: 0;
+        visibility: collapse; /* remove this line to no longer hide the preview icon */
       }
       .hover-button.more-actions {
         bottom: 0;
