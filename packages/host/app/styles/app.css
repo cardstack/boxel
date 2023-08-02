@@ -15,7 +15,7 @@
 }
 
 .dialog-box__content {
-  padding: 0 var(--boxel-sp-xxl) var(--boxel-sp-xl);
+  padding: 0 var(--boxel-sp-xl) var(--boxel-sp-xl);
   height: 100%;
   overflow: auto;
 }
@@ -25,6 +25,7 @@
 }
 
 .dialog-box__close {
+  --icon-bg: var(--boxel-dark);
   border: none;
   background: none;
   font: var(--boxel-font-lg);
@@ -64,7 +65,7 @@
 
 .link {
   color: var(--boxel-highlight);
-  text-decoration:underline
+  text-decoration: underline;
 }
 .link:hover {
   color: var(--boxel-highlight-hover);
@@ -73,7 +74,8 @@
 /* Catalog Entry */
 .catalog-entry {
   display: grid;
-  gap: var(--boxel-sp-xxxs);
+  gap: 3px;
+  font: var(--boxel-font-sm);
 }
 
 .catalog-entry--embedded > * {
@@ -82,8 +84,18 @@
   text-overflow: ellipsis;
 }
 
+.catalog-entry--embedded__title {
+  font: 700 var(--boxel-font-sm);
+}
+
 .catalog-entry__realm-name {
   color: var(--boxel-teal);
+  font-size: var(--boxel-font-size-xs);
+}
+
+.catalog-entry-embedded__description {
+  margin: 0;
+  color: var(--boxel-500);
   font-size: var(--boxel-font-size-xs);
 }
 
@@ -137,6 +149,27 @@
 
 .contains-many-editor ul > li + li {
   margin-top: var(--boxel-sp);
+}
+
+.contains-many-editor .add-new {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--boxel-sp-xxxs);
+
+  background: var(--boxel-light-100);
+  box-sizing: border-box;
+  cursor: pointer;
+  width: 100%;
+  height: calc(var(--boxel-sp-xxxl) * var(--boxel-ratio));
+  border: 1px solid var(--boxel-form-control-border-color);
+  border-radius: var(--boxel-form-control-border-radius);
+  color: var(--boxel-teal);
+  font: var(--boxel-font-sm);
+  font-weight: 500;
+  letter-spacing: var(--boxel-lsp-xs);
+  transition: border-color var(--boxel-transition);
+  --icon-color: var(--boxel-teal);
 }
 
 /* Plural Field */
@@ -333,9 +366,6 @@
   justify-items: center;
   height: 100%;
 }
-.operator-mode .cards-grid__cards > li {
-  cursor: pointer;
-}
 .operator-mode .buried .cards-grid__cards,
 .operator-mode .buried .cards-grid__add-button {
   display: none;
@@ -348,11 +378,12 @@
   position: sticky;
   left: 100%;
   bottom: var(--boxel-sp);
+  z-index: 1;
 }
 .grid-card {
   width: var(--grid-card-width);
   height: var(--grid-card-height);
-  padding: var(--boxel-sp-xs);
+  padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
 }
 .grid-card > *,
 .grid-card__thumbnail-text {

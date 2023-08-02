@@ -1,5 +1,11 @@
 import { module, test } from 'qunit';
-import { visit, currentURL, click, triggerEvent } from '@ember/test-helpers';
+import {
+  visit,
+  currentURL,
+  click,
+  triggerEvent,
+  waitFor,
+} from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
@@ -10,11 +16,13 @@ import {
   setupMockMessageService,
   testRealmURL,
 } from '../helpers';
+import stringify from 'safe-stable-stringify';
 import { Realm } from '@cardstack/runtime-common/realm';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import percySnapshot from '@percy/ember';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import { type CardStackItem } from '@cardstack/host/components/operator-mode/container';
 
 module('Acceptance | operator mode tests', function (hooks) {
   let realm: Realm;
@@ -45,11 +53,29 @@ module('Acceptance | operator mode tests', function (hooks) {
           });
           static embedded = class Embedded extends Component<typeof this> {
             <template>
-              <div ...attributes>
-                <h3 data-test-pet={{@model.name}}>
-                  <@fields.name/>
-                </h3>
-              </div>
+              <h3 data-test-pet={{@model.name}}>
+                <@fields.name/>
+              </h3>
+            </template>
+          }
+        }
+      `,
+      'shipping-info.gts': `
+        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        export class ShippingInfo extends Card {
+          static displayName = 'Shipping Info';
+          @field preferredCarrier = contains(StringCard);
+          @field remarks = contains(StringCard);
+          @field title = contains(StringCard, {
+            computeVia: function (this: ShippingInfo) {
+              return this.preferredCarrier;
+            },
+          });
+          static embedded = class Embedded extends Component<typeof this> {
+            <template>
+              <span data-test-preferredCarrier={{@model.preferredCarrier}}></span>
+              <@fields.preferredCarrier/>
             </template>
           }
         }
@@ -57,12 +83,14 @@ module('Acceptance | operator mode tests', function (hooks) {
       'address.gts': `
         import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
+        import { ShippingInfo } from "./shipping-info";
         import { FieldContainer } from '@cardstack/boxel-ui';
 
         export class Address extends Card {
           static displayName = 'Address';
           @field city = contains(StringCard);
           @field country = contains(StringCard);
+          @field shippingInfo = contains(ShippingInfo);
           static embedded = class Embedded extends Component<typeof this> {
             <template>
               <h3 data-test-city={{@model.city}}>
@@ -71,6 +99,7 @@ module('Acceptance | operator mode tests', function (hooks) {
               <h3 data-test-country={{@model.country}}>
                 <@fields.country/>
               </h3>
+              <div data-test-shippingInfo-field><@fields.shippingInfo/></div>
             </template>
           }
 
@@ -82,6 +111,7 @@ module('Acceptance | operator mode tests', function (hooks) {
               <FieldContainer @label='country' @tag='label' data-test-boxel-input-country>
                 <@fields.country />
               </FieldContainer>
+              <div data-test-shippingInfo-field><@fields.shippingInfo/></div>
             </template>
           };
         }
@@ -148,6 +178,10 @@ module('Acceptance | operator mode tests', function (hooks) {
             address: {
               city: 'Bandung',
               country: 'Indonesia',
+              shippingInfo: {
+                preferredCarrier: 'DHL',
+                remarks: `Don't let bob deliver the package--he's always bringing it to the wrong address`,
+              },
             },
           },
           relationships: {
@@ -223,39 +257,38 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.strictEqual(
         currentURL(),
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          JSON.stringify({
+          stringify({
             stacks: [
-              {
-                items: [
-                  {
-                    card: { id: 'http://test-realm/test/index' },
-                    format: 'isolated',
-                  },
-                ],
-              },
+              [
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/index',
+                  format: 'isolated',
+                },
+              ],
             ],
-          })
+          })!
         )}`
       );
     });
 
     test('restoring the stack from query param', async function (assert) {
-      let operatorModeStateParam = JSON.stringify({
+      let operatorModeStateParam = stringify({
         stacks: [
-          {
-            items: [
-              {
-                card: { id: 'http://test-realm/test/Person/fadhlan' },
-                format: 'isolated',
-              },
-              {
-                card: { id: 'http://test-realm/test/Pet/mango' },
-                format: 'isolated',
-              },
-            ],
-          },
+          [
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Person/fadhlan',
+              format: 'isolated',
+            },
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Pet/mango',
+              format: 'isolated',
+            },
+          ],
         ],
-      });
+      })!;
 
       await visit(
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
@@ -273,95 +306,232 @@ module('Acceptance | operator mode tests', function (hooks) {
         .dom('[data-test-stack-card-index="1"] [data-test-boxel-header-title]')
         .includesText('Pet');
 
-      // Remove the dog from the stack
+      // Remove mango (the dog) from the stack
       await click('[data-test-stack-card-index="1"] [data-test-close-button]');
 
       // The stack should be updated in the URL
       assert.strictEqual(
         currentURL(),
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          JSON.stringify({
+          stringify({
             stacks: [
-              {
-                items: [
-                  {
-                    card: { id: 'http://test-realm/test/Person/fadhlan' },
-                    format: 'isolated',
-                  },
-                ],
-              },
+              [
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/Person/fadhlan',
+                  format: 'isolated',
+                },
+              ],
             ],
-          })
+          })!
         )}`
       );
 
-      // Add the dog back to the stack (via overlayed linked card button)
-      await click('[data-test-cardstack-operator-mode-overlay-button]');
+      await waitFor('[data-test-pet="Mango"]');
+      await click('[data-test-pet="Mango"]');
 
       // The stack should be reflected in the URL
       assert.strictEqual(
         currentURL(),
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          JSON.stringify({
+          stringify({
             stacks: [
-              {
-                items: [
-                  {
-                    card: { id: 'http://test-realm/test/Person/fadhlan' },
-                    format: 'isolated',
-                  },
-                  {
-                    card: { id: 'http://test-realm/test/Pet/mango' },
-                    format: 'isolated',
-                  },
-                ],
-              },
+              [
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/Person/fadhlan',
+                  format: 'isolated',
+                },
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/Pet/mango',
+                  format: 'isolated',
+                },
+              ],
             ],
-          })
+          })!
         )}`
       );
 
       // Click Edit on the top card
       await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
-      await click('[data-test-boxel-menu-item-text="Edit"]');
 
       // The edit format should be reflected in the URL
       assert.strictEqual(
         currentURL(),
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          JSON.stringify({
+          stringify({
             stacks: [
-              {
-                items: [
-                  {
-                    card: { id: 'http://test-realm/test/Person/fadhlan' },
-                    format: 'isolated',
-                  },
-                  {
-                    card: { id: 'http://test-realm/test/Pet/mango' },
-                    format: 'edit',
-                  },
-                ],
-              },
+              [
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/Person/fadhlan',
+                  format: 'isolated',
+                },
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/Pet/mango',
+                  format: 'edit',
+                },
+              ],
             ],
-          })
+          })!
+        )}`
+      );
+    });
+
+    test('restoring the stack from query param with nested contained cards', async function (assert) {
+      let operatorModeStateParam = stringify({
+        stacks: [
+          [
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Person/fadhlan',
+              format: 'isolated',
+            },
+            {
+              type: 'contained',
+              fieldOfIndex: 0,
+              fieldName: 'address',
+              format: 'isolated',
+            },
+            {
+              type: 'contained',
+              fieldOfIndex: 1,
+              fieldName: 'shippingInfo',
+              format: 'isolated',
+            },
+          ],
+        ],
+      })!;
+
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam
+        )}`
+      );
+
+      await percySnapshot(assert);
+
+      assert
+        .dom('[data-test-stack-card-index="0"] [data-test-boxel-header-title]')
+        .includesText('Person');
+      assert
+        .dom('[data-test-stack-card-index="1"] [data-test-boxel-header-title]')
+        .includesText('Address');
+      assert
+        .dom('[data-test-stack-card-index="2"] [data-test-boxel-header-title]')
+        .includesText('Shipping Info');
+
+      await click('[data-test-stack-card-index="2"] [data-test-close-button]');
+
+      // The stack should be updated in the URL
+      assert.strictEqual(
+        currentURL(),
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          stringify({
+            stacks: [
+              [
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/Person/fadhlan',
+                  format: 'isolated',
+                },
+                {
+                  type: 'contained',
+                  fieldName: 'address',
+                  fieldOfIndex: 0,
+                  format: 'isolated',
+                },
+              ],
+            ],
+          })!
+        )}`
+      );
+
+      await waitFor(
+        '[data-test-shippinginfo-field] [data-test-field-component-card]'
+      );
+      await click(
+        '[data-test-shippinginfo-field] [data-test-field-component-card]'
+      );
+
+      // The stack should be reflected in the URL
+      assert.strictEqual(
+        currentURL(),
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          stringify({
+            stacks: [
+              [
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/Person/fadhlan',
+                  format: 'isolated',
+                },
+                {
+                  type: 'contained',
+                  fieldOfIndex: 0,
+                  fieldName: 'address',
+                  format: 'isolated',
+                },
+                {
+                  type: 'contained',
+                  fieldOfIndex: 1,
+                  fieldName: 'shippingInfo',
+                  format: 'isolated',
+                },
+              ],
+            ],
+          })!
+        )}`
+      );
+
+      // Click Edit on the top card
+      await click('[data-test-stack-card-index="2"] [data-test-edit-button]');
+
+      // The edit format should be reflected in the URL
+      assert.strictEqual(
+        currentURL(),
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          stringify({
+            stacks: [
+              [
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/Person/fadhlan',
+                  format: 'edit',
+                },
+                {
+                  type: 'contained',
+                  fieldOfIndex: 0,
+                  fieldName: 'address',
+                  format: 'edit',
+                },
+                {
+                  type: 'contained',
+                  fieldOfIndex: 1,
+                  fieldName: 'shippingInfo',
+                  format: 'edit',
+                },
+              ],
+            ],
+          })!
         )}`
       );
     });
 
     test('restoring the stack from query param when card is in edit format', async function (assert) {
-      let operatorModeStateParam = JSON.stringify({
+      let operatorModeStateParam = stringify({
         stacks: [
-          {
-            items: [
-              {
-                card: { id: 'http://test-realm/test/Person/fadhlan' },
-                format: 'edit',
-              },
-            ],
-          },
+          [
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Person/fadhlan',
+              format: 'edit',
+            },
+          ],
         ],
-      });
+      })!;
 
       await visit(
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
@@ -376,22 +546,22 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
 
     test('click left or right add card button will open the search panel and then click on a recent card will open a new stack on the left or right', async function (assert) {
-      let operatorModeStateParam = JSON.stringify({
+      let operatorModeStateParam = stringify({
         stacks: [
-          {
-            items: [
-              {
-                card: { id: 'http://test-realm/test/Person/fadhlan' },
-                format: 'isolated',
-              },
-              {
-                card: { id: 'http://test-realm/test/Pet/mango' },
-                format: 'edit',
-              },
-            ],
-          },
+          [
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Person/fadhlan',
+              format: 'isolated',
+            },
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Pet/mango',
+              format: 'edit',
+            },
+          ],
         ],
-      });
+      })!;
 
       await visit(
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
@@ -404,8 +574,11 @@ module('Acceptance | operator mode tests', function (hooks) {
       ) as OperatorModeStateService;
 
       // @ts-ignore Property '#private' is missing in type 'Card[]' but required in type 'TrackedArray<Card>'.glint(2741) - don't care about this error here, just stubbing
-      operatorModeStateService.recentCards =
-        operatorModeStateService.state.stacks[0].items.map((item) => item.card);
+      operatorModeStateService.recentCards = (
+        operatorModeStateService.state.stacks[0].filter(
+          (item) => item.type === 'card'
+        ) as CardStackItem[]
+      ).map((item) => item.card);
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
       assert.dom('[data-test-add-card-left-stack]').exists();
@@ -432,9 +605,9 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-add-card-left-stack]').doesNotExist();
       assert.dom('[data-test-add-card-right-stack]').doesNotExist();
 
-      // Close the only card in the 2nd stack
+      // Close the only card in the 1st stack
       await click(
-        '[data-test-operator-mode-stack="1"] [data-test-close-button]'
+        '[data-test-operator-mode-stack="0"] [data-test-close-button]'
       );
 
       // There is now only 1 stack and the buttons to add a neighbor stack are back
@@ -456,36 +629,99 @@ module('Acceptance | operator mode tests', function (hooks) {
       // There are now 2 stacks
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
       assert.dom('[data-test-operator-mode-stack="0"]').includesText('Fadhlan');
-      assert.dom('[data-test-operator-mode-stack="1"]').includesText('Mango'); // Fadhlan goes on the right stack
+      assert.dom('[data-test-operator-mode-stack="1"]').includesText('Mango'); // Mango gets move onto the right stack
 
       // Buttons to add a neighbor stack are gone
       assert.dom('[data-test-add-card-left-stack]').doesNotExist();
       assert.dom('[data-test-add-card-right-stack]').doesNotExist();
     });
+    test('Clicking search panel (without left and right buttons activated) replaces open card on existing stack', async function (assert) {
+      let operatorModeStateParam = stringify({
+        stacks: [
+          [
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Person/fadhlan',
+              format: 'isolated',
+            },
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Pet/mango',
+              format: 'isolated',
+            },
+          ],
+        ],
+      })!;
+
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam
+        )}`
+      );
+
+      let operatorModeStateService = this.owner.lookup(
+        'service:operator-mode-state-service'
+      ) as OperatorModeStateService;
+
+      // @ts-ignore Property '#private' is missing in type 'Card[]' but required in type 'TrackedArray<Card>'.glint(2741) - don't care about this error here, just stubbing
+      operatorModeStateService.recentCards = (
+        operatorModeStateService.state.stacks[0].filter(
+          (item) => item.type === 'card'
+        ) as CardStackItem[]
+      ).map((item) => item.card);
+
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
+      assert.dom('[data-test-add-card-left-stack]').exists();
+      assert.dom('[data-test-add-card-right-stack]').exists();
+      assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
+
+      // Click on search-input
+      await click('[data-test-search-input]');
+
+      assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
+
+      // Click on a recent search
+      await click(
+        '[data-test-search-result="http://test-realm/test/Pet/mango"]'
+      );
+
+      assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
+
+      // The recent card REPLACES onto on current stack
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
+      assert
+        .dom(
+          '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="0"]'
+        )
+        .includesText('Mango');
+      assert
+        .dom(
+          '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"]'
+        )
+        .doesNotExist();
+    });
   });
 
   module('2 stacks', function () {
     test('restoring the stacks from query param', async function (assert) {
-      let operatorModeStateParam = JSON.stringify({
+      let operatorModeStateParam = stringify({
         stacks: [
-          {
-            items: [
-              {
-                card: { id: 'http://test-realm/test/Person/fadhlan' },
-                format: 'isolated',
-              },
-            ],
-          },
-          {
-            items: [
-              {
-                card: { id: 'http://test-realm/test/Pet/mango' },
-                format: 'isolated',
-              },
-            ],
-          },
+          [
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Person/fadhlan',
+              format: 'isolated',
+            },
+          ],
+          [
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Pet/mango',
+              format: 'isolated',
+            },
+          ],
         ],
-      });
+      })!;
 
       await visit(
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
@@ -511,18 +747,17 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.strictEqual(
         currentURL(),
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          JSON.stringify({
+          stringify({
             stacks: [
-              {
-                items: [
-                  {
-                    card: { id: 'http://test-realm/test/Person/fadhlan' },
-                    format: 'isolated',
-                  },
-                ],
-              },
+              [
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/Person/fadhlan',
+                  format: 'isolated',
+                },
+              ],
             ],
-          })
+          })!
         )}`
       );
 
@@ -532,6 +767,73 @@ module('Acceptance | operator mode tests', function (hooks) {
       );
 
       assert.dom('.no-cards').includesText('Add a card to get started');
+    });
+
+    test('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
+      let operatorModeStateParam = stringify({
+        stacks: [
+          [
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Person/fadhlan',
+              format: 'isolated',
+            },
+          ],
+          [
+            {
+              type: 'card',
+              id: 'http://test-realm/test/index',
+              format: 'isolated',
+            },
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Pet/mango',
+              format: 'isolated',
+            },
+          ],
+        ],
+      })!;
+
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam
+        )}`
+      );
+
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
+
+      // Click on search-input
+      await click('[data-test-search-input]');
+
+      assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
+
+      // Click on a recent search
+      await click(
+        '[data-test-search-result="http://test-realm/test/Person/fadhlan"]'
+      );
+      assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
+
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
+      assert
+        .dom(
+          '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="0"]'
+        )
+        .includesText('Fadhlan');
+      assert
+        .dom(
+          '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"]'
+        )
+        .doesNotExist();
+      assert
+        .dom(
+          '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="0"]'
+        )
+        .includesText('Fadhlan');
+      assert
+        .dom(
+          '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="1"]'
+        )
+        .doesNotExist();
     });
   });
 });

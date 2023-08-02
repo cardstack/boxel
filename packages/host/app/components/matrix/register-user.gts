@@ -25,13 +25,19 @@ const MATRIX_REGISTRATION_TYPES = {
   askForToken: undefined,
 };
 
-export default class RegisterUser extends Component {
+interface Args {
+  Args: {
+    onCancel: () => void;
+  };
+}
+
+export default class RegisterUser extends Component<Args> {
   <template>
     <BoxelHeader @title='Register User' @hasBackground={{TRUE}} />
-    {{#if this.doRegistrationFlow.isRunning}}
-      <LoadingIndicator />
-    {{else if (eq this.state.type 'askForToken')}}
-      <fieldset>
+    <div class='registration-form'>
+      {{#if this.doRegistrationFlow.isRunning}}
+        <LoadingIndicator />
+      {{else if (eq this.state.type 'askForToken')}}
         <FieldContainer @label='Registration Token:' @tag='label'>
           <BoxelInputValidationState
             data-test-token-field
@@ -42,16 +48,21 @@ export default class RegisterUser extends Component {
             @onInput={{this.setToken}}
           />
         </FieldContainer>
-        <Button
-          data-test-next-btn
-          @kind='primary'
-          @disabled={{this.isNextButtonDisabled}}
-          {{on 'click' this.sendToken}}
-        >Next</Button>
-      </fieldset>
-    {{else if (eq this.state.type 'initial')}}
-      <fieldset>
-        <FieldContainer @label='Username:' @tag='label'>
+        <div class='button-wrapper'>
+          <Button data-test-cancel-btn {{on 'click' @onCancel}}>Cancel</Button>
+          <Button
+            data-test-next-btn
+            @kind='primary'
+            @disabled={{this.isNextButtonDisabled}}
+            {{on 'click' this.sendToken}}
+          >Next</Button>
+        </div>
+      {{else if (eq this.state.type 'initial')}}
+        <FieldContainer
+          @label='Username:'
+          @tag='label'
+          class='registration-field'
+        >
           <BoxelInputValidationState
             data-test-username-field
             @id=''
@@ -61,7 +72,11 @@ export default class RegisterUser extends Component {
             @onInput={{this.setUsername}}
           />
         </FieldContainer>
-        <FieldContainer @label='Password:' @tag='label'>
+        <FieldContainer
+          @label='Password:'
+          @tag='label'
+          class='registration-field'
+        >
           <BoxelInput
             data-test-password-field
             type='password'
@@ -69,14 +84,37 @@ export default class RegisterUser extends Component {
             @onInput={{this.setPassword}}
           />
         </FieldContainer>
-        <Button
-          data-test-register-btn
-          @kind='primary'
-          @disabled={{this.isRegisterButtonDisabled}}
-          {{on 'click' this.register}}
-        >Register</Button>
-      </fieldset>
-    {{/if}}
+        <div class='button-wrapper'>
+          <Button data-test-cancel-btn {{on 'click' @onCancel}}>Cancel</Button>
+          <Button
+            data-test-register-btn
+            @kind='primary'
+            @disabled={{this.isRegisterButtonDisabled}}
+            {{on 'click' this.register}}
+          >Register</Button>
+        </div>
+      {{/if}}
+    </div>
+
+    <style>
+      .registration-form {
+        padding: var(--boxel-sp);
+      }
+
+      .button-wrapper button {
+        margin-left: var(--boxel-sp-xs);
+      }
+
+      .button-wrapper {
+        display: flex;
+        justify-content: flex-end;
+        padding-top: var(--boxel-sp-sm);
+      }
+      .registration-field {
+        margin-top: var(--boxel-sp-sm);
+      }
+
+    </style>
   </template>
 
   @tracked private usernameError: string | undefined;
@@ -258,10 +296,7 @@ export default class RegisterUser extends Component {
 
     if (auth) {
       await this.matrixService.start(auth);
-      let preparedKey = await this.matrixService.client.prepareKeyBackupVersion(
-        this.password
-      );
-      await this.matrixService.client.createKeyBackupVersion(preparedKey);
+      this.args.onCancel();
     }
   });
 

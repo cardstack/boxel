@@ -44,6 +44,7 @@ export class CatalogEntry extends Card {
       return this[realmInfo]?.name;
     },
   });
+  @field thumbnailURL = contains(StringCard, { computeVia: () => null }); // remove this if we want card type entries to have images
 
   get showDemo() {
     return !this.isPrimitive;
@@ -81,11 +82,12 @@ export class CatalogEntry extends Card {
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <div class='catalog-entry catalog-entry--embedded'>
-        <header><@fields.title /></header>
-        <div class='catalog-entry__realm-name' data-test-realm-name>
-          in
-          <@fields.realmName />
-        </div>
+        <header class='catalog-entry--embedded__title'>
+          <@fields.title />
+        </header>
+        <p class='catalog-entry-embedded__description' data-test-description>
+          <@fields.description />
+        </p>
       </div>
     </template>
   };

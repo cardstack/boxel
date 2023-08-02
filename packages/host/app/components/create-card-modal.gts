@@ -33,7 +33,7 @@ export default class CreateCardModal extends Component {
               <button
                 {{on 'click' (fn this.save undefined)}}
                 class='dialog-box__close'
-              >x</button>
+              >⨯</button>
             </Header>
             <div class='dialog-box__content'>
               <CardEditor @card={{card}} @onSave={{this.save}} />

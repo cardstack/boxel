@@ -9,7 +9,9 @@ import InputValidationStateUsage from '@cardstack/boxel-ui/components/input/vali
 import LoadingIndicatorUsage from '@cardstack/boxel-ui/components/loading-indicator/usage';
 import MessageUsage from '@cardstack/boxel-ui/components/message/usage';
 import ModalUsage from '@cardstack/boxel-ui/components/modal/usage';
+import MenuUsage from '@cardstack/boxel-ui/components/menu/usage';
 import DropdownUsage from '@cardstack/boxel-ui/components/dropdown/usage';
+import TooltipUsage from '@cardstack/boxel-ui/components/tooltip/usage';
 
 export default class IndexController extends FreestyleController {
   constructor() {
@@ -25,7 +27,9 @@ export default class IndexController extends FreestyleController {
       ['Boxel::LoadingIndicator', LoadingIndicatorUsage],
       ['Boxel::Modal', ModalUsage],
       ['Boxel::Message', MessageUsage],
+      ['Boxel::Menu', MenuUsage],
       ['Boxel::Dropdown', DropdownUsage],
+      ['Boxel::Tooltip', TooltipUsage],
     ].map(([name, c]) => {
       return {
         title: name,

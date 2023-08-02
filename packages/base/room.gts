@@ -22,8 +22,7 @@ import {
   type CardRef,
 } from '@cardstack/runtime-common';
 
-// this is so we can have triple equals equivalent attached cards in messages
-const attachedCards = new Map<string, Promise<Card>>();
+const cardVersions = new Map<Card, string>();
 
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember({
@@ -228,6 +227,12 @@ const roomMemberCache = new WeakMap<RoomCard, Map<string, RoomMemberCard>>();
 const roomStateCache = new WeakMap<RoomCard, RoomState>();
 
 export class RoomCard extends Card {
+  // This can be used  to get the version of `cardInstance` like:
+  //   Reflect.getProtypeOf(roomCardInstance).constructor.getVersion(cardInstance);
+  static getVersion(card: Card) {
+    return cardVersions.get(card);
+  }
+
   // the only writeable field for this card should be the "events" field.
   // All other fields should derive from the "events" field.
   @field events = containsMany(MatrixEventCard);
@@ -369,7 +374,14 @@ export class RoomCard extends Card {
         if (event.type !== 'm.room.message') {
           continue;
         }
-        if (cache.has(event.event_id)) {
+        let event_id = event.event_id;
+        let update = false;
+        if (event.content['m.relates_to']?.rel_type === 'm.replace') {
+          event_id = event.content['m.relates_to'].event_id;
+          console.log('Updating', event_id);
+          update = true;
+        }
+        if (cache.has(event_id) && !update) {
           continue;
         }
 
@@ -388,25 +400,24 @@ export class RoomCard extends Card {
         };
         if (event.content.msgtype === 'org.boxel.card') {
           let cardDoc = event.content.instance;
-          let attachedCard: Promise<Card> | undefined;
           if (cardDoc.data.id == null) {
             throw new Error(`cannot handle cards in room without an ID`);
           }
-          attachedCard = attachedCards.get(cardDoc.data.id);
-          if (!attachedCard) {
-            attachedCard = createFromSerialized<typeof Card>(
-              cardDoc.data,
-              cardDoc,
-              new URL(cardDoc.data.id)
-            );
-            attachedCards.set(cardDoc.data.id, attachedCard);
-          }
-          newMessages.set(
-            event.event_id,
-            new MessageCard({ ...cardArgs, attachedCard: await attachedCard })
+          let attachedCard = await createFromSerialized<typeof Card>(
+            cardDoc.data,
+            cardDoc,
+            new URL(cardDoc.data.id)
           );
+          newMessages.set(
+            event_id,
+            new MessageCard({ ...cardArgs, attachedCard })
+          );
+          if (!cardVersions.get(attachedCard)) {
+            cardVersions.set(attachedCard, event.unsigned.transaction_id);
+          }
         } else {
-          newMessages.set(event.event_id, new MessageCard(cardArgs));
+          console.log('Setting new messages with ', event_id, cardArgs);
+          newMessages.set(event_id, new MessageCard(cardArgs));
         }
 
         index++;
@@ -415,9 +426,7 @@ export class RoomCard extends Card {
       // and cache may have changed
       let updatedCache = messageCache.get(this)!; // this should always have an entry as we initialized it at the beginning of the computed
       for (let [eventId, message] of newMessages) {
-        if (!updatedCache.has(eventId)) {
-          updatedCache.set(eventId, message);
-        }
+        updatedCache.set(eventId, message);
       }
       // this sort should hopefully be very optimized since events will
       // be close to chronological order
@@ -518,6 +527,10 @@ interface LeaveEvent extends RoomStateEvent {
 interface MessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: {
+    'm.relates_to'?: {
+      rel_type: string;
+      event_id: string;
+    };
     msgtype: 'm.text';
     format: 'org.matrix.custom.html';
     body: string;
@@ -534,6 +547,10 @@ interface MessageEvent extends BaseMatrixEvent {
 interface CardMessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: {
+    'm.relates_to'?: {
+      rel_type: string;
+      event_id: string;
+    };
     msgtype: 'org.boxel.card';
     format: 'org.matrix.custom.html';
     body: string;
@@ -551,6 +568,10 @@ interface CardMessageEvent extends BaseMatrixEvent {
 interface ObjectiveEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: {
+    'm.relates_to'?: {
+      rel_type: string;
+      event_id: string;
+    };
     msgtype: 'org.boxel.objective';
     body: string;
     ref: CardRef;

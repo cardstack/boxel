@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Friend from /friend",
+      "description": "Catalog entry for Friend from /friend",
+      "ref": {
+        "module": "../friend",
+        "name": "Friend"
+      },
+      "demo": {
+        "firstName": null,
+        "thumbnailURL": "../logo.png"
+      }
+    },
+    "relationships": {
+      "demo.friend": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "fields": {
+        "demo": {
+          "adoptsFrom": {
+            "module": "../friend",
+            "name": "Friend"
+          }
+        }
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}

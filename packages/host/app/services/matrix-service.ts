@@ -11,7 +11,6 @@ import type * as MatrixSDK from 'matrix-js-sdk';
 import { task } from 'ember-concurrency';
 import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
-import RouterService from '@ember/routing/router-service';
 import { importResource } from '../resources/import';
 import { marked } from 'marked';
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
@@ -24,17 +23,20 @@ import {
 } from '@cardstack/runtime-common';
 import type LoaderService from './loader-service';
 import { type Card } from 'https://cardstack.com/base/card-api';
-import type { RoomCard } from 'https://cardstack.com/base/room';
+import type {
+  RoomCard,
+  MatrixEvent as DiscreteMatrixEvent,
+} from 'https://cardstack.com/base/room';
 import type { RoomObjectiveCard } from 'https://cardstack.com/base/room-objective';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 const { matrixURL } = ENV;
 const SET_OBJECTIVE_POWER_LEVEL = 50;
+const DEFAULT_PAGE_SIZE = 50;
 
 export type Event = Partial<IEvent>;
 
 export default class MatrixService extends Service {
-  @service private declare router: RouterService;
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @tracked private _client: MatrixClient | undefined;
@@ -88,15 +90,15 @@ export default class MatrixService extends Service {
     return this.client.isLoggedIn();
   }
 
-  get userId() {
-    return this.client.getUserId();
-  }
-
   get client() {
     if (!this._client) {
       throw new Error(`cannot use matrix client before matrix SDK has loaded`);
     }
     return this._client;
+  }
+
+  get userId() {
+    return this.client.getUserId();
   }
 
   get cardAPI() {
@@ -128,7 +130,6 @@ export default class MatrixService extends Service {
     await this.client.stopClient();
     await this.client.logout();
     this.resetState();
-    this.router.transitionTo('chat');
   }
 
   async start(auth?: IAuthData) {
@@ -178,12 +179,11 @@ export default class MatrixService extends Service {
       deviceId,
     });
     if (this.isLoggedIn) {
-      this.router.transitionTo('chat.index');
       saveAuth(auth);
       this.bindEventListeners();
 
       await this._client.startClient();
-      await this.initializeRoomStates();
+      await this.initializeRooms();
     }
   }
 
@@ -254,27 +254,18 @@ export default class MatrixService extends Service {
     }
   }
 
-  canSetObjective(roomId: string): boolean {
-    let room = this.client.getRoom(roomId);
-    if (!room) {
-      throw new Error(`bug: cannot get room for ${roomId}`);
-    }
+  async allowedToSetObjective(roomId: string): Promise<boolean> {
+    let powerLevels = await this.getPowerLevels(roomId);
     let myUserId = this.client.getUserId();
     if (!myUserId) {
       throw new Error(`bug: cannot get user ID for current matrix client`);
     }
 
-    let myself = room.getMember(myUserId);
-    if (!myself) {
-      throw new Error(
-        `bug: cannot get room member '${myUserId}' in room '${roomId}'`
-      );
-    }
-    return myself.powerLevel >= SET_OBJECTIVE_POWER_LEVEL;
+    return (powerLevels[myUserId] ?? 0) >= SET_OBJECTIVE_POWER_LEVEL;
   }
 
   async setObjective(roomId: string, ref: CardRef): Promise<void> {
-    if (!this.canSetObjective(roomId)) {
+    if (!this.allowedToSetObjective(roomId)) {
       throw new Error(
         `The user '${this.client.getUserId()}' is not permitted to set an objective in room '${roomId}'`
       );
@@ -286,12 +277,55 @@ export default class MatrixService extends Service {
     });
   }
 
-  async initializeRoomStates() {
+  async initializeRooms() {
     let { joined_rooms: joinedRooms } = await this.client.getJoinedRooms();
     for (let roomId of joinedRooms) {
       let stateEvents = await this.client.roomState(roomId);
       await Promise.all(stateEvents.map((event) => addRoomEvent(this, event)));
+      let messages = await this.allRoomMessages(roomId);
+      await Promise.all(messages.map((event) => addRoomEvent(this, event)));
     }
+  }
+
+  async allRoomMessages(roomId: string, opts?: MessageOptions) {
+    let messages: DiscreteMatrixEvent[] = [];
+    let from: string | undefined;
+
+    do {
+      let response = await fetch(
+        `${matrixURL}/_matrix/client/v3/rooms/${roomId}/messages?dir=${
+          opts?.direction ? opts.direction.slice(0, 1) : 'f'
+        }&limit=${opts?.pageSize ?? DEFAULT_PAGE_SIZE}${
+          from ? '&from=' + from : ''
+        }`,
+        {
+          headers: {
+            Authorization: `Bearer ${this.client.getAccessToken()}`,
+          },
+        }
+      );
+      let { chunk, end } = await response.json();
+      from = end;
+      let events: DiscreteMatrixEvent[] = chunk;
+      if (opts?.onMessages) {
+        await opts.onMessages(events);
+      }
+      messages.push(...events);
+    } while (!from);
+    return messages;
+  }
+
+  async getPowerLevels(roomId: string): Promise<{ [userId: string]: number }> {
+    let response = await fetch(
+      `${matrixURL}/_matrix/client/v3/rooms/${roomId}/state/m.room.power_levels/`,
+      {
+        headers: {
+          Authorization: `Bearer ${this.client.getAccessToken()}`,
+        },
+      }
+    );
+    let { users } = await response.json();
+    return users;
   }
 
   private resetState() {
@@ -340,4 +374,10 @@ function getAuth(): IAuthData | undefined {
     return;
   }
   return JSON.parse(auth) as IAuthData;
+}
+
+interface MessageOptions {
+  direction?: 'forward' | 'backward';
+  onMessages?: (messages: DiscreteMatrixEvent[]) => Promise<void>;
+  pageSize: number;
 }

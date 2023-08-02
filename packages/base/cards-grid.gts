@@ -10,7 +10,7 @@ import {
   relativeTo,
   type CardBase,
 } from './card-api';
-import { IconButton } from '@cardstack/boxel-ui';
+import { IconButton, Tooltip } from '@cardstack/boxel-ui';
 import {
   chooseCard,
   catalogEntryRef,
@@ -19,7 +19,6 @@ import {
   cardTypeDisplayName,
 } from '@cardstack/runtime-common';
 import { type CatalogEntry } from './catalog-entry';
-import { fn } from '@ember/helper';
 import StringCard from './string';
 
 class Isolated extends Component<typeof CardsGrid> {
@@ -28,8 +27,12 @@ class Isolated extends Component<typeof CardsGrid> {
       <ul class='cards-grid__cards' data-test-cards-grid-cards>
         {{#each this.request.instances as |card|}}
           <li
+            {{@context.cardComponentModifier
+              card=card
+              format='data'
+              fieldType=undefined
+            }}
             data-test-cards-grid-item={{card.id}}
-            {{on 'click' (fn this.openCard card)}}
           >
             <div class='grid-card'>
               <div class='grid-card__thumbnail'>
@@ -59,16 +62,21 @@ class Isolated extends Component<typeof CardsGrid> {
 
       {{#if @context.actions.createCard}}
         <div class='cards-grid__add-button'>
-          <IconButton
-            @icon='icon-plus-circle'
-            @width='40px'
-            @height='40px'
-            @tooltip='Add a new card to this collection'
-            @tooltipPosition='left'
-            class='add-button'
-            {{on 'click' this.createNew}}
-            data-test-create-new-card-button
-          />
+          <Tooltip @placement='left' @offset={{6}}>
+            <:trigger>
+              <IconButton
+                @icon='icon-plus-circle'
+                @width='40px'
+                @height='40px'
+                class='add-button'
+                {{on 'click' this.createNew}}
+                data-test-create-new-card-button
+              />
+            </:trigger>
+            <:content>
+              Add a new card to this collection
+            </:content>
+          </Tooltip>
         </div>
       {{/if}}
     </div>
@@ -95,10 +103,6 @@ class Isolated extends Component<typeof CardsGrid> {
     this.createCard.perform();
   }
 
-  @action openCard(card: Card) {
-    this.args.context?.actions?.viewCard(card);
-  }
-
   private createCard = restartableTask(async () => {
     let card = await chooseCard<CatalogEntry>({
       filter: {
@@ -110,14 +114,10 @@ class Isolated extends Component<typeof CardsGrid> {
       return;
     }
 
-    let newCard = await this.args.context?.actions?.createCard?.(
+    await this.args.context?.actions?.createCard?.(
       card.ref,
       this.args.model[relativeTo]
     );
-
-    if (newCard) {
-      this.openCard(newCard);
-    }
   });
 }
 

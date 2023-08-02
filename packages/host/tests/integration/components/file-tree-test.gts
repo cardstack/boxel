@@ -55,6 +55,8 @@ module('Integration | file-tree', function (hooks) {
               return this.nickName;
             },
           });
+          @field description = contains(StringCard, { computeVia: () => 'Person' });
+          @field thumbnailURL = contains(StringCard, { computeVia: () => null });
           static isolated = class Isolated extends Component<typeof this> {
             <template><h1><@fields.firstName/></h1></template>
           }
@@ -144,7 +146,11 @@ module('Integration | file-tree', function (hooks) {
       }
     );
     await click('[data-test-create-new-card-button]');
+
     await waitFor('[data-test-card-catalog-modal] [data-test-realm-name]');
+    assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Choose a CatalogEntry card');
 
     assert
       .dom('[data-test-card-catalog] li')

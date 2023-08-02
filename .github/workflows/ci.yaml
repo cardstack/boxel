@@ -46,6 +46,7 @@ jobs:
         if: always()
         run: pnpm run lint
         working-directory: packages/realm-server
+
   boxel-motion-test:
     name: Boxel Motion Tests
     runs-on: ubuntu-latest
@@ -57,6 +58,7 @@ jobs:
       - name: Run Tests
         run: pnpm run test:ember
         working-directory: packages/boxel-motion-test-app
+
   boxel-ui-test:
     name: Boxel UI Tests
     runs-on: ubuntu-latest
@@ -68,6 +70,7 @@ jobs:
       - name: Run test suite
         run: pnpm test
         working-directory: packages/boxel-ui
+
   host-test:
     name: Host Tests
     runs-on: ubuntu-latest
@@ -89,6 +92,7 @@ jobs:
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
         working-directory: packages/host
+
   matrix-client-test:
     name: Matrix Client Tests
     runs-on: ubuntu-latest
@@ -106,7 +110,7 @@ jobs:
           NODE_OPTIONS: --max_old_space_size=4096
         working-directory: packages/host
       - name: Start realm servers
-        run: pnpm start:all &
+        run: pnpm start:without-matrix &
         working-directory: packages/realm-server
       - name: Run Playwright tests
         run: pnpm test
@@ -117,6 +121,7 @@ jobs:
           name: playwright-report
           path: packages/matrix/playwright-report/
           retention-days: 30
+
   realm-server-test:
     name: Realm Server Tests
     runs-on: ubuntu-latest
@@ -142,7 +147,6 @@ jobs:
 
   change-check:
     name: Check which packages changed
-    needs: [boxel-ui-test, host-test, realm-server-test]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
@@ -158,6 +162,7 @@ jobs:
               - '.github/actions/deploy-ember-preview/**'
               - '.github/actions/deploy-realm-server/**'
               - '.github/actions/waypoint-deploy/**'
+              - '.github/workflows/waypoint-deploy.yml'
               - '.github/workflows/ci.yaml'
               - 'packages/base/**'
               - 'packages/boxel-ui/**'
@@ -166,32 +171,49 @@ jobs:
               - 'packages/runtime-common/**'
               - 'pnpm-lock.yaml'
 
-  deploy-host:
-    name: Deploy host to staging
-    needs: change-check
+  build-host:
+    name: Build host
+    needs: [change-check]
     if: ${{ needs.change-check.outputs.boxel == 'true' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Deploy boxel-host if changes have happened
-        uses: ./.github/actions/deploy-boxel-host
-        with:
-          environment: staging
-          discord_webhook: ${{ secrets.DISCORD_WEBHOOK }}
+    uses: ./.github/workflows/build-host.yml
+    secrets: inherit
+    with:
+      environment: "staging"
+
+  build-realm-server:
+    name: Build realm-server
+    needs: [change-check]
+    if: ${{ needs.change-check.outputs.boxel == 'true' }}
+    uses: ./.github/workflows/waypoint-build.yml
+    secrets: inherit
+    with:
+      app: "realm-demo"
+      environment: "staging"
+      restore-mtime: true
+
+  deploy-host:
+    name: Deploy host
+    needs:
+      - boxel-ui-test
+      - host-test
+      - realm-server-test
+      - build-host
+      - build-realm-server
+    uses: ./.github/workflows/deploy-host.yml
+    secrets: inherit
+    with:
+      environment: "staging"
 
   deploy-realm-server:
     name: Deploy realm server to staging
-    needs: deploy-host
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Deploy ${{ matrix.app }}
-        uses: ./.github/actions/deploy-realm-server
-        with:
-          app_name: realm-demo
-          environment: staging
-          discord_webhook: ${{ secrets.DISCORD_WEBHOOK }}
-          production_waypoint_server_token: ${{ secrets.PRODUCTION_WAYPOINT_SERVER_TOKEN }}
-          production_waypoint_server_address: ${{ secrets.PRODUCTION_WAYPOINT_SERVER_ADDR }}
-          staging_waypoint_server_token: ${{ secrets.STAGING_WAYPOINT_SERVER_TOKEN }}
-          staging_waypoint_server_address: ${{ secrets.STAGING_WAYPOINT_SERVER_ADDR }}
+    needs:
+      - boxel-ui-test
+      - host-test
+      - realm-server-test
+      - build-host
+      - build-realm-server
+    uses: ./.github/workflows/waypoint-deploy.yml
+    secrets: inherit
+    with:
+      app: "realm-demo"
+      environment: "staging"

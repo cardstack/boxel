@@ -1,25 +1,42 @@
 import {
-  OperatorModeState,
-  Stack,
-  StackItem,
-} from '@cardstack/host/components/operator-mode/container';
+  type OperatorModeState,
+  type Stack,
+  type StackItem,
+} from '../components/operator-mode/container';
+import { getCardStackItem } from '../components/operator-mode/container';
 import Service from '@ember/service';
 import type CardService from '../services/card-service';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 import { service } from '@ember/service';
-
 import { tracked } from '@glimmer/tracking';
 import { getOwner } from '@ember/application';
 import { scheduleOnce } from '@ember/runloop';
+import stringify from 'safe-stable-stringify';
 import type { Card } from 'https://cardstack.com/base/card-api';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
 // This is because we don't have a way to serialize a stack configuration of linked cards that have not been saved yet.
 
-type SerializedItem = { card: { id: string }; format: 'isolated' | 'edit' };
-type SerializedStack = { items: SerializedItem[] };
+interface CardItem {
+  type: 'card';
+  id: string;
+  format: 'isolated' | 'edit';
+}
+interface ContainedCardItem {
+  type: 'contained';
+  fieldOfIndex: number; // index of the item in the stack that this is a field of
+  fieldName: string;
+  format: 'isolated' | 'edit';
+}
+type SerializedItem = CardItem | ContainedCardItem;
+type SerializedStack = SerializedItem[];
+
 export type SerializedState = { stacks: SerializedStack[] };
+
+interface StackOpts {
+  keepIfEmpty?: boolean; // we want to keep the stack although stack is empty
+}
 
 export default class OperatorModeStateService extends Service {
   @tracked state: OperatorModeState = new TrackedObject({
@@ -36,43 +53,87 @@ export default class OperatorModeStateService extends Service {
   addItemToStack(item: StackItem) {
     let stackIndex = item.stackIndex;
     if (!this.state.stacks[stackIndex]) {
-      this.state.stacks[stackIndex] = new TrackedObject({
-        items: new TrackedArray([]),
-      });
+      this.state.stacks[stackIndex] = new TrackedArray([]);
     }
-    this.state.stacks[stackIndex].items.push(item);
-    this.addRecentCards(item.card);
+    this.state.stacks[stackIndex].push(item);
+    if (item.type === 'card') {
+      this.addRecentCards(item.card);
+    }
     this.schedulePersist();
   }
 
-  removeItemFromStack(item: StackItem) {
+  trimItemsFromStack(item: StackItem, opts?: StackOpts) {
     let stackIndex = item.stackIndex;
-    let itemIndex = this.state.stacks[stackIndex].items.indexOf(item);
-    this.state.stacks[stackIndex].items.splice(itemIndex);
+    let itemIndex = this.state.stacks[stackIndex].indexOf(item);
+    this.state.stacks[stackIndex].splice(itemIndex); // Always remove anything above the item
 
-    // If the additional stack is now empty, remove it from the state
+    // If the resulting stack is now empty, remove it from the state
     if (
-      this.state.stacks[stackIndex].items.length === 0 &&
+      !opts?.keepIfEmpty &&
+      this.stackIsEmpty(stackIndex) &&
       this.state.stacks.length > 1
     ) {
       this.state.stacks.splice(stackIndex, 1);
     }
-
     this.schedulePersist();
+  }
+
+  popItemFromStack(stackIndex: number) {
+    let stack = this.state.stacks[stackIndex];
+    if (!stack) {
+      throw new Error(`No stack at index ${stackIndex}`);
+    }
+    let item = stack.pop();
+    if (!item) {
+      throw new Error(`No items in stack at index ${stackIndex}`);
+    }
+    this.schedulePersist();
+    return item;
   }
 
   replaceItemInStack(item: StackItem, newItem: StackItem) {
     let stackIndex = item.stackIndex;
-    let itemIndex = this.state.stacks[stackIndex].items.indexOf(item);
+    let itemIndex = this.state.stacks[stackIndex].indexOf(item);
 
     if (newItem.stackIndex !== stackIndex) {
-      this.removeItemFromStack(item);
-      this.addItemToStack(newItem);
-      return this.schedulePersist();
+      // this could be a smell that the stack index should not live in the item
+      throw new Error(
+        'cannot move stack item to different stack--this can destabilize contained card pointers'
+      );
     }
 
-    this.state.stacks[stackIndex].items.splice(itemIndex, 1, newItem);
+    this.state.stacks[stackIndex].splice(itemIndex, 1, newItem);
     this.schedulePersist();
+  }
+
+  trimStackAndAdd(lowestItem: StackItem, newItem: StackItem) {
+    // Note: this function maintains the stack in place -- it doesn't delete it even if its empty
+    this.trimItemsFromStack(lowestItem, { keepIfEmpty: true });
+    this.addItemToStack(newItem);
+    return this.schedulePersist();
+  }
+
+  numberOfStacks() {
+    return this.state.stacks.length;
+  }
+
+  rightMostStack() {
+    if (this.numberOfStacks() > 0) {
+      return this.state.stacks[this.state.stacks.length - 1];
+    }
+    return;
+  }
+
+  stackIsEmpty(stackIndex: number) {
+    return this.state.stacks[stackIndex].length === 0;
+  }
+
+  shiftStack(stack: StackItem[], destinationIndex: number) {
+    stack.forEach((item) => {
+      this.trimItemsFromStack(item);
+      this.addItemToStack({ ...item, stackIndex: destinationIndex });
+    });
+    return this.schedulePersist();
   }
 
   clearStacks() {
@@ -108,22 +169,33 @@ export default class OperatorModeStateService extends Service {
     let state: SerializedState = { stacks: [] };
 
     for (let stack of this.state.stacks) {
-      let _stack: SerializedStack = { items: [] };
-
-      for (let item of stack.items) {
-        let cardId = item.card.id;
-        let card = { id: cardId };
-
-        if (cardId) {
-          if (item.format === 'isolated' || item.format === 'edit') {
-            _stack.items.push({ card, format: item.format });
-          } else {
-            throw new Error(`Unknown format for card on stack ${item.format}`);
+      let serializedStack: SerializedStack = [];
+      for (let item of stack) {
+        if (item.format !== 'isolated' && item.format !== 'edit') {
+          throw new Error(`Unknown format for card on stack ${item.format}`);
+        }
+        if (item.type === 'card') {
+          if (item.card.id) {
+            serializedStack.push({
+              type: 'card',
+              id: item.card.id,
+              format: item.format,
+            });
+          }
+        } else {
+          let { fieldName, fieldOfIndex } = item;
+          let addressableCard = getCardStackItem(item, stack).card;
+          if (addressableCard.id) {
+            serializedStack.push({
+              type: 'contained',
+              fieldName,
+              fieldOfIndex,
+              format: item.format,
+            });
           }
         }
       }
-
-      state.stacks.push(_stack);
+      state.stacks.push(serializedStack);
     }
 
     return state;
@@ -131,7 +203,7 @@ export default class OperatorModeStateService extends Service {
 
   // Stringified JSON version of state, with only cards that have been saved, used for the query param
   serialize(): string {
-    return JSON.stringify(this.rawStateWithSavedCardsOnly());
+    return stringify(this.rawStateWithSavedCardsOnly())!;
   }
 
   // Deserialize a stringified JSON version of OperatorModeState into a Glimmer tracked object
@@ -143,11 +215,27 @@ export default class OperatorModeStateService extends Service {
 
     let stackIndex = 0;
     for (let stack of rawState.stacks) {
-      let newStack: Stack = { items: new TrackedArray([]) };
-      for (let item of stack.items) {
-        let cardUrl = new URL(item.card.id);
-        let card = await this.cardService.loadModel(cardUrl);
-        newStack.items.push({ card, format: item.format, stackIndex });
+      let newStack: Stack = new TrackedArray([]);
+      for (let item of stack) {
+        let { format } = item;
+        if (item.type === 'card') {
+          let card = await this.cardService.loadModel(new URL(item.id));
+          newStack.push({
+            type: 'card',
+            card,
+            format,
+            stackIndex,
+          });
+        } else {
+          let { fieldName, fieldOfIndex } = item;
+          newStack.push({
+            type: 'contained',
+            fieldName,
+            fieldOfIndex,
+            format,
+            stackIndex,
+          });
+        }
       }
       newState.stacks.push(newStack);
       stackIndex++;

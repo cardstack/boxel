@@ -6,12 +6,22 @@ import { action } from '@ember/object';
 import { htmlSafe } from '@ember/template';
 import { registerDestructor } from '@ember/destroyable';
 import { enqueueTask, restartableTask } from 'ember-concurrency';
+import { TrackedArray } from 'tracked-built-ins';
 import type { Card, CardContext } from 'https://cardstack.com/base/card-api';
-import type { Query } from '@cardstack/runtime-common/query';
-import { createNewCard, type CardRef } from '@cardstack/runtime-common';
+import {
+  createNewCard,
+  type CardRef,
+  type RealmInfo,
+  type CreateNewCard,
+} from '@cardstack/runtime-common';
+import type { Query, Filter } from '@cardstack/runtime-common/query';
+import {
+  suggestCardChooserTitle,
+  getSuggestionWithLowestDepth,
+} from '../utils/text-suggestion';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { getSearchResults, Search } from '../resources/search';
-import Preview from './preview';
+import CardCatalogItem from './card-catalog-item';
 import {
   Modal,
   CardContainer,
@@ -20,7 +30,10 @@ import {
   IconButton,
   BoxelInputValidationState,
 } from '@cardstack/boxel-ui';
-import { eq, gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
+// @ts-ignore no types
+import cssUrl from 'ember-css-url';
+import { and, eq, gt, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import debounce from 'lodash/debounce';
 import { service } from '@ember/service';
@@ -34,9 +47,19 @@ interface Signature {
   };
 }
 
+type RealmCards = {
+  name: RealmInfo['name'];
+  iconURL: RealmInfo['iconURL'];
+  cards: Card[];
+  displayedCards: Card[];
+};
+const DEFAULT_CHOOOSE_CARD_TITLE = 'Choose a Card';
+
 export default class CardCatalogModal extends Component<Signature> {
   <template>
-    {{#if this.currentRequest}}
+    {{! @glint-ignore Argument of type boolean
+          is not assignable to currentRequest's params. }}
+    {{#if (and this.currentRequest (not this.dismissModal))}}
       <Modal
         @size='large'
         @isOpen={{true}}
@@ -45,89 +68,162 @@ export default class CardCatalogModal extends Component<Signature> {
         data-test-card-catalog-modal
       >
         <CardContainer class='dialog-box' @displayBoundaries={{true}}>
-          <Header @title='Choose a card type'>
-            <button
+          <Header @title={{this.chooseCardTitle}} class='dialog-box__header'>
+            <IconButton
+              @icon='icon-x'
               {{on 'click' (fn this.pick undefined)}}
               class='dialog-box__close'
-            >x</button>
+              aria-label='close modal'
+            />
+            <div class='boxel-searchbox'>
+              <span class='boxel-searchbox__search-icon'>
+                {{svgJar 'search' class='search-icon'}}
+              </span>
+              <label>
+                <span class='boxel-sr-only'>Search</span>
+                <BoxelInputValidationState
+                  class='boxel-searchbox__input'
+                  @value={{this.searchKey}}
+                  @onInput={{this.setSearchKey}}
+                  @onKeyPress={{this.onSearchFieldKeypress}}
+                  @state={{this.searchFieldState}}
+                  @errorMessage={{this.searchErrorMessage}}
+                  @placeholder='Search for a card type or enter card URL'
+                  data-test-search-field
+                />
+              </label>
+            </div>
+            <div class='tags'>
+              <IconButton
+                class='add-tag-button'
+                @icon='icon-plus'
+                @width='20'
+                @height='20'
+                aria-label='add tag'
+              />
+              <ul class='tag-list'>
+                <li>
+                  <div class='tag'>
+                    Realm: All
+                    <IconButton @icon='icon-x' class='remove-tag-button' />
+                  </div>
+                </li>
+              </ul>
+            </div>
           </Header>
           <div class='dialog-box__content'>
             {{#if this.currentRequest.search.isLoading}}
               Loading...
             {{else}}
-              {{#if this.currentRequest.opts.offerToCreate}}
-                <Button
-                  @size='small'
-                  {{on
-                    'click'
-                    (fn this.createNew this.currentRequest.opts.offerToCreate)
-                  }}
-                  data-test-create-new
-                >Create New</Button>
-              {{/if}}
-              {{#let
-                this.currentRequest.search.instances.length
-                as |numResults|
-              }}
-                <div class='results-length'>
-                  {{#if (gt numResults 1)}}
-                    {{numResults}}
-                    results
-                  {{else if (eq numResults 1)}}
-                    1 result
-                  {{/if}}
-                </div>
-              {{/let}}
-              <ul class='card-catalog' data-test-card-catalog>
-                {{#each this.currentRequest.search.instances as |card|}}
-                  <li
-                    class={{cn
-                      'item'
-                      selected=(eq this.selectedCard.id card.id)
-                    }}
-                    data-test-card-catalog-item={{card.id}}
+              <div class='card-catalog' data-test-card-catalog>
+                {{#each this.cardsByRealm as |realm|}}
+                  <section
+                    class='card-catalog__realm'
+                    data-test-realm={{realm.name}}
                   >
-                    <Preview
-                      @card={{card}}
-                      @format='embedded'
-                      @context={{@context}}
-                    />
-                    <button
-                      class='select'
-                      {{on 'click' (fn this.toggleSelect card)}}
-                      data-test-select={{card.id}}
-                      aria-label='Select'
-                    />
-                    <IconButton
-                      class='hover-button preview'
-                      @icon='eye'
-                      aria-label='preview'
-                    />
-                    <IconButton
-                      class='hover-button more-actions'
-                      @icon='more-actions'
-                      aria-label='more actions'
-                    />
-                  </li>
+                    <header class='realm-info'>
+                      <div
+                        style={{if
+                          realm.iconURL
+                          (cssUrl 'background-image' realm.iconURL)
+                        }}
+                        class={{cn
+                          'realm-icon'
+                          realm-icon--empty=(not realm.iconURL)
+                        }}
+                      />
+                      <span class='realm-name' data-test-realm-name>
+                        {{realm.name}}
+                      </span>
+                      <span class='results-count' data-test-results-count>
+                        {{#if (gt realm.cards.length 1)}}
+                          {{realm.cards.length}}
+                          results
+                        {{else if (eq realm.cards.length 1)}}
+                          1 result
+                        {{/if}}
+                      </span>
+                    </header>
+                    {{#if realm.cards.length}}
+                      <ul class='card-catalog__group'>
+                        {{#each realm.displayedCards as |card|}}
+                          <li
+                            class={{cn
+                              'item'
+                              selected=(eq this.selectedCard.id card.id)
+                            }}
+                            data-test-card-catalog-item={{card.id}}
+                          >
+                            <CardCatalogItem
+                              @isSelected={{eq this.selectedCard.id card.id}}
+                              @title={{card.title}}
+                              @description={{card.description}}
+                              @thumbnailURL={{card.thumbnailURL}}
+                              @context={{@context}}
+                            />
+                            <button
+                              class='select'
+                              {{on 'click' (fn this.toggleSelect card)}}
+                              data-test-select={{card.id}}
+                              aria-label='Select'
+                            />
+                            <IconButton
+                              class='hover-button preview'
+                              @icon='eye'
+                              aria-label='preview'
+                            />
+                          </li>
+                        {{/each}}
+                      </ul>
+                      {{#if
+                        (gt realm.cards.length realm.displayedCards.length)
+                      }}
+                        <Button
+                          {{on 'click' (fn this.displayMoreCards realm)}}
+                          @kind='secondary-light'
+                          @size='small'
+                          data-test-show-more-cards
+                        >
+                          Show more cards
+                        </Button>
+                      {{/if}}
+                    {{else}}
+                      <p>No cards available</p>
+                    {{/if}}
+                  </section>
                 {{else}}
                   <p>No cards available</p>
                 {{/each}}
-              </ul>
+              </div>
             {{/if}}
           </div>
-          <footer class='dialog-box__footer footer'>
-            <label class='url-search'>
-              <span>Enter Card URL:</span>
-              <BoxelInputValidationState
-                data-test-url-field
-                placeholder='http://'
-                @value={{this.cardURL}}
-                @onInput={{this.setCardURL}}
-                @onKeyPress={{this.onURLFieldKeypress}}
-                @state={{this.cardURLFieldState}}
-                @errorMessage={{this.cardURLErrorMessage}}
-              />
-            </label>
+          <footer
+            class={{cn
+              'dialog-box__footer footer'
+              (if this.currentRequest.opts.offerToCreate 'with-create-button')
+            }}
+          >
+            {{#if this.currentRequest.opts.offerToCreate}}
+              <Button
+                @kind='secondary-light'
+                @size='tall'
+                class='create-new-button'
+                {{on
+                  'click'
+                  (fn this.createNew this.currentRequest.opts.offerToCreate)
+                }}
+                data-test-card-catalog-create-new-button
+              >
+                {{svgJar
+                  'icon-plus'
+                  width='20'
+                  height='20'
+                  role='presentation'
+                }}
+                Create New
+                {{this.cardRefName}}
+              </Button>
+            {{/if}}
             <div>
               <Button
                 @kind='secondary-light'
@@ -154,54 +250,157 @@ export default class CardCatalogModal extends Component<Signature> {
       </Modal>
     {{/if}}
     <style>
-      .url-search > .boxel-input {
-        border-color: transparent;
-        padding-left: var(--boxel-sp-xxs);
+      .dialog-box__header {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
       }
-
+      .dialog-box__header > * + *:not(button) {
+        margin-top: var(--boxel-sp);
+      }
+      .boxel-searchbox {
+        position: relative;
+        width: 100%;
+      }
+      .boxel-searchbox__search-icon {
+        --icon-color: var(--boxel-highlight);
+        position: absolute;
+        top: 0;
+        right: 0;
+        height: 100%;
+        width: var(--boxel-sp-xl);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      :global(.boxel-searchbox__input .boxel-input) {
+        padding-right: var(--boxel-sp-xl);
+        background-color: var(--boxel-600);
+        border-color: #707070;
+        color: var(--boxel-light);
+        font: var(--boxel-font-sm);
+        font-weight: 400;
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      :global(.boxel-searchbox__input .boxel-input::placeholder) {
+        color: var(--boxel-300);
+      }
+      .tags {
+        --tag-height: 30px;
+        display: flex;
+        gap: var(--boxel-sp-xs);
+        font: 500 var(--boxel-font-sm);
+      }
+      .add-tag-button {
+        --icon-color: var(--boxel-highlight);
+        border: 1px solid var(--boxel-400);
+        border-radius: 100px;
+        width: var(--tag-height);
+        height: var(--tag-height);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      .add-tag-button:hover {
+        border-color: var(--boxel-dark);
+      }
+      .tag-list {
+        list-style-type: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-flow: row wrap;
+        gap: var(--boxel-sp-xs);
+      }
+      .tag {
+        position: relative;
+        height: var(--tag-height);
+        border: 1px solid var(--boxel-400);
+        border-radius: 20px;
+        padding-right: var(--boxel-sp-xl);
+        padding-left: var(--boxel-sp-sm);
+        display: flex;
+        align-items: center;
+      }
+      .remove-tag-button {
+        --icon-bg: var(--boxel-400);
+        position: absolute;
+        right: 0;
+        width: var(--boxel-sp-lg);
+        height: var(--tag-height);
+        background: none;
+        border: none;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .remove-tag-button:hover {
+        --icon-bg: var(--boxel-dark);
+      }
       .footer {
         display: flex;
-        justify-content: space-between;
+        justify-content: flex-end;
         /* This bottom margin is neccesary to show card URL error messages */
         margin-bottom: var(--boxel-sp);
       }
-      .url-search {
-        flex-grow: 0.5;
-        display: grid;
-        grid-template-columns: auto 1fr;
+      .footer.with-create-button {
+        justify-content: space-between;
+      }
+      .create-new-button {
+        --icon-color: var(--boxel-highlight);
+        display: flex;
+        justify-content: center;
         align-items: center;
-        justify-items: flex-start;
+
+        gap: var(--boxel-sp-xxs);
+      }
+
+      .realm-info {
+        --realm-icon-size: 1.25rem;
+        display: flex;
+        align-items: center;
         gap: var(--boxel-sp-xs);
       }
-      .url-search > span {
-        font: 700 var(--boxel-font-sm);
+      .realm-icon {
+        width: var(--realm-icon-size);
+        height: var(--realm-icon-size);
+        background-size: contain;
+        background-position: center;
+      }
+      .realm-icon--empty {
+        border: 1px solid var(--boxel-dark);
+        border-radius: 100px;
+      }
+      .realm-name {
+        display: inline-block;
+        font: 700 var(--boxel-font);
+      }
+      .results-count {
+        display: inline-block;
+        font: var(--boxel-font);
       }
 
       .card-catalog {
-        list-style-type: none;
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(16.25rem, 1fr));
-        gap: var(--boxel-sp);
-        padding-left: 0;
-        margin: 0;
+        gap: var(--boxel-sp-xl);
       }
-      .results-length {
-        font: 700 var(--boxel-font);
-        height: var(--boxel-sp-xxl);
+      .card-catalog__realm > * + * {
+        margin-top: var(--boxel-sp);
+      }
+      .card-catalog__realm > *:not(:first-child) {
+        margin-left: var(--boxel-sp-lg);
+      }
+      .card-catalog__group {
+        list-style-type: none;
+        padding: 0;
+        margin-bottom: 0;
+        display: grid;
+        gap: var(--boxel-sp);
       }
 
       .item {
         position: relative;
-        height: 6.25rem;
-      }
-
-      .item > :deep(.boxel-card-container) {
-        display: flex;
-        align-items: center;
-        height: 100%;
-      }
-      .item.selected > :deep(.boxel-card-container) {
-        box-shadow: 0 0 0 2px var(--boxel-highlight);
       }
 
       .select {
@@ -221,41 +420,46 @@ export default class CardCatalogModal extends Component<Signature> {
       .item > .hover-button {
         display: none;
         width: 30px;
-        height: 30px;
+        height: 100%;
       }
       .hover-button:not(:disabled):hover {
         --icon-color: var(--boxel-highlight);
       }
       .item:hover > .hover-button:not(:disabled) {
-        display: block;
         position: absolute;
+        display: flex;
+        justify-content: center;
+        align-items: center;
       }
       .preview {
-        top: 0;
-        left: 0;
-      }
-      .more-actions {
-        bottom: 0;
         right: 0;
+        top: 0;
       }
-      .preview > svg,
-      .more-actions > svg {
+      .preview > svg {
         height: 100%;
       }
+
     </style>
   </template>
 
+  displayCardCount = 5;
   @tracked currentRequest:
     | {
         search: Search;
         deferred: Deferred<Card | undefined>;
-        opts?: { offerToCreate?: CardRef };
+        opts?: {
+          offerToCreate?: CardRef;
+          createNewCard?: CreateNewCard;
+        };
       }
     | undefined = undefined;
   @tracked zIndex = 20;
   @tracked selectedCard?: Card = undefined;
-  @tracked cardURL = '';
-  @tracked hasCardURLError = false;
+  @tracked searchKey = '';
+  @tracked hasSearchError = false;
+  @tracked urlSearchVisible = false;
+  @tracked chooseCardTitle = DEFAULT_CHOOOSE_CARD_TITLE;
+  @tracked dismissModal = false;
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
 
@@ -267,30 +471,83 @@ export default class CardCatalogModal extends Component<Signature> {
     });
   }
 
+  get cardsByRealm(): RealmCards[] {
+    let realmCards: RealmCards[] = [];
+    let instances = this.currentRequest?.search.instancesWithRealmInfo ?? [];
+
+    if (instances.length) {
+      for (let instance of instances) {
+        let realm = realmCards.find((r) => r.name === instance.realmInfo?.name);
+        if (realm) {
+          realm.cards.push(instance.card);
+        } else {
+          realm = {
+            name: instance.realmInfo.name,
+            iconURL: instance.realmInfo.iconURL
+              ? new URL(instance.realmInfo.iconURL, this.cardService.defaultURL)
+                  .href
+              : null,
+            cards: [instance.card],
+            displayedCards: [],
+          };
+          realmCards.push(realm);
+        }
+      }
+    }
+
+    realmCards.map((r) => {
+      if (!r.displayedCards.length) {
+        r.displayedCards = new TrackedArray<Card>(
+          r.cards.slice(0, this.displayCardCount)
+        );
+      }
+    });
+
+    return realmCards.filter((r) => r.cards.length);
+  }
+
   get styleString() {
     return htmlSafe(`z-index: ${this.zIndex}`);
   }
 
-  get cardURLFieldState() {
-    return this.hasCardURLError ? 'invalid' : 'initial';
+  get searchFieldState() {
+    return this.hasSearchError ? 'invalid' : 'initial';
   }
 
-  get cardURLErrorMessage() {
-    return this.hasCardURLError ? 'Not a valid Card URL' : undefined;
+  get searchErrorMessage() {
+    return this.hasSearchError ? 'Not a valid search key' : undefined;
+  }
+
+  get cardRefName() {
+    return (
+      (
+        this.currentRequest?.opts?.offerToCreate as {
+          module: string;
+          name: string;
+        }
+      ).name ?? 'Card'
+    );
   }
 
   private resetState() {
-    this.cardURL = '';
-    this.hasCardURLError = false;
+    this.searchKey = '';
+    this.hasSearchError = false;
     this.selectedCard = undefined;
+    this.urlSearchVisible = false;
+    this.dismissModal = false;
   }
 
   // This is part of our public API for runtime-common to invoke the card chooser
   async chooseCard<T extends Card>(
     query: Query,
-    opts?: { offerToCreate?: CardRef }
+    opts?: {
+      offerToCreate?: CardRef;
+      multiSelect?: boolean;
+      createNewCard?: CreateNewCard;
+    }
   ): Promise<undefined | T> {
     this.zIndex++;
+    this.chooseCardTitle = chooseCardTitle(query.filter, opts?.multiSelect);
     return (await this._chooseCard.perform(query, opts)) as T | undefined;
   }
 
@@ -313,8 +570,9 @@ export default class CardCatalogModal extends Component<Signature> {
     }
   );
 
-  private getCard = restartableTask(async (cardURL: string) => {
-    let response = await this.loaderService.loader.fetch(cardURL, {
+  private getCard = restartableTask(async (searchKey: string) => {
+    //TODO: Handle fetching card using non-URL search key
+    let response = await this.loaderService.loader.fetch(searchKey, {
       headers: {
         Accept: 'application/vnd.card+json',
       },
@@ -331,50 +589,71 @@ export default class CardCatalogModal extends Component<Signature> {
       }
     }
     this.selectedCard = undefined;
-    this.hasCardURLError = true;
+    this.hasSearchError = true;
   });
 
-  debouncedURLFieldUpdate = debounce(() => {
-    if (!this.cardURL) {
+  debouncedSearchFieldUpdate = debounce(() => {
+    if (!this.searchKey) {
       this.selectedCard = undefined;
       return;
     }
+    //TODO: Remove this URL validation after implementing search feature with non-URL.
     try {
-      new URL(this.cardURL);
+      new URL(this.searchKey);
     } catch (e: any) {
       if (e instanceof TypeError && e.message.includes('Invalid URL')) {
         return;
       }
       throw e;
     }
-    this.onURLFieldUpdated();
+    this.onSearchFieldUpdated();
   }, 500);
 
   @action
-  setCardURL(cardURL: string) {
-    this.hasCardURLError = false;
-    this.selectedCard = undefined;
-    this.cardURL = cardURL;
-    this.debouncedURLFieldUpdate();
+  displayMoreCards(realm: RealmCards) {
+    let num = realm.displayedCards.length;
+    realm.displayedCards.push(
+      ...realm.cards.slice(num, num + this.displayCardCount)
+    );
   }
 
   @action
-  onURLFieldKeypress(e: KeyboardEvent) {
-    if (e.key === 'Enter' && this.cardURL) {
-      this.getCard.perform(this.cardURL);
+  displayURLSearch() {
+    this.urlSearchVisible = true;
+  }
+
+  @action
+  hideURLSearchIfBlank() {
+    if (!this.searchKey.trim()) {
+      this.urlSearchVisible = false;
     }
   }
 
   @action
-  onURLFieldUpdated() {
-    if (this.cardURL) {
+  setSearchKey(searchKey: string) {
+    this.hasSearchError = false;
+    this.selectedCard = undefined;
+    this.searchKey = searchKey;
+    this.debouncedSearchFieldUpdate();
+  }
+
+  @action
+  onSearchFieldKeypress(e: KeyboardEvent) {
+    if (e.key === 'Enter' && this.searchKey) {
+      this.getCard.perform(this.searchKey);
+    }
+  }
+
+  @action
+  onSearchFieldUpdated() {
+    if (this.searchKey) {
       this.selectedCard = undefined;
-      this.getCard.perform(this.cardURL);
+      this.getCard.perform(this.searchKey);
     }
   }
 
   @action toggleSelect(card?: Card): void {
-    this.cardURL = '';
+    this.searchKey = '';
     if (this.selectedCard?.id === card?.id) {
       this.selectedCard = undefined;
       return;
@@ -395,9 +674,30 @@ export default class CardCatalogModal extends Component<Signature> {
   }
 
   @action async createNew(ref: CardRef): Promise<void> {
-    let newCard = await createNewCard(ref, undefined);
+    let newCard;
+    this.dismissModal = true;
+    if (this.currentRequest?.opts?.createNewCard) {
+      newCard = await this.currentRequest?.opts?.createNewCard(ref, undefined, {
+        isLinkedCard: true,
+      });
+    } else {
+      newCard = await createNewCard(ref, undefined);
+    }
     this.pick(newCard);
   }
+}
+
+function chooseCardTitle(
+  filter: Filter | undefined,
+  multiSelect?: boolean
+): string {
+  if (!filter) {
+    return DEFAULT_CHOOOSE_CARD_TITLE;
+  }
+  let suggestions = suggestCardChooserTitle(filter, 0, { multiSelect });
+  return (
+    getSuggestionWithLowestDepth(suggestions) ?? DEFAULT_CHOOOSE_CARD_TITLE
+  );
 }
 
 declare module '@glint/environment-ember-loose/registry' {

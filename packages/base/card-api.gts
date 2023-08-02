@@ -98,11 +98,16 @@ interface NotLoadedValue {
 
 export interface CardContext {
   actions?: Actions;
-  cardComponentModifier?: typeof Modifier<any>;
+  cardComponentModifier?: typeof Modifier<{
+    Args: {
+      Named: {
+        card: Card;
+        format: Format | 'data';
+        fieldType: FieldType | undefined;
+      };
+    };
+  }>;
   renderedIn?: Component<any>;
-  optional?: {
-    fieldType: FieldType;
-  };
 }
 
 function isNotLoadedValue(val: any): val is NotLoadedValue {
@@ -1340,11 +1345,7 @@ function fieldComponent(
       (model.value[fieldName]?.constructor as typeof CardBase) ?? field.card;
   }
   let innerModel = model.field(fieldName) as unknown as Box<CardBase>;
-
-  return getBoxComponent(card, format, innerModel, {
-    ...context,
-    ...{ optional: { fieldType: field.fieldType } },
-  });
+  return getBoxComponent(card, format, innerModel, field, context);
 }
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
@@ -1512,8 +1513,13 @@ export class CardBase {
     return _createFromSerialized(this, data, doc, relativeTo, identityContext);
   }
 
-  static getComponent(card: CardBase, format: Format, context?: CardContext) {
-    return getComponent(card, format, context);
+  static getComponent(
+    card: CardBase,
+    format: Format,
+    field?: Field,
+    context?: CardContext
+  ) {
+    return getComponent(card, format, field, context);
   }
 
   constructor(data?: Record<string, any>) {
@@ -1537,7 +1543,7 @@ export class CardBase {
   }
 }
 
-export function isCard(card: any): card is CardBase {
+export function isCard(card: any): card is Card {
   return card && typeof card === 'object' && isBaseCard in card;
 }
 
@@ -1583,6 +1589,8 @@ export class StringCard extends CardBase {
 export class Card extends CardBase {
   @field id = contains(IDCard);
   @field title = contains(StringCard);
+  @field description = contains(StringCard);
+  @field thumbnailURL = contains(StringCard); // TODO: this will probably be an image or image url field card when we have it
 }
 
 export type CardBaseConstructor = typeof CardBase;
@@ -2176,6 +2184,7 @@ export type SignatureFor<CardT extends CardBaseConstructor> = {
 export function getComponent(
   model: CardBase,
   format: Format,
+  field?: Field,
   context?: CardContext
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let box = Box.create(model);
@@ -2183,6 +2192,7 @@ export function getComponent(
     model.constructor as CardBaseConstructor,
     format,
     box,
+    field,
     context
   );
   return component;

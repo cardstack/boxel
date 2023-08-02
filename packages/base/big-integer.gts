@@ -14,7 +14,7 @@ import { TextInputFilter, DeserializedResult } from './text-input-filter';
 function _deserialize(
   bigintString: string | null | undefined
 ): DeserializedResult<bigint> {
-  if (!bigintString) {
+  if (bigintString == null || bigintString == undefined) {
     return { value: null };
   }
   try {
@@ -36,10 +36,7 @@ function _deserialize(
   }
 }
 
-function _serialize(val: bigint | null | undefined): string | undefined {
-  if (!val) {
-    return;
-  }
+function _serialize(val: bigint): string {
   return val.toString();
 }
 

@@ -1,7 +1,7 @@
-import { Resource } from 'ember-resources/core';
+import { Resource } from 'ember-resources';
 import { restartableTask } from 'ember-concurrency';
 import { tracked } from '@glimmer/tracking';
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, type RealmInfo } from '@cardstack/runtime-common';
 import { service } from '@ember/service';
 import flatMap from 'lodash/flatMap';
 import type CardService from '../services/card-service';
@@ -16,6 +16,7 @@ interface Args {
 
 export class Search extends Resource<Args> {
   @tracked instances: Card[] = [];
+  @tracked instancesWithRealmInfo: { realmInfo: RealmInfo; card: Card }[] = [];
   @service declare cardService: CardService;
 
   modify(_positional: never[], named: Args['named']) {
@@ -33,6 +34,16 @@ export class Search extends Resource<Args> {
           async (realm) => await this.cardService.search(query, new URL(realm))
         )
       )
+    );
+
+    this.instancesWithRealmInfo = await Promise.all(
+      this.instances.map(async (card) => {
+        let realmInfo = await this.cardService.getRealmInfo(card);
+        if (!realmInfo) {
+          throw new Error(`Could not find realm info for ${card.id}`);
+        }
+        return { realmInfo, card };
+      })
     );
   });
 
