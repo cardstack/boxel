@@ -50,10 +50,9 @@ interface Signature {
     index: number;
     publicAPI: Actions;
     close: (item: StackItem) => void;
-    delete: (item: StackItem) => void;
     dismissStackedCardsAbove: (stackIndex: number) => void;
     edit: (item: StackItem) => void;
-    save: (item: StackItem) => void;
+    save: (item: StackItem, dismiss: boolean) => void;
   };
 }
 
@@ -147,6 +146,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     }
   }
 
+  // TODO replace async action with ember concurrency task
   @action async copyToClipboard(cardUrl: string) {
     if (!cardUrl) {
       return;
@@ -180,6 +180,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @action
   hoverOnRealmIcon() {
     this.isHoverOnRealmIcon = !this.isHoverOnRealmIcon;
+  }
+
+  @action
+  delete() {
+    throw new Error(`delete is not implemented`);
   }
 
   get headerIcon() {
@@ -241,7 +246,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private doWhenCardChanges = restartableTask(async () => {
     await timeout(autoSaveDelayMs);
     this.isSaving = true;
-    await this.args.save(this.args.item);
+    await this.args.save(this.args.item, false);
     this.isSaving = false;
     this.lastSaved = Date.now();
     this.calculateLastSavedMsg();
@@ -365,9 +370,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                           icon='icon-link'
                           disabled=(eq @item.type 'contained')
                         )
-                        (menuItem
-                          'Delete' (fn @delete @item @index) icon='icon-trash'
-                        )
+                        (menuItem 'Delete' this.delete icon='icon-trash')
                       )
                       (array
                         (menuItem

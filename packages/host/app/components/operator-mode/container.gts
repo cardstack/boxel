@@ -76,11 +76,6 @@ enum SearchSheetTrigger {
 }
 
 export default class OperatorModeContainer extends Component<Signature> {
-  // In this map we store the field values of cards that are being edited so that we can restore them if the user cancels the edit
-  cardFieldValues: WeakMap<Card, Map<string, any>> = new WeakMap<
-    Card,
-    Map<string, any>
-  >();
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
@@ -158,8 +153,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     this.operatorModeStateService.addItemToStack(item);
   }
 
-  @action async edit(item: StackItem) {
-    await this.saveCardFieldValues(this.getCard(item));
+  @action edit(item: StackItem) {
     this.updateItem(item, 'edit', new Deferred());
   }
 
@@ -199,16 +193,13 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   }
 
-  // TODO probably close needs to save--not revert, since with auto save
-  // it's not obvious what you are reverting to
   @action async close(item: StackItem) {
-    await this.rollbackCardFieldValues(this.getCard(item));
-    this.operatorModeStateService.trimItemsFromStack(item);
-
-    //Ensure process that uses request is ended properly.
-    //User can directly close create a new card without save or cancel it.
+    let card = this.getAddressableCard(item);
     let { request } = item;
-    request?.fulfill(undefined);
+    // close the item first so user doesn't have to wait for the save to complete
+    this.operatorModeStateService.trimItemsFromStack(item);
+    let updatedCard = await this.write.perform(card);
+    await request?.fulfill(updatedCard);
   }
 
   // TODO I'm a little suspicious of all the async actions in this component.
@@ -216,9 +207,8 @@ export default class OperatorModeContainer extends Component<Signature> {
   // interior await's within these async actions. perferably we should be
   // using ember concurrency to perform any async which addresses this situation
   // directly.
-  @action async save(item: StackItem, dismissStackItem = false) {
+  @action async save(item: StackItem, dismissStackItem: boolean) {
     let { request } = item;
-    await this.saveCardFieldValues(this.getCard(item));
     let stack = this.stacks[item.stackIndex];
     let addressableItem = getCardStackItem(item, stack);
     // TODO Do not cast the task to a promise by awaiting it
@@ -242,7 +232,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       }
 
       if (item.type === 'card' && item.isLinkedCard) {
-        this.close(item); // closes the 'create new card' editor for linked card fields
+        this.operatorModeStateService.trimItemsFromStack(item); // closes the 'create new card' editor for linked card fields
       } else {
         if (!addressableItem.card.id && updatedCard.id) {
           this.operatorModeStateService.trimItemsFromStack(addressableItem);
@@ -262,11 +252,6 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   }
 
-  // TODO: Implement remove card function
-  @action async delete(item: StackItem) {
-    await this.close(item);
-  }
-
   // we debounce saves in the stack item--by the time they reach
   // this level we need to handle every request (so not restartable). otherwise
   // we might drop writes from different stack items that want to save
@@ -274,31 +259,6 @@ export default class OperatorModeContainer extends Component<Signature> {
   private write = task(async (card: Card) => {
     return await this.cardService.saveModel(card);
   });
-
-  // TODO this really needs to be ember concurrency task--if this component is
-  // destroyed bad things happen here
-  private async saveCardFieldValues(card: Card) {
-    let fields = await this.cardService.getFields(card);
-    for (let fieldName of Object.keys(fields)) {
-      if (fieldName === 'id') continue;
-
-      let field = fields[fieldName];
-      if (
-        (field.fieldType === 'contains' ||
-          field.fieldType === 'containsMany') &&
-        !(await this.cardService.isPrimitive(field.card))
-      ) {
-        await this.saveCardFieldValues((card as any)[fieldName]);
-      }
-
-      let cardFieldValue = this.cardFieldValues.get(card);
-      if (!cardFieldValue) {
-        cardFieldValue = new Map<string, any>();
-      }
-      cardFieldValue.set(fieldName, (card as any)[fieldName]);
-      this.cardFieldValues.set(card, cardFieldValue);
-    }
-  }
 
   // The public API is wrapped in a closure so that whatever calls its methods
   // in the context of operator-mode, the methods can be aware of which stack to deal with (via stackIndex), i.e.
@@ -417,29 +377,6 @@ export default class OperatorModeContainer extends Component<Signature> {
         return;
       },
     };
-  }
-
-  // TODO this really needs to be ember concurrency task--if this component is
-  // destroyed bad things happen here
-  private async rollbackCardFieldValues(card: Card) {
-    let fields = await this.cardService.getFields(card);
-    for (let fieldName of Object.keys(fields)) {
-      if (fieldName === 'id') continue;
-
-      let field = fields[fieldName];
-      if (
-        (field.fieldType === 'contains' ||
-          field.fieldType === 'containsMany') &&
-        !(await this.cardService.isPrimitive(field.card))
-      ) {
-        await this.rollbackCardFieldValues((card as any)[fieldName]);
-      }
-
-      let cardFieldValue = this.cardFieldValues.get(card);
-      if (cardFieldValue) {
-        (card as any)[fieldName] = cardFieldValue.get(fieldName);
-      }
-    }
   }
 
   addCard = restartableTask(async () => {
@@ -632,7 +569,6 @@ export default class OperatorModeContainer extends Component<Signature> {
                 @publicAPI={{this.publicAPI this stackIndex}}
                 @close={{this.close}}
                 @edit={{this.edit}}
-                @delete={{this.delete}}
                 @save={{this.save}}
               />
             {{/each}}

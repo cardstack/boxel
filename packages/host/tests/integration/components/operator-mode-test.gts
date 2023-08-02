@@ -661,13 +661,8 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-person]');
     assert.dom('[data-test-person]').isVisible();
 
-    await click('[aria-label="Close"]');
-    await waitUntil(
-      () => {
-        return !document.querySelector('.operator-mode-card-stack__card__item');
-      },
-      { timeout: 3000 }
-    );
+    await click('[data-test-close-button]');
+    await waitUntil(() => !document.querySelector('[data-test-stack-card]'));
     assert.dom('[data-test-person]').isNotVisible();
     assert.dom('[data-test-add-card-button]').isVisible();
 

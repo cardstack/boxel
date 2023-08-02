@@ -42,6 +42,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
     );
   }
 
+  // TODO replace async action with ember concurrency task
   @action async getRealmInfo(card: Card) {
     return this.cardService.getRealmInfo(card);
   }

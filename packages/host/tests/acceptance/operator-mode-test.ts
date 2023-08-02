@@ -32,6 +32,10 @@ module('Acceptance | operator mode tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupMockMessageService(hooks);
 
+  hooks.afterEach(async function () {
+    await waitFor('[data-test-save-idle]');
+  });
+
   hooks.beforeEach(async function () {
     Loader.addURLMapping(
       new URL(baseRealm.url),
