@@ -19,14 +19,28 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import { Deferred } from '@cardstack/runtime-common/deferred';
+import { RenderingTestContext } from '@ember/test-helpers';
+import type LoaderService from '@cardstack/host/services/loader-service';
+
+let loader: Loader;
 
 module('Integration | realm', function (hooks) {
   setupRenderingTest(hooks);
+
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+  });
+
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`)
   );
+
+  hooks.beforeEach(function () {
+    shimExternals(loader);
+  });
 
   function getUpdateData(message: string) {
     let [type, data] = message.split('\n');
@@ -78,15 +92,6 @@ module('Integration | realm', function (hooks) {
     return result;
   }
 
-  hooks.beforeEach(async function () {
-    Loader.destroy();
-    shimExternals();
-    Loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
-  });
-
   test('realm can serve GET card requests', async function (assert) {
     let adapter = new TestRealmAdapter({
       'dir/empty.json': {
@@ -100,7 +105,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     let response = await realm.handle(
@@ -180,7 +185,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     let response = await realm.handle(
@@ -276,7 +281,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     let response = await realm.handle(
@@ -352,6 +357,7 @@ module('Integration | realm', function (hooks) {
 
   test("realm can route requests correctly when mounted in the origin's subdir", async function (assert) {
     let realm = await TestRealm.create(
+      loader,
       {
         'dir/empty.json': {
           data: {
@@ -410,7 +416,7 @@ module('Integration | realm', function (hooks) {
 
   test('realm can serve create card requests', async function (assert) {
     let adapter = new TestRealmAdapter({});
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let expected = ['added: Card/1.json', 'added: Card/2.json'];
     await expectEvent(assert, realm, adapter, expected, async () => {
@@ -559,7 +565,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let response = await realm.handle(
       new Request(testRealmURL, {
@@ -699,7 +705,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let expected = ['updated: dir/card.json'];
     let response = await expectEvent(
@@ -841,7 +847,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let response = await realm.handle(
       new Request(`${testRealmURL}ski-trip`, {
@@ -994,7 +1000,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let response = await realm.handle(
       new Request(`${testRealmURL}jackie`, {
@@ -1182,7 +1188,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     let response = await realm.handle(
@@ -1302,7 +1308,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     let response = await realm.handle(
@@ -1411,7 +1417,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     let response = await realm.handle(
@@ -1521,7 +1527,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     // changing linksTo field only
@@ -1655,7 +1661,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     let response = await realm.handle(
@@ -1775,7 +1781,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/mango`, {
@@ -1922,7 +1928,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     let searchIndex = realm.searchIndex;
@@ -1982,6 +1988,7 @@ module('Integration | realm', function (hooks) {
 
   test('realm can serve card source file', async function (assert) {
     let realm = await TestRealm.create(
+      loader,
       {
         'dir/person.gts': cardSrc,
       },
@@ -2006,6 +2013,7 @@ module('Integration | realm', function (hooks) {
 
   test('realm provide redirect for card source', async function (assert) {
     let realm = await TestRealm.create(
+      loader,
       {
         'dir/person.gts': cardSrc,
       },
@@ -2028,7 +2036,7 @@ module('Integration | realm', function (hooks) {
   });
 
   test('realm returns 404 when no card source can be found', async function (assert) {
-    let realm = await TestRealm.create({}, this.owner);
+    let realm = await TestRealm.create(loader, {}, this.owner);
     await realm.ready;
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/person`, {
@@ -2042,7 +2050,7 @@ module('Integration | realm', function (hooks) {
 
   test('realm can serve card source post request', async function (assert) {
     let adapter = new TestRealmAdapter({});
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     {
@@ -2097,7 +2105,7 @@ module('Integration | realm', function (hooks) {
       }
     `,
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     let expected = ['removed: person.gts'];
@@ -2140,6 +2148,7 @@ module('Integration | realm', function (hooks) {
 
   test('realm can serve compiled js file when requested without file extension ', async function (assert) {
     let realm = await TestRealm.create(
+      loader,
       {
         'dir/person.gts': cardSrc,
       },
@@ -2154,6 +2163,7 @@ module('Integration | realm', function (hooks) {
 
   test('realm can serve compiled js file when requested with file extension ', async function (assert) {
     let realm = await TestRealm.create(
+      loader,
       {
         'dir/person.gts': cardSrc,
       },
@@ -2177,6 +2187,7 @@ module('Integration | realm', function (hooks) {
       </html>
     `.trim();
     let realm = await TestRealm.create(
+      loader,
       {
         'dir/index.html': html,
       },
@@ -2193,6 +2204,7 @@ module('Integration | realm', function (hooks) {
 
   test('realm can serve search requests', async function (assert) {
     let realm = await TestRealm.create(
+      loader,
       {
         'dir/empty.json': {
           data: {
@@ -2289,7 +2301,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     let response = await realm.handle(
@@ -2426,6 +2438,7 @@ module('Integration | realm', function (hooks) {
 
   test('realm can serve directory requests', async function (assert) {
     let realm = await TestRealm.create(
+      loader,
       {
         'dir/empty.json': {
           data: {
@@ -2489,6 +2502,7 @@ module('Integration | realm', function (hooks) {
     `;
 
     let realm = await TestRealm.create(
+      loader,
       {
         'sample-post.json': '',
         'posts/1.json': '',
@@ -2571,6 +2585,7 @@ posts/ignore-me.gts
 
   test('realm can serve info requests by reading .realm.json', async function (assert) {
     let realm = await TestRealm.create(
+      loader,
       {
         '.realm.json': `{
           "name": "Example Workspace",
@@ -2607,7 +2622,7 @@ posts/ignore-me.gts
   });
 
   test('realm can serve info requests if .realm.json is missing', async function (assert) {
-    let realm = await TestRealm.create({}, this.owner);
+    let realm = await TestRealm.create(loader, {}, this.owner);
     await realm.ready;
     let response = await realm.handle(
       new Request(`${testRealmURL}_info`, {
@@ -2632,6 +2647,7 @@ posts/ignore-me.gts
 
   test('realm can serve info requests if .realm.json is malformed', async function (assert) {
     let realm = await TestRealm.create(
+      loader,
       {
         '.realm.json': `Some example content that is not valid json`,
       },

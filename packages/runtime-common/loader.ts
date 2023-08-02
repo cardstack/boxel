@@ -130,29 +130,7 @@ export class Loader {
     { module: string; name: string }
   >();
   private consumptionCache = new WeakMap<object, string[]>();
-
-  static #instance: Loader | undefined;
-  static loaders = new WeakMap<Function, Loader>();
-
-  static getLoader() {
-    if (!Loader.#instance) {
-      Loader.#instance = new Loader();
-    }
-    return Loader.#instance;
-  }
-
-  // this will return a new loader instance that has the same file loaders and
-  // url mappings as the global loader
-  static createLoaderFromGlobal(): Loader {
-    let globalLoader = Loader.getLoader();
-    let loader = new Loader();
-    loader.urlHandlers = globalLoader.urlHandlers;
-    loader.urlMappings = globalLoader.urlMappings;
-    for (let [moduleIdentifier, module] of globalLoader.moduleShims) {
-      loader.shimModule(moduleIdentifier, module);
-    }
-    return loader;
-  }
+  private static loaders = new WeakMap<Function, Loader>();
 
   static cloneLoader(loader: Loader): Loader {
     let clone = new Loader();
@@ -164,61 +142,12 @@ export class Loader {
     return clone;
   }
 
-  static async import<T extends object>(moduleIdentifier: string): Promise<T> {
-    let loader = Loader.getLoader();
-    return loader.import<T>(moduleIdentifier);
-  }
-
-  // FOR TESTS ONLY!
-  static destroy() {
-    Loader.#instance = undefined;
-  }
-
-  static resolve(
-    moduleIdentifier: string | URL,
-    relativeTo?: URL
-  ): ResolvedURL {
-    let loader = Loader.getLoader();
-    return loader.resolve(moduleIdentifier, relativeTo);
-  }
-
-  static reverseResolution(
-    moduleIdentifier: string | ResolvedURL,
-    relativeTo?: URL
-  ): URL {
-    let loader = Loader.getLoader();
-    return loader.reverseResolution(moduleIdentifier, relativeTo);
-  }
-
-  static async fetch(
-    urlOrRequest: string | URL | Request,
-    init?: RequestInit
-  ): Promise<Response> {
-    let loader = Loader.getLoader();
-    return loader.fetch(urlOrRequest, init);
-  }
-
-  static addURLMapping(from: URL, to: URL) {
-    let loader = Loader.getLoader();
-    loader.addURLMapping(from, to);
-  }
-
   addURLMapping(from: URL, to: URL) {
     this.urlMappings.push([from.href, to.href]);
   }
 
-  static registerURLHandler(handler: RequestHandler) {
-    let loader = Loader.getLoader();
-    loader.registerURLHandler(handler);
-  }
-
   registerURLHandler(handler: RequestHandler) {
     this.urlHandlers.push(handler);
-  }
-
-  static shimModule(moduleIdentifier: string, module: Record<string, any>) {
-    let loader = Loader.getLoader();
-    loader.shimModule(moduleIdentifier, module);
   }
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
@@ -301,11 +230,11 @@ export class Loader {
     }
   }
 
-  static getLoaderFor(value: unknown): Loader {
+  static getLoaderFor(value: unknown): Loader | undefined {
     if (typeof value === 'function') {
-      return Loader.loaders.get(value) ?? Loader.getLoader();
+      return Loader.loaders.get(value);
     }
-    return Loader.getLoader();
+    return undefined;
   }
 
   async import<T extends object>(moduleIdentifier: string): Promise<T> {

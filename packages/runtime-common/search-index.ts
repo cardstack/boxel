@@ -138,6 +138,7 @@ export class RunnerOptionsManager {
 }
 
 export class SearchIndex {
+  #realm: Realm;
   #runner: IndexRunner;
   runnerOptsMgr: RunnerOptionsManager;
   #reader: Reader;
@@ -163,12 +164,13 @@ export class SearchIndex {
     runner: IndexRunner,
     runnerOptsManager: RunnerOptionsManager
   ) {
+    this.#realm = realm;
     this.#reader = { readdir, readFileAsText };
     this.runnerOptsMgr = runnerOptsManager;
     this.#runner = runner;
     this.#index = {
       realmURL: new URL(realm.url),
-      loader: Loader.createLoaderFromGlobal(),
+      loader: Loader.cloneLoader(realm.loader),
       ignoreMap: new URLMap(),
       ignoreMapContents: new URLMap(),
       instances: new URLMap(),
@@ -205,7 +207,7 @@ export class SearchIndex {
         ignoreMap: current.ignoreMap,
         realmURL: current.realmURL,
         stats: current.stats,
-        loader: Loader.createLoaderFromGlobal(),
+        loader: Loader.cloneLoader(this.#realm.loader),
       };
     });
   }
@@ -230,7 +232,7 @@ export class SearchIndex {
         ignoreMapContents: current.ignoreMapContents,
         realmURL: current.realmURL,
         stats: current.stats,
-        loader: Loader.createLoaderFromGlobal(),
+        loader: Loader.cloneLoader(this.#realm.loader),
       };
     });
   }
