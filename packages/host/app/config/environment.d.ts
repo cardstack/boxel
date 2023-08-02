@@ -13,6 +13,7 @@ declare const config: {
   APP: Record<string, unknown>;
   ownRealmURL: string;
   matrixURL: string;
+  experimentalAIEnabled: boolean;
   resolvedBaseRealmURL: string;
   hostsOwnAssets: boolean;
   realmsServed?: string[];

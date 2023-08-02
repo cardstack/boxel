@@ -17,6 +17,7 @@ module.exports = function (environment) {
     APP: {
       // Here you can pass flags/options to your application instance
       // when it is created
+      experimentalAIEnabled: process.env.EXPERIMENTAL_AI_ENABLED === 'true' ? true : false,
     },
     'ember-cli-mirage': {
       enabled: false,
@@ -44,6 +45,7 @@ module.exports = function (environment) {
     // ENV.APP.LOG_TRANSITIONS = true;
     // ENV.APP.LOG_TRANSITIONS_INTERNAL = true;
     // ENV.APP.LOG_VIEW_LOOKUPS = true;
+    ENV.APP.experimentalAIEnabled = true;
   }
 
   if (environment === 'test') {
@@ -56,6 +58,7 @@ module.exports = function (environment) {
 
     ENV.APP.rootElement = '#ember-testing';
     ENV.APP.autoboot = false;
+    ENV.APP.experimentalAIEnabled = true;
   }
 
   if (environment === 'production') {

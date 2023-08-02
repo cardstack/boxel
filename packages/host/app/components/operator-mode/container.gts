@@ -8,6 +8,7 @@ import CardCatalogModal from '../card-catalog-modal';
 import type CardService from '../../services/card-service';
 import get from 'lodash/get';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import ENV from '@cardstack/host/config/environment';
 import { Modal, IconButton } from '@cardstack/boxel-ui';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import SearchSheet, { SearchSheetMode } from '../search-sheet';
@@ -37,6 +38,8 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import OperatorModeStack from './stack';
 import type MatrixService from '../../services/matrix-service';
 import ChatSidebar from '../matrix/chat-sidebar';
+
+const { APP } = ENV;
 
 interface Signature {
   Args: {
@@ -662,27 +665,28 @@ export default class OperatorModeContainer extends Component<Signature> {
             </button>
           {{/if}}
         </div>
-
-        {{#if this.isChatVisible}}
-          <ChatSidebar
-            @onClose={{this.toggleChat}}
-            @onCommand={{this.onCommand}}
-            @onPreviewCommand={{this.onPreviewCommand}}
-            @onCancelPreviewCommand={{this.onCancelPreviewCommand}}
-          />
-        {{else}}
-          <IconButton
-            data-test-open-chat
-            class='chat-btn'
-            @icon='sparkle'
-            @width='30px'
-            @height='30px'
-            {{on 'click' this.toggleChat}}
-            style={{cssVar
-              boxel-icon-button-width='50px'
-              boxel-icon-button-height='50px'
-            }}
-          />
+        {{#if APP.experimentalAIEnabled}}
+          {{#if this.isChatVisible}}
+            <ChatSidebar
+              @onClose={{this.toggleChat}}
+              @onCommand={{this.onCommand}}
+              @onPreviewCommand={{this.onPreviewCommand}}
+              @onCancelPreviewCommand={{this.onCancelPreviewCommand}}
+            />
+          {{else}}
+            <IconButton
+              data-test-open-chat
+              class='chat-btn'
+              @icon='sparkle'
+              @width='30px'
+              @height='30px'
+              {{on 'click' this.toggleChat}}
+              style={{cssVar
+                boxel-icon-button-width='50px'
+                boxel-icon-button-height='50px'
+              }}
+            />
+          {{/if}}
         {{/if}}
       </div>
 
