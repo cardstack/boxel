@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
 import optional from '@cardstack/boxel-ui/helpers/optional';
 import pick from '@cardstack/boxel-ui/helpers/pick';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { on } from '@ember/modifier';
 
 export enum SearchInputBottomTreatment {
@@ -23,7 +24,9 @@ export default class SearchInput extends Component<Signature> {
   <template>
     <div class='search-input search-input--bottom-{{@bottomTreatment}}'>
       <label class='label'>
-        <span class='icon-label'>&#8981;</span>
+        <span class='icon-label'>
+          {{svgJar 'icon-search' width='20' height='20' class='search-icon'}}
+        </span>
         <span class='sr-label'>Search</span>
         <input
           class='input'
@@ -82,10 +85,8 @@ export default class SearchInput extends Component<Signature> {
       }
 
       .icon-label {
-        color: var(--boxel-highlight);
-        font-size: 2.25rem;
-        line-height: 1.6rem;
-        margin-right: 0.35rem;
+        --icon-color: var(--boxel-highlight);
+        margin-right: var(--boxel-sp-xxs);
       }
 
       .sr-label {
@@ -100,6 +101,7 @@ export default class SearchInput extends Component<Signature> {
       .input:focus {
         outline: none;
       }
+
     </style>
   </template>
 }

@@ -76,9 +76,6 @@ export default class CardCatalogModal extends Component<Signature> {
               aria-label='close modal'
             />
             <div class='boxel-searchbox'>
-              <span class='boxel-searchbox__search-icon'>
-                {{svgJar 'search' class='search-icon'}}
-              </span>
               <label>
                 <span class='boxel-sr-only'>Search</span>
                 <BoxelInputValidationState
@@ -92,6 +89,14 @@ export default class CardCatalogModal extends Component<Signature> {
                   data-test-search-field
                 />
               </label>
+              <span class='boxel-searchbox__search-icon'>
+                {{svgJar
+                  'icon-search'
+                  width='16'
+                  height='16'
+                  class='search-icon'
+                }}
+              </span>
             </div>
             <div class='tags'>
               <IconButton
@@ -254,6 +259,7 @@ export default class CardCatalogModal extends Component<Signature> {
         display: flex;
         flex-direction: column;
         align-items: flex-start;
+        gap: 0;
       }
       .dialog-box__header > * + *:not(button) {
         margin-top: var(--boxel-sp);
@@ -261,6 +267,7 @@ export default class CardCatalogModal extends Component<Signature> {
       .boxel-searchbox {
         position: relative;
         width: 100%;
+        font: var(--boxel-font-sm);
       }
       .boxel-searchbox__search-icon {
         --icon-color: var(--boxel-highlight);
