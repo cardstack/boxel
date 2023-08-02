@@ -150,7 +150,7 @@ export default class Go extends Component<Signature> {
   }
 
   contentChangedTask = restartableTask(async (content: string) => {
-    if (this.openFile?.state !== 'ready' || content === this.openFile.content) {
+    if (this.openFile?.state !== 'ready') {
       return;
     }
 
