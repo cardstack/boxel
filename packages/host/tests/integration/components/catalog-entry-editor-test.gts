@@ -74,8 +74,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
         }
       `,
     });
-    loader.registerURLHandler(realm.maybeHandle.bind(realm));
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    loader.registerURLHandler(realm.maybeHandle.bind(realm));
     await realm.ready;
   });
 
