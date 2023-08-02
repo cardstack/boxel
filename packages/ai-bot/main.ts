@@ -2,13 +2,13 @@ import './setup-logger'; // This should be first
 import {
   IContent,
   RoomMemberEvent,
+  RoomEvent,
   createClient,
   ISendEventResponse,
   Room,
   MatrixClient,
   IRoomEvent,
 } from 'matrix-js-sdk';
-import * as MatrixSDK from 'matrix-js-sdk';
 import OpenAI from 'openai';
 import { ChatCompletionChunk } from 'openai/resources/chat';
 import { logger } from '@cardstack/runtime-common';
@@ -317,7 +317,7 @@ async function getResponse(history: IRoomEvent[]) {
 
   // TODO: Set this up to use a queue that gets drained
   client.on(
-    MatrixSDK.RoomEvent.Timeline,
+    RoomEvent.Timeline,
     async function (event, room, toStartOfTimeline) {
       if (!room) {
         return;
