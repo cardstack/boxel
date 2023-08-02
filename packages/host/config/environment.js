@@ -17,7 +17,8 @@ module.exports = function (environment) {
     APP: {
       // Here you can pass flags/options to your application instance
       // when it is created
-      experimentalAIEnabled: process.env.EXPERIMENTAL_AI_ENABLED === 'true' ? true : false,
+      experimentalAIEnabled:
+        process.env.EXPERIMENTAL_AI_ENABLED === 'true' ? true : false,
     },
     'ember-cli-mirage': {
       enabled: false,
