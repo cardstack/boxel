@@ -19,28 +19,28 @@ import {
   type CardRef,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
+import { RenderingTestContext } from '@ember/test-helpers';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import { Loader } from '@cardstack/runtime-common/loader';
-import { shimExternals } from '@cardstack/host/lib/externals';
 
 const paths = new RealmPaths(testRealmURL);
 const testModuleRealm = 'http://localhost:4202/test/';
 
+let loader: Loader;
+
 module('Integration | search-index', function (hooks) {
   setupRenderingTest(hooks);
+
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+  });
+
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`)
   );
-
-  hooks.beforeEach(async function () {
-    Loader.destroy();
-    shimExternals();
-    Loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
-  });
 
   test('full indexing discovers card instances', async function (assert) {
     let adapter = new TestRealmAdapter({
@@ -55,7 +55,7 @@ module('Integration | search-index', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let indexer = realm.searchIndex;
     let { data: cards } = await indexer.search({});
@@ -108,7 +108,7 @@ module('Integration | search-index', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let indexer = realm.searchIndex;
     {
@@ -218,7 +218,7 @@ module('Integration | search-index', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let indexer = realm.searchIndex;
     let mango = await indexer.card(new URL(`${testRealmURL}Pet/mango`));
@@ -294,7 +294,7 @@ module('Integration | search-index', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let indexer = realm.searchIndex;
     let mango = await indexer.card(new URL(`${testRealmURL}Pet/mango`));
@@ -372,7 +372,7 @@ module('Integration | search-index', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let indexer = realm.searchIndex;
     let entry = await indexer.card(
@@ -483,7 +483,11 @@ module('Integration | search-index', function (hooks) {
           },
         },
       });
-      let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+      let realm = await TestRealm.createWithAdapter(
+        adapter,
+        loader,
+        this.owner
+      );
       await realm.ready;
       let indexer = realm.searchIndex;
       {
@@ -548,7 +552,11 @@ module('Integration | search-index', function (hooks) {
           },
         },
       });
-      let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+      let realm = await TestRealm.createWithAdapter(
+        adapter,
+        loader,
+        this.owner
+      );
       await realm.ready;
       let indexer = realm.searchIndex;
       {
@@ -624,7 +632,11 @@ module('Integration | search-index', function (hooks) {
           },
         },
       });
-      let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+      let realm = await TestRealm.createWithAdapter(
+        adapter,
+        loader,
+        this.owner
+      );
       await realm.ready;
       let indexer = realm.searchIndex;
       let entry = await indexer.card(new URL(`${testRealmURL}vangogh`));
@@ -667,7 +679,11 @@ module('Integration | search-index', function (hooks) {
           },
         },
       });
-      let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+      let realm = await TestRealm.createWithAdapter(
+        adapter,
+        loader,
+        this.owner
+      );
       await realm.ready;
       let indexer = realm.searchIndex;
       {
@@ -747,7 +763,11 @@ module('Integration | search-index', function (hooks) {
           },
         },
       });
-      let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+      let realm = await TestRealm.createWithAdapter(
+        adapter,
+        loader,
+        this.owner
+      );
       await realm.ready;
       let indexer = realm.searchIndex;
       let entry = await indexer.card(new URL(`${testRealmURL}vangogh`));
@@ -790,7 +810,11 @@ module('Integration | search-index', function (hooks) {
           },
         },
       });
-      let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+      let realm = await TestRealm.createWithAdapter(
+        adapter,
+        loader,
+        this.owner
+      );
       await realm.ready;
       let indexer = realm.searchIndex;
       {
@@ -884,7 +908,7 @@ module('Integration | search-index', function (hooks) {
       },
     });
 
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let indexer = realm.searchIndex;
     let card = await indexer.card(new URL(`${testRealmURL}jackie`));
@@ -999,7 +1023,7 @@ module('Integration | search-index', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let indexer = realm.searchIndex;
     let vendor = await indexer.card(new URL(`${testRealmURL}Vendor/vendor1`), {
@@ -1152,7 +1176,7 @@ module('Integration | search-index', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let indexer = realm.searchIndex;
     {
@@ -1197,7 +1221,7 @@ module('Integration | search-index', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let indexer = realm.searchIndex;
     let entry = await indexer.searchEntry(
@@ -1253,7 +1277,7 @@ module('Integration | search-index', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let indexer = realm.searchIndex;
     let entry = await indexer.searchEntry(
@@ -1328,7 +1352,7 @@ module('Integration | search-index', function (hooks) {
       },
     });
 
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let indexer = realm.searchIndex;
     let hassan = await indexer.card(
@@ -1458,7 +1482,7 @@ module('Integration | search-index', function (hooks) {
       },
     });
 
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let indexer = realm.searchIndex;
     let card = await indexer.card(new URL(`${testRealmURL}PetPerson/burcu`), {
@@ -1580,7 +1604,7 @@ module('Integration | search-index', function (hooks) {
       },
     });
 
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let indexer = realm.searchIndex;
     let catalogEntry = await indexer.card(
@@ -1784,7 +1808,7 @@ module('Integration | search-index', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let indexer = realm.searchIndex;
     let hassan = await indexer.card(new URL(`${testRealmURL}Friend/hassan`));
@@ -1905,7 +1929,7 @@ module('Integration | search-index', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let indexer = realm.searchIndex;
     let hassan = await indexer.card(new URL(`${testRealmURL}Friend/hassan`), {
@@ -2150,7 +2174,7 @@ module('Integration | search-index', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let indexer = realm.searchIndex;
     assert.deepEqual(
@@ -2534,6 +2558,7 @@ module('Integration | search-index', function (hooks) {
 
   test("indexing identifies an instance's card references", async function (assert) {
     let realm = await TestRealm.create(
+      loader,
       {
         'person-1.json': {
           data: {
@@ -2593,6 +2618,7 @@ module('Integration | search-index', function (hooks) {
 
   test('search index does not contain entries that match patterns in ignore files', async function (assert) {
     let realm = await TestRealm.create(
+      loader,
       {
         'ignore-me-1.json': { data: { meta: { adoptsFrom: baseCardRef } } },
         'posts/nested.json': { data: { meta: { adoptsFrom: baseCardRef } } },
@@ -2664,6 +2690,7 @@ posts/please-ignore-me.json
 
   test('search index ignores .realm.json file', async function (assert) {
     let realm = await TestRealm.create(
+      loader,
       {
         '.realm.json': `{ name: 'Example Workspace' }`,
         'post.json': { data: { meta: { adoptsFrom: baseCardRef } } },
@@ -2685,6 +2712,7 @@ posts/please-ignore-me.json
 
   test("incremental indexing doesn't process ignored files", async function (assert) {
     let realm = await TestRealm.create(
+      loader,
       {
         'posts/ignore-me.json': { data: { meta: { adoptsFrom: baseCardRef } } },
         '.gitignore': `
@@ -3046,7 +3074,7 @@ posts/ignore-me.json
     let indexer: SearchIndex;
 
     hooks.beforeEach(async function () {
-      let realm = await TestRealm.create(sampleCards, this.owner);
+      let realm = await TestRealm.create(loader, sampleCards, this.owner);
       await realm.ready;
       indexer = realm.searchIndex;
     });

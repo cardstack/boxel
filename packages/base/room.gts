@@ -18,6 +18,7 @@ import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import { formatRFC3339 } from 'date-fns';
 import Modifier from 'ember-modifier';
 import {
+  Loader,
   type LooseSingleCardDocument,
   type CardRef,
 } from '@cardstack/runtime-common';
@@ -363,6 +364,14 @@ export class RoomCard extends Card {
     // tell the card runtime that this field is being used
     isUsed: true,
     computeVia: async function (this: RoomCard) {
+      let loader = Loader.getLoaderFor(Object.getPrototypeOf(this).constructor);
+
+      if (!loader) {
+        throw new Error(
+          'Could not find a loader for this instance’s class’s module'
+        );
+      }
+
       let cache = messageCache.get(this);
       if (!cache) {
         cache = new Map();
@@ -406,7 +415,8 @@ export class RoomCard extends Card {
           let attachedCard = await createFromSerialized<typeof Card>(
             cardDoc.data,
             cardDoc,
-            new URL(cardDoc.data.id)
+            new URL(cardDoc.data.id),
+            loader
           );
           newMessages.set(
             event_id,

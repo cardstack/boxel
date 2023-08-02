@@ -28,7 +28,6 @@ import {
   triggerEvent,
 } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
-import { shimExternals } from '@cardstack/host/lib/externals';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import percySnapshot from '@percy/ember';
 
@@ -36,14 +35,22 @@ let cardApi: typeof import('https://cardstack.com/base/card-api');
 const realmName = 'Operator Mode Workspace';
 let setCardInOperatorModeState: (card: string) => Promise<void>;
 
+let loader: Loader;
+
 module('Integration | operator-mode', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
   setupRenderingTest(hooks);
+
+  hooks.beforeEach(function () {
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+  });
+
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`)
   );
   let noop = () => {};
   async function loadCard(url: string): Promise<Card> {
@@ -60,9 +67,7 @@ module('Integration | operator-mode', function (hooks) {
       result.doc.data,
       result.doc,
       new URL(url),
-      {
-        loader: Loader.getLoaderFor(createFromSerialized),
-      }
+      loader
     );
     await recompute(card, { loadFields: true });
     return card;
@@ -74,15 +79,6 @@ module('Integration | operator-mode', function (hooks) {
 
   hooks.beforeEach(async function () {
     localStorage.removeItem('recent-cards');
-    Loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
-
-    shimExternals();
-
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
     cardApi = await loader.import(`${baseRealm.url}card-api`);
 
     //Generate 11 person card to test recent card menu in card sheet
@@ -534,7 +530,7 @@ module('Integration | operator-mode', function (hooks) {
       '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
       ...Object.fromEntries(personCards),
     });
-    realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
     await realm.ready;
 

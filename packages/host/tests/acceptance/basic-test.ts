@@ -9,7 +9,6 @@ import {
   waitUntil,
 } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
-import { Loader } from '@cardstack/runtime-common/loader';
 import { baseRealm } from '@cardstack/runtime-common';
 import {
   TestRealm,
@@ -19,7 +18,6 @@ import {
   testRealmURL,
 } from '../helpers';
 import { Realm } from '@cardstack/runtime-common/realm';
-import { shimExternals } from '@cardstack/host/lib/externals';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 function getMonacoContent(): string {
@@ -75,11 +73,6 @@ module('Acceptance | basic tests', function (hooks) {
   hooks.beforeEach(async function () {
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
-    Loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
-    shimExternals();
     adapter = new TestRealmAdapter({
       'index.gts': indexCardSource,
       'person.gts': personCardSource,
@@ -130,13 +123,13 @@ module('Acceptance | basic tests', function (hooks) {
         },
       },
     });
-    realm = await TestRealm.createWithAdapter(adapter, this.owner, {
-      isAcceptanceTest: true,
-    });
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
-    loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
+
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
+      isAcceptanceTest: true,
+    });
     await realm.ready;
   });
 

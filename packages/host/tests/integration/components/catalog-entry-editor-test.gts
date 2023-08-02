@@ -17,7 +17,8 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import CardPrerender from '@cardstack/host/components/card-prerender';
-import { shimExternals } from '@cardstack/host/lib/externals';
+
+let loader: Loader;
 
 module('Integration | catalog-entry-editor', function (hooks) {
   let adapter: TestRealmAdapter;
@@ -26,13 +27,9 @@ module('Integration | catalog-entry-editor', function (hooks) {
   setupLocalIndexing(hooks);
 
   hooks.beforeEach(async function () {
-    // this seeds the loader used during index which obtains url mappings
-    // from the global loader
-    Loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
-    shimExternals();
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+
     adapter = new TestRealmAdapter({
       'person.gts': `
         import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
@@ -77,15 +74,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
         }
       `,
     });
-    realm = await TestRealm.createWithAdapter(adapter, this.owner);
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
-    loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
-  });
-
-  hooks.afterEach(function () {
-    Loader.destroy();
   });
 
   test('can publish new catalog entry', async function (assert) {
