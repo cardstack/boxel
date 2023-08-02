@@ -6,6 +6,7 @@ import { action } from '@ember/object';
 import { htmlSafe } from '@ember/template';
 import { registerDestructor } from '@ember/destroyable';
 import { enqueueTask, restartableTask } from 'ember-concurrency';
+import { TrackedArray } from 'tracked-built-ins';
 import type { Card, CardContext } from 'https://cardstack.com/base/card-api';
 import {
   createNewCard,
@@ -50,6 +51,7 @@ type RealmCards = {
   name: RealmInfo['name'];
   iconURL: RealmInfo['iconURL'];
   cards: Card[];
+  displayedCards: Card[];
 };
 const DEFAULT_CHOOOSE_CARD_TITLE = 'Choose a Card';
 
@@ -115,7 +117,10 @@ export default class CardCatalogModal extends Component<Signature> {
             {{else}}
               <div class='card-catalog' data-test-card-catalog>
                 {{#each this.cardsByRealm as |realm|}}
-                  <section data-test-realm={{realm.name}}>
+                  <section
+                    class='card-catalog__realm'
+                    data-test-realm={{realm.name}}
+                  >
                     <header class='realm-info'>
                       <div
                         style={{if
@@ -127,11 +132,10 @@ export default class CardCatalogModal extends Component<Signature> {
                           realm-icon--empty=(not realm.iconURL)
                         }}
                       />
-                      <span
-                        class='realm-name'
-                        data-test-realm-name
-                      >{{realm.name}}</span>
-                      <span class='results-count'>
+                      <span class='realm-name' data-test-realm-name>
+                        {{realm.name}}
+                      </span>
+                      <span class='results-count' data-test-results-count>
                         {{#if (gt realm.cards.length 1)}}
                           {{realm.cards.length}}
                           results
@@ -142,7 +146,7 @@ export default class CardCatalogModal extends Component<Signature> {
                     </header>
                     {{#if realm.cards.length}}
                       <ul class='card-catalog__group'>
-                        {{#each realm.cards as |card|}}
+                        {{#each realm.displayedCards as |card|}}
                           <li
                             class={{cn
                               'item'
@@ -171,6 +175,18 @@ export default class CardCatalogModal extends Component<Signature> {
                           </li>
                         {{/each}}
                       </ul>
+                      {{#if
+                        (gt realm.cards.length realm.displayedCards.length)
+                      }}
+                        <Button
+                          {{on 'click' (fn this.displayMoreCards realm)}}
+                          @kind='secondary-light'
+                          @size='small'
+                          data-test-show-more-cards
+                        >
+                          Show more cards
+                        </Button>
+                      {{/if}}
                     {{else}}
                       <p>No cards available</p>
                     {{/if}}
@@ -367,13 +383,18 @@ export default class CardCatalogModal extends Component<Signature> {
 
       .card-catalog {
         display: grid;
-        gap: var(--boxel-sp-lg);
+        gap: var(--boxel-sp-xl);
+      }
+      .card-catalog__realm > * + * {
+        margin-top: var(--boxel-sp);
+      }
+      .card-catalog__realm > *:not(:first-child) {
+        margin-left: var(--boxel-sp-lg);
       }
       .card-catalog__group {
         list-style-type: none;
-        padding-top: var(--boxel-sp);
-        padding-left: var(--boxel-sp-lg);
-        margin: 0;
+        padding: 0;
+        margin-bottom: 0;
         display: grid;
         gap: var(--boxel-sp);
       }
@@ -421,6 +442,7 @@ export default class CardCatalogModal extends Component<Signature> {
     </style>
   </template>
 
+  displayCardCount = 5;
   @tracked currentRequest:
     | {
         search: Search;
@@ -466,11 +488,20 @@ export default class CardCatalogModal extends Component<Signature> {
                   .href
               : null,
             cards: [instance.card],
+            displayedCards: [],
           };
           realmCards.push(realm);
         }
       }
     }
+
+    realmCards.map((r) => {
+      if (!r.displayedCards.length) {
+        r.displayedCards = new TrackedArray<Card>(
+          r.cards.slice(0, this.displayCardCount)
+        );
+      }
+    });
 
     return realmCards.filter((r) => r.cards.length);
   }
@@ -577,6 +608,14 @@ export default class CardCatalogModal extends Component<Signature> {
     }
     this.onSearchFieldUpdated();
   }, 500);
+
+  @action
+  displayMoreCards(realm: RealmCards) {
+    let num = realm.displayedCards.length;
+    realm.displayedCards.push(
+      ...realm.cards.slice(num, num + this.displayCardCount)
+    );
+  }
 
   @action
   displayURLSearch() {
