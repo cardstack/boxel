@@ -7,8 +7,6 @@ import {
   waitFor,
 } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
-import { Loader } from '@cardstack/runtime-common/loader';
-import { baseRealm } from '@cardstack/runtime-common';
 import {
   TestRealm,
   TestRealmAdapter,
@@ -18,7 +16,6 @@ import {
 } from '../helpers';
 import stringify from 'safe-stable-stringify';
 import { Realm } from '@cardstack/runtime-common/realm';
-import { shimExternals } from '@cardstack/host/lib/externals';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import percySnapshot from '@percy/ember';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -33,11 +30,6 @@ module('Acceptance | operator mode tests', function (hooks) {
   setupMockMessageService(hooks);
 
   hooks.beforeEach(async function () {
-    Loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
-    shimExternals();
     adapter = new TestRealmAdapter({
       'pet.gts': `
         import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
@@ -225,13 +217,12 @@ module('Acceptance | operator mode tests', function (hooks) {
       },
     });
 
-    realm = await TestRealm.createWithAdapter(adapter, this.owner, {
-      isAcceptanceTest: true,
-    });
-
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
-    loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
+
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
+      isAcceptanceTest: true,
+    });
     await realm.ready;
   });
 

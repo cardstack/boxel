@@ -22,6 +22,7 @@ import {
   click,
   typeIn,
   focus,
+  RenderingTestContext,
 } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { Card } from 'https://cardstack.com/base/card-api';
@@ -30,17 +31,14 @@ import CardPrerender from '@cardstack/host/components/card-prerender';
 import { shimExternals } from '@cardstack/host/lib/externals';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
-let updateFromSerialized: (typeof cardApi)['updateFromSerialized'];
+
+let loader: Loader;
 
 module('Integration | text-input-filter', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
-  );
 
   async function loadCard(url: string): Promise<Card> {
     let { createFromSerialized, recompute } = cardApi;
@@ -56,24 +54,22 @@ module('Integration | text-input-filter', function (hooks) {
       result.doc.data,
       result.doc,
       new URL(result.doc.data.id),
-      {
-        loader: Loader.getLoaderFor(createFromSerialized),
-      }
+      loader
     );
     await recompute(card, { loadFields: true });
     return card;
   }
 
-  hooks.beforeEach(async function () {
-    Loader.addURLMapping(
+  hooks.beforeEach(async function (this: RenderingTestContext) {
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+
+    loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
-    shimExternals();
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
+    shimExternals(loader);
     cardApi = await loader.import(`${baseRealm.url}card-api`);
-    updateFromSerialized = cardApi.updateFromSerialized;
 
     adapter = new TestRealmAdapter({
       'sample.gts': `
@@ -103,10 +99,14 @@ module('Integration | text-input-filter', function (hooks) {
         },
       },
     });
-    realm = await TestRealm.createWithAdapter(adapter, this.owner);
-    loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
   });
+
+  setupCardLogs(
+    hooks,
+    async () => await loader.import(`${baseRealm.url}card-api`)
+  );
 
   test('when user fills field with invalid values, the input box should show invalid state', async function (assert) {
     let card = await loadCard(`${testRealmURL}Sample/1`);
@@ -287,11 +287,7 @@ module('Integration | text-input-filter', function (hooks) {
       }
     );
     (card as any).someBigInt = '444';
-    await saveCard(
-      card,
-      `${testRealmURL}Sample/1`,
-      Loader.getLoaderFor(updateFromSerialized)
-    );
+    await saveCard(card, `${testRealmURL}Sample/1`, loader);
     await waitFor('[data-test-field="someBigInt"]');
     await assert
       .dom('div[data-test-field="someBigInt"] [data-test-boxel-input]')

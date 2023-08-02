@@ -6,6 +6,7 @@ import {
   resetOnerror,
   setupOnerror,
   waitUntil,
+  RenderingTestContext,
 } from '@ember/test-helpers';
 import Go from '@cardstack/host/components/editor/go';
 import { Loader } from '@cardstack/runtime-common/loader';
@@ -25,8 +26,8 @@ import moment from 'moment';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import type * as monaco from 'monaco-editor';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
-import { shimExternals } from '@cardstack/host/lib/externals';
 import MonacoService from '@cardstack/host/services/monaco-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 
 const cardContent = `
 import { contains, field, Card, linksTo } from "https://cardstack.com/base/card-api";
@@ -55,6 +56,8 @@ class FailingTestRealmAdapter extends TestRealmAdapter {
   }
 }
 
+let loader: Loader;
+
 module('Integration | Component | go', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
@@ -63,23 +66,25 @@ module('Integration | Component | go', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
   setupMockMessageService(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
-  );
 
-  hooks.beforeEach(async function () {
-    Loader.addURLMapping(
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+    loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
-    shimExternals();
   });
+
+  setupCardLogs(
+    hooks,
+    async () => await loader.import(`${baseRealm.url}card-api`)
+  );
 
   module('with a working realm', function (hooks) {
     hooks.beforeEach(async function () {
       adapter = new TestRealmAdapter({ 'person.gts': cardContent });
-      realm = await TestRealm.createWithAdapter(adapter, this.owner);
+      realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
       monacoService = this.owner.lookup(
         'service:monaco-service'
       ) as MonacoService;
@@ -158,8 +163,15 @@ module('Integration | Component | go', function (hooks) {
 
   module('with a broken realm', function (hooks) {
     hooks.beforeEach(async function () {
+      loader = (this.owner.lookup('service:loader-service') as LoaderService)
+        .loader;
       adapter = new FailingTestRealmAdapter({ 'person.gts': cardContent });
-      realm = await TestRealm.createWithAdapter(adapter, this.owner);
+      realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+      monacoService = this.owner.lookup(
+        'service:monaco-service'
+      ) as MonacoService;
+      await monacoService.ready;
+      await realm.ready;
       await realm.ready;
     });
 

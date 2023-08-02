@@ -21,21 +21,27 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import { Card } from 'https://cardstack.com/base/card-api';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import CardPrerender from '@cardstack/host/components/card-prerender';
-import { shimExternals } from '@cardstack/host/lib/externals';
+import { RenderingTestContext } from '@ember/test-helpers';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
-let updateFromSerialized: (typeof cardApi)['updateFromSerialized'];
+
+let loader: Loader;
 
 module('Integration | card-editor', function (hooks) {
-  let loader: Loader;
   let adapter: TestRealmAdapter;
   let realm: Realm;
   setupRenderingTest(hooks);
+
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+  });
+
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`)
   );
 
   async function loadCard(url: string): Promise<Card> {
@@ -52,25 +58,15 @@ module('Integration | card-editor', function (hooks) {
       result.doc.data,
       result.doc,
       new URL(result.doc.data.id),
-      {
-        loader: Loader.getLoaderFor(createFromSerialized),
-      }
+      loader
     );
     await recompute(card, { loadFields: true });
     return card;
   }
 
   hooks.beforeEach(async function () {
-    Loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
-    shimExternals();
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
-    updateFromSerialized = cardApi.updateFromSerialized;
 
     adapter = new TestRealmAdapter({
       'pet.gts': `
@@ -214,8 +210,7 @@ module('Integration | card-editor', function (hooks) {
         },
       },
     });
-    realm = await TestRealm.createWithAdapter(adapter, this.owner);
-    loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
   });
 
@@ -240,11 +235,7 @@ module('Integration | card-editor', function (hooks) {
     }
     await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
     let card = new TestCard({ firstName: 'Mango', lastName: 'Abdel-Rahman' });
-    await saveCard(
-      card,
-      `${testRealmURL}test-cards/test-card`,
-      Loader.getLoaderFor(updateFromSerialized)
-    );
+    await saveCard(card, `${testRealmURL}test-cards/test-card`, loader);
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -288,11 +279,7 @@ module('Integration | card-editor', function (hooks) {
     await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
 
     let card = new TestCard({ firstName: 'Mango' });
-    await saveCard(
-      card,
-      `${testRealmURL}test-cards/test-card`,
-      Loader.getLoaderFor(updateFromSerialized)
-    );
+    await saveCard(card, `${testRealmURL}test-cards/test-card`, loader);
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -341,11 +328,7 @@ module('Integration | card-editor', function (hooks) {
     }
     await shimModule(`${testRealmURL}test-cards`, { TestCard }, loader);
     let card = new TestCard({ firstName: 'Mango' });
-    await saveCard(
-      card,
-      `${testRealmURL}test-cards/test-card`,
-      Loader.getLoaderFor(updateFromSerialized)
-    );
+    await saveCard(card, `${testRealmURL}test-cards/test-card`, loader);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>

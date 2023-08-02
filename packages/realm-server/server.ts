@@ -2,13 +2,7 @@ import Koa from 'koa';
 import cors from '@koa/cors';
 import Router from '@koa/router';
 import { Memoize } from 'typescript-memoize';
-import {
-  Loader,
-  Realm,
-  baseRealm,
-  assetsDir,
-  logger,
-} from '@cardstack/runtime-common';
+import { Realm, baseRealm, assetsDir, logger } from '@cardstack/runtime-common';
 import { webStreamToText } from '@cardstack/runtime-common/stream';
 import { setupCloseHandler } from './node-realm';
 import {
@@ -38,8 +32,10 @@ export class RealmServer {
     detectRealmCollision(realms);
     this.realms = realms;
     // defaults to using the base realm to host assets (this is the dev env default)
+    // All realms should have URL mapping for the base realm
     this.assetsURL =
-      opts?.assetsURL ?? Loader.resolve(`${baseRealm.url}${assetsDir}`);
+      opts?.assetsURL ??
+      realms[0].loader.resolve(`${baseRealm.url}${assetsDir}`);
   }
 
   @Memoize()
@@ -94,16 +90,16 @@ export class RealmServer {
   }
 
   private serveFromRealm = async (ctxt: Koa.Context, _next: Koa.Next) => {
-    let reversedResolution = Loader.reverseResolution(
-      fullRequestURL(ctxt).href
-    );
-    this.log.debug(
-      `Looking for realm to handle request with full URL: ${
-        fullRequestURL(ctxt).href
-      } (reversed: ${reversedResolution.href})`
-    );
-
     let realm = this.realms.find((r) => {
+      let reversedResolution = r.loader.reverseResolution(
+        fullRequestURL(ctxt).href
+      );
+      this.log.debug(
+        `Looking for realm to handle request with full URL: ${
+          fullRequestURL(ctxt).href
+        } (reversed: ${reversedResolution.href})`
+      );
+
       let inRealm = r.paths.inRealm(reversedResolution);
       this.log.debug(
         `${reversedResolution} in realm ${JSON.stringify({
@@ -123,6 +119,10 @@ export class RealmServer {
     if (['POST', 'PATCH'].includes(ctxt.method)) {
       reqBody = await nodeStreamToText(ctxt.req);
     }
+
+    let reversedResolution = realm.loader.reverseResolution(
+      fullRequestURL(ctxt).href
+    );
 
     let request = new Request(reversedResolution.href, {
       method: ctxt.method,

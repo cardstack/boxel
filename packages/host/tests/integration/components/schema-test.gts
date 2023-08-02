@@ -19,32 +19,34 @@ import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import type LoaderService from '@cardstack/host/services/loader-service';
-import { shimExternals } from '@cardstack/host/lib/externals';
+import { TestContext } from '@ember/test-helpers';
+
+let loader: Loader;
 
 module('Integration | schema', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
 
   setupRenderingTest(hooks);
-  setupLocalIndexing(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
-  );
 
-  hooks.beforeEach(async function () {
-    // this seeds the loader used during index which obtains url mappings
-    // from the global loader
-    Loader.addURLMapping(
+  hooks.beforeEach(function (this: TestContext) {
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+    loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
-    shimExternals();
+  });
+
+  setupLocalIndexing(hooks);
+  setupCardLogs(
+    hooks,
+    async () => await loader.import(`${baseRealm.url}card-api`)
+  );
+
+  hooks.beforeEach(async function () {
     adapter = new TestRealmAdapter({});
-    realm = await TestRealm.createWithAdapter(adapter, this.owner);
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
-    loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
   });
 
