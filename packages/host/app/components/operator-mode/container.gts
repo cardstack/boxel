@@ -198,8 +198,14 @@ export default class OperatorModeContainer extends Component<Signature> {
     let { request } = item;
     // close the item first so user doesn't have to wait for the save to complete
     this.operatorModeStateService.trimItemsFromStack(item);
-    let updatedCard = await this.write.perform(card);
-    await request?.fulfill(updatedCard);
+
+    // only save when closing a stack item in edit mode. there should be no unsaved
+    // changes in isolated mode because they were saved when user toggled between
+    // edit and isolated formats
+    if (item.format === 'edit') {
+      let updatedCard = await this.write.perform(card);
+      await request?.fulfill(updatedCard);
+    }
   }
 
   // TODO I'm a little suspicious of all the async actions in this component.
