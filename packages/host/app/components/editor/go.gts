@@ -47,7 +47,7 @@ export default class Go extends Component<Signature> {
       <div class='main-column'>
         <FileTree @url={{ownRealmURL}} @openFiles={{@openFiles}} />
       </div>
-      {{#if (isReady this.openFile)}}
+      {{#if (isReady this.getOpenFile)}}
         <div class='editor-column'>
           <menu class='editor-menu'>
             <li>
@@ -61,9 +61,9 @@ export default class Go extends Component<Signature> {
             </li>
             {{#if this.contentChangedTask.last.isError}}
               <li data-test-failed-to-save>Failed to save</li>
-            {{else if this.openFile.lastModified}}
+            {{else if this.getOpenFile.lastModified}}
               <li data-test-last-edit>Last edit was
-                {{momentFrom this.openFile.lastModified}}</li>
+                {{momentFrom this.getOpenFile.lastModified}}</li>
               <li data-test-editor-lang>Lang: {{this.language}}</li>
             {{/if}}
           </menu>
@@ -71,7 +71,7 @@ export default class Go extends Component<Signature> {
             class='editor-container'
             data-test-editor
             {{monacoModifier
-              content=this.openFile.content
+              content=this.getOpenFile.content
               contentChanged=this.contentChanged
               monacoSDK=@monaco
               language=this.language
@@ -81,8 +81,8 @@ export default class Go extends Component<Signature> {
           </div>
         </div>
         <div class='main-column'>
-          {{#if (isRunnable this.openFile.name)}}
-            <Module @file={{this.openFile}} />
+          {{#if (isRunnable this.getOpenFile.name)}}
+            <Module @file={{this.getOpenFile}} />
           {{else if this.openFileCardJSON}}
             {{#if this.card}}
               <CardEditor
@@ -188,23 +188,50 @@ export default class Go extends Component<Signature> {
     return undefined;
   }
 
-  openFile = maybe(this, (context) => {
-    const relativePath = this.args.openFiles.path;
-    if (relativePath) {
-      return file(context, () => ({
-        relativePath,
-        realmURL: new RealmPaths(this.cardService.defaultURL).url,
-        onStateChange: (state) => {
-          if (state === 'not-found') {
-            this.args.openFiles.path = undefined;
-          }
-        },
-      }));
+  // I need this getter to react to changes from the controller
+  get getOpenFile() {
+    if (this.args.openFiles.path) {
+      this.openFile = maybe(this, (context) => {
+        const relativePath = this.args.openFiles.path;
+        if (relativePath) {
+          return file(context, () => ({
+            relativePath,
+            realmURL: new RealmPaths(this.cardService.defaultURL).url,
+            onStateChange: (state) => {
+              if (state === 'not-found') {
+                this.args.openFiles.path = undefined;
+              }
+            },
+          }));
+        } else {
+          return undefined;
+        }
+      });
+      return this.openFile;
     } else {
       return undefined;
     }
-  });
+  }
 
+  //The main issue is when the callback in maybe() returns undefined
+  openFile = this.args.openFiles.path
+    ? maybe(this, (context) => {
+        const relativePath = this.args.openFiles.path;
+        if (relativePath) {
+          return file(context, () => ({
+            relativePath,
+            realmURL: new RealmPaths(this.cardService.defaultURL).url,
+            onStateChange: (state) => {
+              if (state === 'not-found') {
+                this.args.openFiles.path = undefined;
+              }
+            },
+          }));
+        } else {
+          return undefined;
+        }
+      })
+    : undefined;
   writeContentToFile(file: FileResource, content: string) {
     if (file.state !== 'ready')
       throw new Error('File is not ready to be written to');
