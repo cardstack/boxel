@@ -16,7 +16,6 @@ interface Signature {
   Args: {
     value: string;
     bottomTreatment?: SearchInputBottomTreatment;
-    iconPosition?: 'start' | 'end';
     state?: InputValidationState;
     errorMessage?: string;
     placeholder?: string;
@@ -29,14 +28,17 @@ interface Signature {
 
 export default class SearchInput extends Component<Signature> {
   <template>
-    <div class='searchbox' data-test-searchbox ...attributes>
+    <div
+      class={{cn
+        'search-input'
+        search-input--bottom-flat=(eq @bottomTreatment 'flat')
+      }}
+      data-test-search-input
+      ...attributes
+    >
       <label>
         <span class='boxel-sr-only'>Search</span>
         <BoxelInputValidationState
-          class={{cn
-            'searchbox-input-group'
-            searchbox-input-group--bottom-flat=(eq @bottomTreatment 'flat')
-          }}
           @value={{@value}}
           @onInput={{@onInput}}
           @onKeyPress={{@onKeyPress}}
@@ -46,55 +48,41 @@ export default class SearchInput extends Component<Signature> {
           @placeholder={{if @placeholder @placeholder 'Search'}}
         />
       </label>
-      <span
-        class={{cn
-          'searchbox-icon'
-          searchbox-icon--start=(eq @iconPosition 'start')
-        }}
-      >
+      <span class='search-input-icon'>
         {{svgJar 'icon-search' width='20' height='20'}}
       </span>
     </div>
     <style>
-      .searchbox {
+      .search-input {
         --search-icon-width: var(--boxel-sp-xxl);
         position: relative;
         width: 100%;
         font: var(--boxel-font);
       }
-      .searchbox-icon {
+      .search-input-icon {
         --icon-color: var(--boxel-highlight);
         position: absolute;
-        top: 0;
-        right: 0;
-        height: 100%;
+        top: var(--boxel-sp);
+        left: 0;
         width: var(--search-icon-width);
         display: flex;
         justify-content: center;
         align-items: center;
       }
-      .searchbox-icon--start {
-        left: 0;
-        right: auto;
-      }
-      :global(.searchbox-input-group > .input.boxel-input) {
+      :global(.search-input .boxel-input) {
         --input-height: 3.75rem;
         --boxel-form-control-border-color: var(--boxel-dark);
         --boxel-form-control-border-radius: var(--boxel-border-radius-xl);
 
-        padding: var(--boxel-sp) var(--search-icon-width);
+        padding-left: var(--search-icon-width);
         background-color: var(--boxel-dark);
         color: var(--boxel-light);
         font: var(--boxel-font);
         letter-spacing: var(--boxel-lsp-xs);
       }
-      :global(.searchbox-input-group--bottom-flat > .input.boxel-input) {
+      :global(.search-input--bottom-flat .boxel-input) {
         --boxel-form-control-border-radius: var(--boxel-border-radius-xl)
           var(--boxel-border-radius-xl) 0 0;
-      }
-      :global(.searchbox-input-group > .boxel-input::placeholder) {
-        color: var(--boxel-light);
-        opacity: 0.6;
       }
 
     </style>

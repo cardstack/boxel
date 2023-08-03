@@ -1,9 +1,10 @@
 import Component from '@glimmer/component';
-import SearchInput, { SearchInputBottomTreatment } from './search-input';
 import {
   Button,
   FieldContainer,
   BoxelInputValidationState,
+  SearchInput,
+  SearchInputBottomTreatment,
 } from '@cardstack/boxel-ui';
 import { on } from '@ember/modifier';
 //@ts-ignore cached not available yet in definitely typed
@@ -179,7 +180,6 @@ export default class SearchSheet extends Component<Signature> {
       </div>
       <SearchInput
         @bottomTreatment={{this.inputBottomTreatment}}
-        @iconPosition='start'
         @value={{this.searchInputValue}}
         @placeholder='Enter search term or type a command'
         @onFocus={{@onFocus}}
@@ -237,8 +237,9 @@ export default class SearchSheet extends Component<Signature> {
       }
 
       .search-sheet {
-        background: #fff;
-        border-radius: 20px 20px 0 0;
+        background-color: var(--boxel-light);
+        border-radius: var(--boxel-border-radius-xl)
+          var(--boxel-border-radius-xl) 0 0;
         bottom: -1px;
         box-shadow: 0 5px 15px 0 rgba(0, 0, 0, 0.5);
         display: flex;
@@ -248,6 +249,10 @@ export default class SearchSheet extends Component<Signature> {
         transition: height var(--boxel-transition),
           padding var(--boxel-transition);
         width: 93%;
+      }
+
+      .search-sheet:not(.closed) {
+        gap: var(--boxel-sp);
       }
 
       .closed {
@@ -309,7 +314,6 @@ export default class SearchSheet extends Component<Signature> {
       .search-sheet-content__recent-access {
         display: flex;
         flex-direction: column;
-        padding: var(--boxel-sp);
         width: 100%;
       }
       .search-sheet-content__recent-access .boxel-label {
@@ -336,7 +340,7 @@ export default class SearchSheet extends Component<Signature> {
       }
 
       .search-sheet .input {
-        margin: 31px 0 20px;
+        margin: var(--boxel-sp-lg) 0 var(--boxel-sp);
       }
 
       .search-sheet.closed .input {

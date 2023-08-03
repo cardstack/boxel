@@ -667,7 +667,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
       // Click on search-input
-      await click('[data-test-searchbox] input');
+      await click('[data-test-search-input] input');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
@@ -794,7 +794,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
 
       // Click on search-input
-      await click('[data-test-searchbox] input');
+      await click('[data-test-search-input] input');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 

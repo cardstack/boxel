@@ -5,6 +5,7 @@ import HeaderUsage from '@cardstack/boxel-ui/components/header/usage';
 import ButtonUsage from '@cardstack/boxel-ui/components/button/usage';
 import IconButtonUsage from '@cardstack/boxel-ui/components/icon-button/usage';
 import InputUsage from '@cardstack/boxel-ui/components/input/usage';
+import SearchInputUsage from '@cardstack/boxel-ui/components/input/search-input/usage';
 import InputValidationStateUsage from '@cardstack/boxel-ui/components/input/validation-state/usage';
 import LoadingIndicatorUsage from '@cardstack/boxel-ui/components/loading-indicator/usage';
 import MessageUsage from '@cardstack/boxel-ui/components/message/usage';
@@ -23,6 +24,7 @@ export default class IndexController extends FreestyleController {
       ['Boxel::Button', ButtonUsage],
       ['Boxel::IconButton', IconButtonUsage],
       ['Boxel::Input', InputUsage],
+      ['Boxel::Input::SearchInput', SearchInputUsage],
       ['Boxel::Input::ValidationState', InputValidationStateUsage],
       ['Boxel::LoadingIndicator', LoadingIndicatorUsage],
       ['Boxel::Modal', ModalUsage],

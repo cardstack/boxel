@@ -22,13 +22,13 @@ import {
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { getSearchResults, Search } from '../resources/search';
 import CardCatalogItem from './card-catalog-item';
-import SearchInput from './search-sheet/search-input';
 import {
   Modal,
   CardContainer,
   Header,
   Button,
   IconButton,
+  SearchInput,
 } from '@cardstack/boxel-ui';
 // @ts-ignore no types
 import cssUrl from 'ember-css-url';
