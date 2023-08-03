@@ -52,7 +52,7 @@ export class Chain extends Card {
 
   static isolated = class Isolated extends Component<typeof Chain> {
     <template>
-      <FieldContainer @label='Chain'><@fields.name />
+      <FieldContainer @label='Chain'><@fields.title />
         (<@fields.chainId />)</FieldContainer>
       <FieldContainer @label='BlockExplorer'>
         <a href={{@model.blockExplorer}}>{{@model.blockExplorer}}</a>
