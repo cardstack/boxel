@@ -5,7 +5,7 @@ import { getOwner, setOwner } from '@ember/owner';
 export function maybe<T>(
   parent: object,
   resourceBuilder: (context: object) => T | undefined
-): T | undefined {
+): { current: T | undefined } {
   return resource(parent, ({ on }) => {
     let context = {};
     let owner = getOwner(parent);
@@ -17,6 +17,8 @@ export function maybe<T>(
     setOwner(context, owner);
     associateDestroyableChild(parent, context);
     on.cleanup(() => destroy(context));
-    return (resourceBuilder(context) ?? undefined) as T | undefined;
+    return {
+      current: (resourceBuilder(context) ?? undefined) as T | undefined,
+    };
   });
 }

@@ -47,7 +47,7 @@ export default class Go extends Component<Signature> {
       <div class='main-column'>
         <FileTree @url={{ownRealmURL}} @openFiles={{@openFiles}} />
       </div>
-      {{#if (isReady this.openFile)}}
+      {{#if (isReady this.openFile.current)}}
         <div class='editor-column'>
           <menu class='editor-menu'>
             <li>
@@ -61,9 +61,9 @@ export default class Go extends Component<Signature> {
             </li>
             {{#if this.contentChangedTask.last.isError}}
               <li data-test-failed-to-save>Failed to save</li>
-            {{else if this.openFile.lastModified}}
+            {{else if this.openFile.current.lastModified}}
               <li data-test-last-edit>Last edit was
-                {{momentFrom this.openFile.lastModified}}</li>
+                {{momentFrom this.openFile.current.lastModified}}</li>
               <li data-test-editor-lang>Lang: {{this.language}}</li>
             {{/if}}
           </menu>
@@ -71,7 +71,7 @@ export default class Go extends Component<Signature> {
             class='editor-container'
             data-test-editor
             {{monacoModifier
-              content=this.openFile.content
+              content=this.openFile.current.content
               contentChanged=this.contentChanged
               monacoSDK=@monaco
               language=this.language
@@ -81,8 +81,8 @@ export default class Go extends Component<Signature> {
           </div>
         </div>
         <div class='main-column'>
-          {{#if (isRunnable this.openFile.name)}}
-            <Module @file={{this.openFile}} />
+          {{#if (isRunnable this.openFile.current.name)}}
+            <Module @file={{this.openFile.current}} />
           {{else if this.openFileCardJSON}}
             {{#if this.card}}
               <CardEditor
@@ -150,11 +150,14 @@ export default class Go extends Component<Signature> {
   }
 
   contentChangedTask = restartableTask(async (content: string) => {
-    if (this.openFile?.state !== 'ready' || content === this.openFile.content) {
+    if (
+      this.openFile.current?.state !== 'ready' ||
+      content === this.openFile.current?.content
+    ) {
       return;
     }
 
-    let isJSON = this.openFile.name.endsWith('.json');
+    let isJSON = this.openFile.current.name.endsWith('.json');
     let json = isJSON && this.safeJSONParse(content);
 
     if (json && isSingleCardDocument(json)) {
@@ -162,7 +165,7 @@ export default class Go extends Component<Signature> {
       return;
     }
 
-    await this.writeContentToFile(this.openFile, content);
+    await this.writeContentToFile(this.openFile.current, content);
   });
 
   safeJSONParse(content: string) {
@@ -229,18 +232,18 @@ export default class Go extends Component<Signature> {
   get openFileCardJSON() {
     this.jsonError = undefined;
     if (
-      this.openFile?.state === 'ready' &&
-      this.openFile.name.endsWith('.json')
+      this.openFile.current?.state === 'ready' &&
+      this.openFile.current.name.endsWith('.json')
     ) {
       let maybeCard: any;
       try {
-        maybeCard = JSON.parse(this.openFile.content);
+        maybeCard = JSON.parse(this.openFile.current.content);
       } catch (err: any) {
         this.jsonError = err.message;
         return undefined;
       }
       if (isCardDocument(maybeCard)) {
-        let url = this.openFile.url.replace(/\.json$/, '');
+        let url = this.openFile.current.url.replace(/\.json$/, '');
         if (!url) {
           return undefined;
         }
@@ -266,10 +269,10 @@ export default class Go extends Component<Signature> {
 
   @action
   removeFile() {
-    if (!this.openFile || !('url' in this.openFile)) {
+    if (!this.openFile.current || !('url' in this.openFile.current)) {
       return;
     }
-    this.remove.perform(this.openFile.url);
+    this.remove.perform(this.openFile.current.url);
   }
 
   private remove = restartableTask(async (url: string) => {
