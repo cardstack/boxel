@@ -475,22 +475,19 @@ export default class OperatorModeContainer extends Component<Signature> {
       // In case, that the search was accessed directly without clicking right and left buttons,
       // the rightmost stack will be REPLACED by the selection
       let numberOfStacks = this.operatorModeStateService.numberOfStacks();
+      let stackIndex = numberOfStacks - 1;
       if (numberOfStacks > 0) {
         //there will always be 1 stack
         let stack = this.operatorModeStateService.rightMostStack();
         if (stack) {
           let bottomMostItem = stack[0];
           if (bottomMostItem) {
-            let stackItem: CardStackItem = {
+            this.operatorModeStateService.clearStackAndAdd(stackIndex, {
               type: 'card',
               card,
               format: 'isolated',
-              stackIndex: numberOfStacks - 1, //rightMost stack index
-            };
-            this.operatorModeStateService.trimStackAndAdd(
-              bottomMostItem,
-              stackItem
-            );
+              stackIndex,
+            });
           }
         }
       }

@@ -34,10 +34,6 @@ type SerializedStack = SerializedItem[];
 
 export type SerializedState = { stacks: SerializedStack[] };
 
-interface StackOpts {
-  keepIfEmpty?: boolean; // we want to keep the stack although stack is empty
-}
-
 export default class OperatorModeStateService extends Service {
   @tracked state: OperatorModeState = new TrackedObject({
     stacks: new TrackedArray([]),
@@ -62,19 +58,29 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
-  trimItemsFromStack(item: StackItem, opts?: StackOpts) {
+  trimItemsFromStack(item: StackItem) {
     let stackIndex = item.stackIndex;
     let itemIndex = this.state.stacks[stackIndex].indexOf(item);
-    this.state.stacks[stackIndex].splice(itemIndex); // Always remove anything above the item
+    this.state.stacks[stackIndex].splice(itemIndex); // Remove anything above the item
 
-    // If the resulting stack is now empty, remove it from the state
-    if (
-      !opts?.keepIfEmpty &&
-      this.stackIsEmpty(stackIndex) &&
-      this.state.stacks.length > 1
-    ) {
+    // If the resulting stack is now empty, remove it
+    if (this.stackIsEmpty(stackIndex) && this.state.stacks.length > 1) {
       this.state.stacks.splice(stackIndex, 1);
+
+      // If we just removed the last item in the stack, and we also removed the stack because of that, we need
+      // to update the stackIndex of all items in the stacks that come after the removed stack.
+      // This is another code smell that the stackIndex should perhaps not not live in the item. For now, we keep it for convenience.
+      this.state.stacks
+        .filter((_, stackIndex) => stackIndex >= item.stackIndex)
+        .forEach((stack, realStackIndex) => {
+          stack.forEach((stackItem) => {
+            if (stackItem.stackIndex !== realStackIndex) {
+              stackItem.stackIndex = realStackIndex;
+            }
+          });
+        });
     }
+
     this.schedulePersist();
   }
 
@@ -106,11 +112,14 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
-  trimStackAndAdd(lowestItem: StackItem, newItem: StackItem) {
-    // Note: this function maintains the stack in place -- it doesn't delete it even if its empty
-    this.trimItemsFromStack(lowestItem, { keepIfEmpty: true });
+  clearStackAndAdd(stackIndex: number, newItem: StackItem) {
+    let itemsToPopCount = this.state.stacks[stackIndex].length;
+
+    for (let i = 0; i < itemsToPopCount; i++) {
+      this.popItemFromStack(stackIndex);
+    }
+
     this.addItemToStack(newItem);
-    return this.schedulePersist();
   }
 
   numberOfStacks() {
@@ -129,10 +138,13 @@ export default class OperatorModeStateService extends Service {
   }
 
   shiftStack(stack: StackItem[], destinationIndex: number) {
-    stack.forEach((item) => {
-      this.trimItemsFromStack(item);
+    let stackItemsCopy = stack.slice(); // The actions in the loop are mutating the stack items, so we need to make a copy to make sure to iterate over all items from the original stack
+
+    stackItemsCopy.forEach((item) => {
+      this.popItemFromStack(item.stackIndex);
       this.addItemToStack({ ...item, stackIndex: destinationIndex });
     });
+
     return this.schedulePersist();
   }
 
@@ -210,7 +222,7 @@ export default class OperatorModeStateService extends Service {
   // so that templates can react to changes in stacks and their items
   async deserialize(rawState: SerializedState): Promise<OperatorModeState> {
     let newState: OperatorModeState = new TrackedObject({
-      stacks: [],
+      stacks: new TrackedArray([]),
     });
 
     let stackIndex = 0;
