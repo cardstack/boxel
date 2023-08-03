@@ -379,7 +379,6 @@ export class RoomCard extends Card {
         let update = false;
         if (event.content['m.relates_to']?.rel_type === 'm.replace') {
           event_id = event.content['m.relates_to'].event_id;
-          console.log('Updating', event_id);
           update = true;
         }
         if (cache.has(event_id) && !update) {
@@ -398,7 +397,7 @@ export class RoomCard extends Card {
           formattedMessage,
           index,
           attachedCard: null,
-          command: null
+          command: null,
         };
         if (event.content.msgtype === 'org.boxel.command') {
           cardArgs['command'] = event.content.command;
@@ -421,7 +420,6 @@ export class RoomCard extends Card {
             cardVersions.set(attachedCard, event.unsigned.transaction_id);
           }
         } else {
-          console.log('Setting new messages with ', event_id, cardArgs);
           newMessages.set(event_id, new MessageCard(cardArgs));
         }
 
@@ -457,6 +455,8 @@ export class RoomCard extends Card {
   static edit = class Edit extends Component<typeof this> {
     <template>
       <div>Cannot edit room card</div>
+
+
     </template>
   };
 }
@@ -569,7 +569,6 @@ interface CommandEvent extends BaseMatrixEvent {
     prev_sender?: string;
   };
 }
-
 
 interface CardMessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';

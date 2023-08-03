@@ -296,14 +296,14 @@ export default class RoomsManager extends Component<Args> {
         continue;
       }
       let joinedMember = resource.roomCard.joinedMembers.find(
-        (m) => this.matrixService.client.getUserId() === m.userId
+        (m) => this.matrixService.userId === m.userId
       );
       if (joinedMember) {
         rooms.joined.push({ room: resource.roomCard, member: joinedMember });
         continue;
       }
       let invitedMember = resource.roomCard.invitedMembers.find(
-        (m) => this.matrixService.client.getUserId() === m.userId
+        (m) => this.matrixService.userId === m.userId
       );
       if (invitedMember) {
         rooms.invited.push({ room: resource.roomCard, member: invitedMember });

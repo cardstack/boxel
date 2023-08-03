@@ -1,4 +1,5 @@
 import { module, test, skip } from 'qunit';
+import Service, { service } from '@ember/service';
 import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
 import { baseRealm, cardTypeDisplayName } from '@cardstack/runtime-common';
@@ -21,16 +22,42 @@ import {
   click,
   fillIn,
   focus,
+  pauseTest,
   triggerEvent,
 } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import percySnapshot from '@percy/ember';
+import { TrackedMap } from 'tracked-built-ins';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 const realmName = 'Operator Mode Workspace';
 let setCardInOperatorModeState: (card: string) => Promise<void>;
+
+class MockClient {
+  public getProfileInfo(userId: string) {
+    return new Promise((resolveOuter) => {
+      resolveOuter({ displayname: userId });
+    });
+  }
+}
+
+class MockMatrixService extends Service {
+  roomCards: TrackedMap<string, Promise<RoomCard>> = new TrackedMap();
+  async start(auth?: IAuthData) {}
+  get isLoggedIn() {
+    return true;
+  }
+
+  get client() {
+    return new MockClient();
+  }
+
+  get userId() {
+    return '@testuser:staging';
+  }
+}
 
 module('Integration | operator-mode', function (hooks) {
   let adapter: TestRealmAdapter;
@@ -574,6 +601,28 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-pet="Mango"]');
     assert.dom('[data-test-stack-card]').exists({ count: 2 });
     assert.dom('[data-test-stack-card-index="1"]').includesText('Mango');
+  });
+
+  test('it previews changes to the card in the stack', async function (assert) {
+    this.owner.register('service:matrixService', MockMatrixService);
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    let component = await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor('[data-test-person]');
+    assert.dom('[data-test-boxel-header-title]').hasText('Person');
+    assert.dom('[data-test-person]').hasText('Fadhlan');
+    await click('[data-test-open-chat]');
+
+    //debugger;
+    await pauseTest();
+    //await
   });
 
   test("it doesn't change the field value if user clicks cancel in edit view", async function (assert) {
