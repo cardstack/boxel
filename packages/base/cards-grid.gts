@@ -97,6 +97,18 @@ class Isolated extends Component<typeof CardsGrid> {
         ],
       },
     },
+    // sorting by title so that we can maintain stability in
+    // the ordering of the search results (server sorts results
+    // by order indexed by default)
+    sort: [
+      {
+        on: {
+          module: `${baseRealm.url}card-api`,
+          name: 'Card',
+        },
+        by: 'title',
+      },
+    ],
   });
 
   @action
