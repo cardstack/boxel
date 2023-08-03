@@ -440,7 +440,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
       .save-indicator {
         font: var(--boxel-font-sm);
-        padding-top: 0.5rem;
+        padding-top: 0.4rem;
         padding-left: 0.5rem;
         opacity: 0.6;
       }
