@@ -50,8 +50,15 @@ module('indexing', function (hooks) {
   setupBaseRealmServer(hooks, loader);
 
   hooks.beforeEach(async function () {
+    let testRealmLoader = new Loader();
+    testRealmLoader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL('http://localhost:4201/base/')
+    );
+    shimExternals(testRealmLoader);
+
     dir = dirSync().name;
-    realm = await createRealm(loader, dir, {
+    realm = await createRealm(testRealmLoader, dir, {
       'person.gts': `
         import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
