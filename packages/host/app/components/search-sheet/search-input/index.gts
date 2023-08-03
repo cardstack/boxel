@@ -29,13 +29,13 @@ interface Signature {
 
 export default class SearchInput extends Component<Signature> {
   <template>
-    <div class='searchbox'>
+    <div class='searchbox' data-test-searchbox ...attributes>
       <label>
         <span class='boxel-sr-only'>Search</span>
         <BoxelInputValidationState
           class={{cn
-            'searchbox-input'
-            searchbox-input--bottom-flat=(eq @bottomTreatment 'flat')
+            'searchbox-input-group'
+            searchbox-input-group--bottom-flat=(eq @bottomTreatment 'flat')
           }}
           @value={{@value}}
           @onInput={{@onInput}}
@@ -44,7 +44,6 @@ export default class SearchInput extends Component<Signature> {
           @state={{if @state @state 'initial'}}
           @errorMessage={{@errorMessage}}
           @placeholder={{if @placeholder @placeholder 'Search'}}
-          data-test-search-input
         />
       </label>
       <span
@@ -78,22 +77,22 @@ export default class SearchInput extends Component<Signature> {
         left: 0;
         right: auto;
       }
-      :global(.searchbox-input .boxel-input) {
+      :global(.searchbox-input-group > .input.boxel-input) {
         --input-height: 3.75rem;
-        --boxel-input-padding: var(--boxel-sp) var(--search-icon-width);
         --boxel-form-control-border-color: var(--boxel-dark);
         --boxel-form-control-border-radius: var(--boxel-border-radius-xl);
 
+        padding: var(--boxel-sp) var(--search-icon-width);
         background-color: var(--boxel-dark);
         color: var(--boxel-light);
         font: var(--boxel-font);
         letter-spacing: var(--boxel-lsp-xs);
       }
-      :global(.searchbox-input--bottom-flat .boxel-input) {
+      :global(.searchbox-input-group--bottom-flat > .input.boxel-input) {
         --boxel-form-control-border-radius: var(--boxel-border-radius-xl)
           var(--boxel-border-radius-xl) 0 0;
       }
-      :global(.searchbox .boxel-input::placeholder) {
+      :global(.searchbox-input-group > .boxel-input::placeholder) {
         color: var(--boxel-light);
         opacity: 0.6;
       }

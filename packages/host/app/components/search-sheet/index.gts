@@ -331,6 +331,18 @@ export default class SearchSheet extends Component<Signature> {
         margin-right: var(--boxel-sp);
       }
 
+      .input {
+        transition: margin var(--boxel-transition);
+      }
+
+      .search-sheet .input {
+        margin: 31px 0 20px;
+      }
+
+      .search-sheet.closed .input {
+        margin: 0;
+      }
+
     </style>
   </template>
 }
