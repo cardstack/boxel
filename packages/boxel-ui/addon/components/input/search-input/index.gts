@@ -23,7 +23,6 @@ interface Signature {
     onInput?: (val: string) => void;
     onKeyPress?: (ev: KeyboardEvent) => void;
   };
-  Blocks: {};
 }
 
 export default class SearchInput extends Component<Signature> {

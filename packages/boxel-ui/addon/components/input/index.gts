@@ -168,12 +168,9 @@ export default class BoxelInput extends Component<Signature> {
         display: none;
       }
 
-      ::placeholder {
+      .boxel-input::placeholder {
         color: var(--boxel-light);
         opacity: 0.6;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
       }
 
     </style>
