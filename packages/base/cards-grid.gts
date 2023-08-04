@@ -135,7 +135,7 @@ class Isolated extends Component<typeof CardsGrid> {
     // same cards into the stack.
     await this.args.context?.actions?.createCard?.(
       card.ref,
-      this.args.model[relativeTo]
+      this.args.model[relativeTo],
     );
   });
 }
