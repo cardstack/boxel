@@ -399,6 +399,7 @@ export default class CardCatalogModal extends Component<Signature> {
       .preview {
         right: 0;
         top: 0;
+        visibility: collapse; /* remove this line to no longer hide the preview icon */
       }
       .preview > svg {
         height: 100%;

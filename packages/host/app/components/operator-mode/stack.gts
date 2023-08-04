@@ -12,20 +12,21 @@ interface Signature {
     stackIndex: number;
     publicAPI: Actions;
     close: (stackItem: StackItem) => void;
-    cancel: (stackItem: StackItem) => void;
     edit: (stackItem: StackItem) => void;
-    delete: (stackItem: StackItem) => void;
-    save: (stackItem: StackItem) => void;
+    save: (stackItem: StackItem, dismiss: boolean) => void;
   };
   Blocks: {};
 }
 
 export default class OperatorModeStack extends Component<Signature> {
+  // TODO replace async action with ember concurrency task
   @action
   async dismissStackedCardsAbove(itemIndex: number) {
+    let itemsToDismiss: StackItem[] = [];
     for (let i = this.args.stackItems.length - 1; i > itemIndex; i--) {
-      this.args.close(this.args.stackItems[i]);
+      itemsToDismiss.push(this.args.stackItems[i]);
     }
+    await Promise.all(itemsToDismiss.map((i) => this.args.close(i)));
   }
 
   <template>
@@ -38,9 +39,7 @@ export default class OperatorModeStack extends Component<Signature> {
           @publicAPI={{@publicAPI}}
           @dismissStackedCardsAbove={{this.dismissStackedCardsAbove}}
           @close={{@close}}
-          @cancel={{@cancel}}
           @edit={{@edit}}
-          @delete={{@delete}}
           @save={{@save}}
         />
       {{/each}}

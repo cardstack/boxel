@@ -73,6 +73,7 @@ export function getBoxComponent(
             card=model.value
             format=format
             fieldType=field.fieldType
+            fieldName=field.name
           }}
           data-test-field-component-card
         >

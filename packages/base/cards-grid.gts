@@ -31,6 +31,7 @@ class Isolated extends Component<typeof CardsGrid> {
               card=card
               format='data'
               fieldType=undefined
+              fieldName=undefined
             }}
             data-test-cards-grid-item={{card.id}}
           >
@@ -96,6 +97,18 @@ class Isolated extends Component<typeof CardsGrid> {
         ],
       },
     },
+    // sorting by title so that we can maintain stability in
+    // the ordering of the search results (server sorts results
+    // by order indexed by default)
+    sort: [
+      {
+        on: {
+          module: `${baseRealm.url}card-api`,
+          name: 'Card',
+        },
+        by: 'title',
+      },
+    ],
   });
 
   @action
@@ -114,6 +127,12 @@ class Isolated extends Component<typeof CardsGrid> {
       return;
     }
 
+    // before auto save we used to add the new card to the stack
+    // after it was created. now this no longer really makes sense
+    // after auto-save. The card is in the stack in an edit mode.
+    //if the user wants to view the card in isolated mode they can
+    // just toggle the edit button. otherwise we'll pop 2 of the
+    // same cards into the stack.
     await this.args.context?.actions?.createCard?.(
       card.ref,
       this.args.model[relativeTo]
