@@ -649,11 +649,8 @@ module('Integration | search-index', function (hooks) {
         assert.ok('false', 'expected search entry to be an error document');
       }
     }
-  });
-
-  // FIXME does splitting this up negate its purpose?
-  test('can also recover from rendering a card that has a nested card with a template error', async function (assert) {
     {
+      // perform a new index to assert that render stack is still consistent
       let adapter = new TestRealmAdapter({
         'person.gts': `
           import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
@@ -783,11 +780,8 @@ module('Integration | search-index', function (hooks) {
         assert.ok('false', 'expected search entry to be an error document');
       }
     }
-  });
-
-  // FIXME does splitting this up negate its purpose?
-  test('can also recover from rendering a card that encounters a template error in its own custom component', async function (assert) {
     {
+      // perform a new index to assert that render stack is still consistent
       let adapter = new TestRealmAdapter({
         'person.gts': `
           import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
