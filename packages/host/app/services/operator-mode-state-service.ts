@@ -138,7 +138,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   shiftStack(stack: StackItem[], destinationIndex: number) {
-    let stackItemsCopy = stack.slice(); // The actions in the loop are mutating the stack items, so we need to make a copy to make sure to iterate over all items from the original stack
+    let stackItemsCopy = [...stack]; // The actions in the loop are mutating the stack items, so we need to make a copy to make sure to iterate over all items from the original stack
 
     stackItemsCopy.forEach((item) => {
       this.popItemFromStack(item.stackIndex);
