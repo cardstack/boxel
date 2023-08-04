@@ -561,29 +561,6 @@ export default class OperatorModeContainer extends Component<Signature> {
           data-test-save-idle={{this.write.isIdle}}
           style={{this.backgroundImageStyle}}
         >
-          {{#if this.canCreateNeighborStack}}
-            <button
-              data-test-add-card-left-stack
-              class='add-card-to-neighbor-stack add-card-to-neighbor-stack--left
-                {{if
-                  (eq
-                    this.searchSheetTrigger
-                    SearchSheetTrigger.DropCardToLeftNeighborStackButton
-                  )
-                  "add-card-to-neighbor-stack--active"
-                }}'
-              {{on
-                'click'
-                (fn
-                  this.onFocusSearchInput
-                  SearchSheetTrigger.DropCardToLeftNeighborStackButton
-                )
-              }}
-            >
-              {{svgJar 'download' width='30px' height='30px'}}
-            </button>
-          {{/if}}
-
           {{#if (eq this.allStackItems.length 0)}}
             <div class='no-cards'>
               <p class='add-card-title'>
@@ -618,6 +595,26 @@ export default class OperatorModeContainer extends Component<Signature> {
           {{/if}}
 
           {{#if this.canCreateNeighborStack}}
+            <button
+              data-test-add-card-left-stack
+              class='add-card-to-neighbor-stack add-card-to-neighbor-stack--left
+                {{if
+                  (eq
+                    this.searchSheetTrigger
+                    SearchSheetTrigger.DropCardToLeftNeighborStackButton
+                  )
+                  "add-card-to-neighbor-stack--active"
+                }}'
+              {{on
+                'click'
+                (fn
+                  this.onFocusSearchInput
+                  SearchSheetTrigger.DropCardToLeftNeighborStackButton
+                )
+              }}
+            >
+              {{svgJar 'download' width='30px' height='30px'}}
+            </button>
             <button
               data-test-add-card-right-stack
               class='add-card-to-neighbor-stack add-card-to-neighbor-stack--right
