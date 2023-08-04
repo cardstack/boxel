@@ -221,7 +221,7 @@ module('Integration | text-input-filter', function (hooks) {
       .exists();
     await click('[data-test-save-card]');
     await waitUntil(() => !document.querySelector('[data-test-saving]'));
-    await assert
+    assert
       .dom('div[data-test-field="someBigInt"]')
       .doesNotIncludeText('a-string-text');
   });

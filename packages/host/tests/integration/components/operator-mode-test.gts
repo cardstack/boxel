@@ -73,10 +73,6 @@ module('Integration | operator-mode', function (hooks) {
     return card;
   }
 
-  hooks.afterEach(async function () {
-    await waitFor('[data-test-save-idle]');
-  });
-
   hooks.beforeEach(async function () {
     localStorage.removeItem('recent-cards');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
@@ -1150,7 +1146,6 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-field="authorBio"]').containsText('Alice');
 
     await click('[data-test-stack-card-index="0"] [data-test-edit-button]');
-    await waitFor('[data-test-save-idle]');
     assert.dom('[data-test-blog-post-isolated]').hasText('Beginnings by Alice');
   });
 
@@ -1171,7 +1166,6 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-field="authorBio"]').containsText('Alien Bob');
     await click('[data-test-field="authorBio"] [data-test-remove-card]');
     await click('[data-test-edit-button]');
-    await waitFor('[data-test-save-idle]');
 
     await waitFor('.operator-mode [data-test-blog-post-isolated]');
     assert
@@ -1378,8 +1372,6 @@ module('Integration | operator-mode', function (hooks) {
           .getAttribute('data-test-last-saved') !== saveTime
     );
     await click('[data-test-edit-button]');
-    await waitFor('[data-test-save-idle]');
-
     await waitFor(`[data-test-person="Burcu"]`);
     assert
       .dom(`[data-test-stack-card="${testRealmURL}Person/burcu"]`)
@@ -1829,7 +1821,7 @@ module('Integration | operator-mode', function (hooks) {
 
     // Linked cards have the realm's icon in the overlaid header title
     assert
-      .dom('[data-test-overlay-card-display-name="Author"] .header-icon img')
+      .dom('[data-test-overlay-card-display-name="Author"] .header-title img')
       .hasAttribute('src', 'https://example-icon.test');
 
     await click('[data-test-author');

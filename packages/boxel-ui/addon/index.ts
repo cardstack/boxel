@@ -12,6 +12,7 @@ import Header from './components/header';
 import IconButton from './components/icon-button';
 import Label from './components/label';
 import LoadingIndicator from './components/loading-indicator';
+import Menu from './components/menu';
 import Message from './components/message';
 import Modal from './components/modal';
 import BoxelDropdown from './components/dropdown';
@@ -31,6 +32,7 @@ export {
   IconButton,
   Label,
   LoadingIndicator,
+  Menu,
   Message,
   Modal,
   BoxelDropdown,

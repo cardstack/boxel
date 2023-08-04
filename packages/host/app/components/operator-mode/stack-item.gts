@@ -7,7 +7,6 @@ import type {
   FieldType,
 } from 'https://cardstack.com/base/card-api';
 import Preview from '../preview';
-import { trackedFunction } from 'ember-resources/util/function';
 import { fn, array } from '@ember/helper';
 import type CardService from '../../services/card-service';
 
@@ -21,8 +20,13 @@ import {
   Tooltip,
 } from '@cardstack/boxel-ui';
 import get from 'lodash/get';
-import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
+import {
+  type Actions,
+  cardTypeDisplayName,
+  type RealmInfo,
+} from '@cardstack/runtime-common';
 import { task, restartableTask, timeout } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
 
 import { service } from '@ember/service';
 //@ts-expect-error cached type not available yet
@@ -69,6 +73,7 @@ export interface RenderedCardForOverlayActions {
 export default class OperatorModeStackItem extends Component<Signature> {
   @tracked selectedCards = new TrackedArray<Card>([]);
   @service declare cardService: CardService;
+  @tracked realmInfo: RealmInfo | undefined;
   @tracked isHoverOnRealmIcon = false;
   @tracked isSaving = false;
   @tracked lastSaved: number | undefined;
@@ -87,6 +92,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     super(owner, args);
     this.subscribeToCard.perform();
     this.subscribedCard = this.card;
+    this.fetchRealmInfo.perform();
   }
 
   get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
@@ -146,28 +152,26 @@ export default class OperatorModeStackItem extends Component<Signature> {
     }
   }
 
-  // TODO replace async action with ember concurrency task
-  @action async copyToClipboard(cardUrl: string) {
-    if (!cardUrl) {
+  copyToClipboard = restartableTask(async () => {
+    if (!this.card.id) {
       return;
     }
     if (config.environment === 'test') {
       return; // navigator.clipboard is not available in test environment
     }
-    await navigator.clipboard.writeText(cardUrl);
-  }
+    await navigator.clipboard.writeText(this.card.id);
+  });
 
-  fetchRealmInfo = trackedFunction(this, async () => {
-    let realmInfo = await this.cardService.getRealmInfo(this.card);
-    return realmInfo;
+  fetchRealmInfo = restartableTask(async () => {
+    this.realmInfo = await this.cardService.getRealmInfo(this.card);
   });
 
   get iconURL() {
-    return this.fetchRealmInfo.value?.iconURL ?? '/default-realm-icon.png';
+    return this.realmInfo?.iconURL ?? '/default-realm-icon.png';
   }
 
   get realmName() {
-    return this.fetchRealmInfo.value?.name;
+    return this.realmInfo?.name;
   }
 
   get cardIdentifier() {
@@ -366,7 +370,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                       (array
                         (menuItem
                           'Copy Card URL'
-                          (fn this.copyToClipboard this.card.id)
+                          (perform this.copyToClipboard)
                           icon='icon-link'
                           disabled=(eq @item.type 'contained')
                         )
@@ -375,7 +379,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                       (array
                         (menuItem
                           'Copy Card URL'
-                          (fn this.copyToClipboard this.card.id)
+                          (perform this.copyToClipboard)
                           icon='icon-link'
                           disabled=(eq @item.type 'contained')
                         )

@@ -193,7 +193,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   }
 
-  @action async close(item: StackItem) {
+  close = task(async (item: StackItem) => {
     let card = this.getAddressableCard(item);
     let { request } = item;
     // close the item first so user doesn't have to wait for the save to complete
@@ -204,27 +204,18 @@ export default class OperatorModeContainer extends Component<Signature> {
     // edit and isolated formats
     if (item.format === 'edit') {
       let updatedCard = await this.write.perform(card);
-      await request?.fulfill(updatedCard);
+      request?.fulfill(updatedCard);
     }
-  }
+  });
 
-  // TODO I'm a little suspicious of all the async actions in this component.
-  // there is the possibility that this component could be destroyed during
-  // interior await's within these async actions. perferably we should be
-  // using ember concurrency to perform any async which addresses this situation
-  // directly.
-  @action async save(item: StackItem, dismissStackItem: boolean) {
+  save = task(async (item: StackItem, dismissStackItem: boolean) => {
     let { request } = item;
     let stack = this.stacks[item.stackIndex];
     let addressableItem = getCardStackItem(item, stack);
-    // TODO Do not cast the task to a promise by awaiting it
-    // https://ember-concurrency.com/docs/task-cancelation-help
-    // if this was a EC task instead of an action then we could await here without
-    // casting the task to a promise
     let updatedCard = await this.write.perform(addressableItem.card);
 
     if (updatedCard) {
-      await request?.fulfill(updatedCard);
+      request?.fulfill(updatedCard);
       if (!dismissStackItem) {
         // if this is a newly created card from auto-save then we
         // need to replace the stack item to account for the new card's ID
@@ -256,7 +247,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         }
       }
     }
-  }
+  });
 
   // we debounce saves in the stack item--by the time they reach
   // this level we need to handle every request (so not restartable). otherwise
@@ -555,7 +546,7 @@ export default class OperatorModeContainer extends Component<Signature> {
               </p>
 
               <button
-                class='add-card-button icon-button'
+                class='add-card-button'
                 {{on 'click' (fn (perform this.addCard))}}
                 data-test-add-card-button
               >
@@ -570,9 +561,9 @@ export default class OperatorModeContainer extends Component<Signature> {
                 @stackItems={{stack}}
                 @stackIndex={{stackIndex}}
                 @publicAPI={{this.publicAPI this stackIndex}}
-                @close={{this.close}}
+                @close={{perform this.close}}
                 @edit={{this.edit}}
-                @save={{this.save}}
+                @save={{perform this.save}}
               />
             {{/each}}
           {{/if}}
