@@ -18,4 +18,5 @@ declare const config: {
   realmsServed?: string[];
   logLevels: string;
   resolvedOwnRealmURL: string;
+  autoSaveDelayMs: number;
 };

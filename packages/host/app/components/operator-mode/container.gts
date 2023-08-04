@@ -11,7 +11,7 @@ import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { Modal, IconButton } from '@cardstack/boxel-ui';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import SearchSheet, { SearchSheetMode } from '../search-sheet';
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
 import {
   Deferred,
   baseCardRef,
@@ -76,11 +76,6 @@ enum SearchSheetTrigger {
 }
 
 export default class OperatorModeContainer extends Component<Signature> {
-  // In this map we store the field values of cards that are being edited so that we can restore them if the user cancels the edit
-  cardFieldValues: WeakMap<Card, Map<string, any>> = new WeakMap<
-    Card,
-    Map<string, any>
-  >();
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
@@ -158,8 +153,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     this.operatorModeStateService.addItemToStack(item);
   }
 
-  @action async edit(item: StackItem) {
-    await this.saveCardFieldValues(this.getCard(item));
+  @action edit(item: StackItem) {
     this.updateItem(item, 'edit', new Deferred());
   }
 
@@ -200,86 +194,77 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   @action async close(item: StackItem) {
-    await this.rollbackCardFieldValues(this.getCard(item));
+    let card = this.getAddressableCard(item);
+    let { request } = item;
+    // close the item first so user doesn't have to wait for the save to complete
     this.operatorModeStateService.trimItemsFromStack(item);
 
-    //Ensure process that uses request is ended properly.
-    //User can directly close create a new card without save or cancel it.
-    let { request } = item;
-    request?.fulfill(undefined);
+    // only save when closing a stack item in edit mode. there should be no unsaved
+    // changes in isolated mode because they were saved when user toggled between
+    // edit and isolated formats
+    if (item.format === 'edit') {
+      let updatedCard = await this.write.perform(card);
+      await request?.fulfill(updatedCard);
+    }
   }
 
-  @action async cancel(item: StackItem) {
-    await this.rollbackCardFieldValues(this.getCard(item));
-    this.updateItem(item, 'isolated');
-
-    //Ensure process that uses request is ended properly.
+  // TODO I'm a little suspicious of all the async actions in this component.
+  // there is the possibility that this component could be destroyed during
+  // interior await's within these async actions. perferably we should be
+  // using ember concurrency to perform any async which addresses this situation
+  // directly.
+  @action async save(item: StackItem, dismissStackItem: boolean) {
     let { request } = item;
-    request?.fulfill(undefined);
-  }
-
-  @action async save(item: StackItem) {
-    let { request } = item;
-    await this.saveCardFieldValues(this.getCard(item));
-    let updatedCard = await this.write.perform(this.getAddressableCard(item));
-    let pathSegments = getPathToStackItem(item, this.stacks[item.stackIndex]);
+    let stack = this.stacks[item.stackIndex];
+    let addressableItem = getCardStackItem(item, stack);
+    // TODO Do not cast the task to a promise by awaiting it
+    // https://ember-concurrency.com/docs/task-cancelation-help
+    // if this was a EC task instead of an action then we could await here without
+    // casting the task to a promise
+    let updatedCard = await this.write.perform(addressableItem.card);
 
     if (updatedCard) {
-      request?.fulfill(updatedCard);
+      await request?.fulfill(updatedCard);
+      if (!dismissStackItem) {
+        // if this is a newly created card from auto-save then we
+        // need to replace the stack item to account for the new card's ID
+        if (!addressableItem.card.id && updatedCard.id) {
+          this.operatorModeStateService.replaceItemInStack(addressableItem, {
+            ...addressableItem,
+            card: updatedCard,
+          });
+        }
+        return;
+      }
 
       if (item.type === 'card' && item.isLinkedCard) {
-        this.close(item); // closes the 'create new card' editor for linked card fields
+        this.operatorModeStateService.trimItemsFromStack(item); // closes the 'create new card' editor for linked card fields
       } else {
-        let addressableItem = getCardStackItem(
-          item,
-          this.stacks[item.stackIndex]
-        );
+        if (!addressableItem.card.id && updatedCard.id) {
+          this.operatorModeStateService.trimItemsFromStack(addressableItem);
+        } else {
+          this.operatorModeStateService.replaceItemInStack(addressableItem, {
+            ...addressableItem,
+            card: updatedCard,
+            request,
+            format: 'isolated',
+          });
 
-        this.operatorModeStateService.replaceItemInStack(addressableItem, {
-          ...addressableItem,
-          card: updatedCard,
-          request,
-          format: 'isolated',
-        });
-
-        pathSegments.forEach(() =>
-          this.operatorModeStateService.popItemFromStack(item.stackIndex)
-        );
+          getPathToStackItem(item, this.stacks[item.stackIndex]).forEach(() =>
+            this.operatorModeStateService.popItemFromStack(item.stackIndex)
+          );
+        }
       }
     }
   }
 
-  // TODO: Implement remove card function
-  @action async delete(item: StackItem) {
-    await this.close(item);
-  }
-
-  private write = restartableTask(async (card: Card) => {
+  // we debounce saves in the stack item--by the time they reach
+  // this level we need to handle every request (so not restartable). otherwise
+  // we might drop writes from different stack items that want to save
+  // at the same time
+  private write = task(async (card: Card) => {
     return await this.cardService.saveModel(card);
   });
-
-  private async saveCardFieldValues(card: Card) {
-    let fields = await this.cardService.getFields(card);
-    for (let fieldName of Object.keys(fields)) {
-      if (fieldName === 'id') continue;
-
-      let field = fields[fieldName];
-      if (
-        (field.fieldType === 'contains' ||
-          field.fieldType === 'containsMany') &&
-        !(await this.cardService.isPrimitive(field.card))
-      ) {
-        await this.saveCardFieldValues((card as any)[fieldName]);
-      }
-
-      let cardFieldValue = this.cardFieldValues.get(card);
-      if (!cardFieldValue) {
-        cardFieldValue = new Map<string, any>();
-      }
-      cardFieldValue.set(fieldName, (card as any)[fieldName]);
-      this.cardFieldValues.set(card, cardFieldValue);
-    }
-  }
 
   // The public API is wrapped in a closure so that whatever calls its methods
   // in the context of operator-mode, the methods can be aware of which stack to deal with (via stackIndex), i.e.
@@ -319,12 +304,38 @@ export default class OperatorModeContainer extends Component<Signature> {
         here.addToStack(newItem);
         return await newItem.request?.promise;
       },
-      viewCard: async (card: Card, format: Format = 'isolated') => {
-        let itemsCount = here.stacks[stackIndex].length;
+      viewCard: async (
+        card: Card,
+        format: Format = 'isolated',
+        fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
+        fieldName?: string
+      ) => {
+        let stack = here.stacks[stackIndex];
+        let itemsCount = stack.length;
 
-        let currentCardOnStack = here.getCard(
-          here.stacks[stackIndex][itemsCount - 1]!
-        ); // Last item on the stack
+        let currentCardOnStack = here.getCard(stack[itemsCount - 1]!); // Last item on the stack
+
+        // TODO this is a hack until contained cards go away
+        // this lets us handle a contained card that is part of a card that has been auto-saved.
+        // the deserialization from the auto save actually breaks object equality for contained cards.
+        if (
+          fieldType === 'contains' &&
+          fieldName &&
+          [
+            ...Object.keys(
+              await here.cardService.getFields(currentCardOnStack)
+            ),
+          ].includes(fieldName)
+        ) {
+          here.addToStack({
+            type: 'contained',
+            fieldOfIndex: itemsCount - 1,
+            fieldName,
+            format,
+            stackIndex,
+          });
+          return;
+        }
 
         let containedPath = await findContainedCardPath(
           currentCardOnStack,
@@ -372,27 +383,6 @@ export default class OperatorModeContainer extends Component<Signature> {
         return;
       },
     };
-  }
-
-  private async rollbackCardFieldValues(card: Card) {
-    let fields = await this.cardService.getFields(card);
-    for (let fieldName of Object.keys(fields)) {
-      if (fieldName === 'id') continue;
-
-      let field = fields[fieldName];
-      if (
-        (field.fieldType === 'contains' ||
-          field.fieldType === 'containsMany') &&
-        !(await this.cardService.isPrimitive(field.card))
-      ) {
-        await this.rollbackCardFieldValues((card as any)[fieldName]);
-      }
-
-      let cardFieldValue = this.cardFieldValues.get(card);
-      if (cardFieldValue) {
-        (card as any)[fieldName] = cardFieldValue.get(fieldName);
-      }
-    }
   }
 
   addCard = restartableTask(async () => {
@@ -531,7 +521,10 @@ export default class OperatorModeContainer extends Component<Signature> {
       <CardCatalogModal />
 
       <div class='operator-mode__with-chat {{this.chatVisibilityClass}}'>
-        <div class='operator-mode__main'>
+        <div
+          class='operator-mode__main'
+          data-test-save-idle={{this.write.isIdle}}
+        >
           {{#if this.canCreateNeighborStack}}
             <button
               data-test-add-card-left-stack
@@ -578,9 +571,7 @@ export default class OperatorModeContainer extends Component<Signature> {
                 @stackIndex={{stackIndex}}
                 @publicAPI={{this.publicAPI this stackIndex}}
                 @close={{this.close}}
-                @cancel={{this.cancel}}
                 @edit={{this.edit}}
-                @delete={{this.delete}}
                 @save={{this.save}}
               />
             {{/each}}

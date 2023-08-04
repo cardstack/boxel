@@ -104,6 +104,7 @@ export interface CardContext {
         card: Card;
         format: Format | 'data';
         fieldType: FieldType | undefined;
+        fieldName: string | undefined;
       };
     };
   }>;
@@ -150,6 +151,8 @@ interface StaleValue {
   staleValue: any;
 }
 
+type CardChangeSubscriber = (fieldName: string, fieldValue: any) => void;
+
 function isStaleValue(value: any): value is StaleValue {
   if (value && typeof value === 'object') {
     return 'type' in value && value.type === 'stale' && 'staleValue' in value;
@@ -160,6 +163,7 @@ function isStaleValue(value: any): value is StaleValue {
 const deserializedData = new WeakMap<CardBase, Map<string, any>>();
 const recomputePromises = new WeakMap<CardBase, Promise<any>>();
 const identityContexts = new WeakMap<CardBase, IdentityContext>();
+const subscribers = new WeakMap<CardBase, Set<CardChangeSubscriber>>();
 
 // our place for notifying Glimmer when a card is ready to re-render (which will
 // involve rerunning async computed fields)
@@ -248,6 +252,7 @@ export interface Field<
     fieldMeta: CardFields[string] | undefined,
     identityContext: IdentityContext | undefined,
     instancePromise: Promise<CardBase>,
+    loadedValue: any,
     relativeTo: URL | undefined
   ): Promise<any>;
   emptyValue(instance: CardBase): any;
@@ -471,6 +476,7 @@ class ContainsMany<FieldT extends CardBaseConstructor>
     fieldMeta: CardFields[string] | undefined,
     _identityContext: undefined,
     instancePromise: Promise<CardBase>,
+    _loadedValue: any,
     relativeTo: URL | undefined
   ): Promise<CardInstanceType<FieldT>[]> {
     if (!Array.isArray(value)) {
@@ -485,7 +491,11 @@ class ContainsMany<FieldT extends CardBaseConstructor>
     }
     let metas: Partial<Meta>[] = fieldMeta ?? [];
     return new WatchedArray(
-      () => instancePromise.then((instance) => logger.log(recompute(instance))),
+      (arrayValue) =>
+        instancePromise.then((instance) => {
+          notifySubscribers(instance, field.name, arrayValue);
+          logger.log(recompute(instance));
+        }),
       await Promise.all(
         value.map(async (entry, index) => {
           if (primitive in this.card) {
@@ -523,14 +533,20 @@ class ContainsMany<FieldT extends CardBaseConstructor>
   }
 
   emptyValue(instance: CardBase) {
-    return new WatchedArray(() => logger.log(recompute(instance)));
+    return new WatchedArray((value) => {
+      notifySubscribers(instance, this.name, value);
+      logger.log(recompute(instance));
+    });
   }
 
   validate(instance: CardBase, value: any) {
     if (value && !Array.isArray(value)) {
       throw new Error(`Expected array for field value ${this.name}`);
     }
-    return new WatchedArray(() => logger.log(recompute(instance)), value);
+    return new WatchedArray((value) => {
+      notifySubscribers(instance, this.name, value);
+      logger.log(recompute(instance));
+    }, value);
   }
 
   async handleNotLoadedError<T extends CardBase>(instance: T, _e: NotLoaded) {
@@ -642,6 +658,7 @@ class Contains<CardT extends CardBaseConstructor> implements Field<CardT, any> {
     fieldMeta: CardFields[string] | undefined,
     _identityContext: undefined,
     _instancePromise: Promise<CardBase>,
+    _loadedValue: any,
     relativeTo: URL | undefined
   ): Promise<CardInstanceType<CardT>> {
     if (primitive in this.card) {
@@ -840,6 +857,7 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     _fieldMeta: undefined,
     identityContext: IdentityContext,
     _instancePromise: Promise<Card>,
+    loadedValue: any,
     relativeTo: URL | undefined
   ): Promise<CardInstanceType<CardT> | null | NotLoadedValue> {
     if (!isRelationship(value)) {
@@ -859,6 +877,9 @@ class LinksTo<CardT extends CardConstructor> implements Field<CardT> {
     let resourceId = new URL(value.links.self, relativeTo).href;
     let resource = resourceFrom(doc, resourceId);
     if (!resource) {
+      if (loadedValue !== undefined) {
+        return loadedValue;
+      }
       return {
         type: 'not-loaded',
         reference: value.links.self,
@@ -1135,6 +1156,7 @@ class LinksToMany<FieldT extends CardConstructor>
     _fieldMeta: undefined,
     identityContext: IdentityContext,
     instancePromise: Promise<CardBase>,
+    loadedValues: any,
     relativeTo: URL | undefined
   ): Promise<(CardInstanceType<FieldT> | NotLoadedValue)[]> {
     if (!Array.isArray(values) && values.links.self === null) {
@@ -1162,6 +1184,14 @@ class LinksToMany<FieldT extends CardConstructor>
         let resourceId = new URL(value.links.self, relativeTo).href;
         let resource = resourceFrom(doc, resourceId);
         if (!resource) {
+          if (loadedValues && Array.isArray(loadedValues)) {
+            let loadedValue = loadedValues.find(
+              (v) => isCard(v) && v.id === resourceId
+            );
+            if (loadedValue) {
+              return loadedValue;
+            }
+          }
           return {
             type: 'not-loaded',
             reference: value.links.self,
@@ -1173,13 +1203,20 @@ class LinksToMany<FieldT extends CardConstructor>
       });
 
     return new WatchedArray(
-      () => instancePromise.then((instance) => logger.log(recompute(instance))),
+      (value) =>
+        instancePromise.then((instance) => {
+          notifySubscribers(instance, this.name, value);
+          logger.log(recompute(instance));
+        }),
       await Promise.all(resources)
     );
   }
 
   emptyValue(instance: CardBase) {
-    return new WatchedArray(() => logger.log(recompute(instance)));
+    return new WatchedArray((value) => {
+      notifySubscribers(instance, this.name, value);
+      logger.log(recompute(instance));
+    });
   }
 
   validate(instance: CardBase, values: any[] | null) {
@@ -1205,7 +1242,10 @@ class LinksToMany<FieldT extends CardConstructor>
       }
     }
 
-    return new WatchedArray(() => logger.log(recompute(instance)), values);
+    return new WatchedArray((value) => {
+      notifySubscribers(instance, this.name, value);
+      logger.log(recompute(instance));
+    }, values);
   }
 
   async handleNotLoadedError<T extends Card>(
@@ -1444,7 +1484,6 @@ export function linksToMany<CardT extends CardConstructor>(
   } as any;
 }
 linksToMany[fieldType] = 'linksToMany' as FieldType;
-
 export class CardBase {
   // this is here because CardBase has no public instance methods, so without it
   // typescript considers everything a valid card.
@@ -1605,6 +1644,29 @@ export class Card extends CardBase {
 
 export type CardBaseConstructor = typeof CardBase;
 export type CardConstructor = typeof Card;
+
+export function subscribeToChanges(
+  card: Card,
+  subscriber: CardChangeSubscriber
+) {
+  let changeSubscribers = subscribers.get(card);
+  if (!changeSubscribers) {
+    changeSubscribers = new Set();
+    subscribers.set(card, changeSubscribers);
+  }
+  changeSubscribers.add(subscriber);
+}
+
+export function unsubscribeFromChanges(
+  card: Card,
+  subscriber: CardChangeSubscriber
+) {
+  let changeSubscribers = subscribers.get(card);
+  if (!changeSubscribers) {
+    return;
+  }
+  changeSubscribers.delete(subscriber);
+}
 
 function getDataBucket<T extends CardBase>(instance: T): Map<string, any> {
   let deserialized = deserializedData.get(instance);
@@ -1770,6 +1832,7 @@ function serializedGet<CardT extends CardBaseConstructor>(
 
 async function getDeserializedValue<CardT extends CardBaseConstructor>({
   card,
+  loadedValue,
   fieldName,
   value,
   resource,
@@ -1779,6 +1842,7 @@ async function getDeserializedValue<CardT extends CardBaseConstructor>({
   relativeTo,
 }: {
   card: CardT;
+  loadedValue: any;
   fieldName: string;
   value: any;
   resource: LooseCardResource;
@@ -1798,6 +1862,7 @@ async function getDeserializedValue<CardT extends CardBaseConstructor>({
     resource.meta.fields?.[fieldName],
     identityContext,
     modelPromise,
+    loadedValue,
     relativeTo
   );
   return result;
@@ -1928,7 +1993,20 @@ export async function updateFromSerialized<T extends CardBaseConstructor>(
   instance: CardInstanceType<T>,
   doc: LooseSingleCardDocument
 ): Promise<CardInstanceType<T>> {
-  let identityContext = identityContexts.get(instance) ?? new IdentityContext();
+  let identityContext = identityContexts.get(instance);
+  if (!identityContext) {
+    identityContext = new IdentityContext();
+    identityContexts.set(instance, identityContext);
+  }
+  if (!instance[relativeTo] && doc.data.id) {
+    instance[relativeTo] = new URL(doc.data.id);
+  }
+  if (!instance[realmInfo] && doc.data.meta.realmInfo) {
+    instance[realmInfo] = doc.data.meta.realmInfo;
+  }
+  if (!instance[realmURL] && doc.data.meta.realmURL) {
+    instance[realmURL] = new URL(doc.data.meta.realmURL);
+  }
   return await _updateFromSerialized(instance, doc.data, doc, identityContext);
 }
 
@@ -2008,6 +2086,7 @@ async function _updateFromSerialized<T extends CardBaseConstructor>(
       return result;
     }, Object.create(null));
 
+  let loadedValues = getDataBucket(instance);
   let values = (await Promise.all(
     Object.entries(
       {
@@ -2027,6 +2106,7 @@ async function _updateFromSerialized<T extends CardBaseConstructor>(
         fieldName,
         await getDeserializedValue({
           card,
+          loadedValue: loadedValues.get(fieldName),
           fieldName,
           value,
           resource,
@@ -2165,11 +2245,21 @@ function makeDescriptor<
           }
         }
       }
+      notifySubscribers(this, field.name, value);
       logger.log(recompute(this));
     };
   }
   (descriptor.get as any)[isField] = field;
   return descriptor;
+}
+
+function notifySubscribers(card: CardBase, fieldName: string, value: any) {
+  let changeSubscribers = subscribers.get(card);
+  if (changeSubscribers) {
+    for (let subscriber of changeSubscribers) {
+      subscriber(fieldName, value);
+    }
+  }
 }
 
 function cardThunk<CardT extends CardBaseConstructor>(
