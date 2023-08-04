@@ -12,6 +12,7 @@ import type { Card } from 'https://cardstack.com/base/card-api';
 interface Args {
   named: {
     query: Query;
+    realms?: string[];
   };
 }
 
@@ -25,11 +26,11 @@ export class Search extends Resource<Args> {
   @service declare cardService: CardService;
 
   modify(_positional: never[], named: Args['named']) {
-    let { query } = named;
-    this.search.perform(query);
+    let { query, realms } = named;
+    this.search.perform(query, realms);
   }
 
-  private search = restartableTask(async (query: Query) => {
+  private search = restartableTask(async (query: Query, realms?: string[]) => {
     // until we have realm index rollup, search all the realms as separate
     // queries that we merge together
     this.instances = flatMap(
@@ -37,11 +38,12 @@ export class Search extends Resource<Args> {
         // use a Set since the default URL may actually be the base realm
         [
           ...new Set(
-            [
-              this.cardService.defaultURL.href,
-              baseRealm.url,
-              otherRealmURL,
-            ].filter(Boolean) as string[]
+            realms ??
+              ([
+                this.cardService.defaultURL.href,
+                baseRealm.url,
+                otherRealmURL,
+              ].filter(Boolean) as string[])
           ),
         ].map(
           async (realm) => await this.cardService.search(query, new URL(realm))
@@ -65,10 +67,15 @@ export class Search extends Resource<Args> {
   }
 }
 
-export function getSearchResults(parent: object, query: () => Query) {
+export function getSearchResults(
+  parent: object,
+  query: () => Query,
+  realms?: () => string[]
+) {
   return Search.from(parent, () => ({
     named: {
       query: query(),
+      realms: realms ? realms() : undefined,
     },
   })) as Search;
 }

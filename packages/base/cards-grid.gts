@@ -83,33 +83,36 @@ class Isolated extends Component<typeof CardsGrid> {
     </div>
   </template>
 
-  request = getCards({
-    filter: {
-      not: {
-        any: [
-          { type: catalogEntryRef },
-          {
-            type: {
-              module: `${baseRealm.url}cards-grid`,
-              name: 'CardsGrid',
+  request = getCards(
+    {
+      filter: {
+        not: {
+          any: [
+            { type: catalogEntryRef },
+            {
+              type: {
+                module: `${baseRealm.url}cards-grid`,
+                name: 'CardsGrid',
+              },
             },
-          },
-        ],
-      },
-    },
-    // sorting by title so that we can maintain stability in
-    // the ordering of the search results (server sorts results
-    // by order indexed by default)
-    sort: [
-      {
-        on: {
-          module: `${baseRealm.url}card-api`,
-          name: 'Card',
+          ],
         },
-        by: 'title',
       },
-    ],
-  });
+      // sorting by title so that we can maintain stability in
+      // the ordering of the search results (server sorts results
+      // by order indexed by default)
+      sort: [
+        {
+          on: {
+            module: `${baseRealm.url}card-api`,
+            name: 'Card',
+          },
+          by: 'title',
+        },
+      ],
+    },
+    this.args.model.realmURL ? [this.args.model.realmURL] : undefined
+  );
 
   @action
   createNew() {
@@ -144,8 +147,19 @@ export class CardsGrid extends Card {
   static displayName = 'Cards Grid';
   static isolated = Isolated;
   @field realmName = contains(StringCard, {
-    computeVia: function (this: CatalogEntry) {
+    computeVia: function (this: CardsGrid) {
       return this[realmInfo]?.name;
+    },
+  });
+  @field realmURL = contains(StringCard, {
+    computeVia: function (this: CardsGrid) {
+      if (this.id) {
+        // take advantage of the fact the id of the index card is always at the root of the realm
+        let path = this.id.split('/');
+        path.pop();
+        return path.join('/') + '/';
+      }
+      return null;
     },
   });
 

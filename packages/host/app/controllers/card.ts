@@ -41,8 +41,12 @@ export default class CardController extends Controller {
     return null;
   }
 
-  getCards(query: Query): Search {
-    return getSearchResults(this, () => query);
+  getCards(query: Query, realms?: string[]): Search {
+    return getSearchResults(
+      this,
+      () => query,
+      realms ? () => realms : undefined
+    );
   }
 
   @action
