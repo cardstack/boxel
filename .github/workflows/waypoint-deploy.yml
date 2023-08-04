@@ -8,11 +8,11 @@ on:
         type: string
       retain:
         required: false
-        default: "1"
+        default: '1'
         type: string
       waypoint_version:
         required: false
-        default: "0.11.3"
+        default: '0.11.3'
         type: string
       environment:
         required: true
@@ -63,7 +63,7 @@ jobs:
       - name: Deploy app
         run: waypoint deploy -app=${{ inputs.app }} -plain -local
         env:
-          WAYPOINT_SERVER_TLS: "1"
+          WAYPOINT_SERVER_TLS: '1'
 
       - name: Send notification to Discord
         uses: ./.github/actions/discord-notification-deploy
@@ -72,4 +72,4 @@ jobs:
           status: ${{ github.action_status }}
           environment: ${{ inputs.environment }}
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
-          is_ecs: "true"
+          is_ecs: 'true'

@@ -12,7 +12,7 @@ import { module, test } from 'qunit';
 
 function simulateRender(
   manager: AnimationParticipantManager,
-  changes: Parameters<AnimationParticipantManager['updateParticipants']>[0]
+  changes: Parameters<AnimationParticipantManager['updateParticipants']>[0],
 ) {
   changes.removedContexts.forEach((context) => {
     // mocks have this to simulate the destroying state of contexts, where they are unstable
@@ -47,7 +47,7 @@ function simulateAnimation(sprite: Sprite) {
 }
 
 function mockContext(
-  element: HTMLElement
+  element: HTMLElement,
 ): IContext & { isDestroying: boolean } {
   return {
     // these are important for creating animators
@@ -110,7 +110,7 @@ module('Unit | AnimationParticipantManager', function (hooks) {
       manager.DOMRefs[0]?.children.length !== 0
     ) {
       throw new Error(
-        'Unexpectedly found child DOMRefs at test initialization'
+        'Unexpectedly found child DOMRefs at test initialization',
       );
     }
   });
@@ -325,10 +325,10 @@ module('Unit | AnimationParticipantManager', function (hooks) {
     });
 
     let rootContextAnimator = animators.find(
-      (a) => a.context.element === rootElement
+      (a) => a.context.element === rootElement,
     );
     let context2Animator = animators.find(
-      (a) => a.context.element === context2Element
+      (a) => a.context.element === context2Element,
     );
     let sprite1 = sprites.find((s) => s.id === 'sprite-1');
     let sprite2 = sprites.find((s) => s.id === 'sprite-2');
@@ -439,11 +439,11 @@ module('Unit | AnimationParticipantManager', function (hooks) {
       assert.ok(modifierParticipant);
       modifierParticipant.uiState.detached!.animation = fakeAnimation(
         element,
-        'finished'
+        'finished',
       );
       assert.equal(
         modifierParticipant.uiState.detached!.animation.playState,
-        'finished'
+        'finished',
       );
 
       manager.performCleanup();
@@ -456,7 +456,7 @@ module('Unit | AnimationParticipantManager', function (hooks) {
       modifierParticipant.uiState.detached!.animation = fakeAnimation(element);
       assert.equal(
         modifierParticipant.uiState.detached!.animation.playState,
-        'running'
+        'running',
       );
 
       manager.performCleanup();
