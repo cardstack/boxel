@@ -19,10 +19,12 @@ function runWithoutAnimations(playAnimations: boolean) {
     let currentTimes: number[] = [];
     animations.forEach((a) => {
       a.pause();
-      currentTimes.push(a.currentTime || 0);
+      currentTimes.push((a.currentTime as number) || 0);
       let timing = a.effect && a.effect.getComputedTiming();
       if (timing) {
-        a.currentTime = (timing.delay || 0) + (timing.activeDuration || 0);
+        a.currentTime =
+          ((timing.delay as number) || 0) +
+          ((timing.activeDuration as number) || 0);
       }
     });
     let result = f();
@@ -61,10 +63,10 @@ function runWithAnimationOffset(offset: number, playAnimations: boolean) {
     let currentTimes: number[] = [];
     animations.forEach((a) => {
       a.pause();
-      currentTimes.push(a.currentTime || 0);
+      currentTimes.push((a.currentTime as number) || 0);
       let timing = a.effect && a.effect.getComputedTiming();
       if (timing) {
-        a.currentTime = (timing.localTime || 0) + offset;
+        a.currentTime = ((timing.localTime as number) || 0) + offset;
       }
     });
     let result = f();
