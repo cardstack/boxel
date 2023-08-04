@@ -63,7 +63,7 @@ export class AnimationParticipantManager {
     function recurse<T>(
       node: DOMRefNode,
       callback: (node: DOMRefNode, scope: T) => { nextScope: T; stop: boolean },
-      scope: T
+      scope: T,
     ) {
       let { nextScope, stop } = callback(node, scope);
       if (stop) return;
@@ -83,7 +83,7 @@ export class AnimationParticipantManager {
             stop: false,
           };
         },
-        undefined
+        undefined,
       );
     }
     for (let DOMRef of this.DOMRefs) {
@@ -137,7 +137,7 @@ export class AnimationParticipantManager {
         },
         {
           lastLiveAncestor: undefined,
-        }
+        },
       );
     }
 
@@ -208,7 +208,7 @@ export class AnimationParticipantManager {
       // for removed sprite modifiers, the identifier should not matter
       // what's important is the element it matches
       getExistingGroupByElement(
-        modifier.element as HTMLElement
+        modifier.element as HTMLElement,
       ).removedSpriteModifier = modifier;
     }
     for (let context of changes.removedContexts) {
@@ -265,7 +265,7 @@ export class AnimationParticipantManager {
       if (!creationAargs) throw new Error('Unexpected missing group');
       if (!creationAargs.spriteModifier && !creationAargs.context) {
         throw new Error(
-          'Invalid new group detected, missing either spriteModifier or context'
+          'Invalid new group detected, missing either spriteModifier or context',
         );
       }
 
@@ -273,7 +273,7 @@ export class AnimationParticipantManager {
         creationAargs.spriteModifier
           ? this.generateIdentifierKey(creationAargs.spriteModifier)
           : null,
-        element
+        element,
       );
       let DOMRef = new DOMRefNode(element);
       let animationParticipant = new AnimationParticipant({
@@ -343,7 +343,7 @@ export class AnimationParticipantManager {
       if (participant.context) {
         if (!participant.uiState.current)
           throw new Error(
-            'Unexpected missing state for context during distribution'
+            'Unexpected missing state for context during distribution',
           );
         let animator = participant.asAnimator();
         if (!animator) continue;
@@ -353,7 +353,7 @@ export class AnimationParticipantManager {
     }
     let recordAnimatorsOnPath = (
       node: DOMRefNode,
-      pathNotIncludingSelf: Animator[]
+      pathNotIncludingSelf: Animator[],
     ) => {
       animatorsByDOMRef.set(node, pathNotIncludingSelf);
       let animator = animatorLookup.get(node);
@@ -385,10 +385,10 @@ export class AnimationParticipantManager {
       // If there is a counterpart, the list should be the intersection of the sprite's DOMRef and its counterpart's DOMRef
       if (participant.uiState.detached && participant.uiState.current) {
         let current = animatorsByDOMRef.get(
-          participant.uiState.current.DOMRef
+          participant.uiState.current.DOMRef,
         )!;
         let detached = animatorsByDOMRef.get(
-          participant.uiState.detached.DOMRef
+          participant.uiState.detached.DOMRef,
         )!;
         animatorList = [];
         for (let i = 0; i < Math.min(current.length, detached.length); i++) {
@@ -402,12 +402,12 @@ export class AnimationParticipantManager {
         }
       } else if (participant.uiState.current) {
         animatorList = animatorsByDOMRef.get(
-          participant.uiState.current.DOMRef
+          participant.uiState.current.DOMRef,
         )!;
         assert('animator list does not exist for a DOMRef', animatorList);
       } else if (participant.uiState.detached) {
         animatorList = animatorsByDOMRef.get(
-          participant.uiState.detached.DOMRef
+          participant.uiState.detached.DOMRef,
         )!;
         assert('animator list does not exist for a DOMRef', animatorList);
       } else {
@@ -522,7 +522,7 @@ export class AnimationParticipantManager {
 class AnimationParticipantIdentifier {
   constructor(
     readonly key: string | null,
-    public element: HTMLElement | null
+    public element: HTMLElement | null,
   ) {}
 
   updateElement(element: HTMLElement | null) {
@@ -576,7 +576,7 @@ export class AnimationParticipant {
   }) {
     if (!options.context && !options.spriteModifier) {
       throw new Error(
-        'AnimationParticipant needs to be initialized with a sprite modifier or context'
+        'AnimationParticipant needs to be initialized with a sprite modifier or context',
       );
     }
 
@@ -592,7 +592,7 @@ export class AnimationParticipant {
         (this.uiState.current &&
           this.uiState.current._stage !== 'AFTER_RENDER') ||
         (this.uiState.detached &&
-          this.uiState.detached._stage !== 'BEFORE_RENDER')
+          this.uiState.detached._stage !== 'BEFORE_RENDER'),
     );
   }
 
@@ -607,7 +607,7 @@ export class AnimationParticipant {
       this.uiState.current &&
         this.uiState.current.beforeRender &&
         this.uiState.current.afterRender &&
-        !this.uiState.detached
+        !this.uiState.detached,
     );
   }
 
@@ -667,7 +667,7 @@ export class AnimationParticipant {
     let onCurrentAnimation = (animation: Animation) => {
       if (!this.uiState.current)
         throw new Error(
-          'Unexpected missing uiState.current when starting current animation'
+          'Unexpected missing uiState.current when starting current animation',
         );
       this.uiState.current.animation = animation;
     };
@@ -681,7 +681,7 @@ export class AnimationParticipant {
     let onDetachedAnimation = (animation: Animation) => {
       if (!this.uiState.detached)
         throw new Error(
-          'Unexpected missing uiState.detached when starting detached animation'
+          'Unexpected missing uiState.detached when starting detached animation',
         );
       this.uiState.detached.animation = animation;
     };
@@ -706,7 +706,7 @@ export class AnimationParticipant {
             final: this.uiState.current.afterRender,
           },
           SpriteType.Kept,
-          this.currentCallbacks()
+          this.currentCallbacks(),
         );
         let counterpart = new Sprite(
           this.uiState.detached.DOMRef.element,
@@ -717,7 +717,7 @@ export class AnimationParticipant {
             final: this.uiState.current.afterRender,
           },
           SpriteType.Removed,
-          this.detachedCallbacks()
+          this.detachedCallbacks(),
         );
         sprite.counterpart = counterpart;
 
@@ -732,7 +732,7 @@ export class AnimationParticipant {
             final: this.uiState.current.afterRender,
           },
           SpriteType.Kept,
-          this.currentCallbacks()
+          this.currentCallbacks(),
         );
 
         this.sprite = sprite;
@@ -745,7 +745,7 @@ export class AnimationParticipant {
             final: this.uiState.current.afterRender,
           },
           SpriteType.Inserted,
-          this.currentCallbacks()
+          this.currentCallbacks(),
         );
 
         this.sprite = sprite;
@@ -758,7 +758,7 @@ export class AnimationParticipant {
             initial: this.uiState.detached.beforeRender,
           },
           SpriteType.Removed,
-          this.detachedCallbacks()
+          this.detachedCallbacks(),
         );
 
         this.sprite = sprite;
@@ -813,7 +813,7 @@ export class AnimationParticipant {
       // it means that it's also a sprite.
       if (insertedContext && !insertedSpriteModifier) {
         throw new Error(
-          'Unexpectedly matched an inserted context without an inserted sprite modifier'
+          'Unexpectedly matched an inserted context without an inserted sprite modifier',
         );
       }
       this.context = insertedContext;
@@ -822,7 +822,7 @@ export class AnimationParticipant {
       if (!removedSpriteModifier) {
         assert(
           'Unexpectedly removing a context without also removing a sprite modifier, despite the context once having been a sprite',
-          !this.latestModifier
+          !this.latestModifier,
         );
         this.currentToDetached();
         this.identifier.updateElement(null);
@@ -837,7 +837,7 @@ export class AnimationParticipant {
       !removedSpriteModifier
     ) {
       throw new Error(
-        'Invalid insertion that matches existing element without removal'
+        'Invalid insertion that matches existing element without removal',
       );
     }
     if (
@@ -849,14 +849,14 @@ export class AnimationParticipant {
     }
     if (!this.uiState.current && !this.uiState.detached) {
       throw new Error(
-        'While matching, detected invalid AnimationParticipant with no current or detached UI state'
+        'While matching, detected invalid AnimationParticipant with no current or detached UI state',
       );
     }
 
     if (removedSpriteModifier && insertedSpriteModifier) {
       assert(
         'removedSpriteModifier does not match current DOMRef',
-        removedSpriteModifier.element === this.uiState.current?.DOMRef.element
+        removedSpriteModifier.element === this.uiState.current?.DOMRef.element,
       );
       assert('inserted items did not come with a dom ref', insertedDOMRef);
 
@@ -867,7 +867,7 @@ export class AnimationParticipant {
     } else if (removedSpriteModifier) {
       assert(
         'removedSpriteModifier does not match current DOMRef',
-        removedSpriteModifier.element === this.uiState.current?.DOMRef.element
+        removedSpriteModifier.element === this.uiState.current?.DOMRef.element,
       );
       this.currentToDetached();
       this.identifier.updateElement(null);
@@ -899,7 +899,7 @@ export class AnimationParticipant {
       current.beforeRender === undefined
     ) {
       throw new Error(
-        'Attempting to convert current in invalid state to detached'
+        'Attempting to convert current in invalid state to detached',
       );
     }
 
@@ -928,7 +928,7 @@ export class AnimationParticipant {
     if (this.uiState.current) {
       assert(
         'UI state is not AFTER_RENDER before clear',
-        this.uiState.current._stage === 'AFTER_RENDER'
+        this.uiState.current._stage === 'AFTER_RENDER',
       );
       this.uiState.current = {
         ...this.uiState.current,
@@ -940,7 +940,7 @@ export class AnimationParticipant {
     if (this.uiState.detached) {
       assert(
         'UI state is not BEFORE_RENDER before clear',
-        this.uiState.detached._stage === 'BEFORE_RENDER'
+        this.uiState.detached._stage === 'BEFORE_RENDER',
       );
       this.uiState.detached = {
         ...this.uiState.detached,
@@ -955,7 +955,7 @@ export class AnimationParticipant {
     if (this.uiState.current) {
       assert(
         'UI state is not CLEARED before snapshotBeforeRender',
-        this.uiState.current._stage === 'CLEARED'
+        this.uiState.current._stage === 'CLEARED',
       );
       this.uiState.current = {
         ...this.uiState.current,
@@ -968,7 +968,7 @@ export class AnimationParticipant {
     if (this.uiState.detached) {
       assert(
         'UI state is not CLEARED before snapshotBeforeRender',
-        this.uiState.detached._stage === 'CLEARED'
+        this.uiState.detached._stage === 'CLEARED',
       );
       this.uiState.detached = {
         ...this.uiState.detached,
@@ -993,7 +993,7 @@ export class AnimationParticipant {
     if (this.uiState.current) {
       assert(
         'UI state is not BEFORE_RENDER before snapshotAfterRender',
-        this.uiState.current._stage === 'BEFORE_RENDER'
+        this.uiState.current._stage === 'BEFORE_RENDER',
       );
       this.uiState.current = {
         ...this.uiState.current,

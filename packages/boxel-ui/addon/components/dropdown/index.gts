@@ -47,7 +47,7 @@ interface Signature {
           Named: EmptyObject;
           Positional: unknown[];
         };
-      }>
+      }>,
     ];
     content: [{ close: () => void }];
   };
@@ -70,26 +70,31 @@ class BoxelDropdown extends Component<Signature> {
       @onClose={{@onClose}}
       as |dd|
     >
-      {{!@glint-ignore}}
-      {{yield (modifier
-        this.dropdownModifier
-        dropdown=dd
-        eventType="click"
-        stopPropagation=false
-      ) to="trigger"}}
+      {{! @glint-ignore }}
+      {{yield
+        (modifier
+          this.dropdownModifier
+          dropdown=dd
+          eventType='click'
+          stopPropagation=false
+        )
+        to='trigger'
+      }}
       <dd.Content
         data-test-boxel-dropdown-content
-        class={{cn "boxel-dropdown__content" @contentClass}}
+        class={{cn 'boxel-dropdown__content' @contentClass}}
         {{focusTrap
           isActive=dd.isOpen
           focusTrapOptions=(hash
-            initialFocus=(concat "[aria-controls='ember-basic-dropdown-content-" dd.uniqueId "']")
+            initialFocus=(concat
+              "[aria-controls='ember-basic-dropdown-content-" dd.uniqueId "']"
+            )
             onDeactivate=dd.actions.close
             allowOutsideClick=true
           )
         }}
       >
-        {{yield (hash close=dd.actions.close) to="content"}}
+        {{yield (hash close=dd.actions.close) to='content'}}
       </dd.Content>
     </BasicDropdown>
     <style>
@@ -111,7 +116,7 @@ class BoxelDropdown extends Component<Signature> {
   dropdownModifier = createModifier<DropdownTriggerSignature>(function (
     element: DropdownTriggerElement,
     _positional: unknown[],
-    named: DropdownTriggerNamedArgs
+    named: DropdownTriggerNamedArgs,
   ) {
     const { dropdown, eventType: desiredEventType, stopPropagation } = named;
 
@@ -123,7 +128,7 @@ class BoxelDropdown extends Component<Signature> {
       element.setAttribute('aria-expanded', dropdown.isOpen ? 'true' : 'false');
       element.setAttribute(
         'aria-disabled',
-        dropdown.disabled ? 'true' : 'false'
+        dropdown.disabled ? 'true' : 'false',
       );
     }
 
@@ -152,32 +157,32 @@ class BoxelDropdown extends Component<Signature> {
     }
     element.addEventListener(
       'click',
-      handleMouseEvent as EventListenerOrEventListenerObject
+      handleMouseEvent as EventListenerOrEventListenerObject,
     );
     element.addEventListener(
       'keydown',
-      handleKeyDown as EventListenerOrEventListenerObject
+      handleKeyDown as EventListenerOrEventListenerObject,
     );
 
     element.setAttribute('data-ebd-id', `${dropdown.uniqueId}-trigger`);
     element.setAttribute(
       'aria-owns',
-      `ember-basic-dropdown-content-${dropdown.uniqueId}`
+      `ember-basic-dropdown-content-${dropdown.uniqueId}`,
     );
     element.setAttribute(
       'aria-controls',
-      `ember-basic-dropdown-content-${dropdown.uniqueId}`
+      `ember-basic-dropdown-content-${dropdown.uniqueId}`,
     );
     updateAria();
 
     return function cleanup() {
       element.removeEventListener(
         'click',
-        handleMouseEvent as EventListenerOrEventListenerObject
+        handleMouseEvent as EventListenerOrEventListenerObject,
       );
       element.removeEventListener(
         'keydown',
-        handleKeyDown as EventListenerOrEventListenerObject
+        handleKeyDown as EventListenerOrEventListenerObject,
       );
     };
   });

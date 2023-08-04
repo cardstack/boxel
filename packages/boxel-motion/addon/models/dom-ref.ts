@@ -19,7 +19,7 @@ export class DOMRefNode {
 
 export function addToDOMRefTrees(
   existingNodes: Array<DOMRefNode>,
-  toAdd: DOMRefNode[]
+  toAdd: DOMRefNode[],
 ) {
   let newNodes = [...existingNodes];
   let DOMRefLookup = new Map<HTMLElement, DOMRefNode>();
@@ -41,7 +41,7 @@ export function addToDOMRefTrees(
       !(
         bitmask & Node.DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC ||
         bitmask & Node.DOCUMENT_POSITION_DISCONNECTED
-      )
+      ),
     );
 
     return bitmask & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
