@@ -117,6 +117,7 @@ export default declare<State>((api: any, options: Options) => {
         if (!noInterop) result = wrapInterop(path, result, 'namespace');
 
         path.replaceWith(
+          // @ts-ignore
           template.expression.ast`
             new Promise((${resolveId}, ${rejectId}) =>
               ${requireId}(

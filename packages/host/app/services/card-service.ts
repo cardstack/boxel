@@ -207,7 +207,7 @@ export default class CardService extends Service {
   // that callers need to await this.ready
   unsubscribeFromCard(
     card: Card,
-    subscriber: (fieldName: string, value: any) => void
+    subscriber: (fieldName: string, value: any) => void,
   ) {
     this.api.unsubscribeFromChanges(card, subscriber);
   }
@@ -216,7 +216,7 @@ export default class CardService extends Service {
   // needs to await this.ready
   subscribeToCard(
     card: Card,
-    subscriber: (fieldName: string, value: any) => void
+    subscriber: (fieldName: string, value: any) => void,
   ) {
     this.api.subscribeToChanges(card, subscriber);
   }
