@@ -1648,7 +1648,7 @@ module('Integration | operator-mode', function (hooks) {
       `http://localhost:4202/test/mango`
     );
     await click(`[data-test-go-button]`);
-    await waitFor(`[data-test-stack-card-index="1"]`);
+    await waitFor(`[data-test-stack-card="http://localhost:4202/test/mango"]`);
     assert
       .dom(
         `[data-test-stack-card="http://localhost:4202/test/mango"] [data-test-field-component-card]`
