@@ -29,18 +29,18 @@ export default class CardService extends Service {
 
   private apiModule = importResource(
     this,
-    () => 'https://cardstack.com/base/card-api'
+    () => 'https://cardstack.com/base/card-api',
   );
 
   private get api() {
     if (this.apiModule.error) {
       throw new Error(
-        `Error loading Card API: ${JSON.stringify(this.apiModule.error)}`
+        `Error loading Card API: ${JSON.stringify(this.apiModule.error)}`,
       );
     }
     if (!this.apiModule.module) {
       throw new Error(
-        `bug: Card API has not loaded yet--make sure to await this.loaded before using the api`
+        `bug: Card API has not loaded yet--make sure to await this.loaded before using the api`,
       );
     }
     return this.apiModule.module as typeof CardAPI;
@@ -54,7 +54,7 @@ export default class CardService extends Service {
 
   private async fetchJSON(
     url: string | URL,
-    args?: RequestInit
+    args?: RequestInit,
   ): Promise<CardDocument> {
     let response = await this.loaderService.loader.fetch(url, {
       headers: { Accept: SupportedMimeType.CardJson },
@@ -63,7 +63,7 @@ export default class CardService extends Service {
     if (!response.ok) {
       throw new Error(
         `status: ${response.status} -
-        ${response.statusText}. ${await response.text()}`
+        ${response.statusText}. ${await response.text()}`,
       );
     }
     return await response.json();
@@ -72,14 +72,14 @@ export default class CardService extends Service {
   async createFromSerialized(
     resource: LooseCardResource,
     doc: LooseSingleCardDocument | CardDocument,
-    relativeTo: URL | undefined
+    relativeTo: URL | undefined,
   ): Promise<Card> {
     await this.apiModule.loaded;
     let card = await this.api.createFromSerialized(
       resource,
       doc,
       relativeTo,
-      this.loaderService.loader
+      this.loaderService.loader,
     );
     // it's important that we absorb the field async here so that glimmer won't
     // encounter NotReady errors, since we don't have the luxury of the indexer
@@ -99,19 +99,19 @@ export default class CardService extends Service {
     if (!isSingleCardDocument(json)) {
       throw new Error(
         `bug: server returned a non card document for ${url}:
-        ${JSON.stringify(json, null, 2)}`
+        ${JSON.stringify(json, null, 2)}`,
       );
     }
     return await this.createFromSerialized(
       json.data,
       json,
-      typeof url === 'string' ? new URL(url) : url
+      typeof url === 'string' ? new URL(url) : url,
     );
   }
 
   async serializeCard(
     card: Card,
-    opts?: SerializeOpts
+    opts?: SerializeOpts,
   ): Promise<LooseSingleCardDocument> {
     await this.apiModule.loaded;
     return this.api.serializeCard(card, opts);
@@ -128,7 +128,7 @@ export default class CardService extends Service {
     // to relative URL's as it serializes the cards
     let json = await this.saveCardDocument(
       doc,
-      card.id ? new URL(card.id) : undefined
+      card.id ? new URL(card.id) : undefined,
     );
     if (isSaved) {
       return (await this.api.updateFromSerialized(card, json)) as Card;
@@ -142,7 +142,7 @@ export default class CardService extends Service {
 
   async saveCardDocument(
     doc: LooseSingleCardDocument,
-    url?: URL
+    url?: URL,
   ): Promise<SingleCardDocument> {
     let isSaved = !!url;
     url = url ?? this.defaultURL;
@@ -153,7 +153,7 @@ export default class CardService extends Service {
     if (!isSingleCardDocument(json)) {
       throw new Error(
         `bug: arg is not a card document:
-        ${JSON.stringify(json, null, 2)}`
+        ${JSON.stringify(json, null, 2)}`,
       );
     }
     return json;
@@ -164,7 +164,7 @@ export default class CardService extends Service {
     if (!isCardCollectionDocument(json)) {
       throw new Error(
         `The realm search response was not a card collection document:
-        ${JSON.stringify(json, null, 2)}`
+        ${JSON.stringify(json, null, 2)}`,
       );
     }
     // TODO the fact that the loader cannot handle a concurrent form of this is
@@ -178,7 +178,7 @@ export default class CardService extends Service {
   }
 
   async getFields(
-    card: CardBase
+    card: CardBase,
   ): Promise<{ [fieldName: string]: Field<typeof CardBase> }> {
     await this.apiModule.loaded;
     return this.api.getFields(card, { includeComputeds: true });

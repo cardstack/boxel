@@ -49,7 +49,7 @@ module('Integration | preview', function (hooks) {
         <template>
           <Preview @card={{card}} />
         </template>
-      }
+      },
     );
     await waitFor('[data-test-firstName]'); // we need to wait for the card instance to load
     assert.dom('[data-test-firstName]').hasText('Mango');

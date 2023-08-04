@@ -166,7 +166,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   @action updateItem(
     item: StackItem,
     format: Format,
-    request?: Deferred<Card | undefined>
+    request?: Deferred<Card | undefined>,
   ) {
     if (item.type === 'card') {
       this.operatorModeStateService.replaceItemInStack(item, {
@@ -179,7 +179,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     if (item.type === 'contained') {
       let addressableItem = getCardStackItem(
         item,
-        this.stacks[item.stackIndex]
+        this.stacks[item.stackIndex],
       );
 
       let pathSegments = getPathToStackItem(item, this.stacks[item.stackIndex]);
@@ -232,7 +232,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       } else {
         let addressableItem = getCardStackItem(
           item,
-          this.stacks[item.stackIndex]
+          this.stacks[item.stackIndex],
         );
 
         this.operatorModeStateService.replaceItemInStack(addressableItem, {
@@ -243,7 +243,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         });
 
         pathSegments.forEach(() =>
-          this.operatorModeStateService.popItemFromStack(item.stackIndex)
+          this.operatorModeStateService.popItemFromStack(item.stackIndex),
         );
       }
     }
@@ -292,7 +292,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         opts?: {
           isLinkedCard?: boolean;
           doc?: LooseSingleCardDocument; // fill in card data with values
-        }
+        },
       ): Promise<Card | undefined> => {
         // prefers optional doc to be passed in
         // use case: to populate default values in a create modal
@@ -301,12 +301,12 @@ export default class OperatorModeContainer extends Component<Signature> {
         };
         // using RealmPaths API to correct for the trailing `/`
         let realmPath = new RealmPaths(
-          relativeTo ?? here.cardService.defaultURL
+          relativeTo ?? here.cardService.defaultURL,
         );
         let newCard = await here.cardService.createFromSerialized(
           doc.data,
           doc,
-          new URL(realmPath.url)
+          new URL(realmPath.url),
         );
         let newItem: StackItem = {
           type: 'card',
@@ -323,13 +323,13 @@ export default class OperatorModeContainer extends Component<Signature> {
         let itemsCount = here.stacks[stackIndex].length;
 
         let currentCardOnStack = here.getCard(
-          here.stacks[stackIndex][itemsCount - 1]!
+          here.stacks[stackIndex][itemsCount - 1]!,
         ); // Last item on the stack
 
         let containedPath = await findContainedCardPath(
           currentCardOnStack,
           card,
-          here.cardService
+          here.cardService,
         );
         if (containedPath.length > 0) {
           let currentIndex = itemsCount - 1;
@@ -354,12 +354,12 @@ export default class OperatorModeContainer extends Component<Signature> {
       },
       createCardDirectly: async (
         doc: LooseSingleCardDocument,
-        relativeTo: URL | undefined
+        relativeTo: URL | undefined,
       ): Promise<void> => {
         let newCard = await here.cardService.createFromSerialized(
           doc.data,
           doc,
-          relativeTo ?? here.cardService.defaultURL
+          relativeTo ?? here.cardService.defaultURL,
         );
         await here.cardService.saveModel(newCard);
         let newItem: StackItem = {
@@ -422,7 +422,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     if (bottomMostCard) {
       if (bottomMostCard.type !== 'card') {
         throw new Error(
-          `bug: the bottom most card for a stack cannot be a contained card`
+          `bug: the bottom most card for a stack cannot be a contained card`,
         );
       }
       realmInfo = await this.cardService.getRealmInfo(bottomMostCard.card);
@@ -456,7 +456,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       ) {
         this.operatorModeStateService.shiftStack(
           this.operatorModeStateService.state.stacks[stackIndex],
-          stackIndex + 1
+          stackIndex + 1,
         );
       }
 
@@ -730,21 +730,20 @@ export default class OperatorModeContainer extends Component<Signature> {
       .chat-btn:hover {
         background: var(--boxel-light);
       }
-
     </style>
   </template>
 }
 
 export function getCardStackItem(
   stackItem: StackItem,
-  stack: StackItem[]
+  stack: StackItem[],
 ): CardStackItem {
   if (stackItem.type === 'card') {
     return stackItem;
   }
   if (stackItem.fieldOfIndex >= stack.length) {
     throw new Error(
-      `bug: the stack item (index ${stackItem.fieldOfIndex}) that is the parent of the contained field '${stackItem.fieldName}' no longer exists in the stack`
+      `bug: the stack item (index ${stackItem.fieldOfIndex}) that is the parent of the contained field '${stackItem.fieldName}' no longer exists in the stack`,
     );
   }
   return getCardStackItem(stack[stackItem.fieldOfIndex], stack);
@@ -753,7 +752,7 @@ export function getCardStackItem(
 export function getPathToStackItem(
   stackItem: StackItem,
   stack: StackItem[],
-  segments: string[] = []
+  segments: string[] = [],
 ): string[] {
   if (stackItem.type === 'card') {
     return segments;
@@ -768,7 +767,7 @@ async function findContainedCardPath(
   possibleParent: Card,
   maybeContained: Card,
   cardService: CardService,
-  path: string[] = []
+  path: string[] = [],
 ): Promise<string[]> {
   let fields = await cardService.getFields(possibleParent);
 

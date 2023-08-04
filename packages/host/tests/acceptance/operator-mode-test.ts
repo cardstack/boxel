@@ -258,8 +258,8 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
-          })!
-        )}`
+          })!,
+        )}`,
       );
     });
 
@@ -283,8 +283,8 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       await visit(
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam
-        )}`
+          operatorModeStateParam,
+        )}`,
       );
 
       await percySnapshot(assert);
@@ -314,8 +314,8 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
-          })!
-        )}`
+          })!,
+        )}`,
       );
 
       await waitFor('[data-test-pet="Mango"]');
@@ -340,8 +340,8 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
-          })!
-        )}`
+          })!,
+        )}`,
       );
 
       // Click Edit on the top card
@@ -366,8 +366,8 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
-          })!
-        )}`
+          })!,
+        )}`,
       );
     });
 
@@ -398,8 +398,8 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       await visit(
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam
-        )}`
+          operatorModeStateParam,
+        )}`,
       );
 
       await percySnapshot(assert);
@@ -436,15 +436,15 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
-          })!
-        )}`
+          })!,
+        )}`,
       );
 
       await waitFor(
-        '[data-test-shippinginfo-field] [data-test-field-component-card]'
+        '[data-test-shippinginfo-field] [data-test-field-component-card]',
       );
       await click(
-        '[data-test-shippinginfo-field] [data-test-field-component-card]'
+        '[data-test-shippinginfo-field] [data-test-field-component-card]',
       );
 
       // The stack should be reflected in the URL
@@ -473,8 +473,8 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
-          })!
-        )}`
+          })!,
+        )}`,
       );
 
       // Click Edit on the top card
@@ -506,8 +506,8 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
-          })!
-        )}`
+          })!,
+        )}`,
       );
     });
 
@@ -526,8 +526,8 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       await visit(
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam
-        )}`
+          operatorModeStateParam,
+        )}`,
       );
 
       await percySnapshot(assert);
@@ -556,18 +556,18 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       await visit(
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam
-        )}`
+          operatorModeStateParam,
+        )}`,
       );
 
       let operatorModeStateService = this.owner.lookup(
-        'service:operator-mode-state-service'
+        'service:operator-mode-state-service',
       ) as OperatorModeStateService;
 
       // @ts-ignore Property '#private' is missing in type 'Card[]' but required in type 'TrackedArray<Card>'.glint(2741) - don't care about this error here, just stubbing
       operatorModeStateService.recentCards = (
         operatorModeStateService.state.stacks[0].filter(
-          (item) => item.type === 'card'
+          (item) => item.type === 'card',
         ) as CardStackItem[]
       ).map((item) => item.card);
 
@@ -582,7 +582,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
       await click(
-        '[data-test-search-result="http://test-realm/test/Pet/mango"]'
+        '[data-test-search-result="http://test-realm/test/Pet/mango"]',
       );
 
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
@@ -598,7 +598,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       // Close the only card in the 1st stack
       await click(
-        '[data-test-operator-mode-stack="0"] [data-test-close-button]'
+        '[data-test-operator-mode-stack="0"] [data-test-close-button]',
       );
 
       // There is now only 1 stack and the buttons to add a neighbor stack are back
@@ -612,7 +612,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
       await click(
-        '[data-test-search-result="http://test-realm/test/Person/fadhlan"]'
+        '[data-test-search-result="http://test-realm/test/Person/fadhlan"]',
       );
 
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
@@ -646,18 +646,18 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       await visit(
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam
-        )}`
+          operatorModeStateParam,
+        )}`,
       );
 
       let operatorModeStateService = this.owner.lookup(
-        'service:operator-mode-state-service'
+        'service:operator-mode-state-service',
       ) as OperatorModeStateService;
 
       // @ts-ignore Property '#private' is missing in type 'Card[]' but required in type 'TrackedArray<Card>'.glint(2741) - don't care about this error here, just stubbing
       operatorModeStateService.recentCards = (
         operatorModeStateService.state.stacks[0].filter(
-          (item) => item.type === 'card'
+          (item) => item.type === 'card',
         ) as CardStackItem[]
       ).map((item) => item.card);
 
@@ -673,7 +673,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       // Click on a recent search
       await click(
-        '[data-test-search-result="http://test-realm/test/Pet/mango"]'
+        '[data-test-search-result="http://test-realm/test/Pet/mango"]',
       );
 
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
@@ -682,12 +682,12 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
       assert
         .dom(
-          '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="0"]'
+          '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="0"]',
         )
         .includesText('Mango');
       assert
         .dom(
-          '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"]'
+          '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"]',
         )
         .doesNotExist();
     });
@@ -716,8 +716,8 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       await visit(
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam
-        )}`
+          operatorModeStateParam,
+        )}`,
       );
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
@@ -726,7 +726,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       // Close the card in the 2nd stack
       await click(
-        '[data-test-operator-mode-stack="1"] [data-test-close-button]'
+        '[data-test-operator-mode-stack="1"] [data-test-close-button]',
       );
       assert.dom('[data-test-operator-mode-stack="0"]').exists();
 
@@ -748,13 +748,13 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
-          })!
-        )}`
+          })!,
+        )}`,
       );
 
       // Close the last card in the last stack that is left - should get the empty state
       await click(
-        '[data-test-operator-mode-stack="0"] [data-test-close-button]'
+        '[data-test-operator-mode-stack="0"] [data-test-close-button]',
       );
 
       assert.dom('.no-cards').includesText('Add a card to get started');
@@ -787,8 +787,8 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       await visit(
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam
-        )}`
+          operatorModeStateParam,
+        )}`,
       );
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
@@ -800,29 +800,29 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       // Click on a recent search
       await click(
-        '[data-test-search-result="http://test-realm/test/Person/fadhlan"]'
+        '[data-test-search-result="http://test-realm/test/Person/fadhlan"]',
       );
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
       assert
         .dom(
-          '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="0"]'
+          '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="0"]',
         )
         .includesText('Fadhlan');
       assert
         .dom(
-          '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"]'
+          '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"]',
         )
         .doesNotExist();
       assert
         .dom(
-          '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="0"]'
+          '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="0"]',
         )
         .includesText('Fadhlan');
       assert
         .dom(
-          '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="1"]'
+          '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="1"]',
         )
         .doesNotExist();
     });

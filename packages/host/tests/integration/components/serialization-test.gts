@@ -43,7 +43,7 @@ module('Integration | serialization', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`),
   );
   const realmURL = `https://test-realm/`;
 
@@ -97,7 +97,7 @@ module('Integration | serialization', function (hooks) {
       resource,
       { data: resource },
       undefined,
-      loader
+      loader,
     );
     let root = await renderCard(loader, firstPost, 'isolated');
 
@@ -105,7 +105,7 @@ module('Integration | serialization', function (hooks) {
     // correctly deserialized it's static data property
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
-      'First Post created Apr 22, 2022 published Apr 27, 2022, 4:02 PM'
+      'First Post created Apr 22, 2022 published Apr 27, 2022, 4:02 PM',
     );
   });
 
@@ -134,25 +134,25 @@ module('Integration | serialization', function (hooks) {
       resource,
       { data: resource },
       undefined,
-      loader
+      loader,
     )) as CardType;
 
     assert.strictEqual(
       savedCard.id,
       `${realmURL}Person/mango`,
-      'instance id is set'
+      'instance id is set',
     );
     assert.strictEqual(
       isSaved(savedCard),
       true,
-      'API recognizes card as saved'
+      'API recognizes card as saved',
     );
 
     let unsavedCard = new Person();
     assert.strictEqual(
       isSaved(unsavedCard),
       false,
-      'API recognizes card as unsaved'
+      'API recognizes card as unsaved',
     );
   });
 
@@ -228,7 +228,7 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(
       card.id,
       `${realmURL}Person/vanGogh`,
-      'ID can be updated for unsaved instance'
+      'ID can be updated for unsaved instance',
     );
     assert.strictEqual(card.firstName, 'Van Gogh', 'the field can be updated');
   });
@@ -259,7 +259,7 @@ module('Integration | serialization', function (hooks) {
       resource,
       { data: resource },
       undefined,
-      loader
+      loader,
     );
 
     try {
@@ -281,7 +281,7 @@ module('Integration | serialization', function (hooks) {
     } catch (err: any) {
       assert.ok(
         err.message.match(/cannot change the id for saved instance/),
-        'exception thrown when updating the ID of a saved card'
+        'exception thrown when updating the ID of a saved card',
       );
     }
   });
@@ -315,16 +315,16 @@ module('Integration | serialization', function (hooks) {
       resource,
       { data: resource },
       undefined,
-      loader
+      loader,
     );
     assert.ok(
       driver.ref !== ref,
-      'the card ref value is not strict equals to its serialized counter part'
+      'the card ref value is not strict equals to its serialized counter part',
     );
     assert.deepEqual(
       driver.ref,
       ref,
-      'the card ref value is deep equal to its serialized counter part'
+      'the card ref value is deep equal to its serialized counter part',
     );
   });
 
@@ -347,12 +347,12 @@ module('Integration | serialization', function (hooks) {
       .data.attributes?.ref;
     assert.ok(
       serializedRef !== ref,
-      'the card ref value is not strict equals to its serialized counter part'
+      'the card ref value is not strict equals to its serialized counter part',
     );
     assert.deepEqual(
       serializedRef,
       ref,
-      'the card ref value is deep equal to its serialized counter part'
+      'the card ref value is deep equal to its serialized counter part',
     );
   });
 
@@ -377,7 +377,7 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(serialized.data.attributes?.created, '2022-04-22');
     assert.strictEqual(
       serialized.data.attributes?.published,
-      '2022-04-27T16:30:00.000Z'
+      '2022-04-27T16:30:00.000Z',
     );
   });
 
@@ -418,12 +418,12 @@ module('Integration | serialization', function (hooks) {
       resource,
       { data: resource },
       undefined,
-      loader
+      loader,
     );
     let root = await renderCard(loader, firstPost, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
-      'First Post created [no date] published [no date-time]'
+      'First Post created [no date] published [no date-time]',
     );
   });
 
@@ -477,7 +477,7 @@ module('Integration | serialization', function (hooks) {
     await saveCard(
       spookyToiletPaper,
       `${realmURL}Toy/spookyToiletPaper`,
-      loader
+      loader,
     );
     await saveCard(mango, `${realmURL}Pet/mango`, loader);
 
@@ -640,7 +640,7 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       undefined,
-      loader
+      loader,
     );
 
     assert.ok(card instanceof Person, 'card is an instance of person');
@@ -654,7 +654,7 @@ module('Integration | serialization', function (hooks) {
         assert.strictEqual(isSaved(favoriteToy), true, 'Toy card is saved');
         assert.strictEqual(
           favoriteToy.description,
-          'Toilet paper ghost: Poooo!'
+          'Toilet paper ghost: Poooo!',
         );
       } else {
         assert.ok(false, '"favoriteToy" field value is not an instance of Toy');
@@ -667,7 +667,7 @@ module('Integration | serialization', function (hooks) {
     if (Array.isArray(relationship)) {
       assert.ok(
         false,
-        'relationshipMeta should not be an array for linksTo relationship'
+        'relationshipMeta should not be an array for linksTo relationship',
       );
     } else {
       if (relationship?.type === 'loaded') {
@@ -675,7 +675,7 @@ module('Integration | serialization', function (hooks) {
         assert.strictEqual(
           relatedCard instanceof Pet,
           true,
-          'related card is a Pet'
+          'related card is a Pet',
         );
         assert.strictEqual(relatedCard?.id, `${realmURL}Pet/mango`);
       } else {
@@ -686,7 +686,7 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(
       relationshipMeta(card, 'firstName'),
       undefined,
-      'relationshipMeta returns undefined for non-relationship field'
+      'relationshipMeta returns undefined for non-relationship field',
     );
   });
 
@@ -749,7 +749,7 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       undefined,
-      loader
+      loader,
     );
 
     try {
@@ -760,8 +760,8 @@ module('Integration | serialization', function (hooks) {
       assert.ok(
         err.message.match(
           /The field Person\.pet refers to the card instance https:\/\/test-realm\/Pet\/mango which is not loaded/,
-          'NotLoaded error describes field not loaded'
-        )
+          'NotLoaded error describes field not loaded',
+        ),
       );
     }
 
@@ -769,7 +769,7 @@ module('Integration | serialization', function (hooks) {
     if (Array.isArray(relationship)) {
       assert.ok(
         false,
-        'relationshipMeta should not be an array for linksTo relationship'
+        'relationshipMeta should not be an array for linksTo relationship',
       );
     } else {
       if (relationship?.type === 'not-loaded') {
@@ -916,7 +916,7 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       undefined,
-      loader
+      loader,
     );
     assert.ok(card instanceof Person, 'card is a Person');
     assert.strictEqual(card.firstName, 'Hassan');
@@ -995,7 +995,7 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       undefined,
-      loader
+      loader,
     );
 
     assert.ok(card instanceof Pet, 'card is an instance of pet');
@@ -1027,7 +1027,7 @@ module('Integration | serialization', function (hooks) {
     if (Array.isArray(relationship)) {
       assert.ok(
         false,
-        'relationshipMeta should not be an array for linksTo relationship'
+        'relationshipMeta should not be an array for linksTo relationship',
       );
     } else {
       if (relationship?.type === 'loaded') {
@@ -1035,7 +1035,7 @@ module('Integration | serialization', function (hooks) {
         assert.strictEqual(
           relatedCard instanceof Person,
           true,
-          'related card is a Person'
+          'related card is a Person',
         );
         assert.strictEqual(relatedCard?.id, `${realmURL}Person/burcu`);
       } else {
@@ -1047,8 +1047,8 @@ module('Integration | serialization', function (hooks) {
       assert.strictEqual(
         relationshipMeta(card, fieldName),
         undefined,
-        `relationshipMeta returns undefined for non-relationship field ${fieldName}`
-      )
+        `relationshipMeta returns undefined for non-relationship field ${fieldName}`,
+      ),
     );
   });
 
@@ -1184,7 +1184,7 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       undefined,
-      loader
+      loader,
     );
     assert.ok(card instanceof Person, 'card is a Person');
     assert.strictEqual(card.firstName, 'Hassan');
@@ -1216,9 +1216,9 @@ module('Integration | serialization', function (hooks) {
     } catch (err: any) {
       assert.ok(
         err.message.match(
-          /field 'pet' cannot be serialized with an unsaved card/
+          /field 'pet' cannot be serialized with an unsaved card/,
         ),
-        'cannot serialize a linksTo relationship to an unsaved card'
+        'cannot serialize a linksTo relationship to an unsaved card',
       );
     }
   });
@@ -1280,7 +1280,7 @@ module('Integration | serialization', function (hooks) {
     await saveCard(
       spookyToiletPaper,
       `${realmURL}Toy/spookyToiletPaper`,
-      loader
+      loader,
     );
     let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
     assert.deepEqual(serialized, {
@@ -1331,7 +1331,7 @@ module('Integration | serialization', function (hooks) {
       serialized.data,
       serialized,
       undefined,
-      loader
+      loader,
     );
     if (card instanceof Person) {
       assert.strictEqual(card.firstName, 'Hassan');
@@ -1342,7 +1342,7 @@ module('Integration | serialization', function (hooks) {
         if (favoriteToy instanceof Toy) {
           assert.strictEqual(
             favoriteToy.description,
-            'Toilet paper ghost: Poooo!'
+            'Toilet paper ghost: Poooo!',
           );
         } else {
           assert.ok(false, 'card is not instance of Toy');
@@ -1414,7 +1414,7 @@ module('Integration | serialization', function (hooks) {
     await saveCard(
       spookyToiletPaper,
       `${realmURL}Toy/spookyToiletPaper`,
-      loader
+      loader,
     );
     let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
     assert.deepEqual(serialized, {
@@ -1467,7 +1467,7 @@ module('Integration | serialization', function (hooks) {
       serialized.data,
       serialized,
       undefined,
-      loader
+      loader,
     );
     if (card instanceof Person) {
       assert.strictEqual(card.firstName, 'Hassan');
@@ -1481,7 +1481,7 @@ module('Integration | serialization', function (hooks) {
           if (favoriteToy instanceof Toy) {
             assert.strictEqual(
               favoriteToy.description,
-              'Toilet paper ghost: Poooo!'
+              'Toilet paper ghost: Poooo!',
             );
           } else {
             assert.ok(false, 'card is not instance of Toy');
@@ -1552,20 +1552,20 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       undefined,
-      loader
+      loader,
     );
     if (mango instanceof Person) {
       let { parent, favorite } = mango;
       assert.strictEqual(
         parent,
         favorite,
-        'relationship values share object equality'
+        'relationship values share object equality',
       );
       parent.firstName = 'Mariko';
       assert.strictEqual(
         favorite.firstName,
         'Mariko',
-        'instances that have object equality can be mutated'
+        'instances that have object equality can be mutated',
       );
     } else {
       assert.ok(false, 'mango is not a Person');
@@ -1637,12 +1637,12 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       undefined,
-      loader
+      loader,
     );
     let root = await renderCard(loader, firstPost, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
-      'birthdate Oct 30, 2019 last login Apr 27, 2022, 4:58 PM'
+      'birthdate Oct 30, 2019 last login Apr 27, 2022, 4:58 PM',
     );
   });
 
@@ -1699,13 +1699,13 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       undefined,
-      loader
+      loader,
     );
     await renderCard(loader, firstPost, 'isolated');
     assert
       .dom('[data-test]')
       .hasText(
-        'Mango born on: Oct 30, 2019 last logged in: Apr 27, 2022, 5:00 PM'
+        'Mango born on: Oct 30, 2019 last logged in: Apr 27, 2022, 5:00 PM',
       );
   });
 
@@ -1789,7 +1789,7 @@ module('Integration | serialization', function (hooks) {
     await shimModule(
       `${realmURL}test-cards`,
       { Person, Employee, Post },
-      loader
+      loader,
     );
 
     let firstPost = new Post({
@@ -1891,7 +1891,7 @@ module('Integration | serialization', function (hooks) {
             },
           },
         },
-      }
+      },
     );
   });
 
@@ -1905,7 +1905,7 @@ module('Integration | serialization', function (hooks) {
           return new Date(
             this.birthdate.getFullYear() + 1,
             this.birthdate.getMonth(),
-            this.birthdate.getDate()
+            this.birthdate.getDate(),
           );
         },
       });
@@ -2093,7 +2093,7 @@ module('Integration | serialization', function (hooks) {
         doc.data,
         doc,
         undefined,
-        loader
+        loader,
       );
 
       assert.ok(card instanceof Person, 'card is an instance of person');
@@ -2110,7 +2110,7 @@ module('Integration | serialization', function (hooks) {
       if (Array.isArray(relationship)) {
         assert.ok(
           false,
-          'relationshipMeta should not be an array for linksTo relationship'
+          'relationshipMeta should not be an array for linksTo relationship',
         );
       } else {
         if (relationship?.type === 'loaded') {
@@ -2118,7 +2118,7 @@ module('Integration | serialization', function (hooks) {
           assert.strictEqual(
             relatedCard instanceof Pet,
             true,
-            'related card is a Pet'
+            'related card is a Pet',
           );
           assert.strictEqual(relatedCard?.id, `${realmURL}Pet/mango`);
         } else {
@@ -2212,7 +2212,7 @@ module('Integration | serialization', function (hooks) {
         doc.data,
         doc,
         undefined,
-        loader
+        loader,
       );
       assert.ok(card instanceof Person, 'card is a Person');
       assert.strictEqual(card.firstName, 'Burcu');
@@ -2264,7 +2264,7 @@ module('Integration | serialization', function (hooks) {
         doc.data,
         doc,
         undefined,
-        loader
+        loader,
       );
 
       try {
@@ -2275,8 +2275,8 @@ module('Integration | serialization', function (hooks) {
         assert.ok(
           err.message.match(
             /The field Person\.friendPet refers to the card instance https:\/\/test-realm\/Pet\/mango which is not loaded/,
-            'NotLoaded error describes field not loaded'
-          )
+            'NotLoaded error describes field not loaded',
+          ),
         );
       }
       let friendRel = relationshipMeta(card, 'friend');
@@ -2324,12 +2324,12 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       undefined,
-      loader
+      loader,
     );
     let root = await renderCard(loader, classSchedule, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
-      'Apr 1, 2022 Apr 4, 2022'
+      'Apr 1, 2022 Apr 4, 2022',
     );
   });
 
@@ -2369,7 +2369,7 @@ module('Integration | serialization', function (hooks) {
     await shimModule(
       `${realmURL}test-cards`,
       { Schedule, Appointment },
-      loader
+      loader,
     );
 
     let doc = {
@@ -2392,17 +2392,17 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       undefined,
-      loader
+      loader,
     );
     await renderCard(loader, classSchedule, 'isolated');
     assert.deepEqual(
       [...this.element.querySelectorAll('[data-test="appointment"]')].map(
-        (element) => cleanWhiteSpace(element.textContent!)
+        (element) => cleanWhiteSpace(element.textContent!),
       ),
       [
         'Biology on Apr 1, 2022 at Room 332',
         'Civics on Apr 4, 2022 at Room 102',
-      ]
+      ],
     );
   });
 
@@ -2418,7 +2418,7 @@ module('Integration | serialization', function (hooks) {
     assert.deepEqual(
       serializeCard(classSchedule, { includeUnrenderedFields: true }).data
         .attributes?.dates,
-      ['2022-04-01', '2022-04-04']
+      ['2022-04-01', '2022-04-04'],
     );
   });
 
@@ -2442,7 +2442,7 @@ module('Integration | serialization', function (hooks) {
     await shimModule(
       `${realmURL}test-cards`,
       { Schedule, Appointment },
-      loader
+      loader,
     );
 
     let classSchedule = new Schedule({
@@ -2523,7 +2523,7 @@ module('Integration | serialization', function (hooks) {
           },
         },
       },
-      'A model can be serialized once instantiated'
+      'A model can be serialized once instantiated',
     );
   });
 
@@ -2608,7 +2608,7 @@ module('Integration | serialization', function (hooks) {
     await shimModule(
       `${realmURL}test-cards`,
       { Person, Employee, Post },
-      loader
+      loader,
     );
 
     let firstPost = new Post({
@@ -2652,7 +2652,7 @@ module('Integration | serialization', function (hooks) {
       payload.data,
       payload,
       new URL(realmURL),
-      loader
+      loader,
     ); // success is not blowing up
     assert.strictEqual(post2.author.firstName, 'Mango');
     let { author } = post2;
@@ -2695,7 +2695,7 @@ module('Integration | serialization', function (hooks) {
     await shimModule(
       `${realmURL}test-cards`,
       { Person, Employee, Post, Pet },
-      loader
+      loader,
     );
 
     let firstPost = new Post({
@@ -2753,7 +2753,7 @@ module('Integration | serialization', function (hooks) {
       payload.data,
       payload,
       new URL(realmURL),
-      loader
+      loader,
     ); // success is not blowing up
     assert.strictEqual(post2.author.firstName, 'Mango');
     assert.strictEqual(post2.author.loves.firstName, 'Van Gogh');
@@ -2829,7 +2829,7 @@ module('Integration | serialization', function (hooks) {
         Customer,
         Group,
       },
-      loader
+      loader,
     );
 
     let group = new Group({
@@ -2890,7 +2890,7 @@ module('Integration | serialization', function (hooks) {
       payload.data,
       payload,
       new URL(realmURL),
-      loader
+      loader,
     );
     let { people } = group2;
     assert.ok(Array.isArray(people), 'people is an array');
@@ -2971,7 +2971,7 @@ module('Integration | serialization', function (hooks) {
         Employee,
         Group,
       },
-      loader
+      loader,
     );
 
     let group = new Group({
@@ -3040,7 +3040,7 @@ module('Integration | serialization', function (hooks) {
       payload.data,
       payload,
       new URL(realmURL),
-      loader
+      loader,
     );
     let { people } = group2;
     assert.ok(Array.isArray(people), 'people is an array');
@@ -3138,7 +3138,7 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       undefined,
-      loader
+      loader,
     );
 
     assert.ok(card instanceof Person, 'card is an instance of person');
@@ -3193,7 +3193,7 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       new URL(realmURL),
-      loader
+      loader,
     );
     assert.strictEqual(person.firstName, 'Mango');
     assert.deepEqual(
@@ -3212,7 +3212,7 @@ module('Integration | serialization', function (hooks) {
           },
         },
       },
-      'card serialization is correct'
+      'card serialization is correct',
     );
   });
 
@@ -3257,7 +3257,7 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       new URL(realmURL),
-      loader
+      loader,
     );
     assert.strictEqual(post.title, 'Things I Want to Chew');
     assert.strictEqual(post.author.firstName, 'Mango');
@@ -3280,7 +3280,7 @@ module('Integration | serialization', function (hooks) {
           },
         },
       },
-      'card serialization is correct'
+      'card serialization is correct',
     );
   });
 
@@ -3356,7 +3356,7 @@ module('Integration | serialization', function (hooks) {
       doc.data,
       doc,
       new URL(realmURL),
-      loader
+      loader,
     );
     let posts = blog.posts;
     assert.strictEqual(posts.length, 2, 'number of posts is correct');
@@ -3395,7 +3395,7 @@ module('Integration | serialization', function (hooks) {
           },
         },
       },
-      'card serialization is correct'
+      'card serialization is correct',
     );
   });
 
@@ -3410,7 +3410,7 @@ module('Integration | serialization', function (hooks) {
           return new Date(
             this.birthdate.getFullYear() + 1,
             this.birthdate.getMonth(),
-            this.birthdate.getDate()
+            this.birthdate.getDate(),
           );
         },
       });
@@ -3601,7 +3601,7 @@ module('Integration | serialization', function (hooks) {
         doc.data,
         doc,
         undefined,
-        loader
+        loader,
       );
 
       assert.ok(card instanceof Person, 'card is an instance of person');
@@ -3633,7 +3633,7 @@ module('Integration | serialization', function (hooks) {
           assert.strictEqual(
             relatedCard instanceof Pet,
             true,
-            'related card is a Pet'
+            'related card is a Pet',
           );
           assert.strictEqual(relatedCard?.id, `${realmURL}Pet/mango`);
         } else {
@@ -3644,7 +3644,7 @@ module('Integration | serialization', function (hooks) {
           assert.strictEqual(
             relatedCard instanceof Pet,
             true,
-            'related card is a Pet'
+            'related card is a Pet',
           );
           assert.strictEqual(relatedCard?.id, `${realmURL}Pet/vanGogh`);
         } else {
@@ -3653,7 +3653,7 @@ module('Integration | serialization', function (hooks) {
         assert.strictEqual(
           relationshipMeta(card, 'firstName'),
           undefined,
-          'relationshipMeta returns undefined for non-relationship field'
+          'relationshipMeta returns undefined for non-relationship field',
         );
       } else {
         assert.ok(false, 'relationshipMeta returned an unexpected value');
@@ -3700,7 +3700,7 @@ module('Integration | serialization', function (hooks) {
       await saveCard(
         spookyToiletPaper,
         `${realmURL}Toy/spookyToiletPaper`,
-        loader
+        loader,
       );
       await saveCard(mango, `${realmURL}Pet/mango`, loader);
 
@@ -3756,7 +3756,7 @@ module('Integration | serialization', function (hooks) {
         serialized.data,
         serialized,
         undefined,
-        loader
+        loader,
       );
       if (card instanceof Person) {
         assert.strictEqual(card.firstName, 'Hassan');
@@ -3770,7 +3770,7 @@ module('Integration | serialization', function (hooks) {
             if (favoriteToy instanceof Toy) {
               assert.strictEqual(
                 favoriteToy.description,
-                'Toilet paper ghost: Poooo!'
+                'Toilet paper ghost: Poooo!',
               );
             } else {
               assert.ok(false, 'card is not instance of Toy');
@@ -3889,7 +3889,7 @@ module('Integration | serialization', function (hooks) {
         doc.data,
         doc,
         undefined,
-        loader
+        loader,
       );
       assert.ok(card instanceof Person, 'card is a Person');
       assert.strictEqual(card.firstName, 'Hassan');
@@ -3966,7 +3966,7 @@ module('Integration | serialization', function (hooks) {
         doc.data,
         doc,
         undefined,
-        loader
+        loader,
       );
 
       try {
@@ -3976,7 +3976,7 @@ module('Integration | serialization', function (hooks) {
         assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
         assert.strictEqual(
           err.message,
-          'The field Person.pets refers to the card instance https://test-realm/Pet/vanGogh which is not loaded'
+          'The field Person.pets refers to the card instance https://test-realm/Pet/vanGogh which is not loaded',
         );
       }
 
@@ -3984,7 +3984,7 @@ module('Integration | serialization', function (hooks) {
       if (!Array.isArray(relationships)) {
         assert.ok(
           false,
-          'relationshipMeta should be an array for linksToMany relationship'
+          'relationshipMeta should be an array for linksToMany relationship',
         );
       } else {
         let [mango, vanGogh] = relationships;
@@ -3993,7 +3993,7 @@ module('Integration | serialization', function (hooks) {
         } else {
           assert.ok(
             false,
-            `relationship type for ${realmURL}Pet/mango was not "loaded"`
+            `relationship type for ${realmURL}Pet/mango was not "loaded"`,
           );
         }
         if (vanGogh?.type === 'not-loaded') {
@@ -4001,7 +4001,7 @@ module('Integration | serialization', function (hooks) {
         } else {
           assert.ok(
             false,
-            `relationship type for ${realmURL}Pet/vanGogh was not "not-loaded"`
+            `relationship type for ${realmURL}Pet/vanGogh was not "not-loaded"`,
           );
         }
       }
@@ -4195,7 +4195,7 @@ module('Integration | serialization', function (hooks) {
         doc.data,
         doc,
         new URL(`${realmURL}Person/hassan`),
-        loader
+        loader,
       );
       assert.ok(card instanceof Person, 'card is a Person');
       assert.strictEqual(card.firstName, 'Hassan');
@@ -4240,7 +4240,7 @@ module('Integration | serialization', function (hooks) {
       await shimModule(
         `${realmURL}test-cards`,
         { Pet, Friend, Person },
-        loader
+        loader,
       );
       let mango = new Pet({ name: 'Mango' });
       let vanGogh = new Pet({ name: 'Van Gogh' });
@@ -4364,7 +4364,7 @@ module('Integration | serialization', function (hooks) {
       await shimModule(
         `${realmURL}test-cards`,
         { Pet, Friend, Person },
-        loader
+        loader,
       );
       let doc: LooseSingleCardDocument = {
         data: {
@@ -4429,7 +4429,7 @@ module('Integration | serialization', function (hooks) {
         doc.data,
         doc,
         undefined,
-        loader
+        loader,
       );
       assert.ok(card instanceof Person, 'card is an instance of person');
       assert.strictEqual(card.firstName, 'Burcu');
@@ -4480,7 +4480,7 @@ module('Integration | serialization', function (hooks) {
       await shimModule(
         `${realmURL}test-cards`,
         { Pet, Friend, Person },
-        loader
+        loader,
       );
       let person = new Person({ firstName: 'Burcu' });
       let serialized = serializeCard(person, {
@@ -4536,7 +4536,7 @@ module('Integration | serialization', function (hooks) {
       await shimModule(
         `${realmURL}test-cards`,
         { Pet, Friend, Person },
-        loader
+        loader,
       );
       let doc: LooseSingleCardDocument = {
         data: {
@@ -4555,7 +4555,7 @@ module('Integration | serialization', function (hooks) {
         doc.data,
         doc,
         undefined,
-        loader
+        loader,
       );
 
       assert.ok(card instanceof Person, 'card is a Person');
@@ -4594,7 +4594,7 @@ module('Integration | serialization', function (hooks) {
       await shimModule(
         `${realmURL}test-cards`,
         { Pet, Friend, Person },
-        loader
+        loader,
       );
       let doc: LooseSingleCardDocument = {
         data: {
@@ -4624,7 +4624,7 @@ module('Integration | serialization', function (hooks) {
         doc.data,
         doc,
         undefined,
-        loader
+        loader,
       );
 
       try {
@@ -4635,8 +4635,8 @@ module('Integration | serialization', function (hooks) {
         assert.ok(
           err.message.match(
             /The field Person\.friend refers to the card instance https:\/\/test-realm\/Friend\/hassan which is not loaded/,
-            'NotLoaded error describes field not loaded'
-          )
+            'NotLoaded error describes field not loaded',
+          ),
         );
       }
 
@@ -4648,8 +4648,8 @@ module('Integration | serialization', function (hooks) {
         assert.ok(
           err.message.match(
             /The field Person\.friendPets refers to the card instance https:\/\/test-realm\/Pet\/vanGogh which is not loaded/,
-            'NotLoaded error describes field not loaded'
-          )
+            'NotLoaded error describes field not loaded',
+          ),
         );
       }
 
@@ -4663,7 +4663,7 @@ module('Integration | serialization', function (hooks) {
         } else {
           assert.ok(
             false,
-            `relationship type for ${realmURL}Pet/mango was not "loaded"`
+            `relationship type for ${realmURL}Pet/mango was not "loaded"`,
           );
         }
         if (vanGogh?.type === 'not-loaded') {
@@ -4671,7 +4671,7 @@ module('Integration | serialization', function (hooks) {
         } else {
           assert.ok(
             false,
-            `relationship type for ${realmURL}Pet/vanGogh was not "not-loaded"`
+            `relationship type for ${realmURL}Pet/vanGogh was not "not-loaded"`,
           );
         }
       }
@@ -4745,7 +4745,7 @@ module('Integration | serialization', function (hooks) {
           resource,
           { data: resource },
           undefined,
-          loader
+          loader,
         );
 
         assert.strictEqual(sample.someNumber, 42);
@@ -4786,11 +4786,11 @@ module('Integration | serialization', function (hooks) {
 
         assert.strictEqual(
           typeof serialized?.data?.attributes?.someNumber === 'number',
-          true
+          true,
         );
         assert.strictEqual(
           typeof serialized?.data?.attributes?.someNumber !== 'string',
-          true
+          true,
         );
         assert.strictEqual(serialized?.data?.attributes?.someNumber, 42);
         assert.strictEqual(serialized?.data?.attributes?.someNull, null);
@@ -4839,7 +4839,7 @@ module('Integration | serialization', function (hooks) {
           resource,
           { data: resource },
           undefined,
-          loader
+          loader,
         );
 
         assert.strictEqual(isBigInt(sample.someBigInt), true);
@@ -4876,15 +4876,15 @@ module('Integration | serialization', function (hooks) {
 
         assert.strictEqual(
           typeof serialized?.data?.attributes?.someBigInt === 'string',
-          true
+          true,
         );
         assert.strictEqual(
           typeof serialized?.data?.attributes?.someBigInt !== 'number',
-          true
+          true,
         );
         assert.strictEqual(
           serialized?.data?.attributes?.someBigInt,
-          '9223372036854775808'
+          '9223372036854775808',
         );
         assert.strictEqual(serialized?.data?.attributes?.someNull, null);
       });
@@ -4894,12 +4894,12 @@ module('Integration | serialization', function (hooks) {
         let { default: BigIntegerCard } = bigInteger;
         assert.strictEqual(
           getQueryableValue(BigIntegerCard, BigInt('9223372036854775808')),
-          '9223372036854775808'
+          '9223372036854775808',
         );
         assert.strictEqual(getQueryableValue(BigIntegerCard, null), undefined);
         assert.strictEqual(
           getQueryableValue(BigIntegerCard, undefined),
-          undefined
+          undefined,
         );
       });
 
@@ -4941,7 +4941,7 @@ module('Integration | serialization', function (hooks) {
 
         assert.strictEqual(
           serialized?.data?.attributes?.someComputed,
-          (BigInt('1') + BigInt('2')).toString()
+          (BigInt('1') + BigInt('2')).toString(),
         );
       });
     });
@@ -4990,13 +4990,13 @@ module('Integration | serialization', function (hooks) {
           resource,
           { data: resource },
           undefined,
-          loader
+          loader,
         );
 
         assert.strictEqual(isEthAddress(sample.someAddress), true);
         assert.strictEqual(
           isEthAddress(sample.checksummedAddressThatDontLookLikeOne),
-          true
+          true,
         );
 
         // failed to deserialize
@@ -5032,19 +5032,19 @@ module('Integration | serialization', function (hooks) {
 
         assert.strictEqual(
           typeof serialized?.data?.attributes?.someAddress === 'string',
-          true
+          true,
         );
         assert.strictEqual(
           typeof serialized?.data?.attributes?.someAddress !== 'number',
-          true
+          true,
         );
         assert.strictEqual(
           serialized?.data?.attributes?.someAddress,
-          '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b'
+          '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b',
         );
         assert.strictEqual(
           serialized?.data?.attributes?.nonChecksummedAddress,
-          '0x3bc8e82b5856b2f2bdc7f6693f79db9648c0aaaa'
+          '0x3bc8e82b5856b2f2bdc7f6693f79db9648c0aaaa',
         );
         assert.strictEqual(serialized?.data?.attributes?.someNull, null);
       });
@@ -5055,17 +5055,17 @@ module('Integration | serialization', function (hooks) {
         assert.strictEqual(
           getQueryableValue(
             EthereumAddressCard,
-            '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b'
+            '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b',
           ),
-          '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b'
+          '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b',
         );
         assert.strictEqual(
           getQueryableValue(EthereumAddressCard, null),
-          undefined
+          undefined,
         );
         assert.strictEqual(
           getQueryableValue(EthereumAddressCard, undefined),
-          undefined
+          undefined,
         );
       });
     });

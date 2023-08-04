@@ -64,7 +64,7 @@ export const languageConfigs = [
 
 export function extendDefinition(
   baseLanguage: LanguageDefinition,
-  newLanguage: LanguageDefinition
+  newLanguage: LanguageDefinition,
 ): LanguageDefinition {
   return {
     ...baseLanguage,

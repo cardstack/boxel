@@ -107,35 +107,35 @@ export default class Go extends Component<Signature> {
     </div>
     <style>
       .main {
-          position: relative;
-          display: grid;
-          grid-template-columns: 15rem 1fr 1fr;
-          min-height: 100vh;
-        }
+        position: relative;
+        display: grid;
+        grid-template-columns: 15rem 1fr 1fr;
+        min-height: 100vh;
+      }
 
-        .main-column {
-          padding: var(--boxel-sp);
-        }
+      .main-column {
+        padding: var(--boxel-sp);
+      }
 
-        .main-column > * + * {
-          margin-top: var(--boxel-sp);
-        }
+      .main-column > * + * {
+        margin-top: var(--boxel-sp);
+      }
 
-        .editor-column {
-          display: flex;
-          flex-direction: column;
-        }
+      .editor-column {
+        display: flex;
+        flex-direction: column;
+      }
 
-        .editor-menu {
-          list-style-type: none;
-          padding: 0;
-          display: flex;
-          gap: var(--boxel-sp-sm);
-        }
+      .editor-menu {
+        list-style-type: none;
+        padding: 0;
+        display: flex;
+        gap: var(--boxel-sp-sm);
+      }
 
-        .editor-container {
-          flex: 1;
-        }
+      .editor-container {
+        flex: 1;
+      }
     </style>
   </template>
 
@@ -177,7 +177,7 @@ export default class Go extends Component<Signature> {
       return JSON.parse(content);
     } catch (err) {
       log.warn(
-        `content for ${this.args.path} is not valid JSON, skipping write`
+        `content for ${this.args.path} is not valid JSON, skipping write`,
       );
       return;
     }
@@ -268,7 +268,7 @@ export default class Go extends Component<Signature> {
       throw new Error(
         `could not delete file, status: ${response.status} - ${
           response.statusText
-        }. ${await response.text()}`
+        }. ${await response.text()}`,
       );
     }
   });
@@ -276,7 +276,7 @@ export default class Go extends Component<Signature> {
 
 function isRunnable(filename: string): boolean {
   return ['.gjs', '.js', '.gts', '.ts'].some((extension) =>
-    filename.endsWith(extension)
+    filename.endsWith(extension),
   );
 }
 

@@ -11,7 +11,7 @@ import type {
 import { baseRealm, Loader } from '@cardstack/runtime-common';
 
 async function cardApi(
-  loader: Loader
+  loader: Loader,
 ): Promise<typeof import('https://cardstack.com/base/card-api')> {
   return await loader.import(`${baseRealm.url}card-api`);
 }
@@ -25,7 +25,7 @@ export async function renderCard(
   card: CardBase,
   format: Format,
   field?: Field,
-  context?: CardContext
+  context?: CardContext,
 ) {
   let api = await cardApi(loader);
   await api.recompute(card, { recomputeAllFields: true });

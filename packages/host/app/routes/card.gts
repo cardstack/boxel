@@ -29,7 +29,7 @@ export default class RenderCard extends Route<Model | null> {
   beforeModel(transition: any) {
     let queryParams = parse(
       new URL(transition.intent.url, 'http://anywhere').search,
-      { ignoreQueryPrefix: true }
+      { ignoreQueryPrefix: true },
     );
     if ('schema' in queryParams) {
       let {

@@ -439,7 +439,6 @@ export default class CardCatalogModal extends Component<Signature> {
       .preview > svg {
         height: 100%;
       }
-
     </style>
   </template>
 
@@ -499,7 +498,7 @@ export default class CardCatalogModal extends Component<Signature> {
     realmCards.map((r) => {
       if (!r.displayedCards.length) {
         r.displayedCards = new TrackedArray<Card>(
-          r.cards.slice(0, this.displayCardCount)
+          r.cards.slice(0, this.displayCardCount),
         );
       }
     });
@@ -545,7 +544,7 @@ export default class CardCatalogModal extends Component<Signature> {
       offerToCreate?: CardRef;
       multiSelect?: boolean;
       createNewCard?: CreateNewCard;
-    }
+    },
   ): Promise<undefined | T> {
     this.zIndex++;
     this.chooseCardTitle = chooseCardTitle(query.filter, opts?.multiSelect);
@@ -555,7 +554,7 @@ export default class CardCatalogModal extends Component<Signature> {
   private _chooseCard = enqueueTask(
     async <T extends Card>(
       query: Query,
-      opts: { offerToCreate?: CardRef } = {}
+      opts: { offerToCreate?: CardRef } = {},
     ) => {
       this.currentRequest = {
         search: getSearchResults(this, () => query),
@@ -568,7 +567,7 @@ export default class CardCatalogModal extends Component<Signature> {
       } else {
         return undefined;
       }
-    }
+    },
   );
 
   private getCard = restartableTask(async (searchKey: string) => {
@@ -584,7 +583,7 @@ export default class CardCatalogModal extends Component<Signature> {
         this.selectedCard = await this.cardService.createFromSerialized(
           maybeCardDoc.data,
           maybeCardDoc,
-          new URL(maybeCardDoc.data.id)
+          new URL(maybeCardDoc.data.id),
         );
         return;
       }
@@ -614,7 +613,7 @@ export default class CardCatalogModal extends Component<Signature> {
   displayMoreCards(realm: RealmCards) {
     let num = realm.displayedCards.length;
     realm.displayedCards.push(
-      ...realm.cards.slice(num, num + this.displayCardCount)
+      ...realm.cards.slice(num, num + this.displayCardCount),
     );
   }
 
@@ -690,7 +689,7 @@ export default class CardCatalogModal extends Component<Signature> {
 
 function chooseCardTitle(
   filter: Filter | undefined,
-  multiSelect?: boolean
+  multiSelect?: boolean,
 ): string {
   if (!filter) {
     return DEFAULT_CHOOOSE_CARD_TITLE;

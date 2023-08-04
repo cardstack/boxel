@@ -47,7 +47,7 @@ export interface Context {
   handleMessage?: (
     context: Context,
     event: Event,
-    roomId: string
+    roomId: string,
   ) => Promise<void>;
 }
 
@@ -56,12 +56,12 @@ export async function addRoomEvent(context: Context, event: Event) {
   eventId = eventId ?? stateKey; // room state may not necessary have an event ID
   if (!eventId) {
     throw new Error(
-      `bug: event ID is undefined for event ${JSON.stringify(event, null, 2)}`
+      `bug: event ID is undefined for event ${JSON.stringify(event, null, 2)}`,
     );
   }
   if (!roomId) {
     throw new Error(
-      `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`
+      `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
     );
   }
   let roomCard = context.roomCards.get(roomId);
@@ -81,7 +81,7 @@ export async function addRoomEvent(context: Context, event: Event) {
       data,
       { data },
       undefined,
-      context.loaderService.loader
+      context.loaderService.loader,
     );
     context.roomCards.set(roomId, roomCard);
   }
