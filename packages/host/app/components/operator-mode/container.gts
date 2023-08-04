@@ -31,6 +31,7 @@ import {
   getSearchResults,
   type Search,
 } from '@cardstack/host/resources/search';
+import { htmlSafe } from '@ember/template';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import perform from 'ember-concurrency/helpers/perform';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -406,22 +407,52 @@ export default class OperatorModeContainer extends Component<Signature> {
   // to have its own background URL. Also need to consider how to treat adjoining
   // stacks that have the same background image (consider 4 stacks, where 2
   // adjacent stacks have the same background image)
-  fetchBackgroundImageURL = trackedFunction(this, async () => {
-    let bottomMostCard = this.stacks[0]?.[0];
-    let realmInfo;
-    if (bottomMostCard) {
-      if (bottomMostCard.type !== 'card') {
-        throw new Error(
-          `bug: the bottom most card for a stack cannot be a contained card`
-        );
-      }
-      realmInfo = await this.cardService.getRealmInfo(bottomMostCard.card);
-    }
-    return realmInfo?.backgroundURL;
+  fetchBackgroundImageURLs = trackedFunction(this, async () => {
+    let result = await Promise.all(
+      this.stacks.map(async (stack) => {
+        if (stack.length === 0) {
+          return;
+        }
+        let bottomMostCard = stack[0];
+        if (bottomMostCard.type !== 'card') {
+          throw new Error(
+            `bug: the bottom most card for a stack cannot be a contained card`
+          );
+        }
+        return (await this.cardService.getRealmInfo(bottomMostCard.card))
+          ?.backgroundURL;
+      })
+    );
+    return result;
   });
 
-  get backgroundImageURL() {
-    return this.fetchBackgroundImageURL.value ?? '';
+  get backgroundImageURLs() {
+    return (
+      this.fetchBackgroundImageURLs.value?.map((u) => (u ? u : undefined)) ?? []
+    );
+  }
+
+  get backgroundImageStyle() {
+    // only return a background iamge when both stacks originate from the same realm
+    // otherwise we delegate to each stack to handle this
+    if (
+      this.backgroundImageURLs.length > 0 &&
+      this.backgroundImageURLs.every(
+        (u) => u != null && this.backgroundImageURLs[0] === u
+      )
+    ) {
+      return htmlSafe(`background-image: url(${this.backgroundImageURLs[0]});`);
+    }
+    return '';
+  }
+
+  get differingBackgroundImageURLs() {
+    // if the this.backgroundImageStyle is undefined when there are images its because
+    // they are different images--in that case we want to return these.
+    if (this.backgroundImageURLs.length > 0 && !this.backgroundImageStyle) {
+      return this.backgroundImageURLs;
+    }
+    return [];
   }
 
   get allStackItems() {
@@ -511,11 +542,11 @@ export default class OperatorModeContainer extends Component<Signature> {
   <template>
     <Modal
       class='operator-mode'
+      @size='full-screen'
       @isOpen={{true}}
       @onClose={{@onClose}}
       @isOverlayDismissalDisabled={{true}}
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
-      @backgroundImageURL={{this.backgroundImageURL}}
     >
 
       <CardCatalogModal />
@@ -524,6 +555,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         <div
           class='operator-mode__main'
           data-test-save-idle={{this.write.isIdle}}
+          style={{this.backgroundImageStyle}}
         >
           {{#if this.canCreateNeighborStack}}
             <button
@@ -568,6 +600,10 @@ export default class OperatorModeContainer extends Component<Signature> {
                 data-test-operator-mode-stack={{stackIndex}}
                 class='operator-mode-stack'
                 @stackItems={{stack}}
+                @backgroundImageURL={{get
+                  this.differingBackgroundImageURLs
+                  stackIndex
+                }}
                 @stackIndex={{stackIndex}}
                 @publicAPI={{this.publicAPI this stackIndex}}
                 @close={{this.close}}
@@ -703,9 +739,11 @@ export default class OperatorModeContainer extends Component<Signature> {
 
       .operator-mode__main {
         display: flex;
-        justify-content: center;
+        justify-content: stretch;
         align-items: center;
         position: relative;
+        background-position: center;
+        background-size: cover;
       }
 
       .chat-btn {

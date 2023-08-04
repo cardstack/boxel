@@ -9,7 +9,7 @@ interface Signature {
   Element: HTMLDialogElement;
   Args: {
     imgURL?: string;
-    size?: 'small' | 'medium' | 'large';
+    size?: 'small' | 'medium' | 'large' | 'full-screen';
     layer?: 'urgent';
     isOpen?: boolean;
     isOverlayDismissalDisabled?: boolean;
@@ -45,8 +45,9 @@ export default class Modal extends Component<Signature> {
           {{on 'click' @onClose}}
           class='overlay'
           style={{cssVar
-            boxel-modal-overlay-color=@boxelModalOverlayColor 
-            boxel-modal-background-image-url=this.backgroundImageURL}}
+            boxel-modal-overlay-color=@boxelModalOverlayColor
+            boxel-modal-background-image-url=this.backgroundImageURL
+          }}
           tabindex='-1'
         >
           <span class='boxel-sr-only'>Close modal</span>
@@ -57,6 +58,7 @@ export default class Modal extends Component<Signature> {
             small=(eq @size 'small')
             medium=(eq @size 'medium')
             large=(eq @size 'large')
+            fullScreen=(eq @size 'full-screen')
           }}
           open={{@isOpen}}
           aria-modal='true'
@@ -119,6 +121,17 @@ export default class Modal extends Component<Signature> {
         --boxel-modal-max-width: 65rem; /* 1040px */
       }
 
+      .fullScreen {
+        padding: 0;
+        top: 0;
+        left: 0;
+        right: 0;
+      }
+
+      .fullScreen .boxel-modal__inner {
+        max-width: inherit;
+      }
+
       :global(.boxel-modal__inner) {
         display: flex;
         align-items: center;
@@ -133,6 +146,7 @@ export default class Modal extends Component<Signature> {
         width: 100%;
         pointer-events: auto;
       }
+
     </style>
-  </template>;
+  </template>
 }

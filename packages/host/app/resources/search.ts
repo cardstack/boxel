@@ -4,6 +4,7 @@ import { tracked } from '@glimmer/tracking';
 import { baseRealm, type RealmInfo } from '@cardstack/runtime-common';
 import { service } from '@ember/service';
 import flatMap from 'lodash/flatMap';
+import ENV from '@cardstack/host/config/environment';
 import type CardService from '../services/card-service';
 import type { Query } from '@cardstack/runtime-common/query';
 import type { Card } from 'https://cardstack.com/base/card-api';
@@ -13,6 +14,10 @@ interface Args {
     query: Query;
   };
 }
+
+// This is temporary until we have a better way of discovering the realms that
+// are available for a user to search from
+const { otherRealmURL } = ENV;
 
 export class Search extends Resource<Args> {
   @tracked instances: Card[] = [];
@@ -30,7 +35,15 @@ export class Search extends Resource<Args> {
     this.instances = flatMap(
       await Promise.all(
         // use a Set since the default URL may actually be the base realm
-        [...new Set([this.cardService.defaultURL.href, baseRealm.url])].map(
+        [
+          ...new Set(
+            [
+              this.cardService.defaultURL.href,
+              baseRealm.url,
+              otherRealmURL,
+            ].filter(Boolean) as string[]
+          ),
+        ].map(
           async (realm) => await this.cardService.search(query, new URL(realm))
         )
       )

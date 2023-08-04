@@ -30,6 +30,9 @@ module.exports = function (environment) {
       environment === 'test'
         ? 'http://test-realm/test/'
         : process.env.OWN_REALM_URL || 'http://localhost:4200/', // this should be provided as an *unresolved* URL
+    // This is temporary until we have a better way to discover realms besides
+    // our own
+    otherRealmURL: process.env.OTHER_REALM_URL,
     hostsOwnAssets: true,
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',

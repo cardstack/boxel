@@ -21,7 +21,7 @@
     "lint:js": "eslint . --cache --ext ts,js",
     "lint:js:fix": "eslint . --fix",
     "lint:glint": "glint",
-    "start": "FASTBOOT_DISABLED=true OWN_REALM_URL=http://localhost:4201/drafts/ ember serve",
+    "start": "FASTBOOT_DISABLED=true OWN_REALM_URL=http://localhost:4201/drafts/ OTHER_REALM_URL=http://localhost:4201/published/ ember serve",
     "start:build": "FASTBOOT_DISABLED=true ember build --watch",
     "test": "concurrently \"npm:lint\" \"npm:test:*\" --names \"lint,test:\"",
     "test-with-percy": "concurrently \"npm:lint\" \"percy exec -- pnpm test:wait-for-servers\" --names \"lint,test:\"",

@@ -12,6 +12,7 @@ declare const config: {
   rootURL: string;
   APP: Record<string, unknown>;
   ownRealmURL: string;
+  otherRealmURL?: string;
   matrixURL: string;
   resolvedBaseRealmURL: string;
   hostsOwnAssets: boolean;

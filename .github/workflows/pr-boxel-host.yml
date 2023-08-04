@@ -64,6 +64,7 @@ jobs:
         uses: ./.github/actions/deploy-ember-preview
         env:
           OWN_REALM_URL: https://realms-staging.stack.cards/demo/
+          OTHER_REALM_URL: https://realms-staging.stack.cards/published/
           RESOLVED_BASE_REALM_URL: https://realms-staging.stack.cards/base/
           S3_PREVIEW_BUCKET_NAME: boxel-host-preview.stack.cards
           AWS_S3_BUCKET: boxel-host-preview.stack.cards
@@ -91,6 +92,7 @@ jobs:
         uses: ./.github/actions/deploy-ember-preview
         env:
           OWN_REALM_URL: https://realms.cardstack.com/demo/
+          OTHER_REALM_URL: https://realms.cardstack.com/published/
           RESOLVED_BASE_REALM_URL: https://realms.cardstack.com/base/
           S3_PREVIEW_BUCKET_NAME: boxel-host-preview.cardstack.com
           AWS_S3_BUCKET: boxel-host-preview.cardstack.com
