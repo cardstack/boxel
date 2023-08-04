@@ -1468,7 +1468,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-cards-grid-cards]`).isNotVisible();
     assert.dom(`[data-test-create-new-card-button]`).isNotVisible();
 
-    await focus(`[data-test-search-input]`);
+    await focus(`[data-test-search-input] input`);
     assert.dom(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`);
     await click(`[data-test-search-sheet-cancel-button]`);
     await click(`[data-test-stack-card-index="1"] [data-test-close-button]`);
@@ -1477,7 +1477,7 @@ module('Integration | operator-mode', function (hooks) {
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
 
-    await focus(`[data-test-search-input]`);
+    await focus(`[data-test-search-input] input`);
     assert
       .dom(
         `.search-sheet-content__recent-access__cards [data-test-search-result]`
@@ -1510,7 +1510,7 @@ module('Integration | operator-mode', function (hooks) {
       await click(`[data-test-stack-card-index="1"] [data-test-close-button]`);
     }
 
-    await focus(`[data-test-search-input]`);
+    await focus(`[data-test-search-input] input`);
     assert
       .dom(
         `.search-sheet-content__recent-access__cards [data-test-search-result]`
@@ -1641,7 +1641,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await waitFor(`[data-test-cards-grid-item]`);
-    await focus(`[data-test-search-input]`);
+    await focus(`[data-test-search-input] input`);
 
     await fillIn(
       `[data-test-url-field] input`,
@@ -1668,7 +1668,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await waitFor(`[data-test-cards-grid-item]`);
-    await focus(`[data-test-search-input]`);
+    await focus(`[data-test-search-input] input`);
 
     assert
       .dom(`[data-test-boxel-input-validation-state="invalid"]`)
