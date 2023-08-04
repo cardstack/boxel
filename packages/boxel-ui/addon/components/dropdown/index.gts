@@ -70,16 +70,19 @@ class BoxelDropdown extends Component<Signature> {
       @onClose={{@onClose}}
       as |dd|
     >
-      {{! @glint-ignore }}
-      {{yield
+      {{#let
         (modifier
           this.dropdownModifier
           dropdown=dd
           eventType='click'
           stopPropagation=false
         )
-        to='trigger'
+        as |ddModifier|
       }}
+        {{! @glint-ignore }}
+        {{yield ddModifier to='trigger'}}
+      {{/let}}
+
       <dd.Content
         data-test-boxel-dropdown-content
         class={{cn 'boxel-dropdown__content' @contentClass}}
