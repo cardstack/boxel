@@ -23,6 +23,7 @@ export interface Signature {
     onInput?: (val: string) => void;
     onBlur?: (ev: Event) => void;
     onKeyPress?: (ev: KeyboardEvent) => void;
+    onFocus?: (ev: Event) => void;
     required?: boolean;
     optional?: boolean;
   };
@@ -64,6 +65,7 @@ export default class BoxelInput extends Component<Signature> {
           {{on 'input' (pick 'target.value' (optional @onInput))}}
           {{on 'blur' (optional @onBlur)}}
           {{on 'keypress' (optional @onKeyPress)}}
+          {{on 'focus' (optional @onFocus)}}
           ...attributes
         />
         {{#if shouldShowErrorMessage}}
@@ -165,6 +167,12 @@ export default class BoxelInput extends Component<Signature> {
       .boxel-input:disabled ~ .helper-text {
         display: none;
       }
+
+      .boxel-input::placeholder {
+        color: var(--boxel-light);
+        opacity: 0.6;
+      }
+
     </style>
   </template>
 }
