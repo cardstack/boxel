@@ -45,8 +45,9 @@ export default class Modal extends Component<Signature> {
           {{on 'click' @onClose}}
           class='overlay'
           style={{cssVar
-            boxel-modal-overlay-color=@boxelModalOverlayColor 
-            boxel-modal-background-image-url=this.backgroundImageURL}}
+            boxel-modal-overlay-color=@boxelModalOverlayColor
+            boxel-modal-background-image-url=this.backgroundImageURL
+          }}
           tabindex='-1'
         >
           <span class='boxel-sr-only'>Close modal</span>
@@ -134,5 +135,5 @@ export default class Modal extends Component<Signature> {
         pointer-events: auto;
       }
     </style>
-  </template>;
+  </template>
 }

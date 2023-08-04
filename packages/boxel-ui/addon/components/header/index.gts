@@ -63,7 +63,8 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       font: 600 var(--boxel-header-text-size, var(--boxel-font-xs));
       letter-spacing: var(--boxel-lsp-xl);
       text-transform: uppercase;
-      transition: background-color var(--boxel-transition),
+      transition:
+        background-color var(--boxel-transition),
         color var(--boxel-transition);
       gap: var(--boxel-sp-xs);
     }
@@ -88,7 +89,6 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       align-items: center;
       padding: var(--boxel-header-action-padding, 0);
     }
-
   </style>
 </template>;
 

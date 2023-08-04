@@ -44,7 +44,8 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       position: relative;
       background-color: var(--boxel-light);
       border-radius: var(--boxel-border-radius);
-      transition: max-width var(--boxel-transition),
+      transition:
+        max-width var(--boxel-transition),
         box-shadow var(--boxel-transition);
     }
     .boundaries {
