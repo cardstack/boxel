@@ -63,7 +63,7 @@ export default class OperatorModeStack extends Component<Signature> {
         width: 100%;
         background-position: center;
         background-size: cover;
-        padding-top: var(--boxel-sp-lg);
+        padding: var(--boxel-sp-lg) var(--boxel-sp-sm) 0;
       }
 
       .inner {
