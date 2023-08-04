@@ -29,6 +29,10 @@ module('Acceptance | operator mode tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupMockMessageService(hooks);
 
+  hooks.afterEach(async function () {
+    await waitFor('[data-test-save-idle]');
+  });
+
   hooks.beforeEach(async function () {
     adapter = new TestRealmAdapter({
       'pet.gts': `
@@ -533,7 +537,6 @@ module('Acceptance | operator mode tests', function (hooks) {
       await percySnapshot(assert);
 
       assert.dom('[data-test-field="firstName"] input').exists(); // Existence of an input field means it is in edit mode
-      assert.dom('[data-test-save-button]').exists(); // Existence of save button means it is in edit mode
     });
 
     test('click left or right add card button will open the search panel and then click on a recent card will open a new stack on the left or right', async function (assert) {

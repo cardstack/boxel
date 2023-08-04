@@ -46,6 +46,10 @@ export default class CardService extends Service {
     return this.apiModule.module as typeof CardAPI;
   }
 
+  get ready() {
+    return this.apiModule.loaded;
+  }
+
   // Note that this should be the unresolved URL and that we need to rely on our
   // fetch to do any URL resolution.
   get defaultURL(): URL {
@@ -121,23 +125,24 @@ export default class CardService extends Service {
     await this.apiModule.loaded;
     let doc = await this.serializeCard(card, {
       includeComputeds: true,
+      // for a brand new card that has no id yet, we don't know what we are
+      // relativeTo because its up to the realm server to assign us an ID, so
+      // URL's should be absolute
       maybeRelativeURL: null, // forces URL's to be absolute.
     });
-    let isSaved = this.api.isSaved(card);
     // send doc over the wire with absolute URL's. The realm server will convert
     // to relative URL's as it serializes the cards
     let json = await this.saveCardDocument(
       doc,
       card.id ? new URL(card.id) : undefined,
     );
-    if (isSaved) {
-      return (await this.api.updateFromSerialized(card, json)) as Card;
-    }
-    // for a brand new card that has no id yet, we don't know what we are
-    // relativeTo because its up to the realm server to assign us an ID, so
-    // URL's should be absolute
-    let relativeTo = json.data.id ? new URL(json.data.id) : undefined;
-    return await this.createFromSerialized(json.data, json, relativeTo);
+
+    // in order to preserve object equality with the unsaved card instance we
+    // should always use updateFromSerialized()--this way a newly created
+    // instance that does not yet have an id is still the same instance after an
+    // ID has been assigned by the server.
+    let result = (await this.api.updateFromSerialized(card, json)) as Card;
+    return result;
   }
 
   async saveCardDocument(
@@ -196,5 +201,23 @@ export default class CardService extends Service {
   async getRealmInfo(card: Card): Promise<RealmInfo | undefined> {
     await this.apiModule.loaded;
     return card[this.api.realmInfo];
+  }
+
+  // intentionally not async so that this can run in a destructor--this means
+  // that callers need to await this.ready
+  unsubscribeFromCard(
+    card: Card,
+    subscriber: (fieldName: string, value: any) => void
+  ) {
+    this.api.unsubscribeFromChanges(card, subscriber);
+  }
+
+  // also not async to reflect the fact the unsubscribe is not async. Callers
+  // needs to await this.ready
+  subscribeToCard(
+    card: Card,
+    subscriber: (fieldName: string, value: any) => void
+  ) {
+    this.api.subscribeToChanges(card, subscriber);
   }
 }
