@@ -128,7 +128,7 @@ export default class Modal extends Component<Signature> {
         right: 0;
       }
 
-      .fullScreen .boxel-modal__inner {
+      .fullScreen > .boxel-modal__inner {
         max-width: inherit;
       }
 
