@@ -219,6 +219,12 @@ module('Acceptance | operator mode tests', function (hooks) {
           },
         },
       },
+      '.realm.json': {
+        name: 'Test Workspace B',
+        backgroundURL:
+          'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+        iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+      },
     });
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
@@ -723,6 +729,8 @@ module('Acceptance | operator mode tests', function (hooks) {
         )}`
       );
 
+      await percySnapshot(assert); // 2 stacks from the same realm share the same background
+
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
       assert.dom('[data-test-operator-mode-stack="0"]').includesText('Fadhlan');
       assert.dom('[data-test-operator-mode-stack="1"]').includesText('Mango');
@@ -763,6 +771,37 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('.no-cards').includesText('Add a card to get started');
     });
 
+    test('visiting 2 stacks from differing realms', async function (assert) {
+      let operatorModeStateParam = stringify({
+        stacks: [
+          [
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Person/fadhlan',
+              format: 'isolated',
+            },
+          ],
+          [
+            {
+              type: 'card',
+              id: 'http://localhost:4202/test/hassan',
+              format: 'isolated',
+            },
+          ],
+        ],
+      })!;
+
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam
+        )}`
+      );
+
+      await percySnapshot(assert); // 2 stacks from the different realms have different backgrounds
+
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
+    });
+
     test('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
       let operatorModeStateParam = stringify({
         stacks: [
@@ -800,6 +839,9 @@ module('Acceptance | operator mode tests', function (hooks) {
       await click('[data-test-search-input]');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
+
+      // TODO this is a flaky test assertion since it relies on test state (a search being
+      // performed) from a different test--need to fix this
 
       // Click on a recent search
       await click(

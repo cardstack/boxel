@@ -253,7 +253,10 @@ export class TestRealmAdapter implements RealmAdapter {
   #subscriber: ((message: Record<string, any>) => void) | undefined;
 
   constructor(
-    flatFiles: Record<string, string | LooseSingleCardDocument | CardDocFiles>,
+    flatFiles: Record<
+      string,
+      string | LooseSingleCardDocument | CardDocFiles | RealmInfo
+    >,
     realmURL = new URL(testRealmURL)
   ) {
     this.#paths = new RealmPaths(realmURL);
