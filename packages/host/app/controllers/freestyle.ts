@@ -19,7 +19,7 @@ export default class IndexController extends FreestyleController {
           title: name,
           component: c,
         };
-      }
+      },
     ) as UsageComponent[];
   }
 }
