@@ -407,10 +407,6 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   });
 
-  // For now use the background from the 1st stack, but eventually, each stack
-  // to have its own background URL. Also need to consider how to treat adjoining
-  // stacks that have the same background image (consider 4 stacks, where 2
-  // adjacent stacks have the same background image)
   fetchBackgroundImageURLs = trackedFunction(this, async () => {
     let result = await Promise.all(
       this.stacks.map(async (stack) => {
