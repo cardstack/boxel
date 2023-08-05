@@ -433,7 +433,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   get backgroundImageStyle() {
-    // only return a background iamge when both stacks originate from the same realm
+    // only return a background image when both stacks originate from the same realm
     // otherwise we delegate to each stack to handle this
     if (
       this.backgroundImageURLs.length > 0 &&
