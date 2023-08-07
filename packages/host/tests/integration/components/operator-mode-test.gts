@@ -618,13 +618,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-stack-card-index="1"]').includesText('Mango');
   });
 
-  test('it previews changes to the card in the stack', async function (assert) {
-    /*
-    Need to add:
-    * Getting a room
-    * Opening(?) a room
-    * Looking at the stuff there.
-    */
+  test('it allows chat commands to change cards in the stack', async function (assert) {
     this.owner.register('service:matrixService', MockMatrixService);
     let matrixService = (this.owner.lookup('service:matrixService') as MockMatrixService);
     matrixService.cardAPI = cardApi;
@@ -678,7 +672,6 @@ module('Integration | operator-mode', function (hooks) {
     };
     addRoomEvent(matrixService, messageObject);
 
-    // create roomcard? Set events?
     messageObject = {
       event_id: "event1",
       room_id: "testroom",
@@ -700,9 +693,17 @@ module('Integration | operator-mode', function (hooks) {
      
     };
     addRoomEvent(matrixService, messageObject);
-    //debugger;
+
+    await waitFor('[data-test-enter-room="test_a"]');
+    await click('[data-test-enter-room="test_a"]');
+
+    await waitFor('[data-test-command-apply]');
+    await click('[data-test-command-apply]');
+
     await pauseTest();
-    //await
+    await waitFor('[data-test-person="Dave"]');
+    assert.dom('[data-test-person]').hasText('Dave');
+
   });
 
   test("it doesn't change the field value if user clicks cancel in edit view", async function (assert) {

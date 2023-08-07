@@ -48,6 +48,7 @@ interface CommandArgs {
 class CommandMessage extends Component<CommandArgs> {
   <template>
     <Button
+      data-test-command-apply
       {{on 'click' this.clicked}}
       {{on 'mouseenter' this.mouseEnter}}
       {{on 'mouseleave' this.mouseLeave}}
