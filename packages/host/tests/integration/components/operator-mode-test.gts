@@ -25,6 +25,7 @@ import {
   pauseTest,
   triggerEvent,
 } from '@ember/test-helpers';
+import { addRoomEvent } from '../../../lib/matrix-handlers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -45,6 +46,8 @@ class MockClient {
 
 class MockMatrixService extends Service {
   roomCards: TrackedMap<string, Promise<RoomCard>> = new TrackedMap();
+  roomObjectives: TrackedMap<string, RoomObjectiveCard> = new TrackedMap();
+
   async start(auth?: IAuthData) {}
   get isLoggedIn() {
     return true;
@@ -56,6 +59,18 @@ class MockMatrixService extends Service {
 
   get userId() {
     return '@testuser:staging';
+  }
+
+  async allowedToSetObjective(roomId: string): Promise<boolean> {
+    return false;
+  }
+
+  async createRoom(
+    name: string,
+    invites: string[], // these can be local names
+    topic?: string
+  ): Promise<string> {
+    return "testroom";
   }
 }
 
@@ -604,7 +619,15 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('it previews changes to the card in the stack', async function (assert) {
+    /*
+    Need to add:
+    * Getting a room
+    * Opening(?) a room
+    * Looking at the stuff there.
+    */
     this.owner.register('service:matrixService', MockMatrixService);
+    let matrixService = (this.owner.lookup('service:matrixService') as MockMatrixService);
+    matrixService.cardAPI = cardApi;
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     let component = await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -619,7 +642,64 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-boxel-header-title]').hasText('Person');
     assert.dom('[data-test-person]').hasText('Fadhlan');
     await click('[data-test-open-chat]');
+    let messageObject;
+    messageObject = {
+      event_id: "eventname",
+      room_id: "testroom",
+      type: 'm.room.name',
+      content: {
+        name: "test_a"
+        }
+    };
+    addRoomEvent(matrixService, messageObject);
+    messageObject = {
+      event_id: "eventname",
+      room_id: "testroom",
+      type: 'm.room.create',
+      origin_server_ts: 0,
+      content: {
+        creator: "@testuser:staging",
+        room_version: "0"
+        }
+    };
+    addRoomEvent(matrixService, messageObject);
+    messageObject = {
+      event_id: "eventjoin",
+      room_id: "testroom",
+      type: 'm.room.member',
+      sender: "@testuser:staging",
+      state_key: "@testuser:staging",
+      content: {
+        displayname: "testuser",
+        membership: "join",
+        membershipTs: 1,
+        membershipInitiator: "@testuser:staging",
+        }
+    };
+    addRoomEvent(matrixService, messageObject);
 
+    // create roomcard? Set events?
+    messageObject = {
+      event_id: "event1",
+      room_id: "testroom",
+      state_key: "state",
+      type: "m.room.message",
+      content: {
+        body: "i am the body",
+        msgtype: 'org.boxel.command',
+        formatted_body: 'A patch',
+        format: 'org.matrix.custom.html',
+        command: {
+          type: 'patch',
+          id: `${testRealmURL}Person/fadhlan`,
+          patch: {
+            attributes: {"firstName": "Dave"},
+          },
+        },
+      }
+     
+    };
+    addRoomEvent(matrixService, messageObject);
     //debugger;
     await pauseTest();
     //await
