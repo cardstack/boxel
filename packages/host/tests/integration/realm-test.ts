@@ -209,6 +209,7 @@ module('Integration | realm', function (hooks) {
         id: `${testRealmURL}dir/mango`,
         attributes: {
           firstName: 'Mango',
+          title: 'Mango',
         },
         relationships: {
           owner: {
@@ -243,6 +244,7 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
+            title: 'Hassan Abdel-Rahman',
           },
           meta: {
             adoptsFrom: {
@@ -307,6 +309,7 @@ module('Integration | realm', function (hooks) {
         id: `${testRealmURL}dir/mango`,
         attributes: {
           firstName: 'Mango',
+          title: 'Mango',
         },
         relationships: {
           owner: {
@@ -341,6 +344,7 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
+            title: 'Hassan Abdel-Rahman',
           },
           meta: {
             adoptsFrom: {
@@ -613,6 +617,7 @@ module('Integration | realm', function (hooks) {
         id: `${testRealmURL}Pet/1`,
         attributes: {
           firstName: 'Mango',
+          title: 'Mango',
         },
         relationships: {
           owner: {
@@ -645,6 +650,7 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
+            title: 'Hassan Abdel-Rahman',
           },
           meta: {
             adoptsFrom: {
@@ -866,7 +872,12 @@ module('Integration | realm', function (hooks) {
             data: {
               type: 'card',
               attributes: {
-                hosts: [{ firstName: 'Hassan' }],
+                hosts: [
+                  {
+                    firstName: 'Hassan',
+                    lastName: null,
+                  },
+                ],
                 sponsors: ['Burton'],
               },
               meta: {
@@ -899,6 +910,8 @@ module('Integration | realm', function (hooks) {
           hosts: [
             {
               firstName: 'Hassan',
+              lastName: null,
+              title: 'Hassan ',
             },
           ],
           sponsors: ['Burton'],
@@ -933,7 +946,12 @@ module('Integration | realm', function (hooks) {
             venue: 'Gore Mountain',
             startTime: '2023-02-18T10:00:00.000Z',
             endTime: '2023-02-19T02:00:00.000Z',
-            hosts: [{ firstName: 'Hassan' }],
+            hosts: [
+              {
+                firstName: 'Hassan',
+                lastName: null,
+              },
+            ],
             sponsors: ['Burton'],
             posts: [],
           },
@@ -1078,7 +1096,11 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           id: `${testRealmURL}dir/friend`,
           links: { self: `${testRealmURL}dir/friend` },
-          attributes: { firstName: 'Hassan', lastName: 'Abdel-Rahman' },
+          attributes: {
+            firstName: 'Hassan',
+            lastName: 'Abdel-Rahman',
+            title: 'Hassan Abdel-Rahman',
+          },
           meta: {
             adoptsFrom: {
               module: 'http://localhost:4202/test/person',
@@ -1095,7 +1117,7 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           id: `${testRealmURL}dir/van-gogh`,
           links: { self: `${testRealmURL}dir/van-gogh` },
-          attributes: { firstName: 'Van Gogh' },
+          attributes: { firstName: 'Van Gogh', title: 'Van Gogh' },
           relationships: { owner: { links: { self: null } } },
           meta: {
             adoptsFrom: {
@@ -1828,6 +1850,7 @@ module('Integration | realm', function (hooks) {
         id: `${testRealmURL}dir/mango`,
         attributes: {
           firstName: 'Mango',
+          title: 'Mango',
         },
         relationships: {
           owner: {
@@ -1862,6 +1885,7 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Mariko',
             lastName: 'Abdel-Rahman',
+            title: 'Mariko Abdel-Rahman',
           },
           meta: {
             adoptsFrom: {
@@ -2336,6 +2360,7 @@ module('Integration | realm', function (hooks) {
           id: `${testRealmURL}dir/mango`,
           attributes: {
             firstName: 'Mango',
+            title: 'Mango',
           },
           relationships: {
             owner: {
@@ -2369,6 +2394,7 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Mariko',
             lastName: 'Abdel-Rahman',
+            title: 'Mariko Abdel-Rahman',
           },
           meta: {
             adoptsFrom: {
@@ -2390,6 +2416,7 @@ module('Integration | realm', function (hooks) {
           id: `${testRealmURL}dir/vanGogh`,
           attributes: {
             firstName: 'Van Gogh',
+            title: 'Van Gogh',
           },
           relationships: {
             owner: {
@@ -2425,6 +2452,7 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
+            title: 'Hassan Abdel-Rahman',
           },
           meta: {
             adoptsFrom: {
