@@ -1,8 +1,7 @@
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { restartableTask } from 'ember-concurrency';
+import { trackedFunction } from 'ember-resources/util/function';
 import { service } from '@ember/service';
 import CardService from '@cardstack/host/services/card-service';
 import type {
@@ -10,7 +9,7 @@ import type {
   Format,
   FieldType,
 } from 'https://cardstack.com/base/card-api';
-import { cardTypeDisplayName, type RealmInfo } from '@cardstack/runtime-common';
+import { cardTypeDisplayName } from '@cardstack/runtime-common';
 import { BoxelDropdown, IconButton, Menu } from '@cardstack/boxel-ui';
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
@@ -29,19 +28,15 @@ interface Signature {
 
 export default class OperatorModeOverlayItemHeader extends Component<Signature> {
   @service declare cardService: CardService;
-  @tracked realmInfo: RealmInfo | undefined;
 
-  constructor(owner: unknown, args: Signature) {
-    super(owner, args);
-    this.fetchRealmInfo.perform();
-  }
-
-  fetchRealmInfo = restartableTask(
-    async () =>
-      (this.realmInfo = await this.cardService.getRealmInfo(
-        this.args.item.card
-      ))
+  fetchRealmInfo = trackedFunction(
+    this,
+    async () => await this.cardService.getRealmInfo(this.args.item.card)
   );
+
+  get iconURL() {
+    return this.fetchRealmInfo.value?.iconURL ?? '/default-realm-icon.png';
+  }
 
   <template>
     <header class='overlay-item-header' data-test-overlay-header>
@@ -50,7 +45,7 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
           {{svgJar 'icon-turn-down-right' width='22px' height='18px'}}
         {{else}}
           <img
-            src={{this.realmInfo.iconURL}}
+            src={{this.iconURL}}
             width='20'
             height='20'
             alt=''

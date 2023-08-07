@@ -7,6 +7,7 @@ import type {
   FieldType,
 } from 'https://cardstack.com/base/card-api';
 import Preview from '../preview';
+import { trackedFunction } from 'ember-resources/util/function';
 import { fn, array } from '@ember/helper';
 import type CardService from '../../services/card-service';
 
@@ -20,11 +21,7 @@ import {
   Tooltip,
 } from '@cardstack/boxel-ui';
 import get from 'lodash/get';
-import {
-  type Actions,
-  cardTypeDisplayName,
-  type RealmInfo,
-} from '@cardstack/runtime-common';
+import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 import { task, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
@@ -73,7 +70,6 @@ export interface RenderedCardForOverlayActions {
 export default class OperatorModeStackItem extends Component<Signature> {
   @tracked selectedCards = new TrackedArray<Card>([]);
   @service declare cardService: CardService;
-  @tracked realmInfo: RealmInfo | undefined;
   @tracked isHoverOnRealmIcon = false;
   @tracked isSaving = false;
   @tracked lastSaved: number | undefined;
@@ -92,7 +88,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     super(owner, args);
     this.subscribeToCard.perform();
     this.subscribedCard = this.card;
-    this.fetchRealmInfo.perform();
   }
 
   get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
@@ -162,16 +157,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
     await navigator.clipboard.writeText(this.card.id);
   });
 
-  fetchRealmInfo = restartableTask(async () => {
-    this.realmInfo = await this.cardService.getRealmInfo(this.card);
+  fetchRealmInfo = trackedFunction(this, async () => {
+    return await this.cardService.getRealmInfo(this.card);
   });
 
   get iconURL() {
-    return this.realmInfo?.iconURL ?? '/default-realm-icon.png';
+    return this.fetchRealmInfo.value?.iconURL ?? '/default-realm-icon.png';
   }
 
   get realmName() {
-    return this.realmInfo?.name;
+    return this.fetchRealmInfo.value?.name;
   }
 
   get cardIdentifier() {
@@ -231,14 +226,14 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.cardService.subscribeToCard(this.subscribedCard, this.onCardChange);
     this.refreshSaveMsg = setInterval(
       () => this.calculateLastSavedMsg(),
-      10 * 1000,
+      10 * 1000
     ) as unknown as number;
   });
 
   private cleanup = () => {
     this.cardService.unsubscribeFromCard(
       this.subscribedCard,
-      this.onCardChange,
+      this.onCardChange
     );
     clearInterval(this.refreshSaveMsg);
   };
@@ -563,6 +558,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         width: var(--boxel-header-icon-width);
         height: var(--boxel-header-icon-height);
       }
+
     </style>
   </template>
 }
