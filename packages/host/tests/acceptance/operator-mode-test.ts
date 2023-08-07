@@ -808,6 +808,12 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
 
     test('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
+      // creates a recent search
+      localStorage.setItem(
+        'recent-cards',
+        JSON.stringify(['http://test-realm/test/Person/fadhlan']),
+      );
+
       let operatorModeStateParam = stringify({
         stacks: [
           [
@@ -844,9 +850,6 @@ module('Acceptance | operator mode tests', function (hooks) {
       await click('[data-test-search-input] input');
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
-
-      // TODO this is a flaky test assertion since it relies on test state (a search being
-      // performed) from a different test--need to fix this
 
       // Click on a recent search
       await click(
