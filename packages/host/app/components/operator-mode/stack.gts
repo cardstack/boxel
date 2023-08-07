@@ -3,8 +3,8 @@ import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { htmlSafe } from '@ember/template';
 import type { Actions } from '@cardstack/runtime-common';
-import type { StackItem } from './container';
-import OperatorModeStackItem from './stack-item';
+import type { StackItem } from '@cardstack/host/components/operator-mode/container';
+import OperatorModeStackItem from '@cardstack/host/components/operator-mode/stack-item';
 
 interface Signature {
   Element: HTMLElement;
@@ -39,18 +39,20 @@ export default class OperatorModeStack extends Component<Signature> {
 
   <template>
     <div ...attributes style={{this.backgroundImageStyle}}>
-      {{#each @stackItems as |item i|}}
-        <OperatorModeStackItem
-          @item={{item}}
-          @index={{i}}
-          @stackItems={{@stackItems}}
-          @publicAPI={{@publicAPI}}
-          @dismissStackedCardsAbove={{perform this.dismissStackedCardsAbove}}
-          @close={{@close}}
-          @edit={{@edit}}
-          @save={{@save}}
-        />
-      {{/each}}
+      <div class='inner'>
+        {{#each @stackItems as |item i|}}
+          <OperatorModeStackItem
+            @item={{item}}
+            @index={{i}}
+            @stackItems={{@stackItems}}
+            @publicAPI={{@publicAPI}}
+            @dismissStackedCardsAbove={{perform this.dismissStackedCardsAbove}}
+            @close={{@close}}
+            @edit={{@edit}}
+            @save={{@save}}
+          />
+        {{/each}}
+      </div>
     </div>
 
     <style>
@@ -90,7 +92,6 @@ export default class OperatorModeStack extends Component<Signature> {
           var(--overlay-embedded-card-header-height) + var(--boxel-sp-lg)
         );
       }
-
     </style>
   </template>
 }

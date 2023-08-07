@@ -22,7 +22,7 @@ interface Signature {
     card: Card,
     format?: Format,
     fieldType?: FieldType,
-    fieldName?: string
+    fieldName?: string,
   ) => void;
 }
 
@@ -31,7 +31,7 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
 
   fetchRealmInfo = trackedFunction(
     this,
-    async () => await this.cardService.getRealmInfo(this.args.item.card)
+    async () => await this.cardService.getRealmInfo(this.args.item.card),
   );
 
   get iconURL() {
@@ -150,7 +150,6 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
         --icon-color: var(--boxel-light);
         background-color: var(--boxel-highlight);
       }
-
     </style>
   </template>
 }
