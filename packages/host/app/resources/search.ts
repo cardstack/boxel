@@ -18,7 +18,7 @@ interface Args {
 
 // This is temporary until we have a better way of discovering the realms that
 // are available for a user to search from
-const { otherRealmURL } = ENV;
+const { otherRealmURLs } = ENV;
 
 export class Search extends Resource<Args> {
   @tracked instances: Card[] = [];
@@ -38,12 +38,11 @@ export class Search extends Resource<Args> {
         // use a Set since the default URL may actually be the base realm
         [
           ...new Set(
-            realms ??
-              ([
-                this.cardService.defaultURL.href,
-                baseRealm.url,
-                otherRealmURL,
-              ].filter(Boolean) as string[])
+            realms ?? [
+              this.cardService.defaultURL.href,
+              baseRealm.url,
+              ...otherRealmURLs,
+            ]
           ),
         ].map(
           async (realm) => await this.cardService.search(query, new URL(realm))
