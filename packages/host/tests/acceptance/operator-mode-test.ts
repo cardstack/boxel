@@ -36,9 +36,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
   hooks.beforeEach(async function () {
     localStorage.removeItem('recent-cards');
-  });
 
-  hooks.beforeEach(async function () {
     adapter = new TestRealmAdapter({
       'pet.gts': `
         import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";

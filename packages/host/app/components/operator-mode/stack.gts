@@ -1,9 +1,10 @@
 import Component from '@glimmer/component';
-import { Actions } from '@cardstack/runtime-common';
-import { StackItem } from '@cardstack/host/components/operator-mode/container';
-import OperatorModeStackItem from '@cardstack/host/components/operator-mode/stack-item';
-import { action } from '@ember/object';
+import { task } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
 import { htmlSafe } from '@ember/template';
+import type { Actions } from '@cardstack/runtime-common';
+import type { StackItem } from '@cardstack/host/components/operator-mode/container';
+import OperatorModeStackItem from '@cardstack/host/components/operator-mode/stack-item';
 
 interface Signature {
   Element: HTMLElement;
@@ -21,15 +22,13 @@ interface Signature {
 }
 
 export default class OperatorModeStack extends Component<Signature> {
-  // TODO replace async action with ember concurrency task
-  @action
-  async dismissStackedCardsAbove(itemIndex: number) {
+  dismissStackedCardsAbove = task(async (itemIndex: number) => {
     let itemsToDismiss: StackItem[] = [];
     for (let i = this.args.stackItems.length - 1; i > itemIndex; i--) {
       itemsToDismiss.push(this.args.stackItems[i]);
     }
     await Promise.all(itemsToDismiss.map((i) => this.args.close(i)));
-  }
+  });
 
   get backgroundImageStyle() {
     if (!this.args.backgroundImageURL) {
@@ -47,7 +46,7 @@ export default class OperatorModeStack extends Component<Signature> {
             @index={{i}}
             @stackItems={{@stackItems}}
             @publicAPI={{@publicAPI}}
-            @dismissStackedCardsAbove={{this.dismissStackedCardsAbove}}
+            @dismissStackedCardsAbove={{perform this.dismissStackedCardsAbove}}
             @close={{@close}}
             @edit={{@edit}}
             @save={{@save}}
