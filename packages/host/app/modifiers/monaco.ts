@@ -31,7 +31,7 @@ export default class Monaco extends Modifier<Signature> {
       contentChanged,
       onSetup,
       monacoSDK,
-    }: Signature['Args']['Named']
+    }: Signature['Args']['Named'],
   ) {
     if (this.model) {
       if (language && language !== this.lastLanguage) {
@@ -53,7 +53,7 @@ export default class Monaco extends Modifier<Signature> {
       this.model = this.editor.getModel()!;
 
       this.model.onDidChangeContent(() =>
-        this.onContentChanged.perform(contentChanged)
+        this.onContentChanged.perform(contentChanged),
       );
 
       // To be consistent call this immediately since the initial content
@@ -70,6 +70,6 @@ export default class Monaco extends Modifier<Signature> {
         this.lastContent = this.model.getValue();
         contentChanged(this.lastContent);
       }
-    }
+    },
   );
 }

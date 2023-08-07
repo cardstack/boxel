@@ -71,8 +71,8 @@ export default class FileTree extends Component<Args> {
     if (!newCard) {
       throw new Error(
         `bug: could not create new card from catalog entry ${JSON.stringify(
-          catalogEntryRef
-        )}`
+          catalogEntryRef,
+        )}`,
       );
     }
     let path = `${newCard.id.slice(ownRealmURL.length)}.json`;

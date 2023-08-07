@@ -10,7 +10,7 @@ export interface Frame {
 
 export type UnitValueSerializer = (
   value: Value,
-  unit: string | undefined
+  unit: string | undefined,
 ) => Value;
 
 export default class SimpleFrame implements Frame {
@@ -28,7 +28,7 @@ export default class SimpleFrame implements Frame {
     property: string,
     value: Value,
     unit?: string,
-    serialize?: UnitValueSerializer
+    serialize?: UnitValueSerializer,
   ) {
     this.property = property;
     this.value = value;

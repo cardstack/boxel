@@ -27,7 +27,7 @@ function getMockSprite() {
     {
       // eslint-disable-next-line @typescript-eslint/no-empty-function
       onAnimationStart() {},
-    }
+    },
   );
 }
 
@@ -51,7 +51,7 @@ module('Unit | Orchestration', function () {
 
     assert.deepEqual(
       orchestrationMatrix.getKeyframes(constructKeyframe),
-      new Map([[sprite, [{}, {}, {}, {}]]])
+      new Map([[sprite, [{}, {}, {}, {}]]]),
     );
   });
 
@@ -102,7 +102,7 @@ module('Unit | Orchestration', function () {
             { width: '20px' },
           ],
         ],
-      ])
+      ]),
     );
   });
 
@@ -153,7 +153,7 @@ module('Unit | Orchestration', function () {
             { width: '20px' },
           ],
         ],
-      ])
+      ]),
     );
   });
 
@@ -212,7 +212,7 @@ module('Unit | Orchestration', function () {
             {},
           ] as Keyframe[],
         ],
-      ])
+      ]),
     );
   });
 
@@ -319,7 +319,7 @@ module('Unit | Orchestration', function () {
             },
           ] as Keyframe[],
         ],
-      ])
+      ]),
     );
   });
 });

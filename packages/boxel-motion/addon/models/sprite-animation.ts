@@ -19,7 +19,7 @@ export class SpriteAnimation {
     sprite: Sprite,
     keyframes: Keyframe[],
     keyframeAnimationOptions: KeyframeAnimationOptions,
-    animationStartCallback: (animation: Animation) => void
+    animationStartCallback: (animation: Animation) => void,
   ) {
     this.sprite = sprite;
     this.keyframes = keyframes;
@@ -35,7 +35,7 @@ export class SpriteAnimation {
     if (!this.animation) {
       this.animation = this.sprite.element.animate(
         this.keyframes,
-        this.keyframeAnimationOptions
+        this.keyframeAnimationOptions,
       );
       this.animation.finished
         .then(() => this._finished.resolve(this.animation))

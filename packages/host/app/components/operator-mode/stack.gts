@@ -72,7 +72,6 @@ export default class OperatorModeStack extends Component<Signature> {
           var(--overlay-embedded-card-header-height) + var(--boxel-sp-lg)
         );
       }
-
     </style>
   </template>
 }

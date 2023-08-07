@@ -33,7 +33,7 @@ function getServices(cluster, appName) {
     let responseJson;
     if (nextToken) {
       responseJson = execute(
-        `aws ecs list-services --cluster ${cluster} --starting-token ${nextToken}`
+        `aws ecs list-services --cluster ${cluster} --starting-token ${nextToken}`,
       );
     } else {
       responseJson = execute(`aws ecs list-services --cluster ${cluster}`);
@@ -41,7 +41,7 @@ function getServices(cluster, appName) {
 
     const response = JSON.parse(responseJson);
     const filtered = response.serviceArns.filter(
-      (arn) => getAppNameFromServiceArn(arn) === appName
+      (arn) => getAppNameFromServiceArn(arn) === appName,
     );
     serviceArns = serviceArns.concat(filtered);
     nextToken = response.nextToken;
@@ -51,13 +51,13 @@ function getServices(cluster, appName) {
   for (let i = 0; i < serviceArns.length; i += 10) {
     const slicedServiceNames = serviceArns.slice(
       i,
-      i + 10 > serviceArns.length ? serviceArns.length : i + 10
+      i + 10 > serviceArns.length ? serviceArns.length : i + 10,
     );
 
     const servicesJson = execute(
       `aws ecs describe-services --cluster ${cluster} --services ${slicedServiceNames.join(
-        ' '
-      )}`
+        ' ',
+      )}`,
     );
     services = services.concat(JSON.parse(servicesJson).services);
   }
@@ -83,7 +83,7 @@ function getStoppedTasks(cluster, serviceArn) {
   do {
     const startingTokenArg = nextToken ? `--starting-token ${nextToken}` : '';
     const responseJson = execute(
-      `aws ecs list-tasks --cluster ${cluster} --service-name ${serviceName} --desired-status STOPPED ${startingTokenArg}`
+      `aws ecs list-tasks --cluster ${cluster} --service-name ${serviceName} --desired-status STOPPED ${startingTokenArg}`,
     );
 
     const response = JSON.parse(responseJson);
@@ -95,11 +95,11 @@ function getStoppedTasks(cluster, serviceArn) {
   for (let i = 0; i < taskArns.length; i += 100) {
     const sliced = taskArns.slice(
       i,
-      i + 100 > taskArns.length ? taskArns.length : i + 100
+      i + 100 > taskArns.length ? taskArns.length : i + 100,
     );
 
     const tasksJson = execute(
-      `aws ecs describe-tasks --cluster ${cluster} --tasks ${sliced.join(' ')}`
+      `aws ecs describe-tasks --cluster ${cluster} --tasks ${sliced.join(' ')}`,
     );
     tasks = tasks.concat(JSON.parse(tasksJson).tasks);
   }

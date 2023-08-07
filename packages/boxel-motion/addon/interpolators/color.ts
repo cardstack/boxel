@@ -11,19 +11,22 @@ export default function interpolateColor(
   property: string,
   from: RGBA | HSLA,
   to: RGBA | HSLA,
-  timing: MotionTiming
+  timing: MotionTiming,
 ) {
   let colorInterpolator = function (
     from: RGBA | HSLA,
     to: RGBA | HSLA,
-    t: number
+    t: number,
   ): RGBA | HSLA {
-    return Object.keys(from).reduce((result, key) => {
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
-      result[key] = (1 - t) * from[key] + t * to[key];
-      return result;
-    }, {} as RGBA | HSLA);
+    return Object.keys(from).reduce(
+      (result, key) => {
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        result[key] = (1 - t) * from[key] + t * to[key];
+        return result;
+      },
+      {} as RGBA | HSLA,
+    );
   };
 
   let behavior = new TweenBehavior();
