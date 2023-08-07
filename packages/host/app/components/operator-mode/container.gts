@@ -555,7 +555,7 @@ export default class OperatorModeContainer extends Component<Signature> {
               </p>
 
               <button
-                class='add-card-button'
+                class='add-card-button icon-button'
                 {{on 'click' (fn (perform this.addCard))}}
                 data-test-add-card-button
               >
@@ -582,6 +582,26 @@ export default class OperatorModeContainer extends Component<Signature> {
           {{/if}}
 
           {{#if this.canCreateNeighborStack}}
+            <button
+              data-test-add-card-left-stack
+              class='add-card-to-neighbor-stack add-card-to-neighbor-stack--left
+                {{if
+                  (eq
+                    this.searchSheetTrigger
+                    SearchSheetTrigger.DropCardToLeftNeighborStackButton
+                  )
+                  "add-card-to-neighbor-stack--active"
+                }}'
+              {{on
+                'click'
+                (fn
+                  this.onFocusSearchInput
+                  SearchSheetTrigger.DropCardToLeftNeighborStackButton
+                )
+              }}
+            >
+              {{svgJar 'download' width='30px' height='30px'}}
+            </button>
             <button
               data-test-add-card-right-stack
               class='add-card-to-neighbor-stack add-card-to-neighbor-stack--right

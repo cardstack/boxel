@@ -1252,13 +1252,18 @@ module('Integration | operator-mode', function (hooks) {
     let saveTime = document
       .querySelector('[data-test-last-saved]')!
       .getAttribute('data-test-last-saved');
-
-    assert.dom('[data-test-field="friends"]').containsText('Jackie');
+    await assert.dom('[data-test-field="friends"]').containsText('Jackie');
 
     await click('[data-test-links-to-many="friends"] [data-test-add-new]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
     await click(`[data-test-select="${testRealmURL}Pet/mango"]`);
     await click('[data-test-card-catalog-go-button]');
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-last-saved]')!
+          .getAttribute('data-test-last-saved') !== saveTime
+    );
 
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
     await waitUntil(
@@ -1267,7 +1272,6 @@ module('Integration | operator-mode', function (hooks) {
           .querySelector('[data-test-last-saved]')!
           .getAttribute('data-test-last-saved') !== saveTime
     );
-    await waitFor('[data-test-save-idle]');
 
     assert.dom('[data-test-field="friends"]').containsText('Mango');
   });
