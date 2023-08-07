@@ -18,6 +18,7 @@ import {
   setupLocalIndexing,
   TestRealmAdapter,
   TestRealm,
+  waitUntilSaved,
 } from '../../helpers';
 import {
   waitFor,
@@ -1241,25 +1242,19 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-edit-button]');
 
     assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
-    await click(
-      '[data-test-links-to-many="friends"] [data-test-item="1"] [data-test-remove-card]',
-    );
-    await waitFor('[data-test-last-saved]');
-    let saveTime = document
-      .querySelector('[data-test-last-saved]')!
-      .getAttribute('data-test-last-saved');
+    await waitUntilSaved(async () => {
+      await click(
+        '[data-test-links-to-many="friends"] [data-test-item="1"] [data-test-remove-card]',
+      );
+    });
     await assert.dom('[data-test-field="friends"]').containsText('Jackie');
 
-    await click('[data-test-links-to-many="friends"] [data-test-add-new]');
-    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
-    await click(`[data-test-select="${testRealmURL}Pet/mango"]`);
-    await click('[data-test-card-catalog-go-button]');
-    await waitUntil(
-      () =>
-        document
-          .querySelector('[data-test-last-saved]')!
-          .getAttribute('data-test-last-saved') !== saveTime,
-    );
+    await waitUntilSaved(async () => {
+      await click('[data-test-links-to-many="friends"] [data-test-add-new]');
+      await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
+      await click(`[data-test-select="${testRealmURL}Pet/mango"]`);
+      await click('[data-test-card-catalog-go-button]');
+    });
 
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
     assert.dom('[data-test-field="friends"]').containsText('Mango');
