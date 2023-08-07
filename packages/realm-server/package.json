@@ -55,7 +55,7 @@
   },
   "scripts": {
     "test": "NODE_NO_WARNINGS=1 qunit --require ts-node/register/transpile-only tests/index.ts",
-    "test:dom": "start-server-and-test 'pnpm run wait 'http://127.0.0.1:4205' 'testem ci -f ./testem.js'",
+    "test:dom": "start-server-and-test 'pnpm run wait' 'http://127.0.0.1:4205' 'testem ci -f ./testem.js'",
     "start:test-container": "http-server ./dom-tests -p 4205 --silent",
     "start:matrix": "cd ../matrix && pnpm assert-synapse-running",
     "test:wait-for-servers": "NODE_NO_WARNINGS=1 start-server-and-test 'pnpm run wait' 'http-get://localhost:4201/base/fields/boolean-field?acceptHeader=application%2Fvnd.card%2Bjson' 'pnpm run wait' 'http-get://localhost:4202/node-test/person-1?acceptHeader=application%2Fvnd.card%2Bjson' 'test'",
