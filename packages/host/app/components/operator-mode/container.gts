@@ -12,6 +12,7 @@ import { Modal, IconButton } from '@cardstack/boxel-ui';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import SearchSheet, { SearchSheetMode } from '../search-sheet';
 import { restartableTask, task } from 'ember-concurrency';
+import { TrackedArray, TrackedWeakMap } from 'tracked-built-ins';
 import {
   Deferred,
   baseCardRef,
@@ -76,6 +77,11 @@ enum SearchSheetTrigger {
   DropCardToRightNeighborStackButton = 'drop-card-to-right-neighbor-stack-button',
 }
 
+interface CopyButtonState {
+  direction: 'left' | 'right';
+  numberOfCards: number;
+}
+
 export default class OperatorModeContainer extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
@@ -84,6 +90,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
   @tracked searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked isChatVisible = false;
+  private cardSelections = new TrackedWeakMap<StackItem, TrackedArray<Card>>();
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -104,7 +111,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     return getSearchResults(
       this,
       () => query,
-      realms ? () => realms : undefined
+      realms ? () => realms : undefined,
     );
   }
 
@@ -149,6 +156,48 @@ export default class OperatorModeContainer extends Component<Signature> {
     return get(card, path.join('.'));
   }
 
+  @action
+  onSelectedCards(selectedCards: Card[], stackItem: StackItem) {
+    let selected = this.cardSelections.get(stackItem);
+    if (!selected) {
+      selected = new TrackedArray([]);
+      this.cardSelections.set(stackItem, selected);
+    }
+    selected.splice(0, selected.length, ...selectedCards);
+  }
+
+  get selectedCards() {
+    return this.operatorModeStateService
+      .topMostStackItems()
+      .map((i) => this.cardSelections.get(i) ?? []);
+  }
+
+  get copyButtonState(): CopyButtonState | undefined {
+    // TODO need to consider whether receiving end is an index card
+    // and/or sending end is a individual card
+
+    let stackWithCards: number | undefined;
+    for (let [index, stackSelections] of this.selectedCards.entries()) {
+      // both stacks have selections--in this case don't show a copy button
+      if (stackSelections.length > 0 && stackWithCards != null) {
+        return;
+      }
+      if (stackSelections.length > 0) {
+        stackWithCards = index;
+      }
+    }
+
+    // no stacks have a selection
+    if (stackWithCards == null) {
+      return;
+    }
+
+    return {
+      direction: stackWithCards === 0 ? 'right' : 'left', // assume we never have more than 2 stacks
+      numberOfCards: this.selectedCards[stackWithCards].length,
+    };
+  }
+
   @action onCancelSearchSheet() {
     this.searchSheetMode = SearchSheetMode.Closed;
     this.searchSheetTrigger = null;
@@ -165,7 +214,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   @action updateItem(
     item: StackItem,
     format: Format,
-    request?: Deferred<Card | undefined>
+    request?: Deferred<Card | undefined>,
   ) {
     if (item.type === 'card') {
       this.operatorModeStateService.replaceItemInStack(item, {
@@ -178,7 +227,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     if (item.type === 'contained') {
       let addressableItem = getCardStackItem(
         item,
-        this.stacks[item.stackIndex]
+        this.stacks[item.stackIndex],
       );
 
       let pathSegments = getPathToStackItem(item, this.stacks[item.stackIndex]);
@@ -256,7 +305,7 @@ export default class OperatorModeContainer extends Component<Signature> {
           });
 
           getPathToStackItem(item, this.stacks[item.stackIndex]).forEach(() =>
-            this.operatorModeStateService.popItemFromStack(item.stackIndex)
+            this.operatorModeStateService.popItemFromStack(item.stackIndex),
           );
         }
       }
@@ -282,7 +331,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         opts?: {
           isLinkedCard?: boolean;
           doc?: LooseSingleCardDocument; // fill in card data with values
-        }
+        },
       ): Promise<Card | undefined> => {
         // prefers optional doc to be passed in
         // use case: to populate default values in a create modal
@@ -291,12 +340,12 @@ export default class OperatorModeContainer extends Component<Signature> {
         };
         // using RealmPaths API to correct for the trailing `/`
         let realmPath = new RealmPaths(
-          relativeTo ?? here.cardService.defaultURL
+          relativeTo ?? here.cardService.defaultURL,
         );
         let newCard = await here.cardService.createFromSerialized(
           doc.data,
           doc,
-          new URL(realmPath.url)
+          new URL(realmPath.url),
         );
         let newItem: StackItem = {
           type: 'card',
@@ -313,7 +362,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         card: Card,
         format: Format = 'isolated',
         fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
-        fieldName?: string
+        fieldName?: string,
       ) => {
         let stack = here.stacks[stackIndex];
         let itemsCount = stack.length;
@@ -328,7 +377,7 @@ export default class OperatorModeContainer extends Component<Signature> {
           fieldName &&
           [
             ...Object.keys(
-              await here.cardService.getFields(currentCardOnStack)
+              await here.cardService.getFields(currentCardOnStack),
             ),
           ].includes(fieldName)
         ) {
@@ -345,7 +394,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         let containedPath = await findContainedCardPath(
           currentCardOnStack,
           card,
-          here.cardService
+          here.cardService,
         );
         if (containedPath.length > 0) {
           let currentIndex = itemsCount - 1;
@@ -370,12 +419,12 @@ export default class OperatorModeContainer extends Component<Signature> {
       },
       createCardDirectly: async (
         doc: LooseSingleCardDocument,
-        relativeTo: URL | undefined
+        relativeTo: URL | undefined,
       ): Promise<void> => {
         let newCard = await here.cardService.createFromSerialized(
           doc.data,
           doc,
-          relativeTo ?? here.cardService.defaultURL
+          relativeTo ?? here.cardService.defaultURL,
         );
         await here.cardService.saveModel(newCard);
         let newItem: StackItem = {
@@ -416,12 +465,12 @@ export default class OperatorModeContainer extends Component<Signature> {
         let bottomMostCard = stack[0];
         if (bottomMostCard.type !== 'card') {
           throw new Error(
-            `bug: the bottom most card for a stack cannot be a contained card`
+            `bug: the bottom most card for a stack cannot be a contained card`,
           );
         }
         return (await this.cardService.getRealmInfo(bottomMostCard.card))
           ?.backgroundURL;
-      })
+      }),
     );
     return result;
   });
@@ -438,7 +487,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     if (
       this.backgroundImageURLs.length > 0 &&
       this.backgroundImageURLs.every(
-        (u) => u != null && this.backgroundImageURLs[0] === u
+        (u) => u != null && this.backgroundImageURLs[0] === u,
       )
     ) {
       return htmlSafe(`background-image: url(${this.backgroundImageURLs[0]});`);
@@ -477,7 +526,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       ) {
         this.operatorModeStateService.shiftStack(
           this.operatorModeStateService.state.stacks[stackIndex],
-          stackIndex + 1
+          stackIndex + 1,
         );
       }
 
@@ -551,6 +600,17 @@ export default class OperatorModeContainer extends Component<Signature> {
 
       <CardCatalogModal />
 
+      <div>
+        {{#if this.copyButtonState}}
+          COPY BUTTON - direction:
+          {{this.copyButtonState.direction}}
+          num cards:
+          {{this.copyButtonState.numberOfCards}}
+        {{else}}
+          NO COPY BUTTON
+        {{/if}}
+      </div>
+
       <div class='operator-mode__with-chat {{this.chatVisibilityClass}}'>
         <div
           class='operator-mode__main'
@@ -586,6 +646,7 @@ export default class OperatorModeContainer extends Component<Signature> {
                 @close={{this.close}}
                 @edit={{this.edit}}
                 @save={{this.save}}
+                @onSelectedCards={{this.onSelectedCards}}
               />
             {{/each}}
           {{/if}}
@@ -756,21 +817,20 @@ export default class OperatorModeContainer extends Component<Signature> {
       .chat-btn:hover {
         background: var(--boxel-light);
       }
-
     </style>
   </template>
 }
 
 export function getCardStackItem(
   stackItem: StackItem,
-  stack: StackItem[]
+  stack: StackItem[],
 ): CardStackItem {
   if (stackItem.type === 'card') {
     return stackItem;
   }
   if (stackItem.fieldOfIndex >= stack.length) {
     throw new Error(
-      `bug: the stack item (index ${stackItem.fieldOfIndex}) that is the parent of the contained field '${stackItem.fieldName}' no longer exists in the stack`
+      `bug: the stack item (index ${stackItem.fieldOfIndex}) that is the parent of the contained field '${stackItem.fieldName}' no longer exists in the stack`,
     );
   }
   return getCardStackItem(stack[stackItem.fieldOfIndex], stack);
@@ -779,7 +839,7 @@ export function getCardStackItem(
 export function getPathToStackItem(
   stackItem: StackItem,
   stack: StackItem[],
-  segments: string[] = []
+  segments: string[] = [],
 ): string[] {
   if (stackItem.type === 'card') {
     return segments;
@@ -794,7 +854,7 @@ async function findContainedCardPath(
   possibleParent: Card,
   maybeContained: Card,
   cardService: CardService,
-  path: string[] = []
+  path: string[] = [],
 ): Promise<string[]> {
   let fields = await cardService.getFields(possibleParent);
 

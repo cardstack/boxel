@@ -4,6 +4,7 @@ import { StackItem } from '@cardstack/host/components/operator-mode/container';
 import OperatorModeStackItem from '@cardstack/host/components/operator-mode/stack-item';
 import { action } from '@ember/object';
 import { htmlSafe } from '@ember/template';
+import { Card } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Element: HTMLElement;
@@ -16,6 +17,7 @@ interface Signature {
     close: (stackItem: StackItem) => void;
     edit: (stackItem: StackItem) => void;
     save: (stackItem: StackItem, dismiss: boolean) => void;
+    onSelectedCards: (selectedCards: Card[], stackItem: StackItem) => void;
   };
   Blocks: {};
 }
@@ -51,6 +53,7 @@ export default class OperatorModeStack extends Component<Signature> {
             @close={{@close}}
             @edit={{@edit}}
             @save={{@save}}
+            @onSelectedCards={{@onSelectedCards}}
           />
         {{/each}}
       </div>

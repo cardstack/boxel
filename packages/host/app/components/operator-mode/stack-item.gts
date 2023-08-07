@@ -53,6 +53,7 @@ interface Signature {
     dismissStackedCardsAbove: (stackIndex: number) => void;
     edit: (item: StackItem) => void;
     save: (item: StackItem, dismiss: boolean) => void;
+    onSelectedCards: (selectedCards: Card[], stackItem: StackItem) => void;
   };
 }
 
@@ -144,6 +145,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
     } else {
       this.selectedCards.splice(index, 1);
     }
+
+    // pass a copy of the array so that this doesn't become a
+    // back door into mutating the state of this component
+    this.args.onSelectedCards([...this.selectedCards], this.args.item);
   }
 
   // TODO replace async action with ember concurrency task

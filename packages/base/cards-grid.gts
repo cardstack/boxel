@@ -111,7 +111,7 @@ class Isolated extends Component<typeof CardsGrid> {
         },
       ],
     },
-    this.args.model.realmURL ? [this.args.model.realmURL] : undefined
+    this.args.model.realmURL ? [this.args.model.realmURL] : undefined,
   );
 
   @action
@@ -160,6 +160,11 @@ export class CardsGrid extends Card {
         return path.join('/') + '/';
       }
       return null;
+    },
+  });
+  @field title = contains(StringCard, {
+    computeVia: function (this: CardsGrid) {
+      return this.realmName;
     },
   });
 
