@@ -58,7 +58,7 @@ export default class Modal extends Component<Signature> {
             small=(eq @size 'small')
             medium=(eq @size 'medium')
             large=(eq @size 'large')
-            fullScreen=(eq @size 'full-screen')
+            full-screen=(eq @size 'full-screen')
           }}
           open={{@isOpen}}
           aria-modal='true'
@@ -121,14 +121,14 @@ export default class Modal extends Component<Signature> {
         --boxel-modal-max-width: 65rem; /* 1040px */
       }
 
-      .fullScreen {
+      .full-screen {
         padding: 0;
         top: 0;
         left: 0;
         right: 0;
       }
 
-      .fullScreen > .boxel-modal__inner {
+      .full-screen > .boxel-modal__inner {
         max-width: inherit;
       }
 
@@ -146,7 +146,6 @@ export default class Modal extends Component<Signature> {
         width: 100%;
         pointer-events: auto;
       }
-
     </style>
   </template>
 }
