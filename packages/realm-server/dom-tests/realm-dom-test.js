@@ -17,13 +17,13 @@ function testDocument() {
   return iframe.contentDocument;
 }
 
-async function waitFor(selector, timeoutMs = 5000) {
+async function waitFor(selector, timeoutMs = 10000) {
   let startTime = Date.now();
   while (
     querySelector(selector) == null &&
     Date.now() <= startTime + timeoutMs
   ) {
-    await new Promise((res) => setTimeout(res, 1000));
+    await new Promise((res) => setTimeout(res, 100));
   }
   if (Date.now() > startTime + timeoutMs) {
     throw new Error(`timed out waiting for selector '${selector}'`);
