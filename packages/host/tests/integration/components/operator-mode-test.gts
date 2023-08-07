@@ -74,6 +74,10 @@ module('Integration | operator-mode', function (hooks) {
     return card;
   }
 
+  hooks.afterEach(async function () {
+    localStorage.removeItem('recent-cards');
+  });
+
   hooks.beforeEach(async function () {
     localStorage.removeItem('recent-cards');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
@@ -1257,6 +1261,7 @@ module('Integration | operator-mode', function (hooks) {
     });
 
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
+
     assert.dom('[data-test-field="friends"]').containsText('Mango');
   });
 
@@ -1644,7 +1649,7 @@ module('Integration | operator-mode', function (hooks) {
       `http://localhost:4202/test/mango`,
     );
     await click(`[data-test-go-button]`);
-    await waitFor(`[data-test-stack-card-index="1"]`);
+    await waitFor(`[data-test-stack-card="http://localhost:4202/test/mango"]`);
     assert
       .dom(
         `[data-test-stack-card="http://localhost:4202/test/mango"] [data-test-field-component-card]`,
