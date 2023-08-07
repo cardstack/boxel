@@ -26,7 +26,7 @@ export function getBoxComponent(
   format: Format,
   model: Box<CardBase>,
   field: Field | undefined,
-  context: CardContext = {}
+  context: CardContext = {},
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let stable = componentCache.get(model);
   if (stable) {
@@ -41,7 +41,7 @@ export function getBoxComponent(
     {},
     model,
     defaultFieldFormat(format),
-    context
+    context,
   );
 
   // cardComponentModifier, when provided, is used for the host environment to get access to card's rendered elements
@@ -108,7 +108,7 @@ export function getBoxComponent(
     component,
     model,
     defaultFieldFormat(format),
-    context
+    context,
   );
 
   // This cast is safe because we're returning a proxy that wraps component.
@@ -131,7 +131,7 @@ function fieldsComponentsFor<T extends CardBase>(
   target: object,
   model: Box<T>,
   defaultFormat: Format,
-  context?: CardContext
+  context?: CardContext,
 ): FieldsTypeFor<T> {
   return new Proxy(target, {
     get(target, property, received) {
@@ -156,7 +156,7 @@ function fieldsComponentsFor<T extends CardBase>(
       return field.component(
         model as unknown as Box<CardBase>,
         format,
-        context
+        context,
       );
     },
     getPrototypeOf() {
@@ -206,12 +206,12 @@ export function getPluralViewComponent(
   format: Format,
   cardTypeFor: (
     field: Field<typeof CardBase>,
-    boxedElement: Box<CardBase>
+    boxedElement: Box<CardBase>,
   ) => typeof CardBase,
-  context?: CardContext
+  context?: CardContext,
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let components = model.children.map((child) =>
-    getBoxComponent(cardTypeFor(field, child), format, child, field, context)
+    getBoxComponent(cardTypeFor(field, child), format, child, field, context),
   );
   let defaultComponent = class PluralView extends GlimmerComponent {
     <template>

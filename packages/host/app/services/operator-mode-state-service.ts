@@ -104,7 +104,7 @@ export default class OperatorModeStateService extends Service {
     if (newItem.stackIndex !== stackIndex) {
       // this could be a smell that the stack index should not live in the item
       throw new Error(
-        'cannot move stack item to different stack--this can destabilize contained card pointers'
+        'cannot move stack item to different stack--this can destabilize contained card pointers',
       );
     }
 
@@ -165,7 +165,7 @@ export default class OperatorModeStateService extends Service {
     let cardController = getOwner(this)!.lookup('controller:card') as any;
     if (!cardController) {
       throw new Error(
-        'OperatorModeStateService must be used in the context of a CardController'
+        'OperatorModeStateService must be used in the context of a CardController',
       );
     }
 
@@ -271,7 +271,7 @@ export default class OperatorModeStateService extends Service {
 
   addRecentCards(card: Card) {
     const existingCardIndex = this.recentCards.findIndex(
-      (recentCard) => recentCard.id === card.id
+      (recentCard) => recentCard.id === card.id,
     );
     if (existingCardIndex !== -1) {
       this.recentCards.splice(existingCardIndex, 1);

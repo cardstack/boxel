@@ -97,7 +97,7 @@ interface Signature {
 class RadioInitializer extends Modifier<Signature> {
   modify(
     element: HTMLInputElement,
-    [model, inputType]: Signature['Args']['Positional']
+    [model, inputType]: Signature['Args']['Positional'],
   ) {
     element.checked = model === inputType;
   }

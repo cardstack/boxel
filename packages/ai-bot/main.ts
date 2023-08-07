@@ -61,7 +61,7 @@ async function sendMessage(
   client: MatrixClient,
   room: Room,
   content: string,
-  previous: string | undefined
+  previous: string | undefined,
 ) {
   if (content.startsWith('option>')) {
     content = content.replace('option>', '');
@@ -102,7 +102,7 @@ async function sendStream(
   stream: APIResponse<Stream<ChatCompletionChunk>>,
   client: MatrixClient,
   room: Room,
-  append_to?: string
+  append_to?: string,
 ) {
   let content = '';
   let unsent = 0;
@@ -209,7 +209,7 @@ async function getResponse(event: MatrixEvent) {
         '(%s) %s :: %s',
         room?.name,
         event.getSender(),
-        event.getContent().body
+        event.getContent().body,
       );
 
       if (event.event.origin_server_ts! < startTime) {
@@ -227,13 +227,13 @@ async function getResponse(event: MatrixEvent) {
       let initialMessage: ISendEventResponse = await client.sendHtmlMessage(
         room!.roomId,
         'Thinking...',
-        'Thinking...'
+        'Thinking...',
       );
 
       const stream = await getResponse(event);
       console.log('Receiving response', stream);
       await sendStream(stream, client, room!, initialMessage.event_id);
-    }
+    },
   );
 
   await client.startClient();

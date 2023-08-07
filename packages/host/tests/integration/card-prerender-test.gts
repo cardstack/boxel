@@ -31,7 +31,7 @@ module('Integration | card-prerender', function (hooks) {
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
@@ -88,22 +88,22 @@ module('Integration | card-prerender', function (hooks) {
   test("can generate the card's pre-rendered HTML", async function (assert) {
     {
       let entry = await realm.searchIndex.searchEntry(
-        new URL(`${testRealmURL}Pet/mango`)
+        new URL(`${testRealmURL}Pet/mango`),
       );
       assert.strictEqual(
         trimCardContainer(entry!.html!),
         cleanWhiteSpace(`<h3> Mango </h3>`),
-        'the pre-rendered HTML is correct'
+        'the pre-rendered HTML is correct',
       );
     }
     {
       let entry = await realm.searchIndex.searchEntry(
-        new URL(`${testRealmURL}Pet/vangogh`)
+        new URL(`${testRealmURL}Pet/vangogh`),
       );
       assert.strictEqual(
         trimCardContainer(entry!.html!),
         cleanWhiteSpace(`<h3> Van Gogh </h3>`),
-        'the pre-rendered HTML is correct'
+        'the pre-rendered HTML is correct',
       );
     }
   });

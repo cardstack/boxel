@@ -39,7 +39,7 @@ export function svgJar(
     'aria-label'?: string;
     'aria-hidden'?: 'true' | 'false';
     'data-test-boxel-menu-item-icon'?: boolean;
-  }
+  },
 ): ContentValue {
   let svgArgs = Object.assign({}, svgAttrs);
   if (svgAttrs?.style?.toString) {

@@ -1,25 +1,25 @@
 {{! template-lint-disable no-invalid-interactive }}
 {{! this handles animations for movement between lists }}
 <AnimationContext @use={{this.listsTransition}}>
-  <div local-class='grid'>
+  <div local-class="grid">
     {{! this could be a list component with it's own internalListTransition defined }}
     <AnimationContext @use={{this.internalListTransition}}>
-      <ul local-class='list wide'>
+      <ul local-class="list wide">
         {{#each this.list1 as |item index|}}
           <li
             {{sprite id=item}}
-            {{on 'click' (fn this.toList2 item index)}}
+            {{on "click" (fn this.toList2 item index)}}
           >{{item}}</li>
         {{/each}}
       </ul>
     </AnimationContext>
 
     <AnimationContext @use={{this.internalListTransition}}>
-      <ul local-class='list'>
+      <ul local-class="list">
         {{#each this.list2 as |item index|}}
           <li
             {{sprite id=item}}
-            {{on 'click' (fn this.toList1 item index)}}
+            {{on "click" (fn this.toList1 item index)}}
           >{{item}}</li>
         {{/each}}
       </ul>

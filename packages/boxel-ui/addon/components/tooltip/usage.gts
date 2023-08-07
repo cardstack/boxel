@@ -21,9 +21,7 @@ export default class TooltipUsage extends Component {
   <template>
     <FreestyleUsage @name='Tooltip'>
       <:example>
-        <BoxelTooltip
-          @placement={{this.placement}}
-          @offset={{this.offset}}>
+        <BoxelTooltip @placement={{this.placement}} @offset={{this.offset}}>
           <:trigger>
             <BoxelButton
               {{on 'click' (fn this.log 'button clicked')}}
@@ -53,7 +51,7 @@ export default class TooltipUsage extends Component {
           @description="A modifier that adjusts the tooltip's position along specific axes."
           @value={{this.offset}}
           @onInput={{fn (mut this.offset)}}
-          @defaultValue="5"
+          @defaultValue='5'
         />
       </:api>
     </FreestyleUsage>

@@ -28,12 +28,12 @@
 .boxel-card--blank-card {
   width: 100%;
   height: 150px;
-  background: url('/@cardstack/boxel/images/placeholders/blank-card.png')
+  background: url("/@cardstack/boxel/images/placeholders/blank-card.png")
     center/contain no-repeat;
 }
 
 .boxel-card__expand-overlay:hover {
-  background-image: url('/@cardstack/boxel/images/icons/expand.svg');
+  background-image: url("/@cardstack/boxel/images/icons/expand.svg");
   background-position: top var(--boxel-sp-xxxs) right var(--boxel-sp-xxxs);
   background-size: 1rem 1rem;
   background-repeat: no-repeat;
@@ -79,13 +79,13 @@
 
 .boxel-card__inner--with-img {
   grid-template:
-    'img .' auto
-    'img .' auto
-    'img title' auto
-    'img desc' auto
-    'img .' auto
-    'img .' auto
-    'more more' auto / auto 1fr;
+    "img ." auto
+    "img ." auto
+    "img title" auto
+    "img desc" auto
+    "img ." auto
+    "img ." auto
+    "more more" auto / auto 1fr;
 }
 
 .boxel-card__inner--with-img .boxel-card__title {
@@ -131,7 +131,7 @@
 .boxel-card__profile-org {
   width: 26px;
   height: 26px;
-  background: url('../../images/media-registry/verifi-logo.svg') center/26px
+  background: url("../../images/media-registry/verifi-logo.svg") center/26px
     26px no-repeat;
   position: absolute;
   top: 10px;
@@ -140,7 +140,7 @@
 
 .boxel-card--profile .boxel-card__bg-img {
   border-radius: 100px;
-  background-image: url('/@cardstack/boxel/images/placeholders/profile.svg');
+  background-image: url("/@cardstack/boxel/images/placeholders/profile.svg");
 }
 
 .boxel-card--audio .boxel-card__inner {
@@ -148,7 +148,7 @@
 }
 
 .file-card__icon .boxel-card__inner {
-  background-image: url('../../images/media-registry/file.svg');
+  background-image: url("../../images/media-registry/file.svg");
   background-position: center left 15px;
   background-repeat: no-repeat;
   background-size: 40px 40px;
@@ -162,7 +162,7 @@
 /* Grid format */
 .boxel-card__inner--grid.boxel-card__inner--with-img {
   grid-column: 1 / -1;
-  grid-template: 'img' 'title' 'desc';
+  grid-template: "img" "title" "desc";
   padding: 10px;
   justify-items: center;
   width: 210px;
@@ -263,7 +263,8 @@
   border: 2px solid transparent;
   border-radius: var(--boxel-border-radius);
   z-index: 1;
-  transition: border-color var(--boxel-transition),
+  transition:
+    border-color var(--boxel-transition),
     box-shadow var(--boxel-transition);
 }
 

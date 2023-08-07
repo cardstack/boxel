@@ -44,7 +44,7 @@ class FailingTestRealmAdapter extends TestRealmAdapter {
 
   async write(
     path: LocalPath,
-    contents: string | object
+    contents: string | object,
   ): Promise<{ lastModified: number }> {
     if (this.writeCalled) {
       return super.write(path, contents);
@@ -72,13 +72,13 @@ module('Integration | Component | go', function (hooks) {
       .loader;
     loader.addURLMapping(
       new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
+      new URL('http://localhost:4201/base/'),
     );
   });
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
   module('with a working realm', function (hooks) {
@@ -86,7 +86,7 @@ module('Integration | Component | go', function (hooks) {
       adapter = new TestRealmAdapter({ 'person.gts': cardContent });
       realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
       monacoService = this.owner.lookup(
-        'service:monaco-service'
+        'service:monaco-service',
       ) as MonacoService;
       await monacoService.ready;
       await realm.ready;
@@ -108,7 +108,7 @@ module('Integration | Component | go', function (hooks) {
       let editor: monaco.editor.IStandaloneCodeEditor;
 
       let onEditorSetup = function (
-        receivedEditor: monaco.editor.IStandaloneCodeEditor
+        receivedEditor: monaco.editor.IStandaloneCodeEditor,
       ) {
         editor = receivedEditor;
       };
@@ -136,7 +136,7 @@ module('Integration | Component | go', function (hooks) {
         .hasText(`Lang: ${monacoContext.language}`);
 
       waitUntil(() =>
-        find('[data-test-editor]')!.innerHTML?.includes('Person')
+        find('[data-test-editor]')!.innerHTML?.includes('Person'),
       );
       assert
         .dom('[data-test-editor]')
@@ -153,7 +153,7 @@ module('Integration | Component | go', function (hooks) {
       assert.dom('[data-test-saved]').exists();
 
       await waitUntil(() =>
-        find('[data-test-last-edit]')!.innerHTML?.includes('seconds')
+        find('[data-test-last-edit]')!.innerHTML?.includes('seconds'),
       );
       assert
         .dom('[data-test-last-edit]')
@@ -168,7 +168,7 @@ module('Integration | Component | go', function (hooks) {
       adapter = new FailingTestRealmAdapter({ 'person.gts': cardContent });
       realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
       monacoService = this.owner.lookup(
-        'service:monaco-service'
+        'service:monaco-service',
       ) as MonacoService;
       await monacoService.ready;
       await realm.ready;
@@ -195,7 +195,7 @@ module('Integration | Component | go', function (hooks) {
       let editor: monaco.editor.IStandaloneCodeEditor;
 
       let onEditorSetup = function (
-        receivedEditor: monaco.editor.IStandaloneCodeEditor
+        receivedEditor: monaco.editor.IStandaloneCodeEditor,
       ) {
         editor = receivedEditor;
       };
@@ -236,13 +236,13 @@ module('Integration | Component | go', function (hooks) {
       assert.dom('[data-test-saved]').exists();
 
       await waitUntil(() =>
-        find('[data-test-last-edit]')!.innerHTML?.includes('seconds')
+        find('[data-test-last-edit]')!.innerHTML?.includes('seconds'),
       );
       assert
         .dom('[data-test-last-edit]')
         .hasText(
           'Last edit was a few seconds ago',
-          'expected last updated to return after a successful save'
+          'expected last updated to return after a successful save',
         );
     });
 

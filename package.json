@@ -19,7 +19,7 @@
       "@embroider/util": "1.11.1",
       "jsesc": "^3.0.0",
       "ember-modifier": "^4.1.0",
-      "prettier": "github:ef4/prettier#8c4a6ad"
+      "prettier": "github:cardstack/prettier#glimmer-style-tag-in-template-support"
     },
     "peerDependencyRules": {
       "allowedVersions": {
@@ -52,11 +52,11 @@
     "eslint": "^7.32.0",
     "eslint-config-prettier": "^8.4.0",
     "eslint-plugin-import": "^2.26.0",
-    "eslint-plugin-prettier": "^4.0.0",
+    "eslint-plugin-prettier": "^5.0.0",
     "hcl2-parser": "^1.0.3",
     "prettier": "^2.7.1",
-    "prettier-plugin-ember-template-tag": "^0.3.2",
-    "typescript": "^4.6.3"
+    "prettier-plugin-ember-template-tag": "^1.0.0",
+    "typescript": "^5.1.6"
   },
   "engines": {
     "pnpm": "^8"

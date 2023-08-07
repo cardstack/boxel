@@ -113,7 +113,7 @@ export default class SearchSheet extends Component<Signature> {
         let card = await this.cardService.createFromSerialized(
           maybeCardDoc.data,
           maybeCardDoc,
-          new URL(maybeCardDoc.data.id)
+          new URL(maybeCardDoc.data.id),
         );
         this.operatorModeStateService.addItemToStack({
           type: 'card',
@@ -246,7 +246,8 @@ export default class SearchSheet extends Component<Signature> {
         flex-direction: column;
         left: 3.5%;
         position: absolute;
-        transition: height var(--boxel-transition),
+        transition:
+          height var(--boxel-transition),
           padding var(--boxel-transition);
         width: 93%;
       }
@@ -276,7 +277,8 @@ export default class SearchSheet extends Component<Signature> {
         flex: 1;
         justify-content: space-between;
         opacity: 1;
-        transition: flex var(--boxel-transition),
+        transition:
+          flex var(--boxel-transition),
           opacity var(--boxel-transition);
       }
 
@@ -346,7 +348,6 @@ export default class SearchSheet extends Component<Signature> {
       .search-sheet.closed .input {
         margin: 0;
       }
-
     </style>
   </template>
 }

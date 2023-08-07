@@ -13,7 +13,7 @@ import { AnimationDefinition, OrchestrationMatrix } from './orchestration';
 
 export function constructKeyframe(
   previousKeyframe: Partial<Keyframe>,
-  frames: Frame[]
+  frames: Frame[],
 ) {
   let keyframe: Keyframe = {};
 
@@ -50,7 +50,7 @@ export function constructKeyframe(
       result.push(...values.map((value) => `${key}(${value})`));
       return result;
     },
-    [] as string[]
+    [] as string[],
   );
 
   if (transformStrings.length) {
@@ -90,7 +90,7 @@ export default class TransitionRunner {
         sprite,
         keyframes,
         keyframeAnimationOptions,
-        sprite.callbacks.onAnimationStart
+        sprite.callbacks.onAnimationStart,
       );
 
       result.push(animation);

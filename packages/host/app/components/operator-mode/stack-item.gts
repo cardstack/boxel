@@ -231,14 +231,14 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.cardService.subscribeToCard(this.subscribedCard, this.onCardChange);
     this.refreshSaveMsg = setInterval(
       () => this.calculateLastSavedMsg(),
-      10 * 1000
+      10 * 1000,
     ) as unknown as number;
   });
 
   private cleanup = () => {
     this.cardService.unsubscribeFromCard(
       this.subscribedCard,
-      this.onCardChange
+      this.onCardChange,
     );
     clearInterval(this.refreshSaveMsg);
   };
@@ -563,7 +563,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
         width: var(--boxel-header-icon-width);
         height: var(--boxel-header-icon-height);
       }
-
     </style>
   </template>
 }

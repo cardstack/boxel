@@ -39,7 +39,7 @@ module('Integration | search-index', function (hooks) {
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
   test('full indexing discovers card instances', async function (assert) {
@@ -116,7 +116,7 @@ module('Integration | search-index', function (hooks) {
       if (mango?.type === 'error') {
         assert.deepEqual(
           mango.error.detail,
-          `missing file ${testRealmURL}Person/owner.json`
+          `missing file ${testRealmURL}Person/owner.json`,
         );
         assert.deepEqual(mango.error.deps, [
           'http://localhost:4202/test/pet',
@@ -141,7 +141,7 @@ module('Integration | search-index', function (hooks) {
             },
           },
         },
-      } as LooseSingleCardDocument)
+      } as LooseSingleCardDocument),
     );
     {
       let mango = await indexer.card(new URL(`${testRealmURL}Pet/mango`));
@@ -168,7 +168,7 @@ module('Integration | search-index', function (hooks) {
               name: 'Pet',
             },
             lastModified: adapter.lastModified.get(
-              `${testRealmURL}Pet/mango.json`
+              `${testRealmURL}Pet/mango.json`,
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
@@ -245,7 +245,7 @@ module('Integration | search-index', function (hooks) {
             name: 'Pet',
           },
           lastModified: adapter.lastModified.get(
-            `${testRealmURL}Pet/mango.json`
+            `${testRealmURL}Pet/mango.json`,
           ),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
@@ -321,7 +321,7 @@ module('Integration | search-index', function (hooks) {
             name: 'Pet',
           },
           lastModified: adapter.lastModified.get(
-            `${testRealmURL}Pet/mango.json`
+            `${testRealmURL}Pet/mango.json`,
           ),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
@@ -376,7 +376,7 @@ module('Integration | search-index', function (hooks) {
     await realm.ready;
     let indexer = realm.searchIndex;
     let entry = await indexer.card(
-      new URL(`${testRealmURL}person-catalog-entry`)
+      new URL(`${testRealmURL}person-catalog-entry`),
     );
     if (entry?.type === 'doc') {
       assert.deepEqual(entry.doc.data, {
@@ -413,7 +413,7 @@ module('Integration | search-index', function (hooks) {
             name: 'CatalogEntry',
           },
           lastModified: adapter.lastModified.get(
-            `${testRealmURL}person-catalog-entry.json`
+            `${testRealmURL}person-catalog-entry.json`,
           ),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
@@ -486,7 +486,7 @@ module('Integration | search-index', function (hooks) {
       let realm = await TestRealm.createWithAdapter(
         adapter,
         loader,
-        this.owner
+        this.owner,
       );
       await realm.ready;
       let indexer = realm.searchIndex;
@@ -495,7 +495,7 @@ module('Integration | search-index', function (hooks) {
         if (entry?.type === 'error') {
           assert.strictEqual(
             entry.error.detail,
-            'Encountered error rendering HTML for card: intentional error'
+            'Encountered error rendering HTML for card: intentional error',
           );
           assert.deepEqual(entry.error.deps, [`${testRealmURL}boom`]);
         } else {
@@ -511,12 +511,12 @@ module('Integration | search-index', function (hooks) {
             {};
           assert.strictEqual(
             trimCardContainer(html!),
-            cleanWhiteSpace(`<h1> Van Gogh </h1>`)
+            cleanWhiteSpace(`<h1> Van Gogh </h1>`),
           );
         } else {
           assert.ok(
             false,
-            `expected search entry to be a document but was: ${entry?.error.detail}`
+            `expected search entry to be a document but was: ${entry?.error.detail}`,
           );
         }
       }
@@ -555,7 +555,7 @@ module('Integration | search-index', function (hooks) {
       let realm = await TestRealm.createWithAdapter(
         adapter,
         loader,
-        this.owner
+        this.owner,
       );
       await realm.ready;
       let indexer = realm.searchIndex;
@@ -568,12 +568,12 @@ module('Integration | search-index', function (hooks) {
             {};
           assert.strictEqual(
             trimCardContainer(html!),
-            cleanWhiteSpace(`<h1> Van Gogh </h1>`)
+            cleanWhiteSpace(`<h1> Van Gogh </h1>`),
           );
         } else {
           assert.ok(
             false,
-            `expected search entry to be a document but was: ${entry?.error.detail}`
+            `expected search entry to be a document but was: ${entry?.error.detail}`,
           );
         }
       }
@@ -635,7 +635,7 @@ module('Integration | search-index', function (hooks) {
       let realm = await TestRealm.createWithAdapter(
         adapter,
         loader,
-        this.owner
+        this.owner,
       );
       await realm.ready;
       let indexer = realm.searchIndex;
@@ -643,7 +643,7 @@ module('Integration | search-index', function (hooks) {
       if (entry?.type === 'error') {
         assert.strictEqual(
           entry.error.detail,
-          'Encountered error rendering HTML for card: intentional error'
+          'Encountered error rendering HTML for card: intentional error',
         );
       } else {
         assert.ok('false', 'expected search entry to be an error document');
@@ -682,7 +682,7 @@ module('Integration | search-index', function (hooks) {
       let realm = await TestRealm.createWithAdapter(
         adapter,
         loader,
-        this.owner
+        this.owner,
       );
       await realm.ready;
       let indexer = realm.searchIndex;
@@ -695,12 +695,12 @@ module('Integration | search-index', function (hooks) {
             {};
           assert.strictEqual(
             trimCardContainer(html!),
-            cleanWhiteSpace(`<h1> Van Gogh </h1>`)
+            cleanWhiteSpace(`<h1> Van Gogh </h1>`),
           );
         } else {
           assert.ok(
             false,
-            `expected search entry to be a document but was: ${entry?.error.detail}`
+            `expected search entry to be a document but was: ${entry?.error.detail}`,
           );
         }
       }
@@ -766,7 +766,7 @@ module('Integration | search-index', function (hooks) {
       let realm = await TestRealm.createWithAdapter(
         adapter,
         loader,
-        this.owner
+        this.owner,
       );
       await realm.ready;
       let indexer = realm.searchIndex;
@@ -774,7 +774,7 @@ module('Integration | search-index', function (hooks) {
       if (entry?.type === 'error') {
         assert.strictEqual(
           entry.error.detail,
-          'Encountered error rendering HTML for card: intentional error'
+          'Encountered error rendering HTML for card: intentional error',
         );
       } else {
         assert.ok('false', 'expected search entry to be an error document');
@@ -813,7 +813,7 @@ module('Integration | search-index', function (hooks) {
       let realm = await TestRealm.createWithAdapter(
         adapter,
         loader,
-        this.owner
+        this.owner,
       );
       await realm.ready;
       let indexer = realm.searchIndex;
@@ -826,12 +826,12 @@ module('Integration | search-index', function (hooks) {
             {};
           assert.strictEqual(
             trimCardContainer(html!),
-            cleanWhiteSpace(`<h1> Van Gogh </h1>`)
+            cleanWhiteSpace(`<h1> Van Gogh </h1>`),
           );
         } else {
           assert.ok(
             false,
-            `expected search entry to be a document but was: ${entry?.error.detail}`
+            `expected search entry to be a document but was: ${entry?.error.detail}`,
           );
         }
       }
@@ -935,7 +935,7 @@ module('Integration | search-index', function (hooks) {
               name: 'PetCard',
             },
             lastModified: adapter.lastModified.get(
-              `${testRealmURL}jackie.json`
+              `${testRealmURL}jackie.json`,
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
@@ -1083,7 +1083,7 @@ module('Integration | search-index', function (hooks) {
               name: 'Vendor',
             },
             lastModified: adapter.lastModified.get(
-              `${testRealmURL}Vendor/vendor1.json`
+              `${testRealmURL}Vendor/vendor1.json`,
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
@@ -1110,7 +1110,7 @@ module('Integration | search-index', function (hooks) {
                 name: 'Chain',
               },
               lastModified: adapter.lastModified.get(
-                `${testRealmURL}Chain/1.json`
+                `${testRealmURL}Chain/1.json`,
               ),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
@@ -1135,7 +1135,7 @@ module('Integration | search-index', function (hooks) {
                 name: 'Chain',
               },
               lastModified: adapter.lastModified.get(
-                `${testRealmURL}Chain/2.json`
+                `${testRealmURL}Chain/2.json`,
               ),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
@@ -1184,7 +1184,7 @@ module('Integration | search-index', function (hooks) {
       if (card?.type === 'error') {
         assert.ok(
           card.error.detail.includes('intentional error thrown'),
-          'error doc includes raised error message'
+          'error doc includes raised error message',
         );
       } else {
         assert.ok(false, `expected search entry to be an error doc`);
@@ -1225,7 +1225,7 @@ module('Integration | search-index', function (hooks) {
     await realm.ready;
     let indexer = realm.searchIndex;
     let entry = await indexer.searchEntry(
-      new URL(`${testRealmURL}Person/hassan`)
+      new URL(`${testRealmURL}Person/hassan`),
     );
     assert.deepEqual(
       entry?.searchData,
@@ -1236,7 +1236,7 @@ module('Integration | search-index', function (hooks) {
         email: 'hassan@cardstack.com',
         posts: 100,
       },
-      `search doc does not include fullName field`
+      `search doc does not include fullName field`,
     );
   });
 
@@ -1281,7 +1281,7 @@ module('Integration | search-index', function (hooks) {
     await realm.ready;
     let indexer = realm.searchIndex;
     let entry = await indexer.searchEntry(
-      new URL(`${testRealmURL}CatalogEntry/booking`)
+      new URL(`${testRealmURL}CatalogEntry/booking`),
     );
     assert.deepEqual(entry?.searchData, {
       id: `${testRealmURL}CatalogEntry/booking`,
@@ -1357,7 +1357,7 @@ module('Integration | search-index', function (hooks) {
     let indexer = realm.searchIndex;
     let hassan = await indexer.card(
       new URL(`${testRealmURL}PetPerson/hassan`),
-      { loadLinks: true }
+      { loadLinks: true },
     );
 
     if (hassan?.type === 'doc') {
@@ -1392,7 +1392,7 @@ module('Integration | search-index', function (hooks) {
             name: 'PetPerson',
           },
           lastModified: adapter.lastModified.get(
-            `${testRealmURL}PetPerson/hassan.json`
+            `${testRealmURL}PetPerson/hassan.json`,
           ),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
@@ -1408,7 +1408,7 @@ module('Integration | search-index', function (hooks) {
           meta: {
             adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
             lastModified: adapter.lastModified.get(
-              `${testRealmURL}Pet/mango.json`
+              `${testRealmURL}Pet/mango.json`,
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
@@ -1423,7 +1423,7 @@ module('Integration | search-index', function (hooks) {
           meta: {
             adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
             lastModified: adapter.lastModified.get(
-              `${testRealmURL}Pet/vanGogh.json`
+              `${testRealmURL}Pet/vanGogh.json`,
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
@@ -1435,7 +1435,7 @@ module('Integration | search-index', function (hooks) {
     }
 
     let hassanEntry = await indexer.searchEntry(
-      new URL(`${testRealmURL}PetPerson/hassan`)
+      new URL(`${testRealmURL}PetPerson/hassan`),
     );
     if (hassanEntry) {
       assert.deepEqual(hassanEntry.searchData, {
@@ -1461,7 +1461,7 @@ module('Integration | search-index', function (hooks) {
     } else {
       assert.ok(
         false,
-        `could not find ${testRealmURL}PetPerson/hassan in the index`
+        `could not find ${testRealmURL}PetPerson/hassan in the index`,
       );
     }
   });
@@ -1511,7 +1511,7 @@ module('Integration | search-index', function (hooks) {
               name: 'PetPerson',
             },
             lastModified: adapter.lastModified.get(
-              `${testRealmURL}PetPerson/burcu.json`
+              `${testRealmURL}PetPerson/burcu.json`,
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
@@ -1523,7 +1523,7 @@ module('Integration | search-index', function (hooks) {
     }
 
     let entry = await indexer.searchEntry(
-      new URL(`${testRealmURL}PetPerson/burcu`)
+      new URL(`${testRealmURL}PetPerson/burcu`),
     );
     if (entry) {
       assert.deepEqual(entry.searchData, {
@@ -1538,7 +1538,7 @@ module('Integration | search-index', function (hooks) {
     } else {
       assert.ok(
         false,
-        `could not find ${testRealmURL}PetPerson/burcu in the index`
+        `could not find ${testRealmURL}PetPerson/burcu in the index`,
       );
     }
   });
@@ -1609,7 +1609,7 @@ module('Integration | search-index', function (hooks) {
     let indexer = realm.searchIndex;
     let catalogEntry = await indexer.card(
       new URL(`${testRealmURL}pet-person-catalog-entry`),
-      { loadLinks: true }
+      { loadLinks: true },
     );
 
     if (catalogEntry?.type === 'doc') {
@@ -1654,7 +1654,7 @@ module('Integration | search-index', function (hooks) {
             },
           },
           lastModified: adapter.lastModified.get(
-            `${testRealmURL}pet-person-catalog-entry.json`
+            `${testRealmURL}pet-person-catalog-entry.json`,
           ),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
@@ -1671,7 +1671,7 @@ module('Integration | search-index', function (hooks) {
           meta: {
             adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
             lastModified: adapter.lastModified.get(
-              `${testRealmURL}Pet/mango.json`
+              `${testRealmURL}Pet/mango.json`,
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
@@ -1686,7 +1686,7 @@ module('Integration | search-index', function (hooks) {
           meta: {
             adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
             lastModified: adapter.lastModified.get(
-              `${testRealmURL}Pet/vanGogh.json`
+              `${testRealmURL}Pet/vanGogh.json`,
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
@@ -1696,12 +1696,12 @@ module('Integration | search-index', function (hooks) {
     } else {
       assert.ok(
         false,
-        `search entry was an error: ${catalogEntry?.error.detail}`
+        `search entry was an error: ${catalogEntry?.error.detail}`,
       );
     }
 
     let entry = await indexer.searchEntry(
-      new URL(`${testRealmURL}pet-person-catalog-entry`)
+      new URL(`${testRealmURL}pet-person-catalog-entry`),
     );
     if (entry) {
       assert.deepEqual(entry.searchData, {
@@ -1733,7 +1733,7 @@ module('Integration | search-index', function (hooks) {
     } else {
       assert.ok(
         false,
-        `could not find ${testRealmURL}pet-person-catalog-entry in the index`
+        `could not find ${testRealmURL}pet-person-catalog-entry in the index`,
       );
     }
   });
@@ -1838,7 +1838,7 @@ module('Integration | search-index', function (hooks) {
             name: 'Friend',
           },
           lastModified: adapter.lastModified.get(
-            `${testRealmURL}Friend/hassan.json`
+            `${testRealmURL}Friend/hassan.json`,
           ),
           realmInfo: testRealmInfo,
           realmURL: 'http://test-realm/test/',
@@ -1849,7 +1849,7 @@ module('Integration | search-index', function (hooks) {
     }
 
     let hassanEntry = await indexer.searchEntry(
-      new URL(`${testRealmURL}Friend/hassan`)
+      new URL(`${testRealmURL}Friend/hassan`),
     );
     if (hassanEntry) {
       assert.deepEqual(hassanEntry.searchData, {
@@ -1877,7 +1877,7 @@ module('Integration | search-index', function (hooks) {
     } else {
       assert.ok(
         false,
-        `could not find ${testRealmURL}Friend/hassan in the index`
+        `could not find ${testRealmURL}Friend/hassan in the index`,
       );
     }
   });
@@ -1964,7 +1964,7 @@ module('Integration | search-index', function (hooks) {
               name: 'Friend',
             },
             lastModified: adapter.lastModified.get(
-              `${testRealmURL}Friend/hassan.json`
+              `${testRealmURL}Friend/hassan.json`,
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
@@ -1998,7 +1998,7 @@ module('Integration | search-index', function (hooks) {
                 name: 'Friend',
               },
               lastModified: adapter.lastModified.get(
-                `${testRealmURL}Friend/mango.json`
+                `${testRealmURL}Friend/mango.json`,
               ),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
@@ -2011,7 +2011,7 @@ module('Integration | search-index', function (hooks) {
     }
 
     let hassanEntry = await indexer.searchEntry(
-      new URL(`${testRealmURL}Friend/hassan`)
+      new URL(`${testRealmURL}Friend/hassan`),
     );
     if (hassanEntry) {
       assert.deepEqual(hassanEntry.searchData, {
@@ -2034,7 +2034,7 @@ module('Integration | search-index', function (hooks) {
     } else {
       assert.ok(
         false,
-        `could not find ${testRealmURL}Friend/hassan in the index`
+        `could not find ${testRealmURL}Friend/hassan in the index`,
       );
     }
 
@@ -2070,7 +2070,7 @@ module('Integration | search-index', function (hooks) {
               name: 'Friend',
             },
             lastModified: adapter.lastModified.get(
-              `${testRealmURL}Friend/mango.json`
+              `${testRealmURL}Friend/mango.json`,
             ),
             realmInfo: testRealmInfo,
             realmURL: 'http://test-realm/test/',
@@ -2104,7 +2104,7 @@ module('Integration | search-index', function (hooks) {
                 name: 'Friend',
               },
               lastModified: adapter.lastModified.get(
-                `${testRealmURL}Friend/hassan.json`
+                `${testRealmURL}Friend/hassan.json`,
               ),
               realmInfo: testRealmInfo,
               realmURL: 'http://test-realm/test/',
@@ -2117,7 +2117,7 @@ module('Integration | search-index', function (hooks) {
     }
 
     let mangoEntry = await indexer.searchEntry(
-      new URL(`${testRealmURL}Friend/mango`)
+      new URL(`${testRealmURL}Friend/mango`),
     );
     if (mangoEntry) {
       assert.deepEqual(mangoEntry.searchData, {
@@ -2138,7 +2138,7 @@ module('Integration | search-index', function (hooks) {
     } else {
       assert.ok(
         false,
-        `could not find ${testRealmURL}Friend/mango in the index`
+        `could not find ${testRealmURL}Friend/mango in the index`,
       );
     }
   });
@@ -2184,7 +2184,7 @@ module('Integration | search-index', function (hooks) {
         instancesIndexed: 3,
         moduleErrors: 0,
       },
-      'instances are indexed without error'
+      'instances are indexed without error',
     );
 
     let hassan = await indexer.card(new URL(hassanID), { loadLinks: true });
@@ -2218,7 +2218,7 @@ module('Integration | search-index', function (hooks) {
             realmURL: 'http://test-realm/test/',
           },
         },
-        'hassan doc.data is correct'
+        'hassan doc.data is correct',
       );
 
       assert.deepEqual(
@@ -2271,7 +2271,7 @@ module('Integration | search-index', function (hooks) {
             },
           },
         ],
-        'hassan doc.included is correct'
+        'hassan doc.included is correct',
       );
     } else {
       assert.ok(false, `search entry was an error: ${hassan?.error.detail}`);
@@ -2303,7 +2303,7 @@ module('Integration | search-index', function (hooks) {
             },
           ],
         },
-        'hassan searchData is correct'
+        'hassan searchData is correct',
       );
     } else {
       assert.ok(false, `could not find ${hassanID} in the index`);
@@ -2336,7 +2336,7 @@ module('Integration | search-index', function (hooks) {
             realmURL: 'http://test-realm/test/',
           },
         },
-        'mango doc.data is correct'
+        'mango doc.data is correct',
       );
       assert.deepEqual(
         mango.doc.included,
@@ -2392,7 +2392,7 @@ module('Integration | search-index', function (hooks) {
             },
           },
         ],
-        'mango doc.included is correct'
+        'mango doc.included is correct',
       );
     } else {
       assert.ok(false, `search entry was an error: ${mango?.error.detail}`);
@@ -2423,7 +2423,7 @@ module('Integration | search-index', function (hooks) {
             },
           ],
         },
-        'mango searchData is correct'
+        'mango searchData is correct',
       );
     } else {
       assert.ok(false, `could not find ${mangoID} in the index`);
@@ -2456,7 +2456,7 @@ module('Integration | search-index', function (hooks) {
             realmURL: 'http://test-realm/test/',
           },
         },
-        'vanGogh doc.data is correct'
+        'vanGogh doc.data is correct',
       );
       assert.deepEqual(
         vanGogh.doc.included,
@@ -2512,7 +2512,7 @@ module('Integration | search-index', function (hooks) {
             },
           },
         ],
-        'vanGogh doc.included is correct'
+        'vanGogh doc.included is correct',
       );
     } else {
       assert.ok(false, `search entry was an error: ${vanGogh?.error.detail}`);
@@ -2549,7 +2549,7 @@ module('Integration | search-index', function (hooks) {
             },
           ],
         },
-        'vanGogh searchData is correct'
+        'vanGogh searchData is correct',
       );
     } else {
       assert.ok(false, `could not find ${vanGoghID} in the index`);
@@ -2574,7 +2574,7 @@ module('Integration | search-index', function (hooks) {
           },
         },
       },
-      this.owner
+      this.owner,
     );
     await realm.ready;
     let indexer = realm.searchIndex;
@@ -2612,7 +2612,7 @@ module('Integration | search-index', function (hooks) {
         'lodash',
         'tracked-built-ins',
       ],
-      'the card references for the instance are correct'
+      'the card references for the instance are correct',
     );
   });
 
@@ -2636,7 +2636,7 @@ dir/
 posts/please-ignore-me.json
       `,
       },
-      this.owner
+      this.owner,
     );
 
     await realm.ready;
@@ -2644,12 +2644,12 @@ posts/please-ignore-me.json
 
     {
       let card = await indexer.card(
-        new URL(`${testRealmURL}posts/please-ignore-me`)
+        new URL(`${testRealmURL}posts/please-ignore-me`),
       );
       assert.deepEqual(
         card,
         undefined,
-        'instance does not exist because file is ignored'
+        'instance does not exist because file is ignored',
       );
     }
     {
@@ -2657,7 +2657,7 @@ posts/please-ignore-me.json
       assert.deepEqual(
         card,
         undefined,
-        'instance does not exist because file is ignored'
+        'instance does not exist because file is ignored',
       );
     }
     {
@@ -2665,17 +2665,17 @@ posts/please-ignore-me.json
       assert.deepEqual(
         card,
         undefined,
-        'instance does not exist because file is ignored'
+        'instance does not exist because file is ignored',
       );
     }
     {
       let card = await indexer.card(
-        new URL(`${testRealmURL}posts/ignore-me-2`)
+        new URL(`${testRealmURL}posts/ignore-me-2`),
       );
       assert.deepEqual(
         card,
         undefined,
-        'instance does not exist because file is ignored'
+        'instance does not exist because file is ignored',
       );
     }
     {
@@ -2695,7 +2695,7 @@ posts/please-ignore-me.json
         '.realm.json': `{ name: 'Example Workspace' }`,
         'post.json': { data: { meta: { adoptsFrom: baseCardRef } } },
       },
-      this.owner
+      this.owner,
     );
 
     await realm.ready;
@@ -2706,7 +2706,7 @@ posts/please-ignore-me.json
     assert.strictEqual(
       instance,
       undefined,
-      'instance does not exist because file is ignored'
+      'instance does not exist because file is ignored',
     );
   });
 
@@ -2719,7 +2719,7 @@ posts/please-ignore-me.json
 posts/ignore-me.json
       `,
       },
-      this.owner
+      this.owner,
     );
 
     await realm.ready;
@@ -2727,17 +2727,17 @@ posts/ignore-me.json
     await indexer.update(new URL(`${testRealmURL}posts/ignore-me.json`));
 
     let instance = await indexer.card(
-      new URL(`${testRealmURL}posts/ignore-me`)
+      new URL(`${testRealmURL}posts/ignore-me`),
     );
     assert.strictEqual(
       instance,
       undefined,
-      'instance does not exist because file is ignored'
+      'instance does not exist because file is ignored',
     );
     assert.strictEqual(
       indexer.stats.instancesIndexed,
       0,
-      'no instances were processed'
+      'no instances were processed',
     );
   });
 
@@ -3088,7 +3088,7 @@ posts/ignore-me.json
       });
       assert.deepEqual(
         matching.map((m) => m.id),
-        [`${paths.url}card-1`, `${paths.url}cards/1`]
+        [`${paths.url}card-1`, `${paths.url}cards/1`],
       );
     });
 
@@ -3101,7 +3101,7 @@ posts/ignore-me.json
       });
       assert.deepEqual(
         matching.map((m) => m.id),
-        [`${testRealmURL}card-2`]
+        [`${testRealmURL}card-2`],
       );
     });
 
@@ -3114,7 +3114,7 @@ posts/ignore-me.json
       });
       assert.deepEqual(
         matching.map((m) => m.id),
-        [`${paths.url}cards/1`]
+        [`${paths.url}cards/1`],
       );
     });
 
@@ -3127,7 +3127,7 @@ posts/ignore-me.json
       });
       assert.deepEqual(
         matching.map((m) => m.id),
-        [`${paths.url}friend1`]
+        [`${paths.url}friend1`],
       );
     });
 
@@ -3145,7 +3145,7 @@ posts/ignore-me.json
       });
       assert.deepEqual(
         matching.map((m) => m.id),
-        [`${paths.url}catalog-entry-1`]
+        [`${paths.url}catalog-entry-1`],
       );
     });
 
@@ -3175,7 +3175,7 @@ posts/ignore-me.json
       });
       assert.deepEqual(
         matching.map((m) => m.id),
-        [`${paths.url}card-1`]
+        [`${paths.url}card-1`],
       );
     });
 
@@ -3188,7 +3188,7 @@ posts/ignore-me.json
       assert.deepEqual(
         matching.map((m) => m.id),
         [`${paths.url}card-1`, `${paths.url}cards/2`],
-        'found cards of type Article'
+        'found cards of type Article',
       );
 
       matching = (
@@ -3199,7 +3199,7 @@ posts/ignore-me.json
       assert.deepEqual(
         matching.map((m) => m.id),
         [`${paths.url}card-1`, `${paths.url}cards/1`, `${paths.url}cards/2`],
-        'found cards of type Post'
+        'found cards of type Post',
       );
     });
 
@@ -3212,7 +3212,7 @@ posts/ignore-me.json
       });
       assert.deepEqual(
         matching.map((m) => m.id),
-        [`${paths.url}cards/1`]
+        [`${paths.url}cards/1`],
       );
     });
 
@@ -3229,7 +3229,7 @@ posts/ignore-me.json
         });
         assert.deepEqual(
           matching.map((m) => m.id),
-          [`${paths.url}booking2`]
+          [`${paths.url}booking2`],
         );
       }
       {
@@ -3243,7 +3243,7 @@ posts/ignore-me.json
         });
         assert.deepEqual(
           matching.map((m) => m.id),
-          [`${paths.url}booking2`]
+          [`${paths.url}booking2`],
         );
       }
       {
@@ -3257,7 +3257,7 @@ posts/ignore-me.json
         });
         assert.deepEqual(
           matching.map((m) => m.id),
-          []
+          [],
         );
       }
     });
@@ -3273,7 +3273,7 @@ posts/ignore-me.json
       });
       assert.deepEqual(
         matching.map((m) => m.id),
-        [`${paths.url}vangogh`]
+        [`${paths.url}vangogh`],
       );
     });
 
@@ -3292,7 +3292,7 @@ posts/ignore-me.json
       } catch (err: any) {
         assert.strictEqual(
           err.message,
-          `Your filter refers to nonexistent type: import { Nonexistent } from "${testModuleRealm}nonexistent"`
+          `Your filter refers to nonexistent type: import { Nonexistent } from "${testModuleRealm}nonexistent"`,
         );
       }
 
@@ -3318,8 +3318,8 @@ posts/ignore-me.json
           `Your filter refers to nonexistent type: ${JSON.stringify(
             cardRef,
             null,
-            2
-          )}`
+            2,
+          )}`,
         );
       }
     });
@@ -3339,7 +3339,7 @@ posts/ignore-me.json
       } catch (err: any) {
         assert.strictEqual(
           err.message,
-          `Your filter refers to nonexistent field "nonExistentField" on type {"module":"${testModuleRealm}person","name":"Person"}`
+          `Your filter refers to nonexistent field "nonExistentField" on type {"module":"${testModuleRealm}person","name":"Person"}`,
         );
       }
     });
@@ -3353,7 +3353,7 @@ posts/ignore-me.json
       });
       assert.deepEqual(
         matching.map((m) => m.id),
-        [`${paths.url}cards/1`, `${paths.url}cards/2`]
+        [`${paths.url}cards/1`, `${paths.url}cards/2`],
       );
     });
 
@@ -3368,7 +3368,7 @@ posts/ignore-me.json
         assert.deepEqual(
           matching.map((m) => m.id),
           [`${paths.url}booking1`, `${paths.url}booking2`],
-          'eq on hosts.firstName'
+          'eq on hosts.firstName',
         );
       }
       {
@@ -3390,7 +3390,7 @@ posts/ignore-me.json
         assert.deepEqual(
           matching.map((m) => m.id),
           [`${paths.url}booking2`],
-          'eq on posts.author.firstName and posts.author.lastName'
+          'eq on posts.author.firstName and posts.author.lastName',
         );
       }
       {
@@ -3406,7 +3406,7 @@ posts/ignore-me.json
         assert.deepEqual(
           matching.map((m) => m.id),
           [`${paths.url}booking1`],
-          'eq on hosts.firstName, posts.author.firstName, and null posts.author.lastName'
+          'eq on hosts.firstName, posts.author.firstName, and null posts.author.lastName',
         );
       }
     });
@@ -3422,7 +3422,7 @@ posts/ignore-me.json
         assert.deepEqual(
           matching.map((m) => m.id),
           [`${paths.url}booking1`],
-          'eq on sponsors'
+          'eq on sponsors',
         );
       }
       {
@@ -3435,7 +3435,7 @@ posts/ignore-me.json
         assert.strictEqual(
           matching.length,
           0,
-          'eq on nonexisting value in sponsors'
+          'eq on nonexisting value in sponsors',
         );
       }
       {
@@ -3451,7 +3451,7 @@ posts/ignore-me.json
         assert.deepEqual(
           matching.map((m) => m.id),
           [`${paths.url}booking2`],
-          'eq on hosts.firstName and null sponsors'
+          'eq on hosts.firstName and null sponsors',
         );
       }
     });
@@ -3465,7 +3465,7 @@ posts/ignore-me.json
       });
       assert.deepEqual(
         matching.map((m) => m.id),
-        [`${testRealmURL}card-1`]
+        [`${testRealmURL}card-1`],
       );
     });
 
@@ -3486,7 +3486,7 @@ posts/ignore-me.json
       });
       assert.deepEqual(
         matching.map((m) => m.id),
-        [`${paths.url}card-1`, `${paths.url}card-2`]
+        [`${paths.url}card-1`, `${paths.url}card-2`],
       );
     });
 
@@ -3505,7 +3505,7 @@ posts/ignore-me.json
       });
       assert.deepEqual(
         matching.map((m) => m.id),
-        [`${paths.url}cards/2`, `${paths.url}card-1`]
+        [`${paths.url}cards/2`, `${paths.url}card-1`],
       );
     });
 
@@ -3526,7 +3526,7 @@ posts/ignore-me.json
           `${paths.url}cards/1`, // type is post
           `${paths.url}cards/2`, // Carl
           `${paths.url}card-1`, // Cardy
-        ]
+        ],
       );
     });
 
@@ -3547,7 +3547,7 @@ posts/ignore-me.json
           `${paths.url}mango`, // 12
           `${paths.url}vangogh`, // 29
           `${paths.url}ringo`, // 35
-        ]
+        ],
       );
     });
 
@@ -3574,7 +3574,7 @@ posts/ignore-me.json
           `${paths.url}books/1`, // Mango Ab
           `${paths.url}books/3`, // Jackie Ag
           `${paths.url}card-2`, // Cardy --> lastName is null
-        ]
+        ],
       );
     });
 
@@ -3599,7 +3599,7 @@ posts/ignore-me.json
           `${paths.url}books/1`, // 1
           `${paths.url}card-2`, // 1
           `${paths.url}books/3`, // 2
-        ]
+        ],
       );
     });
 
@@ -3620,7 +3620,7 @@ posts/ignore-me.json
           `${paths.url}books/3`, // 2022-08-01
           `${paths.url}books/2`, // 2023-08-01
           `${paths.url}card-2`, // null
-        ]
+        ],
       );
     });
 
@@ -3646,7 +3646,7 @@ posts/ignore-me.json
           `${paths.url}books/1`, // 1 // Ab
           `${paths.url}card-2`, // 1 // null
           `${paths.url}books/2`, // 0
-        ]
+        ],
       );
     });
 
@@ -3679,7 +3679,7 @@ posts/ignore-me.json
           `${paths.url}card-2`, // null
           `${paths.url}card-1`, // (article)
           `${paths.url}cards/2`, // (article)
-        ]
+        ],
       );
     });
 
@@ -3707,7 +3707,7 @@ posts/ignore-me.json
       });
       assert.deepEqual(
         matching.map((m) => m.id),
-        [`${paths.url}books/1`]
+        [`${paths.url}books/1`],
       );
     });
   });

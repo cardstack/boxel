@@ -3,7 +3,7 @@ import classnames from 'classnames';
 
 export default helper(function classNames(
   params: (string | undefined)[],
-  hash: Record<string, string | boolean | number | undefined>
+  hash: Record<string, string | boolean | number | undefined>,
 ): string {
   const entries = Object.entries(hash);
   const obj = Object.fromEntries(entries);

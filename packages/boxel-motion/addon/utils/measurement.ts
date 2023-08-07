@@ -19,10 +19,12 @@ function runWithoutAnimations(playAnimations: boolean) {
     let currentTimes: number[] = [];
     animations.forEach((a) => {
       a.pause();
-      currentTimes.push(a.currentTime || 0);
+      currentTimes.push((a.currentTime as number) || 0);
       let timing = a.effect && a.effect.getComputedTiming();
       if (timing) {
-        a.currentTime = (timing.delay || 0) + (timing.activeDuration || 0);
+        a.currentTime =
+          ((timing.delay as number) || 0) +
+          ((timing.activeDuration as number) || 0);
       }
     });
     let result = f();
@@ -61,10 +63,10 @@ function runWithAnimationOffset(offset: number, playAnimations: boolean) {
     let currentTimes: number[] = [];
     animations.forEach((a) => {
       a.pause();
-      currentTimes.push(a.currentTime || 0);
+      currentTimes.push((a.currentTime as number) || 0);
       let timing = a.effect && a.effect.getComputedTiming();
       if (timing) {
-        a.currentTime = (timing.localTime || 0) + offset;
+        a.currentTime = ((timing.localTime as number) || 0) + offset;
       }
     });
     let result = f();
@@ -89,12 +91,12 @@ export function getDocumentPosition(
     withAnimations: false,
     withAnimationOffset: undefined,
     playAnimations: true,
-  }
+  },
 ): DOMRect {
   let wrapper = (_el: HTMLElement, f: () => DOMRect) => f();
   assert(
     'cannot set withAnimations true and withAnimationOffset',
-    !(opts.withAnimations && opts.withAnimationOffset)
+    !(opts.withAnimations && opts.withAnimationOffset),
   );
   if (opts.withAnimations === true) {
     wrapper = runWithAnimations(opts.playAnimations ?? true);
@@ -104,7 +106,7 @@ export function getDocumentPosition(
   if (opts.withAnimationOffset) {
     wrapper = runWithAnimationOffset(
       opts.withAnimationOffset,
-      opts.playAnimations ?? true
+      opts.playAnimations ?? true,
     );
   }
   return wrapper(element, () => {
@@ -114,7 +116,7 @@ export function getDocumentPosition(
       rect.left + window.scrollX,
       rect.top + window.scrollY,
       rect.width,
-      rect.height
+      rect.height,
     );
   });
 }
@@ -122,7 +124,7 @@ export function getDocumentPosition(
 export function calculateBoundsVelocity(
   startBounds: DOMRect,
   endBounds: DOMRect,
-  diffMs: number
+  diffMs: number,
 ): BoundsVelocity {
   let seconds = diffMs / 1000;
   return {

@@ -33,7 +33,7 @@ export default class CardRefCard extends CardBase {
     cardRef: CardId,
     _doc: JSONAPISingleResourceDocument,
     _visited?: Set<string>,
-    opts?: SerializeOpts
+    opts?: SerializeOpts,
   ) {
     return {
       ...cardRef,
@@ -44,7 +44,7 @@ export default class CardRefCard extends CardBase {
   }
   static async [deserialize]<T extends CardBaseConstructor>(
     this: T,
-    cardRef: CardId
+    cardRef: CardId,
   ): Promise<CardInstanceType<T>> {
     return { ...cardRef } as CardInstanceType<T>; // return a new object so that the model cannot be mutated from the outside
   }
