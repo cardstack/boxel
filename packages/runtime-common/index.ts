@@ -141,16 +141,19 @@ export async function chooseCard<T extends Card>(
 }
 
 export interface CardSearch {
-  getCards(query: Query): {
+  getCards(
+    query: Query,
+    realms?: string[]
+  ): {
     instances: Card[];
     isLoading: boolean;
   };
 }
 
-export function getCards(query: Query) {
+export function getCards(query: Query, realms?: string[]) {
   let here = globalThis as any;
   let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.getCards(query);
+  return finder?.getCards(query, realms);
 }
 
 export interface CardCreator {

@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+import { htmlSafe } from '@ember/template';
 import type { Actions } from '@cardstack/runtime-common';
 import type { StackItem } from './container';
 import OperatorModeStackItem from './stack-item';
@@ -12,6 +13,7 @@ interface Signature {
     stackItems: StackItem[];
     stackIndex: number;
     publicAPI: Actions;
+    backgroundImageURL: string | undefined;
     close: (stackItem: StackItem) => void;
     edit: (stackItem: StackItem) => void;
     save: (stackItem: StackItem, dismiss: boolean) => void;
@@ -28,8 +30,15 @@ export default class OperatorModeStack extends Component<Signature> {
     await Promise.all(itemsToDismiss.map((i) => this.args.close(i)));
   });
 
+  get backgroundImageStyle() {
+    if (!this.args.backgroundImageURL) {
+      return '';
+    }
+    return htmlSafe(`background-image: url(${this.args.backgroundImageURL});`);
+  }
+
   <template>
-    <div ...attributes>
+    <div ...attributes style={{this.backgroundImageStyle}}>
       {{#each @stackItems as |item i|}}
         <OperatorModeStackItem
           @item={{item}}
@@ -46,17 +55,27 @@ export default class OperatorModeStack extends Component<Signature> {
 
     <style>
       .operator-mode-stack {
-        height: calc(100% - var(--search-sheet-closed-height));
-        position: relative;
+        z-index: 0;
+        height: 100%;
         width: 100%;
-        max-width: 50rem;
-        padding-top: var(--boxel-sp-xxl);
+        background-position: center;
+        background-size: cover;
+        padding: var(--boxel-sp-lg) var(--boxel-sp-sm) 0;
+      }
+
+      .inner {
+        height: calc(
+          100% - var(--search-sheet-closed-height) + var(--boxel-sp)
+        );
+        position: relative;
         display: flex;
         justify-content: center;
         overflow: hidden;
-        z-index: 0;
-        margin-left: var(--boxel-sp-xs);
-        margin-right: var(--boxel-sp-xs);
+        max-width: 50rem;
+        padding-top: var(--boxel-sp-xxl);
+        margin: 0 auto;
+        border-bottom-left-radius: var(--boxel-border-radius);
+        border-bottom-right-radius: var(--boxel-border-radius);
       }
 
       /* Add some padding to accomodate for overlaid header for embedded cards in operator mode */
@@ -71,6 +90,7 @@ export default class OperatorModeStack extends Component<Signature> {
           var(--overlay-embedded-card-header-height) + var(--boxel-sp-lg)
         );
       }
+
     </style>
   </template>
 }

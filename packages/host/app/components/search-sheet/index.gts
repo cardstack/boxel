@@ -115,12 +115,7 @@ export default class SearchSheet extends Component<Signature> {
           maybeCardDoc,
           new URL(maybeCardDoc.data.id),
         );
-        this.operatorModeStateService.addItemToStack({
-          type: 'card',
-          card,
-          format: 'isolated',
-          stackIndex: 0,
-        });
+        this.args.onCardSelect(card);
         this.resetState();
         this.args.onCancel();
         return;
