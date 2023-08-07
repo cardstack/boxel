@@ -798,8 +798,8 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       await visit(
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam
-        )}`
+          operatorModeStateParam,
+        )}`,
       );
 
       await percySnapshot(assert); // 2 stacks from the different realms have different backgrounds

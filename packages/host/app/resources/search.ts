@@ -42,12 +42,12 @@ export class Search extends Resource<Args> {
               this.cardService.defaultURL.href,
               baseRealm.url,
               ...otherRealmURLs,
-            ]
+            ],
           ),
         ].map(
-          async (realm) => await this.cardService.search(query, new URL(realm))
-        )
-      )
+          async (realm) => await this.cardService.search(query, new URL(realm)),
+        ),
+      ),
     );
 
     this.instancesWithRealmInfo = await Promise.all(
@@ -57,7 +57,7 @@ export class Search extends Resource<Args> {
           throw new Error(`Could not find realm info for ${card.id}`);
         }
         return { realmInfo, card };
-      })
+      }),
     );
   });
 
@@ -69,7 +69,7 @@ export class Search extends Resource<Args> {
 export function getSearchResults(
   parent: object,
   query: () => Query,
-  realms?: () => string[]
+  realms?: () => string[],
 ) {
   return Search.from(parent, () => ({
     named: {

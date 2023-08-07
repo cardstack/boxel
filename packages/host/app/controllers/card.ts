@@ -45,7 +45,7 @@ export default class CardController extends Controller {
     return getSearchResults(
       this,
       () => query,
-      realms ? () => realms : undefined
+      realms ? () => realms : undefined,
     );
   }
 
