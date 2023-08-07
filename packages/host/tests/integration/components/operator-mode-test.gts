@@ -75,6 +75,7 @@ module('Integration | operator-mode', function (hooks) {
 
   hooks.afterEach(async function () {
     await waitFor('[data-test-save-idle]');
+    localStorage.removeItem('recent-cards');
   });
 
   hooks.beforeEach(async function () {
