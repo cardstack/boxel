@@ -31,6 +31,11 @@ module('Acceptance | operator mode tests', function (hooks) {
 
   hooks.afterEach(async function () {
     await waitFor('[data-test-save-idle]');
+    localStorage.removeItem('recent-cards');
+  });
+
+  hooks.beforeEach(async function () {
+    localStorage.removeItem('recent-cards');
   });
 
   hooks.beforeEach(async function () {
@@ -218,6 +223,12 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
           },
         },
+      },
+      '.realm.json': {
+        name: 'Test Workspace B',
+        backgroundURL:
+          'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+        iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
       },
     });
 
@@ -723,6 +734,8 @@ module('Acceptance | operator mode tests', function (hooks) {
         )}`,
       );
 
+      await percySnapshot(assert); // 2 stacks from the same realm share the same background
+
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
       assert.dom('[data-test-operator-mode-stack="0"]').includesText('Fadhlan');
       assert.dom('[data-test-operator-mode-stack="1"]').includesText('Mango');
@@ -763,7 +776,44 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('.no-cards').includesText('Add a card to get started');
     });
 
+    test('visiting 2 stacks from differing realms', async function (assert) {
+      let operatorModeStateParam = stringify({
+        stacks: [
+          [
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Person/fadhlan',
+              format: 'isolated',
+            },
+          ],
+          [
+            {
+              type: 'card',
+              id: 'http://localhost:4202/test/hassan',
+              format: 'isolated',
+            },
+          ],
+        ],
+      })!;
+
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam,
+        )}`,
+      );
+
+      await percySnapshot(assert); // 2 stacks from the different realms have different backgrounds
+
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
+    });
+
     test('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
+      // creates a recent search
+      localStorage.setItem(
+        'recent-cards',
+        JSON.stringify(['http://test-realm/test/Person/fadhlan']),
+      );
+
       let operatorModeStateParam = stringify({
         stacks: [
           [

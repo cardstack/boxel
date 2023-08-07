@@ -75,6 +75,7 @@ module('Integration | operator-mode', function (hooks) {
 
   hooks.afterEach(async function () {
     await waitFor('[data-test-save-idle]');
+    localStorage.removeItem('recent-cards');
   });
 
   hooks.beforeEach(async function () {
@@ -1250,6 +1251,10 @@ module('Integration | operator-mode', function (hooks) {
     await click(
       '[data-test-links-to-many="friends"] [data-test-item="1"] [data-test-remove-card]'
     );
+    await waitFor('[data-test-last-saved]');
+    let saveTime = document
+      .querySelector('[data-test-last-saved]')!
+      .getAttribute('data-test-last-saved');
 
     assert.dom('[data-test-field="friends"]').containsText('Jackie');
 
@@ -1259,6 +1264,14 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-card-catalog-go-button]');
 
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-last-saved]')!
+          .getAttribute('data-test-last-saved') !== saveTime
+    );
+    await waitFor('[data-test-save-idle]');
+
     assert.dom('[data-test-field="friends"]').containsText('Mango');
   });
 
@@ -1648,7 +1661,7 @@ module('Integration | operator-mode', function (hooks) {
       `http://localhost:4202/test/mango`
     );
     await click(`[data-test-go-button]`);
-    await waitFor(`[data-test-stack-card-index="1"]`);
+    await waitFor(`[data-test-stack-card="http://localhost:4202/test/mango"]`);
     assert
       .dom(
         `[data-test-stack-card="http://localhost:4202/test/mango"] [data-test-field-component-card]`

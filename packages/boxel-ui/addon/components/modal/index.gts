@@ -2,14 +2,13 @@ import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { eq } from '../../helpers/truth-helpers';
 import cssVar from '../../helpers/css-var';
-import cn from '../../helpers/cn';
 import setBodyClass from 'ember-set-body-class/helpers/set-body-class';
 
 interface Signature {
   Element: HTMLDialogElement;
   Args: {
     imgURL?: string;
-    size?: 'small' | 'medium' | 'large';
+    size?: 'small' | 'medium' | 'large' | 'full-screen';
     layer?: 'urgent';
     isOpen?: boolean;
     isOverlayDismissalDisabled?: boolean;
@@ -54,11 +53,7 @@ export default class Modal extends Component<Signature> {
         </button>
 
         <dialog
-          class={{cn
-            small=(eq @size 'small')
-            medium=(eq @size 'medium')
-            large=(eq @size 'large')
-          }}
+          class={{@size}}
           open={{@isOpen}}
           aria-modal='true'
           ...attributes
@@ -118,6 +113,17 @@ export default class Modal extends Component<Signature> {
       .large {
         --boxel-modal-offset-top: var(--boxel-sp-lg);
         --boxel-modal-max-width: 65rem; /* 1040px */
+      }
+
+      .full-screen {
+        padding: 0;
+        top: 0;
+        left: 0;
+        right: 0;
+      }
+
+      .full-screen > .boxel-modal__inner {
+        max-width: inherit;
       }
 
       :global(.boxel-modal__inner) {
