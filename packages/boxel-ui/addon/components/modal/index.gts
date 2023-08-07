@@ -2,7 +2,6 @@ import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { eq } from '../../helpers/truth-helpers';
 import cssVar from '../../helpers/css-var';
-import cn from '../../helpers/cn';
 import setBodyClass from 'ember-set-body-class/helpers/set-body-class';
 
 interface Signature {
@@ -54,12 +53,7 @@ export default class Modal extends Component<Signature> {
         </button>
 
         <dialog
-          class={{cn
-            small=(eq @size 'small')
-            medium=(eq @size 'medium')
-            large=(eq @size 'large')
-            full-screen=(eq @size 'full-screen')
-          }}
+          class={{@size}}
           open={{@isOpen}}
           aria-modal='true'
           ...attributes
