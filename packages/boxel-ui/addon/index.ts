@@ -1,4 +1,7 @@
 import BoxelInput from './components/input';
+import SearchInput, {
+  SearchInputBottomTreatment,
+} from './components/input/search-input';
 import BoxelInputValidationState from './components/input/validation-state';
 import BoxelHeader from './components/header';
 import BoxelMessage from './components/message';
@@ -17,6 +20,8 @@ import Tooltip from './components/tooltip';
 export {
   BoxelHeader,
   BoxelInput,
+  SearchInput,
+  SearchInputBottomTreatment,
   BoxelMessage,
   BoxelInputValidationState,
   Button,

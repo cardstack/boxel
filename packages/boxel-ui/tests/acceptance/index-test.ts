@@ -39,7 +39,7 @@ module('Acceptance | Docs', function (hooks) {
 
     if (!buttonElementScopedCssAttribute) {
       throw new Error(
-        'Scoped CSS attribute not found on [data-test-boxel-button]'
+        'Scoped CSS attribute not found on [data-test-boxel-button]',
       );
     }
 

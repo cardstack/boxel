@@ -1,7 +1,11 @@
 import { module, test, skip } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
-import { baseRealm, cardTypeDisplayName } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  cardTypeDisplayName,
+  LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 import { Loader } from '@cardstack/runtime-common/loader';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -68,6 +72,10 @@ module('Integration | operator-mode', function (hooks) {
     await recompute(card, { loadFields: true });
     return card;
   }
+
+  hooks.afterEach(async function () {
+    await waitFor('[data-test-save-idle]');
+  });
 
   hooks.beforeEach(async function () {
     localStorage.removeItem('recent-cards');
@@ -572,7 +580,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-stack-card-index="1"]').includesText('Mango');
   });
 
-  test("it doesn't change the field value if user clicks cancel in edit view", async function (assert) {
+  test('it auto saves the field value', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
 
     await renderComponent(
@@ -586,55 +594,53 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-person]');
     await click('[data-test-edit-button]');
     await fillIn('[data-test-boxel-input]', 'EditedName');
-    await fillIn(
-      '[data-test-boxel-input-city] [data-test-boxel-input]',
-      'EditedCity'
-    );
-    await fillIn(
-      '[data-test-boxel-input-country] [data-test-boxel-input]',
-      'EditedCountry'
-    );
 
-    await click('[aria-label="Cancel"]');
-    assert.dom('[data-test-person]').hasText('Fadhlan');
-    assert.dom('[data-test-first-letter-of-the-name]').hasText('F');
-    assert.dom('[data-test-city]').hasText('Bandung');
-    assert.dom('[data-test-country]').hasText('Indonesia');
-  });
+    await waitFor(`[data-test-last-saved]`);
+    let fileRef = await adapter.openFile('Person/fadhlan.json');
+    let json = JSON.parse(
+      fileRef?.content as string
+    ) as LooseSingleCardDocument;
+    assert.strictEqual(json.data.attributes?.firstName, 'EditedName');
 
-  test('it changes the field value if user clicks save in edit view', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      }
-    );
-    await waitFor('[data-test-person]');
-    await click('[data-test-edit-button]');
-    await fillIn('[data-test-boxel-input]', 'EditedName');
-    await fillIn(
-      '[data-test-boxel-input-city] [data-test-boxel-input]',
-      'EditedCity'
-    );
-    await fillIn(
-      '[data-test-boxel-input-country] [data-test-boxel-input]',
-      'EditedCountry'
-    );
-    await click('[aria-label="Save"]');
 
     await waitFor('[data-test-person="EditedName"]');
-    await waitFor('[data-test-city="EditedCity"]');
-    await waitFor('[data-test-country="EditedCountry"]');
     assert.dom('[data-test-person]').hasText('EditedName');
     assert.dom('[data-test-first-letter-of-the-name]').hasText('E');
+  });
 
-    await waitFor('[data-test-city="EditedCity"]');
-    assert.dom('[data-test-city]').hasText('EditedCity');
-    assert.dom('[data-test-country]').hasText('EditedCountry');
+  test('it auto saves changes made to nested contains card', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      }
+    );
+
+    await waitFor('[data-test-person]');
+    await click(
+      '[data-test-shippinginfo-field] [data-test-field-component-card]'
+    );
+    await waitFor('[data-test-stack-card-index="2"]');
+    await click(`[data-test-stack-card-index="2"] [data-test-edit-button]`);
+
+    await fillIn(`[data-test-field="preferredCarrier"] input`, `FedEx`);
+    await waitFor(`[data-test-last-saved]`);
+    let fileRef = await adapter.openFile('Person/fadhlan.json');
+    let json = JSON.parse(
+      fileRef?.content as string
+    ) as LooseSingleCardDocument;
+    assert.strictEqual(
+      json.data.attributes?.address?.shippingInfo?.preferredCarrier,
+      'FedEx'
+    );
+
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await waitFor('[data-test-preferredcarrier]');
+    assert.dom('data-test-preferredcarrier="FedEx"');
   });
 
   test('displays add card button if user closes the only card in the stack and opens a card from card chooser', async function (assert) {
@@ -651,13 +657,8 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-person]');
     assert.dom('[data-test-person]').isVisible();
 
-    await click('[aria-label="Close"]');
-    await waitUntil(
-      () => {
-        return !document.querySelector('.operator-mode-card-stack__card__item');
-      },
-      { timeout: 3000 }
-    );
+    await click('[data-test-close-button]');
+    await waitUntil(() => !document.querySelector('[data-test-stack-card]'));
     assert.dom('[data-test-person]').isNotVisible();
     assert.dom('[data-test-add-card-button]').isVisible();
 
@@ -743,7 +744,10 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
       .exists();
 
-    await click('[data-test-save-button]');
+    await fillIn(`[data-test-field="title"] input`, 'New Post');
+    await waitFor(`[data-test-last-saved]`);
+    await setCardInOperatorModeState(`${testRealmURL}PublishingPacket/1`);
+
     await waitFor(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`);
     assert
       .dom(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`)
@@ -829,12 +833,16 @@ module('Integration | operator-mode', function (hooks) {
       '[data-test-field="firstName"] [data-test-boxel-input]',
       'Alice'
     );
+    await waitFor(
+      `[data-test-stack-card-index="3"][data-test-stack-card="${testRealmURL}Author/3"]`
+    );
     await fillIn(
       '[data-test-field="lastName"] [data-test-boxel-input]',
       'Enwunder'
     );
+    await waitFor(`[data-test-last-saved]`);
 
-    await click('[data-test-stack-card-index="3"] [data-test-save-button]');
+    await click('[data-test-stack-card-index="3"] [data-test-close-button]');
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="3"]')
     );
@@ -847,7 +855,8 @@ module('Integration | operator-mode', function (hooks) {
       '[data-test-stack-card-index="2"] [data-test-field="title"] [data-test-boxel-input]',
       'Mad As a Hatter'
     );
-    await click('[data-test-stack-card-index="2"] [data-test-save-button]');
+    await waitFor(`[data-test-last-saved]`);
+    await click('[data-test-stack-card-index="2"] [data-test-close-button]');
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="2"]')
     );
@@ -859,13 +868,33 @@ module('Integration | operator-mode', function (hooks) {
       .dom(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`)
       .doesNotExist();
 
+    await waitFor(
+      `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}PublishingPacket/1"]`
+    );
+    let saveTime = document
+      .querySelector('[data-test-last-saved]')!
+      .getAttribute('data-test-last-saved');
     await fillIn(
       '[data-test-stack-card-index="1"] [data-test-field="socialBlurb"] [data-test-boxel-input]',
       `Everyone knows that Alice ran the show in the Brady household. But when Alice’s past comes to light, things get rather topsy turvy…`
     );
-    await click('[data-test-stack-card-index="1"] [data-test-save-button]');
-    await waitFor(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`);
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-last-saved]')!
+          .getAttribute('data-test-last-saved') !== saveTime
+    );
+    let fileRef = await adapter.openFile(`PublishingPacket/1.json`);
+    let json = JSON.parse(
+      fileRef?.content as string
+    ) as LooseSingleCardDocument;
+    assert.strictEqual(
+      json.data.attributes!.socialBlurb,
+      `Everyone knows that Alice ran the show in the Brady household. But when Alice’s past comes to light, things get rather topsy turvy…`
+    );
 
+    await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
+    await waitUntil(() => !document.querySelector('[data-test-last-saved]'));
     assert
       .dom(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`)
       .containsText(
@@ -987,7 +1016,9 @@ module('Integration | operator-mode', function (hooks) {
       .exists('Shipping Info contained card header in edit mode');
 
     await fillIn(`[data-test-field="preferredCarrier"] input`, `FedEx`);
-    await click('[data-test-stack-card-index="2"] [data-test-save-button]');
+    await waitFor('[data-test-last-saved]');
+    await click(' [data-test-stack-card-index="2"] [data-test-edit-button]');
+    await waitUntil(() => !document.querySelector('[data-test-last-saved]'));
 
     // all the nested contains fields are popped from the stack
     await waitUntil(
@@ -1003,63 +1034,15 @@ module('Integration | operator-mode', function (hooks) {
         `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}Person/fadhlan"] > .card.edit`
       )
       .doesNotExist('Person card is not in edit mode');
-  });
 
-  test('can cancel editing of a nested contained card field', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      }
+    let fileRef = await adapter.openFile('Person/fadhlan.json');
+    let json = JSON.parse(
+      fileRef?.content as string
+    ) as LooseSingleCardDocument;
+    assert.strictEqual(
+      json.data.attributes?.address.shippingInfo.preferredCarrier,
+      'FedEx'
     );
-
-    await waitFor('[data-test-person]');
-    await click(
-      '[data-test-shippinginfo-field] [data-test-field-component-card]'
-    );
-    await waitFor('[data-test-stack-card-index="2"]');
-    await click(`[data-test-stack-card-index="2"] [data-test-edit-button]`);
-
-    await fillIn(`[data-test-field="preferredCarrier"] input`, `FedEx`);
-    await click('[data-test-stack-card-index="2"] [data-test-cancel-button]');
-
-    // the entire chain of contained fields and the parent card should be put into edit mode
-    assert
-      .dom(
-        `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}Person/fadhlan"] > .card`
-      )
-      .exists('Person card is in stack');
-    assert
-      .dom(
-        `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}Person/fadhlan"] > .card.edit`
-      )
-      .doesNotExist('Person card is not in edit mode');
-    assert
-      .dom(
-        `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Person/fadhlan/address"] > .card`
-      )
-      .exists('Address contained card is in stack');
-    assert
-      .dom(
-        `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Person/fadhlan/address"] > .card.edit`
-      )
-      .doesNotExist('Address contained card header is not in edit mode');
-    assert
-      .dom(
-        `[data-test-stack-card-index="2"][data-test-stack-card="${testRealmURL}Person/fadhlan/address/shippingInfo"] > .card`
-      )
-      .exists('Shipping Info contained card is in stack');
-    assert
-      .dom(
-        `[data-test-stack-card-index="2"][data-test-stack-card="${testRealmURL}Person/fadhlan/address/shippingInfo"] > .card.edit`
-      )
-      .doesNotExist('Shipping Info contained card header is not in edit mode');
-    assert
-      .dom('.operator-mode [data-test-preferredCarrier="DHL"]')
-      .exists('changed field is reverted');
   });
 
   test('can choose a card for a linksTo field that has an existing value', async function (assert) {
@@ -1117,7 +1100,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
     assert.dom('[data-test-field="authorBio"]').containsText('R2-D2');
 
-    await click('[data-test-save-button]');
+    await click('[data-test-edit-button]');
     await waitFor('.operator-mode [data-test-blog-post-isolated]');
 
     assert
@@ -1153,21 +1136,22 @@ module('Integration | operator-mode', function (hooks) {
       'Alice'
     );
 
-    await click('[data-test-stack-card-index="1"] [data-test-save-button]');
+    await waitFor(
+      `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Author/3"]`
+    );
+
+    await click('[data-test-stack-card-index="1"] [data-test-close-button]');
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="1"]')
     );
+    await waitFor('[data-test-last-saved]');
     assert.dom('[data-test-choose-card]').doesNotExist();
     assert.dom('[data-test-create-new]').doesNotExist();
     assert.dom('[data-test-field="authorBio"]').containsText('Alice');
 
-    await click('[data-test-stack-card-index="0"] [data-test-save-button]');
-    await waitFor(
-      '.operator-mode [data-test-blog-post-isolated] [data-test-author="Alice"]'
-    );
-    assert
-      .dom('.operator-mode [data-test-blog-post-isolated]')
-      .hasText('Beginnings by Alice');
+    await click('[data-test-stack-card-index="0"] [data-test-edit-button]');
+    await waitFor('[data-test-save-idle]');
+    assert.dom('[data-test-blog-post-isolated]').hasText('Beginnings by Alice');
   });
 
   test('can remove the link for a linksTo field', async function (assert) {
@@ -1186,7 +1170,8 @@ module('Integration | operator-mode', function (hooks) {
 
     assert.dom('[data-test-field="authorBio"]').containsText('Alien Bob');
     await click('[data-test-field="authorBio"] [data-test-remove-card]');
-    await click('[data-test-save-button]');
+    await click('[data-test-edit-button]');
+    await waitFor('[data-test-save-idle]');
 
     await waitFor('.operator-mode [data-test-blog-post-isolated]');
     assert
@@ -1305,7 +1290,10 @@ module('Integration | operator-mode', function (hooks) {
       '[data-test-stack-card-index="1"] [data-test-field="name"] [data-test-boxel-input]',
       'Woodster'
     );
-    await click('[data-test-stack-card-index="1"] [data-test-save-button]');
+    await waitFor(
+      `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Pet/1"]`
+    );
+    await click('[data-test-stack-card-index="1"] [data-test-close-button]');
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="1"]')
     );
@@ -1340,7 +1328,9 @@ module('Integration | operator-mode', function (hooks) {
       '[data-test-stack-card-index="1"] [data-test-field="name"] [data-test-boxel-input]',
       'Woodster'
     );
-    await click('[data-test-stack-card-index="1"] [data-test-cancel-button]');
+    await waitFor(
+      `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Pet/1"]`
+    );
     await click('[data-test-stack-card-index="1"] [data-test-close-button]');
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="1"]')
@@ -1374,10 +1364,21 @@ module('Integration | operator-mode', function (hooks) {
     await click(
       '[data-test-links-to-many="friends"] [data-test-item="1"] [data-test-remove-card]'
     );
+    await waitFor('[data-test-last-saved]');
     await click(
       '[data-test-links-to-many="friends"] [data-test-item="0"] [data-test-remove-card]'
     );
-    await click('[data-test-save-button]');
+    let saveTime = document
+      .querySelector('[data-test-last-saved]')!
+      .getAttribute('data-test-last-saved');
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-last-saved]')!
+          .getAttribute('data-test-last-saved') !== saveTime
+    );
+    await click('[data-test-edit-button]');
+    await waitFor('[data-test-save-idle]');
 
     await waitFor(`[data-test-person="Burcu"]`);
     assert
@@ -1467,7 +1468,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-cards-grid-cards]`).isNotVisible();
     assert.dom(`[data-test-create-new-card-button]`).isNotVisible();
 
-    await focus(`[data-test-search-input]`);
+    await focus(`[data-test-search-input] input`);
     assert.dom(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`);
     await click(`[data-test-search-sheet-cancel-button]`);
     await click(`[data-test-stack-card-index="1"] [data-test-close-button]`);
@@ -1476,7 +1477,7 @@ module('Integration | operator-mode', function (hooks) {
     await click(`[data-test-cards-grid-item="${testRealmURL}Person/burcu"]`);
     assert.dom(`[data-test-stack-card-index="1"]`).exists();
 
-    await focus(`[data-test-search-input]`);
+    await focus(`[data-test-search-input] input`);
     assert
       .dom(
         `.search-sheet-content__recent-access__cards [data-test-search-result]`
@@ -1509,7 +1510,7 @@ module('Integration | operator-mode', function (hooks) {
       await click(`[data-test-stack-card-index="1"] [data-test-close-button]`);
     }
 
-    await focus(`[data-test-search-input]`);
+    await focus(`[data-test-search-input] input`);
     assert
       .dom(
         `.search-sheet-content__recent-access__cards [data-test-search-result]`
@@ -1640,7 +1641,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await waitFor(`[data-test-cards-grid-item]`);
-    await focus(`[data-test-search-input]`);
+    await focus(`[data-test-search-input] input`);
 
     await fillIn(
       `[data-test-url-field] input`,
@@ -1667,7 +1668,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await waitFor(`[data-test-cards-grid-item]`);
-    await focus(`[data-test-search-input]`);
+    await focus(`[data-test-search-input] input`);
 
     assert
       .dom(`[data-test-boxel-input-validation-state="invalid"]`)

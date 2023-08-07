@@ -20,7 +20,7 @@ interface Signature {
     field: Field<typeof CardBase>;
     cardTypeFor(
       field: Field<typeof CardBase>,
-      boxedElement: Box<CardBase>
+      boxedElement: Box<CardBase>,
     ): typeof CardBase;
   };
 }
@@ -93,7 +93,7 @@ export function getContainsManyComponent({
   field: Field<typeof CardBase>;
   cardTypeFor(
     field: Field<typeof CardBase>,
-    boxedElement: Box<CardBase>
+    boxedElement: Box<CardBase>,
   ): typeof CardBase;
 }): ComponentLike<{ Args: {}; Blocks: {} }> {
   if (format === 'edit') {

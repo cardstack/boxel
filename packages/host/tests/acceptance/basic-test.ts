@@ -186,7 +186,7 @@ module('Acceptance | basic tests', function (hooks) {
 
     assert.strictEqual(
       currentURL(),
-      '/code?openDirs=Person%2F&path=Person%2F1.json'
+      '/code?openDirs=Person%2F&path=Person%2F1.json',
     );
     assert
       .dom('[data-test-file="Person/1.json"]')
@@ -229,7 +229,7 @@ module('Acceptance | basic tests', function (hooks) {
     assert.strictEqual(
       getMonacoContent(),
       personCardSource,
-      'the monaco content is correct'
+      'the monaco content is correct',
     );
   });
 
@@ -250,7 +250,7 @@ module('Acceptance | basic tests', function (hooks) {
 
     if (!buttonElementScopedCssAttribute) {
       throw new Error(
-        'Scoped CSS attribute not found on [data-test-create-new-card-button]'
+        'Scoped CSS attribute not found on [data-test-create-new-card-button]',
       );
     }
 
@@ -325,7 +325,7 @@ module('Acceptance | basic tests', function (hooks) {
           },
         },
       },
-      'file contents are correct'
+      'file contents are correct',
     );
   });
 });

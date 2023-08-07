@@ -11,7 +11,7 @@ import { BoxelInput } from '@cardstack/boxel-ui';
 import { TextInputFilter, DeserializedResult } from './text-input-filter';
 
 function _deserialize(
-  numberString: string | null | undefined
+  numberString: string | null | undefined,
   //TODO: It turns out at runtime, number value is being passed down.
   //Particularly, value 0 which is falsy can cause issues if not handled correctly
   //Work has to be done to sync [deserialize] in card-api with _deserialize
@@ -53,7 +53,7 @@ export default class NumberCard extends CardBase {
   static [useIndexBasedKey]: never;
   static async [deserialize]<T extends CardBaseConstructor>(
     this: T,
-    number: any
+    number: any,
   ): Promise<CardInstanceType<T>> {
     return _deserialize(number).value as CardInstanceType<T>;
   }
@@ -78,7 +78,7 @@ export default class NumberCard extends CardBase {
       () => this.args.model,
       (inputVal) => this.args.set(inputVal),
       _deserialize,
-      _serialize
+      _serialize,
     );
   };
 }

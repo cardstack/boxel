@@ -81,7 +81,6 @@ export default class CardCatalogItem extends Component<Signature> {
         font: var(--boxel-font-xs);
         color: var(--boxel-500);
       }
-
     </style>
   </template>
 

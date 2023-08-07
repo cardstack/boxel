@@ -24,7 +24,7 @@ export default class LoaderService extends Service {
     let loader = new Loader();
     loader.addURLMapping(
       new URL(baseRealm.url),
-      new URL(config.resolvedBaseRealmURL)
+      new URL(config.resolvedBaseRealmURL),
     );
     shimExternals(loader);
 

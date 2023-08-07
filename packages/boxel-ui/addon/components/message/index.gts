@@ -22,11 +22,7 @@ interface Signature {
 
 const Message: TemplateOnlyComponent<Signature> = <template>
   <div
-    class={{cn
-      'boxel-message'
-      hide-meta=@hideMeta
-      full-width=@fullWidth
-    }}
+    class={{cn 'boxel-message' hide-meta=@hideMeta full-width=@fullWidth}}
     data-test-boxel-message
     ...attributes
   >
@@ -38,10 +34,7 @@ const Message: TemplateOnlyComponent<Signature> = <template>
             alt={{if @name @name 'participant'}}
             width='40px'
             height='40px'
-            class={{cn
-              'avatar-img'
-              avatar-img--not-round=@notRound
-            }}
+            class={{cn 'avatar-img' avatar-img--not-round=@notRound}}
             data-test-boxel-message-avatar
           />
         {{else}}

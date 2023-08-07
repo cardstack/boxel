@@ -67,7 +67,8 @@ export default class InputUsage extends Component {
           @errorMessage={{this.errorMessage}}
           @helperText={{this.helperText}}
           style={{cssVar boxel-input-height=this.boxelInputHeight.value}}
-          {{on 'blur' this.validate}}
+          @onBlur={{this.validate}}
+          @onFocus={{this.logValue}}
           {{on 'input' this.set}}
         />
       </:example>
@@ -123,6 +124,9 @@ export default class InputUsage extends Component {
           @name='onInput'
           @description='Function to update the passed in value. This receives the changed value as a string.'
         />
+        <Args.Action @name='onKeyPress' @description='Action on key press' />
+        <Args.Action @name='onFocus' @description='Action on focus' />
+        <Args.Action @name='onBlur' @description='Action on blur' />
       </:api>
       <:cssVars as |Css|>
         <Css.Basic

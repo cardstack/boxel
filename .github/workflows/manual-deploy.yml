@@ -25,7 +25,7 @@ jobs:
     uses: ./.github/workflows/waypoint-build.yml
     secrets: inherit
     with:
-      app: "realm-demo"
+      app: 'realm-demo'
       environment: ${{ inputs.environment }}
       restore-mtime: true
 
@@ -43,5 +43,5 @@ jobs:
     uses: ./.github/workflows/waypoint-deploy.yml
     secrets: inherit
     with:
-      app: "realm-demo"
+      app: 'realm-demo'
       environment: ${{ inputs.environment }}

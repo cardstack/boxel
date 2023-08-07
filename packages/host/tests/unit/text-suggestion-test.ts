@@ -168,7 +168,7 @@ module('Unit | text-suggestion | card-chooser-title', function () {
     ]);
     assert.strictEqual(
       getSuggestionWithLowestDepth(suggestions),
-      'Choose a Card instance'
+      'Choose a Card instance',
     );
   });
   test('filter -- nested one that exceeds recursion depth', function (assert) {
@@ -206,7 +206,7 @@ module('Unit | text-suggestion | card-chooser-title', function () {
     ]);
     assert.strictEqual(
       getSuggestionWithLowestDepth(suggestions),
-      'Choose a Card instance'
+      'Choose a Card instance',
     );
   });
   test('filter with on specifying multiSelect option', function (assert) {

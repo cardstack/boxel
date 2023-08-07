@@ -37,7 +37,7 @@ export default class MonacoService extends Service {
     this.#sdk = monaco;
     this.setCompilerOptions();
     let promises = languageConfigs.map((lang) =>
-      this.extendMonacoLanguage(lang)
+      this.extendMonacoLanguage(lang),
     );
     await Promise.all(promises);
   });
@@ -53,7 +53,7 @@ export default class MonacoService extends Service {
   // The monaco sdk is dyanmically loaded when visiting /code route
   async getMonacoContext(
     openFile?: FileResource,
-    onEditorSetup?: (editor: MonacoSDK.editor.IStandaloneCodeEditor) => void
+    onEditorSetup?: (editor: MonacoSDK.editor.IStandaloneCodeEditor) => void,
   ): Promise<MonacoContext> {
     let language: string | undefined;
     let sdk = this.sdk;
@@ -71,8 +71,8 @@ export default class MonacoService extends Service {
   async getLangFromFileExtension(fileName: string): Promise<string> {
     const editorLanguages = this.sdk.languages.getLanguages();
     let extension = '.' + fileName.split('.').pop();
-    let language = editorLanguages.find((lang) =>
-      lang.extensions?.find((ext) => ext === extension)
+    let language = editorLanguages.find(
+      (lang) => lang.extensions?.find((ext) => ext === extension),
     );
     return language?.id ?? 'plaintext';
   }
@@ -123,10 +123,10 @@ export default class MonacoService extends Service {
   }
 
   setCompilerOptions(
-    compilerOptions?: MonacoSDK.languages.typescript.CompilerOptions
+    compilerOptions?: MonacoSDK.languages.typescript.CompilerOptions,
   ) {
     this.sdk.languages.typescript.javascriptDefaults.setCompilerOptions(
-      compilerOptions ?? this.defaultCompilerOptions
+      compilerOptions ?? this.defaultCompilerOptions,
     );
   }
 }

@@ -1,28 +1,28 @@
-<div local-class='page'>
+<div local-class="page">
   <button
-    type='button'
-    {{on 'click' (fn (mut this.show) (not this.show))}}
+    type="button"
+    {{on "click" (fn (mut this.show) (not this.show))}}
   >Show</button>
   <br />
   <button
-    type='button'
-    {{on 'click' (fn (mut this.extra) (not this.extra))}}
+    type="button"
+    {{on "click" (fn (mut this.extra) (not this.extra))}}
   >Extra</button>
   <br />
-  <button type='button' {{on 'click' (fn (mut this.ping) (not this.ping))}}>Just
+  <button type="button" {{on "click" (fn (mut this.ping) (not this.ping))}}>Just
     render</button>
 
   <div>
-    <AnimationContext @use={{this.transition}} local-class='context'>
+    <AnimationContext @use={{this.transition}} local-class="context">
       {{#if this.showExtra}}
-        <div {{sprite id='extra'}} data-kept='true'>Extra</div>
+        <div {{sprite id="extra"}} data-kept="true">Extra</div>
       {{/if}}
       {{#if this.show}}
-        <div {{sprite id='outer-no-context'}} local-class='outer'>
+        <div {{sprite id="outer-no-context"}} local-class="outer">
           Outer Sprite
-          <div {{sprite id='inner-no-context'}} local-class='inner'>
+          <div {{sprite id="inner-no-context"}} local-class="inner">
             Inner Sprite
-            <div {{sprite id='extra'}} data-remove='true'>Extra</div>
+            <div {{sprite id="extra"}} data-remove="true">Extra</div>
           </div>
         </div>
       {{/if}}

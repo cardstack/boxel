@@ -31,9 +31,9 @@ export class Search extends Resource<Args> {
       await Promise.all(
         // use a Set since the default URL may actually be the base realm
         [...new Set([this.cardService.defaultURL.href, baseRealm.url])].map(
-          async (realm) => await this.cardService.search(query, new URL(realm))
-        )
-      )
+          async (realm) => await this.cardService.search(query, new URL(realm)),
+        ),
+      ),
     );
 
     this.instancesWithRealmInfo = await Promise.all(
@@ -43,7 +43,7 @@ export class Search extends Resource<Args> {
           throw new Error(`Could not find realm info for ${card.id}`);
         }
         return { realmInfo, card };
-      })
+      }),
     );
   });
 

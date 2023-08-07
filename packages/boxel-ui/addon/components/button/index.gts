@@ -100,7 +100,10 @@ export default class ButtonComponent extends Component<Signature> {
         font: var(--boxel-button-font, var(--boxel-font-sm));
         min-height: var(--boxel-button-min-height);
         min-width: var(--boxel-button-min-width, 5rem);
-        padding: var(--boxel-button-padding, var(--boxel-sp-xs) var(--boxel-sp-sm));
+        padding: var(
+          --boxel-button-padding,
+          var(--boxel-sp-xs) var(--boxel-sp-sm)
+        );
         letter-spacing: var(--boxel-button-letter-spacing, var(--boxel-lsp-lg));
       }
 
@@ -119,7 +122,7 @@ export default class ButtonComponent extends Component<Signature> {
       */
       .boxel-button:disabled,
       a.boxel-button:not([href]),
-      a.boxel-button[href=""],
+      a.boxel-button[href=''],
       a.boxel-button.disabled-link {
         --boxel-button-color: var(--boxel-button-border-color);
         --boxel-button-border: 1px solid var(--boxel-button-border-color);
@@ -130,7 +133,7 @@ export default class ButtonComponent extends Component<Signature> {
 
       /* the a element does not have a disabled attribute. Clicking will still trigger event listeners */
       a.boxel-button:not([href]),
-      a.boxel-button[href=""],
+      a.boxel-button[href=''],
       a.boxel-button.disabled-link {
         pointer-events: none;
       }

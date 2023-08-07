@@ -65,7 +65,7 @@ export default class List extends Controller {
                 },
               },
             ],
-          })
+          }),
         ),
       },
     };

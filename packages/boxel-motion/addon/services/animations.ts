@@ -99,7 +99,7 @@ export default class AnimationsService extends Service {
         promises.push(
           task.perform(changeset).then(() => {
             context.clearOrphans();
-          })
+          }),
         );
       }
     }

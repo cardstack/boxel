@@ -29,7 +29,7 @@ export default class RenderCard extends Route<Model | null> {
   beforeModel(transition: any) {
     let queryParams = parse(
       new URL(transition.intent.url, 'http://anywhere').search,
-      { ignoreQueryPrefix: true }
+      { ignoreQueryPrefix: true },
     );
     if ('schema' in queryParams) {
       let {
@@ -62,6 +62,16 @@ export default class RenderCard extends Route<Model | null> {
       if (operatorModeEnabled) {
         let operatorModeStateObject = JSON.parse(operatorModeState);
 
+        if (this.operatorModeStateService.serialize() === operatorModeState) {
+          // If the operator mode state in the query param is the same as the one we have in memory,
+          // we don't want to restore it again, because it will lead to rerendering of the stack items, which can
+          // bring various annoyances, e.g reloading of the items in the index card.
+          // We will reach this point when the user manipulates the stack and the operator state service will set the
+          // query param, which will trigger a refresh of the model, which will call the model hook again.
+          // The model refresh happens automatically because we have operatorModeState: { refreshModel: true } in the queryParams.
+          // We have that because we want to support back-forward navigation in operator mode.
+          return model;
+        }
         await this.operatorModeStateService.restore(operatorModeStateObject);
       }
 

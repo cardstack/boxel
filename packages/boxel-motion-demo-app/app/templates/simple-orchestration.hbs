@@ -1,11 +1,11 @@
 {{! template-lint-disable no-inline-styles }}
 {{! template-lint-disable style-concatenation }}
-<button type='button' {{on 'click' this.toggleMove}}>Move</button>
+<button type="button" {{on "click" this.toggleMove}}>Move</button>
 
 <AnimationContext @use={{this.sequence}}>
   <div
-    {{sprite id='foo1'}}
-    style='width: 50px; height: 50px; background: red; margin-left: {{this.leftPosition}};'
+    {{sprite id="foo1"}}
+    style="width: 50px; height: 50px; background: red; margin-left: {{this.leftPosition}};"
   ></div>
 </AnimationContext>
 
@@ -13,7 +13,7 @@
 
 <AnimationContext @use={{this.parallel}}>
   <div
-    {{sprite id='foo2'}}
-    style='width: 50px; height: 50px; background: red; margin-left: {{this.leftPosition}};'
+    {{sprite id="foo2"}}
+    style="width: 50px; height: 50px; background: red; margin-left: {{this.leftPosition}};"
   ></div>
 </AnimationContext>

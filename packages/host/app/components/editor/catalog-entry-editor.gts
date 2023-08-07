@@ -99,7 +99,7 @@ export default class CatalogEntryEditor extends Component<Signature> {
     let loader = this.cardService.loaderService.loader;
     let realmInfoResponse = await loader.fetch(
       `${this.cardService.defaultURL}_info`,
-      { headers: { Accept: SupportedMimeType.RealmInfo } }
+      { headers: { Accept: SupportedMimeType.RealmInfo } },
     );
 
     let resource = {
@@ -123,7 +123,7 @@ export default class CatalogEntryEditor extends Component<Signature> {
     this.newEntry = await this.cardService.createFromSerialized(
       resource,
       { data: resource },
-      this.cardService.defaultURL
+      this.cardService.defaultURL,
     );
   }
 

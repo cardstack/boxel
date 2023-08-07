@@ -32,7 +32,7 @@ declare module 'ember-basic-dropdown/components/basic-dropdown' {
     trigger: Element,
     content: HTMLElement,
     destination: HTMLElement,
-    options: CalculatePositionOptions
+    options: CalculatePositionOptions,
   ) => CalculatePositionResult;
 
   interface Args {
@@ -114,7 +114,7 @@ declare module 'ember-basic-dropdown/components/basic-dropdown' {
     onMouseLeave?: (dropdown?: Dropdown, event?: MouseEvent) => void;
     shouldReposition: (
       mutations: MutationRecord[],
-      dropdown: Dropdown
+      dropdown: Dropdown,
     ) => boolean;
   }
 
@@ -138,7 +138,7 @@ declare module 'ember-basic-dropdown/components/basic-dropdown' {
           uniqueId: Dropdown['uniqueId'];
           disabled: Dropdown['disabled'];
           isOpen: Dropdown['isOpen'];
-        }
+        },
       ];
     };
   }> {}

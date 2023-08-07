@@ -55,7 +55,7 @@ export class CardType extends Resource<Args> {
 
   async toType(
     card: typeof CardBase,
-    stack: (typeof CardBase)[] = []
+    stack: (typeof CardBase)[] = [],
   ): Promise<Type | CardRef> {
     let maybeRef = identifyCard(card);
     if (!maybeRef) {
@@ -72,7 +72,7 @@ export class CardType extends Resource<Args> {
     }
 
     let api = await this.loader.import<typeof CardAPI>(
-      `${baseRealm.url}card-api`
+      `${baseRealm.url}card-api`,
     );
     let { id: _remove, ...fields } = api.getFields(card);
     let superCard = getAncestor(card);
@@ -87,7 +87,7 @@ export class CardType extends Resource<Args> {
           ...stack.map((c) => identifyCard(c)),
         ]
           .map((r) => JSON.stringify(r))
-          .join()}`
+          .join()}`,
       );
     }
     let fieldTypes: Type['fields'] = await Promise.all(
@@ -96,8 +96,8 @@ export class CardType extends Resource<Args> {
           name,
           type: field.fieldType,
           card: await this.toType(field.card, [card, ...stack]),
-        })
-      )
+        }),
+      ),
     );
     let type: Type = {
       id,
@@ -117,7 +117,7 @@ export function getCardType(parent: object, card: () => typeof Card) {
       card: card(),
       loader: (
         (getOwner(parent) as any).lookup(
-          'service:loader-service'
+          'service:loader-service',
         ) as LoaderService
       ).loader,
     },

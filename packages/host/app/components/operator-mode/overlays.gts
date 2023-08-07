@@ -42,6 +42,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
     );
   }
 
+  // TODO replace async action with ember concurrency task
   @action async getRealmInfo(card: Card) {
     return this.cardService.getRealmInfo(card);
   }
@@ -94,7 +95,13 @@ export default class OperatorModeOverlays extends Component<Signature> {
                     data-test-embedded-card-edit-button
                     {{on
                       'click'
-                      (fn this.openOrSelectCard renderedCard.card 'edit')
+                      (fn
+                        this.openOrSelectCard
+                        renderedCard.card
+                        'edit'
+                        renderedCard.fieldType
+                        renderedCard.fieldName
+                      )
                     }}
                   />
                 {{/if}}
@@ -270,7 +277,6 @@ export default class OperatorModeOverlays extends Component<Signature> {
         --icon-bg: var(--boxel-light);
         background: var(--boxel-teal);
       }
-
     </style>
   </template>
 
@@ -309,17 +315,22 @@ export default class OperatorModeOverlays extends Component<Signature> {
       if (this.areEventsRegistered.get(renderedCard)) continue;
       renderedCard.element.addEventListener(
         'mouseenter',
-        (_e: MouseEvent) => (this.currentlyHoveredCard = renderedCard)
+        (_e: MouseEvent) => (this.currentlyHoveredCard = renderedCard),
       );
       renderedCard.element.addEventListener(
         'mouseleave',
-        (_e: MouseEvent) => (this.currentlyHoveredCard = null)
+        (_e: MouseEvent) => (this.currentlyHoveredCard = null),
       );
       renderedCard.element.addEventListener('click', (e: MouseEvent) => {
         // prevent outer nested contains fields from triggering when inner most
         // contained field was clicked
         e.stopPropagation();
-        this.openOrSelectCard(renderedCard.card);
+        this.openOrSelectCard(
+          renderedCard.card,
+          renderedCard.stackItem.format,
+          renderedCard.fieldType,
+          renderedCard.fieldName
+        );
       });
       renderedCard.element.style.cursor = 'pointer';
     }
@@ -328,16 +339,21 @@ export default class OperatorModeOverlays extends Component<Signature> {
   }
 
   setCurrentlyHoveredCard = (
-    renderedCard: RenderedCardForOverlayActions | null
+    renderedCard: RenderedCardForOverlayActions | null,
   ) => {
     this.currentlyHoveredCard = renderedCard;
   };
 
-  @action openOrSelectCard(card: Card, format: Format = 'isolated') {
+  @action openOrSelectCard(
+    card: Card,
+    format: Format = 'isolated',
+    fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
+    fieldName?: string
+  ) {
     if (this.args.toggleSelect && this.args.selectedCards?.length) {
       this.args.toggleSelect(card);
     } else {
-      this.args.publicAPI.viewCard(card, format);
+      this.args.publicAPI.viewCard(card, format, fieldType, fieldName);
     }
   }
 

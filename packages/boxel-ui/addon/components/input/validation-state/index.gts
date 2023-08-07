@@ -16,6 +16,7 @@ interface ValidationStateInputArgs {
   onInput?: (val: string) => void;
   onBlur?: (ev: Event) => void;
   onKeyPress?: (ev: KeyboardEvent) => void;
+  onFocus?: (ev: Event) => void;
 }
 
 interface Signature {
@@ -62,6 +63,7 @@ export default class BoxelInputValidationState extends Component<Signature> {
         @helperText={{@helperText}}
         @placeholder={{@placeholder}}
         @onKeyPress={{@onKeyPress}}
+        @onFocus={{@onFocus}}
         autocomplete='off'
         autocorrect='off'
         autocapitalize='off'
@@ -92,7 +94,9 @@ export default class BoxelInputValidationState extends Component<Signature> {
 
       .input {
         height: var(--input-height);
-        padding-right: calc(var(--input-icon-size) + var(--input-icon-space) * 2);
+        padding-right: calc(
+          var(--input-icon-size) + var(--input-icon-space) * 2
+        );
         font: inherit;
         letter-spacing: inherit;
       }

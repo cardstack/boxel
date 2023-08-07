@@ -17,7 +17,7 @@ interface TextOpts {
 export function suggestCardChooserTitle(
   filter: Filter,
   depth = 0, //lower the depth, higher the priority
-  textOpts?: TextOpts
+  textOpts?: TextOpts,
 ): ChooseCardSuggestion[] {
   let MAX_RECURSION_DEPTH = 2;
   if (filter === undefined || depth + 1 > MAX_RECURSION_DEPTH) {
@@ -46,7 +46,7 @@ export function suggestCardChooserTitle(
   //--inductive case--
   if (isEveryFilter(filter)) {
     let nestedSuggestions = filter.every.flatMap((f) =>
-      suggestCardChooserTitle(f, depth + 1, textOpts)
+      suggestCardChooserTitle(f, depth + 1, textOpts),
     );
     suggestions = [...suggestions, ...nestedSuggestions];
   }
@@ -58,7 +58,7 @@ type CardNoun = 'instance' | 'type' | 'card';
 function titleText(
   cardRefName: string,
   cardNoun: CardNoun,
-  textOpts?: TextOpts
+  textOpts?: TextOpts,
 ) {
   let object = `${cardRefName} ${cardNoun}`;
   if (textOpts?.multiSelect) {
@@ -69,7 +69,7 @@ function titleText(
 }
 
 export function getSuggestionWithLowestDepth(
-  items: ChooseCardSuggestion[]
+  items: ChooseCardSuggestion[],
 ): string | undefined {
   items.sort((a, b) => a.depth - b.depth);
   return items[0]?.suggestion;
