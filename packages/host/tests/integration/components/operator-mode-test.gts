@@ -75,6 +75,7 @@ module('Integration | operator-mode', function (hooks) {
   }
 
   hooks.afterEach(async function () {
+    await waitFor('[data-test-save-idle]');
     localStorage.removeItem('recent-cards');
   });
 
@@ -872,19 +873,13 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(
       `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}PublishingPacket/1"]`,
     );
-    let saveTime = document
-      .querySelector('[data-test-last-saved]')!
-      .getAttribute('data-test-last-saved');
-    await fillIn(
-      '[data-test-stack-card-index="1"] [data-test-field="socialBlurb"] [data-test-boxel-input]',
-      `Everyone knows that Alice ran the show in the Brady household. But when Alice’s past comes to light, things get rather topsy turvy…`,
-    );
-    await waitUntil(
-      () =>
-        document
-          .querySelector('[data-test-last-saved]')!
-          .getAttribute('data-test-last-saved') !== saveTime,
-    );
+    await waitUntilSaved(async () => {
+      await fillIn(
+        '[data-test-stack-card-index="1"] [data-test-field="socialBlurb"] [data-test-boxel-input]',
+        `Everyone knows that Alice ran the show in the Brady household. But when Alice’s past comes to light, things get rather topsy turvy…`,
+      );
+    });
+
     let fileRef = await adapter.openFile(`PublishingPacket/1.json`);
     let json = JSON.parse(
       fileRef?.content as string,
@@ -1151,6 +1146,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-field="authorBio"]').containsText('Alice');
 
     await click('[data-test-stack-card-index="0"] [data-test-edit-button]');
+    await waitFor('[data-test-save-idle]');
     assert.dom('[data-test-blog-post-isolated]').hasText('Beginnings by Alice');
   });
 
@@ -1171,6 +1167,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-field="authorBio"]').containsText('Alien Bob');
     await click('[data-test-field="authorBio"] [data-test-remove-card]');
     await click('[data-test-edit-button]');
+    await waitFor('[data-test-save-idle]');
 
     await waitFor('.operator-mode [data-test-blog-post-isolated]');
     assert
@@ -1251,7 +1248,7 @@ module('Integration | operator-mode', function (hooks) {
         '[data-test-links-to-many="friends"] [data-test-item="1"] [data-test-remove-card]',
       );
     });
-    await assert.dom('[data-test-field="friends"]').containsText('Jackie');
+    assert.dom('[data-test-field="friends"]').containsText('Jackie');
 
     await waitUntilSaved(async () => {
       await click('[data-test-links-to-many="friends"] [data-test-add-new]');
@@ -1261,7 +1258,6 @@ module('Integration | operator-mode', function (hooks) {
     });
 
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
-
     assert.dom('[data-test-field="friends"]').containsText('Mango');
   });
 
@@ -1364,22 +1360,17 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-edit-button]');
     assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
 
-    await click(
-      '[data-test-links-to-many="friends"] [data-test-item="1"] [data-test-remove-card]',
-    );
-    await waitFor('[data-test-last-saved]');
-    await click(
-      '[data-test-links-to-many="friends"] [data-test-item="0"] [data-test-remove-card]',
-    );
-    let saveTime = document
-      .querySelector('[data-test-last-saved]')!
-      .getAttribute('data-test-last-saved');
-    await waitUntil(
-      () =>
-        document
-          .querySelector('[data-test-last-saved]')!
-          .getAttribute('data-test-last-saved') !== saveTime,
-    );
+    await waitUntilSaved(async () => {
+      await click(
+        '[data-test-links-to-many="friends"] [data-test-item="1"] [data-test-remove-card]',
+      );
+    });
+    await waitUntilSaved(async () => {
+      await click(
+        '[data-test-links-to-many="friends"] [data-test-item="0"] [data-test-remove-card]',
+      );
+    });
+
     await click('[data-test-edit-button]');
     await waitFor(`[data-test-person="Burcu"]`);
     assert
