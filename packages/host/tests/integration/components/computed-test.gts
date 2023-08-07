@@ -28,7 +28,7 @@ module('Integration | computeds', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
   hooks.beforeEach(async function () {
@@ -276,7 +276,7 @@ module('Integration | computeds', function (hooks) {
     let root = await renderCard(loader, firstPost, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
-      'First Post by Mango'
+      'First Post by Mango',
     );
   });
 
@@ -341,7 +341,7 @@ module('Integration | computeds', function (hooks) {
     let root = await renderCard(loader, mango, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
-      'Mango speaks english japanese'
+      'Mango speaks english japanese',
     );
   });
 
@@ -370,7 +370,7 @@ module('Integration | computeds', function (hooks) {
     assert.deepEqual(
       mango.slowLanguagesSpoken,
       [],
-      'empty containsMany field is initialized to an empty array'
+      'empty containsMany field is initialized to an empty array',
     );
   });
 
@@ -417,9 +417,9 @@ module('Integration | computeds', function (hooks) {
     await renderCard(loader, abdelRahmans, 'isolated');
     assert.deepEqual(
       [...this.element.querySelectorAll('[data-test-firstName]')].map(
-        (element) => element.textContent?.trim()
+        (element) => element.textContent?.trim(),
       ),
-      ['Mango', 'Van Gogh', 'Hassan', 'Mariko', 'Yume', 'Sakura']
+      ['Mango', 'Van Gogh', 'Hassan', 'Mariko', 'Yume', 'Sakura'],
     );
   });
 
@@ -455,7 +455,7 @@ module('Integration | computeds', function (hooks) {
     assert.deepEqual(
       abdelRahmans.slowPeople,
       [],
-      'empty containsMany field is initialized to an empty array'
+      'empty containsMany field is initialized to an empty array',
     );
   });
 
@@ -477,7 +477,7 @@ module('Integration | computeds', function (hooks) {
       async computeTotalAge() {
         let totalAge = this.people.reduce(
           (sum, person) => (sum += person.age),
-          0
+          0,
         );
         return totalAge;
       }
@@ -571,7 +571,7 @@ module('Integration | computeds', function (hooks) {
     await waitUntil(() =>
       document
         .querySelector('[data-test-dep-field="firstName"]')
-        ?.textContent?.includes('Van Gogh')
+        ?.textContent?.includes('Van Gogh'),
     );
     assert.dom('[data-test-field="slowName"]').containsText('Van Gogh');
     assert
@@ -582,7 +582,7 @@ module('Integration | computeds', function (hooks) {
     await waitUntil(() =>
       document
         .querySelector('[data-test-dep-field="homeTown"]')
-        ?.textContent?.includes('Scarsdale')
+        ?.textContent?.includes('Scarsdale'),
     );
     assert
       .dom('[data-test-field="slowHomeTown"] [data-test-location]')
@@ -734,10 +734,10 @@ module('Integration | computeds', function (hooks) {
     assert.deepEqual(
       [
         ...this.element.querySelectorAll(
-          '[data-test-field="collaborators"] [data-test="name"]'
+          '[data-test-field="collaborators"] [data-test="name"]',
         ),
       ].map((element) => element.textContent?.trim()),
-      ['Mango', 'A', 'B', 'C']
+      ['Mango', 'A', 'B', 'C'],
     );
   });
 
@@ -795,10 +795,10 @@ module('Integration | computeds', function (hooks) {
     assert.deepEqual(
       [
         ...this.element.querySelectorAll(
-          '[data-test-field="collaborators"] [data-test="name"]'
+          '[data-test-field="collaborators"] [data-test="name"]',
         ),
       ].map((element) => element.textContent?.trim()),
-      ['Mango', 'A', 'B', 'C']
+      ['Mango', 'A', 'B', 'C'],
     );
   });
 });

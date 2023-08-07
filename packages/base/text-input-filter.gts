@@ -38,9 +38,9 @@ export class TextInputFilter<T> {
     private getValue: () => T | null,
     private setValue: (val: T | null | undefined) => void,
     private deserialize: (
-      inputValue: string | null | undefined
+      inputValue: string | null | undefined,
     ) => DeserializedResult<T>,
-    private serialize: (val: T) => string = (v) => String(v)
+    private serialize: (val: T) => string = (v) => String(v),
   ) {}
   @tracked _lastEditedInputValue: string | undefined;
   @tracked _errorMessage: string | undefined;

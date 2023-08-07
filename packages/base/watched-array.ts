@@ -9,7 +9,7 @@ class WatchedArray<T> {
 
         let done: () => void;
         let notifyPromise = (self.#notifyPromise = new Promise<void>(
-          (res) => (done = res)
+          (res) => (done = res),
         ));
         (async () => {
           await Promise.resolve();

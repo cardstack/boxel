@@ -33,7 +33,7 @@ export default class DatetimeCard extends CardBase {
 
   static async [deserialize]<T extends CardBaseConstructor>(
     this: T,
-    date: any
+    date: any,
   ): Promise<CardInstanceType<T>> {
     if (date == null) {
       return date;

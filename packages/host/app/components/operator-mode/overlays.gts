@@ -277,7 +277,6 @@ export default class OperatorModeOverlays extends Component<Signature> {
         --icon-bg: var(--boxel-light);
         background: var(--boxel-teal);
       }
-
     </style>
   </template>
 
@@ -316,11 +315,11 @@ export default class OperatorModeOverlays extends Component<Signature> {
       if (this.areEventsRegistered.get(renderedCard)) continue;
       renderedCard.element.addEventListener(
         'mouseenter',
-        (_e: MouseEvent) => (this.currentlyHoveredCard = renderedCard)
+        (_e: MouseEvent) => (this.currentlyHoveredCard = renderedCard),
       );
       renderedCard.element.addEventListener(
         'mouseleave',
-        (_e: MouseEvent) => (this.currentlyHoveredCard = null)
+        (_e: MouseEvent) => (this.currentlyHoveredCard = null),
       );
       renderedCard.element.addEventListener('click', (e: MouseEvent) => {
         // prevent outer nested contains fields from triggering when inner most
@@ -340,7 +339,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
   }
 
   setCurrentlyHoveredCard = (
-    renderedCard: RenderedCardForOverlayActions | null
+    renderedCard: RenderedCardForOverlayActions | null,
   ) => {
     this.currentlyHoveredCard = renderedCard;
   };

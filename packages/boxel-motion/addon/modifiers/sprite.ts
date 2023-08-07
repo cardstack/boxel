@@ -39,7 +39,7 @@ export default class SpriteModifier extends Modifier<SpriteModifierSignature> {
   modify(
     element: Element,
     _: PositionalArgs<SpriteModifierSignature>,
-    { id, role }: NamedArgs<SpriteModifierSignature>
+    { id, role }: NamedArgs<SpriteModifierSignature>,
   ): void {
     this.element = element;
     this.id = id;

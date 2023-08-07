@@ -43,7 +43,7 @@ module('Integration | file-tree', function (hooks) {
       .loader;
     loader.addURLMapping(
       new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
+      new URL('http://localhost:4201/base/'),
     );
     shimExternals(loader);
     adapter = new TestRealmAdapter({
@@ -140,7 +140,7 @@ module('Integration | file-tree', function (hooks) {
           <CardCatalogModal />
           <CardPrerender />
         </template>
-      }
+      },
     );
     await click('[data-test-create-new-card-button]');
 
@@ -154,17 +154,17 @@ module('Integration | file-tree', function (hooks) {
       .exists({ count: 3 }, 'number of catalog items is correct');
     assert
       .dom(
-        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"]`
+        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"]`,
       )
       .exists('first item is correct');
     assert
       .dom(
-        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}post-entry"]`
+        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}post-entry"]`,
       )
       .exists('second item is correct');
     assert
       .dom(
-        `[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/string-field`
+        `[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/string-field`,
       )
       .doesNotExist('primitive field cards are not displayed');
 
@@ -183,11 +183,11 @@ module('Integration | file-tree', function (hooks) {
       {
         queryParams: { path: 'Person/1.json' },
       },
-      'the query params are correct'
+      'the query params are correct',
     );
 
     let entry = await realm.searchIndex.card(
-      new URL(`${testRealmURL}Person/1`)
+      new URL(`${testRealmURL}Person/1`),
     );
     assert.ok(entry, 'the new person card was created');
 
@@ -211,7 +211,7 @@ module('Integration | file-tree', function (hooks) {
           },
         },
       },
-      'file contents are correct'
+      'file contents are correct',
     );
   });
 });

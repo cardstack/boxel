@@ -180,7 +180,6 @@ export default class Menu extends Component<Signature> {
         height: 0;
         border-bottom: 1px solid var(--boxel-purple-300);
       }
-
     </style>
   </template>
 }

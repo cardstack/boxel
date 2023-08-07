@@ -52,7 +52,7 @@ export default class SpringBehavior implements Behavior {
     assert('Mass value must be greater than 0', this.options.mass > 0);
     assert(
       'Stiffness value must be greater than 0',
-      this.options.stiffness > 0
+      this.options.stiffness > 0,
     );
     assert('Damping value must be greater than 0', this.options.damping > 0);
   }
@@ -127,7 +127,7 @@ export default class SpringBehavior implements Behavior {
   private finalizeSpring(
     frame: Frame,
     fromValue: number,
-    toValue: number
+    toValue: number,
   ): Frame {
     let { velocity, value } = frame;
 
@@ -206,7 +206,7 @@ export default class SpringBehavior implements Behavior {
             velocity,
           },
           fromValue,
-          toValue
+          toValue,
         );
       };
     } else if (zeta === 1) {
@@ -223,7 +223,7 @@ export default class SpringBehavior implements Behavior {
             velocity,
           },
           fromValue,
-          toValue
+          toValue,
         );
       };
     } else {
@@ -253,7 +253,7 @@ export default class SpringBehavior implements Behavior {
             velocity,
           },
           fromValue,
-          toValue
+          toValue,
         );
       };
     }
@@ -264,7 +264,7 @@ export default class SpringBehavior implements Behavior {
 
     if (isNaN(fromValue) || isNaN(toValue)) {
       throw new Error(
-        `Cannot calculate spring for non-numerical values: ${fromValue} -> ${toValue}`
+        `Cannot calculate spring for non-numerical values: ${fromValue} -> ${toValue}`,
       );
     }
 

@@ -87,7 +87,6 @@ export default class ChatSidebar extends Component<Args> {
       .loading__message {
         margin-left: var(--boxel-sp-xs);
       }
-
     </style>
   </template>
 

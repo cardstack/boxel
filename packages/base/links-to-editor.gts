@@ -75,7 +75,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
   get linkedCard() {
     if (this.args.model.value == null) {
       throw new Error(
-        `can't make field component with box value of null for field ${this.args.field.name}`
+        `can't make field component with box value of null for field ${this.args.field.name}`,
       );
     }
     let card = Reflect.getPrototypeOf(this.args.model.value)!
@@ -85,7 +85,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
       'embedded',
       this.args.model as Box<CardBase>,
       this.args.field,
-      this.args.context
+      this.args.context,
     );
   }
 
@@ -114,7 +114,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
 export function getLinksToEditor(
   model: Box<Card | null>,
   field: Field<typeof Card>,
-  context?: CardContext
+  context?: CardContext,
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   return class LinksToEditTemplate extends GlimmerComponent {
     <template>

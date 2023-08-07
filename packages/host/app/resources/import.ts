@@ -58,7 +58,7 @@ export function importResource(parent: object, url: () => string) {
       url: url(),
       loader: (
         (getOwner(parent) as any).lookup(
-          'service:loader-service'
+          'service:loader-service',
         ) as LoaderService
       ).loader,
     },

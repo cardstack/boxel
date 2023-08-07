@@ -44,7 +44,7 @@ async function processDecryptedEvent(context: Context, event: Event) {
   let { room_id: roomId } = event;
   if (!roomId) {
     throw new Error(
-      `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`
+      `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
     );
   }
   let discreteEvent = event as DiscreteMatrixEvent;
@@ -78,7 +78,7 @@ async function processDecryptedEvent(context: Context, event: Event) {
   let room = context.client.getRoom(roomId);
   if (!room) {
     throw new Error(
-      `bug: should never get here--matrix sdk returned a null room for ${roomId}`
+      `bug: should never get here--matrix sdk returned a null room for ${roomId}`,
     );
   }
   if (room.oldState.paginationToken != null) {
