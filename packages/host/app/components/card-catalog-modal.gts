@@ -1,34 +1,35 @@
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
+import { service } from '@ember/service';
 import { registerDestructor } from '@ember/destroyable';
 import { enqueueTask, restartableTask } from 'ember-concurrency';
+import debounce from 'lodash/debounce';
 import type { Card, CardContext } from 'https://cardstack.com/base/card-api';
 import {
   createNewCard,
+  isSingleCardDocument,
   type CardRef,
   type CreateNewCard,
+  Deferred,
 } from '@cardstack/runtime-common';
 import type { Query, Filter } from '@cardstack/runtime-common/query';
+import { Button, SearchInput } from '@cardstack/boxel-ui';
+import { and, eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import cn from '@cardstack/boxel-ui/helpers/cn';
+import type CardService from '../services/card-service';
+import type LoaderService from '../services/loader-service';
+import { getSearchResults, Search } from '../resources/search';
 import {
   suggestCardChooserTitle,
   getSuggestionWithLowestDepth,
 } from '../utils/text-suggestion';
-import { Deferred } from '@cardstack/runtime-common/deferred';
-import { getSearchResults, Search } from '../resources/search';
-import CardCatalog from './card-catalog';
-import { Button, IconButton, SearchInput } from '@cardstack/boxel-ui';
-import { and, eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import cn from '@cardstack/boxel-ui/helpers/cn';
-import debounce from 'lodash/debounce';
-import { service } from '@ember/service';
-import { isSingleCardDocument } from '@cardstack/runtime-common';
-import type CardService from '../services/card-service';
-import type LoaderService from '../services/loader-service';
 import ModalContainer from './modal-container';
+import CardCatalog from './card-catalog';
+import CardCatalogFilters from './card-catalog/filters';
 
 interface Signature {
   Args: {
@@ -50,34 +51,17 @@ export default class CardCatalogModal extends Component<Signature> {
         data-test-card-catalog-modal
       >
         <:header>
-          <div>
-            <SearchInput
-              class='card-catalog-modal__search-field'
-              @value={{this.searchKey}}
-              @onInput={{this.setSearchKey}}
-              @onKeyPress={{this.onSearchFieldKeypress}}
-              @state={{this.searchFieldState}}
-              @errorMessage={{this.searchErrorMessage}}
-              @placeholder='Search for a card type or enter card URL'
-              data-test-search-field
-            />
-          </div>
-          <div class='tags'>
-            <IconButton
-              class='add-tag-button'
-              @icon='icon-plus'
-              @width='20'
-              @height='20'
-              aria-label='add tag'
-            />
-            <ul class='tag-list'>
-              <li>
-                <div class='tag'>
-                  Realm: All
-                </div>
-              </li>
-            </ul>
-          </div>
+          <SearchInput
+            class='card-catalog-modal__search-field'
+            @value={{this.searchKey}}
+            @onInput={{this.setSearchKey}}
+            @onKeyPress={{this.onSearchFieldKeypress}}
+            @state={{this.searchFieldState}}
+            @errorMessage={{this.searchErrorMessage}}
+            @placeholder='Search for a card type or enter card URL'
+            data-test-search-field
+          />
+          <CardCatalogFilters />
         </:header>
         <:default>
           {{#if this.currentRequest.search.isLoading}}
@@ -148,59 +132,6 @@ export default class CardCatalogModal extends Component<Signature> {
       .card-catalog-modal__search-field {
         /* This is neccesary to show card URL error messages */
         height: 5.625rem;
-      }
-      .tags {
-        --tag-height: 30px;
-        display: flex;
-        gap: var(--boxel-sp-xs);
-        font: 500 var(--boxel-font-sm);
-      }
-      .add-tag-button {
-        --icon-color: var(--boxel-highlight);
-        border: 1px solid var(--boxel-400);
-        border-radius: 100px;
-        width: var(--tag-height);
-        height: var(--tag-height);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-      }
-      .add-tag-button:hover {
-        border-color: var(--boxel-dark);
-      }
-      .tag-list {
-        list-style-type: none;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        flex-flow: row wrap;
-        gap: var(--boxel-sp-xs);
-      }
-      .tag {
-        position: relative;
-        height: var(--tag-height);
-        border: 1px solid var(--boxel-400);
-        border-radius: 20px;
-        padding-right: var(--boxel-sp-lg);
-        padding-left: var(--boxel-sp-sm);
-        display: flex;
-        align-items: center;
-      }
-      .remove-tag-button {
-        --icon-bg: var(--boxel-400);
-        position: absolute;
-        right: 0;
-        width: var(--boxel-sp-lg);
-        height: var(--tag-height);
-        background: none;
-        border: none;
-        padding: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .remove-tag-button:hover {
-        --icon-bg: var(--boxel-dark);
       }
       .footer {
         display: flex;

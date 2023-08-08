@@ -24,6 +24,7 @@ export default class ModalContainer extends Component<Signature> {
       @isOpen={{true}}
       @onClose={{@onClose}}
       style={{this.styleString}}
+      ...attributes
     >
       <CardContainer class='dialog-box' @displayBoundaries={{true}}>
         <Header @title={{@title}} class='dialog-box__header'>

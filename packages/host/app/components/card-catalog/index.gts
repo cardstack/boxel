@@ -2,17 +2,16 @@ import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
+import { service } from '@ember/service';
 import { TrackedArray } from 'tracked-built-ins';
 import type { Card, CardContext } from 'https://cardstack.com/base/card-api';
 import { type RealmInfo } from '@cardstack/runtime-common';
-import CardCatalogItem from './card-catalog-item';
 import { Button, IconButton } from '@cardstack/boxel-ui';
-// @ts-ignore no types
-import cssUrl from 'ember-css-url';
-import { eq, gt, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { eq, gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import cn from '@cardstack/boxel-ui/helpers/cn';
-import { service } from '@ember/service';
-import type CardService from '../services/card-service';
+import type CardService from '../../services/card-service';
+import CardCatalogItem from './item';
+import CardCatalogResultsHeader from './results-header';
 
 interface Signature {
   Args: {
@@ -23,7 +22,7 @@ interface Signature {
   };
 }
 
-type RealmCards = {
+export type RealmCards = {
   name: RealmInfo['name'];
   iconURL: RealmInfo['iconURL'];
   cards: Card[];
@@ -35,26 +34,7 @@ export default class CardCatalog extends Component<Signature> {
     <div class='card-catalog' data-test-card-catalog>
       {{#each this.cardsByRealm as |realm|}}
         <section class='card-catalog__realm' data-test-realm={{realm.name}}>
-          <header class='realm-info'>
-            <div
-              style={{if
-                realm.iconURL
-                (cssUrl 'background-image' realm.iconURL)
-              }}
-              class={{cn 'realm-icon' realm-icon--empty=(not realm.iconURL)}}
-            />
-            <span class='realm-name' data-test-realm-name>
-              {{realm.name}}
-            </span>
-            <span class='results-count' data-test-results-count>
-              {{#if (gt realm.cards.length 1)}}
-                {{realm.cards.length}}
-                results
-              {{else if (eq realm.cards.length 1)}}
-                1 result
-              {{/if}}
-            </span>
-          </header>
+          <CardCatalogResultsHeader @realm={{realm}} />
           {{#if realm.cards.length}}
             <ul class='card-catalog__group'>
               {{#each realm.displayedCards as |card|}}
@@ -103,31 +83,6 @@ export default class CardCatalog extends Component<Signature> {
     </div>
 
     <style>
-      .realm-info {
-        --realm-icon-size: 1.25rem;
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-      }
-      .realm-icon {
-        width: var(--realm-icon-size);
-        height: var(--realm-icon-size);
-        background-size: contain;
-        background-position: center;
-      }
-      .realm-icon--empty {
-        border: 1px solid var(--boxel-dark);
-        border-radius: 100px;
-      }
-      .realm-name {
-        display: inline-block;
-        font: 700 var(--boxel-font);
-      }
-      .results-count {
-        display: inline-block;
-        font: var(--boxel-font);
-      }
-
       .card-catalog {
         display: grid;
         gap: var(--boxel-sp-xl);
@@ -145,11 +100,9 @@ export default class CardCatalog extends Component<Signature> {
         display: grid;
         gap: var(--boxel-sp);
       }
-
       .item {
         position: relative;
       }
-
       .select {
         position: absolute;
         top: 0;
