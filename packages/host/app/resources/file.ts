@@ -19,7 +19,7 @@ interface Args {
 
 export interface Loading {
   state: 'loading';
-  ready: () => Promise<void>; //this is used only for test.
+  ready: () => Promise<void>; // Used for test. It enables resource parent context to update file resource state to be Ready
 }
 
 export interface ServerError {
@@ -51,7 +51,6 @@ class _FileResource extends Resource<Args> {
   @tracked private innerState: FileResource = {
     state: 'loading',
     ready: async () => {
-      //This is best only for testing. You want the readiness of the file resource be tied to the rendering of component
       return this.read.perform();
     },
   };
@@ -129,9 +128,9 @@ class _FileResource extends Resource<Args> {
     }
     let content = await response.text();
     let self = this;
-    //occasionally response will return ''
-    //when url handlers is registered
-    //since there are not network request, we cannot mutate .url in a valid fetch Response object
+    // Inside test, The loader occasionally doesn't do a network request and creates Response object manually
+    // This means that reading response.url will give url = '' and we cannot manually alter the url in Response
+    // The below condition is a workaround
     let url = response.url == '' ? this._url : response.url;
     this.updateState({
       state: 'ready',
