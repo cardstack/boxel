@@ -124,12 +124,16 @@ class _FileResource extends Resource<Args> {
     }
     let content = await response.text();
     let self = this;
+    //occasionally response will return ''
+    //when url handlers is registered
+    //since there are not network request, we cannot mutate .url in a valid fetch Response object
+    let url = response.url == '' ? this._url : response.url;
     this.updateState({
       state: 'ready',
       lastModified: lastModified,
       content,
-      name: response.url.split('/').pop()!,
-      url: response.url,
+      name: url.split('/').pop()!,
+      url: url,
       write(content: string, flushLoader?: true) {
         self.writeTask.perform(this, content, flushLoader);
       },
