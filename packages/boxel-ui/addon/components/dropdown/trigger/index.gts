@@ -15,15 +15,24 @@ interface Signature {
 
 const BoxelDropdownTrigger: TemplateOnlyComponent<Signature> = <template>
   <BoxelButton
-    class={{cn "boxel-dropdown-trigger" boxel-dropdown-trigger--showing-placeholder=@isMissingValue}}
+    class={{cn
+      'boxel-dropdown-trigger'
+      boxel-dropdown-trigger--showing-placeholder=@isMissingValue
+    }}
     @disabled={{@disabled}}
     ...attributes
   >
     {{#if @icon}}
-      {{svgJar @icon class="boxel-dropdown-trigger__icon" role="presentation"}}
+      {{svgJar @icon class='boxel-dropdown-trigger__icon' role='presentation'}}
     {{/if}}
     {{@label}}
-    {{svgJar "caret-down" class="boxel-dropdown-trigger__caret" width=8 height=8 role="presentation"}}
+    {{svgJar
+      'caret-down'
+      class='boxel-dropdown-trigger__caret'
+      width=8
+      height=8
+      role='presentation'
+    }}
   </BoxelButton>
   <style>
     .boxel-dropdown-trigger {
@@ -52,6 +61,6 @@ const BoxelDropdownTrigger: TemplateOnlyComponent<Signature> = <template>
       margin-left: var(--boxel-sp-xxs);
     }
   </style>
-</template>
+</template>;
 
 export default BoxelDropdownTrigger;

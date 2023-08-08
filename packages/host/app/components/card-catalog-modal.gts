@@ -28,7 +28,7 @@ import {
   Header,
   Button,
   IconButton,
-  BoxelInputValidationState,
+  SearchInput,
 } from '@cardstack/boxel-ui';
 // @ts-ignore no types
 import cssUrl from 'ember-css-url';
@@ -71,27 +71,23 @@ export default class CardCatalogModal extends Component<Signature> {
           <Header @title={{this.chooseCardTitle}} class='dialog-box__header'>
             <IconButton
               @icon='icon-x'
+              @width='20'
+              @height='20'
               {{on 'click' (fn this.pick undefined)}}
               class='dialog-box__close'
               aria-label='close modal'
             />
-            <div class='boxel-searchbox'>
-              <span class='boxel-searchbox__search-icon'>
-                {{svgJar 'search' class='search-icon'}}
-              </span>
-              <label>
-                <span class='boxel-sr-only'>Search</span>
-                <BoxelInputValidationState
-                  class='boxel-searchbox__input'
-                  @value={{this.searchKey}}
-                  @onInput={{this.setSearchKey}}
-                  @onKeyPress={{this.onSearchFieldKeypress}}
-                  @state={{this.searchFieldState}}
-                  @errorMessage={{this.searchErrorMessage}}
-                  @placeholder='Search for a card type or enter card URL'
-                  data-test-search-field
-                />
-              </label>
+            <div>
+              <SearchInput
+                class='card-catalog-modal__search-field'
+                @value={{this.searchKey}}
+                @onInput={{this.setSearchKey}}
+                @onKeyPress={{this.onSearchFieldKeypress}}
+                @state={{this.searchFieldState}}
+                @errorMessage={{this.searchErrorMessage}}
+                @placeholder='Search for a card type or enter card URL'
+                data-test-search-field
+              />
             </div>
             <div class='tags'>
               <IconButton
@@ -105,7 +101,6 @@ export default class CardCatalogModal extends Component<Signature> {
                 <li>
                   <div class='tag'>
                     Realm: All
-                    <IconButton @icon='icon-x' class='remove-tag-button' />
                   </div>
                 </li>
               </ul>
@@ -251,39 +246,15 @@ export default class CardCatalogModal extends Component<Signature> {
     {{/if}}
     <style>
       .dialog-box__header {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
+        display: grid;
+        gap: 0;
       }
       .dialog-box__header > * + *:not(button) {
         margin-top: var(--boxel-sp);
       }
-      .boxel-searchbox {
-        position: relative;
-        width: 100%;
-      }
-      .boxel-searchbox__search-icon {
-        --icon-color: var(--boxel-highlight);
-        position: absolute;
-        top: 0;
-        right: 0;
-        height: 100%;
-        width: var(--boxel-sp-xl);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-      }
-      :global(.boxel-searchbox__input .boxel-input) {
-        padding-right: var(--boxel-sp-xl);
-        background-color: var(--boxel-600);
-        border-color: #707070;
-        color: var(--boxel-light);
-        font: var(--boxel-font-sm);
-        font-weight: 400;
-        letter-spacing: var(--boxel-lsp-xs);
-      }
-      :global(.boxel-searchbox__input .boxel-input::placeholder) {
-        color: var(--boxel-300);
+      .card-catalog-modal__search-field {
+        /* This is neccesary to show card URL error messages */
+        height: 5.625rem;
       }
       .tags {
         --tag-height: 30px;
@@ -317,7 +288,7 @@ export default class CardCatalogModal extends Component<Signature> {
         height: var(--tag-height);
         border: 1px solid var(--boxel-400);
         border-radius: 20px;
-        padding-right: var(--boxel-sp-xl);
+        padding-right: var(--boxel-sp-lg);
         padding-left: var(--boxel-sp-sm);
         display: flex;
         align-items: center;
@@ -337,12 +308,6 @@ export default class CardCatalogModal extends Component<Signature> {
       }
       .remove-tag-button:hover {
         --icon-bg: var(--boxel-dark);
-      }
-      .footer {
-        display: flex;
-        justify-content: flex-end;
-        /* This bottom margin is neccesary to show card URL error messages */
-        margin-bottom: var(--boxel-sp);
       }
       .footer.with-create-button {
         justify-content: space-between;
@@ -434,11 +399,11 @@ export default class CardCatalogModal extends Component<Signature> {
       .preview {
         right: 0;
         top: 0;
+        visibility: collapse; /* remove this line to no longer hide the preview icon */
       }
       .preview > svg {
         height: 100%;
       }
-
     </style>
   </template>
 
@@ -498,7 +463,7 @@ export default class CardCatalogModal extends Component<Signature> {
     realmCards.map((r) => {
       if (!r.displayedCards.length) {
         r.displayedCards = new TrackedArray<Card>(
-          r.cards.slice(0, this.displayCardCount)
+          r.cards.slice(0, this.displayCardCount),
         );
       }
     });
@@ -544,7 +509,7 @@ export default class CardCatalogModal extends Component<Signature> {
       offerToCreate?: CardRef;
       multiSelect?: boolean;
       createNewCard?: CreateNewCard;
-    }
+    },
   ): Promise<undefined | T> {
     this.zIndex++;
     this.chooseCardTitle = chooseCardTitle(query.filter, opts?.multiSelect);
@@ -554,7 +519,7 @@ export default class CardCatalogModal extends Component<Signature> {
   private _chooseCard = enqueueTask(
     async <T extends Card>(
       query: Query,
-      opts: { offerToCreate?: CardRef } = {}
+      opts: { offerToCreate?: CardRef } = {},
     ) => {
       this.currentRequest = {
         search: getSearchResults(this, () => query),
@@ -567,7 +532,7 @@ export default class CardCatalogModal extends Component<Signature> {
       } else {
         return undefined;
       }
-    }
+    },
   );
 
   private getCard = restartableTask(async (searchKey: string) => {
@@ -583,7 +548,7 @@ export default class CardCatalogModal extends Component<Signature> {
         this.selectedCard = await this.cardService.createFromSerialized(
           maybeCardDoc.data,
           maybeCardDoc,
-          new URL(maybeCardDoc.data.id)
+          new URL(maybeCardDoc.data.id),
         );
         return;
       }
@@ -613,7 +578,7 @@ export default class CardCatalogModal extends Component<Signature> {
   displayMoreCards(realm: RealmCards) {
     let num = realm.displayedCards.length;
     realm.displayedCards.push(
-      ...realm.cards.slice(num, num + this.displayCardCount)
+      ...realm.cards.slice(num, num + this.displayCardCount),
     );
   }
 
@@ -689,7 +654,7 @@ export default class CardCatalogModal extends Component<Signature> {
 
 function chooseCardTitle(
   filter: Filter | undefined,
-  multiSelect?: boolean
+  multiSelect?: boolean,
 ): string {
   if (!filter) {
     return DEFAULT_CHOOOSE_CARD_TITLE;

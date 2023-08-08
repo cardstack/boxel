@@ -61,7 +61,7 @@ export default class TweenBehavior implements Behavior {
       let velocity = instantaneousVelocityForValues(
         previousValue,
         value,
-        nextValue
+        nextValue,
       );
 
       yield {

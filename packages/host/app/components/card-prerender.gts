@@ -35,14 +35,14 @@ export default class CardPrerender extends Component {
           throw e;
         }
         throw new Error(
-          `card-prerender component is missing or being destroyed before runner registration was completed`
+          `card-prerender component is missing or being destroyed before runner registration was completed`,
         );
       }
     } else {
       this.warmUpModuleCache.perform();
       this.localIndexer.setup(
         this.fromScratch.bind(this),
-        this.incremental.bind(this)
+        this.incremental.bind(this),
       );
     }
   }
@@ -57,14 +57,14 @@ export default class CardPrerender extends Component {
       }
     }
     throw new Error(
-      `card-prerender component is missing or being destroyed before from scratch index of realm ${realmURL} was completed`
+      `card-prerender component is missing or being destroyed before from scratch index of realm ${realmURL} was completed`,
     );
   }
 
   private async incremental(
     prev: RunState,
     url: URL,
-    operation: 'delete' | 'update'
+    operation: 'delete' | 'update',
   ): Promise<RunState> {
     if (hasExecutableExtension(url.href) && !this.fastboot.isFastBoot) {
       this.loaderService.reset();
@@ -78,14 +78,14 @@ export default class CardPrerender extends Component {
       }
     }
     throw new Error(
-      `card-prerender component is missing or being destroyed before incremental index of ${url} was completed`
+      `card-prerender component is missing or being destroyed before incremental index of ${url} was completed`,
     );
   }
 
   private warmUpModuleCache = dropTask(async () => {
     let baseRealmModules = await getModulesInRealm(
       this.loaderService.loader,
-      baseRealm.url
+      baseRealm.url,
     );
     // TODO the fact that we need to reverse this list is
     // indicative of a loader issue. Need to work with Ed around this as I think
@@ -113,7 +113,7 @@ export default class CardPrerender extends Component {
         reader,
         entrySetter,
         renderCard: this.renderService.renderCard.bind(this.renderService),
-      })
+      }),
     );
     this.renderService.indexRunDeferred?.fulfill();
     return current;
@@ -133,7 +133,7 @@ export default class CardPrerender extends Component {
       });
       this.renderService.indexRunDeferred?.fulfill();
       return current;
-    }
+    },
   );
 
   private getRunnerParams(): {
@@ -153,18 +153,18 @@ export default class CardPrerender extends Component {
       let self = this;
       function readFileAsText(
         path: LocalPath,
-        opts?: { withFallbacks?: true }
+        opts?: { withFallbacks?: true },
       ): Promise<{ content: string; lastModified: number } | undefined> {
         return _readFileAsText(
           path,
           self.localIndexer.adapter.openFile.bind(self.localIndexer.adapter),
-          opts
+          opts,
         );
       }
       return {
         reader: {
           readdir: this.localIndexer.adapter.readdir.bind(
-            this.localIndexer.adapter
+            this.localIndexer.adapter,
           ),
           readFileAsText,
         },
@@ -176,7 +176,7 @@ export default class CardPrerender extends Component {
 
 function getRunnerOpts(optsId: number): RunnerOpts {
   return ((globalThis as any).getRunnerOpts as (optsId: number) => RunnerOpts)(
-    optsId
+    optsId,
   );
 }
 

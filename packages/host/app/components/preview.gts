@@ -25,7 +25,7 @@ export default class Preview extends Component<Signature> {
       this.args.card,
       this.args.format ?? 'isolated',
       this.args.field,
-      this.args.context
+      this.args.context,
     );
   }
 }

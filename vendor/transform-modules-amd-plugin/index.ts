@@ -31,7 +31,7 @@ const buildAnonymousWrapper = template.statement(`
 
 function injectWrapper(
   path: NodePath<t.Program>,
-  wrapper: t.ExpressionStatement
+  wrapper: t.ExpressionStatement,
 ) {
   const { body, directives } = path.node;
   path.node.directives = [];
@@ -117,6 +117,7 @@ export default declare<State>((api: any, options: Options) => {
         if (!noInterop) result = wrapInterop(path, result, 'namespace');
 
         path.replaceWith(
+          // @ts-ignore
           template.expression.ast`
             new Promise((${resolveId}, ${rejectId}) =>
               ${requireId}(
@@ -124,7 +125,7 @@ export default declare<State>((api: any, options: Options) => {
                 imported => ${t.cloneNode(resolveId!)}(${result}),
                 ${t.cloneNode(rejectId!)}
               )
-            )`
+            )`,
         );
       },
 
@@ -136,7 +137,7 @@ export default declare<State>((api: any, options: Options) => {
                 path,
                 buildAnonymousWrapper({
                   REQUIRE: t.cloneNode(requireId),
-                }) as t.ExpressionStatement
+                }) as t.ExpressionStatement,
               );
             }
             return;
@@ -170,7 +171,7 @@ export default declare<State>((api: any, options: Options) => {
               noInterop,
               // @ts-ignore
               filename: this.file.opts.filename,
-            }
+            },
           );
 
           if (hasExports(meta)) {
@@ -187,15 +188,15 @@ export default declare<State>((api: any, options: Options) => {
               const interop = wrapInterop(
                 path,
                 t.identifier(metadata.name),
-                metadata.interop
+                metadata.interop,
               );
               if (interop) {
                 const header = t.expressionStatement(
                   t.assignmentExpression(
                     '=',
                     t.identifier(metadata.name),
-                    interop
-                  )
+                    interop,
+                  ),
                 );
                 header.loc = metadata.loc;
                 headers.push(header);
@@ -203,7 +204,11 @@ export default declare<State>((api: any, options: Options) => {
             }
 
             headers.push(
-              ...buildNamespaceInitStatements(meta, metadata, constantReexports)
+              ...buildNamespaceInitStatements(
+                meta,
+                metadata,
+                constantReexports,
+              ),
             );
           }
 
@@ -217,7 +222,7 @@ export default declare<State>((api: any, options: Options) => {
 
               AMD_ARGUMENTS: t.arrayExpression(amdArgs),
               IMPORT_NAMES: importNames,
-            }) as t.ExpressionStatement
+            }) as t.ExpressionStatement,
           );
         },
       },

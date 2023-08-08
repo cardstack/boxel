@@ -53,7 +53,7 @@ module('Integration | card-basics', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
   hooks.beforeEach(async function () {
@@ -165,7 +165,7 @@ module('Integration | card-basics', function (hooks) {
     let cardRoot = await renderCard(loader, helloWorld, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(cardRoot.textContent!),
-      'First Post by Arthur speaks english japanese 5 subscribers is cool true'
+      'First Post by Arthur speaks english japanese 5 subscribers is cool true',
     );
   });
 
@@ -242,9 +242,9 @@ module('Integration | card-basics', function (hooks) {
     } catch (err: any) {
       assert.ok(
         err.message.match(
-          /cannot assign a value to the field 'id' on the saved card/
+          /cannot assign a value to the field 'id' on the saved card/,
         ),
-        'exception thrown when setting ID of saved card'
+        'exception thrown when setting ID of saved card',
       );
     }
   });
@@ -273,7 +273,7 @@ module('Integration | card-basics', function (hooks) {
     assert.strictEqual(
       driver.ref,
       ref,
-      'The deserialized card ref constructor param is strict equal to the deserialized card ref value'
+      'The deserialized card ref constructor param is strict equal to the deserialized card ref value',
     );
   });
 
@@ -312,6 +312,324 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-type-display-name]').containsText(`Driver`);
   });
 
+  test('can subscribe and unsubscribe to card instance contains field changes', async function (assert) {
+    let { field, contains, Card, subscribeToChanges, unsubscribeFromChanges } =
+      cardApi;
+    let { default: StringCard } = string;
+
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field favoriteColor = contains(StringCard);
+    }
+
+    let mango = new Person({
+      firstName: 'Mango',
+      favoriteColor: 'brown',
+    });
+
+    let changeEvent: { fieldName: string; value: any } | undefined;
+    let eventCount = 0;
+    let subscriber = (fieldName: string, value: any) => {
+      eventCount++;
+      changeEvent = {
+        fieldName,
+        value,
+      };
+    };
+    subscribeToChanges(mango, subscriber);
+
+    try {
+      mango.firstName = 'Van Gogh';
+      assert.strictEqual(
+        eventCount,
+        1,
+        'the change event was fired the correct amount of times'
+      );
+      assert.strictEqual(
+        changeEvent?.fieldName,
+        'firstName',
+        'the fieldName was correctly specified in change event'
+      );
+      assert.strictEqual(
+        changeEvent?.value,
+        'Van Gogh',
+        'the field value was correctly specified in change event'
+      );
+    } finally {
+      unsubscribeFromChanges(mango, subscriber);
+    }
+
+    mango.firstName = 'Paper';
+    assert.strictEqual(
+      eventCount,
+      1,
+      'the change event was fired the correct amount of times'
+    );
+    assert.strictEqual(
+      changeEvent?.fieldName,
+      'firstName',
+      'the fieldName was correctly specified in change event'
+    );
+    assert.strictEqual(
+      changeEvent?.value,
+      'Van Gogh',
+      'the field value was correctly specified in change event'
+    );
+  });
+
+  test('can subscribe and unsubscribe to card instance containsMany field changes', async function (assert) {
+    let {
+      field,
+      contains,
+      containsMany,
+      Card,
+      subscribeToChanges,
+      unsubscribeFromChanges,
+      flushLogs,
+    } = cardApi;
+    let { default: StringCard } = string;
+
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field favoriteColors = containsMany(StringCard);
+    }
+
+    let mango = new Person({
+      firstName: 'Mango',
+      favoriteColors: ['brown'],
+    });
+
+    let changeEvent: { fieldName: string; value: any } | undefined;
+    let eventCount = 0;
+    let subscriber = (fieldName: string, value: any) => {
+      eventCount++;
+      changeEvent = {
+        fieldName,
+        value,
+      };
+    };
+    subscribeToChanges(mango, subscriber);
+
+    try {
+      mango.favoriteColors.push('green');
+      await flushLogs();
+      assert.strictEqual(
+        eventCount,
+        1,
+        'the change event was fired the correct amount of times'
+      );
+      assert.strictEqual(
+        changeEvent?.fieldName,
+        'favoriteColors',
+        'the fieldName was correctly specified in change event'
+      );
+      assert.deepEqual(
+        changeEvent?.value,
+        ['brown', 'green'],
+        'the field value was correctly specified in change event'
+      );
+    } finally {
+      unsubscribeFromChanges(mango, subscriber);
+    }
+
+    mango.favoriteColors.push('red');
+    await flushLogs();
+    assert.strictEqual(
+      eventCount,
+      1,
+      'the change event was fired the correct amount of times'
+    );
+    assert.strictEqual(
+      changeEvent?.fieldName,
+      'favoriteColors',
+      'the fieldName was correctly specified in change event'
+    );
+    assert.deepEqual(
+      changeEvent?.value,
+      ['brown', 'green'],
+      'the field value was correctly specified in change event'
+    );
+  });
+
+  test('can subscribe and unsubscribe to card instance linksTo field changes', async function (assert) {
+    let {
+      field,
+      contains,
+      linksTo,
+      Card,
+      subscribeToChanges,
+      unsubscribeFromChanges,
+    } = cardApi;
+    let { default: StringCard } = string;
+
+    class Pet extends Card {
+      @field firstName = contains(StringCard);
+    }
+
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field pet = linksTo(Pet);
+    }
+    await shimModule(`${testRealmURL}test-cards`, { Person, Pet }, loader);
+
+    let mango = new Pet({
+      firstName: 'Mango',
+    });
+    let vanGogh = new Pet({
+      firstName: 'Van Gogh',
+    });
+    let paper = new Pet({
+      firstName: 'Paper',
+    });
+    let hassan = new Person({
+      firstName: 'Hassan',
+      pet: mango,
+    });
+    await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
+    await saveCard(vanGogh, `${testRealmURL}Pet/vanGogh`, loader);
+    await saveCard(paper, `${testRealmURL}Pet/paper`, loader);
+
+    let changeEvent: { fieldName: string; value: any } | undefined;
+    let eventCount = 0;
+    let subscriber = (fieldName: string, value: any) => {
+      eventCount++;
+      changeEvent = {
+        fieldName,
+        value,
+      };
+    };
+    subscribeToChanges(hassan, subscriber);
+
+    try {
+      hassan.pet = vanGogh;
+      assert.strictEqual(
+        eventCount,
+        1,
+        'the change event was fired the correct amount of times'
+      );
+      assert.strictEqual(
+        changeEvent?.fieldName,
+        'pet',
+        'the fieldName was correctly specified in change event'
+      );
+      assert.strictEqual(
+        changeEvent?.value,
+        vanGogh,
+        'the field value was correctly specified in change event'
+      );
+    } finally {
+      unsubscribeFromChanges(hassan, subscriber);
+    }
+
+    hassan.pet = paper;
+    assert.strictEqual(
+      eventCount,
+      1,
+      'the change event was fired the correct amount of times'
+    );
+    assert.strictEqual(
+      changeEvent?.fieldName,
+      'pet',
+      'the fieldName was correctly specified in change event'
+    );
+    assert.strictEqual(
+      changeEvent?.value,
+      vanGogh,
+      'the field value was correctly specified in change event'
+    );
+  });
+
+  test('can subscribe and unsubscribe to card instance linksToMany field changes', async function (assert) {
+    let {
+      field,
+      contains,
+      linksToMany,
+      Card,
+      subscribeToChanges,
+      unsubscribeFromChanges,
+      flushLogs,
+    } = cardApi;
+    let { default: StringCard } = string;
+
+    class Pet extends Card {
+      @field firstName = contains(StringCard);
+    }
+
+    class Person extends Card {
+      @field firstName = contains(StringCard);
+      @field pets = linksToMany(Pet);
+    }
+    await shimModule(`${testRealmURL}test-cards`, { Person, Pet }, loader);
+
+    let mango = new Pet({
+      firstName: 'Mango',
+    });
+    let vanGogh = new Pet({
+      firstName: 'Van Gogh',
+    });
+    let paper = new Pet({
+      firstName: 'Paper',
+    });
+    let hassan = new Person({
+      firstName: 'Hassan',
+      pets: [mango],
+    });
+    await saveCard(mango, `${testRealmURL}Pet/mango`, loader);
+    await saveCard(vanGogh, `${testRealmURL}Pet/vanGogh`, loader);
+    await saveCard(paper, `${testRealmURL}Pet/paper`, loader);
+
+    let changeEvent: { fieldName: string; value: any } | undefined;
+    let eventCount = 0;
+    let subscriber = (fieldName: string, value: any) => {
+      eventCount++;
+      changeEvent = {
+        fieldName,
+        value,
+      };
+    };
+    subscribeToChanges(hassan, subscriber);
+
+    try {
+      hassan.pets.push(vanGogh);
+      await flushLogs();
+      assert.strictEqual(
+        eventCount,
+        1,
+        'the change event was fired the correct amount of times'
+      );
+      assert.strictEqual(
+        changeEvent?.fieldName,
+        'pets',
+        'the fieldName was correctly specified in change event'
+      );
+      assert.deepEqual(
+        (changeEvent?.value as Pet[]).map((p) => p.firstName),
+        ['Mango', 'Van Gogh'],
+        'the field value was correctly specified in change event'
+      );
+    } finally {
+      unsubscribeFromChanges(hassan, subscriber);
+    }
+
+    hassan.pets.push(paper);
+    await flushLogs();
+    assert.strictEqual(
+      eventCount,
+      1,
+      'the change event was fired the correct amount of times'
+    );
+    assert.strictEqual(
+      changeEvent?.fieldName,
+      'pets',
+      'the fieldName was correctly specified in change event'
+    );
+    assert.deepEqual(
+      (changeEvent?.value as Pet[]).map((p) => p.firstName),
+      ['Mango', 'Van Gogh'],
+      'the field value was correctly specified in change event'
+    );
+  });
+
   test('throws when assigning a value to a linksTo field with a primitive card', async function (assert) {
     let { field, contains, linksTo, Card } = cardApi;
     let { default: StringCard } = string;
@@ -329,7 +647,7 @@ module('Integration | card-basics', function (hooks) {
     } catch (err: any) {
       assert.ok(
         err.message.match(/linksTo field 'pet' contains a primitive card/),
-        'cannot have a linkTo field that uses a primitive card'
+        'cannot have a linkTo field that uses a primitive card',
       );
     }
 
@@ -341,7 +659,7 @@ module('Integration | card-basics', function (hooks) {
     } catch (err: any) {
       assert.ok(
         err.message.match(/linksTo field 'pet' contains a primitive card/),
-        'cannot have a linkTo field that uses a primitive card'
+        'cannot have a linkTo field that uses a primitive card',
       );
     }
   });
@@ -363,7 +681,7 @@ module('Integration | card-basics', function (hooks) {
     await shimModule(
       `${testRealmURL}test-cards`,
       { Person, Pet, NotAPet },
-      loader
+      loader,
     );
 
     let door = new NotAPet({ firstName: 'door' });
@@ -373,7 +691,7 @@ module('Integration | card-basics', function (hooks) {
     } catch (err: any) {
       assert.ok(
         err.message.match(/it is not an instance of Pet/),
-        'cannot assign a linksTo field to a value that is not instance of the field card'
+        'cannot assign a linksTo field to a value that is not instance of the field card',
       );
     }
 
@@ -384,7 +702,7 @@ module('Integration | card-basics', function (hooks) {
     } catch (err: any) {
       assert.ok(
         err.message.match(/it is not an instance of Pet/),
-        'cannot assign a linksTo field to a value that is not instance of the field card'
+        'cannot assign a linksTo field to a value that is not instance of the field card',
       );
     }
   });
@@ -452,12 +770,12 @@ module('Integration | card-basics', function (hooks) {
     assert.strictEqual(
       nonPrimitiveEntry.isPrimitive,
       false,
-      'isPrimitive is correct'
+      'isPrimitive is correct',
     );
     assert.strictEqual(
       primitiveEntry.isPrimitive,
       true,
-      'isPrimitive is correct'
+      'isPrimitive is correct',
     );
   });
 
@@ -541,7 +859,7 @@ module('Integration | card-basics', function (hooks) {
         TestNumber,
         TestString,
       },
-      loader
+      loader,
     );
 
     let helloWorld = new Post({
@@ -604,7 +922,7 @@ module('Integration | card-basics', function (hooks) {
     let root = await renderCard(loader, mango, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
-      'Mango speaks english japanese'
+      'Mango speaks english japanese',
     );
   });
 
@@ -624,7 +942,7 @@ module('Integration | card-basics', function (hooks) {
     assert.deepEqual(
       mango.languagesSpoken,
       [],
-      'empty containsMany field is initialized to an empty array'
+      'empty containsMany field is initialized to an empty array',
     );
   });
 
@@ -664,9 +982,9 @@ module('Integration | card-basics', function (hooks) {
     await renderCard(loader, abdelRahmans, 'isolated');
     assert.deepEqual(
       [...this.element.querySelectorAll('[data-test-person-firstName]')].map(
-        (element) => element.textContent?.trim()
+        (element) => element.textContent?.trim(),
       ),
-      ['Mango', 'Van Gogh', 'Hassan', 'Mariko', 'Yume', 'Sakura']
+      ['Mango', 'Van Gogh', 'Hassan', 'Mariko', 'Yume', 'Sakura'],
     );
   });
 
@@ -695,7 +1013,7 @@ module('Integration | card-basics', function (hooks) {
     let root = await renderCard(loader, mango, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
-      'Mango speaks english japanese'
+      'Mango speaks english japanese',
     );
   });
 
@@ -739,9 +1057,9 @@ module('Integration | card-basics', function (hooks) {
     await renderCard(loader, abdelRahmans, 'isolated');
     assert.deepEqual(
       [...this.element.querySelectorAll('[data-test-person-firstName]')].map(
-        (element) => element.textContent?.trim()
+        (element) => element.textContent?.trim(),
       ),
-      ['Mango', 'Van Gogh', 'Hassan', 'Mariko', 'Yume', 'Sakura']
+      ['Mango', 'Van Gogh', 'Hassan', 'Mariko', 'Yume', 'Sakura'],
     );
   });
 
@@ -784,9 +1102,9 @@ module('Integration | card-basics', function (hooks) {
     await renderCard(loader, abdelRahmanDogs, 'isolated');
     assert.deepEqual(
       [...this.element.querySelectorAll('[data-test-person-firstName]')].map(
-        (element) => element.textContent?.trim()
+        (element) => element.textContent?.trim(),
       ),
-      ['Mango', 'Van Gogh']
+      ['Mango', 'Van Gogh'],
     );
   });
 
@@ -837,7 +1155,7 @@ module('Integration | card-basics', function (hooks) {
         Customer,
         Group,
       },
-      loader
+      loader,
     );
 
     let group = new Group({
@@ -893,7 +1211,7 @@ module('Integration | card-basics', function (hooks) {
     assert.strictEqual(cleanWhiteSpace(root.textContent!), 'Mango Van Gogh');
     person.pets = ['Van Gogh', 'Mango', 'Peachy'];
     await waitUntil(
-      () => cleanWhiteSpace(root.textContent!) === 'Van Gogh Mango Peachy'
+      () => cleanWhiteSpace(root.textContent!) === 'Van Gogh Mango Peachy',
     );
   });
 
@@ -913,7 +1231,7 @@ module('Integration | card-basics', function (hooks) {
     assert.strictEqual(cleanWhiteSpace(root.textContent!), 'Mango Van Gogh');
     person.pets[1] = 'Peachy';
     await waitUntil(
-      () => cleanWhiteSpace(root.textContent!) === 'Mango Peachy'
+      () => cleanWhiteSpace(root.textContent!) === 'Mango Peachy',
     );
   });
 
@@ -933,11 +1251,11 @@ module('Integration | card-basics', function (hooks) {
     assert.strictEqual(cleanWhiteSpace(root.textContent!), 'Mango Van Gogh');
     person.pets.push('Peachy');
     await waitUntil(
-      () => cleanWhiteSpace(root.textContent!) === 'Mango Van Gogh Peachy'
+      () => cleanWhiteSpace(root.textContent!) === 'Mango Van Gogh Peachy',
     );
     person.pets.shift();
     await waitUntil(
-      () => cleanWhiteSpace(root.textContent!) === 'Van Gogh Peachy'
+      () => cleanWhiteSpace(root.textContent!) === 'Van Gogh Peachy',
     );
   });
 
@@ -966,7 +1284,7 @@ module('Integration | card-basics', function (hooks) {
     assert.deepEqual(
       abdelRahmans.people,
       [],
-      'empty containsMany field is initialized to an empty array'
+      'empty containsMany field is initialized to an empty array',
     );
   });
 
@@ -980,7 +1298,7 @@ module('Integration | card-basics', function (hooks) {
     await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
     assert.throws(
       () => new Person({ languagesSpoken: 'english' }),
-      /Expected array for field value languagesSpoken/
+      /Expected array for field value languagesSpoken/,
     );
     try {
       new Person({ languagesSpoken: 'english' });
@@ -988,7 +1306,7 @@ module('Integration | card-basics', function (hooks) {
     } catch (err: any) {
       assert.ok(
         err.message.match(/Expected array for field value languagesSpoken/),
-        'expected error received'
+        'expected error received',
       );
     }
   });
@@ -1016,7 +1334,7 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-field="title"] input').hasValue('My Post');
     assert
       .dom(
-        '[data-test-field="author"] [data-test-field="firstName"] [data-test-boxel-field-label]'
+        '[data-test-field="author"] [data-test-field="firstName"] [data-test-boxel-field-label]',
       )
       .hasText('First Name');
     assert
@@ -1052,7 +1370,7 @@ module('Integration | card-basics', function (hooks) {
     let root = await renderCard(loader, mango, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
-      'First Name Mango Is Cool true Title Mango Description Thumbnail URL'
+      'First Name Mango Is Cool true Title Mango Description Thumbnail URL',
     );
   });
 
@@ -1107,12 +1425,12 @@ module('Integration | card-basics', function (hooks) {
     assert.strictEqual(
       mango.isCool,
       true,
-      'the isCool field has the correct value'
+      'the isCool field has the correct value',
     );
     assert.strictEqual(
       mango.isHuman,
       true,
-      'the isHuman field has the correct value'
+      'the isHuman field has the correct value',
     );
   });
 
@@ -1206,7 +1524,7 @@ module('Integration | card-basics', function (hooks) {
         private counter: number;
         constructor(
           owner: unknown,
-          args: SignatureFor<typeof TestString>['Args']
+          args: SignatureFor<typeof TestString>['Args'],
         ) {
           super(owner, args);
           this.counter = counter++;
@@ -1391,7 +1709,7 @@ module('Integration | card-basics', function (hooks) {
     await click('[data-test-contains-many="dates"] [data-test-add-new]');
     await fillIn(
       '[data-test-contains-many="dates"] [data-test-item="3"] input',
-      '2022-06-01'
+      '2022-06-01',
     );
     assert
       .dom('[data-test-contains-many="dates"] [data-test-item]')
@@ -1409,7 +1727,7 @@ module('Integration | card-basics', function (hooks) {
 
     await fillIn(
       '[data-test-contains-many="dates"] [data-test-item="1"] input',
-      '2022-04-10'
+      '2022-04-10',
     );
     assert.dom('[data-test-output]').hasText('2022-05-12 2022-04-10');
 
@@ -1418,9 +1736,9 @@ module('Integration | card-basics', function (hooks) {
       .exists({ count: 2 });
     assert.strictEqual(
       getDateFromInput(
-        '[data-test-contains-many="appointments"] [data-test-item="0"] input'
+        '[data-test-contains-many="appointments"] [data-test-item="0"] input',
       )?.getTime(),
-      parseISO('2022-05-13T13:00').getTime()
+      parseISO('2022-05-13T13:00').getTime(),
     );
     assert
       .dom('[data-test-output="appointments"]')
@@ -1428,7 +1746,7 @@ module('Integration | card-basics', function (hooks) {
 
     await fillIn(
       '[data-test-contains-many="appointments"] [data-test-item="0"] input',
-      '2022-05-01T11:01'
+      '2022-05-01T11:01',
     );
     assert
       .dom('[data-test-output="appointments"]')
@@ -1448,52 +1766,52 @@ module('Integration | card-basics', function (hooks) {
     assert.strictEqual(
       getQueryableValue(TestField, { firstName: 'Van Gogh', age: 6 }),
       'Van Gogh',
-      'The queryable value from user supplied data is correct (string)'
+      'The queryable value from user supplied data is correct (string)',
     );
     assert.strictEqual(
       getQueryableValue(TestField, { firstName: 1, age: 6 }),
       1,
-      'The queryable value from user supplied data is correct (number)'
+      'The queryable value from user supplied data is correct (number)',
     );
     assert.strictEqual(
       getQueryableValue(TestField, { firstName: true, age: 6 }),
       true,
-      'The queryable value from user supplied data is correct (boolean)'
+      'The queryable value from user supplied data is correct (boolean)',
     );
     assert.strictEqual(
       getQueryableValue(TestField, { firstName: undefined, age: 6 }),
       undefined,
-      'The queryable value from user supplied data is correct (undefined)'
+      'The queryable value from user supplied data is correct (undefined)',
     );
     assert.strictEqual(
       getQueryableValue(TestField, { firstName: null, age: 6 }),
       null,
-      'The queryable value from user supplied data is correct (null)'
+      'The queryable value from user supplied data is correct (null)',
     );
     assert.deepEqual(
       getQueryableValue(TestField, { firstName: ['a'], age: 6 }),
       ['a'],
-      'The queryable value from user supplied data is correct (string[])'
+      'The queryable value from user supplied data is correct (string[])',
     );
     assert.deepEqual(
       getQueryableValue(TestField, { firstName: [1], age: 6 }),
       [1],
-      'The queryable value from user supplied data is correct (number[])'
+      'The queryable value from user supplied data is correct (number[])',
     );
     assert.deepEqual(
       getQueryableValue(TestField, { firstName: [true], age: 6 }),
       [true],
-      'The queryable value from user supplied data is correct (boolean[])'
+      'The queryable value from user supplied data is correct (boolean[])',
     );
     assert.deepEqual(
       getQueryableValue(TestField, { firstName: [null], age: 6 }),
       [null],
-      'The queryable value from user supplied data is correct (null[])'
+      'The queryable value from user supplied data is correct (null[])',
     );
     assert.deepEqual(
       getQueryableValue(TestField, { firstName: [undefined], age: 6 }),
       [undefined],
-      'The queryable value from user supplied data is correct (undefined[])'
+      'The queryable value from user supplied data is correct (undefined[])',
     );
   });
 
@@ -1506,7 +1824,7 @@ module('Integration | card-basics', function (hooks) {
     assert.strictEqual(
       getQueryableValue(StringCard, 'Van Gogh'),
       'Van Gogh',
-      'The queryable value from user supplied data is correct'
+      'The queryable value from user supplied data is correct',
     );
   });
 
@@ -1525,7 +1843,7 @@ module('Integration | card-basics', function (hooks) {
           firstName: 'Mango',
           lastName: 'Abdel-Rahman',
         }),
-      /expected queryableValue for field type TestField1 to be scalar/
+      /expected queryableValue for field type TestField1 to be scalar/,
     );
 
     class TestField2 extends Card {
@@ -1540,7 +1858,7 @@ module('Integration | card-basics', function (hooks) {
           firstName: 'Mango',
           lastName: 'Abdel-Rahman',
         }),
-      /expected queryableValue for field type TestField2 to be scalar/
+      /expected queryableValue for field type TestField2 to be scalar/,
     );
   });
 
@@ -1556,7 +1874,7 @@ module('Integration | card-basics', function (hooks) {
           firstName: 'Mango',
           lastName: 'Abdel-Rahman',
         }),
-      /expected queryableValue for field type TestField to be scalar/
+      /expected queryableValue for field type TestField to be scalar/,
     );
   });
 });

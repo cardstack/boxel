@@ -26,7 +26,7 @@ export class CatalogEntry extends Card {
 
       if (!loader) {
         throw new Error(
-          'Could not find a loader for this instance’s class’s module'
+          'Could not find a loader for this instance’s class’s module',
         );
       }
 

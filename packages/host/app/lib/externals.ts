@@ -37,13 +37,13 @@ export function shimExternals(loader: Loader) {
   loader.shimModule('@cardstack/boxel-ui/helpers/pick', boxelPickHelper);
   loader.shimModule(
     '@cardstack/boxel-ui/helpers/truth-helpers',
-    boxelTruthHelpers
+    boxelTruthHelpers,
   );
   loader.shimModule('@glimmer/component', glimmerComponent);
   loader.shimModule('@ember/component', emberComponent);
   loader.shimModule(
     '@ember/component/template-only',
-    emberComponentTemplateOnly
+    emberComponentTemplateOnly,
   );
   loader.shimModule('@ember/template-factory', emberTemplateFactory);
   loader.shimModule('@glimmer/tracking', glimmerTracking);
@@ -55,7 +55,7 @@ export function shimExternals(loader: Loader) {
   loader.shimModule('ember-concurrency', emberConcurrency);
   loader.shimModule(
     'ember-concurrency/-private/async-arrow-runtime',
-    emberConcurrencyAsyncArrowRuntime
+    emberConcurrencyAsyncArrowRuntime,
   );
   loader.shimModule('ember-modifier', emberModifier2);
   loader.shimModule('flat', flat);

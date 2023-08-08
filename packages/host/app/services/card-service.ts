@@ -29,21 +29,25 @@ export default class CardService extends Service {
 
   private apiModule = importResource(
     this,
-    () => 'https://cardstack.com/base/card-api'
+    () => 'https://cardstack.com/base/card-api',
   );
 
   private get api() {
     if (this.apiModule.error) {
       throw new Error(
-        `Error loading Card API: ${JSON.stringify(this.apiModule.error)}`
+        `Error loading Card API: ${JSON.stringify(this.apiModule.error)}`,
       );
     }
     if (!this.apiModule.module) {
       throw new Error(
-        `bug: Card API has not loaded yet--make sure to await this.loaded before using the api`
+        `bug: Card API has not loaded yet--make sure to await this.loaded before using the api`,
       );
     }
     return this.apiModule.module as typeof CardAPI;
+  }
+
+  get ready() {
+    return this.apiModule.loaded;
   }
 
   // Note that this should be the unresolved URL and that we need to rely on our
@@ -54,7 +58,7 @@ export default class CardService extends Service {
 
   private async fetchJSON(
     url: string | URL,
-    args?: RequestInit
+    args?: RequestInit,
   ): Promise<CardDocument> {
     let response = await this.loaderService.loader.fetch(url, {
       headers: { Accept: SupportedMimeType.CardJson },
@@ -63,7 +67,7 @@ export default class CardService extends Service {
     if (!response.ok) {
       throw new Error(
         `status: ${response.status} -
-        ${response.statusText}. ${await response.text()}`
+        ${response.statusText}. ${await response.text()}`,
       );
     }
     return await response.json();
@@ -72,14 +76,14 @@ export default class CardService extends Service {
   async createFromSerialized(
     resource: LooseCardResource,
     doc: LooseSingleCardDocument | CardDocument,
-    relativeTo: URL | undefined
+    relativeTo: URL | undefined,
   ): Promise<Card> {
     await this.apiModule.loaded;
     let card = await this.api.createFromSerialized(
       resource,
       doc,
       relativeTo,
-      this.loaderService.loader
+      this.loaderService.loader,
     );
     // it's important that we absorb the field async here so that glimmer won't
     // encounter NotReady errors, since we don't have the luxury of the indexer
@@ -99,19 +103,19 @@ export default class CardService extends Service {
     if (!isSingleCardDocument(json)) {
       throw new Error(
         `bug: server returned a non card document for ${url}:
-        ${JSON.stringify(json, null, 2)}`
+        ${JSON.stringify(json, null, 2)}`,
       );
     }
     return await this.createFromSerialized(
       json.data,
       json,
-      typeof url === 'string' ? new URL(url) : url
+      typeof url === 'string' ? new URL(url) : url,
     );
   }
 
   async serializeCard(
     card: Card,
-    opts?: SerializeOpts
+    opts?: SerializeOpts,
   ): Promise<LooseSingleCardDocument> {
     await this.apiModule.loaded;
     return this.api.serializeCard(card, opts);
@@ -121,28 +125,29 @@ export default class CardService extends Service {
     await this.apiModule.loaded;
     let doc = await this.serializeCard(card, {
       includeComputeds: true,
+      // for a brand new card that has no id yet, we don't know what we are
+      // relativeTo because its up to the realm server to assign us an ID, so
+      // URL's should be absolute
       maybeRelativeURL: null, // forces URL's to be absolute.
     });
-    let isSaved = this.api.isSaved(card);
     // send doc over the wire with absolute URL's. The realm server will convert
     // to relative URL's as it serializes the cards
     let json = await this.saveCardDocument(
       doc,
-      card.id ? new URL(card.id) : undefined
+      card.id ? new URL(card.id) : undefined,
     );
-    if (isSaved) {
-      return (await this.api.updateFromSerialized(card, json)) as Card;
-    }
-    // for a brand new card that has no id yet, we don't know what we are
-    // relativeTo because its up to the realm server to assign us an ID, so
-    // URL's should be absolute
-    let relativeTo = json.data.id ? new URL(json.data.id) : undefined;
-    return await this.createFromSerialized(json.data, json, relativeTo);
+
+    // in order to preserve object equality with the unsaved card instance we
+    // should always use updateFromSerialized()--this way a newly created
+    // instance that does not yet have an id is still the same instance after an
+    // ID has been assigned by the server.
+    let result = (await this.api.updateFromSerialized(card, json)) as Card;
+    return result;
   }
 
   async saveCardDocument(
     doc: LooseSingleCardDocument,
-    url?: URL
+    url?: URL,
   ): Promise<SingleCardDocument> {
     let isSaved = !!url;
     url = url ?? this.defaultURL;
@@ -153,7 +158,7 @@ export default class CardService extends Service {
     if (!isSingleCardDocument(json)) {
       throw new Error(
         `bug: arg is not a card document:
-        ${JSON.stringify(json, null, 2)}`
+        ${JSON.stringify(json, null, 2)}`,
       );
     }
     return json;
@@ -164,7 +169,7 @@ export default class CardService extends Service {
     if (!isCardCollectionDocument(json)) {
       throw new Error(
         `The realm search response was not a card collection document:
-        ${JSON.stringify(json, null, 2)}`
+        ${JSON.stringify(json, null, 2)}`,
       );
     }
     // TODO the fact that the loader cannot handle a concurrent form of this is
@@ -178,7 +183,7 @@ export default class CardService extends Service {
   }
 
   async getFields(
-    card: CardBase
+    card: CardBase,
   ): Promise<{ [fieldName: string]: Field<typeof CardBase> }> {
     await this.apiModule.loaded;
     return this.api.getFields(card, { includeComputeds: true });
@@ -196,5 +201,23 @@ export default class CardService extends Service {
   async getRealmInfo(card: Card): Promise<RealmInfo | undefined> {
     await this.apiModule.loaded;
     return card[this.api.realmInfo];
+  }
+
+  // intentionally not async so that this can run in a destructor--this means
+  // that callers need to await this.ready
+  unsubscribeFromCard(
+    card: Card,
+    subscriber: (fieldName: string, value: any) => void,
+  ) {
+    this.api.unsubscribeFromChanges(card, subscriber);
+  }
+
+  // also not async to reflect the fact the unsubscribe is not async. Callers
+  // needs to await this.ready
+  subscribeToCard(
+    card: Card,
+    subscriber: (fieldName: string, value: any) => void,
+  ) {
+    this.api.subscribeToChanges(card, subscriber);
   }
 }

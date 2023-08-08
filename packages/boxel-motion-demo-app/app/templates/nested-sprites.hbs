@@ -1,37 +1,37 @@
-<div local-class='page'>
+<div local-class="page">
   <button
-    type='button'
-    {{on 'click' (fn (mut this.moveOuter) (not this.moveOuter))}}
+    type="button"
+    {{on "click" (fn (mut this.moveOuter) (not this.moveOuter))}}
   >Move Outer</button>
   <button
-    type='button'
-    {{on 'click' (fn (mut this.moveInner) (not this.moveInner))}}
+    type="button"
+    {{on "click" (fn (mut this.moveInner) (not this.moveInner))}}
   >Move Inner</button>
 
-  <AnimationContext @use={{this.transition}} local-class='context'>
+  <AnimationContext @use={{this.transition}} local-class="context">
     <div
-      {{sprite id='outer'}}
-      local-class='outer {{if this.moveOuter "right"}}'
+      {{sprite id="outer"}}
+      local-class="outer {{if this.moveOuter 'right'}}"
     >
       Outer Sprite
-      <AnimationContext @use={{this.transition}} local-class='context'>
+      <AnimationContext @use={{this.transition}} local-class="context">
         <div
-          {{sprite id='inner'}}
-          local-class='inner {{if this.moveInner "right"}}'
+          {{sprite id="inner"}}
+          local-class="inner {{if this.moveInner 'right'}}"
         >Inner Sprite</div>
       </AnimationContext>
     </div>
   </AnimationContext>
 
-  <AnimationContext @use={{this.transition}} local-class='context'>
+  <AnimationContext @use={{this.transition}} local-class="context">
     <div
-      {{sprite id='outer-no-context'}}
-      local-class='outer {{if this.moveOuter "right"}}'
+      {{sprite id="outer-no-context"}}
+      local-class="outer {{if this.moveOuter 'right'}}"
     >
       Outer Sprite
       <div
-        {{sprite id='inner-no-context'}}
-        local-class='inner {{if this.moveInner "right"}}'
+        {{sprite id="inner-no-context"}}
+        local-class="inner {{if this.moveInner 'right'}}"
       >Inner Sprite</div>
     </div>
   </AnimationContext>

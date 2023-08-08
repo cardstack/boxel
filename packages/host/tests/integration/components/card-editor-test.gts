@@ -41,7 +41,7 @@ module('Integration | card-editor', function (hooks) {
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
   async function loadCard(url: string): Promise<Card> {
@@ -51,14 +51,14 @@ module('Integration | card-editor', function (hooks) {
       throw new Error(
         `cannot get instance ${url} from the index: ${
           result ? result.error.detail : 'not found'
-        }`
+        }`,
       );
     }
     let card = await createFromSerialized<typeof Card>(
       result.doc.data,
       result.doc,
       new URL(result.doc.data.id),
-      loader
+      loader,
     );
     await recompute(card, { loadFields: true });
     return card;
@@ -244,7 +244,7 @@ module('Integration | card-editor', function (hooks) {
           <CardEditor @card={{card}} />
           <CardPrerender />
         </template>
-      }
+      },
     );
 
     await waitFor('[data-test-field="firstName"]'); // we need to wait for the card instance to load
@@ -288,7 +288,7 @@ module('Integration | card-editor', function (hooks) {
           <CardEditor @card={{card}} @format='isolated' />
           <CardPrerender />
         </template>
-      }
+      },
     );
     await waitFor('[data-test-isolated-firstName]'); // we need to wait for the card instance to load
     assert.dom('[data-test-isolated-firstName]').hasText('Mango');
@@ -336,7 +336,7 @@ module('Integration | card-editor', function (hooks) {
           <CardEditor @card={{card}} />
           <CardPrerender />
         </template>
-      }
+      },
     );
 
     await waitFor('[data-test-edit-firstName] input'); // we need to wait for the card instance to load
@@ -358,7 +358,7 @@ module('Integration | card-editor', function (hooks) {
           <CardCatalogModal />
           <CardPrerender />
         </template>
-      }
+      },
     );
 
     assert.dom('[data-test-pet="Mango"]').containsText('Mango');
@@ -366,7 +366,7 @@ module('Integration | card-editor', function (hooks) {
     await click('[data-test-remove-card]');
     await click('[data-test-choose-card]');
     await waitFor(
-      '[data-test-card-catalog-modal] [data-test-card-catalog-item]'
+      '[data-test-card-catalog-modal] [data-test-card-catalog-item]',
     );
 
     assert
@@ -398,7 +398,7 @@ module('Integration | card-editor', function (hooks) {
           <CardCatalogModal />
           <CardPrerender />
         </template>
-      }
+      },
     );
 
     assert.dom('[data-test-choose-card]').exists();
@@ -409,7 +409,7 @@ module('Integration | card-editor', function (hooks) {
       .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
       .containsText('Choose a Pet card');
     await waitFor(
-      '[data-test-card-catalog-modal] [data-test-card-catalog-item]'
+      '[data-test-card-catalog-modal] [data-test-card-catalog-item]',
     );
     await click(`[data-test-select="${testRealmURL}Pet/vangogh"]`);
     await click('[data-test-card-catalog-go-button]');
@@ -432,7 +432,7 @@ module('Integration | card-editor', function (hooks) {
           <CardCatalogModal />
           <CardPrerender />
         </template>
-      }
+      },
     );
 
     assert.dom('[data-test-pet="Mango"]').containsText('Mango');
@@ -455,7 +455,7 @@ module('Integration | card-editor', function (hooks) {
           <CreateCardModal />
           <CardPrerender />
         </template>
-      }
+      },
     );
 
     await click('[data-test-choose-card]');

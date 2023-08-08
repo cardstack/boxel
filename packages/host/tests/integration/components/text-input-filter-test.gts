@@ -47,14 +47,14 @@ module('Integration | text-input-filter', function (hooks) {
       throw new Error(
         `cannot get instance ${url} from the index: ${
           result ? result.error.detail : 'not found'
-        }`
+        }`,
       );
     }
     let card = await createFromSerialized<typeof Card>(
       result.doc.data,
       result.doc,
       new URL(result.doc.data.id),
-      loader
+      loader,
     );
     await recompute(card, { loadFields: true });
     return card;
@@ -66,7 +66,7 @@ module('Integration | text-input-filter', function (hooks) {
 
     loader.addURLMapping(
       new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
+      new URL('http://localhost:4201/base/'),
     );
     shimExternals(loader);
     cardApi = await loader.import(`${baseRealm.url}card-api`);
@@ -105,7 +105,7 @@ module('Integration | text-input-filter', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
   test('when user fills field with invalid values, the input box should show invalid state', async function (assert) {
@@ -118,15 +118,15 @@ module('Integration | text-input-filter', function (hooks) {
           <CreateCardModal />
           <CardPrerender />
         </template>
-      }
+      },
     );
     await fillIn(
       'div[data-test-field="someBigInt"] [data-test-boxel-input]',
-      'a-string-text'
+      'a-string-text',
     );
     assert
       .dom(
-        'div[data-test-field="someBigInt"] [data-test-boxel-input-error-message]'
+        'div[data-test-field="someBigInt"] [data-test-boxel-input-error-message]',
       )
       .hasText('Not a valid big int');
     assert
@@ -143,19 +143,19 @@ module('Integration | text-input-filter', function (hooks) {
           <CreateCardModal />
           <CardPrerender />
         </template>
-      }
+      },
     );
     await fillIn(
       'div[data-test-field="someBigInt"] [data-test-boxel-input]',
-      '1000000'
+      '1000000',
     );
     await typeIn(
       'div[data-test-field="someBigInt"] [data-test-boxel-input]',
-      'extra'
+      'extra',
     );
     assert
       .dom(
-        'div[data-test-field="someBigInt"] [data-test-boxel-input-error-message]'
+        'div[data-test-field="someBigInt"] [data-test-boxel-input-error-message]',
       )
       .hasText('Not a valid big int');
     assert
@@ -170,7 +170,7 @@ module('Integration | text-input-filter', function (hooks) {
         headers: {
           Accept: 'application/vnd.card+json',
         },
-      })
+      }),
     );
     await response.json();
     await renderComponent(
@@ -181,14 +181,14 @@ module('Integration | text-input-filter', function (hooks) {
           <CreateCardModal />
           <CardPrerender />
         </template>
-      }
+      },
     );
     assert
       .dom('div[data-test-field="anotherBigInt"] [data-test-boxel-input]')
       .hasText('');
     assert
       .dom(
-        'div[data-test-field="anotherBigInt"] [data-test-boxel-input-error-message]'
+        'div[data-test-field="anotherBigInt"] [data-test-boxel-input-error-message]',
       )
       .doesNotExist();
     assert
@@ -205,15 +205,15 @@ module('Integration | text-input-filter', function (hooks) {
           <CreateCardModal />
           <CardPrerender />
         </template>
-      }
+      },
     );
     await fillIn(
       'div[data-test-field="someBigInt"] [data-test-boxel-input]',
-      'a-string-text'
+      'a-string-text',
     );
     assert
       .dom(
-        'div[data-test-field="someBigInt"] [data-test-boxel-input-error-message]'
+        'div[data-test-field="someBigInt"] [data-test-boxel-input-error-message]',
       )
       .hasText('Not a valid big int');
     assert
@@ -221,7 +221,7 @@ module('Integration | text-input-filter', function (hooks) {
       .exists();
     await click('[data-test-save-card]');
     await waitUntil(() => !document.querySelector('[data-test-saving]'));
-    await assert
+    assert
       .dom('div[data-test-field="someBigInt"]')
       .doesNotIncludeText('a-string-text');
   });
@@ -237,15 +237,15 @@ module('Integration | text-input-filter', function (hooks) {
           <CreateCardModal />
           <CardPrerender />
         </template>
-      }
+      },
     );
     await fillIn(
       'div[data-test-field="someBigInt"] [data-test-boxel-input]',
-      '333'
+      '333',
     );
     assert
       .dom(
-        'div[data-test-field="someBigInt"] [data-test-boxel-input-error-message]'
+        'div[data-test-field="someBigInt"] [data-test-boxel-input-error-message]',
       )
       .doesNotExist();
     assert
@@ -266,7 +266,7 @@ module('Integration | text-input-filter', function (hooks) {
           <CreateCardModal />
           <CardPrerender />
         </template>
-      }
+      },
     );
     await focus('div[data-test-field="someBigInt"] [data-test-boxel-input]');
     assert
@@ -284,7 +284,7 @@ module('Integration | text-input-filter', function (hooks) {
           <CreateCardModal />
           <CardPrerender />
         </template>
-      }
+      },
     );
     (card as any).someBigInt = '444';
     await saveCard(card, `${testRealmURL}Sample/1`, loader);

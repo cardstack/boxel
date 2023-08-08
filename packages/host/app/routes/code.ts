@@ -59,7 +59,7 @@ export default class Code extends Route<Model> {
     if (!response.ok) {
       // TODO should we have an error route?
       log.error(
-        `Could not load ${url}: ${response.status}, ${response.statusText}`
+        `Could not load ${url}: ${response.status}, ${response.statusText}`,
       );
       return { path, openFile, openDirs, isFastBoot };
     }

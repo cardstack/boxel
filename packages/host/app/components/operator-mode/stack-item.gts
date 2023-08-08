@@ -18,11 +18,12 @@ import {
   IconButton,
   Header,
   CardContainer,
-  Button,
   Tooltip,
 } from '@cardstack/boxel-ui';
 import get from 'lodash/get';
 import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
+import { task, restartableTask, timeout } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
 
 import { service } from '@ember/service';
 //@ts-expect-error cached type not available yet
@@ -33,6 +34,7 @@ import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
 import BoxelMenu from '@cardstack/boxel-ui/components/menu';
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
 import { StackItem, getCardStackItem, getPathToStackItem } from './container';
+import { registerDestructor } from '@ember/destroyable';
 
 import { htmlSafe, SafeString } from '@ember/template';
 import OperatorModeOverlays from './overlays';
@@ -40,6 +42,7 @@ import ElementTracker from '../../resources/element-tracker';
 import config from '@cardstack/host/config/environment';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import { formatDistanceToNow } from 'date-fns';
 
 interface Signature {
   Args: {
@@ -47,19 +50,20 @@ interface Signature {
     stackItems: StackItem[];
     index: number;
     publicAPI: Actions;
-    cancel: (item: StackItem) => void;
     close: (item: StackItem) => void;
-    delete: (item: StackItem) => void;
     dismissStackedCardsAbove: (stackIndex: number) => void;
     edit: (item: StackItem) => void;
-    save: (item: StackItem) => void;
+    save: (item: StackItem, dismiss: boolean) => void;
   };
 }
+
+let { autoSaveDelayMs } = config;
 
 export interface RenderedCardForOverlayActions {
   element: HTMLElement;
   card: Card;
   fieldType: FieldType | undefined;
+  fieldName: string | undefined;
   stackItem: StackItem;
 }
 
@@ -67,12 +71,24 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @tracked selectedCards = new TrackedArray<Card>([]);
   @service declare cardService: CardService;
   @tracked isHoverOnRealmIcon = false;
+  @tracked isSaving = false;
+  @tracked lastSaved: number | undefined;
+  @tracked lastSavedMsg: string | undefined;
+  private refreshSaveMsg: number | undefined;
+  private subscribedCard: Card;
 
   cardTracker = new ElementTracker<{
     card: Card;
     format: Format | 'data';
     fieldType: FieldType | undefined;
+    fieldName: string | undefined;
   }>();
+
+  constructor(owner: unknown, args: any) {
+    super(owner, args);
+    this.subscribeToCard.perform();
+    this.subscribedCard = this.card;
+  }
 
   get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
     return (
@@ -90,6 +106,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
           element: entry.element,
           card: entry.meta.card,
           fieldType: entry.meta.fieldType,
+          fieldName: entry.meta.fieldName,
           stackItem: this.args.item,
         }))
     );
@@ -130,20 +147,20 @@ export default class OperatorModeStackItem extends Component<Signature> {
     }
   }
 
-  @action async copyToClipboard(cardUrl: string) {
-    if (!cardUrl) {
+  copyToClipboard = restartableTask(async () => {
+    if (!this.card.id) {
       return;
     }
     if (config.environment === 'test') {
       return; // navigator.clipboard is not available in test environment
     }
-    await navigator.clipboard.writeText(cardUrl);
-  }
-
-  fetchRealmInfo = trackedFunction(this, async () => {
-    let realmInfo = await this.cardService.getRealmInfo(this.card);
-    return realmInfo;
+    await navigator.clipboard.writeText(this.card.id);
   });
+
+  fetchRealmInfo = trackedFunction(
+    this,
+    async () => await this.cardService.getRealmInfo(this.card),
+  );
 
   get iconURL() {
     return this.fetchRealmInfo.value?.iconURL ?? '/default-realm-icon.png';
@@ -163,6 +180,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @action
   hoverOnRealmIcon() {
     this.isHoverOnRealmIcon = !this.isHoverOnRealmIcon;
+  }
+
+  @action
+  delete() {
+    throw new Error(`delete is not implemented`);
   }
 
   get headerIcon() {
@@ -186,7 +208,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   @cached
   get addressableCard() {
-    return getCardStackItem(this.args.item, this.args.stackItems).card;
+    let card = getCardStackItem(this.args.item, this.args.stackItems).card;
+    return card;
   }
 
   @cached
@@ -196,6 +219,44 @@ export default class OperatorModeStackItem extends Component<Signature> {
       return this.addressableCard;
     }
     return get(this.addressableCard, path.join('.'));
+  }
+
+  private subscribeToCard = task(async () => {
+    await this.cardService.ready;
+    registerDestructor(this, this.cleanup);
+    this.cardService.subscribeToCard(this.subscribedCard, this.onCardChange);
+    this.refreshSaveMsg = setInterval(
+      () => this.calculateLastSavedMsg(),
+      10 * 1000,
+    ) as unknown as number;
+  });
+
+  private cleanup = () => {
+    this.cardService.unsubscribeFromCard(
+      this.subscribedCard,
+      this.onCardChange,
+    );
+    clearInterval(this.refreshSaveMsg);
+  };
+
+  private onCardChange = () => {
+    this.doWhenCardChanges.perform();
+  };
+
+  private doWhenCardChanges = restartableTask(async () => {
+    await timeout(autoSaveDelayMs);
+    this.isSaving = true;
+    await this.args.save(this.args.item, false);
+    this.isSaving = false;
+    this.lastSaved = Date.now();
+    this.calculateLastSavedMsg();
+  });
+
+  private calculateLastSavedMsg() {
+    this.lastSavedMsg =
+      this.lastSaved != null
+        ? `Saved ${formatDistanceToNow(this.lastSaved)} ago`
+        : undefined;
   }
 
   <template>
@@ -268,7 +329,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                     @height='24px'
                     class='icon-save'
                     aria-label='Finish Editing'
-                    {{on 'click' (fn @save @item)}}
+                    {{on 'click' (fn @save @item true)}}
                     data-test-edit-button
                   />
                 </:trigger>
@@ -283,7 +344,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                   <Tooltip @placement='top'>
                     <:trigger>
                       <IconButton
-                        @icon='icon-horizontal-three-dots'
+                        @icon='three-dots-horizontal'
                         @width='20px'
                         @height='20px'
                         class='icon-button'
@@ -305,18 +366,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
                       (array
                         (menuItem
                           'Copy Card URL'
-                          (fn this.copyToClipboard this.card.id)
+                          (perform this.copyToClipboard)
                           icon='icon-link'
                           disabled=(eq @item.type 'contained')
                         )
-                        (menuItem
-                          'Delete' (fn @delete @item @index) icon='icon-trash'
-                        )
+                        (menuItem 'Delete' this.delete icon='icon-trash')
                       )
                       (array
                         (menuItem
                           'Copy Card URL'
-                          (fn this.copyToClipboard this.card.id)
+                          (perform this.copyToClipboard)
                           icon='icon-link'
                           disabled=(eq @item.type 'contained')
                         )
@@ -343,6 +402,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
               </:content>
             </Tooltip>
           </:actions>
+          <:detail>
+            <div class='save-indicator' data-test-last-saved={{this.lastSaved}}>
+              {{#if this.isSaving}}
+                Saving…
+              {{else if this.lastSavedMsg}}
+                {{this.lastSavedMsg}}
+              {{/if}}
+            </div>
+          </:detail>
         </Header>
         <div class='content'>
           <Preview
@@ -357,30 +425,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
             @selectedCards={{this.selectedCards}}
           />
         </div>
-        {{#if (eq @item.format 'edit')}}
-          <footer class='footer'>
-            <Button
-              @kind='secondary-light'
-              @size='tall'
-              class='footer-button'
-              {{on 'click' (fn @cancel @item)}}
-              aria-label='Cancel'
-              data-test-cancel-button
-            >
-              Cancel
-            </Button>
-            <Button
-              @kind='primary'
-              @size='tall'
-              class='footer-button'
-              {{on 'click' (fn @save @item)}}
-              aria-label='Save'
-              data-test-save-button
-            >
-              Save
-            </Button>
-          </footer>
-        {{/if}}
       </CardContainer>
     </div>
     <style>
@@ -392,6 +436,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
       .header {
         z-index: 1;
         background: var(--boxel-light);
+      }
+
+      .save-indicator {
+        font: var(--boxel-font-sm);
+        padding-top: 0.4rem;
+        padding-left: 0.5rem;
+        opacity: 0.6;
       }
 
       .item {
@@ -429,25 +480,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
         margin-bottom: var(--stack-card-footer-height);
       }
 
-      .footer {
-        position: absolute;
-        bottom: 0;
-        right: 0;
-        display: flex;
-        justify-content: flex-end;
-        padding: var(--boxel-sp);
-        width: 100%;
-        background: white;
-        height: var(--stack-card-footer-height);
-        border-top: 1px solid var(--boxel-300);
-        border-bottom-left-radius: var(--boxel-border-radius);
-        border-bottom-right-radius: var(--boxel-border-radius);
-      }
-
-      .footer-button + .footer-button {
-        margin-left: var(--boxel-sp-xs);
-      }
-
       .buried .card {
         background-color: var(--boxel-200);
         grid-template-rows: var(--buried-operator-mode-header-height) auto;
@@ -464,24 +496,21 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .edit .header {
-        background: var(--boxel-teal);
+        background-color: var(--boxel-highlight);
         color: var(--boxel-light);
       }
 
       .edit .icon-button {
-        --icon-bg: var(--boxel-light);
-        --icon-border: none;
         --icon-color: var(--boxel-light);
       }
 
       .edit .icon-button:hover {
-        --icon-bg: var(--boxel-teal);
-        --icon-border: none;
-        --icon-color: var(--boxel-teal);
-        background: var(--boxel-light);
+        --icon-color: var(--boxel-highlight);
+        background-color: var(--boxel-light);
       }
 
       .icon-button {
+        --icon-color: var(--boxel-highlight);
         --boxel-icon-button-width: 28px;
         --boxel-icon-button-height: 28px;
         border-radius: 4px;
@@ -496,15 +525,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .icon-button:hover {
-        --icon-bg: var(--boxel-light);
-        --icon-border: none;
         --icon-color: var(--boxel-light);
-        background: var(--boxel-teal);
+        background-color: var(--boxel-highlight);
       }
 
       .icon-save {
-        --icon-bg: var(--boxel-teal);
-        background: var(--boxel-light);
+        --icon-color: var(--boxel-dark);
+        background-color: var(--boxel-light);
 
         --boxel-icon-button-width: 28px;
         --boxel-icon-button-height: 28px;
@@ -520,14 +547,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .icon-save:hover {
-        --icon-bg: var(--boxel-dark);
+        --icon-color: var(--boxel-highlight);
       }
 
       .header-icon {
         width: var(--boxel-header-icon-width);
         height: var(--boxel-header-icon-height);
       }
-
     </style>
   </template>
 }
