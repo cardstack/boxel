@@ -130,7 +130,6 @@ module('Acceptance | basic tests', function (hooks) {
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
       isAcceptanceTest: true,
     });
-
     await realm.ready;
   });
 
