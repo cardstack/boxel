@@ -25,9 +25,10 @@ import {
   type SearchEntryWithErrors,
 } from '@cardstack/runtime-common/search-index';
 import { WebMessageStream, messageCloseHandler } from './stream';
-import { file, FileResource } from '@cardstack/host/resources/file';
+import { file, Ready, isReady } from '@cardstack/host/resources/file';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import Owner from '@ember/owner';
+import { OpenFiles } from '@cardstack/host/controllers/code';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
@@ -442,21 +443,31 @@ export function delay(delayAmountMs: number): Promise<void> {
 
 export async function getFileResource(
   context: TestContext,
-  adapter: TestRealmAdapter,
-  ref: { name: string; module: string; lastModified?: string }
-): Promise<FileResource> {
-  let fileURL = ref.module.endsWith('.gts') ? ref.module : `${ref.module}.gts`;
-  let paths = new RealmPaths(testRealmURL);
-  let relativePath = paths.local(fileURL);
-  let content = (await adapter.openFile(relativePath))?.content as
-    | string
-    | undefined;
-  return file(context, () => ({
+  realmURL: string,
+  openFiles: OpenFiles
+): Promise<Ready> {
+  if (openFiles.path === undefined) {
+    throw new Error('Wrong relativePath undefined');
+  }
+  let relativePath = openFiles.path;
+  let f = file(context, () => ({
     relativePath,
-    realmURL: paths.url,
-    lastModified: ref.lastModified,
-    content,
+    realmURL: new RealmPaths(realmURL).url,
+    onStateChange: (state) => {
+      if (state === 'not-found') {
+        openFiles.path = undefined;
+      }
+    },
   }));
+  if (f.state == 'loading') {
+    await f.ready();
+  }
+  if (!isReady(f)) {
+    throw new Error(
+      `Resource is in ${f.state} state. It should be in Ready state`
+    );
+  }
+  return f;
 }
 
 function changedEntry(
