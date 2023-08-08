@@ -100,7 +100,6 @@ module('Integration | text-input-filter', function (hooks) {
       },
     });
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    loader.registerURLHandler(realm.maybeHandle.bind(realm));
     await realm.ready;
   });
 

@@ -131,8 +131,6 @@ module('Acceptance | basic tests', function (hooks) {
       isAcceptanceTest: true,
     });
 
-    loader.registerURLHandler(realm.maybeHandle.bind(realm));
-
     await realm.ready;
   });
 

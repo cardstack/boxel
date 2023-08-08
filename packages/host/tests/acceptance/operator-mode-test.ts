@@ -224,8 +224,6 @@ module('Acceptance | operator mode tests', function (hooks) {
       isAcceptanceTest: true,
     });
 
-    loader.registerURLHandler(realm.maybeHandle.bind(realm));
-
     await realm.ready;
   });
 

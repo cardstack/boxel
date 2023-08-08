@@ -658,7 +658,6 @@ module('Integration | search-index', function (hooks) {
       },
     });
     let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    loader.registerURLHandler(realm.maybeHandle.bind(realm));
     await realm.ready;
     let indexer = realm.searchIndex;
 
@@ -777,7 +776,6 @@ module('Integration | search-index', function (hooks) {
     });
 
     let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    loader.registerURLHandler(realm.maybeHandle.bind(realm));
     await realm.ready;
 
     let indexer = realm.searchIndex;

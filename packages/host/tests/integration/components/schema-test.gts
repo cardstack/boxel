@@ -49,7 +49,6 @@ module('Integration | schema', function (hooks) {
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    loader.registerURLHandler(realm.maybeHandle.bind(realm));
     await realm.ready;
   });
 

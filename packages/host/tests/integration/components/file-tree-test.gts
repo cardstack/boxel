@@ -123,7 +123,6 @@ module('Integration | file-tree', function (hooks) {
       },
     });
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    loader.registerURLHandler(realm.maybeHandle.bind(realm));
     await realm.ready;
   });
 

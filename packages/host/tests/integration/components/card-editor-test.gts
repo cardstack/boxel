@@ -210,9 +210,8 @@ module('Integration | card-editor', function (hooks) {
         },
       },
     });
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    loader.registerURLHandler(realm.maybeHandle.bind(realm));
 
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
   });
 
