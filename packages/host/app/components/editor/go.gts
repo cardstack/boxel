@@ -1,7 +1,7 @@
 import Component from '@glimmer/component';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, timeout } from 'ember-concurrency';
 import { service } from '@ember/service';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
@@ -81,7 +81,7 @@ export default class Go extends Component<Signature> {
           </div>
         </div>
         <div class='main-column'>
-          {{#if (isRunnable this.openFile.current.name)}}
+          {{#if this.isRunnable}}
             <Module @file={{this.openFile.current}} />
           {{else if this.openFileCardJSON}}
             {{#if this.card}}
@@ -268,6 +268,13 @@ export default class Go extends Component<Signature> {
     return this.args.openFiles.path ?? '/';
   }
 
+  get isRunnable(): boolean {
+    let filename = this.path;
+    return ['.gjs', '.js', '.gts', '.ts'].some((extension) =>
+      filename.endsWith(extension)
+    );
+  }
+
   @action
   removeFile() {
     if (!this.openFile.current || !('url' in this.openFile.current)) {
@@ -293,12 +300,6 @@ export default class Go extends Component<Signature> {
       );
     }
   });
-}
-
-function isRunnable(filename: string): boolean {
-  return ['.gjs', '.js', '.gts', '.ts'].some((extension) =>
-    filename.endsWith(extension)
-  );
 }
 
 declare module '@glint/environment-ember-loose/registry' {
