@@ -3,10 +3,8 @@ import type {
   CardRef,
   LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
-import { htmlSafe } from '@ember/template';
 import { tracked } from '@glimmer/tracking';
 import { registerDestructor } from '@ember/destroyable';
 import { Deferred } from '@cardstack/runtime-common/deferred';
@@ -15,31 +13,20 @@ import { service } from '@ember/service';
 import type CardService from '../services/card-service';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import CardEditor from './card-editor';
-import { Modal, CardContainer, Header } from '@cardstack/boxel-ui';
+import ModalContainer from './modal-container';
 
 export default class CreateCardModal extends Component {
   <template>
     {{#let this.currentRequest.card as |card|}}
       {{#if card}}
-        <Modal
-          @size='large'
-          @isOpen={{true}}
+        <ModalContainer
+          @title='Create New Card'
           @onClose={{fn this.save undefined}}
-          style={{this.styleString}}
+          @zIndex={{this.zIndex}}
           data-test-create-new-card={{card.constructor.name}}
         >
-          <CardContainer class='dialog-box' @displayBoundaries={{true}}>
-            <Header @title='Create New Card'>
-              <button
-                {{on 'click' (fn this.save undefined)}}
-                class='dialog-box__close'
-              >⨯</button>
-            </Header>
-            <div class='dialog-box__content'>
-              <CardEditor @card={{card}} @onSave={{this.save}} />
-            </div>
-          </CardContainer>
-        </Modal>
+          <CardEditor @card={{card}} @onSave={{this.save}} />
+        </ModalContainer>
       {{/if}}
     {{/let}}
   </template>
@@ -59,10 +46,6 @@ export default class CreateCardModal extends Component {
     registerDestructor(this, () => {
       delete (globalThis as any)._CARDSTACK_CREATE_NEW_CARD;
     });
-  }
-
-  get styleString() {
-    return htmlSafe(`z-index: ${this.zIndex}`);
   }
 
   async create<T extends Card>(

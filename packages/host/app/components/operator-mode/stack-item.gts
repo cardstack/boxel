@@ -162,8 +162,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
     async () => await this.cardService.getRealmInfo(this.card),
   );
 
+  @cached
   get iconURL() {
-    return this.fetchRealmInfo.value?.iconURL ?? '/default-realm-icon.png';
+    return this.fetchRealmInfo.value?.iconURL;
   }
 
   get realmName() {
@@ -542,7 +543,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
         justify-content: center;
 
         font: var(--boxel-font-sm);
-        margin-right: var(--boxel-sp-xxxs);
         z-index: 1;
       }
 
