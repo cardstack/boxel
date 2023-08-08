@@ -11,7 +11,7 @@ interface Signature {
     zIndex?: number;
   };
   Blocks: {
-    default: [];
+    content: [];
     header: [];
     footer: [];
   };
@@ -39,7 +39,7 @@ export default class ModalContainer extends Component<Signature> {
           {{yield to='header'}}
         </Header>
         <div class='dialog-box__content'>
-          {{yield to='default'}}
+          {{yield to='content'}}
         </div>
         {{#if (has-block 'footer')}}
           <footer class='dialog-box__footer'>

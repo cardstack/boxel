@@ -25,7 +25,9 @@ export default class CreateCardModal extends Component {
           @zIndex={{this.zIndex}}
           data-test-create-new-card={{card.constructor.name}}
         >
-          <CardEditor @card={{card}} @onSave={{this.save}} />
+          <:content>
+            <CardEditor @card={{card}} @onSave={{this.save}} />
+          </:content>
         </ModalContainer>
       {{/if}}
     {{/let}}

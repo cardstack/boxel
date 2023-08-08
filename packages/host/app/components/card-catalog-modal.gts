@@ -63,7 +63,7 @@ export default class CardCatalogModal extends Component<Signature> {
           />
           <CardCatalogFilters />
         </:header>
-        <:default>
+        <:content>
           {{#if this.currentRequest.search.isLoading}}
             Loading...
           {{else}}
@@ -74,7 +74,7 @@ export default class CardCatalogModal extends Component<Signature> {
               @context={{@context}}
             />
           {{/if}}
-        </:default>
+        </:content>
         <:footer>
           <div
             class={{cn
