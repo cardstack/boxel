@@ -87,7 +87,7 @@ export default class OperatorModeStack extends Component<Signature> {
         );
       }
       /* This is repeated for the edit-card because specifying multiple selectors in :global don't work */
-      :global(.operator-mode-stack .edit-card) {
+      :global(.operator-mode-stack .edit-card.not-saved) {
         padding-top: calc(
           var(--overlay-embedded-card-header-height) + var(--boxel-sp-lg)
         );

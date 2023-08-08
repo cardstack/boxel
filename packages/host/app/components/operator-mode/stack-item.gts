@@ -344,7 +344,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                   <Tooltip @placement='top'>
                     <:trigger>
                       <IconButton
-                        @icon='icon-horizontal-three-dots'
+                        @icon='three-dots-horizontal'
                         @width='20px'
                         @height='20px'
                         class='icon-button'
@@ -496,24 +496,21 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .edit .header {
-        background: var(--boxel-teal);
+        background-color: var(--boxel-highlight);
         color: var(--boxel-light);
       }
 
       .edit .icon-button {
-        --icon-bg: var(--boxel-light);
-        --icon-border: none;
         --icon-color: var(--boxel-light);
       }
 
       .edit .icon-button:hover {
-        --icon-bg: var(--boxel-teal);
-        --icon-border: none;
-        --icon-color: var(--boxel-teal);
-        background: var(--boxel-light);
+        --icon-color: var(--boxel-highlight);
+        background-color: var(--boxel-light);
       }
 
       .icon-button {
+        --icon-color: var(--boxel-highlight);
         --boxel-icon-button-width: 28px;
         --boxel-icon-button-height: 28px;
         border-radius: 4px;
@@ -528,15 +525,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .icon-button:hover {
-        --icon-bg: var(--boxel-light);
-        --icon-border: none;
         --icon-color: var(--boxel-light);
-        background: var(--boxel-teal);
+        background-color: var(--boxel-highlight);
       }
 
       .icon-save {
-        --icon-bg: var(--boxel-teal);
-        background: var(--boxel-light);
+        --icon-color: var(--boxel-dark);
+        background-color: var(--boxel-light);
 
         --boxel-icon-button-width: 28px;
         --boxel-icon-button-height: 28px;
@@ -552,7 +547,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .icon-save:hover {
-        --icon-bg: var(--boxel-dark);
+        --icon-color: var(--boxel-highlight);
       }
 
       .header-icon {
