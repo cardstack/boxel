@@ -19,6 +19,7 @@ interface Args {
 
 export interface Loading {
   state: 'loading';
+  ready: () => Promise<void>; //this is used only for test.
 }
 
 export interface ServerError {
@@ -49,6 +50,10 @@ class _FileResource extends Resource<Args> {
 
   @tracked private innerState: FileResource = {
     state: 'loading',
+    ready: async () => {
+      //This is best only for testing. You want the readiness of the file resource be tied to the rendering of component
+      return this.read.perform();
+    },
   };
 
   @service declare loaderService: LoaderService;
@@ -177,6 +182,10 @@ class _FileResource extends Resource<Args> {
       }
     }
   );
+
+  async ready() {
+    await this.read.perform();
+  }
 
   get state() {
     return this.innerState.state;
