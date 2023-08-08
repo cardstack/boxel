@@ -144,6 +144,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     if (command.type == 'patch') {
       for (let item of this.allStackItems) {
         if ('card' in item && item.card.id == command.id) {
+          await this.setFieldValues(item.card, command.patch.attributes);
           return await this.save(item);
         }
       }
