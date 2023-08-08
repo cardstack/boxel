@@ -78,22 +78,18 @@ export default class Schema extends Component<Signature> {
                   {{cardId field.card}}
                   (this card)
                 {{else if (this.inRealm (cardModule field.card))}}
-                  <div>{{cardId field.card}}</div>
-                  {{!-- Temporarily disable this until we determine architectural decisions for code mode --}}
-                  {{!-- <LinkTo
+                  <LinkTo
                     @route='code'
                     @query={{hash
                       path=(this.modulePath (cardModule field.card))
                     }}
                   >
-                  {{cardId field.card}}
-                  </LinkTo> --}}
+                    {{cardId field.card}}
+                  </LinkTo>
                 {{else}}
-                  <div>{{cardId field.card}}</div>
-                  {{!-- Temporarily disable this until we determine architectural decisions for code mode --}}
-                  {{!-- <a
+                  <a
                     href={{this.moduleSchemaURL (cardModule field.card)}}
-                  >{{cardId field.card}}</a> --}}
+                  >{{cardId field.card}}</a>
                 {{/if}}
               </li>
             {{/each}}
