@@ -3756,7 +3756,7 @@ posts/ignore-me.json
           contains: { title: 'ca' },
         },
       });
-      assert.equal(matching.length, 5);
+      assert.strictEqual(matching.length, 5);
       assert.deepEqual(
         matching.map((m) => m.id),
         [
@@ -3776,7 +3776,7 @@ posts/ignore-me.json
           contains: { title: 'ca' },
         },
       });
-      assert.equal(personMatchingByTitle.length, 2);
+      assert.strictEqual(personMatchingByTitle.length, 2);
       assert.deepEqual(
         personMatchingByTitle.map((m) => m.id),
         [`${paths.url}person-card1`, `${paths.url}person-card2`],
@@ -3788,7 +3788,7 @@ posts/ignore-me.json
           contains: { firstName: 'go' },
         },
       });
-      assert.equal(dogMatchingByFirstName.length, 3);
+      assert.strictEqual(dogMatchingByFirstName.length, 3);
       assert.deepEqual(
         dogMatchingByFirstName.map((m) => m.id),
         [`${paths.url}mango`, `${paths.url}ringo`, `${paths.url}vangogh`],
@@ -3802,7 +3802,7 @@ posts/ignore-me.json
           contains: { title: null },
         },
       });
-      assert.equal(matching.length, 3);
+      assert.strictEqual(matching.length, 3);
     });
   });
 });
