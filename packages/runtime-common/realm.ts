@@ -250,6 +250,10 @@ export class Realm {
     return this.#searchIndex;
   }
 
+  async reindex() {
+    await this.#searchIndex.run();
+  }
+
   async #startup() {
     await Promise.resolve();
     await this.#warmUpCache();
