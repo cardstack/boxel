@@ -700,11 +700,8 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-command-apply]');
     await click('[data-test-command-apply]');
 
-    // pausing here and clicking does work
-    //await pauseTest();
     await waitFor('[data-test-person="Dave"]');
     assert.dom('[data-test-person]').hasText('Dave');
-
   });
 
   test("it doesn't change the field value if user clicks cancel in edit view", async function (assert) {
