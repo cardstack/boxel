@@ -700,7 +700,8 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-command-apply]');
     await click('[data-test-command-apply]');
 
-    await pauseTest();
+    // pausing here and clicking does work
+    //await pauseTest();
     await waitFor('[data-test-person="Dave"]');
     assert.dom('[data-test-person]').hasText('Dave');
 
