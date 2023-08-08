@@ -38,6 +38,12 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import OperatorModeStack from './stack';
 import type MatrixService from '../../services/matrix-service';
 import ChatSidebar from '../matrix/chat-sidebar';
+import { buildWaiter } from '@ember/test-waiters';
+import ENV from '@cardstack/host/config/environment';
+
+let waiter = buildWaiter('operator-mode-container:write-waiter');
+
+const { environment } = ENV;
 
 interface Signature {
   Args: {
@@ -259,7 +265,18 @@ export default class OperatorModeContainer extends Component<Signature> {
   // we might drop writes from different stack items that want to save
   // at the same time
   private write = task(async (card: Card) => {
-    return await this.cardService.saveModel(card);
+    let token = waiter.beginAsync();
+    try {
+      let savedCard = await this.cardService.saveModel(card);
+      // only do this in test env--this makes sure that we also wait for any
+      // interior card instance async as part of our ember-test-waiters
+      if (environment === 'test') {
+        await this.cardService.flushLogs();
+      }
+      return savedCard;
+    } finally {
+      waiter.endAsync(token);
+    }
   });
 
   // The public API is wrapped in a closure so that whatever calls its methods

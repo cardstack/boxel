@@ -30,6 +30,8 @@ import {
   type SearchEntryWithErrors,
 } from '@cardstack/runtime-common/search-index';
 import { WebMessageStream, messageCloseHandler } from './stream';
+import type CardService from '@cardstack/host/services/card-service';
+import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
 import { file, FileResource } from '@cardstack/host/resources/file';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import Owner from '@ember/owner';
@@ -45,10 +47,11 @@ export function cleanWhiteSpace(text: string) {
 export function trimCardContainer(text: string) {
   return cleanWhiteSpace(text).replace(
     /<div .*? data-test-field-component-card> (.*?) <\/div> <\/div>/,
-    '$1'
+    '$1',
   );
 }
 
+// TODO remove this
 export async function waitUntilSaved(test: () => Promise<void>) {
   let lastSavedEl = document.querySelector('[data-test-last-saved]');
   let saveTime = lastSavedEl
@@ -99,7 +102,7 @@ export const TestRealm = {
     loader: Loader,
     flatFiles: Record<string, string | LooseSingleCardDocument | CardDocFiles>,
     owner: Owner,
-    opts?: Options
+    opts?: Options,
   ): Promise<Realm> {
     if (opts?.isAcceptanceTest) {
       await visit('/');
@@ -110,7 +113,7 @@ export const TestRealm = {
       new TestRealmAdapter(flatFiles),
       loader,
       owner,
-      opts?.realmURL
+      opts?.realmURL,
     );
   },
 
@@ -118,7 +121,7 @@ export const TestRealm = {
     adapter: RealmAdapter,
     loader: Loader,
     owner: Owner,
-    opts?: Options
+    opts?: Options,
   ): Promise<Realm> {
     if (opts?.isAcceptanceTest) {
       await visit('/acceptance-test-setup');
@@ -136,7 +139,7 @@ async function makeRenderer() {
       <template>
         <CardPrerender />
       </template>
-    }
+    },
   );
 }
 
@@ -149,7 +152,7 @@ class MockLocalIndexer extends Service {
     | ((
         prev: RunState,
         url: URL,
-        operation: 'update' | 'delete'
+        operation: 'update' | 'delete',
       ) => Promise<RunState>)
     | undefined;
   setup(
@@ -157,8 +160,8 @@ class MockLocalIndexer extends Service {
     incremental: (
       prev: RunState,
       url: URL,
-      operation: 'update' | 'delete'
-    ) => Promise<RunState>
+      operation: 'update' | 'delete',
+    ) => Promise<RunState>,
   ) {
     this.#fromScratch = fromScratch;
     this.#incremental = incremental;
@@ -166,18 +169,18 @@ class MockLocalIndexer extends Service {
   async configureRunner(
     registerRunner: RunnerRegistration,
     entrySetter: EntrySetter,
-    adapter: RealmAdapter
+    adapter: RealmAdapter,
   ) {
     if (!this.#fromScratch || !this.#incremental) {
       throw new Error(
-        `fromScratch/incremental not registered with MockLocalIndexer`
+        `fromScratch/incremental not registered with MockLocalIndexer`,
       );
     }
     this.#entrySetter = entrySetter;
     this.#adapter = adapter;
     await registerRunner(
       this.#fromScratch.bind(this),
-      this.#incremental.bind(this)
+      this.#incremental.bind(this),
     );
   }
   async setEntry(url: URL, entry: SearchEntryWithErrors) {
@@ -206,6 +209,22 @@ class MockMessageService extends Service {
   }
 }
 
+export function setupOnSave(
+  hooks: NestedHooks,
+  cb: (
+    onSave: (card: CardSaveSubscriber) => void,
+    unregisterSaveSubscriber: () => void,
+  ) => void,
+) {
+  hooks.beforeEach(function () {
+    let cardService = this.owner.lookup('service:card-service') as CardService;
+    cb(
+      cardService.onSave.bind(cardService),
+      cardService.unregisterSaveSubscriber.bind(cardService),
+    );
+  });
+}
+
 export function setupMockMessageService(hooks: NestedHooks) {
   hooks.beforeEach(function () {
     this.owner.register('service:message-service', MockMessageService);
@@ -217,10 +236,10 @@ function makeRealm(
   adapter: RealmAdapter,
   loader: Loader,
   owner: Owner,
-  realmURL = testRealmURL
+  realmURL = testRealmURL,
 ) {
   let localIndexer = owner.lookup(
-    'service:local-indexer'
+    'service:local-indexer',
   ) as unknown as MockLocalIndexer;
   return new Realm(
     realmURL,
@@ -232,7 +251,7 @@ function makeRealm(
     },
     runnerOptsMgr,
     async () =>
-      `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`
+      `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
   );
 }
 
@@ -246,7 +265,7 @@ export async function saveCard(instance: Card, id: string, loader: Loader) {
 export async function shimModule(
   moduleURL: string,
   module: Record<string, any>,
-  loader: Loader
+  loader: Loader,
 ) {
   if (loader) {
     loader.shimModule(moduleURL, module);
@@ -255,13 +274,13 @@ export async function shimModule(
     Object.keys(module).map(async (name) => {
       let m = await loader.import<any>(moduleURL);
       m[name];
-    })
+    }),
   );
 }
 
 export function setupCardLogs(
   hooks: NestedHooks,
-  apiThunk: () => Promise<CardAPI>
+  apiThunk: () => Promise<CardAPI>,
 ) {
   hooks.afterEach(async function () {
     let api = await apiThunk();
@@ -280,7 +299,7 @@ export class TestRealmAdapter implements RealmAdapter {
       string,
       string | LooseSingleCardDocument | CardDocFiles | RealmInfo
     >,
-    realmURL = new URL(testRealmURL)
+    realmURL = new URL(testRealmURL),
   ) {
     this.#paths = new RealmPaths(realmURL);
     let now = Date.now();
@@ -310,7 +329,7 @@ export class TestRealmAdapter implements RealmAdapter {
   }
 
   async *readdir(
-    path: string
+    path: string,
   ): AsyncGenerator<{ name: string; path: string; kind: Kind }, void> {
     let dir =
       path === '' ? this.#files : this.#traverse(path.split('/'), 'directory');
@@ -368,7 +387,7 @@ export class TestRealmAdapter implements RealmAdapter {
 
   async write(
     path: LocalPath,
-    contents: string | object
+    contents: string | object,
   ): Promise<{ lastModified: number }> {
     let segments = path.split('/');
     let name = segments.pop()!;
@@ -378,7 +397,7 @@ export class TestRealmAdapter implements RealmAdapter {
     }
     if (typeof dir[name] === 'object') {
       throw new Error(
-        `cannot write file over an existing directory at ${path}`
+        `cannot write file over an existing directory at ${path}`,
       );
     }
 
@@ -413,7 +432,7 @@ export class TestRealmAdapter implements RealmAdapter {
   #traverse(
     segments: string[],
     targetKind: Kind,
-    originalPath = segments.join('/')
+    originalPath = segments.join('/'),
   ): string | Dir {
     let dir: Dir | string = this.#files;
     while (segments.length > 0) {
@@ -444,7 +463,7 @@ export class TestRealmAdapter implements RealmAdapter {
   createStreamingResponse(
     _request: Request,
     responseInit: ResponseInit,
-    cleanup: () => void
+    cleanup: () => void,
   ) {
     let s = new WebMessageStream();
     let response = createResponse(s.readable, responseInit);
@@ -470,7 +489,7 @@ export function delay(delayAmountMs: number): Promise<void> {
 export async function getFileResource(
   context: TestContext,
   adapter: TestRealmAdapter,
-  ref: { name: string; module: string; lastModified?: string }
+  ref: { name: string; module: string; lastModified?: string },
 ): Promise<FileResource> {
   let fileURL = ref.module.endsWith('.gts') ? ref.module : `${ref.module}.gts`;
   let paths = new RealmPaths(testRealmURL);
@@ -488,24 +507,24 @@ export async function getFileResource(
 
 function changedEntry(
   listings: { path: string; lastModified?: number }[],
-  entry: { path: string; lastModified?: number }
+  entry: { path: string; lastModified?: number },
 ) {
   return listings.some(
     (item) =>
-      item.path === entry.path && item.lastModified != entry.lastModified
+      item.path === entry.path && item.lastModified != entry.lastModified,
   );
 }
 
 function hasEntry(
   listings: { path: string; lastModified?: number }[],
-  entry: { path: string; lastModified?: number }
+  entry: { path: string; lastModified?: number },
 ) {
   return listings.some((item) => item.path === entry.path);
 }
 
 export function diff(
   prevEntries: { path: string; lastModified?: number }[],
-  currEntries: { path: string; lastModified?: number }[]
+  currEntries: { path: string; lastModified?: number }[],
 ) {
   let changed = prevEntries.filter((entry) => changedEntry(currEntries, entry));
   let added = currEntries.filter((entry) => !hasEntry(prevEntries, entry));

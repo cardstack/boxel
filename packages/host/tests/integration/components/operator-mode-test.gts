@@ -16,6 +16,7 @@ import {
   testRealmURL,
   setupCardLogs,
   setupLocalIndexing,
+  setupOnSave,
   TestRealmAdapter,
   TestRealm,
   waitUntilSaved,
@@ -31,12 +32,14 @@ import {
 import type LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import percySnapshot from '@percy/ember';
+import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 const realmName = 'Operator Mode Workspace';
 let setCardInOperatorModeState: (card: string) => Promise<void>;
 
 let loader: Loader;
+let onSave: (subcriber: CardSaveSubscriber) => void;
 
 module('Integration | operator-mode', function (hooks) {
   let adapter: TestRealmAdapter;
@@ -49,6 +52,12 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   setupLocalIndexing(hooks);
+  setupOnSave(
+    hooks,
+    // you can use the unregisterSaveSubscriber to turn off the onSave
+    // as well for more precise control of when the onSave callback is triggered
+    (_onSave, _unregisterSaveSubscriber) => (onSave = _onSave),
+  );
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
@@ -75,6 +84,7 @@ module('Integration | operator-mode', function (hooks) {
   }
 
   hooks.afterEach(async function () {
+    // this makes sure that the indexer isn't still running when the test finishes
     await waitFor('[data-test-save-idle]');
     localStorage.removeItem('recent-cards');
   });
@@ -842,7 +852,6 @@ module('Integration | operator-mode', function (hooks) {
       '[data-test-field="lastName"] [data-test-boxel-input]',
       'Enwunder',
     );
-    await waitFor(`[data-test-last-saved]`);
 
     await click('[data-test-stack-card-index="3"] [data-test-close-button]');
     await waitUntil(
@@ -857,40 +866,30 @@ module('Integration | operator-mode', function (hooks) {
       '[data-test-stack-card-index="2"] [data-test-field="title"] [data-test-boxel-input]',
       'Mad As a Hatter',
     );
-    await waitFor(`[data-test-last-saved]`);
     await click('[data-test-stack-card-index="2"] [data-test-close-button]');
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="2"]'),
     );
 
-    assert
-      .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
-      .containsText('Mad As a Hatter by Alice Enwunder');
-    assert
-      .dom(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`)
-      .doesNotExist();
-
     await waitFor(
       `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}PublishingPacket/1"]`,
     );
-    await waitUntilSaved(async () => {
-      await fillIn(
-        '[data-test-stack-card-index="1"] [data-test-field="socialBlurb"] [data-test-boxel-input]',
+    await fillIn(
+      '[data-test-stack-card-index="1"] [data-test-field="socialBlurb"] [data-test-boxel-input]',
+      `Everyone knows that Alice ran the show in the Brady household. But when Alice’s past comes to light, things get rather topsy turvy…`,
+    );
+    assert
+      .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
+      .containsText('Mad As a Hatter by Alice Enwunder');
+
+    onSave((json) => {
+      assert.strictEqual(
+        json.data.attributes!.socialBlurb,
         `Everyone knows that Alice ran the show in the Brady household. But when Alice’s past comes to light, things get rather topsy turvy…`,
       );
     });
 
-    let fileRef = await adapter.openFile(`PublishingPacket/1.json`);
-    let json = JSON.parse(
-      fileRef?.content as string,
-    ) as LooseSingleCardDocument;
-    assert.strictEqual(
-      json.data.attributes!.socialBlurb,
-      `Everyone knows that Alice ran the show in the Brady household. But when Alice’s past comes to light, things get rather topsy turvy…`,
-    );
-
     await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
-    await waitUntil(() => !document.querySelector('[data-test-last-saved]'));
     assert
       .dom(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`)
       .containsText(
