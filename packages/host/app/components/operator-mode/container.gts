@@ -560,11 +560,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       <CardCatalogModal />
 
       <div class='operator-mode__with-chat {{this.chatVisibilityClass}}'>
-        <div
-          class='operator-mode__main'
-          data-test-save-idle={{this.write.isIdle}}
-          style={{this.backgroundImageStyle}}
-        >
+        <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
           {{#if (eq this.allStackItems.length 0)}}
             <div class='no-cards'>
               <p class='add-card-title'>

@@ -30,7 +30,6 @@ module('Acceptance | operator mode tests', function (hooks) {
   setupMockMessageService(hooks);
 
   hooks.afterEach(async function () {
-    await waitFor('[data-test-save-idle]');
     localStorage.removeItem('recent-cards');
   });
 

@@ -15,7 +15,6 @@ import {
   setupOnSave,
   TestRealmAdapter,
   TestRealm,
-  waitUntilSaved,
 } from '../../helpers';
 import {
   waitFor,
@@ -1219,19 +1218,15 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-edit-button]');
 
     assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
-    await waitUntilSaved(async () => {
-      await click(
-        '[data-test-links-to-many="friends"] [data-test-item="1"] [data-test-remove-card]',
-      );
-    });
+    await click(
+      '[data-test-links-to-many="friends"] [data-test-item="1"] [data-test-remove-card]',
+    );
     assert.dom('[data-test-field="friends"]').containsText('Jackie');
 
-    await waitUntilSaved(async () => {
-      await click('[data-test-links-to-many="friends"] [data-test-add-new]');
-      await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
-      await click(`[data-test-select="${testRealmURL}Pet/mango"]`);
-      await click('[data-test-card-catalog-go-button]');
-    });
+    await click('[data-test-links-to-many="friends"] [data-test-add-new]');
+    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Pet/mango"]`);
+    await click(`[data-test-select="${testRealmURL}Pet/mango"]`);
+    await click('[data-test-card-catalog-go-button]');
 
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
     assert.dom('[data-test-field="friends"]').containsText('Mango');
@@ -1336,16 +1331,12 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-edit-button]');
     assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
 
-    await waitUntilSaved(async () => {
-      await click(
-        '[data-test-links-to-many="friends"] [data-test-item="1"] [data-test-remove-card]',
-      );
-    });
-    await waitUntilSaved(async () => {
-      await click(
-        '[data-test-links-to-many="friends"] [data-test-item="0"] [data-test-remove-card]',
-      );
-    });
+    await click(
+      '[data-test-links-to-many="friends"] [data-test-item="1"] [data-test-remove-card]',
+    );
+    await click(
+      '[data-test-links-to-many="friends"] [data-test-item="0"] [data-test-remove-card]',
+    );
 
     await click('[data-test-edit-button]');
     await waitFor(`[data-test-person="Burcu"]`);

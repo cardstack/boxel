@@ -9,12 +9,7 @@ import {
   RealmInfo,
 } from '@cardstack/runtime-common';
 import GlimmerComponent from '@glimmer/component';
-import {
-  type TestContext,
-  visit,
-  waitFor,
-  waitUntil,
-} from '@ember/test-helpers';
+import { type TestContext, visit } from '@ember/test-helpers';
 import { LocalPath } from '@cardstack/runtime-common/paths';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
@@ -49,25 +44,6 @@ export function trimCardContainer(text: string) {
     /<div .*? data-test-field-component-card> (.*?) <\/div> <\/div>/,
     '$1',
   );
-}
-
-// TODO remove this
-export async function waitUntilSaved(test: () => Promise<void>) {
-  let lastSavedEl = document.querySelector('[data-test-last-saved]');
-  let saveTime = lastSavedEl
-    ? lastSavedEl.getAttribute('data-test-last-saved')
-    : undefined;
-  await test();
-  if (saveTime == null) {
-    await waitFor('[data-test-last-saved]');
-  } else {
-    await waitUntil(
-      () =>
-        document
-          .querySelector('[data-test-last-saved]')!
-          .getAttribute('data-test-last-saved') !== saveTime,
-    );
-  }
 }
 
 export function p(dateString: string): Date {
