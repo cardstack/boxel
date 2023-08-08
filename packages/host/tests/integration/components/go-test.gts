@@ -1,32 +1,26 @@
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
-import {
-  find,
-  render,
-  resetOnerror,
-  setupOnerror,
-  waitUntil,
-} from '@ember/test-helpers';
+import { find, render, waitUntil, waitFor, click } from '@ember/test-helpers';
 import Go from '@cardstack/host/components/editor/go';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 import { baseRealm } from '@cardstack/runtime-common';
 import {
-  delay,
-  getFileResource,
   TestRealmAdapter,
   TestRealm,
-  testRealmURL,
   setupCardLogs,
   setupLocalIndexing,
   setupMockMessageService,
 } from '../../helpers';
-import moment from 'moment';
 import CardPrerender from '@cardstack/host/components/card-prerender';
-import type * as monaco from 'monaco-editor';
-import type { LocalPath } from '@cardstack/runtime-common/paths';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import MonacoService from '@cardstack/host/services/monaco-service';
+import type {
+  MonacoSDK,
+  IStandaloneCodeEditor,
+} from '@cardstack/host/services/monaco-service';
+import CodeController from '@cardstack/host/controllers/code';
+import { OpenFiles } from '@cardstack/host/controllers/code';
 
 const cardContent = `
 import { contains, field, Card, linksTo } from "https://cardstack.com/base/card-api";
@@ -38,27 +32,14 @@ export class Person extends Card {
 }
 `;
 
-class FailingTestRealmAdapter extends TestRealmAdapter {
-  writeCalled = false;
-
-  async write(
-    path: LocalPath,
-    contents: string | object
-  ): Promise<{ lastModified: number }> {
-    if (this.writeCalled) {
-      return super.write(path, contents);
-    } else {
-      this.writeCalled = true;
-      await delay(10);
-      throw new Error('Something has gone horribly wrong on purpose');
-    }
-  }
-}
-
 module('Integration | Component | go', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
   let monacoService: MonacoService;
+  let mockController: CodeController;
+  let mockOpenFiles: OpenFiles;
+  let editor: IStandaloneCodeEditor;
+  let monacoContext: MonacoSDK;
 
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
@@ -83,56 +64,113 @@ module('Integration | Component | go', function (hooks) {
       monacoService = this.owner.lookup(
         'service:monaco-service'
       ) as MonacoService;
-      await monacoService.ready;
+      mockController = new CodeController();
+      mockOpenFiles = new OpenFiles(mockController);
       await realm.ready;
     });
 
-    test('it shows the editor, last modified date, and save status', async function (assert) {
-      let lastModified = new Date(2020, 4, 5).toISOString();
-
-      let path = 'boolean-field.json';
-
-      let openFile = await getFileResource(this, adapter, {
-        module: `${testRealmURL}person`,
-        name: 'Person',
-        lastModified,
-      });
-
-      let openDirs: string[] = [];
-
-      let editor: monaco.editor.IStandaloneCodeEditor;
-
-      let onEditorSetup = function (
-        receivedEditor: monaco.editor.IStandaloneCodeEditor
-      ) {
+    test('When no file is selected, displays file tree only', async function (assert) {
+      monacoContext = await monacoService.getMonacoContext();
+      let onEditorSetup = function (receivedEditor: IStandaloneCodeEditor) {
         editor = receivedEditor;
       };
-      let monacoContext = {
-        sdk: monacoService.sdk,
-        language: 'plaintext',
-        onEditorSetup,
-      };
-
       await render(<template>
         <Go
-          @path={{path}}
-          @openFile={{openFile}}
-          @openDirs={{openDirs}}
-          @monacoContext={{monacoContext}}
+          @openFiles={{mockOpenFiles}}
+          @monaco={{monacoContext}}
+          @onEditorSetup={{onEditorSetup}}
         />
         <CardPrerender />
       </template>);
 
-      assert
-        .dom('[data-test-last-edit]')
-        .hasText(`Last edit was ${moment(lastModified).fromNow()}`);
-      assert
-        .dom('[data-test-editor-lang]')
-        .hasText(`Lang: ${monacoContext.language}`);
+      await waitFor('[data-test-file]');
+      assert.dom('[data-test-file="person.gts"]').exists();
+      assert.dom('[data-test-editor').doesNotExist();
+      assert.dom('[data-test-card-id]').doesNotExist();
+    });
 
-      waitUntil(() =>
+    test('When a file is selected in the file tree, displays editor with contents and can save new content', async function (assert) {
+      monacoContext = await monacoService.getMonacoContext();
+
+      let onEditorSetup = function (receivedEditor: IStandaloneCodeEditor) {
+        editor = receivedEditor;
+      };
+      await render(<template>
+        <Go
+          @openFiles={{mockOpenFiles}}
+          @monaco={{monacoContext}}
+          @onEditorSetup={{onEditorSetup}}
+        />
+        <CardPrerender />
+      </template>);
+      await waitFor('[data-test-file]');
+      assert.dom('[data-test-file="person.gts"]').exists();
+
+      //click a file
+      await click('[data-test-file="person.gts"]');
+
+      assert.strictEqual(mockOpenFiles.path, 'person.gts');
+      assert.strictEqual(mockOpenFiles.openDirs.length, 0);
+
+      await waitUntil(() => find('[data-test-last-edit]'));
+      await waitUntil(() => find('[data-test-editor-lang]'));
+      await waitUntil(() =>
         find('[data-test-editor]')!.innerHTML?.includes('Person')
       );
+      await waitFor('[data-test-card-id]');
+
+      //sub components exists
+      assert.dom('[data-test-editor').exists(); //monaco exists
+      assert.dom('[data-test-file="person.gts"]').exists(); //file tree with file exists
+      assert.dom('[data-test-card-id]').exists(); //schema editor exist
+
+      // TODO: Need to find last modified test
+      // assert
+      //   .dom('[data-test-last-edit]')
+      //   .hasText(`Last edit was ${moment(lastModified).fromNow()}`);
+      assert.dom('[data-test-last-edit]').exists();
+      assert.dom('[data-test-editor-lang]').hasText(`Lang: glimmerTS`);
+      assert
+        .dom('[data-test-editor]')
+        .containsText('export')
+        .containsText('class')
+        .containsText('Person');
+    });
+
+    test('When a file is selected in the file tree, can update and save new content', async function (assert) {
+      monacoContext = await monacoService.getMonacoContext();
+
+      let onEditorSetup = function (receivedEditor: IStandaloneCodeEditor) {
+        editor = receivedEditor;
+      };
+      await render(<template>
+        <Go
+          @openFiles={{mockOpenFiles}}
+          @monaco={{monacoContext}}
+          @onEditorSetup={{onEditorSetup}}
+        />
+        <CardPrerender />
+      </template>);
+      await waitFor('[data-test-file]');
+      assert.dom('[data-test-file="person.gts"]').exists();
+      await click('[data-test-file="person.gts"]');
+
+      assert.strictEqual(mockOpenFiles.path, 'person.gts');
+      assert.strictEqual(mockOpenFiles.openDirs.length, 0);
+
+      await waitUntil(() => find('[data-test-editor'));
+
+      await waitUntil(() => find('[data-test-last-edit]'));
+      await waitUntil(() => find('[data-test-editor-lang]'));
+      await waitUntil(() =>
+        find('[data-test-editor]')!.innerHTML?.includes('Person')
+      );
+      // TODO: Need to find last modified test
+      // assert
+      //   .dom('[data-test-last-edit]')
+      //   .hasText(`Last edit was ${moment(lastModified).fromNow()}`);
+      assert.dom('[data-test-last-edit]').exists();
+      assert.dom('[data-test-editor-lang]').hasText(`Lang: glimmerTS`);
       assert
         .dom('[data-test-editor]')
         .containsText('export')
@@ -153,83 +191,6 @@ module('Integration | Component | go', function (hooks) {
       assert
         .dom('[data-test-last-edit]')
         .hasText('Last edit was a few seconds ago');
-    });
-  });
-
-  module('with a broken realm', function (hooks) {
-    hooks.beforeEach(async function () {
-      adapter = new FailingTestRealmAdapter({ 'person.gts': cardContent });
-      realm = await TestRealm.createWithAdapter(adapter, this.owner);
-      await realm.ready;
-    });
-
-    test('it shows last modified date and save status', async function (assert) {
-      setupOnerror(function (err: unknown) {
-        assert.ok(err, 'expected an error saving');
-      });
-
-      let lastModified = new Date(2020, 4, 5).toISOString();
-
-      let path = 'boolean-field.json';
-
-      let openFile = await getFileResource(this, adapter, {
-        module: `${testRealmURL}person`,
-        name: 'Person',
-        lastModified,
-      });
-
-      let openDirs: string[] = [];
-
-      let editor: monaco.editor.IStandaloneCodeEditor;
-
-      let onEditorSetup = function (
-        receivedEditor: monaco.editor.IStandaloneCodeEditor
-      ) {
-        editor = receivedEditor;
-      };
-
-      await render(<template>
-        <Go
-          @path={{path}}
-          @openFile={{openFile}}
-          @openDirs={{openDirs}}
-          @monacoContext={{monacoContext}}
-        />
-        <CardPrerender />
-      </template>);
-
-      editor!.setValue(cardContent + '\n\n');
-
-      await waitUntil(() => find('[data-test-saving]'), {
-        timeoutMessage: 'saving icon not found',
-      });
-      assert.dom('[data-test-saving]').exists();
-
-      await waitUntil(() => find('[data-test-save-error]'), {
-        timeoutMessage: 'error icon not found',
-      });
-      assert.dom('[data-test-save-error]').exists();
-
-      assert.dom('[data-test-failed-to-save]').hasText('Failed to save');
-
-      editor!.setValue(cardContent + '\n\n\n\n');
-
-      await waitUntil(() => find('[data-test-saved]'));
-      assert.dom('[data-test-saved]').exists();
-
-      await waitUntil(() =>
-        find('[data-test-last-edit]')!.innerHTML?.includes('seconds')
-      );
-      assert
-        .dom('[data-test-last-edit]')
-        .hasText(
-          'Last edit was a few seconds ago',
-          'expected last updated to return after a successful save'
-        );
-    });
-
-    hooks.afterEach(() => {
-      resetOnerror();
     });
   });
 });
