@@ -1,11 +1,7 @@
 import { module, test, skip } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
-import {
-  baseRealm,
-  cardTypeDisplayName,
-  LooseSingleCardDocument,
-} from '@cardstack/runtime-common';
+import { baseRealm, cardTypeDisplayName } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 import { Loader } from '@cardstack/runtime-common/loader';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -84,8 +80,6 @@ module('Integration | operator-mode', function (hooks) {
   }
 
   hooks.afterEach(async function () {
-    // this makes sure that the indexer isn't still running when the test finishes
-    await waitFor('[data-test-save-idle]');
     localStorage.removeItem('recent-cards');
   });
 
@@ -605,15 +599,10 @@ module('Integration | operator-mode', function (hooks) {
     );
     await waitFor('[data-test-person]');
     await click('[data-test-edit-button]');
+    onSave((json) => {
+      assert.strictEqual(json.data.attributes?.firstName, 'EditedName');
+    });
     await fillIn('[data-test-boxel-input]', 'EditedName');
-
-    await waitFor(`[data-test-last-saved]`);
-    let fileRef = await adapter.openFile('Person/fadhlan.json');
-    let json = JSON.parse(
-      fileRef?.content as string,
-    ) as LooseSingleCardDocument;
-    assert.strictEqual(json.data.attributes?.firstName, 'EditedName');
-
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
 
     await waitFor('[data-test-person="EditedName"]');
@@ -639,17 +628,14 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-stack-card-index="2"]');
     await click(`[data-test-stack-card-index="2"] [data-test-edit-button]`);
 
-    await fillIn(`[data-test-field="preferredCarrier"] input`, `FedEx`);
-    await waitFor(`[data-test-last-saved]`);
-    let fileRef = await adapter.openFile('Person/fadhlan.json');
-    let json = JSON.parse(
-      fileRef?.content as string,
-    ) as LooseSingleCardDocument;
-    assert.strictEqual(
-      json.data.attributes?.address?.shippingInfo?.preferredCarrier,
-      'FedEx',
-    );
+    onSave((json) => {
+      assert.strictEqual(
+        json.data.attributes?.address?.shippingInfo?.preferredCarrier,
+        'FedEx',
+      );
+    });
 
+    await fillIn(`[data-test-field="preferredCarrier"] input`, `FedEx`);
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await waitFor('[data-test-preferredcarrier]');
     assert.dom('data-test-preferredcarrier="FedEx"');
@@ -757,7 +743,6 @@ module('Integration | operator-mode', function (hooks) {
       .exists();
 
     await fillIn(`[data-test-field="title"] input`, 'New Post');
-    await waitFor(`[data-test-last-saved]`);
     await setCardInOperatorModeState(`${testRealmURL}PublishingPacket/1`);
 
     await waitFor(`[data-test-stack-card="${testRealmURL}PublishingPacket/1"]`);
@@ -1011,9 +996,13 @@ module('Integration | operator-mode', function (hooks) {
       .exists('Shipping Info contained card header in edit mode');
 
     await fillIn(`[data-test-field="preferredCarrier"] input`, `FedEx`);
-    await waitFor('[data-test-last-saved]');
+    onSave((json) => {
+      assert.strictEqual(
+        json.data.attributes?.address.shippingInfo.preferredCarrier,
+        'FedEx',
+      );
+    });
     await click(' [data-test-stack-card-index="2"] [data-test-edit-button]');
-    await waitUntil(() => !document.querySelector('[data-test-last-saved]'));
 
     // all the nested contains fields are popped from the stack
     await waitUntil(
@@ -1029,15 +1018,6 @@ module('Integration | operator-mode', function (hooks) {
         `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}Person/fadhlan"] > .card.edit`,
       )
       .doesNotExist('Person card is not in edit mode');
-
-    let fileRef = await adapter.openFile('Person/fadhlan.json');
-    let json = JSON.parse(
-      fileRef?.content as string,
-    ) as LooseSingleCardDocument;
-    assert.strictEqual(
-      json.data.attributes?.address.shippingInfo.preferredCarrier,
-      'FedEx',
-    );
   });
 
   test('can choose a card for a linksTo field that has an existing value', async function (assert) {
@@ -1139,13 +1119,11 @@ module('Integration | operator-mode', function (hooks) {
     await waitUntil(
       () => !document.querySelector('[data-test-stack-card-index="1"]'),
     );
-    await waitFor('[data-test-last-saved]');
     assert.dom('[data-test-choose-card]').doesNotExist();
     assert.dom('[data-test-create-new]').doesNotExist();
     assert.dom('[data-test-field="authorBio"]').containsText('Alice');
 
     await click('[data-test-stack-card-index="0"] [data-test-edit-button]');
-    await waitFor('[data-test-save-idle]');
     assert.dom('[data-test-blog-post-isolated]').hasText('Beginnings by Alice');
   });
 
@@ -1166,7 +1144,6 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-field="authorBio"]').containsText('Alien Bob');
     await click('[data-test-field="authorBio"] [data-test-remove-card]');
     await click('[data-test-edit-button]');
-    await waitFor('[data-test-save-idle]');
 
     await waitFor('.operator-mode [data-test-blog-post-isolated]');
     assert
