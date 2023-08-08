@@ -71,12 +71,15 @@ export default class CardCatalogModal extends Component<Signature> {
           <Header @title={{this.chooseCardTitle}} class='dialog-box__header'>
             <IconButton
               @icon='icon-x'
+              @width='20'
+              @height='20'
               {{on 'click' (fn this.pick undefined)}}
               class='dialog-box__close'
               aria-label='close modal'
             />
             <div>
               <SearchInput
+                class='card-catalog-modal__search-field'
                 @value={{this.searchKey}}
                 @onInput={{this.setSearchKey}}
                 @onKeyPress={{this.onSearchFieldKeypress}}
@@ -98,7 +101,6 @@ export default class CardCatalogModal extends Component<Signature> {
                 <li>
                   <div class='tag'>
                     Realm: All
-                    <IconButton @icon='icon-x' class='remove-tag-button' />
                   </div>
                 </li>
               </ul>
@@ -250,6 +252,10 @@ export default class CardCatalogModal extends Component<Signature> {
       .dialog-box__header > * + *:not(button) {
         margin-top: var(--boxel-sp);
       }
+      .card-catalog-modal__search-field {
+        /* This is neccesary to show card URL error messages */
+        height: 5.625rem;
+      }
       .tags {
         --tag-height: 30px;
         display: flex;
@@ -282,7 +288,7 @@ export default class CardCatalogModal extends Component<Signature> {
         height: var(--tag-height);
         border: 1px solid var(--boxel-400);
         border-radius: 20px;
-        padding-right: var(--boxel-sp-xl);
+        padding-right: var(--boxel-sp-lg);
         padding-left: var(--boxel-sp-sm);
         display: flex;
         align-items: center;
@@ -302,12 +308,6 @@ export default class CardCatalogModal extends Component<Signature> {
       }
       .remove-tag-button:hover {
         --icon-bg: var(--boxel-dark);
-      }
-      .footer {
-        display: flex;
-        justify-content: flex-end;
-        /* This bottom margin is neccesary to show card URL error messages */
-        margin-bottom: var(--boxel-sp);
       }
       .footer.with-create-button {
         justify-content: space-between;

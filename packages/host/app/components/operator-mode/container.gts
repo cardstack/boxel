@@ -555,7 +555,7 @@ export default class OperatorModeContainer extends Component<Signature> {
               </p>
 
               <button
-                class='add-card-button icon-button'
+                class='add-card-button'
                 {{on 'click' (fn (perform this.addCard))}}
                 data-test-add-card-button
               >
@@ -676,29 +676,30 @@ export default class OperatorModeContainer extends Component<Signature> {
         font: var(--boxel-font-lg);
       }
       .add-card-button {
+        --icon-color: var(--boxel-light);
         height: 350px;
         width: 200px;
         vertical-align: middle;
-        background: var(--boxel-teal);
+        background-color: var(--boxel-highlight);
         border: none;
         border-radius: var(--boxel-border-radius);
       }
       .add-card-button:hover {
-        background: var(--boxel-dark-teal);
+        background-color: var(--boxel-highlight-hover);
       }
       .add-card-to-neighbor-stack {
+        --icon-color: var(--boxel-highlight-hover);
         position: absolute;
         width: 60px;
         height: 60px;
         border-radius: 50%;
-        background: #aeabba;
-        fill: #3295a2;
+        background-color: var(--boxel-light-100);
         border-color: transparent;
       }
       .add-card-to-neighbor-stack:hover,
       .add-card-to-neighbor-stack--active {
-        background: var(--boxel-light);
-        fill: var(--boxel-teal);
+        --icon-color: var(--boxel-highlight);
+        background-color: var(--boxel-light);
       }
       .add-card-to-neighbor-stack--left {
         left: 0;
@@ -735,17 +736,19 @@ export default class OperatorModeContainer extends Component<Signature> {
       }
 
       .chat-btn {
+        --icon-color: var(--boxel-highlight-hover);
         position: absolute;
         bottom: 6px;
         right: 6px;
         margin-right: 0;
         border-radius: var(--boxel-border-radius);
-        background-color: var(--boxel-400);
+        background-color: var(--boxel-light-100);
         border: solid 1px var(--boxel-border-color);
         box-shadow: var(--boxel-box-shadow);
       }
       .chat-btn:hover {
-        background: var(--boxel-light);
+        --icon-color: var(--boxel-highlight);
+        background-color: var(--boxel-light);
       }
     </style>
   </template>
