@@ -3770,27 +3770,39 @@ posts/ignore-me.json
     });
 
     test(`can search on specific card by using 'contains' filter`, async function (assert) {
-      let { data: matching } = await indexer.search({
+      let { data: personMatchingByTitle } = await indexer.search({
         filter: {
           on: { module: `${testModuleRealm}person`, name: 'Person' },
           contains: { title: 'ca' },
         },
       });
-      assert.equal(matching.length, 2);
+      assert.equal(personMatchingByTitle.length, 2);
       assert.deepEqual(
-        matching.map((m) => m.id),
+        personMatchingByTitle.map((m) => m.id),
         [`${paths.url}person-card1`, `${paths.url}person-card2`],
+      );
+
+      let { data: dogMatchingByFirstName } = await indexer.search({
+        filter: {
+          on: { module: `${testModuleRealm}dog`, name: 'Dog' },
+          contains: { firstName: 'go' },
+        },
+      });
+      assert.equal(dogMatchingByFirstName.length, 3);
+      assert.deepEqual(
+        dogMatchingByFirstName.map((m) => m.id),
+        [`${paths.url}mango`, `${paths.url}ringo`, `${paths.url}vangogh`],
       );
     });
 
-    test(`cannot retrieve any cards if 'contains' filter value is null`, async function (assert) {
+    test(`can use 'contains' filter to find 'null' values`, async function (assert) {
       let { data: matching } = await indexer.search({
         filter: {
-          on: { module: `${testModuleRealm}person`, name: 'Person' },
+          on: { module: `${testModuleRealm}dog`, name: 'Dog' },
           contains: { title: null },
         },
       });
-      assert.equal(matching.length, 0);
+      assert.equal(matching.length, 3);
     });
   });
 });

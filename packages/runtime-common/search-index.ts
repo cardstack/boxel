@@ -629,8 +629,11 @@ export class SearchIndex {
         };
       } else {
         matcher = (instanceValue: any) => {
-          if (instanceValue == null || queryValue == null) {
-            return false;
+          if ((instanceValue == null && queryValue != null) || (instanceValue != null && queryValue == null)) {
+            return null;
+          }
+          if (instanceValue == null && queryValue == null) {
+            return true;
           }
           return (instanceValue as string).toLowerCase().includes((queryValue as string).toLowerCase());
         };
