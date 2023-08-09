@@ -13,7 +13,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: .github/actions/init
+    - uses: ./.github/actions/init
 
     - name: Set PR branch name
       shell: bash
