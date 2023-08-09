@@ -23,6 +23,7 @@ import {
 import get from 'lodash/get';
 import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 import { task, restartableTask, timeout } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
 
 import { service } from '@ember/service';
 //@ts-expect-error cached type not available yet
@@ -146,21 +147,20 @@ export default class OperatorModeStackItem extends Component<Signature> {
     }
   }
 
-  // TODO replace async action with ember concurrency task
-  @action async copyToClipboard(cardUrl: string) {
-    if (!cardUrl) {
+  copyToClipboard = restartableTask(async () => {
+    if (!this.card.id) {
       return;
     }
     if (config.environment === 'test') {
       return; // navigator.clipboard is not available in test environment
     }
-    await navigator.clipboard.writeText(cardUrl);
-  }
-
-  fetchRealmInfo = trackedFunction(this, async () => {
-    let realmInfo = await this.cardService.getRealmInfo(this.card);
-    return realmInfo;
+    await navigator.clipboard.writeText(this.card.id);
   });
+
+  fetchRealmInfo = trackedFunction(
+    this,
+    async () => await this.cardService.getRealmInfo(this.card),
+  );
 
   get iconURL() {
     return this.fetchRealmInfo.value?.iconURL ?? '/default-realm-icon.png';
@@ -344,7 +344,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                   <Tooltip @placement='top'>
                     <:trigger>
                       <IconButton
-                        @icon='icon-horizontal-three-dots'
+                        @icon='three-dots-horizontal'
                         @width='20px'
                         @height='20px'
                         class='icon-button'
@@ -366,7 +366,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                       (array
                         (menuItem
                           'Copy Card URL'
-                          (fn this.copyToClipboard this.card.id)
+                          (perform this.copyToClipboard)
                           icon='icon-link'
                           disabled=(eq @item.type 'contained')
                         )
@@ -375,7 +375,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                       (array
                         (menuItem
                           'Copy Card URL'
-                          (fn this.copyToClipboard this.card.id)
+                          (perform this.copyToClipboard)
                           icon='icon-link'
                           disabled=(eq @item.type 'contained')
                         )
@@ -496,24 +496,21 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .edit .header {
-        background: var(--boxel-teal);
+        background-color: var(--boxel-highlight);
         color: var(--boxel-light);
       }
 
       .edit .icon-button {
-        --icon-bg: var(--boxel-light);
-        --icon-border: none;
         --icon-color: var(--boxel-light);
       }
 
       .edit .icon-button:hover {
-        --icon-bg: var(--boxel-teal);
-        --icon-border: none;
-        --icon-color: var(--boxel-teal);
-        background: var(--boxel-light);
+        --icon-color: var(--boxel-highlight);
+        background-color: var(--boxel-light);
       }
 
       .icon-button {
+        --icon-color: var(--boxel-highlight);
         --boxel-icon-button-width: 28px;
         --boxel-icon-button-height: 28px;
         border-radius: 4px;
@@ -528,15 +525,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .icon-button:hover {
-        --icon-bg: var(--boxel-light);
-        --icon-border: none;
         --icon-color: var(--boxel-light);
-        background: var(--boxel-teal);
+        background-color: var(--boxel-highlight);
       }
 
       .icon-save {
-        --icon-bg: var(--boxel-teal);
-        background: var(--boxel-light);
+        --icon-color: var(--boxel-dark);
+        background-color: var(--boxel-light);
 
         --boxel-icon-button-width: 28px;
         --boxel-icon-button-height: 28px;
@@ -552,7 +547,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .icon-save:hover {
-        --icon-bg: var(--boxel-dark);
+        --icon-color: var(--boxel-highlight);
       }
 
       .header-icon {

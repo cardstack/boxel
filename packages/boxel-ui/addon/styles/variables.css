@@ -107,7 +107,7 @@
   --boxel-dark: #000;
 
   --boxel-highlight: var(--boxel-teal);
-  --boxel-highlight-hover: #02b1ad;
+  --boxel-highlight-hover: var(--boxel-dark-teal);
   --boxel-danger: var(--boxel-error-100);
   --boxel-danger-hover: #fa1521;
 

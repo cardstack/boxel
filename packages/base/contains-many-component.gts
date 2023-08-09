@@ -47,10 +47,10 @@ class ContainsManyEditor extends GlimmerComponent<Signature> {
                 <Item />
               {{/let}}
               <IconButton
-                @icon='icon-minus-circle'
+                @icon='icon-trash'
                 @width='20px'
                 @height='20px'
-                class='remove-button'
+                class='contains-many-editor__remove-icon'
                 {{on 'click' (fn this.remove i)}}
                 data-test-remove={{i}}
                 aria-label='Remove'

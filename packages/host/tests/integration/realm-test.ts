@@ -352,8 +352,10 @@ module('Integration | realm', function (hooks) {
               name: 'Person',
             },
             realmInfo: {
-              ...testRealmInfo,
-              name: 'Test Workspace',
+              name: 'Test Workspace A',
+              backgroundURL:
+                'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
+              iconURL: 'https://i.postimg.cc/d0B9qMvy/icon.png',
             },
             realmURL: 'http://localhost:4202/test/',
           },
@@ -2459,7 +2461,12 @@ module('Integration | realm', function (hooks) {
               module: './person',
               name: 'Person',
             },
-            realmInfo: { ...testRealmInfo, name: 'Test Workspace' },
+            realmInfo: {
+              name: 'Test Workspace A',
+              backgroundURL:
+                'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
+              iconURL: 'https://i.postimg.cc/d0B9qMvy/icon.png',
+            },
             realmURL: 'http://localhost:4202/test/',
           },
           links: {

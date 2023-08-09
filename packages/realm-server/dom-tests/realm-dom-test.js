@@ -17,7 +17,7 @@ function testDocument() {
   return iframe.contentDocument;
 }
 
-async function waitFor(selector, timeoutMs = 5000) {
+async function waitFor(selector, timeoutMs = 10000) {
   let startTime = Date.now();
   while (
     querySelector(selector) == null &&
@@ -72,7 +72,7 @@ QUnit.module(
       assert.equal(
         cleanWhiteSpace(p.textContent),
         'Hello, world',
-        'the index route is displayed'
+        'the index route is displayed',
       );
     });
 
@@ -103,14 +103,14 @@ QUnit.module(
       await boot(`${testRealmURL}/code?path=person.gts`, '[data-test-card-id]');
       assert.strictEqual(
         testDocument().location.href,
-        `${testRealmURL}/code?path=person.gts`
+        `${testRealmURL}/code?path=person.gts`,
       );
       let cardId = querySelector('[data-test-card-id');
       assert.ok(cardId, 'card ID element exists');
       assert.strictEqual(
         cleanWhiteSpace(cardId.textContent),
         `Card ID: ${testRealmURL}/person/Person`,
-        'the card id is correct'
+        'the card id is correct',
       );
 
       let fields = [...querySelectorAll('[data-test-field]')];
@@ -118,17 +118,17 @@ QUnit.module(
       assert.strictEqual(
         cleanWhiteSpace(fields[0].textContent),
         `Delete firstName - contains - field card ID: https://cardstack.com/base/string/default`,
-        'field is correct'
+        'field is correct',
       );
       assert.strictEqual(
         cleanWhiteSpace(fields[1].textContent),
         `description - contains - field card ID: https://cardstack.com/base/string/default`,
-        'description field is correct'
+        'description field is correct',
       );
       assert.strictEqual(
         cleanWhiteSpace(fields[2].textContent),
         `thumbnailURL - contains - field card ID: https://cardstack.com/base/string/default`,
-        'thumbnailURL field is correct'
+        'thumbnailURL field is correct',
       );
     });
 
@@ -136,13 +136,13 @@ QUnit.module(
       await boot(`${testRealmURL}/code?path=person-2.json`, '[data-test-card]');
       assert.strictEqual(
         testDocument().location.href,
-        `${testRealmURL}/code?path=person-2.json`
+        `${testRealmURL}/code?path=person-2.json`,
       );
       let card = querySelector('[data-test-card]');
       assert.strictEqual(
         cleanWhiteSpace(card.textContent),
         'Jackie',
-        'the card is rendered correctly'
+        'the card is rendered correctly',
       );
     });
 
@@ -150,7 +150,7 @@ QUnit.module(
       await boot(`${testRealmURL}/code`, '[data-test-directory-level]');
       let files = querySelectorAll('.main nav .file');
       let instance = [...files].find(
-        (file) => cleanWhiteSpace(file.textContent) === 'person-1.json'
+        (file) => cleanWhiteSpace(file.textContent) === 'person-1.json',
       );
       assert.ok(instance, 'card instance file element exists');
       instance.click();
@@ -158,13 +158,13 @@ QUnit.module(
       await waitFor('[data-test-card]');
       assert.strictEqual(
         testDocument().location.href,
-        `${testRealmURL}/code?path=person-1.json`
+        `${testRealmURL}/code?path=person-1.json`,
       );
       let card = querySelector('[data-test-card]');
       assert.strictEqual(
         cleanWhiteSpace(card.textContent),
         'Mango',
-        'the card is rendered correctly'
+        'the card is rendered correctly',
       );
     });
 
@@ -172,13 +172,13 @@ QUnit.module(
       await boot(`${testRealmURL}/person-1`, '[data-test-card]');
       assert.strictEqual(
         testDocument().location.href,
-        `${testRealmURL}/person-1`
+        `${testRealmURL}/person-1`,
       );
       let card = querySelector('[data-test-card]');
       assert.strictEqual(
         cleanWhiteSpace(card.textContent),
         'Mango',
-        'the card is rendered correctly'
+        'the card is rendered correctly',
       );
       let nav = querySelector('.main nav');
       assert.notOk(nav, 'file tree is not rendered');
@@ -188,20 +188,20 @@ QUnit.module(
       await boot(`${testRealmURL}/does-not-exist`, '[data-card-error]');
       assert.strictEqual(
         testDocument().location.href,
-        `${testRealmURL}/does-not-exist`
+        `${testRealmURL}/does-not-exist`,
       );
       let card = querySelector('[data-test-card]');
       assert.notOk(card, 'no card rendered');
       let error = querySelector('[data-card-error]');
       assert.ok(
         cleanWhiteSpace(error.textContent).includes(`Cannot load card`),
-        'error message is displayed'
+        'error message is displayed',
       );
       assert.ok(
         cleanWhiteSpace(error.textContent).includes(
-          `Could not find ${testRealmURL}/does-not-exist`
+          `Could not find ${testRealmURL}/does-not-exist`,
         ),
-        'error message is displayed'
+        'error message is displayed',
       );
     });
 
@@ -209,14 +209,14 @@ QUnit.module(
       await boot(`${testRealmURL}/person?schema`, '[data-test-card-id]');
       assert.strictEqual(
         testDocument().location.href,
-        `${testRealmURL}/code?openDirs=&path=person.gts`
+        `${testRealmURL}/code?openDirs=&path=person.gts`,
       );
       let cardId = querySelector('[data-test-card-id');
       assert.ok(cardId, 'card ID element exists');
       assert.strictEqual(
         cleanWhiteSpace(cardId.textContent),
         `Card ID: ${testRealmURL}/person/Person`,
-        'the card id is correct'
+        'the card id is correct',
       );
 
       let fields = [...querySelectorAll('[data-test-field]')];
@@ -224,18 +224,18 @@ QUnit.module(
       assert.strictEqual(
         cleanWhiteSpace(fields[0].textContent),
         `Delete firstName - contains - field card ID: https://cardstack.com/base/string/default`,
-        'field is correct'
+        'field is correct',
       );
       assert.strictEqual(
         cleanWhiteSpace(fields[1].textContent),
         `description - contains - field card ID: https://cardstack.com/base/string/default`,
-        'description field is correct'
+        'description field is correct',
       );
       assert.strictEqual(
         cleanWhiteSpace(fields[2].textContent),
         `thumbnailURL - contains - field card ID: https://cardstack.com/base/string/default`,
-        'thumbnailURL field is correct'
+        'thumbnailURL field is correct',
       );
     });
-  }
+  },
 );

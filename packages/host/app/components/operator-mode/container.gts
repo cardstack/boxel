@@ -31,6 +31,7 @@ import {
   getSearchResults,
   type Search,
 } from '@cardstack/host/resources/search';
+import { htmlSafe } from '@ember/template';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import perform from 'ember-concurrency/helpers/perform';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -99,8 +100,12 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   @action
-  getCards(query: Query): Search {
-    return getSearchResults(this, () => query);
+  getCards(query: Query, realms?: string[]): Search {
+    return getSearchResults(
+      this,
+      () => query,
+      realms ? () => realms : undefined,
+    );
   }
 
   @action
@@ -193,7 +198,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   }
 
-  @action async close(item: StackItem) {
+  close = task(async (item: StackItem) => {
     let card = this.getAddressableCard(item);
     let { request } = item;
     // close the item first so user doesn't have to wait for the save to complete
@@ -204,27 +209,18 @@ export default class OperatorModeContainer extends Component<Signature> {
     // edit and isolated formats
     if (item.format === 'edit') {
       let updatedCard = await this.write.perform(card);
-      await request?.fulfill(updatedCard);
+      request?.fulfill(updatedCard);
     }
-  }
+  });
 
-  // TODO I'm a little suspicious of all the async actions in this component.
-  // there is the possibility that this component could be destroyed during
-  // interior await's within these async actions. perferably we should be
-  // using ember concurrency to perform any async which addresses this situation
-  // directly.
-  @action async save(item: StackItem, dismissStackItem: boolean) {
+  save = task(async (item: StackItem, dismissStackItem: boolean) => {
     let { request } = item;
     let stack = this.stacks[item.stackIndex];
     let addressableItem = getCardStackItem(item, stack);
-    // TODO Do not cast the task to a promise by awaiting it
-    // https://ember-concurrency.com/docs/task-cancelation-help
-    // if this was a EC task instead of an action then we could await here without
-    // casting the task to a promise
     let updatedCard = await this.write.perform(addressableItem.card);
 
     if (updatedCard) {
-      await request?.fulfill(updatedCard);
+      request?.fulfill(updatedCard);
       if (!dismissStackItem) {
         // if this is a newly created card from auto-save then we
         // need to replace the stack item to account for the new card's ID
@@ -251,12 +247,12 @@ export default class OperatorModeContainer extends Component<Signature> {
           });
 
           getPathToStackItem(item, this.stacks[item.stackIndex]).forEach(() =>
-            this.operatorModeStateService.popItemFromStack(item.stackIndex)
+            this.operatorModeStateService.popItemFromStack(item.stackIndex),
           );
         }
       }
     }
-  }
+  });
 
   // we debounce saves in the stack item--by the time they reach
   // this level we need to handle every request (so not restartable). otherwise
@@ -308,7 +304,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         card: Card,
         format: Format = 'isolated',
         fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
-        fieldName?: string
+        fieldName?: string,
       ) => {
         let stack = here.stacks[stackIndex];
         let itemsCount = stack.length;
@@ -323,7 +319,7 @@ export default class OperatorModeContainer extends Component<Signature> {
           fieldName &&
           [
             ...Object.keys(
-              await here.cardService.getFields(currentCardOnStack)
+              await here.cardService.getFields(currentCardOnStack),
             ),
           ].includes(fieldName)
         ) {
@@ -402,26 +398,52 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   });
 
-  // For now use the background from the 1st stack, but eventually, each stack
-  // to have its own background URL. Also need to consider how to treat adjoining
-  // stacks that have the same background image (consider 4 stacks, where 2
-  // adjacent stacks have the same background image)
-  fetchBackgroundImageURL = trackedFunction(this, async () => {
-    let bottomMostCard = this.stacks[0]?.[0];
-    let realmInfo;
-    if (bottomMostCard) {
-      if (bottomMostCard.type !== 'card') {
-        throw new Error(
-          `bug: the bottom most card for a stack cannot be a contained card`,
-        );
-      }
-      realmInfo = await this.cardService.getRealmInfo(bottomMostCard.card);
-    }
-    return realmInfo?.backgroundURL;
+  fetchBackgroundImageURLs = trackedFunction(this, async () => {
+    let result = await Promise.all(
+      this.stacks.map(async (stack) => {
+        if (stack.length === 0) {
+          return;
+        }
+        let bottomMostCard = stack[0];
+        if (bottomMostCard.type !== 'card') {
+          throw new Error(
+            `bug: the bottom most card for a stack cannot be a contained card`,
+          );
+        }
+        return (await this.cardService.getRealmInfo(bottomMostCard.card))
+          ?.backgroundURL;
+      }),
+    );
+    return result;
   });
 
-  get backgroundImageURL() {
-    return this.fetchBackgroundImageURL.value ?? '';
+  get backgroundImageURLs() {
+    return (
+      this.fetchBackgroundImageURLs.value?.map((u) => (u ? u : undefined)) ?? []
+    );
+  }
+
+  get backgroundImageStyle() {
+    // only return a background image when both stacks originate from the same realm
+    // otherwise we delegate to each stack to handle this
+    if (
+      this.backgroundImageURLs.length > 0 &&
+      this.backgroundImageURLs.every(
+        (u) => u != null && this.backgroundImageURLs[0] === u,
+      )
+    ) {
+      return htmlSafe(`background-image: url(${this.backgroundImageURLs[0]});`);
+    }
+    return '';
+  }
+
+  get differingBackgroundImageURLs() {
+    // if the this.backgroundImageStyle is undefined when there are images its because
+    // they are different images--in that case we want to return these.
+    if (this.backgroundImageURLs.length > 0 && !this.backgroundImageStyle) {
+      return this.backgroundImageURLs;
+    }
+    return [];
   }
 
   get allStackItems() {
@@ -511,11 +533,11 @@ export default class OperatorModeContainer extends Component<Signature> {
   <template>
     <Modal
       class='operator-mode'
+      @size='full-screen'
       @isOpen={{true}}
       @onClose={{@onClose}}
       @isOverlayDismissalDisabled={{true}}
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
-      @backgroundImageURL={{this.backgroundImageURL}}
     >
 
       <CardCatalogModal />
@@ -524,7 +546,41 @@ export default class OperatorModeContainer extends Component<Signature> {
         <div
           class='operator-mode__main'
           data-test-save-idle={{this.write.isIdle}}
+          style={{this.backgroundImageStyle}}
         >
+          {{#if (eq this.allStackItems.length 0)}}
+            <div class='no-cards'>
+              <p class='add-card-title'>
+                Add a card to get started
+              </p>
+
+              <button
+                class='add-card-button'
+                {{on 'click' (fn (perform this.addCard))}}
+                data-test-add-card-button
+              >
+                {{svgJar 'icon-plus' width='50px' height='50px'}}
+              </button>
+            </div>
+          {{else}}
+            {{#each this.stacks as |stack stackIndex|}}
+              <OperatorModeStack
+                data-test-operator-mode-stack={{stackIndex}}
+                class='operator-mode-stack'
+                @stackItems={{stack}}
+                @backgroundImageURL={{get
+                  this.differingBackgroundImageURLs
+                  stackIndex
+                }}
+                @stackIndex={{stackIndex}}
+                @publicAPI={{this.publicAPI this stackIndex}}
+                @close={{perform this.close}}
+                @edit={{this.edit}}
+                @save={{perform this.save}}
+              />
+            {{/each}}
+          {{/if}}
+
           {{#if this.canCreateNeighborStack}}
             <button
               data-test-add-card-left-stack
@@ -546,38 +602,6 @@ export default class OperatorModeContainer extends Component<Signature> {
             >
               {{svgJar 'download' width='30px' height='30px'}}
             </button>
-          {{/if}}
-
-          {{#if (eq this.allStackItems.length 0)}}
-            <div class='no-cards'>
-              <p class='add-card-title'>
-                Add a card to get started
-              </p>
-
-              <button
-                class='add-card-button icon-button'
-                {{on 'click' (fn (perform this.addCard))}}
-                data-test-add-card-button
-              >
-                {{svgJar 'icon-plus' width='50px' height='50px'}}
-              </button>
-            </div>
-          {{else}}
-            {{#each this.stacks as |stack stackIndex|}}
-              <OperatorModeStack
-                data-test-operator-mode-stack={{stackIndex}}
-                class='operator-mode-stack'
-                @stackItems={{stack}}
-                @stackIndex={{stackIndex}}
-                @publicAPI={{this.publicAPI this stackIndex}}
-                @close={{this.close}}
-                @edit={{this.edit}}
-                @save={{this.save}}
-              />
-            {{/each}}
-          {{/if}}
-
-          {{#if this.canCreateNeighborStack}}
             <button
               data-test-add-card-right-stack
               class='add-card-to-neighbor-stack add-card-to-neighbor-stack--right
@@ -652,29 +676,30 @@ export default class OperatorModeContainer extends Component<Signature> {
         font: var(--boxel-font-lg);
       }
       .add-card-button {
+        --icon-color: var(--boxel-light);
         height: 350px;
         width: 200px;
         vertical-align: middle;
-        background: var(--boxel-teal);
+        background-color: var(--boxel-highlight);
         border: none;
         border-radius: var(--boxel-border-radius);
       }
       .add-card-button:hover {
-        background: var(--boxel-dark-teal);
+        background-color: var(--boxel-highlight-hover);
       }
       .add-card-to-neighbor-stack {
+        --icon-color: var(--boxel-highlight-hover);
         position: absolute;
         width: 60px;
         height: 60px;
         border-radius: 50%;
-        background: #aeabba;
-        fill: #3295a2;
+        background-color: var(--boxel-light-100);
         border-color: transparent;
       }
       .add-card-to-neighbor-stack:hover,
       .add-card-to-neighbor-stack--active {
-        background: var(--boxel-light);
-        fill: var(--boxel-teal);
+        --icon-color: var(--boxel-highlight);
+        background-color: var(--boxel-light);
       }
       .add-card-to-neighbor-stack--left {
         left: 0;
@@ -703,23 +728,27 @@ export default class OperatorModeContainer extends Component<Signature> {
 
       .operator-mode__main {
         display: flex;
-        justify-content: center;
+        justify-content: stretch;
         align-items: center;
         position: relative;
+        background-position: center;
+        background-size: cover;
       }
 
       .chat-btn {
+        --icon-color: var(--boxel-highlight-hover);
         position: absolute;
         bottom: 6px;
         right: 6px;
         margin-right: 0;
         border-radius: var(--boxel-border-radius);
-        background-color: var(--boxel-400);
+        background-color: var(--boxel-light-100);
         border: solid 1px var(--boxel-border-color);
         box-shadow: var(--boxel-box-shadow);
       }
       .chat-btn:hover {
-        background: var(--boxel-light);
+        --icon-color: var(--boxel-highlight);
+        background-color: var(--boxel-light);
       }
     </style>
   </template>
