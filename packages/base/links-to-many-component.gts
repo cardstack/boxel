@@ -64,7 +64,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
                 @icon='icon-minus-circle'
                 @width='20px'
                 @height='20px'
-                class='icon-button'
+                class='remove-icon-button'
                 {{on 'click' (fn this.remove i)}}
                 data-test-remove-card
                 data-test-remove={{i}}

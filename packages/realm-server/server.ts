@@ -2,7 +2,13 @@ import Koa from 'koa';
 import cors from '@koa/cors';
 import Router from '@koa/router';
 import { Memoize } from 'typescript-memoize';
-import { Realm, baseRealm, assetsDir, logger } from '@cardstack/runtime-common';
+import {
+  Realm,
+  baseRealm,
+  assetsDir,
+  logger,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 import { webStreamToText } from '@cardstack/runtime-common/stream';
 import { setupCloseHandler } from './node-realm';
 import {
@@ -19,6 +25,7 @@ import { monacoMiddleware } from './middleware/monaco';
 import './lib/externals';
 import { nodeStreamToText } from './stream';
 import mime from 'mime-types';
+import { extractSupportedMimeType } from '@cardstack/runtime-common/router';
 
 interface Options {
   assetsURL?: URL;
@@ -60,6 +67,23 @@ export class RealmServer {
             'Authorization, Content-Type, If-Match, X-Requested-With',
         })
       )
+      .use(async (ctx, next) => {
+        // Disable browser cache for all data requests to the realm server. The condition captures our supported mime types but not others,
+        // such as assets, which we probably want to cache.
+        let mimeType = extractSupportedMimeType(
+          ctx.header.accept as unknown as null | string | [string],
+        );
+
+        if (
+          Object.values(SupportedMimeType).includes(
+            mimeType as SupportedMimeType,
+          )
+        ) {
+          ctx.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+        }
+
+        await next();
+      })
       .use(monacoMiddleware(this.assetsURL))
       .use(assetRedirect(this.assetsURL))
       .use(convertAcceptHeaderQueryParam)

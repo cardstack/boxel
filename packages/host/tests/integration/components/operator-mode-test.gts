@@ -530,7 +530,6 @@ module('Integration | operator-mode', function (hooks) {
       ...Object.fromEntries(personCards),
     });
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
     await realm.ready;
 
     setCardInOperatorModeState = async (cardURL: string) => {

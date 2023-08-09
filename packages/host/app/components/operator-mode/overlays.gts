@@ -86,7 +86,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
               {{on 'mouseenter' (fn this.setCurrentlyHoveredCard renderedCard)}}
               {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
               class='hover-button more-actions'
-              @icon='more-actions'
+              @icon='three-dots-horizontal'
               aria-label='more actions'
             />
           {{/if}}

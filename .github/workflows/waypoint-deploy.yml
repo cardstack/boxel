@@ -18,9 +18,6 @@ on:
         required: true
         type: string
 
-env:
-  VOLTA_FEATURE_PNPM: 1
-
 jobs:
   deploy:
     name: Deploy

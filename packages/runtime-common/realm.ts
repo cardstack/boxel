@@ -5,7 +5,7 @@ import {
   type RunnerOptionsManager,
 } from './search-index';
 import { type SingleCardDocument } from './card-document';
-import { Loader, type MaybeLocalRequest } from './loader';
+import { Loader } from './loader';
 import { RealmPaths, LocalPath, join } from './paths';
 import {
   systemError,
@@ -155,7 +155,7 @@ export class Realm {
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
     this.#loader = loader;
-    this.#loader.registerURLHandler(new URL(url), this.handle.bind(this));
+    this.#loader.registerURLHandler(this.maybeHandle.bind(this));
     this.#adapter = adapter;
     this.#searchIndex = new SearchIndex(
       this,
@@ -250,6 +250,10 @@ export class Realm {
     return this.#searchIndex;
   }
 
+  async reindex() {
+    await this.#searchIndex.run();
+  }
+
   async #startup() {
     await Promise.resolve();
     await this.#warmUpCache();
@@ -284,9 +288,23 @@ export class Realm {
     return this.#startedUp.promise;
   }
 
-  async handle(request: MaybeLocalRequest): Promise<ResponseWithNodeStream> {
+  async maybeHandle(request: Request): Promise<Response | null> {
+    if (!this.paths.inRealm(new URL(request.url))) {
+      return null;
+    }
+    return await this.internalHandle(request, true);
+  }
+
+  async handle(request: Request): Promise<ResponseWithNodeStream> {
+    return this.internalHandle(request, false);
+  }
+
+  private async internalHandle(
+    request: Request,
+    isLocal: boolean
+  ): Promise<ResponseWithNodeStream> {
     // local requests are allowed to query the realm as the index is being built up
-    if (!request.isLocal) {
+    if (!isLocal) {
       await this.ready;
     }
     if (!this.searchIndex) {

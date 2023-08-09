@@ -4,8 +4,9 @@ description: Setup common dependencies
 runs:
   using: composite
   steps:
-    - run: 'echo VOLTA_FEATURE_PNPM=1 >> $GITHUB_ENV'
-      shell: bash
+    - shell: bash
+      run: |
+        echo "VOLTA_FEATURE_PNPM=1" >> $GITHUB_ENV
 
     - uses: volta-cli/action@v4
 
