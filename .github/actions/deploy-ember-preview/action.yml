@@ -13,14 +13,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: volta-cli/action@v4
-
-    - shell: bash
-      run: echo "VOLTA_FEATURE_PNPM=1" >> $GITHUB_ENV
-
-    - name: Install Dependencies
-      shell: bash
-      run: pnpm install --frozen-lockfile
+    - uses: ./.github/actions/init
 
     - name: Set PR branch name
       shell: bash

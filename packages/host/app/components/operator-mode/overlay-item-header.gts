@@ -83,7 +83,7 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
         <BoxelDropdown>
           <:trigger as |bindings|>
             <IconButton
-              @icon='more-actions'
+              @icon='three-dots-horizontal'
               @width='20px'
               @height='20px'
               class='header-actions__button'

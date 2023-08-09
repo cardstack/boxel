@@ -91,8 +91,8 @@ module('loader', function (hooks) {
       },
       'http://example.com/'
     );
+    loader.registerURLHandler(realm.maybeHandle.bind(realm));
     loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
-    loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
     await realm.ready;
 
     let { checkImportMeta, myLoader } = await loader.import<{

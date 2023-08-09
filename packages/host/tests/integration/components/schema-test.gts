@@ -46,6 +46,8 @@ module('Integration | schema', function (hooks) {
 
   hooks.beforeEach(async function () {
     adapter = new TestRealmAdapter({});
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
   });

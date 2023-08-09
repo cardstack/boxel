@@ -39,6 +39,10 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import OperatorModeStack from './stack';
 import type MatrixService from '../../services/matrix-service';
 import ChatSidebar from '../matrix/chat-sidebar';
+import { buildWaiter } from '@ember/test-waiters';
+import { isTesting } from '@embroider/macros';
+
+let waiter = buildWaiter('operator-mode-container:write-waiter');
 
 interface Signature {
   Args: {
@@ -308,7 +312,18 @@ export default class OperatorModeContainer extends Component<Signature> {
   // we might drop writes from different stack items that want to save
   // at the same time
   private write = task(async (card: Card) => {
-    return await this.cardService.saveModel(card);
+    let token = waiter.beginAsync();
+    try {
+      let savedCard = await this.cardService.saveModel(card);
+      // only do this in test env--this makes sure that we also wait for any
+      // interior card instance async as part of our ember-test-waiters
+      if (isTesting()) {
+        await this.cardService.flushLogs();
+      }
+      return savedCard;
+    } finally {
+      waiter.endAsync(token);
+    }
   });
 
   // The public API is wrapped in a closure so that whatever calls its methods
@@ -603,11 +618,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       </div>
 
       <div class='operator-mode__with-chat {{this.chatVisibilityClass}}'>
-        <div
-          class='operator-mode__main'
-          data-test-save-idle={{this.write.isIdle}}
-          style={{this.backgroundImageStyle}}
-        >
+        <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
           {{#if (eq this.allStackItems.length 0)}}
             <div class='no-cards'>
               <p class='add-card-title'>
@@ -615,7 +626,7 @@ export default class OperatorModeContainer extends Component<Signature> {
               </p>
 
               <button
-                class='add-card-button icon-button'
+                class='add-card-button'
                 {{on 'click' (fn (perform this.addCard))}}
                 data-test-add-card-button
               >
@@ -737,29 +748,30 @@ export default class OperatorModeContainer extends Component<Signature> {
         font: var(--boxel-font-lg);
       }
       .add-card-button {
+        --icon-color: var(--boxel-light);
         height: 350px;
         width: 200px;
         vertical-align: middle;
-        background: var(--boxel-teal);
+        background-color: var(--boxel-highlight);
         border: none;
         border-radius: var(--boxel-border-radius);
       }
       .add-card-button:hover {
-        background: var(--boxel-dark-teal);
+        background-color: var(--boxel-highlight-hover);
       }
       .add-card-to-neighbor-stack {
+        --icon-color: var(--boxel-highlight-hover);
         position: absolute;
         width: 60px;
         height: 60px;
         border-radius: 50%;
-        background: #aeabba;
-        fill: #3295a2;
+        background-color: var(--boxel-light-100);
         border-color: transparent;
       }
       .add-card-to-neighbor-stack:hover,
       .add-card-to-neighbor-stack--active {
-        background: var(--boxel-light);
-        fill: var(--boxel-teal);
+        --icon-color: var(--boxel-highlight);
+        background-color: var(--boxel-light);
       }
       .add-card-to-neighbor-stack--left {
         left: 0;
@@ -796,17 +808,19 @@ export default class OperatorModeContainer extends Component<Signature> {
       }
 
       .chat-btn {
+        --icon-color: var(--boxel-highlight-hover);
         position: absolute;
         bottom: 6px;
         right: 6px;
         margin-right: 0;
         border-radius: var(--boxel-border-radius);
-        background-color: var(--boxel-400);
+        background-color: var(--boxel-light-100);
         border: solid 1px var(--boxel-border-color);
         box-shadow: var(--boxel-box-shadow);
       }
       .chat-btn:hover {
-        background: var(--boxel-light);
+        --icon-color: var(--boxel-highlight);
+        background-color: var(--boxel-light);
       }
     </style>
   </template>

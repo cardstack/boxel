@@ -154,6 +154,7 @@ module('Integration | search-index', function (hooks) {
           },
           attributes: {
             firstName: 'Mango',
+            title: 'Mango',
           },
           relationships: {
             owner: {
@@ -231,6 +232,7 @@ module('Integration | search-index', function (hooks) {
         },
         attributes: {
           firstName: 'Mango',
+          title: 'Mango',
         },
         relationships: {
           owner: {
@@ -307,6 +309,7 @@ module('Integration | search-index', function (hooks) {
         },
         attributes: {
           firstName: 'Mango',
+          title: 'Mango',
         },
         relationships: {
           owner: {
@@ -581,260 +584,233 @@ module('Integration | search-index', function (hooks) {
   });
 
   test('can recover from rendering a card that has a nested card with a template error', async function (assert) {
-    {
-      let adapter = new TestRealmAdapter({
-        'boom-person.gts': `
-          import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
-          import StringCard from "https://cardstack.com/base/string";
-          import { Boom } from "./boom";
+    let adapter = new TestRealmAdapter({
+      'boom-person.gts': `
+        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        import { Boom } from "./boom";
 
-          export class BoomPerson extends Card {
-            @field firstName = contains(StringCard);
-            @field boom = contains(Boom);
-            static isolated = class Isolated extends Component<typeof this> {
-              <template>
-                <h1><@fields.firstName/></h1>
-                <h2><@fields.boom/></h2>
-              </template>
-            }
+        export class BoomPerson extends Card {
+          @field firstName = contains(StringCard);
+          @field boom = contains(Boom);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <h1><@fields.firstName/></h1>
+              <h2><@fields.boom/></h2>
+            </template>
           }
-        `,
-        'boom.gts': `
-          import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
-          import StringCard from "https://cardstack.com/base/string";
-
-          export class Boom extends Card {
-            @field firstName = contains(StringCard);
-            static embedded = class Embedded extends Component<typeof this> {
-              <template>
-                <h1><@fields.firstName/>{{this.boom}}</h1>
-              </template>
-              get boom() {
-                throw new Error('intentional error');
-              }
-            }
-          }
-        `,
-        'vangogh.json': {
-          data: {
-            attributes: {
-              firstName: 'Van Gogh',
-              boom: {
-                firstName: 'Mango',
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: './boom-person',
-                name: 'BoomPerson',
-              },
-            },
-          },
-        },
-      });
-      let realm = await TestRealm.createWithAdapter(
-        adapter,
-        loader,
-        this.owner,
-      );
-      await realm.ready;
-      let indexer = realm.searchIndex;
-      let entry = await indexer.card(new URL(`${testRealmURL}vangogh`));
-      if (entry?.type === 'error') {
-        assert.strictEqual(
-          entry.error.detail,
-          'Encountered error rendering HTML for card: intentional error',
-        );
-      } else {
-        assert.ok('false', 'expected search entry to be an error document');
-      }
-    }
-    {
-      // perform a new index to assert that render stack is still consistent
-      let adapter = new TestRealmAdapter({
-        'person.gts': `
-          import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
-          import StringCard from "https://cardstack.com/base/string";
-
-          export class Person extends Card {
-            @field firstName = contains(StringCard);
-            static isolated = class Isolated extends Component<typeof this> {
-              <template>
-                <h1><@fields.firstName/></h1>
-              </template>
-            }
-          }
-        `,
-        'vangogh.json': {
-          data: {
-            attributes: {
-              firstName: 'Van Gogh',
-            },
-            meta: {
-              adoptsFrom: {
-                module: './person',
-                name: 'Person',
-              },
-            },
-          },
-        },
-      });
-      let realm = await TestRealm.createWithAdapter(
-        adapter,
-        loader,
-        this.owner,
-      );
-      await realm.ready;
-      let indexer = realm.searchIndex;
-      {
-        let entry = await indexer.card(new URL(`${testRealmURL}vangogh`));
-        if (entry?.type === 'doc') {
-          assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
-          let { html } =
-            (await indexer.searchEntry(new URL(`${testRealmURL}vangogh`))) ??
-            {};
-          assert.strictEqual(
-            trimCardContainer(html!),
-            cleanWhiteSpace(`<h1> Van Gogh </h1>`),
-          );
-        } else {
-          assert.ok(
-            false,
-            `expected search entry to be a document but was: ${entry?.error.detail}`,
-          );
         }
-      }
-    }
-  });
-
-  test('can recover from rendering a card that encounters a template error in its own custom component', async function (assert) {
-    {
-      let adapter = new TestRealmAdapter({
-        'boom-person2.gts': `
-          import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
-          import StringCard from "https://cardstack.com/base/string";
-          import { CustomBoom } from "./custom-boom";
-
-          export class BoomPerson2 extends Card {
-            @field firstName = contains(StringCard);
-            @field boom = contains(CustomBoom);
-            static isolated = class Isolated extends Component<typeof this> {
-              <template>
-                <h1><@fields.firstName/></h1>
-                <h2><@fields.boom/></h2>
-              </template>
-            }
-          }
         `,
-        'custom-boom.gts': `
-          import GlimmerComponent from '@glimmer/component';
-          import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
-          import StringCard from "https://cardstack.com/base/string";
+      'boom.gts': `
+        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
 
-          export class CustomBoom extends Card {
-            @field firstName = contains(StringCard);
-            static embedded = class Embedded extends Component<typeof this> {
-              <template>
-                <h1><@fields.firstName/><Custom/></h1>
-              </template>
-            }
-          }
-          class Custom extends GlimmerComponent {
-            <template>{{this.boom}}</template>
+        export class Boom extends Card {
+          @field firstName = contains(StringCard);
+          static embedded = class Embedded extends Component<typeof this> {
+            <template>
+              <h1><@fields.firstName/>{{this.boom}}</h1>
+            </template>
             get boom() {
               throw new Error('intentional error');
             }
           }
-        `,
-        'vangogh.json': {
-          data: {
-            attributes: {
-              firstName: 'Van Gogh',
-              boom: {
-                firstName: 'Mango',
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: './boom-person2',
-                name: 'BoomPerson2',
-              },
-            },
-          },
-        },
-      });
-      let realm = await TestRealm.createWithAdapter(
-        adapter,
-        loader,
-        this.owner,
-      );
-      await realm.ready;
-      let indexer = realm.searchIndex;
-      let entry = await indexer.card(new URL(`${testRealmURL}vangogh`));
-      if (entry?.type === 'error') {
-        assert.strictEqual(
-          entry.error.detail,
-          'Encountered error rendering HTML for card: intentional error',
-        );
-      } else {
-        assert.ok('false', 'expected search entry to be an error document');
-      }
-    }
-    {
-      // perform a new index to assert that render stack is still consistent
-      let adapter = new TestRealmAdapter({
-        'person.gts': `
-          import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
-          import StringCard from "https://cardstack.com/base/string";
-
-          export class Person extends Card {
-            @field firstName = contains(StringCard);
-            static isolated = class Isolated extends Component<typeof this> {
-              <template>
-                <h1><@fields.firstName/></h1>
-              </template>
-            }
-          }
-        `,
-        'vangogh.json': {
-          data: {
-            attributes: {
-              firstName: 'Van Gogh',
-            },
-            meta: {
-              adoptsFrom: {
-                module: './person',
-                name: 'Person',
-              },
-            },
-          },
-        },
-      });
-      let realm = await TestRealm.createWithAdapter(
-        adapter,
-        loader,
-        this.owner,
-      );
-      await realm.ready;
-      let indexer = realm.searchIndex;
-      {
-        let entry = await indexer.card(new URL(`${testRealmURL}vangogh`));
-        if (entry?.type === 'doc') {
-          assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
-          let { html } =
-            (await indexer.searchEntry(new URL(`${testRealmURL}vangogh`))) ??
-            {};
-          assert.strictEqual(
-            trimCardContainer(html!),
-            cleanWhiteSpace(`<h1> Van Gogh </h1>`),
-          );
-        } else {
-          assert.ok(
-            false,
-            `expected search entry to be a document but was: ${entry?.error.detail}`,
-          );
         }
-      }
+        `,
+      'vangogh.json': {
+        data: {
+          attributes: {
+            firstName: 'Van Gogh',
+            boom: {
+              firstName: 'Mango',
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: './boom-person',
+              name: 'BoomPerson',
+            },
+          },
+        },
+      },
+      'person.gts': `
+        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        export class Person extends Card {
+          @field firstName = contains(StringCard);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <h1><@fields.firstName/></h1>
+            </template>
+          }
+        }
+        `,
+      'working-van-gogh.json': {
+        data: {
+          attributes: {
+            firstName: 'Van Gogh',
+          },
+          meta: {
+            adoptsFrom: {
+              module: './person',
+              name: 'Person',
+            },
+          },
+        },
+      },
+    });
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    await realm.ready;
+    let indexer = realm.searchIndex;
+
+    let entry = await indexer.card(new URL(`${testRealmURL}vangogh`));
+    if (entry?.type === 'error') {
+      assert.strictEqual(
+        entry.error.detail,
+        'Encountered error rendering HTML for card: intentional error',
+      );
+    } else {
+      assert.ok('false', 'expected search entry to be an error document');
+    }
+
+    // Reindex to assert that the broken card has been indexed before the working one
+    await realm.reindex();
+
+    entry = await indexer.card(new URL(`${testRealmURL}working-van-gogh`));
+    if (entry?.type === 'doc') {
+      assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
+      let { html } =
+        (await indexer.searchEntry(
+          new URL(`${testRealmURL}working-van-gogh`),
+        )) ?? {};
+      assert.strictEqual(
+        trimCardContainer(html!),
+        cleanWhiteSpace(`<h1> Van Gogh </h1>`),
+      );
+    } else {
+      assert.ok(
+        false,
+        `expected search entry to be a document but was: ${entry?.error.detail}`,
+      );
+    }
+  });
+
+  test('can recover from rendering a card that encounters a template error in its own custom component', async function (assert) {
+    let adapter = new TestRealmAdapter({
+      'boom-person2.gts': `
+        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        import { CustomBoom } from "./custom-boom";
+
+        export class BoomPerson2 extends Card {
+          @field firstName = contains(StringCard);
+          @field boom = contains(CustomBoom);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <h1><@fields.firstName/></h1>
+              <h2><@fields.boom/></h2>
+            </template>
+          }
+        }
+        `,
+      'custom-boom.gts': `
+        import GlimmerComponent from '@glimmer/component';
+        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        export class CustomBoom extends Card {
+          @field firstName = contains(StringCard);
+          static embedded = class Embedded extends Component<typeof this> {
+            <template>
+              <h1><@fields.firstName/><Custom/></h1>
+            </template>
+          }
+        }
+        class Custom extends GlimmerComponent {
+          <template>{{this.boom}}</template>
+          get boom() {
+            throw new Error('intentional error');
+          }
+        }
+        `,
+      'vangogh.json': {
+        data: {
+          attributes: {
+            firstName: 'Van Gogh',
+            boom: {
+              firstName: 'Mango',
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: './boom-person2',
+              name: 'BoomPerson2',
+            },
+          },
+        },
+      },
+      'person.gts': `
+        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        export class Person extends Card {
+          @field firstName = contains(StringCard);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <h1><@fields.firstName/></h1>
+            </template>
+          }
+        }
+        `,
+      'working-vangogh.json': {
+        data: {
+          attributes: {
+            firstName: 'Van Gogh',
+          },
+          meta: {
+            adoptsFrom: {
+              module: './person',
+              name: 'Person',
+            },
+          },
+        },
+      },
+    });
+
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    await realm.ready;
+
+    let indexer = realm.searchIndex;
+    let entry = await indexer.card(new URL(`${testRealmURL}vangogh`));
+    if (entry?.type === 'error') {
+      assert.strictEqual(
+        entry.error.detail,
+        'Encountered error rendering HTML for card: intentional error',
+      );
+    } else {
+      assert.ok('false', 'expected search entry to be an error document');
+    }
+
+    // Reindex to assert that the broken card has been indexed before the working one
+    await realm.reindex();
+
+    entry = await indexer.card(new URL(`${testRealmURL}working-vangogh`));
+    if (entry?.type === 'doc') {
+      assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
+      let { html } =
+        (await indexer.searchEntry(
+          new URL(`${testRealmURL}working-vangogh`),
+        )) ?? {};
+      assert.strictEqual(
+        trimCardContainer(html!),
+        cleanWhiteSpace(`<h1> Van Gogh </h1>`),
+      );
+    } else {
+      assert.ok(
+        false,
+        `expected search entry to be a document but was: ${entry?.error.detail}`,
+      );
     }
   });
 
@@ -1030,6 +1006,7 @@ module('Integration | search-index', function (hooks) {
       loadLinks: true,
     });
     if (vendor?.type === 'doc') {
+      console.log(vendor.doc);
       assert.deepEqual(vendor.doc, {
         data: {
           id: `${testRealmURL}Vendor/vendor1`,
@@ -1235,6 +1212,7 @@ module('Integration | search-index', function (hooks) {
         lastName: 'Abdel-Rahman',
         email: 'hassan@cardstack.com',
         posts: 100,
+        title: 'Hassan Abdel-Rahman',
       },
       `search doc does not include fullName field`,
     );
@@ -1403,7 +1381,7 @@ module('Integration | search-index', function (hooks) {
           id: `${testRealmURL}Pet/mango`,
           type: 'card',
           links: { self: `${testRealmURL}Pet/mango` },
-          attributes: { firstName: 'Mango' },
+          attributes: { firstName: 'Mango', title: 'Mango' },
           relationships: { owner: { links: { self: null } } },
           meta: {
             adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
@@ -1418,7 +1396,7 @@ module('Integration | search-index', function (hooks) {
           id: `${testRealmURL}Pet/vanGogh`,
           type: 'card',
           links: { self: `${testRealmURL}Pet/vanGogh` },
-          attributes: { firstName: 'Van Gogh' },
+          attributes: { firstName: 'Van Gogh', title: 'Van Gogh' },
           relationships: { owner: { links: { self: null } } },
           meta: {
             adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
@@ -1446,11 +1424,13 @@ module('Integration | search-index', function (hooks) {
             id: `${testRealmURL}Pet/mango`,
             firstName: 'Mango',
             owner: null,
+            title: 'Mango',
           },
           {
             id: `${testRealmURL}Pet/vanGogh`,
             firstName: 'Van Gogh',
             owner: null,
+            title: 'Van Gogh',
           },
         ],
         friend: null,
@@ -1666,7 +1646,7 @@ module('Integration | search-index', function (hooks) {
           id: `${testRealmURL}Pet/mango`,
           type: 'card',
           links: { self: `${testRealmURL}Pet/mango` },
-          attributes: { firstName: 'Mango' },
+          attributes: { firstName: 'Mango', title: 'Mango' },
           relationships: { owner: { links: { self: null } } },
           meta: {
             adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
@@ -1681,7 +1661,7 @@ module('Integration | search-index', function (hooks) {
           id: `${testRealmURL}Pet/vanGogh`,
           type: 'card',
           links: { self: `${testRealmURL}Pet/vanGogh` },
-          attributes: { firstName: 'Van Gogh' },
+          attributes: { firstName: 'Van Gogh', title: 'Van Gogh' },
           relationships: { owner: { links: { self: null } } },
           meta: {
             adoptsFrom: { module: `${testModuleRealm}pet`, name: 'Pet' },
@@ -1717,11 +1697,13 @@ module('Integration | search-index', function (hooks) {
               id: `${testRealmURL}Pet/mango`,
               firstName: 'Mango',
               owner: null,
+              title: 'Mango',
             },
             {
               id: `${testRealmURL}Pet/vanGogh`,
               firstName: 'Van Gogh',
               owner: null,
+              title: 'Van Gogh',
             },
           ],
           friend: null,
@@ -2017,7 +1999,6 @@ module('Integration | search-index', function (hooks) {
       assert.deepEqual(hassanEntry.searchData, {
         id: `${testRealmURL}Friend/hassan`,
         firstName: 'Hassan',
-        title: 'Hassan',
         description: 'Dog owner',
         thumbnailURL: undefined,
         friend: {
@@ -2030,6 +2011,7 @@ module('Integration | search-index', function (hooks) {
           description: 'Dog friend',
           thumbnailURL: undefined,
         },
+        title: 'Hassan',
       });
     } else {
       assert.ok(
@@ -3069,6 +3051,36 @@ posts/ignore-me.json
           },
         },
       },
+      'person-card1.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Person',
+            lastName: 'Card 1',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}person`,
+              name: 'Person',
+            },
+          },
+        },
+      },
+      'person-card2.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Person',
+            lastName: 'Card 2',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testModuleRealm}person`,
+              name: 'Person',
+            },
+          },
+        },
+      },
     };
 
     let indexer: SearchIndex;
@@ -3709,6 +3721,61 @@ posts/ignore-me.json
         matching.map((m) => m.id),
         [`${paths.url}books/1`],
       );
+    });
+
+    test(`can search for cards by using the 'contains' filter`, async function (assert) {
+      let { data: matching } = await indexer.search({
+        filter: {
+          contains: { title: 'ca' },
+        },
+      });
+      assert.strictEqual(matching.length, 5);
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [
+          `${paths.url}card-1`,
+          `${paths.url}cards/1`,
+          `${paths.url}cards/2`,
+          `${paths.url}person-card1`,
+          `${paths.url}person-card2`,
+        ],
+      );
+    });
+
+    test(`can search on specific card by using 'contains' filter`, async function (assert) {
+      let { data: personMatchingByTitle } = await indexer.search({
+        filter: {
+          on: { module: `${testModuleRealm}person`, name: 'Person' },
+          contains: { title: 'ca' },
+        },
+      });
+      assert.strictEqual(personMatchingByTitle.length, 2);
+      assert.deepEqual(
+        personMatchingByTitle.map((m) => m.id),
+        [`${paths.url}person-card1`, `${paths.url}person-card2`],
+      );
+
+      let { data: dogMatchingByFirstName } = await indexer.search({
+        filter: {
+          on: { module: `${testModuleRealm}dog`, name: 'Dog' },
+          contains: { firstName: 'go' },
+        },
+      });
+      assert.strictEqual(dogMatchingByFirstName.length, 3);
+      assert.deepEqual(
+        dogMatchingByFirstName.map((m) => m.id),
+        [`${paths.url}mango`, `${paths.url}ringo`, `${paths.url}vangogh`],
+      );
+    });
+
+    test(`can use 'contains' filter to find 'null' values`, async function (assert) {
+      let { data: matching } = await indexer.search({
+        filter: {
+          on: { module: `${testModuleRealm}dog`, name: 'Dog' },
+          contains: { title: null },
+        },
+      });
+      assert.strictEqual(matching.length, 3);
     });
   });
 });

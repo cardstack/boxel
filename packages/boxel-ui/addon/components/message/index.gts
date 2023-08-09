@@ -39,7 +39,7 @@ const Message: TemplateOnlyComponent<Signature> = <template>
           />
         {{else}}
           {{svgJar
-            'participant'
+            'profile'
             width='40px'
             height='40px'
             aria-label=(if @name @name 'participant')

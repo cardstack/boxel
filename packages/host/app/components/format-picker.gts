@@ -14,7 +14,7 @@ interface Signature {
 
 export default class FormatPicker extends Component<Signature> {
   <template>
-    <div>
+    <div class='format-picker'>
       Format:
       {{#each @formats as |format|}}
         <button
@@ -28,5 +28,10 @@ export default class FormatPicker extends Component<Signature> {
         </button>
       {{/each}}
     </div>
+    <style>
+      .format-picker {
+        margin-bottom: var(--boxel-sp);
+      }
+    </style>
   </template>
 }

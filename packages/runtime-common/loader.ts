@@ -110,14 +110,13 @@ type EvaluatableDep =
   | { type: '__import_meta__' }
   | { type: 'exports' };
 
-export interface MaybeLocalRequest extends Request {
-  isLocal?: true;
-}
+export type RequestHandler = (req: Request) => Promise<Response | null>;
 
 export class Loader {
   private log = logger('loader');
   private modules = new Map<string, Module>();
-  private urlHandlers = new Map<string, (req: Request) => Promise<Response>>();
+  private urlHandlers: RequestHandler[] = [];
+
   // use a tuple array instead of a map so that we can support reversing
   // different resolutions back to the same URL. the resolution that we apply
   // will be in order of precedence. consider 2 realms in the same server
@@ -147,8 +146,8 @@ export class Loader {
     this.urlMappings.push([from.href, to.href]);
   }
 
-  registerURLHandler(url: URL, handler: (req: Request) => Promise<Response>) {
-    this.urlHandlers.set(url.href, handler);
+  registerURLHandler(handler: RequestHandler) {
+    this.urlHandlers.push(handler);
   }
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
@@ -452,32 +451,12 @@ export class Loader {
     }
   }
 
-  async fetch(
+  private asUnresolvedRequest(
     urlOrRequest: string | URL | Request,
     init?: RequestInit
-  ): Promise<Response> {
-    let requestURL = new URL(
-      urlOrRequest instanceof Request
-        ? urlOrRequest.url
-        : typeof urlOrRequest === 'string'
-        ? urlOrRequest
-        : urlOrRequest.href
-    );
+  ): Request {
     if (urlOrRequest instanceof Request) {
-      for (let [url, handle] of this.urlHandlers) {
-        let path = new RealmPaths(new URL(url));
-        if (path.inRealm(requestURL)) {
-          let request = urlOrRequest as MaybeLocalRequest;
-          request.isLocal = true;
-          return await handle(request);
-        }
-      }
-      let request = new Request(this.resolve(requestURL).href, {
-        method: urlOrRequest.method,
-        headers: urlOrRequest.headers,
-        body: urlOrRequest.body,
-      });
-      return getNativeFetch()(request);
+      return urlOrRequest;
     } else {
       let unresolvedURL =
         typeof urlOrRequest === 'string'
@@ -485,19 +464,40 @@ export class Loader {
           : isResolvedURL(urlOrRequest)
           ? this.reverseResolution(urlOrRequest)
           : urlOrRequest;
-      for (let [url, handle] of this.urlHandlers) {
-        let path = new RealmPaths(new URL(url));
-        if (path.inRealm(unresolvedURL)) {
-          let request = new Request(
-            unresolvedURL.href,
-            init
-          ) as MaybeLocalRequest;
-          request.isLocal = true;
-          return await handle(request);
-        }
-      }
-      return getNativeFetch()(this.resolve(unresolvedURL).href, init);
+      return new Request(unresolvedURL.href, init);
     }
+  }
+
+  private asResolvedRequest(
+    urlOrRequest: string | URL | Request,
+    init?: RequestInit
+  ): Request {
+    if (urlOrRequest instanceof Request) {
+      return new Request(this.resolve(urlOrRequest.url).href, {
+        method: urlOrRequest.method,
+        headers: urlOrRequest.headers,
+        body: urlOrRequest.body,
+      });
+    } else if (typeof urlOrRequest === 'string') {
+      return new Request(this.resolve(urlOrRequest), init);
+    } else if (isResolvedURL(urlOrRequest)) {
+      return new Request(urlOrRequest, init);
+    } else {
+      return new Request(this.resolve(urlOrRequest), init);
+    }
+  }
+
+  async fetch(
+    urlOrRequest: string | URL | Request,
+    init?: RequestInit
+  ): Promise<Response> {
+    for (let handler of this.urlHandlers) {
+      let result = await handler(this.asUnresolvedRequest(urlOrRequest, init));
+      if (result) {
+        return result;
+      }
+    }
+    return await getNativeFetch()(this.asResolvedRequest(urlOrRequest, init));
   }
 
   resolve(moduleIdentifier: string | URL, relativeTo?: URL): ResolvedURL {
