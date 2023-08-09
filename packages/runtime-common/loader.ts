@@ -210,14 +210,6 @@ export class Loader {
     return [];
   }
 
-  identify(value: unknown): { module: string; name: string } | undefined {
-    if (typeof value === 'function') {
-      return this.identities.get(value);
-    } else {
-      return undefined;
-    }
-  }
-
   static identify(
     value: unknown
   ): { module: string; name: string } | undefined {
@@ -230,6 +222,21 @@ export class Loader {
     } else {
       return undefined;
     }
+  }
+
+  identify(value: unknown): { module: string; name: string } | undefined {
+    if (typeof value === 'function') {
+      return this.identities.get(value);
+    } else {
+      return undefined;
+    }
+  }
+
+  static getLoaderFor(value: unknown): Loader | undefined {
+    if (typeof value === 'function') {
+      return Loader.loaders.get(value);
+    }
+    return undefined;
   }
 
   async import<T extends object>(moduleIdentifier: string): Promise<T> {
