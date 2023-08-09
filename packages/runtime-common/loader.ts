@@ -132,6 +132,7 @@ export class Loader {
     { module: string; name: string }
   >();
   private consumptionCache = new WeakMap<object, string[]>();
+  private static loaders = new WeakMap<Function, Loader>();
 
   static cloneLoader(loader: Loader): Loader {
     let clone = new Loader();
@@ -212,6 +213,20 @@ export class Loader {
   identify(value: unknown): { module: string; name: string } | undefined {
     if (typeof value === 'function') {
       return this.identities.get(value);
+    } else {
+      return undefined;
+    }
+  }
+
+  static identify(
+    value: unknown
+  ): { module: string; name: string } | undefined {
+    if (typeof value !== 'function') {
+      return undefined;
+    }
+    let loader = Loader.loaders.get(value);
+    if (loader) {
+      return loader.identify(value);
     } else {
       return undefined;
     }
@@ -544,6 +559,7 @@ export class Loader {
               : moduleIdentifier,
             name: property,
           });
+          Loader.loaders.set(value, this);
         }
         return value;
       },
