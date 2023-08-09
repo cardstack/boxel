@@ -10,6 +10,26 @@ function execute(command, options = {}) {
   return execSync(command, options).toString().trim();
 }
 
+function taskDefinitionHasVolume(
+  taskDefinition,
+  name,
+  fileSystemId,
+  accessPointId
+) {
+  if (taskDefinition.volumes?.length === 0) return false;
+
+  const volume = taskDefinition.volumes.find((vol) => vol.name === name);
+
+  if (
+    volume?.efsVolumeConfiguration?.fileSystemId !== fileSystemId ||
+    volume.efsVolumeConfiguration.authorizationConfig?.accessPointId !==
+      accessPointId
+  )
+    return false;
+
+  return true;
+}
+
 function addVolume(
   cluster,
   service,
@@ -23,6 +43,19 @@ function addVolume(
       `aws ecs describe-task-definition --task-definition ${service.taskDefinition}`
     )
   );
+
+  if (
+    taskDefinitionHasVolume(
+      taskDefinition.taskDefinition,
+      volumeName,
+      fileSystemId,
+      accessPointId
+    )
+  ) {
+    console.log('» Volume already attached');
+    return;
+  }
+
   taskDefinition.taskDefinition.volumes = [
     {
       name: volumeName,

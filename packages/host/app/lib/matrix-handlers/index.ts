@@ -12,6 +12,7 @@ import type {
 import type { RoomObjectiveCard } from 'https://cardstack.com/base/room-objective';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { type LooseCardResource, baseRealm } from '@cardstack/runtime-common';
+import type LoaderService from '../../services/loader-service';
 
 export * as Membership from './membership';
 export * as Timeline from './timeline';
@@ -42,10 +43,11 @@ export interface Context {
   cardAPI: typeof CardAPI;
   client: MatrixClient;
   matrixSDK: typeof MatrixSDK;
+  loaderService: LoaderService;
   handleMessage?: (
     context: Context,
     event: Event,
-    roomId: string
+    roomId: string,
   ) => Promise<void>;
 }
 
@@ -54,12 +56,12 @@ export async function addRoomEvent(context: Context, event: Event) {
   eventId = eventId ?? stateKey; // room state may not necessary have an event ID
   if (!eventId) {
     throw new Error(
-      `bug: event ID is undefined for event ${JSON.stringify(event, null, 2)}`
+      `bug: event ID is undefined for event ${JSON.stringify(event, null, 2)}`,
     );
   }
   if (!roomId) {
     throw new Error(
-      `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`
+      `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
     );
   }
   let roomCard = context.roomCards.get(roomId);
@@ -78,7 +80,8 @@ export async function addRoomEvent(context: Context, event: Event) {
     roomCard = context.cardAPI.createFromSerialized<typeof RoomCard>(
       data,
       { data },
-      undefined
+      undefined,
+      context.loaderService.loader,
     );
     context.roomCards.set(roomId, roomCard);
   }

@@ -9,7 +9,8 @@
         "name": "Friend"
       },
       "demo": {
-        "firstName": null
+        "firstName": null,
+        "thumbnailURL": "../logo.png"
       }
     },
     "relationships": {

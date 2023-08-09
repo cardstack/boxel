@@ -18,7 +18,7 @@ function isChecksumAddress(address: string): boolean {
 }
 
 function _deserialize(
-  address: string | null | undefined
+  address: string | null | undefined,
 ): DeserializedResult<string> {
   if (address == null || address == undefined) {
     return { value: null };
@@ -56,7 +56,7 @@ class Edit extends Component<typeof EthereumAddressCard> {
   textInputFilter: TextInputFilter<string> = new TextInputFilter(
     () => this.args.model,
     (inputVal) => this.args.set(inputVal),
-    _deserialize
+    _deserialize,
   );
 }
 
@@ -73,7 +73,7 @@ export default class EthereumAddressCard extends CardBase {
 
   static async [deserialize]<T extends CardBaseConstructor>(
     this: T,
-    address: any
+    address: any,
   ): Promise<CardInstanceType<T>> {
     return _deserialize(address).value as CardInstanceType<T>;
   }

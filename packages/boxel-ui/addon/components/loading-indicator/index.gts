@@ -37,7 +37,9 @@ const LoadingIndicator: TemplateOnlyComponent<Signature> = <template>
     }
 
     @keyframes spin {
-      to { transform: rotate(360deg); }
+      to {
+        transform: rotate(360deg);
+      }
     }
   </style>
 </template>;

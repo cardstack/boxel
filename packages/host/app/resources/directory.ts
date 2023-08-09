@@ -59,7 +59,7 @@ export class DirectoryResource extends Resource<Args> {
       this.subscription = {
         url: path,
         unsubscribe: this.messageService.subscribe(path, () =>
-          this.readdir.perform()
+          this.readdir.perform(),
         ),
       };
     }
@@ -90,7 +90,7 @@ export class DirectoryResource extends Resource<Args> {
       log.error(
         `Could not get directory listing ${url}, status ${response.status}: ${
           response.statusText
-        } - ${await response.text()}`
+        } - ${await response.text()}`,
       );
       return [];
     }
@@ -110,7 +110,7 @@ export class DirectoryResource extends Resource<Args> {
 export function directory(
   parent: object,
   relativePath: () => string,
-  realmURL: () => string
+  realmURL: () => string,
 ) {
   return DirectoryResource.from(parent, () => ({
     relativePath: relativePath(),

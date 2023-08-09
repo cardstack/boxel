@@ -1,15 +1,15 @@
 {{! @glint-nocheck is this component used? }}
 <div
-  class='boxel-card__container boxel-card__container--{{or @format "list"}}
+  class="boxel-card__container boxel-card__container--{{or @format 'list'}}
     boxel-card--{{@model.type}}
-    boxel-card--{{@model.id}}'
+    boxel-card--{{@model.id}}"
   ...attributes
 >
   {{#if @expandAction}}
     <button
-      class='boxel-highlight boxel-card__expand-overlay'
-      type='button'
-      {{on 'click' @expandAction}}
+      class="boxel-highlight boxel-card__expand-overlay"
+      type="button"
+      {{on "click" @expandAction}}
     />
   {{/if}}
   {{#if @model.type}}
@@ -21,36 +21,36 @@
   {{! Template and the styling of the area below (the card itself) is up to the card author. }}
   {{! The template below and its styling is an embedded card template for media-registry cards. }}
   <article
-    class='boxel-card boxel-card--default boxel-card--{{if
+    class="boxel-card boxel-card--default boxel-card--{{if
         @model
         @model.type
-        "blank-card"
+        'blank-card'
       }}
-      {{@class}}'
+      {{@class}}"
   >
     <div
-      class='boxel-card__inner boxel-card__inner--{{or @format "list"}}
-        {{if (or @model.imgURL @hasImage) "boxel-card__inner--with-img"}}
+      class="boxel-card__inner boxel-card__inner--{{or @format 'list'}}
+        {{if (or @model.imgURL @hasImage) 'boxel-card__inner--with-img'}}
         {{if
-          (and @status (not-eq @status "no-change"))
-          ""
-          "field-renderer__opacity-control"
-        }}'
+          (and @status (not-eq @status 'no-change'))
+          ''
+          'field-renderer__opacity-control'
+        }}"
     >
       {{#if @model.imgURL}}
         <div
-          class='boxel-card__bg-img boxel-card__bg-img--{{@model.id}}'
-          style={{css-url 'background-image' @model.imgURL}}
+          class="boxel-card__bg-img boxel-card__bg-img--{{@model.id}}"
+          style={{css-url "background-image" @model.imgURL}}
         />
       {{/if}}
       {{#if @model.title}}
-        <h3 class='boxel-card__title'>{{@model.title}}</h3>
+        <h3 class="boxel-card__title">{{@model.title}}</h3>
       {{/if}}
       {{#if @model.description}}
-        <p class='boxel-card__description'>
+        <p class="boxel-card__description">
           {{#if @model.createdDate}}
             Created
-            {{moment-format @model.createdDate 'MMM DD, YYYY' 'YYYY-MM-DD'}}<br
+            {{moment-format @model.createdDate "MMM DD, YYYY" "YYYY-MM-DD"}}<br
             /><br />
           {{/if}}
 
@@ -59,7 +59,7 @@
       {{/if}}
 
       {{#if (has-block)}}
-        <div class='boxel-card__more' {{sprite role='card-more' id=@model.id}}>
+        <div class="boxel-card__more" {{sprite role="card-more" id=@model.id}}>
           more
           {{yield}}
           /more
@@ -67,11 +67,11 @@
       {{/if}}
 
       {{#if (and @model.fields (is-array @model.fields))}}
-        <ul class='boxel-card__fields'>
+        <ul class="boxel-card__fields">
           {{#each @model.fields as |field|}}
             <li>
               <Boxel::FieldRenderer
-                @class='boxel-card-field'
+                @class="boxel-card-field"
                 @mode={{@mode}}
                 @field={{field}}
               />

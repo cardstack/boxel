@@ -7,7 +7,7 @@ import * as lodash from 'lodash';
 import * as dateFns from 'date-fns';
 import * as ethers from 'ethers';
 
-export function shimExternals(loader: Loader = Loader.getLoader()) {
+export function shimExternals(loader: Loader) {
   loader.shimModule('@cardstack/runtime-common', runtime);
   loader.shimModule('@cardstack/boxel-ui', boxelUI);
   // import * as boxelSvgJar from "@cardstack/boxel-ui/helpers/svg-jar";
@@ -97,5 +97,3 @@ export function shimExternals(loader: Loader = Loader.getLoader()) {
   loader.shimModule('marked', { marked: () => {} });
   loader.shimModule('ethers', ethers);
 }
-
-shimExternals();

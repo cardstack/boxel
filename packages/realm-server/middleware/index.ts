@@ -1,6 +1,5 @@
 import proxy from 'koa-proxies';
 import {
-  Loader,
   assetsDir,
   boxelUIAssetsDir,
   logger as getLogger,
@@ -109,7 +108,7 @@ export function rootRealmRedirect(
       !realmUrlWithoutQueryParams.endsWith('/') &&
       realms.find(
         (r) =>
-          Loader.reverseResolution(`${realmUrlWithoutQueryParams}/`).href ===
+          r.loader.reverseResolution(`${realmUrlWithoutQueryParams}/`).href ===
           r.url
       )
     ) {

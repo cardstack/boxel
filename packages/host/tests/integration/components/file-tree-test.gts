@@ -20,6 +20,8 @@ import { waitUntil, waitFor, fillIn, click } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
 
+let loader: Loader;
+
 module('Integration | file-tree', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
@@ -37,11 +39,13 @@ module('Integration | file-tree', function (hooks) {
     this.owner.register('service:router', MockRouter);
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
-    Loader.addURLMapping(
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+    loader.addURLMapping(
       new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
+      new URL('http://localhost:4201/base/'),
     );
-    shimExternals();
+    shimExternals(loader);
     adapter = new TestRealmAdapter({
       'person.gts': `
         import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
@@ -55,6 +59,8 @@ module('Integration | file-tree', function (hooks) {
               return this.nickName;
             },
           });
+          @field description = contains(StringCard, { computeVia: () => 'Person' });
+          @field thumbnailURL = contains(StringCard, { computeVia: () => null });
           static isolated = class Isolated extends Component<typeof this> {
             <template><h1><@fields.firstName/></h1></template>
           }
@@ -116,15 +122,8 @@ module('Integration | file-tree', function (hooks) {
         },
       },
     });
-    realm = await TestRealm.createWithAdapter(adapter, this.owner);
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
-    loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
-  });
-
-  hooks.afterEach(function () {
-    Loader.destroy();
   });
 
   test('can create a new card', async function (assert) {
@@ -141,7 +140,7 @@ module('Integration | file-tree', function (hooks) {
           <CardCatalogModal />
           <CardPrerender />
         </template>
-      }
+      },
     );
     await click('[data-test-create-new-card-button]');
 
@@ -155,17 +154,17 @@ module('Integration | file-tree', function (hooks) {
       .exists({ count: 3 }, 'number of catalog items is correct');
     assert
       .dom(
-        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"]`
+        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"]`,
       )
       .exists('first item is correct');
     assert
       .dom(
-        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}post-entry"]`
+        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}post-entry"]`,
       )
       .exists('second item is correct');
     assert
       .dom(
-        `[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/string-field`
+        `[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/string-field`,
       )
       .doesNotExist('primitive field cards are not displayed');
 
@@ -184,11 +183,11 @@ module('Integration | file-tree', function (hooks) {
       {
         queryParams: { path: 'Person/1.json' },
       },
-      'the query params are correct'
+      'the query params are correct',
     );
 
     let entry = await realm.searchIndex.card(
-      new URL(`${testRealmURL}Person/1`)
+      new URL(`${testRealmURL}Person/1`),
     );
     assert.ok(entry, 'the new person card was created');
 
@@ -212,7 +211,7 @@ module('Integration | file-tree', function (hooks) {
           },
         },
       },
-      'file contents are correct'
+      'file contents are correct',
     );
   });
 });

@@ -19,7 +19,7 @@ function formatValue(value: CSSValueOrFuncReturningCSSValue) {
 }
 
 export function cssVar(
-  values: Record<string, CSSValueOrFuncReturningCSSValue>
+  values: Record<string, CSSValueOrFuncReturningCSSValue>,
 ): string {
   let vars: string[] = [];
   Object.keys(values).forEach((name) => {
@@ -33,7 +33,7 @@ export function cssVar(
 
 export default helper(function (
   _params,
-  hash: Record<string, CSSValueOrFuncReturningCSSValue>
+  hash: Record<string, CSSValueOrFuncReturningCSSValue>,
 ) {
   return htmlSafe(cssVar(hash));
 });

@@ -19,4 +19,14 @@ export class Chain extends Card {
       return this.name;
     },
   });
+  @field description = contains(StringCard, {
+    computeVia: function (this: Chain) {
+      return `Chain ${this.chainId}`;
+    },
+  });
+  @field thumbnailURL = contains(StringCard, {
+    computeVia: function (this: Chain) {
+      return `${this.name}-icon.png`;
+    },
+  });
 }

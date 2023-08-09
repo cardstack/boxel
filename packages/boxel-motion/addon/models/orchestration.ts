@@ -21,7 +21,7 @@ export class OrchestrationMatrix {
   constructor(
     // This isn't ordered yet, but can be ordered if necessary
     public rows = new Map<Sprite, RowFragment[]>(),
-    public totalColumns = 0
+    public totalColumns = 0,
   ) {}
 
   // TODO: if we want to handle cascading effects, we'll need a way of iterating over this column-by-column,
@@ -30,8 +30,8 @@ export class OrchestrationMatrix {
   getKeyframes(
     constructKeyframe: (
       previousKeyframe: Partial<Keyframe>,
-      frames: Frame[] // frame order may be relevant
-    ) => Keyframe
+      frames: Frame[], // frame order may be relevant
+    ) => Keyframe,
   ) {
     let result: Map<Sprite, Keyframe[]> = new Map();
     for (let [sprite, rowFragments] of this.rows) {
@@ -57,7 +57,7 @@ export class OrchestrationMatrix {
       for (let i = 0; i < this.totalColumns; i++) {
         if (fragmentsByColumn[i]) {
           activeFragments = activeFragments.concat(
-            fragmentsByColumn[i] as RowFragment[]
+            fragmentsByColumn[i] as RowFragment[],
           );
         }
 
@@ -73,7 +73,7 @@ export class OrchestrationMatrix {
             }
             return result;
           },
-          {} as Keyframe
+          {} as Keyframe,
         );
         propertiesToRemoveFromPreviousKeyframe = [];
 
@@ -96,7 +96,7 @@ export class OrchestrationMatrix {
 
         if (needsRemoval) {
           activeFragments = activeFragments.filter(
-            (rowFragment) => rowFragment.frames.length
+            (rowFragment) => rowFragment.frames.length,
           );
         }
       }
@@ -129,16 +129,16 @@ export class OrchestrationMatrix {
   }
 
   static from(
-    animationDefinitionPart: AnimationTimeline | MotionDefinition
+    animationDefinitionPart: AnimationTimeline | MotionDefinition,
   ): OrchestrationMatrix {
     if (isAnimationTimeline(animationDefinitionPart)) {
       if (animationDefinitionPart.type === 'sequence') {
         return OrchestrationMatrix.fromSequentialTimeline(
-          animationDefinitionPart
+          animationDefinitionPart,
         );
       } else {
         return OrchestrationMatrix.fromParallelTimeline(
-          animationDefinitionPart
+          animationDefinitionPart,
         );
       }
     } else {
@@ -147,20 +147,20 @@ export class OrchestrationMatrix {
   }
 
   static fromSequentialTimeline(
-    timeline: AnimationTimeline
+    timeline: AnimationTimeline,
   ): OrchestrationMatrix {
     let timelineMatrix = OrchestrationMatrix.empty();
     for (let item of timeline.animations) {
       timelineMatrix.add(
         timelineMatrix.totalColumns,
-        OrchestrationMatrix.from(item)
+        OrchestrationMatrix.from(item),
       );
     }
     return timelineMatrix;
   }
 
   static fromParallelTimeline(
-    timeline: AnimationTimeline
+    timeline: AnimationTimeline,
   ): OrchestrationMatrix {
     let timelineMatrix = OrchestrationMatrix.empty();
     let submatrices = [];

@@ -13,6 +13,7 @@ import {
   setupBaseRealmServer,
 } from './helpers';
 import isEqual from 'lodash/isEqual';
+import { shimExternals } from '../lib/externals';
 
 function cleanWhiteSpace(text: string) {
   return text.replace(/\s+/g, ' ').trim();
@@ -31,19 +32,26 @@ setGracefulCleanup();
 // underlying filesystem in a manner that doesn't leak into other tests (as well
 // as to test through loader caching)
 module('indexing', function (hooks) {
+  let loader = new Loader();
+  loader.addURLMapping(
+    new URL(baseRealm.url),
+    new URL('http://localhost:4201/base/')
+  );
+  shimExternals(loader);
+
   setupCardLogs(
     hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`)
   );
 
   let dir: string;
   let realm: Realm;
 
-  setupBaseRealmServer(hooks);
+  setupBaseRealmServer(hooks, loader);
 
   hooks.beforeEach(async function () {
     dir = dirSync().name;
-    realm = await createRealm(dir, {
+    realm = await createRealm(loader, dir, {
       'person.gts': `
         import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";

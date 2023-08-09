@@ -8,7 +8,7 @@ on:
         type: string
       waypoint_version:
         required: false
-        default: "0.8.1"
+        default: '0.11.3'
         type: string
       environment:
         required: true
@@ -64,13 +64,11 @@ jobs:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: us-east-1
 
-      - name: Install Waypoint
-        run: |
-          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
-          sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
-          sudo apt-get install waypoint=${{ inputs.waypoint_version }}
+      - uses: lucasmelin/setup-waypoint@v1
+        with:
+          version: ${{ inputs.waypoint_version }}
 
       - name: Build app
         run: waypoint build -app=${{ inputs.app }} -plain -push
         env:
-          WAYPOINT_SERVER_TLS: "1"
+          WAYPOINT_SERVER_TLS: '1'

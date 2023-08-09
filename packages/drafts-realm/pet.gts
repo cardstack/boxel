@@ -20,6 +20,11 @@ export class Pet extends Card {
       return this.firstName;
     },
   });
+  @field description = contains(StringCard, {
+    computeVia: function (this: Pet) {
+      return `${this.firstName} the Pet`;
+    },
+  });
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <div
@@ -35,7 +40,7 @@ export class Pet extends Card {
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <div class='demo-card'>
-        <h2><@fields.firstName /></h2>
+        <h2><@fields.title /></h2>
         <div>
           <div>Sleeps On the Couch: <@fields.sleepsOnTheCouch /></div>
           <div>Favorite Toy: <@fields.favoriteToy /></div>

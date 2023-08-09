@@ -13,7 +13,7 @@ export default class Router extends EmberRouter {
 // that means that means the resolvedOwnRealmURL should be used instead of ownRealmURL.
 let path = new URL(resolvedOwnRealmURL ?? ownRealmURL).pathname.replace(
   /\/$/,
-  ''
+  '',
 );
 
 Router.map(function () {

@@ -127,7 +127,6 @@ export default class Go extends Component<Signature> {
         display: flex;
         gap: var(--boxel-sp-sm);
       }
-
       .editor-container {
         flex: 1;
       }

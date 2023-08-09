@@ -1,6 +1,1 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
-<svg width="800px" height="800px" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-    <path fill="var(--icon-bg, none)" stroke="var(--icon-color, #000)"
-        d="M195.2 195.2a64 64 0 0 1 90.496 0L512 421.504 738.304 195.2a64 64 0 0 1 90.496 90.496L602.496 512 828.8 738.304a64 64 0 0 1-90.496 90.496L512 602.496 285.696 828.8a64 64 0 0 1-90.496-90.496L421.504 512 195.2 285.696a64 64 0 0 1 0-90.496z" />
-</svg>
+<svg height="15.556" viewBox="0 0 15.556 15.556" width="15.556" xmlns="http://www.w3.org/2000/svg"><g stroke="var(--icon-color, #000)" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="m12 5v11" transform="matrix(.70710678 .70710678 -.70710678 .70710678 6.717701 -8.131965)"/><path d="m5 12h11" transform="matrix(.70710678 .70710678 -.70710678 .70710678 8.838361 -8.131691)"/></g></svg>

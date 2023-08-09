@@ -9,7 +9,12 @@ import {
   RealmInfo,
 } from '@cardstack/runtime-common';
 import GlimmerComponent from '@glimmer/component';
-import { type TestContext, visit } from '@ember/test-helpers';
+import {
+  type TestContext,
+  visit,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 import { LocalPath } from '@cardstack/runtime-common/paths';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
@@ -44,6 +49,24 @@ export function trimCardContainer(text: string) {
   );
 }
 
+export async function waitUntilSaved(test: () => Promise<void>) {
+  let lastSavedEl = document.querySelector('[data-test-last-saved]');
+  let saveTime = lastSavedEl
+    ? lastSavedEl.getAttribute('data-test-last-saved')
+    : undefined;
+  await test();
+  if (saveTime == null) {
+    await waitFor('[data-test-last-saved]');
+  } else {
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-last-saved]')!
+          .getAttribute('data-test-last-saved') !== saveTime,
+    );
+  }
+}
+
 export function p(dateString: string): Date {
   return parse(dateString, 'yyyy-MM-dd', new Date());
 }
@@ -73,6 +96,7 @@ interface Options {
 // `setupRenderingTest(hooks)` from ember-qunit must be used in your tests.
 export const TestRealm = {
   async create(
+    loader: Loader,
     flatFiles: Record<string, string | LooseSingleCardDocument | CardDocFiles>,
     owner: Owner,
     opts?: Options
@@ -82,11 +106,17 @@ export const TestRealm = {
     } else {
       await makeRenderer();
     }
-    return makeRealm(new TestRealmAdapter(flatFiles), owner, opts?.realmURL);
+    return makeRealm(
+      new TestRealmAdapter(flatFiles),
+      loader,
+      owner,
+      opts?.realmURL
+    );
   },
 
   async createWithAdapter(
     adapter: RealmAdapter,
+    loader: Loader,
     owner: Owner,
     opts?: Options
   ): Promise<Realm> {
@@ -95,7 +125,7 @@ export const TestRealm = {
     } else {
       await makeRenderer();
     }
-    return makeRealm(adapter, owner, opts?.realmURL);
+    return makeRealm(adapter, loader, owner, opts?.realmURL);
   },
 };
 
@@ -185,6 +215,7 @@ export function setupMockMessageService(hooks: NestedHooks) {
 let runnerOptsMgr = new RunnerOptionsManager();
 function makeRealm(
   adapter: RealmAdapter,
+  loader: Loader,
   owner: Owner,
   realmURL = testRealmURL
 ) {
@@ -194,6 +225,7 @@ function makeRealm(
   return new Realm(
     realmURL,
     adapter,
+    loader,
     async (optsId) => {
       let { registerRunner, entrySetter } = runnerOptsMgr.getOptions(optsId);
       await localIndexer.configureRunner(registerRunner, entrySetter, adapter);
@@ -204,11 +236,7 @@ function makeRealm(
   );
 }
 
-export async function saveCard(
-  instance: Card,
-  id: string,
-  loader: Loader = Loader.getLoader()
-) {
+export async function saveCard(instance: Card, id: string, loader: Loader) {
   let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
   let doc = api.serializeCard(instance);
   doc.data.id = id;
@@ -218,18 +246,14 @@ export async function saveCard(
 export async function shimModule(
   moduleURL: string,
   module: Record<string, any>,
-  loader?: Loader
+  loader: Loader
 ) {
-  // this allows the current run's loader to pick up the shimmed value as well
-  // which is seeded from the global loader
-  Loader.shimModule(moduleURL, module);
-
   if (loader) {
     loader.shimModule(moduleURL, module);
   }
   await Promise.all(
     Object.keys(module).map(async (name) => {
-      let m = await Loader.import<any>(moduleURL);
+      let m = await loader.import<any>(moduleURL);
       m[name];
     })
   );
@@ -252,7 +276,10 @@ export class TestRealmAdapter implements RealmAdapter {
   #subscriber: ((message: Record<string, any>) => void) | undefined;
 
   constructor(
-    flatFiles: Record<string, string | LooseSingleCardDocument | CardDocFiles>,
+    flatFiles: Record<
+      string,
+      string | LooseSingleCardDocument | CardDocFiles | RealmInfo
+    >,
     realmURL = new URL(testRealmURL)
   ) {
     this.#paths = new RealmPaths(realmURL);

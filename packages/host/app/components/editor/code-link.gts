@@ -7,10 +7,7 @@ interface Signature {
 
 export default class CodeLink extends Component<Signature> {
   <template>
-    <footer
-      class='footer'
-      data-test-moved
-    >The card code editor has moved to
+    <footer class='footer' data-test-moved>The card code editor has moved to
       <LinkTo @route='code' class='link' data-test-code-link>/code</LinkTo>
     </footer>
     <style>

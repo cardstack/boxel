@@ -78,7 +78,7 @@ export default class Directory extends Component<Args> {
   listing = directory(
     this,
     () => this.args.relativePath,
-    () => this.args.realmURL
+    () => this.args.realmURL,
   );
   @service declare router: RouterService;
 

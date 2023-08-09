@@ -2,7 +2,8 @@
   "data": {
     "type": "card",
     "attributes": {
-      "firstName": "Mango"
+      "firstName": "Mango",
+      "thumbnailURL": "../logo.png"
     },
     "relationships": {
       "friend": {
