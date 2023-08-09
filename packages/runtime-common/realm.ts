@@ -47,6 +47,7 @@ import * as babel from '@babel/core';
 import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation/browser';
 import type { Options as EmberTemplatePluginOptions } from 'babel-plugin-ember-template-compilation/src/plugin';
 import type { EmberTemplateCompiler } from 'babel-plugin-ember-template-compilation/src/ember-template-compiler';
+import type { ExtendedPluginBuilder } from 'babel-plugin-ember-template-compilation/src/js-utils';
 //@ts-ignore no types are available
 import * as etc from 'ember-source/dist/ember-template-compiler';
 import { loaderPlugin } from './loader-plugin';
@@ -457,7 +458,7 @@ export class Realm {
 
     let templateOptions: EmberTemplatePluginOptions = {
       compiler: etc as unknown as EmberTemplateCompiler,
-      transforms: [scopedCSSTransform],
+      transforms: [scopedCSSTransform as ExtendedPluginBuilder],
     };
 
     let src = babel.transformSync(content, {
