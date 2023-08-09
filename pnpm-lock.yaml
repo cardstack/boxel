@@ -91,7 +91,7 @@ importers:
         version: 1.0.3
       prettier:
         specifier: github:cardstack/prettier#glimmer-style-tag-in-template-support
-        version: github.com/cardstack/prettier/1f8ff0292cd3a8538475448e3b11eee7cc64eeed
+        version: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
       prettier-plugin-ember-template-tag:
         specifier: ^1.0.0
         version: 1.0.0(prettier@3.1.0-dev)
@@ -258,7 +258,7 @@ importers:
         version: 4.1.5
       prettier:
         specifier: github:cardstack/prettier#glimmer-style-tag-in-template-support
-        version: github.com/cardstack/prettier/1f8ff0292cd3a8538475448e3b11eee7cc64eeed
+        version: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
       typescript:
         specifier: ^5.1.6
         version: 5.1.6
@@ -433,7 +433,7 @@ importers:
         version: 8.0.1
       prettier:
         specifier: github:cardstack/prettier#glimmer-style-tag-in-template-support
-        version: github.com/cardstack/prettier/1f8ff0292cd3a8538475448e3b11eee7cc64eeed
+        version: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
       qunit:
         specifier: ^2.19.4
         version: 2.19.4
@@ -599,7 +599,7 @@ importers:
         version: 4.7.0
       prettier:
         specifier: github:cardstack/prettier#glimmer-style-tag-in-template-support
-        version: github.com/cardstack/prettier/1f8ff0292cd3a8538475448e3b11eee7cc64eeed
+        version: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
       qunit:
         specifier: ^2.19.4
         version: 2.19.4
@@ -828,7 +828,7 @@ importers:
         version: 4.7.0
       prettier:
         specifier: github:cardstack/prettier#glimmer-style-tag-in-template-support
-        version: github.com/cardstack/prettier/1f8ff0292cd3a8538475448e3b11eee7cc64eeed
+        version: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
       prettier-plugin-ember-template-tag:
         specifier: ^1.0.0
         version: 1.0.0(prettier@3.1.0-dev)
@@ -1171,7 +1171,7 @@ importers:
         version: 1.0.1
       prettier:
         specifier: github:cardstack/prettier#glimmer-style-tag-in-template-support
-        version: github.com/cardstack/prettier/1f8ff0292cd3a8538475448e3b11eee7cc64eeed
+        version: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
       qs:
         specifier: ^6.10.5
         version: 6.11.0
@@ -1350,7 +1350,7 @@ importers:
         version: 4.1.5
       prettier:
         specifier: github:cardstack/prettier#glimmer-style-tag-in-template-support
-        version: github.com/cardstack/prettier/1f8ff0292cd3a8538475448e3b11eee7cc64eeed
+        version: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
       prettier-plugin-ember-template-tag:
         specifier: ^1.0.0
         version: 1.0.0(prettier@3.1.0-dev)
@@ -1471,6 +1471,9 @@ importers:
       flat:
         specifier: ^5.0.2
         version: 5.0.2
+      glimmer-scoped-css:
+        specifier: ^0.3.2
+        version: 0.3.2
       http-status-codes:
         specifier: ^2.2.0
         version: 2.2.0
@@ -1685,7 +1688,7 @@ importers:
         version: 4.1.5
       prettier:
         specifier: github:cardstack/prettier#glimmer-style-tag-in-template-support
-        version: github.com/cardstack/prettier/1f8ff0292cd3a8538475448e3b11eee7cc64eeed
+        version: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
       qunit:
         specifier: ^2.14.0
         version: 2.19.3
@@ -8370,6 +8373,7 @@ packages:
       make-dir: 3.1.0
       schema-utils: 2.7.1
       webpack: 5.75.0
+    dev: false
 
   /babel-loader@8.3.0(@babel/core@7.21.0)(webpack@5.84.0):
     resolution: {integrity: sha512-H8SvsMF+m9t15HNLMipppzkC+Y2Yq+v3SonZyU70RBL/h1gxPkH08Ot8pEE9Z4Kd+czyWJClmFS8qzIP9OZ04Q==}
@@ -12219,6 +12223,7 @@ packages:
       - '@glint/template'
       - supports-color
       - webpack
+    dev: false
 
   /ember-auto-import@2.6.3(@glint/template@1.0.2)(webpack@5.84.0):
     resolution: {integrity: sha512-uLhrRDJYWCRvQ4JQ1e64XlSrqAKSd6PXaJ9ZsZI6Tlms9T4DtQFxNXasqji2ZRJBVrxEoLCRYX3RTldsQ0vNGQ==}
@@ -13416,7 +13421,7 @@ packages:
       '@embroider/addon-shim': 1.8.5
       ember-cli-normalize-entity-name: 1.0.0
       ember-cli-string-utils: 1.1.0
-      ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.75.0)
+      ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -13692,6 +13697,7 @@ packages:
       - '@glint/template'
       - supports-color
       - webpack
+    dev: false
 
   /ember-source@4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0):
     resolution: {integrity: sha512-h0lV902A4Mny2eiqXPy15uXXoCc7BnUegE4axLAy4IoxEkJ1o5h0aLJFiB4Tzb1htx8vgHjJz//Y5Jig7NSDTw==}
@@ -14563,7 +14569,7 @@ packages:
     dependencies:
       eslint: 7.32.0
       eslint-config-prettier: 7.2.0(eslint@7.32.0)
-      prettier: github.com/cardstack/prettier/1f8ff0292cd3a8538475448e3b11eee7cc64eeed
+      prettier: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
       prettier-linter-helpers: 1.0.0
     dev: true
 
@@ -14583,7 +14589,7 @@ packages:
     dependencies:
       eslint: 7.32.0
       eslint-config-prettier: 8.5.0(eslint@7.32.0)
-      prettier: github.com/cardstack/prettier/1f8ff0292cd3a8538475448e3b11eee7cc64eeed
+      prettier: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
       prettier-linter-helpers: 1.0.0
       synckit: 0.8.5
     dev: true
@@ -14604,7 +14610,7 @@ packages:
     dependencies:
       eslint: 8.41.0
       eslint-config-prettier: 8.8.0(eslint@8.41.0)
-      prettier: github.com/cardstack/prettier/1f8ff0292cd3a8538475448e3b11eee7cc64eeed
+      prettier: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
       prettier-linter-helpers: 1.0.0
       synckit: 0.8.5
     dev: true
@@ -16466,6 +16472,17 @@ packages:
       js-string-escape: 1.0.1
       postcss: 8.4.23
       postcss-selector-parser: 6.0.12
+      super-fast-md5: 1.0.1
+    transitivePeerDependencies:
+      - supports-color
+
+  /glimmer-scoped-css@0.3.2:
+    resolution: {integrity: sha512-DW8LyfbH1XUMgswPxXJOl3b/bMNZ6UjbYeWSoiALHFRsIeTZgf0oYgSrzxTX/QArMvuLn42O2UbZ9trwZRD6LQ==}
+    dependencies:
+      '@embroider/addon-shim': 1.8.5
+      js-string-escape: 1.0.1
+      postcss: 8.4.25
+      postcss-selector-parser: 6.0.13
       super-fast-md5: 1.0.1
     transitivePeerDependencies:
       - supports-color
@@ -21255,7 +21272,7 @@ packages:
       '@glimmer/syntax': 0.84.3
       ember-cli-htmlbars: 6.2.0
       ember-template-imports: 3.4.2
-      prettier: github.com/cardstack/prettier/1f8ff0292cd3a8538475448e3b11eee7cc64eeed
+      prettier: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
     transitivePeerDependencies:
       - supports-color
     dev: true
@@ -22002,7 +22019,7 @@ packages:
       '@babel/core': 7.21.0(supports-color@8.1.1)
       '@babel/plugin-syntax-decorators': 7.21.0(@babel/core@7.21.0)
       '@babel/plugin-transform-typescript': 7.20.2(@babel/core@7.21.0)
-      prettier: github.com/cardstack/prettier/1f8ff0292cd3a8538475448e3b11eee7cc64eeed
+      prettier: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
     transitivePeerDependencies:
       - '@angular/core'
       - supports-color
@@ -23397,7 +23414,7 @@ packages:
       prettier: '>=3.0.0'
       stylelint: '>=15.8.0'
     dependencies:
-      prettier: github.com/cardstack/prettier/1f8ff0292cd3a8538475448e3b11eee7cc64eeed
+      prettier: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
       prettier-linter-helpers: 1.0.0
       stylelint: 15.10.2
     dev: true
@@ -26366,6 +26383,7 @@ packages:
       ember-concurrency-async-plugin: link:vendor/ember-concurrency-async-plugin
       ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0)
       flat: 5.0.2
+      glimmer-scoped-css: 0.3.2
       http-status-codes: 2.2.0
       ignore: 5.2.4
       js-string-escape: 1.0.1
@@ -26407,8 +26425,8 @@ packages:
     transitivePeerDependencies:
       - supports-color
 
-  github.com/cardstack/prettier/1f8ff0292cd3a8538475448e3b11eee7cc64eeed:
-    resolution: {tarball: https://codeload.github.com/cardstack/prettier/tar.gz/1f8ff0292cd3a8538475448e3b11eee7cc64eeed}
+  github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6:
+    resolution: {tarball: https://codeload.github.com/cardstack/prettier/tar.gz/60eccfdc598d682a931d3c569ffb0c4f92ef5db6}
     name: prettier
     version: 3.1.0-dev
     engines: {node: '>=16'}
