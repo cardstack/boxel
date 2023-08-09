@@ -67,9 +67,9 @@ import { parseQueryString } from './query';
 import type { Readable } from 'stream';
 import { type Card } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
+import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import scopedCSSTransform from 'glimmer-scoped-css/ast-transform';
 
 export type RealmInfo = {
