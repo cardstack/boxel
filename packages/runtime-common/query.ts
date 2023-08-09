@@ -16,6 +16,7 @@ export type Filter =
   | EveryFilter
   | NotFilter
   | EqFilter
+  | ContainsFilter
   | RangeFilter
   | CardTypeFilter;
 
@@ -65,6 +66,10 @@ export interface RangeFilter extends TypedFilter {
       lte?: JSON.Value;
     };
   };
+}
+
+export interface ContainsFilter extends TypedFilter {
+  contains: { [fieldName: string]: JSON.Value };
 }
 
 export function isCardTypeFilter(filter: Filter): filter is CardTypeFilter {
@@ -225,6 +230,8 @@ function assertFilter(
     assertNotFilter(filter, pointer);
   } else if ('eq' in filter) {
     assertEqFilter(filter, pointer);
+  } else if ('contains' in filter) {
+    assertContainsFilter(filter, pointer);
   } else if ('range' in filter) {
     assertRangeFilter(filter, pointer);
   } else {
@@ -324,6 +331,27 @@ function assertEqFilter(
     throw new Error(`${pointer.join('/') || '/'}: eq must be an object`);
   }
   Object.entries(filter.eq).every(([key, value]) =>
+    assertJSONValue(value, pointer.concat(key))
+  );
+}
+
+function assertContainsFilter(
+  filter: any,
+  pointer: string[]
+): asserts filter is ContainsFilter {
+  if (typeof filter !== 'object' || filter == null) {
+    throw new Error(`${pointer.join('/') || '/'}: filter must be an object`);
+  }
+  pointer.concat('contains');
+  if (!('contains' in filter)) {
+    throw new Error(
+      `${pointer.concat('contains').join('/') || '/'}: ContainsFilter must have contains property`
+    );
+  }
+  if (typeof filter.contains !== 'object' || filter.contains == null) {
+    throw new Error(`${pointer.join('/') || '/'}: contains must be an object`);
+  }
+  Object.entries(filter.contains).every(([key, value]) =>
     assertJSONValue(value, pointer.concat(key))
   );
 }
