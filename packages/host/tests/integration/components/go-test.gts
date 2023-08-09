@@ -1,8 +1,14 @@
 import { module, test } from 'qunit';
 import { setupRenderingTest } from 'ember-qunit';
-import { find, render, waitUntil, waitFor, click } from '@ember/test-helpers';
+import {
+  find,
+  render,
+  waitUntil,
+  waitFor,
+  click,
+  RenderingTestContext,
+} from '@ember/test-helpers';
 import Go from '@cardstack/host/components/editor/go';
-import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 import { baseRealm } from '@cardstack/runtime-common';
 import {
@@ -21,6 +27,7 @@ import type {
 } from '@cardstack/host/services/monaco-service';
 import CodeController from '@cardstack/host/controllers/code';
 import { OpenFiles } from '@cardstack/host/controllers/code';
+import type LoaderService from '@cardstack/host/services/loader-service';
 
 const cardContent = `
 import { contains, field, Card, linksTo } from "https://cardstack.com/base/card-api";
@@ -44,23 +51,25 @@ module('Integration | Component | go', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
   setupMockMessageService(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
-  );
 
-  hooks.beforeEach(async function () {
-    Loader.addURLMapping(
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+    loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
-    shimExternals();
   });
+
+  setupCardLogs(
+    hooks,
+    async () => await loader.import(`${baseRealm.url}card-api`)
+  );
 
   module('with a working realm', function (hooks) {
     hooks.beforeEach(async function () {
       adapter = new TestRealmAdapter({ 'person.gts': cardContent });
-      realm = await TestRealm.createWithAdapter(adapter, this.owner);
+      realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
       monacoService = this.owner.lookup(
         'service:monaco-service'
       ) as MonacoService;

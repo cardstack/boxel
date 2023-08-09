@@ -11,7 +11,7 @@ import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { Modal, IconButton } from '@cardstack/boxel-ui';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import SearchSheet, { SearchSheetMode } from '../search-sheet';
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
 import {
   Deferred,
   baseCardRef,
@@ -31,6 +31,7 @@ import {
   getSearchResults,
   type Search,
 } from '@cardstack/host/resources/search';
+import { htmlSafe } from '@ember/template';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import perform from 'ember-concurrency/helpers/perform';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -52,7 +53,7 @@ export type Stack = StackItem[];
 
 interface BaseItem {
   format: Format;
-  request?: Deferred<Card>;
+  request?: Deferred<Card | undefined>;
   stackIndex: number;
 }
 
@@ -76,11 +77,6 @@ enum SearchSheetTrigger {
 }
 
 export default class OperatorModeContainer extends Component<Signature> {
-  // In this map we store the field values of cards that are being edited so that we can restore them if the user cancels the edit
-  cardFieldValues: WeakMap<Card, Map<string, any>> = new WeakMap<
-    Card,
-    Map<string, any>
-  >();
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
@@ -104,8 +100,12 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   @action
-  getCards(query: Query): Search {
-    return getSearchResults(this, () => query);
+  getCards(query: Query, realms?: string[]): Search {
+    return getSearchResults(
+      this,
+      () => query,
+      realms ? () => realms : undefined,
+    );
   }
 
   @action
@@ -158,15 +158,14 @@ export default class OperatorModeContainer extends Component<Signature> {
     this.operatorModeStateService.addItemToStack(item);
   }
 
-  @action async edit(item: StackItem) {
-    await this.saveCardFieldValues(this.getCard(item));
+  @action edit(item: StackItem) {
     this.updateItem(item, 'edit', new Deferred());
   }
 
   @action updateItem(
     item: StackItem,
     format: Format,
-    request?: Deferred<Card>
+    request?: Deferred<Card | undefined>,
   ) {
     if (item.type === 'card') {
       this.operatorModeStateService.replaceItemInStack(item, {
@@ -179,7 +178,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     if (item.type === 'contained') {
       let addressableItem = getCardStackItem(
         item,
-        this.stacks[item.stackIndex]
+        this.stacks[item.stackIndex],
       );
 
       let pathSegments = getPathToStackItem(item, this.stacks[item.stackIndex]);
@@ -199,79 +198,69 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   }
 
-  @action async close(item: StackItem) {
-    await this.rollbackCardFieldValues(this.getCard(item));
-
-    this.operatorModeStateService.trimItemsFromStack(item);
-  }
-
-  @action async cancel(item: StackItem) {
-    await this.rollbackCardFieldValues(this.getCard(item));
-    this.updateItem(item, 'isolated');
-  }
-
-  @action async save(item: StackItem) {
+  close = task(async (item: StackItem) => {
+    let card = this.getAddressableCard(item);
     let { request } = item;
-    await this.saveCardFieldValues(this.getCard(item));
-    let updatedCard = await this.write.perform(this.getAddressableCard(item));
-    let pathSegments = getPathToStackItem(item, this.stacks[item.stackIndex]);
+    // close the item first so user doesn't have to wait for the save to complete
+    this.operatorModeStateService.trimItemsFromStack(item);
+
+    // only save when closing a stack item in edit mode. there should be no unsaved
+    // changes in isolated mode because they were saved when user toggled between
+    // edit and isolated formats
+    if (item.format === 'edit') {
+      let updatedCard = await this.write.perform(card);
+      request?.fulfill(updatedCard);
+    }
+  });
+
+  save = task(async (item: StackItem, dismissStackItem: boolean) => {
+    let { request } = item;
+    let stack = this.stacks[item.stackIndex];
+    let addressableItem = getCardStackItem(item, stack);
+    let updatedCard = await this.write.perform(addressableItem.card);
 
     if (updatedCard) {
       request?.fulfill(updatedCard);
+      if (!dismissStackItem) {
+        // if this is a newly created card from auto-save then we
+        // need to replace the stack item to account for the new card's ID
+        if (!addressableItem.card.id && updatedCard.id) {
+          this.operatorModeStateService.replaceItemInStack(addressableItem, {
+            ...addressableItem,
+            card: updatedCard,
+          });
+        }
+        return;
+      }
 
       if (item.type === 'card' && item.isLinkedCard) {
-        this.close(item); // closes the 'create new card' editor for linked card fields
+        this.operatorModeStateService.trimItemsFromStack(item); // closes the 'create new card' editor for linked card fields
       } else {
-        let addressableItem = getCardStackItem(
-          item,
-          this.stacks[item.stackIndex]
-        );
+        if (!addressableItem.card.id && updatedCard.id) {
+          this.operatorModeStateService.trimItemsFromStack(addressableItem);
+        } else {
+          this.operatorModeStateService.replaceItemInStack(addressableItem, {
+            ...addressableItem,
+            card: updatedCard,
+            request,
+            format: 'isolated',
+          });
 
-        this.operatorModeStateService.replaceItemInStack(addressableItem, {
-          ...addressableItem,
-          card: updatedCard,
-          request,
-          format: 'isolated',
-        });
-
-        pathSegments.forEach(() =>
-          this.operatorModeStateService.popItemFromStack(item.stackIndex)
-        );
+          getPathToStackItem(item, this.stacks[item.stackIndex]).forEach(() =>
+            this.operatorModeStateService.popItemFromStack(item.stackIndex),
+          );
+        }
       }
     }
-  }
-
-  // TODO: Implement remove card function
-  @action async delete(item: StackItem) {
-    await this.close(item);
-  }
-
-  private write = restartableTask(async (card: Card) => {
-    return await this.cardService.saveModel(card);
   });
 
-  private async saveCardFieldValues(card: Card) {
-    let fields = await this.cardService.getFields(card);
-    for (let fieldName of Object.keys(fields)) {
-      if (fieldName === 'id') continue;
-
-      let field = fields[fieldName];
-      if (
-        (field.fieldType === 'contains' ||
-          field.fieldType === 'containsMany') &&
-        !(await this.cardService.isPrimitive(field.card))
-      ) {
-        await this.saveCardFieldValues((card as any)[fieldName]);
-      }
-
-      let cardFieldValue = this.cardFieldValues.get(card);
-      if (!cardFieldValue) {
-        cardFieldValue = new Map<string, any>();
-      }
-      cardFieldValue.set(fieldName, (card as any)[fieldName]);
-      this.cardFieldValues.set(card, cardFieldValue);
-    }
-  }
+  // we debounce saves in the stack item--by the time they reach
+  // this level we need to handle every request (so not restartable). otherwise
+  // we might drop writes from different stack items that want to save
+  // at the same time
+  private write = task(async (card: Card) => {
+    return await this.cardService.saveModel(card);
+  });
 
   // The public API is wrapped in a closure so that whatever calls its methods
   // in the context of operator-mode, the methods can be aware of which stack to deal with (via stackIndex), i.e.
@@ -284,7 +273,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         opts?: {
           isLinkedCard?: boolean;
           doc?: LooseSingleCardDocument; // fill in card data with values
-        }
+        },
       ): Promise<Card | undefined> => {
         // prefers optional doc to be passed in
         // use case: to populate default values in a create modal
@@ -293,12 +282,12 @@ export default class OperatorModeContainer extends Component<Signature> {
         };
         // using RealmPaths API to correct for the trailing `/`
         let realmPath = new RealmPaths(
-          relativeTo ?? here.cardService.defaultURL
+          relativeTo ?? here.cardService.defaultURL,
         );
         let newCard = await here.cardService.createFromSerialized(
           doc.data,
           doc,
-          new URL(realmPath.url)
+          new URL(realmPath.url),
         );
         let newItem: StackItem = {
           type: 'card',
@@ -311,17 +300,43 @@ export default class OperatorModeContainer extends Component<Signature> {
         here.addToStack(newItem);
         return await newItem.request?.promise;
       },
-      viewCard: async (card: Card, format: Format = 'isolated') => {
-        let itemsCount = here.stacks[stackIndex].length;
+      viewCard: async (
+        card: Card,
+        format: Format = 'isolated',
+        fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
+        fieldName?: string,
+      ) => {
+        let stack = here.stacks[stackIndex];
+        let itemsCount = stack.length;
 
-        let currentCardOnStack = here.getCard(
-          here.stacks[stackIndex][itemsCount - 1]!
-        ); // Last item on the stack
+        let currentCardOnStack = here.getCard(stack[itemsCount - 1]!); // Last item on the stack
+
+        // TODO this is a hack until contained cards go away
+        // this lets us handle a contained card that is part of a card that has been auto-saved.
+        // the deserialization from the auto save actually breaks object equality for contained cards.
+        if (
+          fieldType === 'contains' &&
+          fieldName &&
+          [
+            ...Object.keys(
+              await here.cardService.getFields(currentCardOnStack),
+            ),
+          ].includes(fieldName)
+        ) {
+          here.addToStack({
+            type: 'contained',
+            fieldOfIndex: itemsCount - 1,
+            fieldName,
+            format,
+            stackIndex,
+          });
+          return;
+        }
 
         let containedPath = await findContainedCardPath(
           currentCardOnStack,
           card,
-          here.cardService
+          here.cardService,
         );
         if (containedPath.length > 0) {
           let currentIndex = itemsCount - 1;
@@ -346,12 +361,12 @@ export default class OperatorModeContainer extends Component<Signature> {
       },
       createCardDirectly: async (
         doc: LooseSingleCardDocument,
-        relativeTo: URL | undefined
+        relativeTo: URL | undefined,
       ): Promise<void> => {
         let newCard = await here.cardService.createFromSerialized(
           doc.data,
           doc,
-          relativeTo ?? here.cardService.defaultURL
+          relativeTo ?? here.cardService.defaultURL,
         );
         await here.cardService.saveModel(newCard);
         let newItem: StackItem = {
@@ -364,27 +379,6 @@ export default class OperatorModeContainer extends Component<Signature> {
         return;
       },
     };
-  }
-
-  private async rollbackCardFieldValues(card: Card) {
-    let fields = await this.cardService.getFields(card);
-    for (let fieldName of Object.keys(fields)) {
-      if (fieldName === 'id') continue;
-
-      let field = fields[fieldName];
-      if (
-        (field.fieldType === 'contains' ||
-          field.fieldType === 'containsMany') &&
-        !(await this.cardService.isPrimitive(field.card))
-      ) {
-        await this.rollbackCardFieldValues((card as any)[fieldName]);
-      }
-
-      let cardFieldValue = this.cardFieldValues.get(card);
-      if (cardFieldValue) {
-        (card as any)[fieldName] = cardFieldValue.get(fieldName);
-      }
-    }
   }
 
   addCard = restartableTask(async () => {
@@ -404,26 +398,52 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   });
 
-  // For now use the background from the 1st stack, but eventually, each stack
-  // to have its own background URL. Also need to consider how to treat adjoining
-  // stacks that have the same background image (consider 4 stacks, where 2
-  // adjacent stacks have the same background image)
-  fetchBackgroundImageURL = trackedFunction(this, async () => {
-    let bottomMostCard = this.stacks[0]?.[0];
-    let realmInfo;
-    if (bottomMostCard) {
-      if (bottomMostCard.type !== 'card') {
-        throw new Error(
-          `bug: the bottom most card for a stack cannot be a contained card`
-        );
-      }
-      realmInfo = await this.cardService.getRealmInfo(bottomMostCard.card);
-    }
-    return realmInfo?.backgroundURL;
+  fetchBackgroundImageURLs = trackedFunction(this, async () => {
+    let result = await Promise.all(
+      this.stacks.map(async (stack) => {
+        if (stack.length === 0) {
+          return;
+        }
+        let bottomMostCard = stack[0];
+        if (bottomMostCard.type !== 'card') {
+          throw new Error(
+            `bug: the bottom most card for a stack cannot be a contained card`,
+          );
+        }
+        return (await this.cardService.getRealmInfo(bottomMostCard.card))
+          ?.backgroundURL;
+      }),
+    );
+    return result;
   });
 
-  get backgroundImageURL() {
-    return this.fetchBackgroundImageURL.value ?? '';
+  get backgroundImageURLs() {
+    return (
+      this.fetchBackgroundImageURLs.value?.map((u) => (u ? u : undefined)) ?? []
+    );
+  }
+
+  get backgroundImageStyle() {
+    // only return a background image when both stacks originate from the same realm
+    // otherwise we delegate to each stack to handle this
+    if (
+      this.backgroundImageURLs.length > 0 &&
+      this.backgroundImageURLs.every(
+        (u) => u != null && this.backgroundImageURLs[0] === u,
+      )
+    ) {
+      return htmlSafe(`background-image: url(${this.backgroundImageURLs[0]});`);
+    }
+    return '';
+  }
+
+  get differingBackgroundImageURLs() {
+    // if the this.backgroundImageStyle is undefined when there are images its because
+    // they are different images--in that case we want to return these.
+    if (this.backgroundImageURLs.length > 0 && !this.backgroundImageStyle) {
+      return this.backgroundImageURLs;
+    }
+    return [];
   }
 
   get allStackItems() {
@@ -448,7 +468,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       ) {
         this.operatorModeStateService.shiftStack(
           this.operatorModeStateService.state.stacks[stackIndex],
-          stackIndex + 1
+          stackIndex + 1,
         );
       }
 
@@ -475,22 +495,19 @@ export default class OperatorModeContainer extends Component<Signature> {
       // In case, that the search was accessed directly without clicking right and left buttons,
       // the rightmost stack will be REPLACED by the selection
       let numberOfStacks = this.operatorModeStateService.numberOfStacks();
+      let stackIndex = numberOfStacks - 1;
       if (numberOfStacks > 0) {
         //there will always be 1 stack
         let stack = this.operatorModeStateService.rightMostStack();
         if (stack) {
           let bottomMostItem = stack[0];
           if (bottomMostItem) {
-            let stackItem: CardStackItem = {
+            this.operatorModeStateService.clearStackAndAdd(stackIndex, {
               type: 'card',
               card,
               format: 'isolated',
-              stackIndex: numberOfStacks - 1, //rightMost stack index
-            };
-            this.operatorModeStateService.trimStackAndAdd(
-              bottomMostItem,
-              stackItem
-            );
+              stackIndex,
+            });
           }
         }
       }
@@ -516,17 +533,54 @@ export default class OperatorModeContainer extends Component<Signature> {
   <template>
     <Modal
       class='operator-mode'
+      @size='full-screen'
       @isOpen={{true}}
       @onClose={{@onClose}}
       @isOverlayDismissalDisabled={{true}}
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
-      @backgroundImageURL={{this.backgroundImageURL}}
     >
 
       <CardCatalogModal />
 
       <div class='operator-mode__with-chat {{this.chatVisibilityClass}}'>
-        <div class='operator-mode__main'>
+        <div
+          class='operator-mode__main'
+          data-test-save-idle={{this.write.isIdle}}
+          style={{this.backgroundImageStyle}}
+        >
+          {{#if (eq this.allStackItems.length 0)}}
+            <div class='no-cards'>
+              <p class='add-card-title'>
+                Add a card to get started
+              </p>
+
+              <button
+                class='add-card-button'
+                {{on 'click' (fn (perform this.addCard))}}
+                data-test-add-card-button
+              >
+                {{svgJar 'icon-plus' width='50px' height='50px'}}
+              </button>
+            </div>
+          {{else}}
+            {{#each this.stacks as |stack stackIndex|}}
+              <OperatorModeStack
+                data-test-operator-mode-stack={{stackIndex}}
+                class='operator-mode-stack'
+                @stackItems={{stack}}
+                @backgroundImageURL={{get
+                  this.differingBackgroundImageURLs
+                  stackIndex
+                }}
+                @stackIndex={{stackIndex}}
+                @publicAPI={{this.publicAPI this stackIndex}}
+                @close={{perform this.close}}
+                @edit={{this.edit}}
+                @save={{perform this.save}}
+              />
+            {{/each}}
+          {{/if}}
+
           {{#if this.canCreateNeighborStack}}
             <button
               data-test-add-card-left-stack
@@ -548,40 +602,6 @@ export default class OperatorModeContainer extends Component<Signature> {
             >
               {{svgJar 'download' width='30px' height='30px'}}
             </button>
-          {{/if}}
-
-          {{#if (eq this.allStackItems.length 0)}}
-            <div class='no-cards'>
-              <p class='add-card-title'>
-                Add a card to get started
-              </p>
-
-              <button
-                class='add-card-button icon-button'
-                {{on 'click' (fn (perform this.addCard))}}
-                data-test-add-card-button
-              >
-                {{svgJar 'icon-plus' width='50px' height='50px'}}
-              </button>
-            </div>
-          {{else}}
-            {{#each this.stacks as |stack stackIndex|}}
-              <OperatorModeStack
-                data-test-operator-mode-stack={{stackIndex}}
-                class='operator-mode-stack'
-                @stackItems={{stack}}
-                @stackIndex={{stackIndex}}
-                @publicAPI={{this.publicAPI this stackIndex}}
-                @close={{this.close}}
-                @cancel={{this.cancel}}
-                @edit={{this.edit}}
-                @delete={{this.delete}}
-                @save={{this.save}}
-              />
-            {{/each}}
-          {{/if}}
-
-          {{#if this.canCreateNeighborStack}}
             <button
               data-test-add-card-right-stack
               class='add-card-to-neighbor-stack add-card-to-neighbor-stack--right
@@ -656,29 +676,30 @@ export default class OperatorModeContainer extends Component<Signature> {
         font: var(--boxel-font-lg);
       }
       .add-card-button {
+        --icon-color: var(--boxel-light);
         height: 350px;
         width: 200px;
         vertical-align: middle;
-        background: var(--boxel-teal);
+        background-color: var(--boxel-highlight);
         border: none;
         border-radius: var(--boxel-border-radius);
       }
       .add-card-button:hover {
-        background: var(--boxel-dark-teal);
+        background-color: var(--boxel-highlight-hover);
       }
       .add-card-to-neighbor-stack {
+        --icon-color: var(--boxel-highlight-hover);
         position: absolute;
         width: 60px;
         height: 60px;
         border-radius: 50%;
-        background: #aeabba;
-        fill: #3295a2;
+        background-color: var(--boxel-light-100);
         border-color: transparent;
       }
       .add-card-to-neighbor-stack:hover,
       .add-card-to-neighbor-stack--active {
-        background: var(--boxel-light);
-        fill: var(--boxel-teal);
+        --icon-color: var(--boxel-highlight);
+        background-color: var(--boxel-light);
       }
       .add-card-to-neighbor-stack--left {
         left: 0;
@@ -707,39 +728,42 @@ export default class OperatorModeContainer extends Component<Signature> {
 
       .operator-mode__main {
         display: flex;
-        justify-content: center;
+        justify-content: stretch;
         align-items: center;
         position: relative;
+        background-position: center;
+        background-size: cover;
       }
 
       .chat-btn {
+        --icon-color: var(--boxel-highlight-hover);
         position: absolute;
         bottom: 6px;
         right: 6px;
         margin-right: 0;
         border-radius: var(--boxel-border-radius);
-        background-color: var(--boxel-400);
+        background-color: var(--boxel-light-100);
         border: solid 1px var(--boxel-border-color);
         box-shadow: var(--boxel-box-shadow);
       }
       .chat-btn:hover {
-        background: var(--boxel-light);
+        --icon-color: var(--boxel-highlight);
+        background-color: var(--boxel-light);
       }
-
     </style>
   </template>
 }
 
 export function getCardStackItem(
   stackItem: StackItem,
-  stack: StackItem[]
+  stack: StackItem[],
 ): CardStackItem {
   if (stackItem.type === 'card') {
     return stackItem;
   }
   if (stackItem.fieldOfIndex >= stack.length) {
     throw new Error(
-      `bug: the stack item (index ${stackItem.fieldOfIndex}) that is the parent of the contained field '${stackItem.fieldName}' no longer exists in the stack`
+      `bug: the stack item (index ${stackItem.fieldOfIndex}) that is the parent of the contained field '${stackItem.fieldName}' no longer exists in the stack`,
     );
   }
   return getCardStackItem(stack[stackItem.fieldOfIndex], stack);
@@ -748,7 +772,7 @@ export function getCardStackItem(
 export function getPathToStackItem(
   stackItem: StackItem,
   stack: StackItem[],
-  segments: string[] = []
+  segments: string[] = [],
 ): string[] {
   if (stackItem.type === 'card') {
     return segments;
@@ -763,7 +787,7 @@ async function findContainedCardPath(
   possibleParent: Card,
   maybeContained: Card,
   cardService: CardService,
-  path: string[] = []
+  path: string[] = [],
 ): Promise<string[]> {
   let fields = await cardService.getFields(possibleParent);
 

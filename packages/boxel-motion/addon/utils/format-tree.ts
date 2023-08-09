@@ -89,7 +89,7 @@ export interface TreeNode {
  */
 export function formatTreeString(
   tree: TreeNode | TreeNode[],
-  options?: Options
+  options?: Options,
 ): string {
   return formatTree(tree, options).join('\n');
 }
@@ -103,7 +103,7 @@ export function formatTreeString(
  */
 export function formatTree(
   tree: TreeNode | TreeNode[],
-  options: Options = {}
+  options: Options = {},
 ): string[] {
   let toBuild: Array<{ line: string; extra?: string }> = [];
   let shouldFirstCap = true;

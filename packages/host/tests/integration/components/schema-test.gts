@@ -18,9 +18,12 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import CardPrerender from '@cardstack/host/components/card-prerender';
-import { shimExternals } from '@cardstack/host/lib/externals';
 import CodeController from '@cardstack/host/controllers/code';
 import { OpenFiles } from '@cardstack/host/controllers/code';
+import type LoaderService from '@cardstack/host/services/loader-service';
+import { TestContext } from '@ember/test-helpers';
+
+let loader: Loader;
 
 module('Integration | schema', function (hooks) {
   let realm: Realm;
@@ -29,22 +32,25 @@ module('Integration | schema', function (hooks) {
   let mockOpenFiles: OpenFiles;
 
   setupRenderingTest(hooks);
-  setupLocalIndexing(hooks);
-  setupCardLogs(
-    hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
-  );
 
-  hooks.beforeEach(async function () {
-    // this seeds the loader used during index which obtains url mappings
-    // from the global loader
-    Loader.addURLMapping(
+  hooks.beforeEach(function (this: TestContext) {
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+    loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
-    shimExternals();
+  });
+
+  setupLocalIndexing(hooks);
+  setupCardLogs(
+    hooks,
+    async () => await loader.import(`${baseRealm.url}card-api`)
+  );
+
+  hooks.beforeEach(async function () {
     adapter = new TestRealmAdapter({});
-    realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     mockController = new CodeController();
     mockOpenFiles = new OpenFiles(mockController);
     await realm.ready;
@@ -442,14 +448,47 @@ module('Integration | schema', function (hooks) {
       .exists({ count: 2 });
     assert
       .dom(
+        '[data-test-card-catalog] [data-test-realm="Base Workspace"] [data-test-results-count]'
+      )
+      .hasText('12 results');
+    assert
+      .dom(
         '[data-test-card-catalog] [data-test-realm="Base Workspace"] [data-test-card-catalog-item]'
       )
-      .exists({ count: 12 });
+      .exists({ count: 5 }, 'first 5 base realm cards are displayed');
+
+    await click(
+      '[data-test-realm="Base Workspace"] [data-test-show-more-cards]'
+    );
+    assert
+      .dom(
+        '[data-test-card-catalog] [data-test-realm="Base Workspace"] [data-test-card-catalog-item]'
+      )
+      .exists({ count: 10 }, '5 more base realm cards are displayed');
+
+    await click(
+      '[data-test-realm="Base Workspace"] [data-test-show-more-cards]'
+    );
+    assert
+      .dom(
+        '[data-test-card-catalog] [data-test-realm="Base Workspace"] [data-test-card-catalog-item]'
+      )
+      .exists({ count: 12 }, 'all base realm cards are displayed');
+
+    assert
+      .dom(
+        '[data-test-card-catalog] [data-test-realm="Unnamed Workspace"] [data-test-results-count]'
+      )
+      .hasText('1 result');
     assert
       .dom(
         '[data-test-card-catalog] [data-test-realm="Unnamed Workspace"] [data-test-card-catalog-item]'
       )
       .exists({ count: 1 });
+    assert
+      .dom('[data-test-realm="Unnamed Workspace"] [data-test-show-more-cards]')
+      .doesNotExist();
+
     assert
       .dom(
         `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"]`
@@ -564,7 +603,9 @@ module('Integration | schema', function (hooks) {
     assert
       .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
       .containsText('Choose a CatalogEntry card');
-
+    await click(
+      '[data-test-realm="Base Workspace"] [data-test-show-more-cards]'
+    );
     await click(`[data-test-select="${baseRealm.url}fields/string-field"]`);
     await click('[data-test-card-catalog-go-button]');
     await waitFor('[data-test-field="aliases"]');

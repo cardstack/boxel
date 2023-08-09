@@ -12,7 +12,7 @@ import { BoxelInput } from '@cardstack/boxel-ui';
 import { TextInputFilter, DeserializedResult } from './text-input-filter';
 
 function _deserialize(
-  bigintString: string | null | undefined
+  bigintString: string | null | undefined,
 ): DeserializedResult<bigint> {
   if (bigintString == null || bigintString == undefined) {
     return { value: null };
@@ -26,7 +26,7 @@ function _deserialize(
         e.message.match(/Cannot convert (.*) to a BigInt/) &&
         e instanceof SyntaxError) ||
       (e.message.match(
-        /The number (.*) cannot be converted to a BigInt because it is not an integer/
+        /The number (.*) cannot be converted to a BigInt because it is not an integer/,
       ) &&
         e instanceof RangeError)
     ) {
@@ -54,7 +54,7 @@ class Edit extends Component<typeof BigIntegerCard> {
     () => this.args.model,
     (inputVal) => this.args.set(inputVal),
     _deserialize,
-    _serialize
+    _serialize,
   );
 }
 
@@ -65,7 +65,7 @@ export default class BigIntegerCard extends CardBase {
   }
   static async [deserialize]<T extends CardBaseConstructor>(
     this: T,
-    bigintString: any
+    bigintString: any,
   ): Promise<CardInstanceType<T>> {
     return _deserialize(bigintString).value as CardInstanceType<T>;
   }

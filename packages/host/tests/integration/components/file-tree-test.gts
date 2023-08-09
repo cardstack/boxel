@@ -21,6 +21,8 @@ import { shimExternals } from '@cardstack/host/lib/externals';
 import CodeController from '@cardstack/host/controllers/code';
 import { OpenFiles } from '@cardstack/host/controllers/code';
 
+let loader: Loader;
+
 module('Integration | file-tree', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
@@ -32,11 +34,13 @@ module('Integration | file-tree', function (hooks) {
   hooks.beforeEach(async function () {
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
-    Loader.addURLMapping(
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+    loader.addURLMapping(
       new URL(baseRealm.url),
       new URL('http://localhost:4201/base/')
     );
-    shimExternals();
+    shimExternals(loader);
     adapter = new TestRealmAdapter({
       'person.gts': `
         import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
@@ -50,6 +54,8 @@ module('Integration | file-tree', function (hooks) {
               return this.nickName;
             },
           });
+          @field description = contains(StringCard, { computeVia: () => 'Person' });
+          @field thumbnailURL = contains(StringCard, { computeVia: () => null });
           static isolated = class Isolated extends Component<typeof this> {
             <template><h1><@fields.firstName/></h1></template>
           }
@@ -111,15 +117,8 @@ module('Integration | file-tree', function (hooks) {
         },
       },
     });
-    realm = await TestRealm.createWithAdapter(adapter, this.owner);
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
-    loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
-  });
-
-  hooks.afterEach(function () {
-    Loader.destroy();
   });
 
   test('can create a new card', async function (assert) {

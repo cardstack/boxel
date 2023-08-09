@@ -12,10 +12,12 @@ declare const config: {
   rootURL: string;
   APP: Record<string, unknown>;
   ownRealmURL: string;
+  otherRealmURLs: string[];
   matrixURL: string;
   resolvedBaseRealmURL: string;
   hostsOwnAssets: boolean;
   realmsServed?: string[];
   logLevels: string;
   resolvedOwnRealmURL: string;
+  autoSaveDelayMs: number;
 };

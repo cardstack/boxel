@@ -16,6 +16,7 @@ interface Signature {
     default: [];
     actions: [];
     icon: [];
+    detail: [];
   };
 }
 
@@ -34,12 +35,19 @@ const Header: TemplateOnlyComponent<Signature> = <template>
     {{/if}}
 
     {{#if (or @label @title)}}
-      <div data-test-boxel-header-title>
+      <div
+        class='title {{if (has-block "detail") "with-detail"}}'
+        data-test-boxel-header-title
+      >
         {{#if @label}}<Label
             data-test-boxel-header-label
           >{{@label}}</Label>{{/if}}
         {{#if @title}}{{@title}}{{/if}}
       </div>
+    {{/if}}
+
+    {{#if (has-block 'detail')}}
+      {{yield to='detail'}}
     {{/if}}
 
     {{yield}}
@@ -63,9 +71,21 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       font: 600 var(--boxel-header-text-size, var(--boxel-font-xs));
       letter-spacing: var(--boxel-lsp-xl);
       text-transform: uppercase;
-      transition: background-color var(--boxel-transition),
+      transition:
+        background-color var(--boxel-transition),
         color var(--boxel-transition);
       gap: var(--boxel-sp-xs);
+    }
+    header .title {
+      max-width: calc(
+        100% - 10rem
+      ); /* this includes the space to show the header buttons */
+      text-overflow: ellipsis;
+      overflow: hidden;
+      text-wrap: nowrap;
+    }
+    .header .title.with-detail {
+      max-width: calc(100% - 23rem); /* fits last saved message */
     }
     .large {
       padding: var(--boxel-header-padding, var(--boxel-sp-xl));
@@ -88,7 +108,6 @@ const Header: TemplateOnlyComponent<Signature> = <template>
       align-items: center;
       padding: var(--boxel-header-action-padding, 0);
     }
-
   </style>
 </template>;
 

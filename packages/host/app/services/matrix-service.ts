@@ -66,7 +66,7 @@ export default class MatrixService extends Service {
 
   private cardAPIModule = importResource(
     this,
-    () => 'https://cardstack.com/base/card-api'
+    () => 'https://cardstack.com/base/card-api',
   );
 
   private loadSDK = task(async () => {
@@ -104,12 +104,12 @@ export default class MatrixService extends Service {
   get cardAPI() {
     if (this.cardAPIModule.error) {
       throw new Error(
-        `Error loading Card API: ${JSON.stringify(this.cardAPIModule.error)}`
+        `Error loading Card API: ${JSON.stringify(this.cardAPIModule.error)}`,
       );
     }
     if (!this.cardAPIModule.module) {
       throw new Error(
-        `bug: Card API has not loaded yet--make sure to await this.loaded before using the api`
+        `bug: Card API has not loaded yet--make sure to await this.loaded before using the api`,
       );
     }
     return this.cardAPIModule.module as typeof CardAPI;
@@ -150,8 +150,8 @@ export default class MatrixService extends Service {
         `Cannot create matrix client from auth that has no access token: ${JSON.stringify(
           auth,
           null,
-          2
-        )}`
+          2,
+        )}`,
       );
     }
     if (!userId) {
@@ -159,8 +159,8 @@ export default class MatrixService extends Service {
         `Cannot create matrix client from auth that has no user id: ${JSON.stringify(
           auth,
           null,
-          2
-        )}`
+          2,
+        )}`,
       );
     }
     if (!deviceId) {
@@ -168,8 +168,8 @@ export default class MatrixService extends Service {
         `Cannot create matrix client from auth that has no device id: ${JSON.stringify(
           auth,
           null,
-          2
-        )}`
+          2,
+        )}`,
       );
     }
     this._client = this.matrixSDK.createClient({
@@ -190,16 +190,16 @@ export default class MatrixService extends Service {
   async createRoom(
     name: string,
     invites: string[], // these can be local names
-    topic?: string
+    topic?: string,
   ): Promise<string> {
     let userId = this.client.getUserId();
     if (!userId) {
       throw new Error(
-        `bug: there is no userId associated with the matrix client`
+        `bug: there is no userId associated with the matrix client`,
       );
     }
     let invite = invites.map((i) =>
-      i.startsWith('@') ? i : `@${i}:${userId!.split(':')[1]}`
+      i.startsWith('@') ? i : `@${i}:${userId!.split(':')[1]}`,
     );
     let { room_id: roomId } = await this.client.createRoom({
       preset: this.matrixSDK.Preset.PrivateChat,
@@ -216,23 +216,23 @@ export default class MatrixService extends Service {
     let userId = this.client.getUserId();
     if (!userId) {
       throw new Error(
-        `bug: there is no userId associated with the matrix client`
+        `bug: there is no userId associated with the matrix client`,
       );
     }
     await Promise.all(
       invite.map((i) =>
         this.client.invite(
           roomId,
-          i.startsWith('@') ? i : `@${i}:${userId!.split(':')[1]}`
-        )
-      )
+          i.startsWith('@') ? i : `@${i}:${userId!.split(':')[1]}`,
+        ),
+      ),
     );
   }
 
   async sendMessage(
     roomId: string,
     body: string | undefined,
-    card?: Card
+    card?: Card,
   ): Promise<void> {
     let html = body != null ? sanitizeHtml(marked(body)) : '';
     let serializedCard: LooseSingleCardDocument | undefined;
@@ -267,7 +267,7 @@ export default class MatrixService extends Service {
   async setObjective(roomId: string, ref: CardRef): Promise<void> {
     if (!this.allowedToSetObjective(roomId)) {
       throw new Error(
-        `The user '${this.client.getUserId()}' is not permitted to set an objective in room '${roomId}'`
+        `The user '${this.client.getUserId()}' is not permitted to set an objective in room '${roomId}'`,
       );
     }
     await this.client.sendEvent(roomId, 'm.room.message', {
@@ -302,7 +302,7 @@ export default class MatrixService extends Service {
           headers: {
             Authorization: `Bearer ${this.client.getAccessToken()}`,
           },
-        }
+        },
       );
       let { chunk, end } = await response.json();
       from = end;
@@ -322,7 +322,7 @@ export default class MatrixService extends Service {
         headers: {
           Authorization: `Bearer ${this.client.getAccessToken()}`,
         },
-      }
+      },
     );
     let { users } = await response.json();
     return users;
@@ -341,7 +341,7 @@ export default class MatrixService extends Service {
   private bindEventListeners() {
     if (!this.#eventBindings) {
       throw new Error(
-        `cannot bind to matrix events before the matrix SDK has loaded`
+        `cannot bind to matrix events before the matrix SDK has loaded`,
       );
     }
     for (let [event, handler] of this.#eventBindings) {
@@ -351,7 +351,7 @@ export default class MatrixService extends Service {
   private unbindEventListeners() {
     if (!this.#eventBindings) {
       throw new Error(
-        `cannot unbind to matrix events before the matrix SDK has loaded`
+        `cannot unbind to matrix events before the matrix SDK has loaded`,
       );
     }
     for (let [event, handler] of this.#eventBindings) {

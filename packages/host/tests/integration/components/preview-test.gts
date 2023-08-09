@@ -23,9 +23,9 @@ module('Integration | preview', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(async function () {
-    shimExternals();
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
+    shimExternals(loader);
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     this.owner.register('service:local-indexer', MockLocalIndexer);
@@ -49,7 +49,7 @@ module('Integration | preview', function (hooks) {
         <template>
           <Preview @card={{card}} />
         </template>
-      }
+      },
     );
     await waitFor('[data-test-firstName]'); // we need to wait for the card instance to load
     assert.dom('[data-test-firstName]').hasText('Mango');

@@ -25,7 +25,7 @@
 }
 
 .dialog-box__close {
-  --icon-bg: var(--boxel-dark);
+  --icon-color: var(--boxel-dark);
   border: none;
   background: none;
   font: var(--boxel-font-lg);
@@ -38,7 +38,7 @@
 }
 
 .dialog-box__close:hover {
-  color: var(--boxel-highlight);
+  --icon-color: var(--boxel-highlight);
 }
 
 .dialog-box__footer {
@@ -105,11 +105,11 @@
 }
 
 .isolated-card {
-  padding: var(--boxel-sp) var(--boxel-sp-xl);
+  padding: var(--boxel-sp-xl);
 }
 
 .edit-card.saved {
-  padding: var(--boxel-sp) var(--boxel-sp-xl);
+  padding: var(--boxel-sp-xl);
 }
 
 /* Default Card Component */
@@ -130,13 +130,13 @@
   display: block;
 }
 
-.icon-button {
-  --icon-bg: var(--boxel-teal);
+.remove-icon-button {
+  --icon-bg: var(--boxel-highlight);
   --icon-border: var(--icon-bg);
   --icon-color: var(--boxel-light);
 }
 
-.icon-button:hover {
+.remove-icon-button:hover {
   --icon-bg: var(--boxel-dark);
 }
 
@@ -149,6 +149,34 @@
 
 .contains-many-editor ul > li + li {
   margin-top: var(--boxel-sp);
+}
+
+.contains-many-editor .add-new {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--boxel-sp-xxxs);
+
+  background: var(--boxel-light-100);
+  box-sizing: border-box;
+  cursor: pointer;
+  width: 100%;
+  height: calc(var(--boxel-sp-xxxl) * var(--boxel-ratio));
+  border: 1px solid var(--boxel-form-control-border-color);
+  border-radius: var(--boxel-form-control-border-radius);
+  color: var(--boxel-teal);
+  font: var(--boxel-font-sm);
+  font-weight: 500;
+  letter-spacing: var(--boxel-lsp-xs);
+  transition: border-color var(--boxel-transition);
+  --icon-color: var(--boxel-teal);
+}
+
+.contains-many-editor__remove-icon {
+  --icon-color: var(--boxel-red);
+}
+.contains-many-editor__remove-icon:hover {
+  --icon-color: var(--boxel-error-200);
 }
 
 /* Plural Field */
@@ -303,10 +331,6 @@
   font: 700 var(--boxel-font);
 }
 
-.payment-method-card .boxel-field {
-  margin-top: var(--boxel-sp);
-}
-
 .vendor-card .boxel-field + .boxel-field {
   margin-top: var(--boxel-sp);
 }
@@ -356,7 +380,7 @@
   display: inline-block;
   position: sticky;
   left: 100%;
-  bottom: var(--boxel-sp);
+  bottom: var(--boxel-sp-xl);
   z-index: 1;
 }
 .grid-card {

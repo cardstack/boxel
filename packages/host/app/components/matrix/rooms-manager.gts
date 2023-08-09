@@ -224,7 +224,6 @@ export default class RoomsManager extends Component {
       .create-room__field {
         margin-top: var(--boxel-sp-sm);
       }
-
     </style>
   </template>
 
@@ -250,7 +249,7 @@ export default class RoomsManager extends Component {
     for (let roomId of this.matrixService.roomCards.keys()) {
       resources.set(
         roomId,
-        getRoomCard(this, () => roomId)
+        getRoomCard(this, () => roomId),
       );
     }
     return resources;
@@ -270,14 +269,14 @@ export default class RoomsManager extends Component {
         continue;
       }
       let joinedMember = resource.roomCard.joinedMembers.find(
-        (m) => this.matrixService.client.getUserId() === m.userId
+        (m) => this.matrixService.client.getUserId() === m.userId,
       );
       if (joinedMember) {
         rooms.joined.push({ room: resource.roomCard, member: joinedMember });
         continue;
       }
       let invitedMember = resource.roomCard.invitedMembers.find(
-        (m) => this.matrixService.client.getUserId() === m.userId
+        (m) => this.matrixService.client.getUserId() === m.userId,
       );
       if (invitedMember) {
         rooms.invited.push({ room: resource.roomCard, member: invitedMember });
@@ -291,7 +290,7 @@ export default class RoomsManager extends Component {
     return this.myRooms.joined.sort(
       (a, b) =>
         a.member.membershipDateTime.getTime() -
-        b.member.membershipDateTime.getTime()
+        b.member.membershipDateTime.getTime(),
     );
   }
 
@@ -300,7 +299,7 @@ export default class RoomsManager extends Component {
     return this.myRooms.invited.sort(
       (a, b) =>
         a.member.membershipDateTime.getTime() -
-        b.member.membershipDateTime.getTime()
+        b.member.membershipDateTime.getTime(),
     );
   }
 
@@ -378,7 +377,7 @@ export default class RoomsManager extends Component {
   private doCreateRoom = restartableTask(async () => {
     if (!this.newRoomName) {
       throw new Error(
-        `bug: should never get here, create button is disabled when there is no new room name`
+        `bug: should never get here, create button is disabled when there is no new room name`,
       );
     }
     try {

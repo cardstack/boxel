@@ -11,25 +11,30 @@ import {
   trimCardContainer,
   setupLocalIndexing,
 } from '../helpers';
+import { RenderingTestContext } from '@ember/test-helpers';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import { setupRenderingTest } from 'ember-qunit';
-import { shimExternals } from '@cardstack/host/lib/externals';
+
+let loader: Loader;
 
 module('Integration | card-prerender', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
+
   setupRenderingTest(hooks);
+
+  hooks.beforeEach(function () {
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+  });
+
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  hooks.beforeEach(async function () {
-    Loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
-    shimExternals();
+  hooks.beforeEach(async function (this: RenderingTestContext) {
     adapter = new TestRealmAdapter({
       'pet.gts': `
         import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
@@ -75,29 +80,30 @@ module('Integration | card-prerender', function (hooks) {
         },
       },
     });
-    realm = await TestRealm.createWithAdapter(adapter, this.owner);
+
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
   });
 
   test("can generate the card's pre-rendered HTML", async function (assert) {
     {
       let entry = await realm.searchIndex.searchEntry(
-        new URL(`${testRealmURL}Pet/mango`)
+        new URL(`${testRealmURL}Pet/mango`),
       );
       assert.strictEqual(
         trimCardContainer(entry!.html!),
         cleanWhiteSpace(`<h3> Mango </h3>`),
-        'the pre-rendered HTML is correct'
+        'the pre-rendered HTML is correct',
       );
     }
     {
       let entry = await realm.searchIndex.searchEntry(
-        new URL(`${testRealmURL}Pet/vangogh`)
+        new URL(`${testRealmURL}Pet/vangogh`),
       );
       assert.strictEqual(
         trimCardContainer(entry!.html!),
         cleanWhiteSpace(`<h3> Van Gogh </h3>`),
-        'the pre-rendered HTML is correct'
+        'the pre-rendered HTML is correct',
       );
     }
   });

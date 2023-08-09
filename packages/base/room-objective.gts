@@ -55,7 +55,7 @@ export class RoomObjectiveCard extends Card {
   @field usersThatFinishedTask = containsMany(RoomMemberCard, {
     computeVia: function (this: RoomObjectiveCard) {
       let desiredMessages = this.room.messages.filter((m) =>
-        m.message.match(/^[\W_b]*[Hh][Ee][Ll][Ll][Oo][\W_\b]*$/)
+        m.message.match(/^[\W_b]*[Hh][Ee][Ll][Ll][Oo][\W_\b]*$/),
       );
       return [...new Set(desiredMessages.map((m) => m.author))];
     },

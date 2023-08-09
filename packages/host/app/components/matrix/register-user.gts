@@ -113,7 +113,6 @@ export default class RegisterUser extends Component<Args> {
       .registration-field {
         margin-top: var(--boxel-sp-sm);
       }
-
     </style>
   </template>
 
@@ -200,11 +199,11 @@ export default class RegisterUser extends Component<Args> {
   private register() {
     if (!this.username) {
       throw new Error(
-        `bug: should never get here: register button disabled when no username`
+        `bug: should never get here: register button disabled when no username`,
       );
     } else if (!this.password) {
       throw new Error(
-        `bug: should never get here: register button disabled when no password`
+        `bug: should never get here: register button disabled when no password`,
       );
     } else {
       this.state = {
@@ -220,12 +219,12 @@ export default class RegisterUser extends Component<Args> {
   private sendToken() {
     if (this.state.type !== 'askForToken') {
       throw new Error(
-        `invalid state: cannot sendToken() in state ${this.state.type}`
+        `invalid state: cannot sendToken() in state ${this.state.type}`,
       );
     }
     if (!this.token) {
       throw new Error(
-        `bug: should never get here: next button disabled when no token`
+        `bug: should never get here: next button disabled when no token`,
       );
     } else {
       this.state = {
@@ -245,7 +244,7 @@ export default class RegisterUser extends Component<Args> {
   private doRegistrationFlow = restartableTask(async () => {
     if (this.state.type === 'initial') {
       throw new Error(
-        `invalid state: cannot doRegistrationFlow() in state ${this.state.type}`
+        `invalid state: cannot doRegistrationFlow() in state ${this.state.type}`,
       );
     }
     let auth: IAuthData | undefined;
@@ -273,15 +272,15 @@ export default class RegisterUser extends Component<Args> {
       ) {
         let remainingStages = difference(
           maybeRegistrationFlow.flows[0].stages,
-          maybeRegistrationFlow.completed ?? []
+          maybeRegistrationFlow.completed ?? [],
         );
         if (remainingStages.length === 0) {
           throw new Error(
             `Completed all registration stages but encountered unsuccessful registration response: ${JSON.stringify(
               e.data,
               null,
-              2
-            )}`
+              2,
+            )}`,
           );
         }
         let nextStage = remainingStages[0];
@@ -302,12 +301,12 @@ export default class RegisterUser extends Component<Args> {
 
   private nextStateFromResponse(
     nextStage: string,
-    registrationFlows: RegistrationFlows
+    registrationFlows: RegistrationFlows,
   ) {
     let { session } = registrationFlows;
     if (this.state.type === 'initial') {
       throw new Error(
-        `invalid state: cannot do nextStateFromResponse() in state ${this.state.type}`
+        `invalid state: cannot do nextStateFromResponse() in state ${this.state.type}`,
       );
     }
     switch (nextStage) {
@@ -331,7 +330,7 @@ export default class RegisterUser extends Component<Args> {
         return;
       default:
         throw new Error(
-          `Don't know to to handle registration stage ${nextStage}`
+          `Don't know to to handle registration stage ${nextStage}`,
         );
     }
   }
@@ -364,7 +363,7 @@ function isFlow(flow: any): flow is Flow {
 }
 
 function isRegistrationFlows(
-  registration: any
+  registration: any,
 ): registration is RegistrationFlows {
   if (
     typeof registration === 'object' &&

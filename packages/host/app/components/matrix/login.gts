@@ -66,7 +66,6 @@ export default class Login extends Component {
         position: absolute;
         right: var(--boxel-sp);
       }
-
     </style>
   </template>
 
@@ -99,18 +98,18 @@ export default class Login extends Component {
   private doLogin = restartableTask(async () => {
     if (!this.username) {
       throw new Error(
-        `bug: should never get here: login button disabled when no username`
+        `bug: should never get here: login button disabled when no username`,
       );
     } else if (!this.password) {
       throw new Error(
-        `bug: should never get here: login button disabled when no password`
+        `bug: should never get here: login button disabled when no password`,
       );
     }
     let auth: IAuthData | undefined;
     try {
       auth = await this.matrixService.client.loginWithPassword(
         this.username,
-        this.password
+        this.password,
       );
     } catch (e: any) {
       if (isMatrixError(e)) {
@@ -123,7 +122,7 @@ export default class Login extends Component {
       await this.matrixService.start(auth);
     } else {
       throw new Error(
-        `bug: should be impossible to get here - successful matrix login with no auth response`
+        `bug: should be impossible to get here - successful matrix login with no auth response`,
       );
     }
   });

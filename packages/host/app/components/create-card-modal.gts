@@ -68,7 +68,7 @@ export default class CreateCardModal extends Component {
   async create<T extends Card>(
     ref: CardRef,
     relativeTo: URL | undefined,
-    opts?: { doc?: LooseSingleCardDocument }
+    opts?: { doc?: LooseSingleCardDocument },
   ): Promise<undefined | T> {
     this.zIndex++;
     return (await this._create.perform(ref, relativeTo, opts)) as T | undefined;
@@ -78,7 +78,7 @@ export default class CreateCardModal extends Component {
     async <T extends Card>(
       ref: CardRef,
       relativeTo: URL | undefined,
-      opts?: { doc?: LooseSingleCardDocument }
+      opts?: { doc?: LooseSingleCardDocument },
     ) => {
       let doc: LooseSingleCardDocument = opts?.doc ?? {
         data: { meta: { adoptsFrom: ref } },
@@ -87,7 +87,7 @@ export default class CreateCardModal extends Component {
         card: await this.cardService.createFromSerialized(
           doc.data,
           doc,
-          relativeTo ?? this.cardService.defaultURL
+          relativeTo ?? this.cardService.defaultURL,
         ),
         deferred: new Deferred(),
       };
@@ -97,7 +97,7 @@ export default class CreateCardModal extends Component {
       } else {
         return undefined;
       }
-    }
+    },
   );
 
   @action save(card?: Card): void {

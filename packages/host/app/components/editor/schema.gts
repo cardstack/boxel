@@ -207,7 +207,6 @@ export default class Schema extends Component<Signature> {
       .add-new-field > * + * {
         margin-top: var(--boxel-sp);
       }
-
     </style>
   </template>
 
@@ -229,8 +228,8 @@ export default class Schema extends Component<Signature> {
   get realmPath() {
     return new RealmPaths(
       this.loaderService.loader.reverseResolution(
-        this.cardService.defaultURL.href
-      )
+        this.cardService.defaultURL.href,
+      ),
     );
   }
 
@@ -250,7 +249,7 @@ export default class Schema extends Component<Signature> {
     }
     if (
       this.cardType.type?.fields.find(
-        (field) => field.name === this.newFieldName
+        (field) => field.name === this.newFieldName,
       )
     ) {
       return `The field name "${this.newFieldName}" already exists, please choose a different name.`;
@@ -261,7 +260,7 @@ export default class Schema extends Component<Signature> {
   @action
   isOwnField(fieldName: string): boolean {
     return Object.keys(
-      Object.getOwnPropertyDescriptors(this.args.card.prototype)
+      Object.getOwnPropertyDescriptors(this.args.card.prototype),
     ).includes(fieldName);
   }
   @action
@@ -296,7 +295,7 @@ export default class Schema extends Component<Signature> {
   deleteField(fieldName: string) {
     this.args.moduleSyntax.removeField(
       { type: 'exportedName', name: this.ref.name },
-      fieldName
+      fieldName,
     );
     this.write.perform(this.args.moduleSyntax.code());
   }
@@ -336,7 +335,7 @@ export default class Schema extends Component<Signature> {
       { type: 'exportedName', name: this.ref.name },
       this.newFieldName,
       fieldEntry.ref,
-      this.newFieldType
+      this.newFieldType,
     );
     await this.write.perform(this.args.moduleSyntax.code());
   });
@@ -378,7 +377,7 @@ interface RadioInitializerSignature {
 class RadioInitializer extends Modifier<RadioInitializerSignature> {
   modify(
     element: HTMLInputElement,
-    [model, inputType]: RadioInitializerSignature['Args']['Positional']
+    [model, inputType]: RadioInitializerSignature['Args']['Positional'],
   ) {
     element.checked = model === inputType;
   }

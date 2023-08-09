@@ -8,7 +8,7 @@ import { FPS, Frame } from '@cardstack/boxel-motion/behaviors/base';
  */
 export default function instantaneousVelocity(
   index: number,
-  frames: Frame[]
+  frames: Frame[],
 ): number {
   let previous = index > 0 ? frames[index - 1]?.value : undefined;
   let current = frames[index]?.value;
@@ -20,7 +20,7 @@ export default function instantaneousVelocity(
 export function instantaneousVelocityForValues(
   previous: number | undefined,
   current: number | undefined,
-  next: number | undefined
+  next: number | undefined,
 ) {
   if (previous !== undefined && current !== undefined && next !== undefined) {
     let frameDuration = 1 / FPS;

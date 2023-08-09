@@ -17,7 +17,7 @@ export class WebMessageStream {
   async pull(controller: ReadableStreamDefaultController) {
     if (this.pendingRead) {
       throw new Error(
-        'bug: did not expect node to call read until after we push data from the prior read'
+        'bug: did not expect node to call read until after we push data from the prior read',
       );
     }
     if (this.pendingWrite) {
@@ -35,7 +35,7 @@ export class WebMessageStream {
   async write(chunk: string, _controller: WritableStreamDefaultController) {
     if (this.pendingWrite) {
       throw new Error(
-        'bug: did not expect node to call write until after we call the callback'
+        'bug: did not expect node to call write until after we call the callback',
       );
     }
     if (this.pendingRead) {

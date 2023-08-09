@@ -4,8 +4,16 @@ import { dirSync } from 'tmp';
 import { Loader, baseRealm } from '@cardstack/runtime-common';
 import { testRealm, createRealm } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
+import { shimExternals } from '../lib/externals';
 
 module('module-syntax', function () {
+  let loader = new Loader();
+  loader.addURLMapping(
+    new URL(baseRealm.url),
+    new URL('http://localhost:4201/base/')
+  );
+  shimExternals(loader);
+
   test('can get the code for a card', async function (assert) {
     let src = `
       import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
@@ -260,11 +268,7 @@ module('module-syntax', function () {
   });
 
   test('can add a linksTo field', async function (assert) {
-    Loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
-    let realm = await createRealm(dirSync().name, {
+    let realm = await createRealm(loader, dirSync().name, {
       'pet.gts': `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
@@ -317,8 +321,6 @@ module('module-syntax', function () {
       },
       'the field type is correct'
     );
-
-    Loader.destroy();
   });
 
   test('can add a linksTo field with the same type as its enclosing card', async function (assert) {

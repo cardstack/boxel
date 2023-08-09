@@ -23,6 +23,13 @@ export class Friend extends Card {
       return this.firstName;
     },
   });
+  @field description = contains(StringCard, {
+    computeVia: function (this: Friend) {
+      return `Friend`;
+    },
+  });
+  @field thumbnailURL = contains(StringCard);
+
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <div class='demo-card'>
