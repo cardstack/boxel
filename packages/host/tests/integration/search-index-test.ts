@@ -22,15 +22,12 @@ import {
 import { RenderingTestContext } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { Loader } from '@cardstack/runtime-common/loader';
+import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 
 const paths = new RealmPaths(testRealmURL);
 const testModuleRealm = 'http://localhost:4202/test/';
 
 let loader: Loader;
-
-function stripScopedCSSAttributes(htmlString: string) {
-  return htmlString.replace(/ data-scopedcss-[0-9a-f]{10}/g, '');
-}
 
 module('Integration | search-index', function (hooks) {
   setupRenderingTest(hooks);

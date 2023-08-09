@@ -27,6 +27,7 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
 import { shimExternals } from '../lib/externals';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
@@ -35,14 +36,6 @@ const testRealmHref = testRealmURL.href;
 const testRealm2Href = testRealm2URL.href;
 const distDir = resolve(join(__dirname, '..', '..', 'host', 'dist'));
 console.log(`using host dist dir: ${distDir}`);
-
-function stripScopedCSSGlimmerAttributes(htmlString: string) {
-  let attributeArray = `\\[(14|24),\\\\"data\\-scopedcss\\-[0-9a-f]{10}\\\\",\\\\"\\\\"\\]`;
-  let double = new RegExp(`\\[${attributeArray}\\]`, 'g');
-  let single = new RegExp(`${attributeArray},`, 'g');
-
-  return htmlString.replace(double, 'null').replace(single, '');
-}
 
 module('Realm Server', function (hooks) {
   let testRealmServer: Server;

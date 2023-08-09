@@ -14,13 +14,10 @@ import {
 } from './helpers';
 import isEqual from 'lodash/isEqual';
 import { shimExternals } from '../lib/externals';
+import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 
 function cleanWhiteSpace(text: string) {
   return text.replace(/\s+/g, ' ').trim();
-}
-
-function stripScopedCSSAttributes(htmlString: string) {
-  return htmlString.replace(/ data-scopedcss-[0-9a-f]{10}/g, '');
 }
 
 function trimCardContainer(text: string) {

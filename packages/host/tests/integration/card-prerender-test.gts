@@ -14,12 +14,9 @@ import {
 import { RenderingTestContext } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { setupRenderingTest } from 'ember-qunit';
+import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 
 let loader: Loader;
-
-function stripScopedCSSAttributes(htmlString: string) {
-  return htmlString.replace(/ data-scopedcss-[0-9a-f]{10}/g, '');
-}
 
 module('Integration | card-prerender', function (hooks) {
   let adapter: TestRealmAdapter;

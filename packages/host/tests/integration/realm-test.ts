@@ -21,16 +21,9 @@ import { shimExternals } from '@cardstack/host/lib/externals';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { RenderingTestContext } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 
 let loader: Loader;
-
-function stripScopedCSSGlimmerAttributes(htmlString: string) {
-  let attributeArray = `\\[(14|24),\\\\"data\\-scopedcss\\-[0-9a-f]{10}\\\\",\\\\"\\\\"\\]`;
-  let double = new RegExp(`\\[${attributeArray}\\]`, 'g');
-  let single = new RegExp(`${attributeArray},`, 'g');
-
-  return htmlString.replace(double, 'null').replace(single, '');
-}
 
 module('Integration | realm', function (hooks) {
   setupRenderingTest(hooks);
