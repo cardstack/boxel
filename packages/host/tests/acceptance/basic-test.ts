@@ -220,7 +220,7 @@ module('Acceptance | basic tests', function (hooks) {
       {
         color: 'rgb(0, 128, 0)',
       },
-      'expected scoped CSS to apply to card instance'
+      'expected scoped CSS to apply to card instance',
     );
   });
 
