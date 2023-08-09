@@ -121,8 +121,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return htmlSafe(`
       width: ${100 - invertedIndex * widthReductionPercent}%;
       z-index: ${itemsOnStackCount - invertedIndex};
-      padding-top: calc(${offsetPx}px * ${this.args.index});
-    `);
+      margin-top: calc(${offsetPx}px * ${this.args.index});
+    `); // using margin-top instead of padding-top to hide scrolled content from view
   }
 
   get isBuried() {
