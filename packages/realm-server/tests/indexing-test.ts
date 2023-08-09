@@ -19,6 +19,10 @@ function cleanWhiteSpace(text: string) {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+function stripScopedCSSAttributes(htmlString: string) {
+  return htmlString.replace(/ data-scopedcss-[0-9a-f]{10}/g, '');
+}
+
 function trimCardContainer(text: string) {
   return cleanWhiteSpace(text).replace(
     /<div .*? data-test-field-component-card> (.*?) <\/div> <\/div>/,
@@ -209,7 +213,7 @@ module('indexing', function (hooks) {
       new URL(`${testRealm}mango`)
     );
     assert.strictEqual(
-      trimCardContainer(entry!.html!),
+      trimCardContainer(stripScopedCSSAttributes(entry!.html!)),
       cleanWhiteSpace(`<h1> Mango </h1>`),
       'pre-rendered html is correct'
     );
@@ -237,8 +241,8 @@ module('indexing', function (hooks) {
             new URL(`${testRealm}vangogh`)
           )) ?? {};
         assert.strictEqual(
-          trimCardContainer(html!),
-          cleanWhiteSpace(`<h1> Van Gogh </h1>`)
+          trimCardContainer(stripScopedCSSAttributes(html!)),
+          cleanWhiteSpace(`<h1> Van Gogh </h1>`),
         );
       } else {
         assert.ok(

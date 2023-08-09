@@ -36,6 +36,14 @@ const testRealm2Href = testRealm2URL.href;
 const distDir = resolve(join(__dirname, '..', '..', 'host', 'dist'));
 console.log(`using host dist dir: ${distDir}`);
 
+function stripScopedCSSGlimmerAttributes(htmlString: string) {
+  let attributeArray = `\\[(14|24),\\\\"data\\-scopedcss\\-[0-9a-f]{10}\\\\",\\\\"\\\\"\\]`;
+  let double = new RegExp(`\\[${attributeArray}\\]`, 'g');
+  let single = new RegExp(`${attributeArray},`, 'g');
+
+  return htmlString.replace(double, 'null').replace(single, '');
+}
+
 module('Realm Server', function (hooks) {
   let testRealmServer: Server;
   let testRealmServer2: Server;
@@ -366,7 +374,9 @@ module('Realm Server', function (hooks) {
     let moduleAbsolutePath = resolve(join(__dirname, '..', 'person.gts'));
 
     // Remove platform-dependent id, from https://github.com/emberjs/babel-plugin-ember-template-compilation/blob/d67cca121cfb3bbf5327682b17ed3f2d5a5af528/__tests__/tests.ts#LL1430C1-L1431C1
-    body = body.replace(/"id":\s"[^"]+"/, '"id": "<id>"');
+    body = stripScopedCSSGlimmerAttributes(
+      body.replace(/"id":\s"[^"]+"/, '"id": "<id>"'),
+    );
 
     assert.codeEqual(
       body,
