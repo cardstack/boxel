@@ -404,7 +404,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             </Tooltip>
           </:actions>
           <:detail>
-            <div class='save-indicator' data-test-last-saved={{this.lastSaved}}>
+            <div class='save-indicator'>
               {{#if this.isSaving}}
                 Saving…
               {{else if this.lastSavedMsg}}
