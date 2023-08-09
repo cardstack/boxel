@@ -17,6 +17,10 @@ import { setupRenderingTest } from 'ember-qunit';
 
 let loader: Loader;
 
+function stripScopedCSSAttributes(htmlString: string) {
+  return htmlString.replace(/ data-scopedcss-[0-9a-f]{10}/g, '');
+}
+
 module('Integration | card-prerender', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
@@ -91,7 +95,7 @@ module('Integration | card-prerender', function (hooks) {
         new URL(`${testRealmURL}Pet/mango`),
       );
       assert.strictEqual(
-        trimCardContainer(entry!.html!),
+        trimCardContainer(stripScopedCSSAttributes(entry!.html!)),
         cleanWhiteSpace(`<h3> Mango </h3>`),
         'the pre-rendered HTML is correct',
       );
@@ -101,7 +105,7 @@ module('Integration | card-prerender', function (hooks) {
         new URL(`${testRealmURL}Pet/vangogh`),
       );
       assert.strictEqual(
-        trimCardContainer(entry!.html!),
+        trimCardContainer(stripScopedCSSAttributes(entry!.html!)),
         cleanWhiteSpace(`<h3> Van Gogh </h3>`),
         'the pre-rendered HTML is correct',
       );
