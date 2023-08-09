@@ -191,10 +191,10 @@ class MockMessageService extends Service {
 }
 
 export function setupOnSave(hooks: NestedHooks) {
-  hooks.beforeEach(function () {
+  hooks.beforeEach<AutoSaveTestContext>(function () {
     let cardService = this.owner.lookup('service:card-service') as CardService;
-    (this as AutoSaveTestContext).onSave = cardService.onSave.bind(cardService);
-    (this as AutoSaveTestContext).unregisterOnSave =
+    this.onSave = cardService.onSave.bind(cardService);
+    this.unregisterOnSave =
       cardService.unregisterSaveSubscriber.bind(cardService);
   });
 }
