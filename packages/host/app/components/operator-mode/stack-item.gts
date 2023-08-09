@@ -55,6 +55,7 @@ interface Signature {
     edit: (item: StackItem) => void;
     save: (item: StackItem, dismiss: boolean) => void;
     onSelectedCards: (selectedCards: Card[], stackItem: StackItem) => void;
+    setupStackItem: (stackItem: StackItem, clearSelections: () => void) => void;
   };
 }
 
@@ -89,6 +90,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     super(owner, args);
     this.subscribeToCard.perform();
     this.subscribedCard = this.card;
+    this.args.setupStackItem(this.args.item, this.clearSelections);
   }
 
   get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
@@ -166,6 +168,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this,
     async () => await this.cardService.getRealmInfo(this.card),
   );
+
+  clearSelections = () => {
+    this.selectedCards.splice(0, this.selectedCards.length);
+  };
 
   @cached
   get iconURL() {

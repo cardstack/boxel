@@ -20,6 +20,8 @@ import type {
   SerializeOpts,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type * as CardsGridModule from 'https://cardstack.com/base/cards-grid';
+import type { CardsGrid } from 'https://cardstack.com/base/cards-grid';
 import ENV from '@cardstack/host/config/environment';
 
 export type CardSaveSubscriber = (json: SingleCardDocument) => void;
@@ -32,6 +34,10 @@ export default class CardService extends Service {
   private apiModule = importResource(
     this,
     () => 'https://cardstack.com/base/card-api',
+  );
+  private cardGridModule = importResource(
+    this,
+    () => 'https://cardstack.com/base/cards-grid',
   );
 
   private get api() {
@@ -48,8 +54,23 @@ export default class CardService extends Service {
     return this.apiModule.module as typeof CardAPI;
   }
 
+  private get CardsGrid() {
+    if (this.cardGridModule.error) {
+      throw new Error(
+        `Error loading CardsGrid: ${JSON.stringify(this.cardGridModule.error)}`,
+      );
+    }
+    if (!this.cardGridModule.module) {
+      throw new Error(
+        `bug: CardsGrid has not loaded yet--make sure to await this.loaded before using the this.CardsGrid`,
+      );
+    }
+    let module = this.cardGridModule.module as typeof CardsGridModule;
+    return module.CardsGrid;
+  }
+
   get ready() {
-    return this.apiModule.loaded;
+    return Promise.all([this.apiModule.loaded, this.cardGridModule.loaded]);
   }
 
   // Note that this should be the unresolved URL and that we need to rely on our
@@ -134,7 +155,6 @@ export default class CardService extends Service {
   async saveModel(card: Card): Promise<Card> {
     await this.apiModule.loaded;
     let doc = await this.serializeCard(card, {
-      includeComputeds: true,
       // for a brand new card that has no id yet, we don't know what we are
       // relativeTo because its up to the realm server to assign us an ID, so
       // URL's should be absolute
@@ -162,7 +182,7 @@ export default class CardService extends Service {
     doc: LooseSingleCardDocument,
     url?: URL,
   ): Promise<SingleCardDocument> {
-    let isSaved = !!url;
+    let isSaved = !!doc.data.id;
     url = url ?? this.defaultURL;
     let json = await this.fetchJSON(url, {
       method: isSaved ? 'PATCH' : 'POST',
@@ -175,6 +195,28 @@ export default class CardService extends Service {
       );
     }
     return json;
+  }
+
+  async copyCard(source: Card, destinationRealm: URL): Promise<Card> {
+    // TODO - THURSDAY issues with absolute URL's realms that are colocated on the same
+    // server are getting relative URL's. let's force our relative URL logic not
+    // to use leading '/'. this should be a signal that we are dealing with a
+    // different realm instead.
+    let serialized = await this.serializeCard(source, {
+      maybeRelativeURL: null, // forces URL's to be absolute.
+    });
+    delete serialized.data.id;
+    let json = await this.saveCardDocument(serialized, destinationRealm);
+    let result = (await this.api.createFromSerialized(
+      json.data,
+      json,
+      new URL(json.data.id),
+      this.loaderService.loader,
+    )) as Card;
+    if (this.subscriber) {
+      this.subscriber(json);
+    }
+    return result;
   }
 
   async search(query: Query, realmURL: URL): Promise<Card[]> {
@@ -209,6 +251,14 @@ export default class CardService extends Service {
 
   isCard(maybeCard: any): maybeCard is Card {
     return this.api.isCard(maybeCard);
+  }
+
+  isIndexCard(maybeIndexCard: any): maybeIndexCard is CardsGrid {
+    if (!(maybeIndexCard instanceof this.CardsGrid)) {
+      return false;
+    }
+    let realmURL = maybeIndexCard.realmURL;
+    return maybeIndexCard.id === `${realmURL}index`;
   }
 
   async getRealmInfo(card: Card): Promise<RealmInfo | undefined> {

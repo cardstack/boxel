@@ -7,7 +7,7 @@ import { trackedFunction } from 'ember-resources/util/function';
 import CardCatalogModal from '../card-catalog-modal';
 import type CardService from '../../services/card-service';
 import get from 'lodash/get';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { eq, gt, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { Modal, IconButton } from '@cardstack/boxel-ui';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import SearchSheet, { SearchSheetMode } from '../search-sheet';
@@ -42,7 +42,10 @@ import ChatSidebar from '../matrix/chat-sidebar';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 
-let waiter = buildWaiter('operator-mode-container:write-waiter');
+const waiter = buildWaiter('operator-mode-container:write-waiter');
+
+const LEFT = 0;
+const RIGHT = 1;
 
 interface Signature {
   Args: {
@@ -83,8 +86,13 @@ enum SearchSheetTrigger {
 
 interface CopyButtonState {
   direction: 'left' | 'right';
-  numberOfCards: number;
+  sources: Card[];
+  destinationItem: CardStackItem;
+  sourceItem: CardStackItem;
 }
+
+const cardSelections = new TrackedWeakMap<StackItem, TrackedArray<Card>>();
+const clearSelections = new WeakMap<StackItem, () => void>();
 
 export default class OperatorModeContainer extends Component<Signature> {
   @service declare loaderService: LoaderService;
@@ -94,12 +102,12 @@ export default class OperatorModeContainer extends Component<Signature> {
   @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
   @tracked searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked isChatVisible = false;
-  private cardSelections = new TrackedWeakMap<StackItem, TrackedArray<Card>>();
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
 
     (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
+    this.loadCardService.perform();
     registerDestructor(this, () => {
       delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
       this.operatorModeStateService.clearStacks();
@@ -162,10 +170,10 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   @action
   onSelectedCards(selectedCards: Card[], stackItem: StackItem) {
-    let selected = this.cardSelections.get(stackItem);
+    let selected = cardSelections.get(stackItem);
     if (!selected) {
       selected = new TrackedArray([]);
-      this.cardSelections.set(stackItem, selected);
+      cardSelections.set(stackItem, selected);
     }
     selected.splice(0, selected.length, ...selectedCards);
   }
@@ -173,33 +181,90 @@ export default class OperatorModeContainer extends Component<Signature> {
   get selectedCards() {
     return this.operatorModeStateService
       .topMostStackItems()
-      .map((i) => this.cardSelections.get(i) ?? []);
+      .map((i) => cardSelections.get(i) ?? []);
   }
 
-  get copyButtonState(): CopyButtonState | undefined {
-    // TODO need to consider whether receiving end is an index card
-    // and/or sending end is a individual card
-
-    let stackWithCards: number | undefined;
-    for (let [index, stackSelections] of this.selectedCards.entries()) {
-      // both stacks have selections--in this case don't show a copy button
-      if (stackSelections.length > 0 && stackWithCards != null) {
-        return;
-      }
-      if (stackSelections.length > 0) {
-        stackWithCards = index;
-      }
-    }
-
-    // no stacks have a selection
-    if (stackWithCards == null) {
+  get copyState(): CopyButtonState | undefined {
+    // Need to have 2 stacks in order for a copy button to exist
+    if (this.operatorModeStateService.state.stacks.length < 2) {
       return;
     }
 
-    return {
-      direction: stackWithCards === 0 ? 'right' : 'left', // assume we never have more than 2 stacks
-      numberOfCards: this.selectedCards[stackWithCards].length,
-    };
+    let topMostStackItems = this.operatorModeStateService.topMostStackItems();
+    let indexCardIndicies = topMostStackItems.reduce(
+      (indexCards, item, index) => {
+        if (item.type === 'card' && this.cardService.isIndexCard(item.card)) {
+          return [...indexCards, index];
+        }
+        return indexCards;
+      },
+      [] as number[],
+    );
+
+    switch (indexCardIndicies.length) {
+      case 0:
+        // at least one of the top most cards needs to be an index card
+        return;
+
+      case 1:
+        // if only one of the top most cards are index cards, and the index card
+        // has no selections, then the copy state reflects the copy of the top most
+        // card to the index card
+        if (this.selectedCards[indexCardIndicies[0]].length) {
+          // the index card should be the destination card--if it has any
+          // selections then don't show the copy button
+          return;
+        }
+        let destinationItem = topMostStackItems[
+          indexCardIndicies[0]
+        ] as CardStackItem; // the index card is never a contained card
+        let sourceItem =
+          topMostStackItems[indexCardIndicies[0] === LEFT ? RIGHT : LEFT];
+        if (sourceItem.type === 'contained') {
+          return;
+        }
+        return {
+          direction: indexCardIndicies[0] === LEFT ? 'left' : 'right',
+          sources: [sourceItem.card],
+          destinationItem,
+          sourceItem,
+        };
+
+      case 2: {
+        // if both the top most cards are index cards, then we need to analyze
+        // the selected cards from both stacks in order to determine copy button state
+        let sourceStack: number | undefined;
+        for (let [index, stackSelections] of this.selectedCards.entries()) {
+          // both stacks have selections--in this case don't show a copy button
+          if (stackSelections.length > 0 && sourceStack != null) {
+            return;
+          }
+          if (stackSelections.length > 0) {
+            sourceStack = index;
+          }
+        }
+        // no stacks have a selection
+        if (sourceStack == null) {
+          return;
+        }
+        return {
+          direction: sourceStack === LEFT ? 'right' : 'left',
+          sources: this.selectedCards[sourceStack],
+          sourceItem:
+            sourceStack === LEFT
+              ? (topMostStackItems[LEFT] as CardStackItem)
+              : (topMostStackItems[RIGHT] as CardStackItem), // the index card is never a contained card
+          destinationItem:
+            sourceStack === LEFT
+              ? (topMostStackItems[RIGHT] as CardStackItem)
+              : (topMostStackItems[LEFT] as CardStackItem), // the index card is never a contained card
+        };
+      }
+      default:
+        throw new Error(
+          `Don't know how to handle copy state for ${this.operatorModeStateService.state.stacks.length} stacks`,
+        );
+    }
   }
 
   @action onCancelSearchSheet() {
@@ -321,6 +386,41 @@ export default class OperatorModeContainer extends Component<Signature> {
         await this.cardService.flushLogs();
       }
       return savedCard;
+    } finally {
+      waiter.endAsync(token);
+    }
+  });
+
+  private copy = restartableTask(async () => {
+    if (!this.copyState) {
+      return;
+    }
+    let { copyState } = this;
+    let { destinationItem, sourceItem } = copyState;
+    if (!this.cardService.isIndexCard(destinationItem.card)) {
+      throw new Error(`bug: this should never happen`);
+    }
+    let indexCard = destinationItem.card;
+    let token = waiter.beginAsync();
+    try {
+      await Promise.all(
+        copyState.sources.map((card) =>
+          this.cardService.copyCard(card, new URL(indexCard.realmURL)),
+        ),
+      );
+      let clearSelection = clearSelections.get(sourceItem);
+      if (typeof clearSelection === 'function') {
+        clearSelection();
+      }
+      let refresh = (globalThis as any).__cardsGrids.get(indexCard);
+      if (typeof refresh === 'function') {
+        refresh();
+      }
+      // only do this in test env--this makes sure that we also wait for any
+      // interior card instance async as part of our ember-test-waiters
+      if (isTesting()) {
+        await this.cardService.flushLogs();
+      }
     } finally {
       waiter.endAsync(token);
     }
@@ -481,6 +581,10 @@ export default class OperatorModeContainer extends Component<Signature> {
     return result;
   });
 
+  private loadCardService = task(this, async () => {
+    await this.cardService.ready;
+  });
+
   get backgroundImageURLs() {
     return (
       this.fetchBackgroundImageURLs.value?.map((u) => (u ? u : undefined)) ?? []
@@ -594,6 +698,10 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.isChatVisible ? 'chat-open' : 'chat-closed';
   }
 
+  setupStackItem = (item: StackItem, doClearSelections: () => void) => {
+    clearSelections.set(item, doClearSelections);
+  };
+
   <template>
     <Modal
       class='operator-mode'
@@ -605,17 +713,6 @@ export default class OperatorModeContainer extends Component<Signature> {
     >
 
       <CardCatalogModal />
-
-      <div>
-        {{#if this.copyButtonState}}
-          COPY BUTTON - direction:
-          {{this.copyButtonState.direction}}
-          num cards:
-          {{this.copyButtonState.numberOfCards}}
-        {{else}}
-          NO COPY BUTTON
-        {{/if}}
-      </div>
 
       <div class='operator-mode__with-chat {{this.chatVisibilityClass}}'>
         <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
@@ -649,8 +746,34 @@ export default class OperatorModeContainer extends Component<Signature> {
                 @edit={{this.edit}}
                 @onSelectedCards={{this.onSelectedCards}}
                 @save={{perform this.save}}
+                @setupStackItem={{this.setupStackItem}}
               />
             {{/each}}
+
+            {{#if (and this.loadCardService.isIdle (gt this.stacks.length 1))}}
+              {{#if this.copyState}}
+                <button
+                  class='copy-button'
+                  {{on 'click' (fn (perform this.copy))}}
+                  data-test-copy-button
+                  disabled={{this.copy.isRunning}}
+                >
+                  {{#if (eq this.copyState.direction 'left')}}
+                    [LEFT ARROW]
+                  {{/if}}
+                  Copy
+                  {{this.copyState.sources.length}}
+                  {{#if (gt this.copyState.sources.length 1)}}
+                    Cards
+                  {{else}}
+                    Card
+                  {{/if}}
+                  {{#if (eq this.copyState.direction 'right')}}
+                    [RIGHT ARROW]
+                  {{/if}}
+                </button>
+              {{/if}}
+            {{/if}}
           {{/if}}
 
           {{#if this.canCreateNeighborStack}}

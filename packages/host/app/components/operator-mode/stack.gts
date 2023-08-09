@@ -19,6 +19,7 @@ interface Signature {
     edit: (stackItem: StackItem) => void;
     save: (stackItem: StackItem, dismiss: boolean) => void;
     onSelectedCards: (selectedCards: Card[], stackItem: StackItem) => void;
+    setupStackItem: (stackItem: StackItem, clearSelections: () => void) => void;
   };
   Blocks: {};
 }
@@ -53,6 +54,7 @@ export default class OperatorModeStack extends Component<Signature> {
             @edit={{@edit}}
             @save={{@save}}
             @onSelectedCards={{@onSelectedCards}}
+            @setupStackItem={{@setupStackItem}}
           />
         {{/each}}
       </div>

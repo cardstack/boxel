@@ -18,8 +18,13 @@ import {
   baseRealm,
   cardTypeDisplayName,
 } from '@cardstack/runtime-common';
+import { tracked } from '@glimmer/tracking';
 import { type CatalogEntry } from './catalog-entry';
 import StringCard from './string';
+
+// We pass a handle on the search refresh so that the outside
+// can trigger timely refreshes of this grid
+(globalThis as any).__cardsGrids = new WeakMap<Isolated, () => void>();
 
 class Isolated extends Component<typeof CardsGrid> {
   <template>
@@ -83,36 +88,51 @@ class Isolated extends Component<typeof CardsGrid> {
     </div>
   </template>
 
-  request = getCards(
-    {
-      filter: {
-        not: {
-          any: [
-            { type: catalogEntryRef },
-            {
-              type: {
-                module: `${baseRealm.url}cards-grid`,
-                name: 'CardsGrid',
+  @tracked
+  private declare request: { instances: Card[]; isLoading: boolean };
+
+  constructor(owner: unknown, args: any) {
+    super(owner, args);
+    this.refresh();
+
+    (globalThis as any).__cardsGrids.set(
+      this.args.model,
+      this.refresh.bind(this),
+    );
+  }
+
+  private refresh() {
+    this.request = getCards(
+      {
+        filter: {
+          not: {
+            any: [
+              { type: catalogEntryRef },
+              {
+                type: {
+                  module: `${baseRealm.url}cards-grid`,
+                  name: 'CardsGrid',
+                },
               },
-            },
-          ],
-        },
-      },
-      // sorting by title so that we can maintain stability in
-      // the ordering of the search results (server sorts results
-      // by order indexed by default)
-      sort: [
-        {
-          on: {
-            module: `${baseRealm.url}card-api`,
-            name: 'Card',
+            ],
           },
-          by: 'title',
         },
-      ],
-    },
-    this.args.model.realmURL ? [this.args.model.realmURL] : undefined,
-  );
+        // sorting by title so that we can maintain stability in
+        // the ordering of the search results (server sorts results
+        // by order indexed by default)
+        sort: [
+          {
+            on: {
+              module: `${baseRealm.url}card-api`,
+              name: 'Card',
+            },
+            by: 'title',
+          },
+        ],
+      },
+      this.args.model.realmURL ? [this.args.model.realmURL] : undefined,
+    );
+  }
 
   @action
   createNew() {
