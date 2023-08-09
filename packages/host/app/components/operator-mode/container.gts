@@ -39,11 +39,9 @@ import OperatorModeStack from './stack';
 import type MatrixService from '../../services/matrix-service';
 import ChatSidebar from '../matrix/chat-sidebar';
 import { buildWaiter } from '@ember/test-waiters';
-import ENV from '@cardstack/host/config/environment';
+import { isTesting } from '@embroider/macros';
 
 let waiter = buildWaiter('operator-mode-container:write-waiter');
-
-const { environment } = ENV;
 
 interface Signature {
   Args: {
@@ -270,7 +268,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       let savedCard = await this.cardService.saveModel(card);
       // only do this in test env--this makes sure that we also wait for any
       // interior card instance async as part of our ember-test-waiters
-      if (environment === 'test') {
+      if (isTesting()) {
         await this.cardService.flushLogs();
       }
       return savedCard;

@@ -15,6 +15,7 @@ import {
   setupOnSave,
   TestRealmAdapter,
   TestRealm,
+  type AutoSaveTestContext,
 } from '../../helpers';
 import {
   waitFor,
@@ -27,14 +28,12 @@ import {
 import type LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import percySnapshot from '@percy/ember';
-import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 const realmName = 'Operator Mode Workspace';
 let setCardInOperatorModeState: (card: string) => Promise<void>;
 
 let loader: Loader;
-let onSave: (subcriber: CardSaveSubscriber) => void;
 
 module('Integration | operator-mode', function (hooks) {
   let adapter: TestRealmAdapter;
@@ -47,12 +46,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   setupLocalIndexing(hooks);
-  setupOnSave(
-    hooks,
-    // you can use the unregisterSaveSubscriber to turn off the onSave
-    // as well for more precise control of when the onSave callback is triggered
-    (_onSave, _unregisterSaveSubscriber) => (onSave = _onSave),
-  );
+  setupOnSave(hooks);
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
@@ -585,7 +579,8 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-stack-card-index="1"]').includesText('Mango');
   });
 
-  test('it auto saves the field value', async function (assert) {
+  test<AutoSaveTestContext>('it auto saves the field value', async function (assert) {
+    assert.expect(3);
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
 
     await renderComponent(
@@ -598,7 +593,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     await waitFor('[data-test-person]');
     await click('[data-test-edit-button]');
-    onSave((json) => {
+    this.onSave((json) => {
       assert.strictEqual(json.data.attributes?.firstName, 'EditedName');
     });
     await fillIn('[data-test-boxel-input]', 'EditedName');
@@ -609,7 +604,8 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-first-letter-of-the-name]').hasText('E');
   });
 
-  test('it auto saves changes made to nested contains card', async function (assert) {
+  test<AutoSaveTestContext>('it auto saves changes made to nested contains card', async function (assert) {
+    assert.expect(2);
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -627,7 +623,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-stack-card-index="2"]');
     await click(`[data-test-stack-card-index="2"] [data-test-edit-button]`);
 
-    onSave((json) => {
+    this.onSave((json) => {
       assert.strictEqual(
         json.data.attributes?.address?.shippingInfo?.preferredCarrier,
         'FedEx',
@@ -637,7 +633,7 @@ module('Integration | operator-mode', function (hooks) {
     await fillIn(`[data-test-field="preferredCarrier"] input`, `FedEx`);
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await waitFor('[data-test-preferredcarrier]');
-    assert.dom('data-test-preferredcarrier="FedEx"');
+    assert.dom('[data-test-preferredcarrier="FedEx"]').exists();
   });
 
   test('displays add card button if user closes the only card in the stack and opens a card from card chooser', async function (assert) {
@@ -777,7 +773,8 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-stack-card-index="1"]`).doesNotExist();
   });
 
-  test('create new card editor opens in the stack at each nesting level', async function (assert) {
+  test<AutoSaveTestContext>('create new card editor opens in the stack at each nesting level', async function (assert) {
+    assert.expect(11);
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -866,7 +863,7 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
       .containsText('Mad As a Hatter by Alice Enwunder');
 
-    onSave((json) => {
+    this.onSave((json) => {
       assert.strictEqual(
         json.data.attributes!.socialBlurb,
         `Everyone knows that Alice ran the show in the Brady household. But when Alice’s past comes to light, things get rather topsy turvy…`,
@@ -959,7 +956,8 @@ module('Integration | operator-mode', function (hooks) {
       );
   });
 
-  test('can edit a nested contained card field', async function (assert) {
+  test<AutoSaveTestContext>('can edit a nested contained card field', async function (assert) {
+    assert.expect(6);
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -995,7 +993,7 @@ module('Integration | operator-mode', function (hooks) {
       .exists('Shipping Info contained card header in edit mode');
 
     await fillIn(`[data-test-field="preferredCarrier"] input`, `FedEx`);
-    onSave((json) => {
+    this.onSave((json) => {
       assert.strictEqual(
         json.data.attributes?.address.shippingInfo.preferredCarrier,
         'FedEx',

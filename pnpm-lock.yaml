@@ -904,6 +904,9 @@ importers:
       '@embroider/core':
         specifier: ^3.0.1
         version: 3.0.1(@glint/template@1.0.2)
+      '@embroider/macros':
+        specifier: ^1.10.0
+        version: 1.13.0(@glint/template@1.0.2)
       '@embroider/webpack':
         specifier: ^3.0.0
         version: 3.0.0(@embroider/core@3.0.1)(webpack@5.84.0)
@@ -4422,7 +4425,7 @@ packages:
       ember-source: '>=3.8.0'
     dependencies:
       '@ember/test-waiters': 3.0.2
-      '@embroider/macros': 1.11.0(@glint/template@1.0.2)
+      '@embroider/macros': 1.13.0(@glint/template@1.0.2)
       '@embroider/util': 1.11.1(@glint/environment-ember-loose@1.0.2)(@glint/template@1.0.2)(ember-source@3.27.5)
       broccoli-debug: 0.6.5
       broccoli-funnel: 3.0.8
@@ -4444,7 +4447,7 @@ packages:
       ember-source: '>=3.8.0'
     dependencies:
       '@ember/test-waiters': 3.0.2
-      '@embroider/macros': 1.10.0
+      '@embroider/macros': 1.13.0(@glint/template@1.0.2)
       '@embroider/util': 1.11.1(@glint/environment-ember-loose@1.0.2)(@glint/template@1.0.2)(ember-source@4.12.0)
       broccoli-debug: 0.6.5
       broccoli-funnel: 3.0.8
@@ -4489,7 +4492,7 @@ packages:
     resolution: {integrity: sha512-pDgpdTsC9i/+5hHziygK5VIZc64OG8bupiqL0OxJp+bnINURalHMbu5B3Gikq/a0QIvMPzDFWzKxIZCBpeiHkg==}
     engines: {node: 12.* || 14.* || >= 16}
     dependencies:
-      '@embroider/shared-internals': 2.1.0
+      '@embroider/shared-internals': 2.3.0
       broccoli-funnel: 3.0.8
       semver: 7.3.8
     transitivePeerDependencies:
@@ -4627,6 +4630,7 @@ packages:
       semver: 7.3.8
     transitivePeerDependencies:
       - supports-color
+    dev: false
 
   /@embroider/macros@1.11.0(@glint/template@1.0.2):
     resolution: {integrity: sha512-P/WSB+PqKSja5qXjYvhLyUM0ivcDoI9kkqs+R0GNujfVhS0EIIAMHfD9uHDBbhzFit39pT0QJqgcXGE2rprCPA==}
@@ -4648,6 +4652,7 @@ packages:
       semver: 7.3.8
     transitivePeerDependencies:
       - supports-color
+    dev: true
 
   /@embroider/macros@1.13.0(@glint/template@1.0.2):
     resolution: {integrity: sha512-V89lvlNPIjcvbuew+FLxcCcgdPO0cZrgHHmX6dHO3TpiweC5G6DN4/QogvdnSprPvWOMQS9u3bSFmR7DBkmSgg==}
@@ -4708,6 +4713,7 @@ packages:
       resolve-package-path: 4.0.3
       semver: 7.3.8
       typescript-memoize: 1.1.1
+    dev: false
 
   /@embroider/shared-internals@2.1.0:
     resolution: {integrity: sha512-9hKbMxW7wDWt1BqdpnLZ5W6ETrmAg9HnfBwf1IDkT+8he5nOdTD0PNtruMjm7V0Tb9p9hI7O+UXSa8ZnX1BQXg==}
@@ -4721,6 +4727,7 @@ packages:
       resolve-package-path: 4.0.3
       semver: 7.3.8
       typescript-memoize: 1.1.1
+    dev: true
 
   /@embroider/shared-internals@2.3.0:
     resolution: {integrity: sha512-5h7hUcci10ixXecJj/peqNQJO8kWe4b4tRx7mZjf7I6+P6zDcdVk3QxQZ+/gwrG6cbEfpLzEGKIEiLjZvPtqIA==}
@@ -4801,7 +4808,7 @@ packages:
       '@glint/template':
         optional: true
     dependencies:
-      '@embroider/macros': 1.11.0(@glint/template@1.0.2)
+      '@embroider/macros': 1.13.0(@glint/template@1.0.2)
       '@glint/environment-ember-loose': 1.0.2(@glimmer/component@1.1.2)(@glint/template@1.0.2)(ember-cli-htmlbars@6.2.0)(ember-modifier@4.1.0)
       '@glint/template': 1.0.2
       broccoli-funnel: 3.0.8
@@ -12139,7 +12146,7 @@ packages:
       '@babel/plugin-proposal-class-properties': 7.18.6(@babel/core@7.20.2)
       '@babel/plugin-proposal-decorators': 7.20.2(@babel/core@7.20.2)
       '@babel/preset-env': 7.20.2(@babel/core@7.20.2)
-      '@embroider/macros': 1.11.0(@glint/template@1.0.2)
+      '@embroider/macros': 1.13.0(@glint/template@1.0.2)
       '@embroider/shared-internals': 1.8.3
       babel-loader: 8.3.0(@babel/core@7.20.2)(webpack@5.75.0)
       babel-plugin-ember-modules-api-polyfill: 3.5.0
@@ -12178,8 +12185,8 @@ packages:
       '@babel/plugin-proposal-class-properties': 7.18.6(@babel/core@7.21.0)
       '@babel/plugin-proposal-decorators': 7.21.0(@babel/core@7.21.0)
       '@babel/preset-env': 7.20.2(@babel/core@7.21.0)
-      '@embroider/macros': 1.11.0(@glint/template@1.0.2)
-      '@embroider/shared-internals': 2.0.0
+      '@embroider/macros': 1.13.0(@glint/template@1.0.2)
+      '@embroider/shared-internals': 2.3.0
       babel-loader: 8.3.0(@babel/core@7.21.0)(webpack@5.75.0)
       babel-plugin-ember-modules-api-polyfill: 3.5.0
       babel-plugin-ember-template-compilation: 2.0.3
@@ -12219,8 +12226,8 @@ packages:
       '@babel/plugin-proposal-class-properties': 7.18.6(@babel/core@7.21.0)
       '@babel/plugin-proposal-decorators': 7.21.0(@babel/core@7.21.0)
       '@babel/preset-env': 7.20.2(@babel/core@7.21.0)
-      '@embroider/macros': 1.11.0(@glint/template@1.0.2)
-      '@embroider/shared-internals': 2.0.0
+      '@embroider/macros': 1.13.0(@glint/template@1.0.2)
+      '@embroider/shared-internals': 2.3.0
       babel-loader: 8.3.0(@babel/core@7.21.0)(webpack@5.84.0)
       babel-plugin-ember-modules-api-polyfill: 3.5.0
       babel-plugin-ember-template-compilation: 2.0.3
@@ -12256,7 +12263,7 @@ packages:
     engines: {node: 16.* || >= 18}
     dependencies:
       '@ember/render-modifiers': 2.0.5(@babel/core@7.20.2)(@glint/template@1.0.2)(ember-source@4.12.0)
-      '@embroider/macros': 1.11.0(@glint/template@1.0.2)
+      '@embroider/macros': 1.13.0(@glint/template@1.0.2)
       '@embroider/util': 1.11.1(@glint/environment-ember-loose@1.0.2)(@glint/template@1.0.2)(ember-source@4.12.0)
       '@glimmer/component': 1.1.2(@babel/core@7.20.2)
       '@glimmer/tracking': 1.1.2

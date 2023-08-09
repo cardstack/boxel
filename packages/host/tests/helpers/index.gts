@@ -65,6 +65,11 @@ export interface CardDocFiles {
   [filename: string]: LooseSingleCardDocument;
 }
 
+export interface AutoSaveTestContext extends TestContext {
+  onSave: (subscriber: CardSaveSubscriber) => void;
+  unregisterOnSave: () => void;
+}
+
 interface Options {
   realmURL?: string;
   isAcceptanceTest?: true;
@@ -185,19 +190,12 @@ class MockMessageService extends Service {
   }
 }
 
-export function setupOnSave(
-  hooks: NestedHooks,
-  cb: (
-    onSave: (card: CardSaveSubscriber) => void,
-    unregisterSaveSubscriber: () => void,
-  ) => void,
-) {
+export function setupOnSave(hooks: NestedHooks) {
   hooks.beforeEach(function () {
     let cardService = this.owner.lookup('service:card-service') as CardService;
-    cb(
-      cardService.onSave.bind(cardService),
-      cardService.unregisterSaveSubscriber.bind(cardService),
-    );
+    (this as AutoSaveTestContext).onSave = cardService.onSave.bind(cardService);
+    (this as AutoSaveTestContext).unregisterOnSave =
+      cardService.unregisterSaveSubscriber.bind(cardService);
   });
 }
 
