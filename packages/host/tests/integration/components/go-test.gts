@@ -19,7 +19,6 @@ import {
   setupMockMessageService,
 } from '../../helpers';
 import CardPrerender from '@cardstack/host/components/card-prerender';
-import { shimExternals } from '@cardstack/host/lib/externals';
 import MonacoService from '@cardstack/host/services/monaco-service';
 import type {
   MonacoSDK,
@@ -28,6 +27,7 @@ import type {
 import CodeController from '@cardstack/host/controllers/code';
 import { OpenFiles } from '@cardstack/host/controllers/code';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import { Loader } from '@cardstack/runtime-common/loader';
 
 const cardContent = `
 import { contains, field, Card, linksTo } from "https://cardstack.com/base/card-api";
@@ -47,6 +47,7 @@ module('Integration | Component | go', function (hooks) {
   let mockOpenFiles: OpenFiles;
   let editor: IStandaloneCodeEditor;
   let monacoContext: MonacoSDK;
+  let loader: Loader;
 
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
