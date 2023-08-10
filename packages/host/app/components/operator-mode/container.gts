@@ -38,6 +38,10 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import OperatorModeStack from './stack';
 import type MatrixService from '../../services/matrix-service';
 import ChatSidebar from '../matrix/chat-sidebar';
+import { buildWaiter } from '@ember/test-waiters';
+import { isTesting } from '@embroider/macros';
+
+let waiter = buildWaiter('operator-mode-container:write-waiter');
 
 interface Signature {
   Args: {
@@ -259,7 +263,18 @@ export default class OperatorModeContainer extends Component<Signature> {
   // we might drop writes from different stack items that want to save
   // at the same time
   private write = task(async (card: Card) => {
-    return await this.cardService.saveModel(card);
+    let token = waiter.beginAsync();
+    try {
+      let savedCard = await this.cardService.saveModel(card);
+      // only do this in test env--this makes sure that we also wait for any
+      // interior card instance async as part of our ember-test-waiters
+      if (isTesting()) {
+        await this.cardService.flushLogs();
+      }
+      return savedCard;
+    } finally {
+      waiter.endAsync(token);
+    }
   });
 
   // The public API is wrapped in a closure so that whatever calls its methods
@@ -543,11 +558,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       <CardCatalogModal />
 
       <div class='operator-mode__with-chat {{this.chatVisibilityClass}}'>
-        <div
-          class='operator-mode__main'
-          data-test-save-idle={{this.write.isIdle}}
-          style={{this.backgroundImageStyle}}
-        >
+        <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
           {{#if (eq this.allStackItems.length 0)}}
             <div class='no-cards'>
               <p class='add-card-title'>

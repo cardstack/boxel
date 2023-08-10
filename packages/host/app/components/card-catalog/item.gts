@@ -5,8 +5,8 @@ import cn from '@cardstack/boxel-ui/helpers/cn';
 import cssUrl from 'ember-css-url';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type { CardContext } from 'https://cardstack.com/base/card-api';
-import type CardService from '../services/card-service';
-import type LoaderService from '../services/loader-service';
+import type CardService from '../../services/card-service';
+import type LoaderService from '../../services/loader-service';
 
 interface Signature {
   Args: {
