@@ -32,9 +32,10 @@ export type RealmCards = {
 export default class CardCatalog extends Component<Signature> {
   <template>
     <div class='card-catalog' data-test-card-catalog>
-      {{#each this.cardsByRealm as |realm|}}
+      {{#each this.paginatedCardsByRealm as |realm|}}
         <section class='card-catalog__realm' data-test-realm={{realm.name}}>
           <CardCatalogResultsHeader @realm={{realm}} />
+
           {{#if realm.cards.length}}
             <ul class='card-catalog__group'>
               {{#each realm.displayedCards as |card|}}
@@ -145,38 +146,15 @@ export default class CardCatalog extends Component<Signature> {
   displayCardCount = 5;
   @service declare cardService: CardService;
 
-  get cardsByRealm(): RealmCards[] {
-    let realmCards: RealmCards[] = [];
-
-    if (this.args.results.length) {
-      for (let instance of this.args.results) {
-        let realm = realmCards.find((r) => r.name === instance.realmInfo?.name);
-        if (realm) {
-          realm.cards.push(instance.card);
-        } else {
-          realm = {
-            name: instance.realmInfo.name,
-            iconURL: instance.realmInfo.iconURL
-              ? new URL(instance.realmInfo.iconURL, this.cardService.defaultURL)
-                  .href
-              : null,
-            cards: [instance.card],
-            displayedCards: [],
-          };
-          realmCards.push(realm);
-        }
-      }
-    }
-
-    realmCards.map((r) => {
-      if (!r.displayedCards.length) {
-        r.displayedCards = new TrackedArray<Card>(
+  get paginatedCardsByRealm() {
+    return this.args.filteredRealmsWithCards.map((r) => {
+      return {
+        ...r,
+        displayedCards: new TrackedArray<Card>(
           r.cards.slice(0, this.displayCardCount),
-        );
-      }
+        ),
+      };
     });
-
-    return realmCards.filter((r) => r.cards.length);
   }
 
   @action
