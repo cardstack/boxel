@@ -222,6 +222,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         },
       },
       '.realm.json': {
+        url: testRealmURL,
         name: 'Test Workspace B',
         backgroundURL:
           'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',

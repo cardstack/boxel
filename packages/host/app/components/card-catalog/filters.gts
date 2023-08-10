@@ -1,9 +1,16 @@
 import Component from '@glimmer/component';
-import { BoxelDropdown, IconButton, Menu } from '@cardstack/boxel-ui';
+import { BoxelDropdown, Menu } from '@cardstack/boxel-ui';
 import { MenuItem } from '@cardstack/boxel-ui/helpers/menu-item';
-import { fn } from '@ember/helper';
+import { type RealmInfo } from '@cardstack/runtime-common';
 
-export default class CardCatalogFilters extends Component {
+interface Signature {
+  availableRealms: RealmInfo[];
+  selectedRealms: RealmInfo[];
+  onSelectRealm: (realm: RealmInfo) => void;
+  onDeselectRealm: (realm: RealmInfo) => void;
+}
+
+export default class CardCatalogFilters extends Component<Signature> {
   get realmMenuItems() {
     return this.args.availableRealms.map((realm) => {
       return new MenuItem(realm.name, 'action', {
@@ -15,6 +22,7 @@ export default class CardCatalogFilters extends Component {
           // Toggle selection - if the item selected, deselect it, if not, select it
           if (isSelected) {
             // Prevent deselecting all realms. At least one realm must be selected at all times
+            // TODO: when no realm is selected (or when all realms are unselected), display all realms instead
             if (this.args.selectedRealms.length > 1) {
               this.args.onDeselectRealm(realm);
             }
@@ -47,7 +55,7 @@ export default class CardCatalogFilters extends Component {
               </button>
             </:trigger>
             <:content as |dd|>
-              <Menu @closeMenu={{this.noop}} @items={{this.realmMenuItems}} />
+              <Menu @closeMenu={{dd.close}} @items={{this.realmMenuItems}} />
             </:content>
           </BoxelDropdown>
         </li>

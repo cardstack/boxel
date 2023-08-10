@@ -5,29 +5,22 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { TrackedArray } from 'tracked-built-ins';
 import type { Card, CardContext } from 'https://cardstack.com/base/card-api';
-import { type RealmInfo } from '@cardstack/runtime-common';
 import { Button, IconButton } from '@cardstack/boxel-ui';
 import { eq, gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import type CardService from '../../services/card-service';
 import CardCatalogItem from './item';
 import CardCatalogResultsHeader from './results-header';
+import type { RealmCards } from '../card-catalog-modal';
 
 interface Signature {
   Args: {
-    results: { card: Card; realmInfo: RealmInfo }[];
+    results: RealmCards[];
     toggleSelect: (card?: Card) => void;
     selectedCard: Card | undefined;
     context?: CardContext;
   };
 }
-
-export type RealmCards = {
-  name: RealmInfo['name'];
-  iconURL: RealmInfo['iconURL'];
-  cards: Card[];
-  displayedCards: Card[];
-};
 
 export default class CardCatalog extends Component<Signature> {
   <template>
@@ -147,7 +140,7 @@ export default class CardCatalog extends Component<Signature> {
   @service declare cardService: CardService;
 
   get paginatedCardsByRealm() {
-    return this.args.filteredRealmsWithCards.map((r) => {
+    return this.args.results.map((r) => {
       return {
         ...r,
         displayedCards: new TrackedArray<Card>(

@@ -28,7 +28,7 @@ import {
   getSuggestionWithLowestDepth,
 } from '../utils/text-suggestion';
 import ModalContainer from './modal-container';
-import CardCatalog from './card-catalog';
+import CardCatalog from './card-catalog/index';
 import CardCatalogFilters from './card-catalog/filters';
 import { type RealmInfo } from '@cardstack/runtime-common';
 import { TrackedArray } from 'tracked-built-ins';
@@ -39,13 +39,10 @@ interface Signature {
   };
 }
 
-export type RealmCards = {
-  url: RealmInfo['url'];
-  name: RealmInfo['name'];
-  iconURL: RealmInfo['iconURL'];
+export interface RealmCards extends RealmInfo {
   cards: Card[];
   displayedCards: Card[];
-};
+}
 
 const DEFAULT_CHOOOSE_CARD_TITLE = 'Choose a Card';
 
@@ -83,8 +80,7 @@ export default class CardCatalogModal extends Component<Signature> {
             Loading...
           {{else}}
             <CardCatalog
-              @results={{this.results}}
-              @filteredRealmsWithCards={{this.filteredRealmsWithCards}}
+              @results={{this.filteredRealmsWithCards}}
               @toggleSelect={{this.toggleSelect}}
               @selectedCard={{this.selectedCard}}
               @context={{@context}}
@@ -197,10 +193,6 @@ export default class CardCatalogModal extends Component<Signature> {
     });
   }
 
-  get results() {
-    return this.currentRequest?.search.instancesWithRealmInfo ?? [];
-  }
-
   get searchFieldState() {
     return this.hasSearchError ? 'invalid' : 'initial';
   }
@@ -222,22 +214,21 @@ export default class CardCatalogModal extends Component<Signature> {
 
   get realmsWithCards(): RealmCards[] {
     let realmCards: RealmCards[] = [];
+    let results = this.currentRequest?.search.instancesWithRealmInfo ?? [];
 
-    if (this.results.length) {
-      for (let instance of this.results) {
+    if (results.length) {
+      for (let instance of results) {
         let realm = realmCards.find((r) => r.name === instance.realmInfo?.name);
         if (realm) {
           realm.cards.push(instance.card);
         } else {
           realm = {
-            url: instance.realmInfo.url,
-            name: instance.realmInfo.name,
+            ...instance.realmInfo,
             iconURL: instance.realmInfo.iconURL
               ? new URL(instance.realmInfo.iconURL, this.cardService.defaultURL)
                   .href
               : null,
             cards: [instance.card],
-
             displayedCards: [],
           };
           realmCards.push(realm);
@@ -248,7 +239,7 @@ export default class CardCatalogModal extends Component<Signature> {
     return realmCards;
   }
 
-  get filteredRealmsWithCards() {
+  get filteredRealmsWithCards(): RealmCards[] {
     let selectedRealmUrls = this.selectedRealms.map((r) => r.url);
 
     return this.realmsWithCards.filter((realm) => {
@@ -256,10 +247,13 @@ export default class CardCatalogModal extends Component<Signature> {
     });
   }
 
+  // TODO: Use env var for known realms
   get availableRealms(): RealmInfo[] {
-    return this.realmsWithCards.map((r) => {
-      return { url: r.url, name: r.name, iconURL: r.iconURL } as RealmInfo;
-    });
+    return this.realmsWithCards.map<RealmInfo>(
+      ({ url, name, backgroundURL, iconURL }) => {
+        return { url, name, backgroundURL, iconURL };
+      },
+    );
   }
 
   get selectedRealms(): RealmInfo[] {
