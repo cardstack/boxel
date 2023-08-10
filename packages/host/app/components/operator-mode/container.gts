@@ -247,17 +247,25 @@ export default class OperatorModeContainer extends Component<Signature> {
         if (sourceStack == null) {
           return;
         }
+        let sourceItem =
+          sourceStack === LEFT
+            ? (topMostStackItems[LEFT] as CardStackItem)
+            : (topMostStackItems[RIGHT] as CardStackItem); // the index card is never a contained card
+        let destinationItem =
+          sourceStack === LEFT
+            ? (topMostStackItems[RIGHT] as CardStackItem)
+            : (topMostStackItems[LEFT] as CardStackItem); // the index card is never a contained card
+
+        // the source and destination are the same
+        if (sourceItem.card.id === destinationItem.card.id) {
+          return;
+        }
+
         return {
           direction: sourceStack === LEFT ? 'right' : 'left',
           sources: this.selectedCards[sourceStack],
-          sourceItem:
-            sourceStack === LEFT
-              ? (topMostStackItems[LEFT] as CardStackItem)
-              : (topMostStackItems[RIGHT] as CardStackItem), // the index card is never a contained card
-          destinationItem:
-            sourceStack === LEFT
-              ? (topMostStackItems[RIGHT] as CardStackItem)
-              : (topMostStackItems[LEFT] as CardStackItem), // the index card is never a contained card
+          sourceItem,
+          destinationItem,
         };
       }
       default:
@@ -763,7 +771,7 @@ export default class OperatorModeContainer extends Component<Signature> {
                 <button
                   class='copy-button'
                   {{on 'click' (fn (perform this.copy))}}
-                  data-test-copy-button
+                  data-test-copy-button={{this.copyState.direction}}
                   disabled={{this.copy.isRunning}}
                 >
                   {{#if (eq this.copyState.direction 'left')}}
