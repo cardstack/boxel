@@ -419,11 +419,9 @@ export default class OperatorModeContainer extends Component<Signature> {
         );
       }
       let realmURL = destinationRealmURL;
-      await Promise.all(
-        copyState.sources.map((card) =>
-          this.cardService.copyCard(card, realmURL),
-        ),
-      );
+      for (let card of copyState.sources) {
+        await this.cardService.copyCard(card, realmURL);
+      }
       let clearSelection = clearSelections.get(sourceItem);
       if (typeof clearSelection === 'function') {
         clearSelection();

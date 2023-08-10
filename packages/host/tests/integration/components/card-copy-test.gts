@@ -1,12 +1,15 @@
 import { module, test } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
 import { setupRenderingTest } from 'ember-qunit';
-import { baseRealm } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  type SingleCardDocument,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 import { Loader } from '@cardstack/runtime-common/loader';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import CardPrerender from '@cardstack/host/components/card-prerender';
-// import { Card } from 'https://cardstack.com/base/card-api';
 import { renderComponent } from '../../helpers/render-component';
 import {
   testRealmURL,
@@ -15,7 +18,7 @@ import {
   setupOnSave,
   TestRealmAdapter,
   TestRealm,
-  // type AutoSaveTestContext,
+  type AutoSaveTestContext,
 } from '../../helpers';
 import { waitFor, click } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -233,6 +236,32 @@ module('Integration | card-copy', function (hooks) {
       realmURL: testRealm2URL,
     });
     await realm2.ready;
+
+    // write in the new record last because it's link didn't exist until realm2 was created
+    await realm1.write(
+      'Person/sakura.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Sakura',
+          },
+          relationships: {
+            pet: {
+              links: {
+                self: `${testRealm2URL}Pet/paper`,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `../person`,
+              name: 'Person',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
 
     let cardService = this.owner.lookup('service:card-service') as CardService;
     // the copy button only appears after this service has loaded,
@@ -534,14 +563,286 @@ module('Integration | card-copy', function (hooks) {
       .containsText('Copy 1 Card', 'button text is correct');
   });
 
-  QUnit.skip('can copy a card', async function (_assert) {});
-  QUnit.skip('can copy mulitple cards', async function (_assert) {});
-  QUnit.skip(
-    'can copy a card that has a relative link to card in source realm',
-    async function (_assert) {},
-  );
-  QUnit.skip(
-    'can copy a card that has a link to card in destination realm',
-    async function (_assert) {},
-  );
+  test<AutoSaveTestContext>('can copy a card', async function (assert) {
+    assert.expect(8);
+    await setCardInOperatorModeState(
+      [`${testRealmURL}index`],
+      [`${testRealm2URL}index`],
+    );
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor(
+      '[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]',
+    );
+    await waitFor(
+      '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
+    );
+    await click(
+      `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.select`,
+    );
+
+    this.onSave((json) => {
+      assert.strictEqual(json.data.id, `${testRealm2URL}Pet/1`);
+      assert.strictEqual(json.data.attributes?.firstName, 'Mango');
+      assert.deepEqual(json.data.meta.adoptsFrom, {
+        module: `${testRealmURL}pet`,
+        name: 'Pet',
+      });
+      assert.strictEqual(json.data.meta.realmURL, testRealm2URL);
+    });
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/1"]`,
+      )
+      .doesNotExist('card does not initially exist in destiation realm');
+    await click('[data-test-copy-button]');
+    await waitFor(
+      `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
+    );
+    assert
+      .dom(`[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`)
+      .exists({ count: 2 });
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/1"]`,
+      )
+      .exists('copied card appears in destination realm');
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/1"]`,
+      )
+      .containsText('Mango');
+  });
+
+  test<AutoSaveTestContext>('can copy mulitple cards', async function (assert) {
+    assert.expect(8);
+    await setCardInOperatorModeState(
+      [`${testRealmURL}index`],
+      [`${testRealm2URL}index`],
+    );
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor(
+      '[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]',
+    );
+    await waitFor(
+      '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
+    );
+    await click(
+      `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.select`,
+    );
+    await click(
+      `[data-test-overlay-card="${testRealmURL}Pet/vangogh"] button.select`,
+    );
+
+    let savedCards: SingleCardDocument[] = [];
+    this.onSave((json) => {
+      savedCards.push(json);
+    });
+
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/1"]`,
+      )
+      .doesNotExist('card does not initially exist in destiation realm');
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/2"]`,
+      )
+      .doesNotExist('card does not initially exist in destiation realm');
+    await click('[data-test-copy-button]');
+    await waitFor(
+      `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
+    );
+    assert
+      .dom(`[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`)
+      .exists({ count: 3 });
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/1"]`,
+      )
+      .exists('copied card appears in destination realm');
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/2"]`,
+      )
+      .exists('copied card appears in destination realm');
+    assert.strictEqual(savedCards.length, 2, 'correct number of cards saved');
+    assert.deepEqual(savedCards.map((c) => c.data.id).sort(), [
+      `${testRealm2URL}Pet/1`,
+      `${testRealm2URL}Pet/2`,
+    ]);
+    assert.deepEqual(
+      savedCards.map((c) => c.data.attributes?.firstName).sort(),
+      ['Mango', 'Van Gogh'],
+    );
+  });
+
+  test<AutoSaveTestContext>('can copy a card that has a relative link to card in source realm', async function (assert) {
+    assert.expect(13);
+    await setCardInOperatorModeState(
+      [`${testRealmURL}index`],
+      [`${testRealm2URL}index`],
+    );
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor(
+      '[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]',
+    );
+    await waitFor(
+      '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
+    );
+    await click(
+      `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.select`,
+    );
+
+    this.onSave((json) => {
+      assert.strictEqual(json.data.id, `${testRealm2URL}Person/1`);
+      assert.strictEqual(json.data.attributes?.firstName, 'Hassan');
+      assert.deepEqual(json.data.meta.adoptsFrom, {
+        module: `${testRealmURL}person`,
+        name: 'Person',
+      });
+      assert.strictEqual(json.data.meta.realmURL, testRealm2URL);
+      assert.deepEqual(json.data.relationships, {
+        pet: {
+          links: {
+            self: `${testRealmURL}Pet/mango`,
+          },
+          data: {
+            type: 'card',
+            id: `${testRealmURL}Pet/mango`,
+          },
+        },
+      });
+      assert.strictEqual(json.included?.length, 1);
+      let included = json.included?.[0]!;
+      assert.strictEqual(included.id, `${testRealmURL}Pet/mango`);
+      assert.deepEqual(included.meta.adoptsFrom, {
+        module: `../pet`, // this is ok because it is relative to the incuded's id
+        name: 'Pet',
+      });
+      assert.deepEqual(included.meta.realmURL, testRealmURL);
+    });
+
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Person/1"]`,
+      )
+      .doesNotExist('card does not initially exist in destiation realm');
+    await click('[data-test-copy-button]');
+    await waitFor(
+      `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
+    );
+    assert
+      .dom(`[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`)
+      .exists({ count: 2 });
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Person/1"]`,
+      )
+      .exists('copied card appears in destination realm');
+
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Person/1"]`,
+      )
+      .containsText('Hassan');
+  });
+
+  test<AutoSaveTestContext>('can copy a card that has a link to card in destination realm', async function (assert) {
+    assert.expect(13);
+    await setCardInOperatorModeState(
+      [`${testRealmURL}index`],
+      [`${testRealm2URL}index`],
+    );
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor(
+      '[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]',
+    );
+    await waitFor(
+      '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
+    );
+    await click(
+      `[data-test-overlay-card="${testRealmURL}Person/sakura"] button.select`,
+    );
+
+    this.onSave((json) => {
+      assert.strictEqual(json.data.id, `${testRealm2URL}Person/1`);
+      assert.strictEqual(json.data.attributes?.firstName, 'Sakura');
+      assert.deepEqual(json.data.meta.adoptsFrom, {
+        module: `${testRealmURL}person`,
+        name: 'Person',
+      });
+      assert.strictEqual(json.data.meta.realmURL, testRealm2URL);
+      assert.deepEqual(json.data.relationships, {
+        pet: {
+          links: {
+            self: `../Pet/paper`, // we should recognize that the link is now in the same realm and should be a relative path
+          },
+          data: {
+            type: 'card',
+            id: `${testRealm2URL}Pet/paper`,
+          },
+        },
+      });
+      assert.strictEqual(json.included?.length, 1);
+      let included = json.included?.[0]!;
+      assert.strictEqual(included.id, `${testRealm2URL}Pet/paper`);
+      assert.deepEqual(included.meta.adoptsFrom, {
+        module: `${testRealmURL}pet`,
+        name: 'Pet',
+      });
+      assert.deepEqual(included.meta.realmURL, testRealm2URL);
+    });
+
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Person/1"]`,
+      )
+      .doesNotExist('card does not initially exist in destiation realm');
+    await click('[data-test-copy-button]');
+    await waitFor(
+      `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
+    );
+    assert
+      .dom(`[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`)
+      .exists({ count: 2 });
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Person/1"]`,
+      )
+      .exists('copied card appears in destination realm');
+
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Person/1"]`,
+      )
+      .containsText('Sakura');
+  });
 });
