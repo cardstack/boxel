@@ -7,6 +7,7 @@ import {
   Component,
   Card,
   realmInfo,
+  realmURL,
   relativeTo,
   type CardBase,
 } from './card-api';
@@ -130,7 +131,7 @@ class Isolated extends Component<typeof CardsGrid> {
           },
         ],
       },
-      this.args.model.realmURL ? [this.args.model.realmURL] : undefined,
+      this.args.model[realmURL] ? [this.args.model[realmURL].href] : undefined,
     );
   }
 
@@ -169,17 +170,6 @@ export class CardsGrid extends Card {
   @field realmName = contains(StringCard, {
     computeVia: function (this: CardsGrid) {
       return this[realmInfo]?.name;
-    },
-  });
-  @field realmURL = contains(StringCard, {
-    computeVia: function (this: CardsGrid) {
-      if (this.id) {
-        // take advantage of the fact the id of the index card is always at the root of the realm
-        let path = this.id.split('/');
-        path.pop();
-        return path.join('/') + '/';
-      }
-      return null;
     },
   });
   @field title = contains(StringCard, {
