@@ -827,7 +827,7 @@ function isEvaluatable(
 async function maybeHandleScopedCSSRequest(req: Request) {
   if (isScopedCSSRequest(req.url)) {
     if (isFastBoot) {
-      return Promise.resolve(new Response('// skipped scoped CSS'));
+      return Promise.resolve(new Response('', { status: 204 }));
     } else {
       let decodedCSS = decodeScopedCSSRequest(req.url);
       return Promise.resolve(
