@@ -263,7 +263,6 @@ module('Integration | Component | go', function (hooks) {
       assert.dom('[data-test-saved]').exists();
       await waitUntil(() => find('[data-test-field="name"]'));
       assert.dom('[data-test-field="name"]').containsText('Abdel-Rahman');
-      debugger;
     });
   });
 });
