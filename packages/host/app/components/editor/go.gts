@@ -160,12 +160,17 @@ export default class Go extends Component<Signature> {
     let isJSON = this.openFile.current.name.endsWith('.json');
     let json = isJSON && this.safeJSONParse(content);
 
+    // Here lies the difference in how json files and other source code files
+    // are treated during editing in the code editor
     if (json && isSingleCardDocument(json)) {
+      // writes json instance but doesn't update state of the file resource
+      // relies on message service subscription to update state
       await this.saveSingleCardDocument(json);
       return;
+    } else {
+      //writes source code and updates the state of the file resource
+      await this.writeSourceCodeToFile(this.openFile.current, content);
     }
-
-    await this.writeContentToFile(this.openFile.current, content);
   });
 
   safeJSONParse(content: string) {
@@ -208,7 +213,7 @@ export default class Go extends Component<Signature> {
     }
   });
 
-  writeContentToFile(file: FileResource, content: string) {
+  writeSourceCodeToFile(file: FileResource, content: string) {
     if (file.state !== 'ready')
       throw new Error('File is not ready to be written to');
 

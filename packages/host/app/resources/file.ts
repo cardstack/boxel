@@ -68,27 +68,27 @@ class _FileResource extends Resource<Args> {
     });
   }
 
-  modify(_positional: never[], named: Args['named']) {
-    let { relativePath, realmURL, onStateChange } = named;
-    this._url = realmURL + relativePath;
-    this.onStateChange = onStateChange;
-    this.read.perform();
-
-    let path = `${realmURL}_message`;
-
-    if (this.subscription && this.subscription.url !== path) {
+  setSubscription(realmURL: string, callback: () => void) {
+    let messageServiceUrl = `${realmURL}_message`;
+    if (this.subscription && this.subscription.url !== messageServiceUrl) {
       this.subscription.unsubscribe();
       this.subscription = undefined;
     }
 
     if (!this.subscription) {
       this.subscription = {
-        url: path,
-        unsubscribe: this.messageService.subscribe(path, () =>
-          this.read.perform()
-        ),
+        url: messageServiceUrl,
+        unsubscribe: this.messageService.subscribe(messageServiceUrl, callback),
       };
     }
+  }
+
+  modify(_positional: never[], named: Args['named']) {
+    let { relativePath, realmURL, onStateChange } = named;
+    this._url = realmURL + relativePath;
+    this.onStateChange = onStateChange;
+    this.read.perform(); //initial read
+    this.setSubscription(realmURL, () => this.read.perform());
   }
 
   private updateState(newState: FileResource): void {
