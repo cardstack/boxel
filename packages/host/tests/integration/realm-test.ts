@@ -21,6 +21,7 @@ import { shimExternals } from '@cardstack/host/lib/externals';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { RenderingTestContext } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 
 let loader: Loader;
 
@@ -2190,7 +2191,11 @@ module('Integration | realm', function (hooks) {
     let response = await realm.handle(new Request(`${testRealmURL}dir/person`));
     assert.strictEqual(response.status, 200, 'HTTP 200 status code');
     let compiledJS = await response.text();
-    assert.codeEqual(compiledJS, compiledCard(), 'compiled card is correct');
+    assert.codeEqual(
+      stripScopedCSSGlimmerAttributes(compiledJS),
+      compiledCard(),
+      'compiled card is correct',
+    );
   });
 
   test('realm can serve compiled js file when requested with file extension ', async function (assert) {
@@ -2207,7 +2212,11 @@ module('Integration | realm', function (hooks) {
     );
     assert.strictEqual(response.status, 200, 'HTTP 200 status code');
     let compiledJS = await response.text();
-    assert.codeEqual(compiledJS, compiledCard(), 'compiled card is correct');
+    assert.codeEqual(
+      stripScopedCSSGlimmerAttributes(compiledJS),
+      compiledCard(),
+      'compiled card is correct',
+    );
   });
 
   test('realm can serve file asset (not card source, not js, not JSON-API)', async function (assert) {
