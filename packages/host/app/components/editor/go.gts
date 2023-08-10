@@ -15,7 +15,12 @@ import {
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type CardService from '@cardstack/host/services/card-service';
-import { file, FileResource, isReady } from '@cardstack/host/resources/file';
+import {
+  file,
+  FileResource,
+  isReady,
+  Ready,
+} from '@cardstack/host/resources/file';
 import CardEditor from '@cardstack/host/components/card-editor';
 import Module from './module';
 import FileTree from './file-tree';
@@ -38,6 +43,7 @@ interface Signature {
     openFiles: OpenFiles;
     monaco: MonacoSDK;
     onEditorSetup?(editor: IStandaloneCodeEditor): void;
+    fileResource?: Ready; //Optionally pass file resource for testing
   };
 }
 
@@ -130,7 +136,6 @@ export default class Go extends Component<Signature> {
       .editor-container {
         flex: 1;
       }
-
     </style>
   </template>
 
@@ -178,7 +183,7 @@ export default class Go extends Component<Signature> {
       return JSON.parse(content);
     } catch (err) {
       log.warn(
-        `content for ${this.args.openFiles.path} is not valid JSON, skipping write`
+        `content for ${this.args.openFiles.path} is not valid JSON, skipping write`,
       );
       return;
     }
@@ -189,29 +194,31 @@ export default class Go extends Component<Signature> {
       const editorLanguages = this.args.monaco.languages.getLanguages();
       let extension = '.' + this.args.openFiles.path.split('.').pop();
       let language = editorLanguages.find((lang) =>
-        lang.extensions?.find((ext) => ext === extension)
+        lang.extensions?.find((ext) => ext === extension),
       );
       return language?.id ?? 'plaintext';
     }
     return undefined;
   }
 
-  openFile = maybe(this, (context) => {
-    const relativePath = this.args.openFiles.path;
-    if (relativePath) {
-      return file(context, () => ({
-        relativePath,
-        realmURL: new RealmPaths(this.cardService.defaultURL).url,
-        onStateChange: (state) => {
-          if (state === 'not-found') {
-            this.args.openFiles.path = undefined;
-          }
-        },
-      }));
-    } else {
-      return undefined;
-    }
-  });
+  openFile = this.args.fileResource
+    ? { current: this.args.fileResource } //Optionaly pass a file resource for testing
+    : maybe(this, (context) => {
+        const relativePath = this.args.openFiles.path;
+        if (relativePath) {
+          return file(context, () => ({
+            relativePath,
+            realmURL: new RealmPaths(this.cardService.defaultURL).url,
+            onStateChange: (state) => {
+              if (state === 'not-found') {
+                this.args.openFiles.path = undefined;
+              }
+            },
+          }));
+        } else {
+          return undefined;
+        }
+      });
 
   writeSourceCodeToFile(file: FileResource, content: string) {
     if (file.state !== 'ready')
@@ -223,7 +230,7 @@ export default class Go extends Component<Signature> {
   async saveSingleCardDocument(json: any) {
     let realmPath = new RealmPaths(this.cardService.defaultURL);
     let url = realmPath.fileURL(
-      this.args.openFiles.path!.replace(/\.json$/, '')
+      this.args.openFiles.path!.replace(/\.json$/, ''),
     );
 
     try {
@@ -276,7 +283,7 @@ export default class Go extends Component<Signature> {
   get isRunnable(): boolean {
     let filename = this.path;
     return ['.gjs', '.js', '.gts', '.ts'].some((extension) =>
-      filename.endsWith(extension)
+      filename.endsWith(extension),
     );
   }
 
@@ -301,7 +308,7 @@ export default class Go extends Component<Signature> {
       throw new Error(
         `could not delete file, status: ${response.status} - ${
           response.statusText
-        }. ${await response.text()}`
+        }. ${await response.text()}`,
       );
     }
   });

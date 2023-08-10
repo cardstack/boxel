@@ -18,6 +18,7 @@ import {
   setupLocalIndexing,
   setupMockMessageService,
   testRealmURL,
+  getFileResource,
 } from '../../helpers';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import MonacoService from '@cardstack/host/services/monaco-service';
@@ -29,6 +30,7 @@ import CodeController from '@cardstack/host/controllers/code';
 import { OpenFiles } from '@cardstack/host/controllers/code';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { Loader } from '@cardstack/runtime-common/loader';
+import { formatRFC7231 } from 'date-fns';
 
 const sourceContent = `
 import { contains, field, Card } from "https://cardstack.com/base/card-api";
@@ -74,13 +76,13 @@ module('Integration | Component | go', function (hooks) {
       .loader;
     loader.addURLMapping(
       new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
+      new URL('http://localhost:4201/base/'),
     );
   });
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
   module('with a working realm', function (hooks) {
@@ -91,7 +93,7 @@ module('Integration | Component | go', function (hooks) {
       });
       realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
       monacoService = this.owner.lookup(
-        'service:monaco-service'
+        'service:monaco-service',
       ) as MonacoService;
       mockController = new CodeController();
       mockOpenFiles = new OpenFiles(mockController);
@@ -149,7 +151,7 @@ module('Integration | Component | go', function (hooks) {
       await waitUntil(() => find('[data-test-last-edit]'));
       await waitUntil(() => find('[data-test-editor-lang]'));
       await waitUntil(() =>
-        find('[data-test-editor]')!.innerHTML?.includes('Person')
+        find('[data-test-editor]')!.innerHTML?.includes('Person'),
       );
       // TODO: Need to find last modified test
       // assert
@@ -172,7 +174,7 @@ module('Integration | Component | go', function (hooks) {
       assert.dom('[data-test-saved]').exists();
 
       await waitUntil(() =>
-        find('[data-test-last-edit]')!.innerHTML?.includes('seconds')
+        find('[data-test-last-edit]')!.innerHTML?.includes('seconds'),
       );
       assert
         .dom('[data-test-last-edit]')
@@ -220,6 +222,36 @@ module('Integration | Component | go', function (hooks) {
       assert.dom('[data-test-saved]').exists();
       await waitUntil(() => find('[data-test-field="name"]'));
       assert.dom('[data-test-field="name"]').containsText('Abdel-Rahman');
+    });
+    test('Last modified updates when updating content. This is a very specific test that manually manufactured to update assumptions of time', async function (assert) {
+      mockOpenFiles.path = 'person.gts';
+      let tenMinutesAgo = formatRFC7231(new Date(Date.now() - 10 * 60 * 1000));
+      let readyFile = await getFileResource(
+        this,
+        testRealmURL,
+        mockOpenFiles,
+        tenMinutesAgo,
+      );
+      monacoContext = await monacoService.getMonacoContext();
+
+      let onEditorSetup = function (receivedEditor: IStandaloneCodeEditor) {
+        editor = receivedEditor;
+      };
+      //openFiles is irrelevant here
+      //readyFile is the overriiding resource which but its attached to this test context, not the component
+      await render(<template>
+        <Go
+          @openFiles={{mockOpenFiles}}
+          @monaco={{monacoContext}}
+          @onEditorSetup={{onEditorSetup}}
+          @fileResource={{readyFile}}
+        />
+        <CardPrerender />
+      </template>);
+      await waitUntil(() => find('[data-test-last-edit]'));
+      assert
+        .dom('[data-test-last-edit]')
+        .hasText(`Last edit was 10 minutes ago`);
     });
   });
 });

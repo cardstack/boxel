@@ -19,7 +19,7 @@ interface Args {
 
 export interface Loading {
   state: 'loading';
-  ready: () => Promise<void>; // Used for test. It enables resource parent context to update file resource state to be Ready
+  ready: (lastModified?: string) => Promise<void>; // Used for test. It enables resource parent context to update file resource state to be Ready
 }
 
 export interface ServerError {
@@ -109,7 +109,7 @@ class _FileResource extends Resource<Args> {
       log.error(
         `Could not get file ${this._url}, status ${response.status}: ${
           response.statusText
-        } - ${await response.text()}`
+        } - ${await response.text()}`,
       );
       if (response.status === 404) {
         this.updateState({ state: 'not-found', url: this._url });
@@ -163,7 +163,7 @@ class _FileResource extends Resource<Args> {
       if (this.innerState.state === 'not-found') {
         // TODO think about the "unauthorized" scenario
         throw new Error(
-          'this should be impossible--we are creating the specified path'
+          'this should be impossible--we are creating the specified path',
         );
       }
 
@@ -179,11 +179,15 @@ class _FileResource extends Resource<Args> {
       if (flushLoader) {
         this.loaderService.reset();
       }
-    }
+    },
   );
 
-  async ready() {
+  async ready(lastModified?: string) {
     await this.read.perform();
+    if (this.innerState.state != 'ready') {
+      throw new Error('File not ready');
+    }
+    this.innerState.lastModified = lastModified;
   }
 
   get state() {
