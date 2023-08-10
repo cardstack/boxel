@@ -464,7 +464,8 @@ export function delay(delayAmountMs: number): Promise<void> {
 export async function getFileResource(
   context: TestContext,
   realmURL: string,
-  openFiles: OpenFiles
+  openFiles: OpenFiles,
+  lastModified?: string
 ): Promise<Ready> {
   if (openFiles.path === undefined) {
     throw new Error('Wrong relativePath undefined');
@@ -480,7 +481,7 @@ export async function getFileResource(
     },
   }));
   if (f.state == 'loading') {
-    await f.ready();
+    await f.ready(lastModified);
   }
   if (!isReady(f)) {
     throw new Error(
