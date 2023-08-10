@@ -118,54 +118,6 @@ module('Integration | Component | go', function (hooks) {
       assert.dom('[data-test-card-id]').doesNotExist();
     });
 
-    test('When a file is selected in the file tree, displays editor with contents and can save new content', async function (assert) {
-      monacoContext = await monacoService.getMonacoContext();
-
-      let onEditorSetup = function (receivedEditor: IStandaloneCodeEditor) {
-        editor = receivedEditor;
-      };
-      await render(<template>
-        <Go
-          @openFiles={{mockOpenFiles}}
-          @monaco={{monacoContext}}
-          @onEditorSetup={{onEditorSetup}}
-        />
-        <CardPrerender />
-      </template>);
-      await waitFor('[data-test-file]');
-      assert.dom('[data-test-file="person.gts"]').exists();
-
-      //click a file
-      await click('[data-test-file="person.gts"]');
-
-      assert.strictEqual(mockOpenFiles.path, 'person.gts');
-      assert.strictEqual(mockOpenFiles.openDirs.length, 0);
-
-      await waitUntil(() => find('[data-test-last-edit]'));
-      await waitUntil(() => find('[data-test-editor-lang]'));
-      await waitUntil(() =>
-        find('[data-test-editor]')!.innerHTML?.includes('Person')
-      );
-      await waitFor('[data-test-card-id]');
-
-      //sub components exists
-      assert.dom('[data-test-editor').exists(); //monaco exists
-      assert.dom('[data-test-file="person.gts"]').exists(); //file tree with file exists
-      assert.dom('[data-test-card-id]').exists(); //schema editor exist
-
-      // TODO: Need to find last modified test
-      // assert
-      //   .dom('[data-test-last-edit]')
-      //   .hasText(`Last edit was ${moment(lastModified).fromNow()}`);
-      assert.dom('[data-test-last-edit]').exists();
-      assert.dom('[data-test-editor-lang]').hasText(`Lang: glimmerTS`);
-      assert
-        .dom('[data-test-editor]')
-        .containsText('export')
-        .containsText('class')
-        .containsText('Person');
-    });
-
     test('When a source file is selected in the file tree, can update and save new content', async function (assert) {
       monacoContext = await monacoService.getMonacoContext();
 
@@ -188,6 +140,11 @@ module('Integration | Component | go', function (hooks) {
       assert.strictEqual(mockOpenFiles.openDirs.length, 0);
 
       await waitUntil(() => find('[data-test-editor'));
+
+      //sub components exists
+      assert.dom('[data-test-editor').exists(); //monaco exists
+      assert.dom('[data-test-file="person.gts"]').exists(); //file tree with file exists
+      assert.dom('[data-test-card-id]').exists(); //schema editor exist
 
       await waitUntil(() => find('[data-test-last-edit]'));
       await waitUntil(() => find('[data-test-editor-lang]'));
