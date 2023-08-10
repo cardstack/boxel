@@ -4,14 +4,14 @@ import { getOwner, setOwner } from '@ember/owner';
 
 export function maybe<T>(
   parent: object,
-  resourceBuilder: (context: object) => T | undefined
+  resourceBuilder: (context: object) => T | undefined,
 ): { current: T | undefined } {
   return resource(parent, ({ on }) => {
     let context = {};
     let owner = getOwner(parent);
     if (!owner) {
       throw new Error(
-        'bug: maybe() needs an owned object as its first argument'
+        'bug: maybe() needs an owned object as its first argument',
       );
     }
     setOwner(context, owner);
