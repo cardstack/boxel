@@ -400,19 +400,27 @@ export default class OperatorModeContainer extends Component<Signature> {
     if (!this.cardService.isIndexCard(destinationItem.card)) {
       throw new Error(`bug: this should never happen`);
     }
-    let indexCard = destinationItem.card;
     let token = waiter.beginAsync();
     try {
+      let destinationRealmURL = await this.cardService.getRealmURL(
+        destinationItem.card,
+      );
+      if (!destinationRealmURL) {
+        throw new Error(
+          `bug: could not determine realm URL for index card ${destinationItem.card.id}`,
+        );
+      }
+      let realmURL = destinationRealmURL;
       await Promise.all(
         copyState.sources.map((card) =>
-          this.cardService.copyCard(card, new URL(indexCard.realmURL)),
+          this.cardService.copyCard(card, realmURL),
         ),
       );
       let clearSelection = clearSelections.get(sourceItem);
       if (typeof clearSelection === 'function') {
         clearSelection();
       }
-      let refresh = (globalThis as any).__cardsGrids.get(indexCard);
+      let refresh = (globalThis as any).__cardsGrids.get(destinationItem.card);
       if (typeof refresh === 'function') {
         refresh();
       }

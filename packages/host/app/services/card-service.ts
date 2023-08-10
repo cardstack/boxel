@@ -198,10 +198,6 @@ export default class CardService extends Service {
   }
 
   async copyCard(source: Card, destinationRealm: URL): Promise<Card> {
-    // TODO - THURSDAY issues with absolute URL's realms that are colocated on the same
-    // server are getting relative URL's. let's force our relative URL logic not
-    // to use leading '/'. this should be a signal that we are dealing with a
-    // different realm instead.
     let serialized = await this.serializeCard(source, {
       maybeRelativeURL: null, // forces URL's to be absolute.
     });
@@ -257,13 +253,23 @@ export default class CardService extends Service {
     if (!(maybeIndexCard instanceof this.CardsGrid)) {
       return false;
     }
-    let realmURL = maybeIndexCard.realmURL;
+    let realmURL = maybeIndexCard[this.api.realmURL]?.href;
+    if (!realmURL) {
+      throw new Error(
+        `bug: could not determine realm URL for index card ${maybeIndexCard.id}`,
+      );
+    }
     return maybeIndexCard.id === `${realmURL}index`;
   }
 
   async getRealmInfo(card: Card): Promise<RealmInfo | undefined> {
     await this.apiModule.loaded;
     return card[this.api.realmInfo];
+  }
+
+  async getRealmURL(card: Card): Promise<URL | undefined> {
+    await this.apiModule.loaded;
+    return card[this.api.realmURL];
   }
 
   // only for tests!
