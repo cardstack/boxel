@@ -256,7 +256,7 @@ export default class OperatorModeContainer extends Component<Signature> {
             ? (topMostStackItems[RIGHT] as CardStackItem)
             : (topMostStackItems[LEFT] as CardStackItem); // the index card is never a contained card
 
-        // the source and destination are the same
+        // if the source and destination are the same, don't show a copy button
         if (sourceItem.card.id === destinationItem.card.id) {
           return;
         }
