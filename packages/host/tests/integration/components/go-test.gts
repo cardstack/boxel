@@ -17,6 +17,7 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupMockMessageService,
+  testRealmURL,
 } from '../../helpers';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import MonacoService from '@cardstack/host/services/monaco-service';
@@ -29,15 +30,30 @@ import { OpenFiles } from '@cardstack/host/controllers/code';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-const cardContent = `
-import { contains, field, Card, linksTo } from "https://cardstack.com/base/card-api";
+const sourceContent = `
+import { contains, field, Card } from "https://cardstack.com/base/card-api";
 import StringCard from "https://cardstack.com/base/string";
 
 export class Person extends Card {
   @field name = contains(StringCard);
-  @field friend = linksTo(() => Person);
 }
 `;
+
+const jsonContent = {
+  data: {
+    type: 'card',
+    id: `${testRealmURL}Person/hassan`,
+    attributes: {
+      name: 'Hassan',
+    },
+    meta: {
+      adoptsFrom: {
+        module: `${testRealmURL}person`,
+        name: 'Person',
+      },
+    },
+  },
+};
 
 module('Integration | Component | go', function (hooks) {
   let adapter: TestRealmAdapter;
@@ -69,7 +85,10 @@ module('Integration | Component | go', function (hooks) {
 
   module('with a working realm', function (hooks) {
     hooks.beforeEach(async function () {
-      adapter = new TestRealmAdapter({ 'person.gts': cardContent });
+      adapter = new TestRealmAdapter({
+        'person.gts': sourceContent,
+        'Person/hassan.json': JSON.stringify(jsonContent, null, 2),
+      });
       realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
       monacoService = this.owner.lookup(
         'service:monaco-service'
@@ -147,7 +166,7 @@ module('Integration | Component | go', function (hooks) {
         .containsText('Person');
     });
 
-    test('When a file is selected in the file tree, can update and save new content', async function (assert) {
+    test('When a source file is selected in the file tree, can update and save new content', async function (assert) {
       monacoContext = await monacoService.getMonacoContext();
 
       let onEditorSetup = function (receivedEditor: IStandaloneCodeEditor) {
@@ -187,7 +206,7 @@ module('Integration | Component | go', function (hooks) {
         .containsText('class')
         .containsText('Person');
 
-      editor!.setValue(cardContent + '\n\n');
+      editor!.setValue(sourceContent + '\n\n');
 
       await waitUntil(() => find('[data-test-saving]'));
       assert.dom('[data-test-saving]').exists();
@@ -201,6 +220,50 @@ module('Integration | Component | go', function (hooks) {
       assert
         .dom('[data-test-last-edit]')
         .hasText('Last edit was a few seconds ago');
+    });
+    test('When a json file is selected, can update and save new content. Isolated render also updates', async function (assert) {
+      monacoContext = await monacoService.getMonacoContext();
+
+      let onEditorSetup = function (receivedEditor: IStandaloneCodeEditor) {
+        editor = receivedEditor;
+      };
+      await render(<template>
+        <Go
+          @openFiles={{mockOpenFiles}}
+          @monaco={{monacoContext}}
+          @onEditorSetup={{onEditorSetup}}
+        />
+        <CardPrerender />
+      </template>);
+      await waitFor('[data-test-file]');
+      assert.dom('[data-test-directory="Person/"]').exists();
+      await click('[data-test-directory="Person/"]');
+      assert.strictEqual(mockOpenFiles.openDirs.length, 1);
+      assert.strictEqual(mockOpenFiles.openDirs[0], 'Person/');
+      await waitFor('[data-test-file="Person/hassan.json"]');
+      assert.dom('[data-test-file="Person/hassan.json"]').exists();
+      await click('[data-test-file="Person/hassan.json"]');
+      await waitUntil(() => find('[data-test-editor]'));
+      assert.strictEqual(mockOpenFiles.path, 'Person/hassan.json');
+      assert
+        .dom('[data-test-editor]')
+        .containsText('data')
+        .containsText('Person/hassan');
+      await waitUntil(() => find('[data-test-field="name"]'));
+      assert.dom('[data-test-field="name"]').containsText('Hassan');
+      let newJsonContent = {
+        ...jsonContent,
+      };
+      newJsonContent.data.attributes.name = 'Abdel-Rahman';
+      editor!.setValue(JSON.stringify(newJsonContent, null, 2));
+      await waitUntil(() => find('[data-test-saving]'));
+      assert.dom('[data-test-saving]').exists();
+
+      await waitUntil(() => find('[data-test-saved]'));
+      assert.dom('[data-test-saved]').exists();
+      await waitUntil(() => find('[data-test-field="name"]'));
+      assert.dom('[data-test-field="name"]').containsText('Abdel-Rahman');
+      debugger;
     });
   });
 });
