@@ -22,6 +22,7 @@ import {
 import { RenderingTestContext } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { Loader } from '@cardstack/runtime-common/loader';
+import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 
 const paths = new RealmPaths(testRealmURL);
 const testModuleRealm = 'http://localhost:4202/test/';
@@ -513,7 +514,7 @@ module('Integration | search-index', function (hooks) {
             (await indexer.searchEntry(new URL(`${testRealmURL}vangogh`))) ??
             {};
           assert.strictEqual(
-            trimCardContainer(html!),
+            trimCardContainer(stripScopedCSSAttributes(html!)),
             cleanWhiteSpace(`<h1> Van Gogh </h1>`),
           );
         } else {
@@ -570,7 +571,7 @@ module('Integration | search-index', function (hooks) {
             (await indexer.searchEntry(new URL(`${testRealmURL}vangogh`))) ??
             {};
           assert.strictEqual(
-            trimCardContainer(html!),
+            trimCardContainer(stripScopedCSSAttributes(html!)),
             cleanWhiteSpace(`<h1> Van Gogh </h1>`),
           );
         } else {
@@ -685,7 +686,7 @@ module('Integration | search-index', function (hooks) {
           new URL(`${testRealmURL}working-van-gogh`),
         )) ?? {};
       assert.strictEqual(
-        trimCardContainer(html!),
+        trimCardContainer(stripScopedCSSAttributes(html!)),
         cleanWhiteSpace(`<h1> Van Gogh </h1>`),
       );
     } else {
@@ -803,7 +804,7 @@ module('Integration | search-index', function (hooks) {
           new URL(`${testRealmURL}working-vangogh`),
         )) ?? {};
       assert.strictEqual(
-        trimCardContainer(html!),
+        trimCardContainer(stripScopedCSSAttributes(html!)),
         cleanWhiteSpace(`<h1> Van Gogh </h1>`),
       );
     } else {

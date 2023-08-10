@@ -14,6 +14,7 @@ import {
 import { RenderingTestContext } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { setupRenderingTest } from 'ember-qunit';
+import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 
 let loader: Loader;
 
@@ -91,7 +92,7 @@ module('Integration | card-prerender', function (hooks) {
         new URL(`${testRealmURL}Pet/mango`),
       );
       assert.strictEqual(
-        trimCardContainer(entry!.html!),
+        trimCardContainer(stripScopedCSSAttributes(entry!.html!)),
         cleanWhiteSpace(`<h3> Mango </h3>`),
         'the pre-rendered HTML is correct',
       );
@@ -101,7 +102,7 @@ module('Integration | card-prerender', function (hooks) {
         new URL(`${testRealmURL}Pet/vangogh`),
       );
       assert.strictEqual(
-        trimCardContainer(entry!.html!),
+        trimCardContainer(stripScopedCSSAttributes(entry!.html!)),
         cleanWhiteSpace(`<h3> Van Gogh </h3>`),
         'the pre-rendered HTML is correct',
       );
