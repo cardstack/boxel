@@ -20,7 +20,7 @@ function isHTTPMethod(method: unknown): method is Method {
   return ['GET', 'POST', 'PATCH', 'DELETE'].includes(method);
 }
 
-function extractSupportedMimeType(
+export function extractSupportedMimeType(
   rawAcceptHeader: null | string | [string]
 ): SupportedMimeType | undefined {
   if (!rawAcceptHeader) {

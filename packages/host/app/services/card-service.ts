@@ -22,10 +22,12 @@ import type {
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
 
+export type CardSaveSubscriber = (json: SingleCardDocument) => void;
 const { ownRealmURL } = ENV;
 
 export default class CardService extends Service {
   @service declare loaderService: LoaderService;
+  private subscriber: CardSaveSubscriber | undefined;
 
   private apiModule = importResource(
     this,
@@ -54,6 +56,14 @@ export default class CardService extends Service {
   // fetch to do any URL resolution.
   get defaultURL(): URL {
     return new URL(ownRealmURL);
+  }
+
+  onSave(subscriber: CardSaveSubscriber) {
+    this.subscriber = subscriber;
+  }
+
+  unregisterSaveSubscriber() {
+    this.subscriber = undefined;
   }
 
   private async fetchJSON(
@@ -142,6 +152,9 @@ export default class CardService extends Service {
     // instance that does not yet have an id is still the same instance after an
     // ID has been assigned by the server.
     let result = (await this.api.updateFromSerialized(card, json)) as Card;
+    if (this.subscriber) {
+      this.subscriber(json);
+    }
     return result;
   }
 
@@ -201,6 +214,12 @@ export default class CardService extends Service {
   async getRealmInfo(card: Card): Promise<RealmInfo | undefined> {
     await this.apiModule.loaded;
     return card[this.api.realmInfo];
+  }
+
+  // only for tests!
+  async flushLogs() {
+    await this.apiModule.loaded;
+    await this.api.flushLogs();
   }
 
   // intentionally not async so that this can run in a destructor--this means
