@@ -23,14 +23,3 @@
 .edit-card.saved {
   padding: var(--boxel-sp-xl);
 }
-
-/* DEMO-CARDS */
-.demo-card {
-  display: grid;
-  gap: var(--boxel-sp);
-}
-
-.demo-card h2,
-.demo-card h3 {
-  margin: 0;
-}

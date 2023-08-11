@@ -1,4 +1,4 @@
-import { FieldContainer } from '@cardstack/boxel-ui';
+import { FieldContainer, GridContainer } from '@cardstack/boxel-ui';
 import {
   contains,
   linksToMany,
@@ -33,7 +33,7 @@ export class ClaimList extends Card {
       return this.args.model.claims?.filter((o) => !o.hasBeenClaimed).length;
     }
     <template>
-      <div class='demo-card'>
+      <GridContainer>
         <h2><@fields.description /></h2>
         <FieldContainer @label='Number Claims:'>
           {{@model.claims.length}}
@@ -44,7 +44,7 @@ export class ClaimList extends Card {
         <FieldContainer @label='Number Unclaimed'>
           {{this.numberOfUnclaimed}}
         </FieldContainer>
-      </div>
+      </GridContainer>
     </template>
   };
 }

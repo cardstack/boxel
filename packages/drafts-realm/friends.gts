@@ -7,6 +7,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import { Friend } from './friend';
+import { GridContainer } from '@cardstack/boxel-ui';
 
 export class Friends extends Card {
   static displayName = 'Friends';
@@ -19,12 +20,12 @@ export class Friends extends Card {
   });
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div class='demo-card'>
+      <GridContainer>
         <@fields.firstName />
         has
         {{@model.friends.length}}
         friends
-      </div>
+      </GridContainer>
     </template>
   };
 }

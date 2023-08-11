@@ -7,7 +7,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import StringCard from 'https://cardstack.com/base/string';
-import { FieldContainer } from '@cardstack/boxel-ui';
+import { FieldContainer, GridContainer } from '@cardstack/boxel-ui';
 import BigIntegerCard from 'https://cardstack.com/base/big-integer';
 import NumberCard from 'https://cardstack.com/base/number';
 import { Chain } from './chain';
@@ -38,7 +38,7 @@ export class Transaction extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div class='demo-card'>
+      <GridContainer>
         <FieldContainer @label='Title'><@fields.title /></FieldContainer>
         <FieldContainer @label='From'><@fields.from /></FieldContainer>
         <FieldContainer @label='To'><@fields.to /></FieldContainer>
@@ -49,13 +49,13 @@ export class Transaction extends Card {
         </FieldContainer>
         <FieldContainer @label='Status'><@fields.status /></FieldContainer>
         <FieldContainer @label='Memo'><@fields.memo /></FieldContainer>
-      </div>
+      </GridContainer>
     </template>
   };
 
   static isolated = class Isolated extends Component<typeof Transaction> {
     <template>
-      <div class='demo-card'>
+      <GridContainer>
         <FieldContainer @label='Title'><@fields.title /></FieldContainer>
         <FieldContainer @label='Status'><@fields.status /></FieldContainer>
         <FieldContainer @label='Chain'><@fields.chain /></FieldContainer>
@@ -73,7 +73,7 @@ export class Transaction extends Card {
         </FieldContainer>
 
         <FieldContainer @label='Memo'><@fields.memo /></FieldContainer>
-      </div>
+      </GridContainer>
     </template>
   };
 }

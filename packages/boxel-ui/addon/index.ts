@@ -9,6 +9,7 @@ import BoxelMessage from './components/message';
 import Button from './components/button';
 import CardContainer from './components/card-container';
 import FieldContainer from './components/field-container';
+import GridContainer from './components/grid-container';
 import Header from './components/header';
 import IconButton from './components/icon-button';
 import Label from './components/label';
@@ -30,6 +31,7 @@ export {
   Button,
   CardContainer,
   FieldContainer,
+  GridContainer,
   Header,
   IconButton,
   Label,

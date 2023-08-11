@@ -2,6 +2,7 @@ import FreestyleController from 'ember-freestyle/controllers/freestyle';
 import AddButtonUsage from '@cardstack/boxel-ui/components/add-button/usage';
 import CardContainerUsage from '@cardstack/boxel-ui/components/card-container/usage';
 import FieldContainerUsage from '@cardstack/boxel-ui/components/field-container/usage';
+import GridContainerUsage from '@cardstack/boxel-ui/components/grid-container/usage';
 import HeaderUsage from '@cardstack/boxel-ui/components/header/usage';
 import ButtonUsage from '@cardstack/boxel-ui/components/button/usage';
 import IconButtonUsage from '@cardstack/boxel-ui/components/icon-button/usage';
@@ -22,6 +23,7 @@ export default class IndexController extends FreestyleController {
       ['Boxel::AddButton', AddButtonUsage],
       ['Boxel::CardContainer', CardContainerUsage],
       ['Boxel::FieldContainer', FieldContainerUsage],
+      ['Boxel::GridContainer', GridContainerUsage],
       ['Boxel::Header', HeaderUsage],
       ['Boxel::Button', ButtonUsage],
       ['Boxel::IconButton', IconButtonUsage],
