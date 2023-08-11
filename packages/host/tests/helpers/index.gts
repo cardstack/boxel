@@ -59,7 +59,6 @@ export const testRealmInfo: RealmInfo = {
   name: 'Unnamed Workspace',
   backgroundURL: null,
   iconURL: null,
-  url: null,
 };
 
 export interface CardDocFiles {

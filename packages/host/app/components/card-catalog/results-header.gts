@@ -15,11 +15,17 @@ export default class CardCatalogResultsHeader extends Component<Signature> {
   <template>
     <header class='catalog-results-header'>
       <div
-        style={{if @realm.iconURL (cssUrl 'background-image' @realm.iconURL)}}
-        class={{cn 'realm-icon' realm-icon--empty=(not @realm.iconURL)}}
+        style={{if
+          @realm.realmInfo.iconURL
+          (cssUrl 'background-image' @realm.realmInfo.iconURL)
+        }}
+        class={{cn
+          'realm-icon'
+          realm-icon--empty=(not @realm.realmInfo.iconURL)
+        }}
       />
       <span class='realm-name' data-test-realm-name>
-        {{@realm.name}}
+        {{@realm.realmInfo.name}}
       </span>
       <span class='results-count' data-test-results-count>
         {{#if (gt @realm.cards.length 1)}}

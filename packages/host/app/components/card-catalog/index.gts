@@ -22,53 +22,56 @@ interface Signature {
   };
 }
 
+interface RealmsWithDisplayedCards extends RealmCards {
+  displayedCards: Card[];
+}
+
 export default class CardCatalog extends Component<Signature> {
   <template>
     <div class='card-catalog' data-test-card-catalog>
-      {{#each this.paginatedCardsByRealm as |realm|}}
-        <section class='card-catalog__realm' data-test-realm={{realm.name}}>
-          <CardCatalogResultsHeader @realm={{realm}} />
+      {{#each this.paginatedCardsByRealm as |r|}}
+        <section
+          class='card-catalog__realm'
+          data-test-realm={{r.realmInfo.name}}
+        >
+          <CardCatalogResultsHeader @realm={{r}} />
 
-          {{#if realm.cards.length}}
-            <ul class='card-catalog__group'>
-              {{#each realm.displayedCards as |card|}}
-                <li
-                  class={{cn 'item' selected=(eq @selectedCard.id card.id)}}
-                  data-test-card-catalog-item={{card.id}}
-                >
-                  <CardCatalogItem
-                    @isSelected={{eq @selectedCard.id card.id}}
-                    @title={{card.title}}
-                    @description={{card.description}}
-                    @thumbnailURL={{card.thumbnailURL}}
-                    @context={{@context}}
-                  />
-                  <button
-                    class='select'
-                    {{on 'click' (fn @toggleSelect card)}}
-                    data-test-select={{card.id}}
-                    aria-label='Select'
-                  />
-                  <IconButton
-                    class='hover-button preview'
-                    @icon='eye'
-                    aria-label='preview'
-                  />
-                </li>
-              {{/each}}
-            </ul>
-            {{#if (gt realm.cards.length realm.displayedCards.length)}}
-              <Button
-                {{on 'click' (fn this.displayMoreCards realm)}}
-                @kind='secondary-light'
-                @size='small'
-                data-test-show-more-cards
+          <ul class='card-catalog__group'>
+            {{#each r.displayedCards as |card|}}
+              <li
+                class={{cn 'item' selected=(eq @selectedCard.id card.id)}}
+                data-test-card-catalog-item={{card.id}}
               >
-                Show more cards
-              </Button>
-            {{/if}}
-          {{else}}
-            <p>No cards available</p>
+                <CardCatalogItem
+                  @isSelected={{eq @selectedCard.id card.id}}
+                  @title={{card.title}}
+                  @description={{card.description}}
+                  @thumbnailURL={{card.thumbnailURL}}
+                  @context={{@context}}
+                />
+                <button
+                  class='select'
+                  {{on 'click' (fn @toggleSelect card)}}
+                  data-test-select={{card.id}}
+                  aria-label='Select'
+                />
+                <IconButton
+                  class='hover-button preview'
+                  @icon='eye'
+                  aria-label='preview'
+                />
+              </li>
+            {{/each}}
+          </ul>
+          {{#if (gt r.cards.length r.displayedCards.length)}}
+            <Button
+              {{on 'click' (fn this.displayMoreCards r)}}
+              @kind='secondary-light'
+              @size='small'
+              data-test-show-more-cards
+            >
+              Show more cards
+            </Button>
           {{/if}}
         </section>
       {{else}}
@@ -139,7 +142,7 @@ export default class CardCatalog extends Component<Signature> {
   displayCardCount = 5;
   @service declare cardService: CardService;
 
-  get paginatedCardsByRealm() {
+  get paginatedCardsByRealm(): RealmsWithDisplayedCards[] {
     return this.args.results.map((r) => {
       return {
         ...r,
@@ -151,7 +154,7 @@ export default class CardCatalog extends Component<Signature> {
   }
 
   @action
-  displayMoreCards(realm: RealmCards) {
+  displayMoreCards(realm: RealmsWithDisplayedCards) {
     let num = realm.displayedCards.length;
     realm.displayedCards.push(
       ...realm.cards.slice(num, num + this.displayCardCount),

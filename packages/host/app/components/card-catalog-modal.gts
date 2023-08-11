@@ -39,9 +39,13 @@ interface Signature {
   };
 }
 
-export interface RealmCards extends RealmInfo {
+interface RealmInfoWithURL extends RealmInfo {
+  url: string;
+}
+
+export interface RealmCards {
+  realmInfo: RealmInfoWithURL;
   cards: Card[];
-  displayedCards: Card[];
 }
 
 const DEFAULT_CHOOOSE_CARD_TITLE = 'Choose a Card';
@@ -80,7 +84,7 @@ export default class CardCatalogModal extends Component<Signature> {
             Loading...
           {{else}}
             <CardCatalog
-              @results={{this.filteredRealmsWithCards}}
+              @results={{this.selectedRealms}}
               @toggleSelect={{this.toggleSelect}}
               @selectedCard={{this.selectedCard}}
               @context={{@context}}
@@ -212,51 +216,11 @@ export default class CardCatalogModal extends Component<Signature> {
     );
   }
 
-  get realmsWithCards(): RealmCards[] {
-    let realmCards: RealmCards[] = [];
-    let results = this.currentRequest?.search.instancesWithRealmInfo ?? [];
-
-    if (results.length) {
-      for (let instance of results) {
-        let realm = realmCards.find((r) => r.name === instance.realmInfo?.name);
-        if (realm) {
-          realm.cards.push(instance.card);
-        } else {
-          realm = {
-            ...instance.realmInfo,
-            iconURL: instance.realmInfo.iconURL
-              ? new URL(instance.realmInfo.iconURL, this.cardService.defaultURL)
-                  .href
-              : null,
-            cards: [instance.card],
-            displayedCards: [],
-          };
-          realmCards.push(realm);
-        }
-      }
-    }
-
-    return realmCards;
+  get availableRealms(): RealmCards[] {
+    return this.currentRequest?.search.instancesByRealm ?? [];
   }
 
-  get filteredRealmsWithCards(): RealmCards[] {
-    let selectedRealmUrls = this.selectedRealms.map((r) => r.url);
-
-    return this.realmsWithCards.filter((realm) => {
-      return selectedRealmUrls.includes(realm.url);
-    });
-  }
-
-  // TODO: Use env var for known realms
-  get availableRealms(): RealmInfo[] {
-    return this.realmsWithCards.map<RealmInfo>(
-      ({ url, name, backgroundURL, iconURL }) => {
-        return { url, name, backgroundURL, iconURL };
-      },
-    );
-  }
-
-  get selectedRealms(): RealmInfo[] {
+  get selectedRealms(): RealmCards[] {
     if (this._selectedRealms.length === 0) {
       return this.availableRealms; // All realms are selected by default
     } else {
@@ -264,18 +228,19 @@ export default class CardCatalogModal extends Component<Signature> {
     }
   }
 
-  @tracked _selectedRealms: RealmInfo[] = new TrackedArray([]);
+  @tracked _selectedRealms = new TrackedArray<RealmCards>([]);
 
-  @action onSelectRealm(realm: RealmInfo) {
+  @action onSelectRealm(realm: RealmCards) {
     this._selectedRealms.push(realm);
   }
 
-  @action onDeselectRealm(realm: RealmInfo) {
+  @action onDeselectRealm(realm: RealmCards) {
     if (this._selectedRealms.length === 0) {
+      // When no realm is selected (or when all realms are unselected), display all realms instead
       this._selectedRealms = new TrackedArray(this.availableRealms);
     }
     let selectedRealmIndex = this._selectedRealms.findIndex(
-      (r) => r.url === realm.url,
+      ({ realmInfo }) => realmInfo.url === realm.realmInfo.url,
     );
     this._selectedRealms.splice(selectedRealmIndex, 1);
   }

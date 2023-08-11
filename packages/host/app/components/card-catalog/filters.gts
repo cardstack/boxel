@@ -1,46 +1,44 @@
 import Component from '@glimmer/component';
 import { BoxelDropdown, Menu } from '@cardstack/boxel-ui';
 import { MenuItem } from '@cardstack/boxel-ui/helpers/menu-item';
-import { type RealmInfo } from '@cardstack/runtime-common';
+import { type RealmCards } from '../card-catalog-modal';
 
 interface Signature {
-  availableRealms: RealmInfo[];
-  selectedRealms: RealmInfo[];
-  onSelectRealm: (realm: RealmInfo) => void;
-  onDeselectRealm: (realm: RealmInfo) => void;
+  availableRealms: RealmCards[];
+  selectedRealms: RealmCards[];
+  onSelectRealm: (realm: RealmCards) => void;
+  onDeselectRealm: (realm: RealmCards) => void;
 }
 
 export default class CardCatalogFilters extends Component<Signature> {
   get realmMenuItems() {
-    return this.args.availableRealms.map((realm) => {
-      return new MenuItem(realm.name, 'action', {
+    return this.args.availableRealms.map((r) => {
+      return new MenuItem(r.realmInfo.name, 'action', {
         action: () => {
           let isSelected = this.args.selectedRealms
-            .map((r) => r.url)
-            .includes(realm.url);
+            .map(({ realmInfo }) => realmInfo.url)
+            .includes(r.realmInfo.url);
 
           // Toggle selection - if the item selected, deselect it, if not, select it
           if (isSelected) {
-            // Prevent deselecting all realms. At least one realm must be selected at all times
-            // TODO: when no realm is selected (or when all realms are unselected), display all realms instead
-            if (this.args.selectedRealms.length > 1) {
-              this.args.onDeselectRealm(realm);
-            }
+            this.args.onDeselectRealm(r);
           } else {
-            this.args.onSelectRealm(realm);
+            this.args.onSelectRealm(r);
           }
 
           return false;
         },
         selected: this.args.selectedRealms
-          .map((r) => r.url)
-          .includes(realm.url),
+          .map(({ realmInfo }) => realmInfo.url)
+          .includes(r.realmInfo.url),
       });
     });
   }
 
   get realmFilterSummary() {
-    return this.args.selectedRealms.map((realm) => realm.name).join(', ');
+    return this.args.selectedRealms
+      .map(({ realmInfo }) => realmInfo.name)
+      .join(', ');
   }
 
   <template>

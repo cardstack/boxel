@@ -73,7 +73,6 @@ import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import scopedCSSTransform from 'glimmer-scoped-css/ast-transform';
 
 export type RealmInfo = {
-  url: string | null;
   name: string;
   backgroundURL: string | null;
   iconURL: string | null;
@@ -830,7 +829,6 @@ export class Realm {
       name: 'Unnamed Workspace',
       backgroundURL: null,
       iconURL: null,
-      url: null,
     };
 
     if (realmConfig) {
@@ -840,7 +838,6 @@ export class Realm {
         realmInfo.backgroundURL =
           realmConfigJson.backgroundURL ?? realmInfo.backgroundURL;
         realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
-        realmInfo.url = this.paths.url.toString();
       } catch (e) {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }
