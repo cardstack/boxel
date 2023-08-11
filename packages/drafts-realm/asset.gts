@@ -45,8 +45,19 @@ class Asset extends Card {
         {{#if @model.logoURL}}
           <img src={{@model.logoHref}} width='20' height='20' />
         {{/if}}
-        <div class='payment-method__currency'><@fields.symbol /></div>
+        <div class='currency'><@fields.symbol /></div>
       </div>
+      <style>
+        .asset-card {
+          display: inline-grid;
+          grid-template-columns: var(--boxel-sp) 1fr;
+          gap: var(--boxel-sp-xxxs);
+        }
+
+        .currency {
+          font: 700 var(--boxel-font);
+        }
+      </style>
     </template>
   };
 }

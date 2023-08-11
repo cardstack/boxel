@@ -180,16 +180,6 @@
 }
 
 /* DEMO-CARDS */
-.asset-card {
-  display: inline-grid;
-  grid-template-columns: var(--boxel-sp) 1fr;
-  gap: var(--boxel-sp-xxxs);
-}
-
-.payment-method__currency {
-  font: 700 var(--boxel-font);
-}
-
 .vendor-card .boxel-field + .boxel-field {
   margin-top: var(--boxel-sp);
 }
