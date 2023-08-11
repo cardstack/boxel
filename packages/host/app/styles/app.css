@@ -18,8 +18,3 @@
 .link:hover {
   color: var(--boxel-highlight-hover);
 }
-
-/* For all cards */
-.edit-card.saved {
-  padding: var(--boxel-sp-xl);
-}
