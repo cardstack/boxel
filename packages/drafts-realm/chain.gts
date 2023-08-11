@@ -52,6 +52,8 @@ export class Chain extends Card {
 
   static isolated = class Isolated extends Component<typeof Chain> {
     <template>
+      <FieldContainer @label='Title'><@fields.title />
+        (<@fields.title />)</FieldContainer>
       <FieldContainer @label='Chain'><@fields.title />
         (<@fields.chainId />)</FieldContainer>
       <FieldContainer @label='BlockExplorer'>
