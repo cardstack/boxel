@@ -1,3 +1,4 @@
+import AddButton from './components/add-button';
 import BoxelInput from './components/input';
 import SearchInput, {
   SearchInputBottomTreatment,
@@ -19,6 +20,7 @@ import BoxelDropdown from './components/dropdown';
 import Tooltip from './components/tooltip';
 
 export {
+  AddButton,
   BoxelHeader,
   BoxelInput,
   SearchInput,

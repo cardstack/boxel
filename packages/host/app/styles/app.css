@@ -68,17 +68,3 @@
 .demo-card h3 {
   margin: 0;
 }
-
-/* Add Button */
-.add-button {
-  --icon-bg: var(--boxel-light-100);
-  --icon-border: var(--icon-bg);
-  --icon-color: var(--boxel-highlight);
-
-  border-radius: 100px;
-  box-shadow: 0 4px 6px 0px rgb(0 0 0 / 35%);
-}
-
-.add-button:hover {
-  --icon-bg: var(--boxel-light-200);
-}

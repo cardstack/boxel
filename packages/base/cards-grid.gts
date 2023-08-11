@@ -10,7 +10,7 @@ import {
   relativeTo,
   type CardBase,
 } from './card-api';
-import { IconButton, Tooltip } from '@cardstack/boxel-ui';
+import { AddButton, Tooltip } from '@cardstack/boxel-ui';
 import {
   chooseCard,
   catalogEntryRef,
@@ -65,14 +65,7 @@ class Isolated extends Component<typeof CardsGrid> {
         <div class='add-button'>
           <Tooltip @placement='left' @offset={{6}}>
             <:trigger>
-              <IconButton
-                @icon='icon-plus-circle'
-                @width='40px'
-                @height='40px'
-                class='add-button'
-                {{on 'click' this.createNew}}
-                data-test-create-new-card-button
-              />
+              <AddButton {{on 'click' this.createNew}} />
             </:trigger>
             <:content>
               Add a new card to this collection
