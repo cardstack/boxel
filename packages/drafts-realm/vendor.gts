@@ -110,6 +110,16 @@ export class Vendor extends Card {
         </div>
         <img src={{@model.vendor.logoHref}} />
       </div>
+      <style>
+        .vendor-card .boxel-field + .boxel-field {
+          margin-top: var(--boxel-sp);
+        }
+
+        .vendor-card--embedded {
+          display: grid;
+          grid-template-columns: 1fr auto;
+        }
+      </style>
     </template>
   };
   static isolated = class Isolated extends Component<typeof this> {

@@ -25,15 +25,6 @@
 }
 
 /* DEMO-CARDS */
-.vendor-card .boxel-field + .boxel-field {
-  margin-top: var(--boxel-sp);
-}
-
-.vendor-card--embedded {
-  display: grid;
-  grid-template-columns: 1fr auto;
-}
-
 .demo-card {
   display: grid;
   gap: var(--boxel-sp);
