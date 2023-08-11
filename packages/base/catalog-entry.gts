@@ -97,7 +97,7 @@ export class CatalogEntry extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div class='entry'>
+      <div class='entry embedded'>
         <header class='title'>
           <@fields.title />
         </header>
@@ -106,13 +106,7 @@ export class CatalogEntry extends Card {
         </p>
       </div>
       <style>
-        .entry {
-          display: grid;
-          gap: 3px;
-          font: var(--boxel-font-sm);
-        }
-
-        .entry > * {
+        .embedded > * {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -151,12 +145,6 @@ export class CatalogEntry extends Card {
         {{/if}}
       </div>
       <style>
-        .entry {
-          display: grid;
-          gap: 3px;
-          font: var(--boxel-font-sm);
-        }
-
         .realm-name {
           color: var(--boxel-teal);
           font-size: var(--boxel-font-size-xs);
