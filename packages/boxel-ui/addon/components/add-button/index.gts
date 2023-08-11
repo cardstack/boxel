@@ -1,5 +1,4 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { on } from '@ember/modifier';
 import IconButton from '../icon-button';
 
 interface Signature {
