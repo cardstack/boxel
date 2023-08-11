@@ -19,34 +19,6 @@
   color: var(--boxel-highlight-hover);
 }
 
-/* Catalog Entry */
-.catalog-entry {
-  display: grid;
-  gap: 3px;
-  font: var(--boxel-font-sm);
-}
-
-.catalog-entry--embedded > * {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.catalog-entry--embedded__title {
-  font: 700 var(--boxel-font-sm);
-}
-
-.catalog-entry__realm-name {
-  color: var(--boxel-teal);
-  font-size: var(--boxel-font-size-xs);
-}
-
-.catalog-entry-embedded__description {
-  margin: 0;
-  color: var(--boxel-500);
-  font-size: var(--boxel-font-size-xs);
-}
-
 /* For all cards */
 .field-component-card {
   padding: var(--boxel-sp);
