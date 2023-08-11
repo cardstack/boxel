@@ -8,7 +8,7 @@ module('Acceptance | Docs', function (hooks) {
 
   test('accessibility check', async function (assert) {
     await visit('/');
-    assert.dom('h2.FreestyleUsage-name').containsText('CardContainer');
+    assert.dom('h2.FreestyleUsage-name').containsText('AddButton');
     // Only audit usage-preview examples
     await a11yAudit({
       include: ['.FreestyleUsage-preview'],
@@ -23,7 +23,7 @@ module('Acceptance | Docs', function (hooks) {
 
   test('glimmer-scoped-css smoke test', async function (assert) {
     await visit('/');
-    await click('a[href*=Button]');
+    await click('a[href$="%3AButton%3E"]');
 
     const buttonElement = find('[data-test-boxel-button]');
 
