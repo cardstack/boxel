@@ -16,7 +16,7 @@ export default class AddButtonUsage extends Component {
   }
 
   <template>
-    <FreestyleUsage @name='Tooltip'>
+    <FreestyleUsage @name='AddButton'>
       <:example>
         <BoxelAddButton {{on 'click' (fn this.log 'button clicked')}} />
       </:example>
