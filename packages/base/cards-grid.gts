@@ -18,14 +18,12 @@ import {
   getCards,
   baseRealm,
   cardTypeDisplayName,
+  subscribeToRealm,
 } from '@cardstack/runtime-common';
+import { registerDestructor } from '@ember/destroyable';
 import { tracked } from '@glimmer/tracking';
 import { type CatalogEntry } from './catalog-entry';
 import StringCard from './string';
-
-// We pass a handle on the search refresh so that the outside
-// can trigger timely refreshes of this grid
-(globalThis as any).__cardsGrids = new WeakMap<Isolated, () => void>();
 
 class Isolated extends Component<typeof CardsGrid> {
   <template>
@@ -91,15 +89,30 @@ class Isolated extends Component<typeof CardsGrid> {
 
   @tracked
   private declare request: { instances: Card[]; isLoading: boolean };
+  private subscription: { url: string; unsubscribe: () => void } | undefined;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
     this.refresh();
 
-    (globalThis as any).__cardsGrids.set(
-      this.args.model,
-      this.refresh.bind(this),
-    );
+    let url = `${this.args.model[realmURL]}_message`;
+    if (!this.subscription) {
+      this.subscription = {
+        url,
+        unsubscribe: subscribeToRealm(url, ({ data }) => {
+          // we are only interested in events related to index changes.
+          // currently these looks like "index: full" and "index: incremental"
+          if (data.startsWith('index:')) {
+            this.refresh();
+          }
+        }),
+      };
+    }
+    registerDestructor(this, () => {
+      if (this.subscription) {
+        this.subscription.unsubscribe();
+      }
+    });
   }
 
   private refresh() {

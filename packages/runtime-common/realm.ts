@@ -232,6 +232,7 @@ export class Realm {
     let results = await this.#adapter.write(path, contents);
     await this.#searchIndex.update(this.paths.fileURL(path));
 
+    this.sendUpdateMessages({ type: 'update', data: { index: 'incremental' } });
     return results;
   }
 
@@ -240,6 +241,7 @@ export class Realm {
     await this.#searchIndex.update(this.paths.fileURL(path), {
       delete: true,
     });
+    this.sendUpdateMessages({ type: 'update', data: { index: 'incremental' } });
   }
 
   get loader() {
@@ -252,12 +254,14 @@ export class Realm {
 
   async reindex() {
     await this.#searchIndex.run();
+    this.sendUpdateMessages({ type: 'update', data: { index: 'full' } });
   }
 
   async #startup() {
     await Promise.resolve();
     await this.#warmUpCache();
     await this.#searchIndex.run();
+    this.sendUpdateMessages({ type: 'update', data: { index: 'full' } });
   }
 
   // Take advantage of the fact that the base realm modules are static (for now)

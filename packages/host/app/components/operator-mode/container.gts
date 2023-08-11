@@ -38,6 +38,7 @@ import perform from 'ember-concurrency/helpers/perform';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import OperatorModeStack from './stack';
 import type MatrixService from '../../services/matrix-service';
+import type MessageService from '../../services/message-service';
 import ChatSidebar from '../matrix/chat-sidebar';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
@@ -97,6 +98,7 @@ const clearSelections = new WeakMap<StackItem, () => void>();
 export default class OperatorModeContainer extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
+  @service declare messageService: MessageService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
   @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
@@ -106,6 +108,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   constructor(owner: unknown, args: any) {
     super(owner, args);
 
+    this.messageService.register();
     (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
     this.loadCardService.perform();
     registerDestructor(this, () => {
@@ -184,6 +187,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       .map((i) => cardSelections.get(i) ?? []);
   }
 
+  // TODO move copy button into its own component
   get copyState(): CopyButtonState | undefined {
     // Need to have 2 stacks in order for a copy button to exist
     if (this.operatorModeStateService.state.stacks.length < 2) {
@@ -425,10 +429,6 @@ export default class OperatorModeContainer extends Component<Signature> {
       let clearSelection = clearSelections.get(sourceItem);
       if (typeof clearSelection === 'function') {
         clearSelection();
-      }
-      let refresh = (globalThis as any).__cardsGrids.get(destinationItem.card);
-      if (typeof refresh === 'function') {
-        refresh();
       }
       // only do this in test env--this makes sure that we also wait for any
       // interior card instance async as part of our ember-test-waiters
