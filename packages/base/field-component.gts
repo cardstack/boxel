@@ -95,6 +95,11 @@ export function getBoxComponent(
         @context={{context}}
       />
     {{/if}}
+    <style>
+      .field-component-card {
+        padding: var(--boxel-sp);
+      }
+    </style>
   </template>;
 
   // when viewed from *outside*, our component is both an invokable component

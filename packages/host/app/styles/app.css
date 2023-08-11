@@ -20,10 +20,6 @@
 }
 
 /* For all cards */
-.field-component-card {
-  padding: var(--boxel-sp);
-}
-
 .isolated-card {
   padding: var(--boxel-sp-xl);
 }
