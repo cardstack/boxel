@@ -101,7 +101,7 @@ class Isolated extends Component<typeof CardsGrid> {
         url,
         unsubscribe: subscribeToRealm(url, ({ data }) => {
           // we are only interested in events related to index changes.
-          // currently these looks like "index: full" and "index: incremental"
+          // currently these look like "index: full" and "index: incremental"
           if (data.startsWith('index:')) {
             this.refresh();
           }

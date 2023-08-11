@@ -35,6 +35,8 @@ let setCardInOperatorModeState: (
   rightCards?: string[],
 ) => Promise<void>;
 
+type TestContextForCopy = TestContextWithSave & TestContextWithSSE;
+
 module('Integration | card-copy', function (hooks) {
   let adapter1: TestRealmAdapter;
   let adapter2: TestRealmAdapter;
@@ -566,9 +568,7 @@ module('Integration | card-copy', function (hooks) {
       .containsText('Copy 1 Card', 'button text is correct');
   });
 
-  test<
-    TestContextWithSave & TestContextWithSSE
-  >('can copy a card', async function (assert) {
+  test<TestContextForCopy>('can copy a card', async function (assert) {
     assert.expect(9);
     let expectedEvents = ['added: Pet/1.json', 'index: incremental'];
     await setCardInOperatorModeState(
@@ -634,9 +634,7 @@ module('Integration | card-copy', function (hooks) {
       .containsText('Mango');
   });
 
-  test<
-    TestContextWithSave & TestContextWithSSE
-  >('can copy mulitple cards', async function (assert) {
+  test<TestContextForCopy>('can copy mulitple cards', async function (assert) {
     assert.expect(9);
     let expectedEvents = [
       'added: Pet/1.json',
@@ -719,9 +717,7 @@ module('Integration | card-copy', function (hooks) {
     );
   });
 
-  test<
-    TestContextWithSave & TestContextWithSSE
-  >('can copy a card that has a relative link to card in source realm', async function (assert) {
+  test<TestContextForCopy>('can copy a card that has a relative link to card in source realm', async function (assert) {
     assert.expect(14);
     let expectedEvents = ['added: Person/1.json', 'index: incremental'];
     await setCardInOperatorModeState(
@@ -807,9 +803,7 @@ module('Integration | card-copy', function (hooks) {
       .containsText('Hassan');
   });
 
-  test<
-    TestContextWithSave & TestContextWithSSE
-  >('can copy a card that has a link to card in destination realm', async function (assert) {
+  test<TestContextForCopy>('can copy a card that has a link to card in destination realm', async function (assert) {
     assert.expect(14);
     let expectedEvents = ['added: Person/1.json', 'index: incremental'];
     await setCardInOperatorModeState(
