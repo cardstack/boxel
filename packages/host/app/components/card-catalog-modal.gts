@@ -39,12 +39,9 @@ interface Signature {
   };
 }
 
-interface RealmInfoWithURL extends RealmInfo {
-  url: string;
-}
-
 export interface RealmCards {
-  realmInfo: RealmInfoWithURL;
+  url: string | null;
+  realmInfo: RealmInfo;
   cards: Card[];
 }
 
@@ -84,7 +81,7 @@ export default class CardCatalogModal extends Component<Signature> {
             Loading...
           {{else}}
             <CardCatalog
-              @results={{this.selectedRealms}}
+              @results={{this.displayedRealms}}
               @toggleSelect={{this.toggleSelect}}
               @selectedCard={{this.selectedCard}}
               @context={{@context}}
@@ -216,16 +213,19 @@ export default class CardCatalogModal extends Component<Signature> {
     );
   }
 
+  get displayedRealms(): RealmCards[] {
+    // if no realms are selected, display all realms
+    return this.selectedRealms.length
+      ? this.selectedRealms
+      : this.availableRealms;
+  }
+
   get availableRealms(): RealmCards[] {
     return this.currentRequest?.search.instancesByRealm ?? [];
   }
 
   get selectedRealms(): RealmCards[] {
-    if (this._selectedRealms.length === 0) {
-      return this.availableRealms; // All realms are selected by default
-    } else {
-      return this._selectedRealms;
-    }
+    return this._selectedRealms;
   }
 
   @tracked _selectedRealms = new TrackedArray<RealmCards>([]);
@@ -235,12 +235,8 @@ export default class CardCatalogModal extends Component<Signature> {
   }
 
   @action onDeselectRealm(realm: RealmCards) {
-    if (this._selectedRealms.length === 0) {
-      // When no realm is selected (or when all realms are unselected), display all realms instead
-      this._selectedRealms = new TrackedArray(this.availableRealms);
-    }
     let selectedRealmIndex = this._selectedRealms.findIndex(
-      ({ realmInfo }) => realmInfo.url === realm.realmInfo.url,
+      (r) => r.url === realm.url,
     );
     this._selectedRealms.splice(selectedRealmIndex, 1);
   }

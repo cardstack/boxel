@@ -65,7 +65,7 @@ export class Search extends Resource<Args> {
         if (!realmInfo) {
           throw new Error(`Could not find realm info for card ${cards[0].id}`);
         }
-        return { realmInfo: { ...realmInfo, url }, cards };
+        return { url, realmInfo, cards };
       }),
     );
   });

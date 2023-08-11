@@ -12,30 +12,33 @@ interface Signature {
 
 export default class CardCatalogFilters extends Component<Signature> {
   get realmMenuItems() {
-    return this.args.availableRealms.map((r) => {
-      return new MenuItem(r.realmInfo.name, 'action', {
+    return this.args.availableRealms.map((realm) => {
+      return new MenuItem(realm.realmInfo.name, 'action', {
         action: () => {
           let isSelected = this.args.selectedRealms
-            .map(({ realmInfo }) => realmInfo.url)
-            .includes(r.realmInfo.url);
+            .map((realm) => realm.url)
+            .includes(realm.url);
 
           // Toggle selection - if the item selected, deselect it, if not, select it
           if (isSelected) {
-            this.args.onDeselectRealm(r);
+            this.args.onDeselectRealm(realm);
           } else {
-            this.args.onSelectRealm(r);
+            this.args.onSelectRealm(realm);
           }
 
           return false;
         },
         selected: this.args.selectedRealms
-          .map(({ realmInfo }) => realmInfo.url)
-          .includes(r.realmInfo.url),
+          .map((realm) => realm.url)
+          .includes(realm.url),
       });
     });
   }
 
   get realmFilterSummary() {
+    if (this.args.selectedRealms.length === 0) {
+      return 'All';
+    }
     return this.args.selectedRealms
       .map(({ realmInfo }) => realmInfo.name)
       .join(', ');

@@ -29,15 +29,18 @@ interface RealmsWithDisplayedCards extends RealmCards {
 export default class CardCatalog extends Component<Signature> {
   <template>
     <div class='card-catalog' data-test-card-catalog>
-      {{#each this.paginatedCardsByRealm as |r|}}
+      {{#each this.paginatedCardsByRealm as |realm|}}
         <section
           class='card-catalog__realm'
-          data-test-realm={{r.realmInfo.name}}
+          data-test-realm={{realm.realmInfo.name}}
         >
-          <CardCatalogResultsHeader @realm={{r}} />
+          <CardCatalogResultsHeader
+            @realm={{realm.realmInfo}}
+            @resultsCount={{realm.cards.length}}
+          />
 
           <ul class='card-catalog__group'>
-            {{#each r.displayedCards as |card|}}
+            {{#each realm.displayedCards as |card|}}
               <li
                 class={{cn 'item' selected=(eq @selectedCard.id card.id)}}
                 data-test-card-catalog-item={{card.id}}
@@ -63,9 +66,9 @@ export default class CardCatalog extends Component<Signature> {
               </li>
             {{/each}}
           </ul>
-          {{#if (gt r.cards.length r.displayedCards.length)}}
+          {{#if (gt realm.cards.length realm.displayedCards.length)}}
             <Button
-              {{on 'click' (fn this.displayMoreCards r)}}
+              {{on 'click' (fn this.displayMoreCards realm)}}
               @kind='secondary-light'
               @size='small'
               data-test-show-more-cards

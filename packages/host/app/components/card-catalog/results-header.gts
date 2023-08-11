@@ -3,11 +3,12 @@ import Component from '@glimmer/component';
 import cssUrl from 'ember-css-url';
 import { eq, gt, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import cn from '@cardstack/boxel-ui/helpers/cn';
-import type { RealmCards } from '../card-catalog-modal';
+import type { RealmInfo } from '@cardstack/runtime-common';
 
 interface Signature {
   Args: {
-    realm: RealmCards;
+    realm: RealmInfo;
+    resultsCount: number;
   };
 }
 
@@ -15,23 +16,17 @@ export default class CardCatalogResultsHeader extends Component<Signature> {
   <template>
     <header class='catalog-results-header'>
       <div
-        style={{if
-          @realm.realmInfo.iconURL
-          (cssUrl 'background-image' @realm.realmInfo.iconURL)
-        }}
-        class={{cn
-          'realm-icon'
-          realm-icon--empty=(not @realm.realmInfo.iconURL)
-        }}
+        style={{if @realm.iconURL (cssUrl 'background-image' @realm.iconURL)}}
+        class={{cn 'realm-icon' realm-icon--empty=(not @realm.iconURL)}}
       />
       <span class='realm-name' data-test-realm-name>
-        {{@realm.realmInfo.name}}
+        {{@realm.name}}
       </span>
       <span class='results-count' data-test-results-count>
-        {{#if (gt @realm.cards.length 1)}}
-          {{@realm.cards.length}}
+        {{#if (gt @resultsCount 1)}}
+          {{@resultsCount}}
           results
-        {{else if (eq @realm.cards.length 1)}}
+        {{else if (eq @resultsCount 1)}}
           1 result
         {{/if}}
       </span>
