@@ -1,6 +1,6 @@
 import Modifier from 'ember-modifier';
 import '@cardstack/requirejs-monaco-ember-polyfill';
-import { restartableTask, timeout } from 'ember-concurrency';
+import { restartableTask } from 'ember-concurrency';
 import { registerDestructor } from '@ember/destroyable';
 import type * as MonacoSDK from 'monaco-editor';
 
@@ -55,17 +55,12 @@ export default class Monaco extends Modifier<Signature> {
       this.model.onDidChangeContent(() =>
         this.onContentChanged.perform(contentChanged),
       );
-
-      // To be consistent call this immediately since the initial content
-      // was set before we had a chance to register our listener
-      this.onContentChanged.perform(contentChanged);
     }
     this.lastLanguage = language;
   }
 
   private onContentChanged = restartableTask(
     async (contentChanged: (text: string) => void) => {
-      await timeout(500);
       if (this.model) {
         this.lastContent = this.model.getValue();
         contentChanged(this.lastContent);

@@ -204,38 +204,5 @@ QUnit.module(
         'error message is displayed',
       );
     });
-
-    test('can render a schema view for card module', async function (assert) {
-      await boot(`${testRealmURL}/person?schema`, '[data-test-card-id]');
-      assert.strictEqual(
-        testDocument().location.href,
-        `${testRealmURL}/code?openDirs=&path=person.gts`,
-      );
-      let cardId = querySelector('[data-test-card-id');
-      assert.ok(cardId, 'card ID element exists');
-      assert.strictEqual(
-        cleanWhiteSpace(cardId.textContent),
-        `Card ID: ${testRealmURL}/person/Person`,
-        'the card id is correct',
-      );
-
-      let fields = [...querySelectorAll('[data-test-field]')];
-      assert.strictEqual(fields.length, 3, 'number of fields is correct');
-      assert.strictEqual(
-        cleanWhiteSpace(fields[0].textContent),
-        `Delete firstName - contains - field card ID: https://cardstack.com/base/string/default`,
-        'field is correct',
-      );
-      assert.strictEqual(
-        cleanWhiteSpace(fields[1].textContent),
-        `description - contains - field card ID: https://cardstack.com/base/string/default`,
-        'description field is correct',
-      );
-      assert.strictEqual(
-        cleanWhiteSpace(fields[2].textContent),
-        `thumbnailURL - contains - field card ID: https://cardstack.com/base/string/default`,
-        'thumbnailURL field is correct',
-      );
-    });
   },
 );

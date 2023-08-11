@@ -22,10 +22,10 @@ export default class MonacoService extends Service {
   private loadMonacoSDK = task(async () => {
     const monaco = await import('monaco-editor');
     monaco.languages.typescript.javascriptDefaults.setCompilerOptions(
-      this.defaultCompilerOptions(monaco)
+      this.defaultCompilerOptions(monaco),
     );
     let promises = languageConfigs.map((lang) =>
-      this.extendMonacoLanguage(lang, monaco)
+      this.extendMonacoLanguage(lang, monaco),
     );
     await Promise.all(promises);
     return monaco;
@@ -40,7 +40,7 @@ export default class MonacoService extends Service {
 
   private async extendMonacoLanguage(
     { baseId, langInfo, rules }: MonacoLanguageConfig,
-    sdk: MonacoSDK
+    sdk: MonacoSDK,
   ) {
     const baseLanguage = sdk.languages
       .getLanguages()
@@ -63,7 +63,7 @@ export default class MonacoService extends Service {
   }
 
   private defaultCompilerOptions(
-    sdk: MonacoSDK
+    sdk: MonacoSDK,
   ): _MonacoSDK.languages.typescript.CompilerOptions {
     return {
       target: sdk.languages.typescript.ScriptTarget.ES2020,

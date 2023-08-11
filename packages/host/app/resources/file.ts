@@ -19,6 +19,7 @@ interface Args {
 
 export interface Loading {
   state: 'loading';
+  ready: (lastModified?: string) => Promise<void>; // Used for test. It enables resource parent context to update file resource state to be Ready
 }
 
 export interface ServerError {
@@ -49,6 +50,9 @@ class _FileResource extends Resource<Args> {
 
   @tracked private innerState: FileResource = {
     state: 'loading',
+    ready: async () => {
+      return this.read.perform();
+    },
   };
 
   @service declare loaderService: LoaderService;
@@ -64,27 +68,27 @@ class _FileResource extends Resource<Args> {
     });
   }
 
-  modify(_positional: never[], named: Args['named']) {
-    let { relativePath, realmURL, onStateChange } = named;
-    this._url = realmURL + relativePath;
-    this.onStateChange = onStateChange;
-    this.read.perform();
-
-    let path = `${realmURL}_message`;
-
-    if (this.subscription && this.subscription.url !== path) {
+  setSubscription(realmURL: string, callback: () => void) {
+    let messageServiceUrl = `${realmURL}_message`;
+    if (this.subscription && this.subscription.url !== messageServiceUrl) {
       this.subscription.unsubscribe();
       this.subscription = undefined;
     }
 
     if (!this.subscription) {
       this.subscription = {
-        url: path,
-        unsubscribe: this.messageService.subscribe(path, () =>
-          this.read.perform()
-        ),
+        url: messageServiceUrl,
+        unsubscribe: this.messageService.subscribe(messageServiceUrl, callback),
       };
     }
+  }
+
+  modify(_positional: never[], named: Args['named']) {
+    let { relativePath, realmURL, onStateChange } = named;
+    this._url = realmURL + relativePath;
+    this.onStateChange = onStateChange;
+    this.read.perform(); //initial read
+    this.setSubscription(realmURL, () => this.read.perform());
   }
 
   private updateState(newState: FileResource): void {
@@ -105,7 +109,7 @@ class _FileResource extends Resource<Args> {
       log.error(
         `Could not get file ${this._url}, status ${response.status}: ${
           response.statusText
-        } - ${await response.text()}`
+        } - ${await response.text()}`,
       );
       if (response.status === 404) {
         this.updateState({ state: 'not-found', url: this._url });
@@ -124,12 +128,16 @@ class _FileResource extends Resource<Args> {
     }
     let content = await response.text();
     let self = this;
+    // Inside test, The loader occasionally doesn't do a network request and creates Response object manually
+    // This means that reading response.url will give url = '' and we cannot manually alter the url in Response
+    // The below condition is a workaround
+    let url = response.url == '' ? this._url : response.url;
     this.updateState({
       state: 'ready',
       lastModified: lastModified,
       content,
-      name: response.url.split('/').pop()!,
-      url: response.url,
+      name: url.split('/').pop()!,
+      url: url,
       write(content: string, flushLoader?: true) {
         self.writeTask.perform(this, content, flushLoader);
       },
@@ -155,7 +163,7 @@ class _FileResource extends Resource<Args> {
       if (this.innerState.state === 'not-found') {
         // TODO think about the "unauthorized" scenario
         throw new Error(
-          'this should be impossible--we are creating the specified path'
+          'this should be impossible--we are creating the specified path',
         );
       }
 
@@ -171,8 +179,16 @@ class _FileResource extends Resource<Args> {
       if (flushLoader) {
         this.loaderService.reset();
       }
-    }
+    },
   );
+
+  async ready(lastModified?: string) {
+    await this.read.perform();
+    if (this.innerState.state != 'ready') {
+      throw new Error('File not ready');
+    }
+    this.innerState.lastModified = lastModified;
+  }
 
   get state() {
     return this.innerState.state;

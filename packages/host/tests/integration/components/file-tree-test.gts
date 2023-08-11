@@ -1,5 +1,4 @@
 import { module, test } from 'qunit';
-import Service from '@ember/service';
 import GlimmerComponent from '@glimmer/component';
 import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
@@ -19,31 +18,27 @@ import FileTree from '@cardstack/host/components/editor/file-tree';
 import { waitUntil, waitFor, fillIn, click } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
+import CodeController from '@cardstack/host/controllers/code';
+import { OpenFiles } from '@cardstack/host/controllers/code';
 
 let loader: Loader;
 
 module('Integration | file-tree', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
-  let didTransition: { route: string; params: any } | undefined;
-  class MockRouter extends Service {
-    transitionTo(route: string, params: any) {
-      didTransition = { route, params };
-    }
-  }
+  let mockController = new CodeController();
+  let mockOpenFiles = new OpenFiles(mockController);
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
 
   hooks.beforeEach(async function () {
-    didTransition = undefined;
-    this.owner.register('service:router', MockRouter);
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
     loader.addURLMapping(
       new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/'),
+      new URL('http://localhost:4201/base/')
     );
     shimExternals(loader);
     adapter = new TestRealmAdapter({
@@ -127,20 +122,15 @@ module('Integration | file-tree', function (hooks) {
   });
 
   test('can create a new card', async function (assert) {
-    let openDirs: string[] = [];
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <FileTree
-            @url={{testRealmURL}}
-            @openFile={{undefined}}
-            @openDirs={{openDirs}}
-          />
+          <FileTree @url={{testRealmURL}} @openFiles={{mockOpenFiles}} />
           <CreateCardModal />
           <CardCatalogModal />
           <CardPrerender />
         </template>
-      },
+      }
     );
     await click('[data-test-create-new-card-button]');
 
@@ -154,17 +144,17 @@ module('Integration | file-tree', function (hooks) {
       .exists({ count: 3 }, 'number of catalog items is correct');
     assert
       .dom(
-        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"]`,
+        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"]`
       )
       .exists('first item is correct');
     assert
       .dom(
-        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}post-entry"]`,
+        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}post-entry"]`
       )
       .exists('second item is correct');
     assert
       .dom(
-        `[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/string-field`,
+        `[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/string-field`
       )
       .doesNotExist('primitive field cards are not displayed');
 
@@ -176,18 +166,11 @@ module('Integration | file-tree', function (hooks) {
     await fillIn('[data-test-field="firstName"] input', 'Jackie');
     await click('[data-test-save-card]');
     await waitUntil(() => !document.querySelector('[data-test-saving]'));
-
-    assert.strictEqual(didTransition?.route, 'code', 'the route is correct');
-    assert.deepEqual(
-      didTransition?.params,
-      {
-        queryParams: { path: 'Person/1.json' },
-      },
-      'the query params are correct',
-    );
+    assert.strictEqual(mockController.path, 'Person/1.json');
+    assert.strictEqual(mockController.openDirs, undefined);
 
     let entry = await realm.searchIndex.card(
-      new URL(`${testRealmURL}Person/1`),
+      new URL(`${testRealmURL}Person/1`)
     );
     assert.ok(entry, 'the new person card was created');
 
@@ -211,7 +194,7 @@ module('Integration | file-tree', function (hooks) {
           },
         },
       },
-      'file contents are correct',
+      'file contents are correct'
     );
   });
 });
