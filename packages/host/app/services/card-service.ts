@@ -20,8 +20,6 @@ import type {
   SerializeOpts,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type * as CardsGridModule from 'https://cardstack.com/base/cards-grid';
-import type { CardsGrid } from 'https://cardstack.com/base/cards-grid';
 import ENV from '@cardstack/host/config/environment';
 
 export type CardSaveSubscriber = (json: SingleCardDocument) => void;
@@ -34,10 +32,6 @@ export default class CardService extends Service {
   private apiModule = importResource(
     this,
     () => 'https://cardstack.com/base/card-api',
-  );
-  private cardGridModule = importResource(
-    this,
-    () => 'https://cardstack.com/base/cards-grid',
   );
 
   private get api() {
@@ -54,23 +48,8 @@ export default class CardService extends Service {
     return this.apiModule.module as typeof CardAPI;
   }
 
-  private get CardsGrid() {
-    if (this.cardGridModule.error) {
-      throw new Error(
-        `Error loading CardsGrid: ${JSON.stringify(this.cardGridModule.error)}`,
-      );
-    }
-    if (!this.cardGridModule.module) {
-      throw new Error(
-        `bug: CardsGrid has not loaded yet--make sure to await this.loaded before using the this.CardsGrid`,
-      );
-    }
-    let module = this.cardGridModule.module as typeof CardsGridModule;
-    return module.CardsGrid;
-  }
-
   get ready() {
-    return Promise.all([this.apiModule.loaded, this.cardGridModule.loaded]);
+    return this.apiModule.loaded;
   }
 
   // Note that this should be the unresolved URL and that we need to rely on our
@@ -249,8 +228,8 @@ export default class CardService extends Service {
     return this.api.isCard(maybeCard);
   }
 
-  isIndexCard(maybeIndexCard: any): maybeIndexCard is CardsGrid {
-    if (!(maybeIndexCard instanceof this.CardsGrid)) {
+  isIndexCard(maybeIndexCard: any): maybeIndexCard is Card {
+    if (!(maybeIndexCard instanceof this.api.Card)) {
       return false;
     }
     let realmURL = maybeIndexCard[this.api.realmURL]?.href;
