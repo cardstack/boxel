@@ -80,6 +80,28 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         {{getPlural @field.card.displayName}}
       </div>
     </div>
+    <style>
+      .add-new {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+
+        background: var(--boxel-light-100);
+        box-sizing: border-box;
+        cursor: pointer;
+        width: 100%;
+        height: calc(var(--boxel-sp-xxxl) * var(--boxel-ratio));
+        border: 1px solid var(--boxel-form-control-border-color);
+        border-radius: var(--boxel-form-control-border-radius);
+        color: var(--boxel-teal);
+        font: var(--boxel-font-sm);
+        font-weight: 500;
+        letter-spacing: var(--boxel-lsp-xs);
+        transition: border-color var(--boxel-transition);
+        --icon-color: var(--boxel-teal);
+      }
+    </style>
   </template>
 
   add = () => {

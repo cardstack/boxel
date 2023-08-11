@@ -28,13 +28,12 @@ interface Signature {
 class ContainsManyEditor extends GlimmerComponent<Signature> {
   <template>
     <div
-      class='contains-many-editor'
       data-test-contains-many={{this.args.field.name}}
     >
       {{#if @arrayField.children.length}}
-        <ul>
+        <ul class='list'>
           {{#each @arrayField.children as |boxedElement i|}}
-            <li class='links-to-editor' data-test-item={{i}}>
+            <li class='links-to-editor FIXME' data-test-item={{i}}>
               {{#let
                 (getBoxComponent
                   (this.args.cardTypeFor @field boxedElement)
@@ -50,7 +49,7 @@ class ContainsManyEditor extends GlimmerComponent<Signature> {
                 @icon='icon-trash'
                 @width='20px'
                 @height='20px'
-                class='contains-many-editor__remove-icon'
+                class='remove-icon'
                 {{on 'click' (fn this.remove i)}}
                 data-test-remove={{i}}
                 aria-label='Remove'
@@ -66,6 +65,24 @@ class ContainsManyEditor extends GlimmerComponent<Signature> {
         data-test-add-new
       >+ Add New</Button>
     </div>
+    <style>
+      .list {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 var(--boxel-sp);
+      }
+
+      .list > li + li {
+        margin-top: var(--boxel-sp);
+      }
+
+      .remove-icon {
+        --icon-color: var(--boxel-red);
+      }
+      .remove-icon:hover {
+        --icon-color: var(--boxel-error-200);
+      }
+    </style>
   </template>
 
   add = () => {
