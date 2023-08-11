@@ -1,5 +1,19 @@
 # Card Serialization and Deserialization
 
+```mermaid
+flowchart TB
+
+    A[Card Instance] --> |serializeCard| B[LooseSingleCardDocument]
+    B --> C
+    E[LooseCardResource] -->|createFromSerialized| A
+    C[JSON Storage on Realm Server] --> E
+
+    style A fill:#58D68D
+    style B fill:#3498DB
+    style C fill:#F5B041
+    style E fill:#3498DB
+```
+
 Card Serialization and Deserialization are crucial processes that enable smooth conversion of card data between JSON format and actual card instances. This transformation is necessary to save card data persistently on the realm server in JSON format, while also facilitating its presentation to users through browser-rendered card instances. The following is an illustration of the JSON structure of a card:
 
 ```
