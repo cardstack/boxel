@@ -12,6 +12,7 @@ import {
   testRealmURL,
   setupCardLogs,
   setupLocalIndexing,
+  setupServerSentEvents,
   setupOnSave,
   TestRealmAdapter,
   TestRealm,
@@ -51,6 +52,7 @@ module('Integration | operator-mode', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
+  setupServerSentEvents(hooks);
   let noop = () => {};
   async function loadCard(url: string): Promise<Card> {
     let { createFromSerialized, recompute } = cardApi;
