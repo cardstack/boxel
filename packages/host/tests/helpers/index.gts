@@ -201,6 +201,7 @@ class MockMessageService extends Service {
   subscribe() {
     return () => {};
   }
+  register() {}
 }
 
 export function setupOnSave(hooks: NestedHooks) {
