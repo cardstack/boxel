@@ -2,6 +2,9 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 interface Signature {
   Element: HTMLElement;
+  Blocks: {
+    default: [];
+  };
 }
 
 const GridContainer: TemplateOnlyComponent<Signature> = <template>
