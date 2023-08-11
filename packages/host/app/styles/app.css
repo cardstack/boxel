@@ -24,12 +24,6 @@
   padding: var(--boxel-sp-xl);
 }
 
-/* Default Card Component */
-.default-card-template {
-  display: grid;
-  gap: var(--boxel-sp-lg);
-}
-
 /* DEMO-CARDS */
 .vendor-card .boxel-field + .boxel-field {
   margin-top: var(--boxel-sp);
