@@ -41,13 +41,12 @@ interface Signature {
 class LinksToManyEditor extends GlimmerComponent<Signature> {
   <template>
     <div
-      class='contains-many-editor'
       data-test-links-to-many={{this.args.field.name}}
     >
       {{#if @arrayField.children.length}}
         <ul>
           {{#each @arrayField.children as |boxedElement i|}}
-            <li class='links-to-editor' data-test-item={{i}}>
+            <li class='editor' data-test-item={{i}}>
               {{#let
                 (getBoxComponent
                   (this.args.cardTypeFor @field boxedElement)
@@ -64,7 +63,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
                 @icon='icon-minus-circle'
                 @width='20px'
                 @height='20px'
-                class='remove-icon-button'
+                class='remove'
                 {{on 'click' (fn this.remove i)}}
                 data-test-remove-card
                 data-test-remove={{i}}
@@ -81,6 +80,27 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       </div>
     </div>
     <style>
+      .editor {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: var(--boxel-sp-xs);
+        align-items: center;
+      }
+
+      .empty {
+        display: block;
+      }
+
+      .remove {
+        --icon-bg: var(--boxel-highlight);
+        --icon-border: var(--icon-bg);
+        --icon-color: var(--boxel-light);
+      }
+
+      .remove:hover {
+        --icon-bg: var(--boxel-dark);
+      }
+
       .add-new {
         display: flex;
         justify-content: center;
