@@ -234,6 +234,17 @@ export function getPluralViewComponent(
           {{/let}}
         {{/each}}
       </ul>
+      <style>
+        .plural-field {
+          list-style: none;
+          padding: 0;
+          margin: 0;
+        }
+
+        .plural-field > li + li {
+          margin-top: var(--boxel-sp);
+        }
+      </style>
     </template>
   };
   return new Proxy(defaultComponent, {

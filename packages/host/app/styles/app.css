@@ -30,17 +30,6 @@
   gap: var(--boxel-sp-lg);
 }
 
-/* Plural Field */
-.plural-field {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.plural-field > li + li {
-  margin-top: var(--boxel-sp);
-}
-
 /* DEMO-CARDS */
 .vendor-card .boxel-field + .boxel-field {
   margin-top: var(--boxel-sp);
