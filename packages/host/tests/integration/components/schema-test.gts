@@ -178,55 +178,6 @@ module('Integration | schema', function (hooks) {
       );
   });
 
-  //  Temporarily disable this until we determine architectural decisions for code mode
-  skip('renders link to field card', async function (assert) {
-    await realm.write(
-      'person.gts',
-      `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-
-      export class Person extends Card {
-        @field firstName = contains(StringCard);
-        @field lastName = contains(StringCard);
-      }
-    `,
-    );
-    await realm.write(
-      'post.gts',
-      `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-      import { Person } from "./person";
-
-      export class Post extends Card {
-        @field title = contains(StringCard);
-        @field author = contains(Person);
-      }
-    `,
-    );
-    mockOpenFiles.path = 'post.gts';
-    let openFile = await getFileResource(this, testRealmURL, mockOpenFiles);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <Module @file={{openFile}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-
-    await waitFor('[data-test-card-id]');
-    assert
-      .dom('[data-test-field="author"] a[href="/code?path=person"]')
-      .exists('link to person card exists');
-    assert
-      .dom(
-        '[data-test-field="title"] a[href="http://localhost:4201/base/string?schema"]',
-      )
-      .exists('link to string card exists');
-  });
-
   test('can delete a field from card', async function (assert) {
     await realm.write(
       'person.gts',
