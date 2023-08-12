@@ -116,6 +116,10 @@ export class Vendor extends Card {
     <template>
       <div class='vendor-card'>
         <section>
+          <h2>Title</h2>
+          <@fields.title />
+        </section>
+        <section>
           <h2>Vendor</h2>
           <@fields.vendor />
         </section>
