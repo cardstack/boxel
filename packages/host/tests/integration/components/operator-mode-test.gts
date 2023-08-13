@@ -37,6 +37,8 @@ let cardApi: typeof import('https://cardstack.com/base/card-api');
 const realmName = 'Operator Mode Workspace';
 let setCardInOperatorModeState: (card: string) => Promise<void>;
 
+let loader: Loader;
+
 class MockClient {
   public getProfileInfo(userId: string) {
     return new Promise((resolveOuter) => {
@@ -46,6 +48,7 @@ class MockClient {
 }
 
 class MockMatrixService extends Service {
+  @service declare loaderService: LoaderService;
   roomCards: TrackedMap<string, Promise<RoomCard>> = new TrackedMap();
   roomObjectives: TrackedMap<string, RoomObjectiveCard> = new TrackedMap();
 
@@ -69,12 +72,11 @@ class MockMatrixService extends Service {
   async createRoom(
     name: string,
     invites: string[], // these can be local names
-    topic?: string
+    topic?: string,
   ): Promise<string> {
-    return "testroom";
+    return 'testroom';
   }
 }
-let loader: Loader;
 
 module('Integration | operator-mode', function (hooks) {
   let adapter: TestRealmAdapter;
@@ -592,6 +594,93 @@ module('Integration | operator-mode', function (hooks) {
     };
   });
 
+  test<AutoSaveTestContext>('it allows chat commands to change cards in the stack', async function (assert) {
+    this.owner.register('service:matrixService', MockMatrixService);
+    let matrixService = this.owner.lookup(
+      'service:matrixService',
+    ) as MockMatrixService;
+    matrixService.cardAPI = cardApi;
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    let component = await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor('[data-test-person]');
+    assert.dom('[data-test-boxel-header-title]').hasText('Person');
+    assert.dom('[data-test-person]').hasText('Fadhlan');
+    await click('[data-test-open-chat]');
+    let messageObject;
+    messageObject = {
+      event_id: 'eventname',
+      room_id: 'testroom',
+      type: 'm.room.name',
+      content: {
+        name: 'test_a',
+      },
+    };
+    addRoomEvent(matrixService, messageObject);
+    messageObject = {
+      event_id: 'eventname',
+      room_id: 'testroom',
+      type: 'm.room.create',
+      origin_server_ts: 0,
+      content: {
+        creator: '@testuser:staging',
+        room_version: '0',
+      },
+    };
+    addRoomEvent(matrixService, messageObject);
+    messageObject = {
+      event_id: 'eventjoin',
+      room_id: 'testroom',
+      type: 'm.room.member',
+      sender: '@testuser:staging',
+      state_key: '@testuser:staging',
+      content: {
+        displayname: 'testuser',
+        membership: 'join',
+        membershipTs: 1,
+        membershipInitiator: '@testuser:staging',
+      },
+    };
+    addRoomEvent(matrixService, messageObject);
+
+    messageObject = {
+      event_id: 'event1',
+      room_id: 'testroom',
+      state_key: 'state',
+      type: 'm.room.message',
+      content: {
+        body: 'i am the body',
+        msgtype: 'org.boxel.command',
+        formatted_body: 'A patch',
+        format: 'org.matrix.custom.html',
+        command: {
+          type: 'patch',
+          id: `${testRealmURL}Person/fadhlan`,
+          patch: {
+            attributes: { firstName: 'Dave' },
+          },
+        },
+      },
+    };
+    addRoomEvent(matrixService, messageObject);
+
+    await waitFor('[data-test-enter-room="test_a"]');
+    await click('[data-test-enter-room="test_a"]');
+
+    await waitFor('[data-test-command-apply]');
+    await click('[data-test-command-apply]');
+
+    await waitFor('[data-test-person="Dave"]');
+    assert.dom('[data-test-person]').hasText('Dave');
+  });
+
   test('it loads a card and renders its isolated view', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
@@ -619,93 +708,6 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-stack-card-index="1"]').includesText('Mango');
   });
 
-  test('it allows chat commands to change cards in the stack', async function (assert) {
-    this.owner.register('service:matrixService', MockMatrixService);
-    let matrixService = (this.owner.lookup('service:matrixService') as MockMatrixService);
-    matrixService.cardAPI = cardApi;
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-    let component = await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      }
-    );
-
-    await waitFor('[data-test-person]');
-    assert.dom('[data-test-boxel-header-title]').hasText('Person');
-    assert.dom('[data-test-person]').hasText('Fadhlan');
-    await click('[data-test-open-chat]');
-    let messageObject;
-    messageObject = {
-      event_id: "eventname",
-      room_id: "testroom",
-      type: 'm.room.name',
-      content: {
-        name: "test_a"
-        }
-    };
-    addRoomEvent(matrixService, messageObject);
-    messageObject = {
-      event_id: "eventname",
-      room_id: "testroom",
-      type: 'm.room.create',
-      origin_server_ts: 0,
-      content: {
-        creator: "@testuser:staging",
-        room_version: "0"
-        }
-    };
-    addRoomEvent(matrixService, messageObject);
-    messageObject = {
-      event_id: "eventjoin",
-      room_id: "testroom",
-      type: 'm.room.member',
-      sender: "@testuser:staging",
-      state_key: "@testuser:staging",
-      content: {
-        displayname: "testuser",
-        membership: "join",
-        membershipTs: 1,
-        membershipInitiator: "@testuser:staging",
-        }
-    };
-    addRoomEvent(matrixService, messageObject);
-
-    messageObject = {
-      event_id: "event1",
-      room_id: "testroom",
-      state_key: "state",
-      type: "m.room.message",
-      content: {
-        body: "i am the body",
-        msgtype: 'org.boxel.command',
-        formatted_body: 'A patch',
-        format: 'org.matrix.custom.html',
-        command: {
-          type: 'patch',
-          id: `${testRealmURL}Person/fadhlan`,
-          patch: {
-            attributes: {"firstName": "Dave"},
-          },
-        },
-      }
-     
-    };
-    addRoomEvent(matrixService, messageObject);
-
-    await waitFor('[data-test-enter-room="test_a"]');
-    await click('[data-test-enter-room="test_a"]');
-
-    await waitFor('[data-test-command-apply]');
-    await click('[data-test-command-apply]');
-
-    await waitFor('[data-test-person="Dave"]');
-    assert.dom('[data-test-person]').hasText('Dave');
-  });
-
-  test("it doesn't change the field value if user clicks cancel in edit view", async function (assert) {
   test<AutoSaveTestContext>('it auto saves the field value', async function (assert) {
     assert.expect(3);
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
