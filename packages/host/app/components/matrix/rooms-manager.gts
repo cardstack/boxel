@@ -32,8 +32,6 @@ const TRUE = true;
 interface Args {
   Args: {
     onCommand: (command: any) => void;
-    onPreviewCommand: (command: any) => void;
-    onCancelPreviewCommand: (command: any) => void;
   };
 }
 export default class RoomsManager extends Component<Args> {
@@ -172,12 +170,7 @@ export default class RoomsManager extends Component<Args> {
     {{/if}}
 
     {{#if this.currentRoomId}}
-      <Room
-        @roomId={{this.currentRoomId}}
-        @onCommand={{this.onCommand}}
-        @onPreviewCommand={{this.onPreviewCommand}}
-        @onCancelPreviewCommand={{this.onCancelPreviewCommand}}
-      />
+      <Room @roomId={{this.currentRoomId}} @onCommand={{this.onCommand}} />
     {{/if}}
 
     <style>
@@ -235,7 +228,6 @@ export default class RoomsManager extends Component<Args> {
       .create-room__field {
         margin-top: var(--boxel-sp-sm);
       }
-
     </style>
   </template>
 
@@ -260,23 +252,13 @@ export default class RoomsManager extends Component<Args> {
     this.args.onCommand(command);
   }
 
-  @action
-  private onPreviewCommand(command: any) {
-    this.args.onPreviewCommand(command);
-  }
-
-  @action
-  private onCancelPreviewCommand(command: any) {
-    this.args.onCancelPreviewCommand(command);
-  }
-
   @cached
   private get roomResources() {
     let resources = new TrackedMap<string, RoomCardResource>();
     for (let roomId of this.matrixService.roomCards.keys()) {
       resources.set(
         roomId,
-        getRoomCard(this, () => roomId)
+        getRoomCard(this, () => roomId),
       );
     }
     return resources;
@@ -296,14 +278,14 @@ export default class RoomsManager extends Component<Args> {
         continue;
       }
       let joinedMember = resource.roomCard.joinedMembers.find(
-        (m) => this.matrixService.userId === m.userId
+        (m) => this.matrixService.userId === m.userId,
       );
       if (joinedMember) {
         rooms.joined.push({ room: resource.roomCard, member: joinedMember });
         continue;
       }
       let invitedMember = resource.roomCard.invitedMembers.find(
-        (m) => this.matrixService.userId === m.userId
+        (m) => this.matrixService.userId === m.userId,
       );
       if (invitedMember) {
         rooms.invited.push({ room: resource.roomCard, member: invitedMember });
@@ -317,7 +299,7 @@ export default class RoomsManager extends Component<Args> {
     return this.myRooms.joined.sort(
       (a, b) =>
         a.member.membershipDateTime.getTime() -
-        b.member.membershipDateTime.getTime()
+        b.member.membershipDateTime.getTime(),
     );
   }
 
@@ -326,7 +308,7 @@ export default class RoomsManager extends Component<Args> {
     return this.myRooms.invited.sort(
       (a, b) =>
         a.member.membershipDateTime.getTime() -
-        b.member.membershipDateTime.getTime()
+        b.member.membershipDateTime.getTime(),
     );
   }
 
@@ -404,7 +386,7 @@ export default class RoomsManager extends Component<Args> {
   private doCreateRoom = restartableTask(async () => {
     if (!this.newRoomName) {
       throw new Error(
-        `bug: should never get here, create button is disabled when there is no new room name`
+        `bug: should never get here, create button is disabled when there is no new room name`,
       );
     }
     try {

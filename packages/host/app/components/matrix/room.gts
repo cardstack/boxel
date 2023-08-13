@@ -34,8 +34,6 @@ interface RoomArgs {
   Args: {
     roomId: string;
     onCommand: (command: any) => void;
-    onPreviewCommand: (command: any) => void;
-    onCancelPreviewCommand: (command: any) => void;
   };
 }
 
@@ -43,34 +41,17 @@ interface CommandArgs {
   Args: {
     command: any;
     onCommand: (command: any) => void;
-    onPreviewCommand: (command: any) => void;
-    onCancelPreviewCommand: (command: any) => void;
   };
 }
 
 class CommandMessage extends Component<CommandArgs> {
   <template>
-    <Button
-      data-test-command-apply
-      {{on 'click' this.clicked}}
-      {{on 'mouseenter' this.mouseEnter}}
-      {{on 'mouseleave' this.mouseLeave}}
-    >Apply</Button>
+    <Button data-test-command-apply {{on 'click' this.clicked}}>Apply</Button>
   </template>
 
   @action
   private clicked() {
     this.args.onCommand(this.args.command);
-  }
-
-  @action
-  private mouseEnter() {
-    this.args.onPreviewCommand(this.args.command);
-  }
-
-  @action
-  private mouseLeave() {
-    this.args.onCancelPreviewCommand(this.args.command);
   }
 
   constructor(owner: unknown, args: any) {
@@ -283,7 +264,6 @@ export default class Room extends Component<RoomArgs> {
       .invite-btn {
         margin-top: var(--boxel-sp-xs);
       }
-
     </style>
   </template>
 
@@ -325,16 +305,6 @@ export default class Room extends Component<RoomArgs> {
     this.args.onCommand(command);
   }
 
-  @action
-  private onPreviewCommand(command: any) {
-    this.args.onPreviewCommand(command);
-  }
-
-  @action
-  private onCancelPreviewCommand(command: any) {
-    this.args.onCancelPreviewCommand(command);
-  }
-
   @cached
   private get currentCards() {
     if (!this.roomCard) {
@@ -362,7 +332,7 @@ export default class Room extends Component<RoomArgs> {
     if (this.objective) {
       return this.objective.constructor.getComponent(
         this.objective,
-        'embedded'
+        'embedded',
       );
     }
     return;
@@ -378,7 +348,7 @@ export default class Room extends Component<RoomArgs> {
   private get messageCardComponents() {
     return this.roomCard
       ? this.roomCard.messages.map((messageCard) =>
-          this.getComponent(messageCard, 'embedded')
+          this.getComponent(messageCard, 'embedded'),
         )
       : [];
   }
@@ -410,7 +380,7 @@ export default class Room extends Component<RoomArgs> {
     if (this.cardtoSend) {
       return this.cardtoSend.constructor.getComponent(
         this.cardtoSend,
-        'embedded'
+        'embedded',
       );
     }
     return;
@@ -429,7 +399,7 @@ export default class Room extends Component<RoomArgs> {
   private sendMessage() {
     if (this.messageToSend == null && !this.cardtoSend) {
       throw new Error(
-        `bug: should never get here, send button is disabled when there is no message nor card`
+        `bug: should never get here, send button is disabled when there is no message nor card`,
       );
     }
     this.doSendMessage.perform(this.messageToSend, this.cardtoSend);
@@ -475,7 +445,7 @@ export default class Room extends Component<RoomArgs> {
       this.messagesToSend.set(this.args.roomId, undefined);
       this.cardsToSend.set(this.args.roomId, undefined);
       await this.matrixService.sendMessage(this.args.roomId, message, card);
-    }
+    },
   );
 
   private doInvite = restartableTask(async () => {
@@ -488,7 +458,7 @@ export default class Room extends Component<RoomArgs> {
     await this.matrixService.flushTimeline;
     await this.roomCardResource.loading;
     this.allowedToSetObjective = await this.matrixService.allowedToSetObjective(
-      this.args.roomId
+      this.args.roomId,
     );
   });
 

@@ -15,8 +15,6 @@ interface Args {
   Args: {
     onClose: () => void;
     onCommand: (command: any) => void;
-    onPreviewCommand: (command: any) => void;
-    onCancelPreviewCommand: (command: any) => void;
   };
 }
 export default class ChatSidebar extends Component<Args> {
@@ -43,11 +41,7 @@ export default class ChatSidebar extends Component<Args> {
           <span data-test-matrix-ready></span>
           {{#if this.showLoggedInMode}}
             <UserProfile />
-            <RoomsManager
-              @onCommand={{this.onCommand}}
-              @onPreviewCommand={{this.onPreviewCommand}}
-              @onCancelPreviewCommand={{this.onCancelPreviewCommand}}
-            />
+            <RoomsManager @onCommand={{this.onCommand}} />
           {{else}}
             {{#if this.isRegistrationMode}}
               <RegisterUser @onCancel={{this.toggleRegistrationMode}} />
@@ -112,14 +106,6 @@ export default class ChatSidebar extends Component<Args> {
   @action
   private onCommand(command: any) {
     this.args.onCommand(command);
-  }
-  @action
-  private onPreviewCommand(command: any) {
-    this.args.onPreviewCommand(command);
-  }
-  @action
-  private onCancelPreviewCommand(command: any) {
-    this.args.onCancelPreviewCommand(command);
   }
 
   @action
