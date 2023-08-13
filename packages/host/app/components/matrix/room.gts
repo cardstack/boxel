@@ -378,7 +378,7 @@ export default class Room extends Component<RoomArgs> {
   private get messageCardComponents() {
     return this.roomCard
       ? this.roomCard.messages.map((messageCard) =>
-          this.constructor.getComponent(messageCard, 'embedded')
+          this.getComponent(messageCard, 'embedded')
         )
       : [];
   }
