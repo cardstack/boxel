@@ -322,6 +322,13 @@ async function getResponse(history: IRoomEvent[]) {
       if (!room) {
         return;
       }
+      console.log(
+        '(%s) %s :: %s',
+        room?.name,
+        event.getSender(),
+        event.getContent().body
+      );
+
       if (event.event.origin_server_ts! < startTime) {
         return;
       }

@@ -11,7 +11,7 @@ import {
 import StringCard from './string';
 import BooleanCard from './boolean';
 import CardRefCard from './card-ref';
-import { baseCardRef, loadCard } from '@cardstack/runtime-common';
+import { baseCardRef, loadCard, Loader } from '@cardstack/runtime-common';
 import { isEqual } from 'lodash';
 import { FieldContainer } from '@cardstack/boxel-ui';
 
@@ -22,7 +22,16 @@ export class CatalogEntry extends Card {
   @field ref = contains(CardRefCard);
   @field isPrimitive = contains(BooleanCard, {
     computeVia: async function (this: CatalogEntry) {
+      let loader = Loader.getLoaderFor(Object.getPrototypeOf(this).constructor);
+
+      if (!loader) {
+        throw new Error(
+          'Could not find a loader for this instance’s class’s module',
+        );
+      }
+
       let card: typeof CardBase | undefined = await loadCard(this.ref, {
+        loader,
         relativeTo: this[relativeTo],
       });
       if (!card) {

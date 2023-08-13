@@ -13,7 +13,7 @@ import {
 } from 'ember-freestyle/decorators/css-variable';
 import { on } from '@ember/modifier';
 
-type ModalSize = 'small' | 'medium' | 'large' | undefined;
+type ModalSize = 'small' | 'medium' | 'large' | 'full-screen' | undefined;
 
 export default class ModalUsage extends Component {
   @tracked isOpen = false;
@@ -91,9 +91,15 @@ export default class ModalUsage extends Component {
       <:api as |Args|>
         <Args.String
           @name='size'
-          @description="Can be 'small', 'medium', 'large', or unspecified. Sets a predetermined max-width to inner modal."
+          @description="Can be 'small', 'medium', 'large', 'full-screen', or unspecified. Sets a predetermined max-width to inner modal."
           @value={{this.sizeAsString}}
-          @options={{array 'small' 'medium' 'large' '<undefined>'}}
+          @options={{array
+            'small'
+            'medium'
+            'large'
+            'full-screen'
+            '<undefined>'
+          }}
           @onInput={{this.updateSize}}
           @defaultValue='<undefined>'
         />

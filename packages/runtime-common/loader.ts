@@ -6,6 +6,8 @@ import { RealmPaths } from './paths';
 import { CardError } from './error';
 import flatMap from 'lodash/flatMap';
 import { type RunnerOpts } from './search-index';
+import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
+import jsEscapeString from 'js-string-escape';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
@@ -110,14 +112,13 @@ type EvaluatableDep =
   | { type: '__import_meta__' }
   | { type: 'exports' };
 
-export interface MaybeLocalRequest extends Request {
-  isLocal?: true;
-}
+export type RequestHandler = (req: Request) => Promise<Response | null>;
 
 export class Loader {
   private log = logger('loader');
   private modules = new Map<string, Module>();
-  private urlHandlers = new Map<string, (req: Request) => Promise<Response>>();
+  private urlHandlers: RequestHandler[] = [maybeHandleScopedCSSRequest];
+
   // use a tuple array instead of a map so that we can support reversing
   // different resolutions back to the same URL. the resolution that we apply
   // will be in order of precedence. consider 2 realms in the same server
@@ -131,29 +132,7 @@ export class Loader {
     { module: string; name: string }
   >();
   private consumptionCache = new WeakMap<object, string[]>();
-
-  static #instance: Loader | undefined;
-  static loaders = new WeakMap<Function, Loader>();
-
-  static getLoader() {
-    if (!Loader.#instance) {
-      Loader.#instance = new Loader();
-    }
-    return Loader.#instance;
-  }
-
-  // this will return a new loader instance that has the same file loaders and
-  // url mappings as the global loader
-  static createLoaderFromGlobal(): Loader {
-    let globalLoader = Loader.getLoader();
-    let loader = new Loader();
-    loader.urlHandlers = globalLoader.urlHandlers;
-    loader.urlMappings = globalLoader.urlMappings;
-    for (let [moduleIdentifier, module] of globalLoader.moduleShims) {
-      loader.shimModule(moduleIdentifier, module);
-    }
-    return loader;
-  }
+  private static loaders = new WeakMap<Function, Loader>();
 
   static cloneLoader(loader: Loader): Loader {
     let clone = new Loader();
@@ -165,64 +144,12 @@ export class Loader {
     return clone;
   }
 
-  static async import<T extends object>(moduleIdentifier: string): Promise<T> {
-    let loader = Loader.getLoader();
-    return loader.import<T>(moduleIdentifier);
-  }
-
-  // FOR TESTS ONLY!
-  static destroy() {
-    Loader.#instance = undefined;
-  }
-
-  static resolve(
-    moduleIdentifier: string | URL,
-    relativeTo?: URL
-  ): ResolvedURL {
-    let loader = Loader.getLoader();
-    return loader.resolve(moduleIdentifier, relativeTo);
-  }
-
-  static reverseResolution(
-    moduleIdentifier: string | ResolvedURL,
-    relativeTo?: URL
-  ): URL {
-    let loader = Loader.getLoader();
-    return loader.reverseResolution(moduleIdentifier, relativeTo);
-  }
-
-  static async fetch(
-    urlOrRequest: string | URL | Request,
-    init?: RequestInit
-  ): Promise<Response> {
-    let loader = Loader.getLoader();
-    return loader.fetch(urlOrRequest, init);
-  }
-
-  static addURLMapping(from: URL, to: URL) {
-    let loader = Loader.getLoader();
-    loader.addURLMapping(from, to);
-  }
-
   addURLMapping(from: URL, to: URL) {
     this.urlMappings.push([from.href, to.href]);
   }
 
-  static registerURLHandler(
-    url: URL,
-    handler: (req: Request) => Promise<Response>
-  ) {
-    let loader = Loader.getLoader();
-    loader.registerURLHandler(url, handler);
-  }
-
-  registerURLHandler(url: URL, handler: (req: Request) => Promise<Response>) {
-    this.urlHandlers.set(url.href, handler);
-  }
-
-  static shimModule(moduleIdentifier: string, module: Record<string, any>) {
-    let loader = Loader.getLoader();
-    loader.shimModule(moduleIdentifier, module);
+  registerURLHandler(handler: RequestHandler) {
+    this.urlHandlers.push(handler);
   }
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {
@@ -305,11 +232,11 @@ export class Loader {
     }
   }
 
-  static getLoaderFor(value: unknown): Loader {
+  static getLoaderFor(value: unknown): Loader | undefined {
     if (typeof value === 'function') {
-      return Loader.loaders.get(value) ?? Loader.getLoader();
+      return Loader.loaders.get(value);
     }
-    return Loader.getLoader();
+    return undefined;
   }
 
   async import<T extends object>(moduleIdentifier: string): Promise<T> {
@@ -526,32 +453,12 @@ export class Loader {
     }
   }
 
-  async fetch(
+  private asUnresolvedRequest(
     urlOrRequest: string | URL | Request,
     init?: RequestInit
-  ): Promise<Response> {
-    let requestURL = new URL(
-      urlOrRequest instanceof Request
-        ? urlOrRequest.url
-        : typeof urlOrRequest === 'string'
-        ? urlOrRequest
-        : urlOrRequest.href
-    );
+  ): Request {
     if (urlOrRequest instanceof Request) {
-      for (let [url, handle] of this.urlHandlers) {
-        let path = new RealmPaths(new URL(url));
-        if (path.inRealm(requestURL)) {
-          let request = urlOrRequest as MaybeLocalRequest;
-          request.isLocal = true;
-          return await handle(request);
-        }
-      }
-      let request = new Request(this.resolve(requestURL).href, {
-        method: urlOrRequest.method,
-        headers: urlOrRequest.headers,
-        body: urlOrRequest.body,
-      });
-      return getNativeFetch()(request);
+      return urlOrRequest;
     } else {
       let unresolvedURL =
         typeof urlOrRequest === 'string'
@@ -559,19 +466,40 @@ export class Loader {
           : isResolvedURL(urlOrRequest)
           ? this.reverseResolution(urlOrRequest)
           : urlOrRequest;
-      for (let [url, handle] of this.urlHandlers) {
-        let path = new RealmPaths(new URL(url));
-        if (path.inRealm(unresolvedURL)) {
-          let request = new Request(
-            unresolvedURL.href,
-            init
-          ) as MaybeLocalRequest;
-          request.isLocal = true;
-          return await handle(request);
-        }
-      }
-      return getNativeFetch()(this.resolve(unresolvedURL).href, init);
+      return new Request(unresolvedURL.href, init);
     }
+  }
+
+  private asResolvedRequest(
+    urlOrRequest: string | URL | Request,
+    init?: RequestInit
+  ): Request {
+    if (urlOrRequest instanceof Request) {
+      return new Request(this.resolve(urlOrRequest.url).href, {
+        method: urlOrRequest.method,
+        headers: urlOrRequest.headers,
+        body: urlOrRequest.body,
+      });
+    } else if (typeof urlOrRequest === 'string') {
+      return new Request(this.resolve(urlOrRequest), init);
+    } else if (isResolvedURL(urlOrRequest)) {
+      return new Request(urlOrRequest, init);
+    } else {
+      return new Request(this.resolve(urlOrRequest), init);
+    }
+  }
+
+  async fetch(
+    urlOrRequest: string | URL | Request,
+    init?: RequestInit
+  ): Promise<Response> {
+    for (let handler of this.urlHandlers) {
+      let result = await handler(this.asUnresolvedRequest(urlOrRequest, init));
+      if (result) {
+        return result;
+      }
+    }
+    return await getNativeFetch()(this.asResolvedRequest(urlOrRequest, init));
   }
 
   resolve(moduleIdentifier: string | URL, relativeTo?: URL): ResolvedURL {
@@ -894,4 +822,26 @@ function isEvaluatable(
     return false;
   }
   return stateOrder[module.state] >= stateOrder['registered-completing-deps'];
+}
+
+async function maybeHandleScopedCSSRequest(req: Request) {
+  if (isScopedCSSRequest(req.url)) {
+    if (isFastBoot) {
+      return Promise.resolve(new Response('', { status: 204 }));
+    } else {
+      let decodedCSS = decodeScopedCSSRequest(req.url);
+      return Promise.resolve(
+        new Response(`
+          let styleNode = document.createElement('style');
+          let styleText = document.createTextNode('${jsEscapeString(
+            decodedCSS
+          )}');
+          styleNode.appendChild(styleText);
+          document.body.appendChild(styleNode);
+        `)
+      );
+    }
+  } else {
+    return Promise.resolve(null);
+  }
 }

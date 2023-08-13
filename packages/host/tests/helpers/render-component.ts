@@ -10,10 +10,10 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 import { baseRealm, Loader } from '@cardstack/runtime-common';
 
-async function cardApi(): Promise<
-  typeof import('https://cardstack.com/base/card-api')
-> {
-  return await Loader.import(`${baseRealm.url}card-api`);
+async function cardApi(
+  loader: Loader,
+): Promise<typeof import('https://cardstack.com/base/card-api')> {
+  return await loader.import(`${baseRealm.url}card-api`);
 }
 
 export async function renderComponent(C: ComponentLike) {
@@ -21,12 +21,13 @@ export async function renderComponent(C: ComponentLike) {
 }
 
 export async function renderCard(
+  loader: Loader,
   card: CardBase,
   format: Format,
   field?: Field,
-  context?: CardContext
+  context?: CardContext,
 ) {
-  let api = await cardApi();
+  let api = await cardApi(loader);
   await api.recompute(card, { recomputeAllFields: true });
   await renderComponent(api.getComponent(card, format, field, context));
   return (getContext() as { element: Element }).element;

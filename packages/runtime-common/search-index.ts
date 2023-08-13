@@ -9,7 +9,7 @@ import {
 import { Kind, Realm } from './realm';
 import { LocalPath, RealmPaths } from './paths';
 import { Loader } from './loader';
-import type { Query, Filter, Sort, EqFilter, RangeFilter } from './query';
+import type { Query, Filter, Sort, EqFilter, ContainsFilter, RangeFilter } from './query';
 import { CardError, type SerializedError } from './error';
 import { URLMap } from './url-map';
 import flatMap from 'lodash/flatMap';
@@ -138,6 +138,7 @@ export class RunnerOptionsManager {
 }
 
 export class SearchIndex {
+  #realm: Realm;
   #runner: IndexRunner;
   runnerOptsMgr: RunnerOptionsManager;
   #reader: Reader;
@@ -163,12 +164,13 @@ export class SearchIndex {
     runner: IndexRunner,
     runnerOptsManager: RunnerOptionsManager
   ) {
+    this.#realm = realm;
     this.#reader = { readdir, readFileAsText };
     this.runnerOptsMgr = runnerOptsManager;
     this.#runner = runner;
     this.#index = {
       realmURL: new URL(realm.url),
-      loader: Loader.createLoaderFromGlobal(),
+      loader: Loader.cloneLoader(realm.loader),
       ignoreMap: new URLMap(),
       ignoreMapContents: new URLMap(),
       instances: new URLMap(),
@@ -205,7 +207,7 @@ export class SearchIndex {
         ignoreMap: current.ignoreMap,
         realmURL: current.realmURL,
         stats: current.stats,
-        loader: Loader.createLoaderFromGlobal(),
+        loader: Loader.cloneLoader(this.#realm.loader),
       };
     });
   }
@@ -230,7 +232,7 @@ export class SearchIndex {
         ignoreMapContents: current.ignoreMapContents,
         realmURL: current.realmURL,
         stats: current.stats,
-        loader: Loader.createLoaderFromGlobal(),
+        loader: Loader.cloneLoader(this.#realm.loader),
       };
     });
   }
@@ -486,8 +488,8 @@ export class SearchIndex {
       };
     }
 
-    if ('eq' in filter) {
-      return await this.buildEqMatchers(filter.eq, on);
+    if ('eq' in filter || 'contains' in filter) {
+      return await this.buildEqOrContainsMatchers(filter, on);
     }
 
     if ('range' in filter) {
@@ -574,10 +576,21 @@ export class SearchIndex {
       });
   }
 
-  private async buildEqMatchers(
-    filterValue: EqFilter['eq'],
+  private async buildEqOrContainsMatchers(
+    filter: EqFilter | ContainsFilter,
     ref: CardRef
   ): Promise<(entry: SearchEntry) => boolean | null> {
+    let filterType: 'eq' | 'contains';
+    let filterValue: EqFilter['eq'] | ContainsFilter['contains'];
+    if ('eq' in filter) {
+      filterType = 'eq';
+      filterValue = filter.eq;
+    } else if ('contains' in filter) {
+      filterType = 'contains';
+      filterValue = filter.contains;
+    } else {
+      throw new Error('Invalid filter type');
+    }
     // TODO when we are ready to execute queries within computeds, we'll need to
     // use the loader instance from current-run and not the global loader, as
     // the card definitions may have changed in the current-run loader
@@ -602,16 +615,29 @@ export class SearchIndex {
       }
 
       let queryValue = api.getQueryableValue(fields[fields.length - 1], value);
-      let matcher = (instanceValue: any) => {
-        if (instanceValue === undefined && queryValue != null) {
-          return null;
-        }
-        // allows queries for null to work
-        if (queryValue == null && instanceValue == null) {
-          return true;
-        }
-        return instanceValue === queryValue;
-      };
+      let matcher: (instanceValue: any) => boolean | null;
+      if (filterType === 'eq') {
+        matcher = (instanceValue: any) => {
+          if (instanceValue === undefined && queryValue != null) {
+            return null;
+          }
+          // allows queries for null to work
+          if (queryValue == null && instanceValue == null) {
+            return true;
+          }
+          return instanceValue === queryValue;
+        };
+      } else {
+        matcher = (instanceValue: any) => {
+          if ((instanceValue == null && queryValue != null) || (instanceValue != null && queryValue == null)) {
+            return null;
+          }
+          if (instanceValue == null && queryValue == null) {
+            return true;
+          }
+          return (instanceValue as string).toLowerCase().includes((queryValue as string).toLowerCase());
+        };
+      }
       while (fields.length > 0) {
         let nextField = fields.pop()!;
         let nextMatcher = nextField.queryMatcher(matcher);

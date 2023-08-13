@@ -90,6 +90,8 @@ class Isolated extends Component<typeof Claim> {
   getSDK: typeof CardPaySDK.getSDK | undefined;
   <template>
     <div class='demo-card'>
+      {{! include title field in template so that it can be indexed }}
+      <@fields.title />
       <FieldContainer @label='Module Address.'><@fields.moduleAddress
         /></FieldContainer>
       <FieldContainer @label='Safe Address'><@fields.safeAddress

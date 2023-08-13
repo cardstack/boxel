@@ -47,7 +47,7 @@ export class MenuItem {
 
 export function menuItemFunc(
   params: [string, ActionType],
-  named: Partial<MenuItemOptions>
+  named: Partial<MenuItemOptions>,
 ): MenuItem {
   let text = params[0];
   let opts = Object.assign({}, named);

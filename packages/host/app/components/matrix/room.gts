@@ -21,7 +21,10 @@ import {
 } from '@cardstack/runtime-common';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type Card, type Format } from 'https://cardstack.com/base/card-api';
-import { type RoomCard, type MessageCard } from 'https://cardstack.com/base/room';
+import {
+  type RoomCard,
+  type MessageCard,
+} from 'https://cardstack.com/base/room';
 import type CardService from '@cardstack/host/services/card-service';
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
@@ -375,7 +378,7 @@ export default class Room extends Component<RoomArgs> {
   private get messageCardComponents() {
     return this.roomCard
       ? this.roomCard.messages.map((messageCard) =>
-          this.getComponent(messageCard, 'embedded')
+          this.constructor.getComponent(messageCard, 'embedded')
         )
       : [];
   }

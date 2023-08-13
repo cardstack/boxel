@@ -19,14 +19,29 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import { Deferred } from '@cardstack/runtime-common/deferred';
+import { RenderingTestContext } from '@ember/test-helpers';
+import type LoaderService from '@cardstack/host/services/loader-service';
+import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
+
+let loader: Loader;
 
 module('Integration | realm', function (hooks) {
   setupRenderingTest(hooks);
+
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+  });
+
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`),
   );
+
+  hooks.beforeEach(function () {
+    shimExternals(loader);
+  });
 
   function getUpdateData(message: string) {
     let [type, data] = message.split('\n');
@@ -36,9 +51,13 @@ module('Integration | realm', function (hooks) {
     return;
   }
 
-  async function expectEvent<
-    T
-  >(assert: Assert, realm: Realm, adapter: TestRealmAdapter, expectedContents: string[], callback: () => Promise<T>) {
+  async function expectEvent<T>(
+    assert: Assert,
+    realm: Realm,
+    adapter: TestRealmAdapter,
+    expectedContents: string[],
+    callback: () => Promise<T>,
+  ) {
     let defer = new Deferred<string[]>();
     let events: string[] = [];
     let response = await realm.handle(
@@ -47,7 +66,7 @@ module('Integration | realm', function (hooks) {
         headers: {
           Accept: 'text/event-stream',
         },
-      })
+      }),
     );
     if (!response.ok) {
       throw new Error(`failed to connect to realm: ${response.status}`);
@@ -55,7 +74,9 @@ module('Integration | realm', function (hooks) {
     let reader = response.body!.getReader();
     let timeout = setTimeout(() => {
       defer.reject(
-        new Error(`expectEvent timed out, saw events ${JSON.stringify(events)}`)
+        new Error(
+          `expectEvent timed out, saw events ${JSON.stringify(events)}`,
+        ),
       );
     }, 3000);
     let result = await callback();
@@ -78,15 +99,6 @@ module('Integration | realm', function (hooks) {
     return result;
   }
 
-  hooks.beforeEach(async function () {
-    Loader.destroy();
-    shimExternals();
-    Loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
-  });
-
   test('realm can serve GET card requests', async function (assert) {
     let adapter = new TestRealmAdapter({
       'dir/empty.json': {
@@ -100,7 +112,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     let response = await realm.handle(
@@ -108,7 +120,7 @@ module('Integration | realm', function (hooks) {
         headers: {
           Accept: 'application/vnd.card+json',
         },
-      })
+      }),
     );
 
     assert.strictEqual(response.status, 200, 'successful http status');
@@ -128,7 +140,7 @@ module('Integration | realm', function (hooks) {
             name: 'Card',
           },
           lastModified: adapter.lastModified.get(
-            `${testRealmURL}dir/empty.json`
+            `${testRealmURL}dir/empty.json`,
           ),
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
@@ -180,7 +192,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     let response = await realm.handle(
@@ -188,7 +200,7 @@ module('Integration | realm', function (hooks) {
         headers: {
           Accept: 'application/vnd.card+json',
         },
-      })
+      }),
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
@@ -198,6 +210,7 @@ module('Integration | realm', function (hooks) {
         id: `${testRealmURL}dir/mango`,
         attributes: {
           firstName: 'Mango',
+          title: 'Mango',
         },
         relationships: {
           owner: {
@@ -216,7 +229,7 @@ module('Integration | realm', function (hooks) {
             name: 'Pet',
           },
           lastModified: adapter.lastModified.get(
-            `${testRealmURL}dir/mango.json`
+            `${testRealmURL}dir/mango.json`,
           ),
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
@@ -232,6 +245,7 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
+            title: 'Hassan Abdel-Rahman',
           },
           meta: {
             adoptsFrom: {
@@ -239,7 +253,7 @@ module('Integration | realm', function (hooks) {
               name: 'Person',
             },
             lastModified: adapter.lastModified.get(
-              `${testRealmURL}dir/owner.json`
+              `${testRealmURL}dir/owner.json`,
             ),
             realmInfo: testRealmInfo,
             realmURL: testRealmURL,
@@ -276,7 +290,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     let response = await realm.handle(
@@ -284,7 +298,7 @@ module('Integration | realm', function (hooks) {
         headers: {
           Accept: 'application/vnd.card+json',
         },
-      })
+      }),
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
@@ -296,6 +310,7 @@ module('Integration | realm', function (hooks) {
         id: `${testRealmURL}dir/mango`,
         attributes: {
           firstName: 'Mango',
+          title: 'Mango',
         },
         relationships: {
           owner: {
@@ -314,7 +329,7 @@ module('Integration | realm', function (hooks) {
             name: 'Pet',
           },
           lastModified: adapter.lastModified.get(
-            `${testRealmURL}dir/mango.json`
+            `${testRealmURL}dir/mango.json`,
           ),
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
@@ -330,6 +345,7 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
+            title: 'Hassan Abdel-Rahman',
           },
           meta: {
             adoptsFrom: {
@@ -337,8 +353,10 @@ module('Integration | realm', function (hooks) {
               name: 'Person',
             },
             realmInfo: {
-              ...testRealmInfo,
-              name: 'Test Workspace',
+              name: 'Test Workspace A',
+              backgroundURL:
+                'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
+              iconURL: 'https://i.postimg.cc/d0B9qMvy/icon.png',
             },
             realmURL: 'http://localhost:4202/test/',
           },
@@ -352,6 +370,7 @@ module('Integration | realm', function (hooks) {
 
   test("realm can route requests correctly when mounted in the origin's subdir", async function (assert) {
     let realm = await TestRealm.create(
+      loader,
       {
         'dir/empty.json': {
           data: {
@@ -367,7 +386,7 @@ module('Integration | realm', function (hooks) {
       this.owner,
       {
         realmURL: `${testRealmURL}root/`,
-      }
+      },
     );
     await realm.ready;
     {
@@ -376,14 +395,14 @@ module('Integration | realm', function (hooks) {
           headers: {
             Accept: 'application/vnd.card+json',
           },
-        })
+        }),
       );
       assert.strictEqual(response.status, 200, 'successful http status');
       let json = await response.json();
       assert.strictEqual(
         json.data.id,
         `${testRealmURL}root/dir/empty`,
-        'card ID is correct'
+        'card ID is correct',
       );
     }
     {
@@ -392,25 +411,25 @@ module('Integration | realm', function (hooks) {
           headers: {
             Accept: 'application/vnd.card+json',
           },
-        })
+        }),
       );
       let json = await response.json();
       assert.strictEqual(
         json.data.length,
         1,
-        'the card is returned in the search results'
+        'the card is returned in the search results',
       );
       assert.strictEqual(
         json.data[0].id,
         `${testRealmURL}root/dir/empty`,
-        'card ID is correct'
+        'card ID is correct',
       );
     }
   });
 
   test('realm can serve create card requests', async function (assert) {
     let adapter = new TestRealmAdapter({});
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let expected = ['added: Card/1.json', 'added: Card/2.json'];
     await expectEvent(assert, realm, adapter, expected, async () => {
@@ -434,9 +453,9 @@ module('Integration | realm', function (hooks) {
                 },
               },
               null,
-              2
+              2,
             ),
-          })
+          }),
         );
         assert.strictEqual(response.status, 201, 'successful http status');
         let json = await response.json();
@@ -444,7 +463,7 @@ module('Integration | realm', function (hooks) {
           assert.strictEqual(
             json.data.id,
             `${testRealmURL}Card/1`,
-            'the id is correct'
+            'the id is correct',
           );
           assert.ok(json.data.meta.lastModified, 'lastModified is populated');
           let fileRef = await adapter.openFile('Card/1.json');
@@ -464,7 +483,7 @@ module('Integration | realm', function (hooks) {
                 },
               },
             },
-            'file contents are correct'
+            'file contents are correct',
           );
         } else {
           assert.ok(false, 'response body is not a card document');
@@ -474,13 +493,13 @@ module('Integration | realm', function (hooks) {
         let result = await searchIndex.card(new URL(json.data.links.self));
         if (result?.type === 'error') {
           throw new Error(
-            `unexpected error when getting card from index: ${result.error.detail}`
+            `unexpected error when getting card from index: ${result.error.detail}`,
           );
         }
         assert.strictEqual(
           result?.doc.data.id,
           `${testRealmURL}Card/1`,
-          'found card in index'
+          'found card in index',
         );
       }
 
@@ -505,9 +524,9 @@ module('Integration | realm', function (hooks) {
                 },
               },
               null,
-              2
+              2,
             ),
-          })
+          }),
         );
         assert.strictEqual(response.status, 201, 'successful http status');
         let json = await response.json();
@@ -515,11 +534,11 @@ module('Integration | realm', function (hooks) {
           assert.strictEqual(
             json.data.id,
             `${testRealmURL}Card/2`,
-            'the id is correct'
+            'the id is correct',
           );
           assert.ok(
             (await adapter.openFile('Card/2.json'))?.content,
-            'file contents exist'
+            'file contents exist',
           );
         } else {
           assert.ok(false, 'response body is not a card document');
@@ -529,13 +548,13 @@ module('Integration | realm', function (hooks) {
         let result = await searchIndex.card(new URL(json.data.links.self));
         if (result?.type === 'error') {
           throw new Error(
-            `unexpected error when getting card from index: ${result.error.detail}`
+            `unexpected error when getting card from index: ${result.error.detail}`,
           );
         }
         assert.strictEqual(
           result?.doc.data.id,
           `${testRealmURL}Card/2`,
-          'found card in index'
+          'found card in index',
         );
       }
     });
@@ -559,7 +578,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let response = await realm.handle(
       new Request(testRealmURL, {
@@ -589,9 +608,9 @@ module('Integration | realm', function (hooks) {
             },
           },
           null,
-          2
+          2,
         ),
-      })
+      }),
     );
     assert.strictEqual(response.status, 201, 'successful http status');
     let json = await response.json();
@@ -601,6 +620,7 @@ module('Integration | realm', function (hooks) {
         id: `${testRealmURL}Pet/1`,
         attributes: {
           firstName: 'Mango',
+          title: 'Mango',
         },
         relationships: {
           owner: {
@@ -633,6 +653,7 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
+            title: 'Hassan Abdel-Rahman',
           },
           meta: {
             adoptsFrom: {
@@ -640,7 +661,7 @@ module('Integration | realm', function (hooks) {
               name: 'Person',
             },
             lastModified: adapter.lastModified.get(
-              `${testRealmURL}dir/owner.json`
+              `${testRealmURL}dir/owner.json`,
             ),
             realmInfo: testRealmInfo,
             realmURL: testRealmURL,
@@ -678,7 +699,7 @@ module('Integration | realm', function (hooks) {
           },
         },
       },
-      'file contents are correct'
+      'file contents are correct',
     );
   });
 
@@ -699,7 +720,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let expected = ['updated: dir/card.json'];
     let response = await expectEvent(
@@ -730,11 +751,11 @@ module('Integration | realm', function (hooks) {
                 },
               },
               null,
-              2
+              2,
             ),
-          })
+          }),
         );
-      }
+      },
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
@@ -742,22 +763,22 @@ module('Integration | realm', function (hooks) {
       assert.strictEqual(
         json.data.id,
         `${testRealmURL}dir/card`,
-        'the id is correct'
+        'the id is correct',
       );
       assert.strictEqual(
         json.data.attributes?.firstName,
         'Van Gogh',
-        'field value is correct'
+        'field value is correct',
       );
       assert.strictEqual(
         json.data.attributes?.lastName,
         'Abdel-Rahman',
-        'field value is correct'
+        'field value is correct',
       );
       assert.strictEqual(
         json.data.meta.lastModified,
         adapter.lastModified.get(`${testRealmURL}dir/card.json`),
-        'lastModified is correct'
+        'lastModified is correct',
       );
       let fileRef = await adapter.openFile('dir/card.json');
       if (!fileRef) {
@@ -780,7 +801,7 @@ module('Integration | realm', function (hooks) {
             },
           },
         },
-        'file contents are correct'
+        'file contents are correct',
       );
     } else {
       assert.ok(false, 'response body is not a card document');
@@ -790,23 +811,23 @@ module('Integration | realm', function (hooks) {
     let result = await searchIndex.card(new URL(json.data.links.self));
     if (result?.type === 'error') {
       throw new Error(
-        `unexpected error when getting card from index: ${result.error.detail}`
+        `unexpected error when getting card from index: ${result.error.detail}`,
       );
     }
     assert.strictEqual(
       result?.doc.data.id,
       `${testRealmURL}dir/card`,
-      'found card in index'
+      'found card in index',
     );
     assert.strictEqual(
       result?.doc.data.attributes?.firstName,
       'Van Gogh',
-      'field value is correct'
+      'field value is correct',
     );
     assert.strictEqual(
       result?.doc.data.attributes?.lastName,
       'Abdel-Rahman',
-      'field value is correct'
+      'field value is correct',
     );
 
     let { data: cards } = await searchIndex.search({
@@ -841,7 +862,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let response = await realm.handle(
       new Request(`${testRealmURL}ski-trip`, {
@@ -854,7 +875,12 @@ module('Integration | realm', function (hooks) {
             data: {
               type: 'card',
               attributes: {
-                hosts: [{ firstName: 'Hassan' }],
+                hosts: [
+                  {
+                    firstName: 'Hassan',
+                    lastName: null,
+                  },
+                ],
                 sponsors: ['Burton'],
               },
               meta: {
@@ -866,9 +892,9 @@ module('Integration | realm', function (hooks) {
             },
           },
           null,
-          2
+          2,
         ),
-      })
+      }),
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
@@ -887,6 +913,8 @@ module('Integration | realm', function (hooks) {
           hosts: [
             {
               firstName: 'Hassan',
+              lastName: null,
+              title: 'Hassan ',
             },
           ],
           sponsors: ['Burton'],
@@ -900,7 +928,7 @@ module('Integration | realm', function (hooks) {
             name: 'Booking',
           },
           lastModified: adapter.lastModified.get(
-            `${testRealmURL}ski-trip.json`
+            `${testRealmURL}ski-trip.json`,
           ),
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
@@ -921,7 +949,12 @@ module('Integration | realm', function (hooks) {
             venue: 'Gore Mountain',
             startTime: '2023-02-18T10:00:00.000Z',
             endTime: '2023-02-19T02:00:00.000Z',
-            hosts: [{ firstName: 'Hassan' }],
+            hosts: [
+              {
+                firstName: 'Hassan',
+                lastName: null,
+              },
+            ],
             sponsors: ['Burton'],
             posts: [],
           },
@@ -933,7 +966,7 @@ module('Integration | realm', function (hooks) {
           },
         },
       },
-      'file contents are correct'
+      'file contents are correct',
     );
   });
 
@@ -994,7 +1027,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let response = await realm.handle(
       new Request(`${testRealmURL}jackie`, {
@@ -1018,9 +1051,9 @@ module('Integration | realm', function (hooks) {
             },
           },
           null,
-          2
+          2,
         ),
-      })
+      }),
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
@@ -1066,14 +1099,18 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           id: `${testRealmURL}dir/friend`,
           links: { self: `${testRealmURL}dir/friend` },
-          attributes: { firstName: 'Hassan', lastName: 'Abdel-Rahman' },
+          attributes: {
+            firstName: 'Hassan',
+            lastName: 'Abdel-Rahman',
+            title: 'Hassan Abdel-Rahman',
+          },
           meta: {
             adoptsFrom: {
               module: 'http://localhost:4202/test/person',
               name: 'Person',
             },
             lastModified: adapter.lastModified.get(
-              `${testRealmURL}dir/friend.json`
+              `${testRealmURL}dir/friend.json`,
             ),
             realmInfo: testRealmInfo,
             realmURL: testRealmURL,
@@ -1083,7 +1120,7 @@ module('Integration | realm', function (hooks) {
           type: 'card',
           id: `${testRealmURL}dir/van-gogh`,
           links: { self: `${testRealmURL}dir/van-gogh` },
-          attributes: { firstName: 'Van Gogh' },
+          attributes: { firstName: 'Van Gogh', title: 'Van Gogh' },
           relationships: { owner: { links: { self: null } } },
           meta: {
             adoptsFrom: {
@@ -1091,7 +1128,7 @@ module('Integration | realm', function (hooks) {
               name: 'Pet',
             },
             lastModified: adapter.lastModified.get(
-              `${testRealmURL}dir/van-gogh.json`
+              `${testRealmURL}dir/van-gogh.json`,
             ),
             realmInfo: testRealmInfo,
             realmURL: testRealmURL,
@@ -1121,7 +1158,7 @@ module('Integration | realm', function (hooks) {
           },
         },
       },
-      'file contents are correct'
+      'file contents are correct',
     );
   });
 
@@ -1182,7 +1219,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     let response = await realm.handle(
@@ -1206,9 +1243,9 @@ module('Integration | realm', function (hooks) {
             },
           },
           null,
-          2
+          2,
         ),
-      })
+      }),
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
@@ -1302,7 +1339,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     let response = await realm.handle(
@@ -1326,9 +1363,9 @@ module('Integration | realm', function (hooks) {
             },
           },
           null,
-          2
+          2,
         ),
-      })
+      }),
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
@@ -1411,7 +1448,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     let response = await realm.handle(
@@ -1432,9 +1469,9 @@ module('Integration | realm', function (hooks) {
             },
           },
           null,
-          2
+          2,
         ),
-      })
+      }),
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
@@ -1521,7 +1558,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     // changing linksTo field only
@@ -1547,9 +1584,9 @@ module('Integration | realm', function (hooks) {
             },
           },
           null,
-          2
+          2,
         ),
-      })
+      }),
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
@@ -1655,7 +1692,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     let response = await realm.handle(
@@ -1683,9 +1720,9 @@ module('Integration | realm', function (hooks) {
             },
           },
           null,
-          2
+          2,
         ),
-      })
+      }),
     );
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
@@ -1775,7 +1812,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/mango`, {
@@ -1803,9 +1840,9 @@ module('Integration | realm', function (hooks) {
             },
           },
           null,
-          2
+          2,
         ),
-      })
+      }),
     );
 
     assert.strictEqual(response.status, 200, 'successful http status');
@@ -1816,6 +1853,7 @@ module('Integration | realm', function (hooks) {
         id: `${testRealmURL}dir/mango`,
         attributes: {
           firstName: 'Mango',
+          title: 'Mango',
         },
         relationships: {
           owner: {
@@ -1834,7 +1872,7 @@ module('Integration | realm', function (hooks) {
             name: 'Pet',
           },
           lastModified: adapter.lastModified.get(
-            `${testRealmURL}dir/mango.json`
+            `${testRealmURL}dir/mango.json`,
           ),
           realmInfo: testRealmInfo,
           realmURL: testRealmURL,
@@ -1850,6 +1888,7 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Mariko',
             lastName: 'Abdel-Rahman',
+            title: 'Mariko Abdel-Rahman',
           },
           meta: {
             adoptsFrom: {
@@ -1857,7 +1896,7 @@ module('Integration | realm', function (hooks) {
               name: 'Person',
             },
             lastModified: adapter.lastModified.get(
-              `${testRealmURL}dir/mariko.json`
+              `${testRealmURL}dir/mariko.json`,
             ),
             realmInfo: testRealmInfo,
             realmURL: testRealmURL,
@@ -1895,7 +1934,7 @@ module('Integration | realm', function (hooks) {
           },
         },
       },
-      'file contents are correct'
+      'file contents are correct',
     );
   });
 
@@ -1922,7 +1961,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     let searchIndex = realm.searchIndex;
@@ -1933,13 +1972,13 @@ module('Integration | realm', function (hooks) {
     let result = await searchIndex.card(new URL(`${testRealmURL}cards/2`));
     if (result?.type === 'error') {
       throw new Error(
-        `unexpected error when getting card from index: ${result.error.detail}`
+        `unexpected error when getting card from index: ${result.error.detail}`,
       );
     }
     assert.strictEqual(
       result?.doc.data.id,
       `${testRealmURL}cards/2`,
-      'found card in index'
+      'found card in index',
     );
 
     let expected = ['removed: cards/2.json'];
@@ -1955,9 +1994,9 @@ module('Integration | realm', function (hooks) {
             headers: {
               Accept: 'application/vnd.card+json',
             },
-          })
+          }),
         );
-      }
+      },
     );
     assert.strictEqual(response.status, 204, 'status was 204');
 
@@ -1967,13 +2006,13 @@ module('Integration | realm', function (hooks) {
     result = await searchIndex.card(new URL(`${testRealmURL}cards/1`));
     if (result?.type === 'error') {
       throw new Error(
-        `unexpected error when getting card from index: ${result.error.detail}`
+        `unexpected error when getting card from index: ${result.error.detail}`,
       );
     }
     assert.strictEqual(
       result?.doc.data.id,
       `${testRealmURL}cards/1`,
-      'card 1 is still there'
+      'card 1 is still there',
     );
 
     cards = (await searchIndex.search({})).data;
@@ -1982,10 +2021,11 @@ module('Integration | realm', function (hooks) {
 
   test('realm can serve card source file', async function (assert) {
     let realm = await TestRealm.create(
+      loader,
       {
         'dir/person.gts': cardSrc,
       },
-      this.owner
+      this.owner,
     );
     await realm.ready;
     let response = await realm.handle(
@@ -1993,23 +2033,24 @@ module('Integration | realm', function (hooks) {
         headers: {
           Accept: 'application/vnd.card+source',
         },
-      })
+      }),
     );
     assert.strictEqual(response.status, 200, '200 HTTP status');
     let responseText = await response.text();
     assert.strictEqual(responseText, cardSrc, 'the card source is correct');
     assert.ok(
       response.headers.get('last-modified'),
-      'last-modified header exists'
+      'last-modified header exists',
     );
   });
 
   test('realm provide redirect for card source', async function (assert) {
     let realm = await TestRealm.create(
+      loader,
       {
         'dir/person.gts': cardSrc,
       },
-      this.owner
+      this.owner,
     );
     await realm.ready;
     let response = await realm.handle(
@@ -2017,32 +2058,32 @@ module('Integration | realm', function (hooks) {
         headers: {
           Accept: 'application/vnd.card+source',
         },
-      })
+      }),
     );
     assert.strictEqual(response.status, 302, '302 HTTP status');
     assert.strictEqual(
       response.headers.get('Location'),
       '/test/dir/person.gts',
-      'Location header is correct'
+      'Location header is correct',
     );
   });
 
   test('realm returns 404 when no card source can be found', async function (assert) {
-    let realm = await TestRealm.create({}, this.owner);
+    let realm = await TestRealm.create(loader, {}, this.owner);
     await realm.ready;
     let response = await realm.handle(
       new Request(`${testRealmURL}dir/person`, {
         headers: {
           Accept: 'application/vnd.card+source',
         },
-      })
+      }),
     );
     assert.strictEqual(response.status, 404, '404 HTTP status');
   });
 
   test('realm can serve card source post request', async function (assert) {
     let adapter = new TestRealmAdapter({});
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     {
@@ -2060,15 +2101,15 @@ module('Integration | realm', function (hooks) {
                 Accept: 'application/vnd.card+source',
               },
               body: cardSrc,
-            })
+            }),
           );
-        }
+        },
       );
 
       assert.strictEqual(response.status, 204, 'HTTP status is 204');
       assert.ok(
         response.headers.get('last-modified'),
-        'last-modified header exists'
+        'last-modified header exists',
       );
     }
     {
@@ -2077,7 +2118,7 @@ module('Integration | realm', function (hooks) {
           headers: {
             Accept: 'application/vnd.card+source',
           },
-        })
+        }),
       );
       assert.strictEqual(response.status, 200, '200 HTTP status');
       let responseText = await response.text();
@@ -2097,7 +2138,7 @@ module('Integration | realm', function (hooks) {
       }
     `,
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     let expected = ['removed: person.gts'];
@@ -2112,7 +2153,7 @@ module('Integration | realm', function (hooks) {
             headers: {
               Accept: 'application/vnd.card+source',
             },
-          })
+          }),
         );
         assert.strictEqual(response.status, 302, 'file exists');
 
@@ -2122,9 +2163,9 @@ module('Integration | realm', function (hooks) {
             headers: {
               Accept: 'application/vnd.card+source',
             },
-          })
+          }),
         );
-      }
+      },
     );
     assert.strictEqual(response.status, 204, 'file is deleted');
 
@@ -2133,39 +2174,49 @@ module('Integration | realm', function (hooks) {
         headers: {
           Accept: 'application/vnd.card+source',
         },
-      })
+      }),
     );
     assert.strictEqual(response.status, 404, 'file no longer exists');
   });
 
   test('realm can serve compiled js file when requested without file extension ', async function (assert) {
     let realm = await TestRealm.create(
+      loader,
       {
         'dir/person.gts': cardSrc,
       },
-      this.owner
+      this.owner,
     );
     await realm.ready;
     let response = await realm.handle(new Request(`${testRealmURL}dir/person`));
     assert.strictEqual(response.status, 200, 'HTTP 200 status code');
     let compiledJS = await response.text();
-    assert.codeEqual(compiledJS, compiledCard(), 'compiled card is correct');
+    assert.codeEqual(
+      stripScopedCSSGlimmerAttributes(compiledJS),
+      compiledCard(),
+      'compiled card is correct',
+    );
   });
 
   test('realm can serve compiled js file when requested with file extension ', async function (assert) {
     let realm = await TestRealm.create(
+      loader,
       {
         'dir/person.gts': cardSrc,
       },
-      this.owner
+      this.owner,
     );
     await realm.ready;
     let response = await realm.handle(
-      new Request(`${testRealmURL}dir/person.gts`)
+      new Request(`${testRealmURL}dir/person.gts`),
     );
     assert.strictEqual(response.status, 200, 'HTTP 200 status code');
     let compiledJS = await response.text();
-    assert.codeEqual(compiledJS, compiledCard(), 'compiled card is correct');
+    assert.codeEqual(
+      stripScopedCSSGlimmerAttributes(compiledJS),
+      compiledCard(),
+      'compiled card is correct',
+    );
   });
 
   test('realm can serve file asset (not card source, not js, not JSON-API)', async function (assert) {
@@ -2177,14 +2228,15 @@ module('Integration | realm', function (hooks) {
       </html>
     `.trim();
     let realm = await TestRealm.create(
+      loader,
       {
         'dir/index.html': html,
       },
-      this.owner
+      this.owner,
     );
     await realm.ready;
     let response = await realm.handle(
-      new Request(`${testRealmURL}dir/index.html`)
+      new Request(`${testRealmURL}dir/index.html`),
     );
     assert.strictEqual(response.status, 200, 'HTTP 200 status code');
     let responseText = await response.text();
@@ -2193,6 +2245,7 @@ module('Integration | realm', function (hooks) {
 
   test('realm can serve search requests', async function (assert) {
     let realm = await TestRealm.create(
+      loader,
       {
         'dir/empty.json': {
           data: {
@@ -2206,7 +2259,7 @@ module('Integration | realm', function (hooks) {
           },
         },
       },
-      this.owner
+      this.owner,
     );
     await realm.ready;
     let response = await realm.handle(
@@ -2214,18 +2267,18 @@ module('Integration | realm', function (hooks) {
         headers: {
           Accept: 'application/vnd.card+json',
         },
-      })
+      }),
     );
     let json = await response.json();
     assert.strictEqual(
       json.data.length,
       1,
-      'the card is returned in the search results'
+      'the card is returned in the search results',
     );
     assert.strictEqual(
       json.data[0].id,
       `${testRealmURL}dir/empty`,
-      'card ID is correct'
+      'card ID is correct',
     );
   });
 
@@ -2289,7 +2342,7 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let realm = await TestRealm.createWithAdapter(adapter, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     let response = await realm.handle(
@@ -2306,8 +2359,8 @@ module('Integration | realm', function (hooks) {
           headers: {
             Accept: 'application/vnd.card+json',
           },
-        }
-      )
+        },
+      ),
     );
     let json = await response.json();
     delete json.included?.[0].meta.lastModified;
@@ -2318,6 +2371,7 @@ module('Integration | realm', function (hooks) {
           id: `${testRealmURL}dir/mango`,
           attributes: {
             firstName: 'Mango',
+            title: 'Mango',
           },
           relationships: {
             owner: {
@@ -2336,7 +2390,7 @@ module('Integration | realm', function (hooks) {
               name: 'Pet',
             },
             lastModified: adapter.lastModified.get(
-              `${testRealmURL}dir/mango.json`
+              `${testRealmURL}dir/mango.json`,
             ),
             realmInfo: testRealmInfo,
             realmURL: testRealmURL,
@@ -2351,6 +2405,7 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Mariko',
             lastName: 'Abdel-Rahman',
+            title: 'Mariko Abdel-Rahman',
           },
           meta: {
             adoptsFrom: {
@@ -2358,7 +2413,7 @@ module('Integration | realm', function (hooks) {
               name: 'Person',
             },
             lastModified: adapter.lastModified.get(
-              `${testRealmURL}dir/mariko.json`
+              `${testRealmURL}dir/mariko.json`,
             ),
             realmInfo: testRealmInfo,
             realmURL: testRealmURL,
@@ -2372,6 +2427,7 @@ module('Integration | realm', function (hooks) {
           id: `${testRealmURL}dir/vanGogh`,
           attributes: {
             firstName: 'Van Gogh',
+            title: 'Van Gogh',
           },
           relationships: {
             owner: {
@@ -2390,7 +2446,7 @@ module('Integration | realm', function (hooks) {
               name: 'Pet',
             },
             lastModified: adapter.lastModified.get(
-              `${testRealmURL}dir/vanGogh.json`
+              `${testRealmURL}dir/vanGogh.json`,
             ),
             realmInfo: testRealmInfo,
             realmURL: testRealmURL,
@@ -2407,13 +2463,19 @@ module('Integration | realm', function (hooks) {
           attributes: {
             firstName: 'Hassan',
             lastName: 'Abdel-Rahman',
+            title: 'Hassan Abdel-Rahman',
           },
           meta: {
             adoptsFrom: {
               module: './person',
               name: 'Person',
             },
-            realmInfo: { ...testRealmInfo, name: 'Test Workspace' },
+            realmInfo: {
+              name: 'Test Workspace A',
+              backgroundURL:
+                'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
+              iconURL: 'https://i.postimg.cc/d0B9qMvy/icon.png',
+            },
             realmURL: 'http://localhost:4202/test/',
           },
           links: {
@@ -2426,6 +2488,7 @@ module('Integration | realm', function (hooks) {
 
   test('realm can serve directory requests', async function (assert) {
     let realm = await TestRealm.create(
+      loader,
       {
         'dir/empty.json': {
           data: {
@@ -2440,7 +2503,7 @@ module('Integration | realm', function (hooks) {
         },
         'dir/subdir/file.txt': '',
       },
-      this.owner
+      this.owner,
     );
     await realm.ready;
     let response = await realm.handle(
@@ -2448,7 +2511,7 @@ module('Integration | realm', function (hooks) {
         headers: {
           Accept: 'application/vnd.api+json',
         },
-      })
+      }),
     );
     assert.strictEqual(response.status, 200, 'HTTP 200 status code');
     let json = await response.json();
@@ -2478,7 +2541,7 @@ module('Integration | realm', function (hooks) {
           },
         },
       },
-      'the directory response is correct'
+      'the directory response is correct',
     );
   });
 
@@ -2489,6 +2552,7 @@ module('Integration | realm', function (hooks) {
     `;
 
     let realm = await TestRealm.create(
+      loader,
       {
         'sample-post.json': '',
         'posts/1.json': '',
@@ -2503,7 +2567,7 @@ module('Integration | realm', function (hooks) {
 posts/ignore-me.gts
 `,
       },
-      this.owner
+      this.owner,
     );
     await realm.ready;
 
@@ -2519,8 +2583,8 @@ posts/ignore-me.gts
             headers: {
               Accept: 'application/vnd.api+json',
             },
-          }
-        )
+          },
+        ),
       );
 
       assert.strictEqual(response.status, 404, 'HTTP 404 response');
@@ -2531,7 +2595,7 @@ posts/ignore-me.gts
           headers: {
             Accept: 'application/vnd.api+json',
           },
-        })
+        }),
       );
       assert.strictEqual(response.status, 404, 'HTTP 404 response');
     }
@@ -2541,14 +2605,14 @@ posts/ignore-me.gts
           headers: {
             Accept: 'application/vnd.api+json',
           },
-        })
+        }),
       );
 
       let json = await response.json();
       assert.deepEqual(
         Object.keys(json.data.relationships).sort(),
         ['.gitignore', 'post.gts', 'posts/'],
-        'top level entries are correct'
+        'top level entries are correct',
       );
     }
     {
@@ -2557,20 +2621,21 @@ posts/ignore-me.gts
           headers: {
             Accept: 'application/vnd.api+json',
           },
-        })
+        }),
       );
 
       let json = await response.json();
       assert.deepEqual(
         Object.keys(json.data.relationships).sort(),
         ['nested.gts'],
-        'nested entries are correct'
+        'nested entries are correct',
       );
     }
   });
 
   test('realm can serve info requests by reading .realm.json', async function (assert) {
     let realm = await TestRealm.create(
+      loader,
       {
         '.realm.json': `{
           "name": "Example Workspace",
@@ -2578,7 +2643,7 @@ posts/ignore-me.gts
           "iconURL": "https://example-icon-url.com"
         }`,
       },
-      this.owner
+      this.owner,
     );
     await realm.ready;
     let response = await realm.handle(
@@ -2586,7 +2651,7 @@ posts/ignore-me.gts
         headers: {
           Accept: 'application/vnd.api+json',
         },
-      })
+      }),
     );
     let json = await response.json();
     assert.deepEqual(
@@ -2602,19 +2667,19 @@ posts/ignore-me.gts
           },
         },
       },
-      '/_info response is correct'
+      '/_info response is correct',
     );
   });
 
   test('realm can serve info requests if .realm.json is missing', async function (assert) {
-    let realm = await TestRealm.create({}, this.owner);
+    let realm = await TestRealm.create(loader, {}, this.owner);
     await realm.ready;
     let response = await realm.handle(
       new Request(`${testRealmURL}_info`, {
         headers: {
           Accept: 'application/vnd.api+json',
         },
-      })
+      }),
     );
     let json = await response.json();
     assert.deepEqual(
@@ -2626,16 +2691,17 @@ posts/ignore-me.gts
           attributes: testRealmInfo,
         },
       },
-      '/_info response is correct'
+      '/_info response is correct',
     );
   });
 
   test('realm can serve info requests if .realm.json is malformed', async function (assert) {
     let realm = await TestRealm.create(
+      loader,
       {
         '.realm.json': `Some example content that is not valid json`,
       },
-      this.owner
+      this.owner,
     );
     await realm.ready;
     let response = await realm.handle(
@@ -2643,7 +2709,7 @@ posts/ignore-me.gts
         headers: {
           Accept: 'application/vnd.api+json',
         },
-      })
+      }),
     );
     let json = await response.json();
     assert.deepEqual(
@@ -2655,7 +2721,7 @@ posts/ignore-me.gts
           attributes: testRealmInfo,
         },
       },
-      '/_info response is correct'
+      '/_info response is correct',
     );
   });
 });

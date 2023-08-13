@@ -32,7 +32,7 @@ interface Signature {
     field: Field<typeof Card>;
     cardTypeFor(
       field: Field<typeof CardBase>,
-      boxedElement: Box<CardBase>
+      boxedElement: Box<CardBase>,
     ): typeof CardBase;
     context?: CardContext;
   };
@@ -64,7 +64,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
                 @icon='icon-minus-circle'
                 @width='20px'
                 @height='20px'
-                class='icon-button'
+                class='remove-icon-button'
                 {{on 'click' (fn this.remove i)}}
                 data-test-remove-card
                 data-test-remove={{i}}
@@ -75,7 +75,9 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         </ul>
       {{/if}}
       <div class='add-new' {{on 'click' this.add}} data-test-add-new>
-        {{svgJar 'icon-plus' width='20px' height='20px'}} Add {{getPlural @field.card.displayName}}
+        {{svgJar 'icon-plus' width='20px' height='20px'}}
+        Add
+        {{getPlural @field.card.displayName}}
       </div>
     </div>
   </template>
@@ -92,8 +94,13 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
     let filter = { every: [{ type }, ...selectedCardsQuery] };
     let chosenCard: Card | undefined = await chooseCard(
-          { filter },
-          { offerToCreate: type, multiSelect: true, createNewCard: this.args.context?.actions?.createCard });
+      { filter },
+      {
+        offerToCreate: type,
+        multiSelect: true,
+        createNewCard: this.args.context?.actions?.createCard,
+      },
+    );
     if (chosenCard) {
       selectedCards = [...selectedCards, chosenCard];
       (this.args.model.value as any)[this.args.field.name] = selectedCards;
@@ -121,7 +128,7 @@ export function getLinksToManyComponent({
   field: Field<typeof Card>;
   cardTypeFor(
     field: Field<typeof CardBase>,
-    boxedElement: Box<CardBase>
+    boxedElement: Box<CardBase>,
   ): typeof CardBase;
   context?: CardContext;
 }): ComponentLike<{ Args: {}; Blocks: {} }> {
@@ -144,7 +151,7 @@ export function getLinksToManyComponent({
       field,
       format,
       cardTypeFor,
-      context
+      context,
     );
   }
 }

@@ -21,7 +21,7 @@ declare global {
 declare module '@ember/component' {
   export function setComponentTemplate(
     template: string,
-    Component: ComponentLike
+    Component: ComponentLike,
   ): void;
 }
 

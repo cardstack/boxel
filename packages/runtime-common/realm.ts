@@ -5,7 +5,7 @@ import {
   type RunnerOptionsManager,
 } from './search-index';
 import { type SingleCardDocument } from './card-document';
-import { Loader, type MaybeLocalRequest } from './loader';
+import { Loader } from './loader';
 import { RealmPaths, LocalPath, join } from './paths';
 import {
   systemError,
@@ -47,6 +47,7 @@ import * as babel from '@babel/core';
 import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation/browser';
 import type { Options as EmberTemplatePluginOptions } from 'babel-plugin-ember-template-compilation/src/plugin';
 import type { EmberTemplateCompiler } from 'babel-plugin-ember-template-compilation/src/ember-template-compiler';
+import type { ExtendedPluginBuilder } from 'babel-plugin-ember-template-compilation/src/js-utils';
 //@ts-ignore no types are available
 import * as etc from 'ember-source/dist/ember-template-compiler';
 import { loaderPlugin } from './loader-plugin';
@@ -66,9 +67,10 @@ import { parseQueryString } from './query';
 import type { Readable } from 'stream';
 import { type Card } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
+import type { LoaderType } from 'https://cardstack.com/base/card-api';
+import scopedCSSTransform from 'glimmer-scoped-css/ast-transform';
 
 export type RealmInfo = {
   name: string;
@@ -129,6 +131,7 @@ export class Realm {
   #startedUp = new Deferred<void>();
   #searchIndex: SearchIndex;
   #adapter: RealmAdapter;
+  #loader: Loader;
   #router: Router;
   #deferStartup: boolean;
   #useTestingDomain = false;
@@ -144,6 +147,7 @@ export class Realm {
   constructor(
     url: string,
     adapter: RealmAdapter,
+    loader: Loader,
     indexRunner: IndexRunner,
     runnerOptsMgr: RunnerOptionsManager,
     getIndexHTML: () => Promise<string>,
@@ -152,7 +156,8 @@ export class Realm {
     this.paths = new RealmPaths(url);
     this.#getIndexHTML = getIndexHTML;
     this.#useTestingDomain = Boolean(opts?.useTestingDomain);
-    Loader.registerURLHandler(new URL(url), this.handle.bind(this));
+    this.#loader = loader;
+    this.#loader.registerURLHandler(this.maybeHandle.bind(this));
     this.#adapter = adapter;
     this.#searchIndex = new SearchIndex(
       this,
@@ -239,8 +244,16 @@ export class Realm {
     });
   }
 
+  get loader() {
+    return this.#loader;
+  }
+
   get searchIndex() {
     return this.#searchIndex;
+  }
+
+  async reindex() {
+    await this.#searchIndex.run();
   }
 
   async #startup() {
@@ -277,9 +290,23 @@ export class Realm {
     return this.#startedUp.promise;
   }
 
-  async handle(request: MaybeLocalRequest): Promise<ResponseWithNodeStream> {
+  async maybeHandle(request: Request): Promise<Response | null> {
+    if (!this.paths.inRealm(new URL(request.url))) {
+      return null;
+    }
+    return await this.internalHandle(request, true);
+  }
+
+  async handle(request: Request): Promise<ResponseWithNodeStream> {
+    return this.internalHandle(request, false);
+  }
+
+  private async internalHandle(
+    request: Request,
+    isLocal: boolean
+  ): Promise<ResponseWithNodeStream> {
     // local requests are allowed to query the realm as the index is being built up
-    if (!request.isLocal) {
+    if (!isLocal) {
       await this.ready;
     }
     if (!this.searchIndex) {
@@ -431,6 +458,7 @@ export class Realm {
 
     let templateOptions: EmberTemplatePluginOptions = {
       compiler: etc as unknown as EmberTemplateCompiler,
+      transforms: [scopedCSSTransform as ExtendedPluginBuilder],
     };
 
     let src = babel.transformSync(content, {
@@ -808,8 +836,7 @@ export class Realm {
         realmInfo.name = realmConfigJson.name ?? realmInfo.name;
         realmInfo.backgroundURL =
           realmConfigJson.backgroundURL ?? realmInfo.backgroundURL;
-        realmInfo.iconURL = 
-          realmConfigJson.iconURL ?? realmInfo.iconURL;
+        realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
       } catch (e) {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }
@@ -833,9 +860,12 @@ export class Realm {
     let api = await this.searchIndex.loader.import<typeof CardAPI>(
       'https://cardstack.com/base/card-api'
     );
-    let card = (await api.createFromSerialized(doc.data, doc, relativeTo, {
-      loader: this.searchIndex.loader as unknown as LoaderType,
-    })) as Card;
+    let card = (await api.createFromSerialized(
+      doc.data,
+      doc,
+      relativeTo,
+      this.searchIndex.loader as unknown as LoaderType
+    )) as Card;
     let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds
     delete data.data.id; // the ID is derived from the filename, so we don't serialize it on disk
     delete data.included;

@@ -85,7 +85,7 @@ class _FileResource extends Resource<Args> {
       this.subscription = {
         url: path,
         unsubscribe: this.messageService.subscribe(path, () =>
-          this.read.perform()
+          this.read.perform(),
         ),
       };
     }
@@ -114,7 +114,7 @@ class _FileResource extends Resource<Args> {
       log.error(
         `Could not get file ${this.url}, status ${response.status}: ${
           response.statusText
-        } - ${await response.text()}`
+        } - ${await response.text()}`,
       );
       if (response.status === 404) {
         this.state = 'not-found';
@@ -156,7 +156,7 @@ class _FileResource extends Resource<Args> {
     if (this.state === 'not-found') {
       // TODO think about the "unauthorized" scenario
       throw new Error(
-        'this should be impossible--we are creating the specified path'
+        'this should be impossible--we are creating the specified path',
       );
     }
 

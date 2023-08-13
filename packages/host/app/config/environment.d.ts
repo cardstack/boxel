@@ -12,6 +12,7 @@ declare const config: {
   rootURL: string;
   APP: Record<string, unknown>;
   ownRealmURL: string;
+  otherRealmURLs: string[];
   matrixURL: string;
   experimentalAIEnabled: boolean;
   resolvedBaseRealmURL: string;
@@ -19,4 +20,5 @@ declare const config: {
   realmsServed?: string[];
   logLevels: string;
   resolvedOwnRealmURL: string;
+  autoSaveDelayMs: number;
 };

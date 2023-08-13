@@ -18,6 +18,7 @@ import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import { formatRFC3339 } from 'date-fns';
 import Modifier from 'ember-modifier';
 import {
+  Loader,
   type LooseSingleCardDocument,
   type CardRef,
 } from '@cardstack/runtime-common';
@@ -207,7 +208,7 @@ export class MessageCard extends Card {
       }
       return this.args.model.attachedCard.constructor.getComponent(
         this.args.model.attachedCard,
-        'isolated'
+        'isolated',
       );
     }
   };
@@ -276,8 +277,9 @@ export class RoomCard extends Card {
       // events for a room name even if we already have one
       let events = this.newEvents
         .filter((e) => e.type === 'm.room.name')
-        .sort((a, b) => a.origin_server_ts - b.origin_server_ts) as
-        | RoomNameEvent[];
+        .sort(
+          (a, b) => a.origin_server_ts - b.origin_server_ts,
+        ) as RoomNameEvent[];
       if (events.length > 0) {
         roomState.name = name ?? events.pop()!.content.name;
       }
@@ -364,6 +366,14 @@ export class RoomCard extends Card {
     // tell the card runtime that this field is being used
     isUsed: true,
     computeVia: async function (this: RoomCard) {
+      let loader = Loader.getLoaderFor(Object.getPrototypeOf(this).constructor);
+
+      if (!loader) {
+        throw new Error(
+          'Could not find a loader for this instance’s class’s module',
+        );
+      }
+
       let cache = messageCache.get(this);
       if (!cache) {
         cache = new Map();
@@ -410,11 +420,12 @@ export class RoomCard extends Card {
           let attachedCard = await createFromSerialized<typeof Card>(
             cardDoc.data,
             cardDoc,
-            new URL(cardDoc.data.id)
+            new URL(cardDoc.data.id),
+            loader,
           );
           newMessages.set(
             event_id,
-            new MessageCard({ ...cardArgs, attachedCard })
+            new MessageCard({ ...cardArgs, attachedCard }),
           );
           if (!cardVersions.get(attachedCard)) {
             cardVersions.set(attachedCard, event.unsigned.transaction_id);
@@ -434,7 +445,7 @@ export class RoomCard extends Card {
       // this sort should hopefully be very optimized since events will
       // be close to chronological order
       return [...updatedCache.values()].sort(
-        (a, b) => a.created.getTime() - b.created.getTime()
+        (a, b) => a.created.getTime() - b.created.getTime(),
       );
     },
   });

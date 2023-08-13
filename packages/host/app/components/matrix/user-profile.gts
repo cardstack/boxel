@@ -80,7 +80,6 @@ export default class UserProfile extends Component {
       .user-button {
         margin-left: var(--boxel-sp-xs);
       }
-
     </style>
   </template>
 
@@ -92,7 +91,7 @@ export default class UserProfile extends Component {
     super(owner, args);
     if (!this.matrixService.isLoggedIn) {
       throw new Error(
-        `cannot render UserProfile component when not logged into Matrix`
+        `cannot render UserProfile component when not logged into Matrix`,
       );
     }
     this.loadProfile.perform();
@@ -139,7 +138,7 @@ export default class UserProfile extends Component {
   private doSave = restartableTask(async () => {
     if (!this.displayName) {
       throw new Error(
-        `bug: should never get here, save button is disabled when there is no display name`
+        `bug: should never get here, save button is disabled when there is no display name`,
       );
     }
     await this.matrixService.client.setDisplayName(this.displayName);

@@ -13,6 +13,8 @@ import {
   setupBaseRealmServer,
 } from './helpers';
 import isEqual from 'lodash/isEqual';
+import { shimExternals } from '../lib/externals';
+import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 
 function cleanWhiteSpace(text: string) {
   return text.replace(/\s+/g, ' ').trim();
@@ -31,19 +33,33 @@ setGracefulCleanup();
 // underlying filesystem in a manner that doesn't leak into other tests (as well
 // as to test through loader caching)
 module('indexing', function (hooks) {
+  let loader = new Loader();
+  loader.addURLMapping(
+    new URL(baseRealm.url),
+    new URL('http://localhost:4201/base/')
+  );
+  shimExternals(loader);
+
   setupCardLogs(
     hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`)
   );
 
   let dir: string;
   let realm: Realm;
 
-  setupBaseRealmServer(hooks);
+  setupBaseRealmServer(hooks, loader);
 
   hooks.beforeEach(async function () {
+    let testRealmLoader = new Loader();
+    testRealmLoader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL('http://localhost:4201/base/')
+    );
+    shimExternals(testRealmLoader);
+
     dir = dirSync().name;
-    realm = await createRealm(dir, {
+    realm = await createRealm(testRealmLoader, dir, {
       'person.gts': `
         import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
@@ -194,7 +210,7 @@ module('indexing', function (hooks) {
       new URL(`${testRealm}mango`)
     );
     assert.strictEqual(
-      trimCardContainer(entry!.html!),
+      trimCardContainer(stripScopedCSSAttributes(entry!.html!)),
       cleanWhiteSpace(`<h1> Mango </h1>`),
       'pre-rendered html is correct'
     );
@@ -222,8 +238,8 @@ module('indexing', function (hooks) {
             new URL(`${testRealm}vangogh`)
           )) ?? {};
         assert.strictEqual(
-          trimCardContainer(html!),
-          cleanWhiteSpace(`<h1> Van Gogh </h1>`)
+          trimCardContainer(stripScopedCSSAttributes(html!)),
+          cleanWhiteSpace(`<h1> Van Gogh </h1>`),
         );
       } else {
         assert.ok(

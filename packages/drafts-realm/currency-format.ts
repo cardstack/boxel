@@ -2,7 +2,7 @@ import { Token, Currency } from './asset';
 
 export function balanceInCurrency(
   balance: number | null | undefined,
-  payment: Token | Currency | null | undefined
+  payment: Token | Currency | null | undefined,
 ) {
   if (balance == null || payment?.exchangeRate == null) {
     return 0;

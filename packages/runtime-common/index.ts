@@ -113,13 +113,21 @@ export type CreateNewCard = (
 export interface CardChooser {
   chooseCard<T extends CardBase>(
     query: Query,
-    opts?: { offerToCreate?: CardRef; multiSelect?: boolean, createNewCard?: CreateNewCard }
+    opts?: {
+      offerToCreate?: CardRef;
+      multiSelect?: boolean;
+      createNewCard?: CreateNewCard;
+    }
   ): Promise<undefined | T>;
 }
 
 export async function chooseCard<T extends Card>(
   query: Query,
-  opts?: { offerToCreate?: CardRef; multiSelect?: boolean, createNewCard?: CreateNewCard }
+  opts?: {
+    offerToCreate?: CardRef;
+    multiSelect?: boolean;
+    createNewCard?: CreateNewCard;
+  }
 ): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CARD_CHOOSER) {
@@ -133,16 +141,19 @@ export async function chooseCard<T extends Card>(
 }
 
 export interface CardSearch {
-  getCards(query: Query): {
+  getCards(
+    query: Query,
+    realms?: string[]
+  ): {
     instances: Card[];
     isLoading: boolean;
   };
 }
 
-export function getCards(query: Query) {
+export function getCards(query: Query, realms?: string[]) {
   let here = globalThis as any;
   let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.getCards(query);
+  return finder?.getCards(query, realms);
 }
 
 export interface CardCreator {
@@ -175,7 +186,12 @@ export interface Actions {
     relativeTo: URL | undefined,
     opts?: { isLinkedCard?: boolean; doc?: LooseSingleCardDocument }
   ) => Promise<Card | undefined>;
-  viewCard: (card: Card, format?: Format) => void;
+  viewCard: (
+    card: Card,
+    format?: Format,
+    fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
+    fieldName?: string
+  ) => void;
   createCardDirectly: (
     doc: LooseSingleCardDocument,
     relativeTo: URL | undefined

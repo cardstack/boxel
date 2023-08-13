@@ -30,8 +30,17 @@ export default class Tooltip extends Component<Signature> {
   }
 
   <template>
-    <Velcro @placement={{if @placement @placement 'top'}} @offsetOptions={{if @offset @offset 6}} as |velcro|>
-      <div class='trigger' {{velcro.hook}} {{on 'mouseenter' this.onMouseEnter}} {{on 'mouseleave' this.onMouseLeave}}>
+    <Velcro
+      @placement={{if @placement @placement 'top'}}
+      @offsetOptions={{if @offset @offset 6}}
+      as |velcro|
+    >
+      <div
+        class='trigger'
+        {{velcro.hook}}
+        {{on 'mouseenter' this.onMouseEnter}}
+        {{on 'mouseleave' this.onMouseLeave}}
+      >
         {{yield to='trigger'}}
       </div>
       {{#if this.isHoverOnTrigger}}
@@ -40,7 +49,7 @@ export default class Tooltip extends Component<Signature> {
         </div>
       {{/if}}
     </Velcro>
-    
+
     <style>
       .trigger {
         width: max-content;
