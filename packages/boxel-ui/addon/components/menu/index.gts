@@ -100,6 +100,14 @@ export default class Menu extends Component<Signature> {
                     }}
                   {{/if}}
                   {{menuItem.text}}
+                  <span
+                    class={{cn
+                      'check-icon'
+                      check-icon--selected=menuItem.selected
+                    }}
+                  >
+                    {{svgJar 'check-mark' width='20' height='20'}}
+                  </span>
                 </div>
               </li>
             </:item>
@@ -113,7 +121,7 @@ export default class Menu extends Component<Signature> {
         --boxel-menu-current-color: var(--boxel-light-100);
         --boxel-menu-selected-color: var(--boxel-highlight);
         --boxel-menu-disabled-color: var(--boxel-highlight);
-        --boxel-menu-font: var(--boxel-font-sm);
+        --boxel-menu-font: 500 var(--boxel-font-sm);
 
         list-style-type: none;
         margin: 0;
@@ -144,10 +152,11 @@ export default class Menu extends Component<Signature> {
       }
 
       .boxel-menu__item > .boxel-menu__item__content {
-        width: max-content;
+        width: 100%;
         padding: var(--boxel-sp-xs) var(--boxel-sp);
 
         display: flex;
+        justify-content: space-between;
         align-items: center;
         gap: 10px;
       }
@@ -164,11 +173,6 @@ export default class Menu extends Component<Signature> {
         color: var(--boxel-error-200);
       }
 
-      .boxel-menu__item--selected,
-      .boxel-menu__item--selected.boxel-menu__item:hover {
-        background-color: var(--boxel-menu-selected-color);
-      }
-
       .boxel-menu__item--disabled,
       .boxel-menu__item--disabled.boxel-menu__item:hover {
         background-color: initial;
@@ -180,6 +184,15 @@ export default class Menu extends Component<Signature> {
         border: 0;
         height: 0;
         border-bottom: 1px solid var(--boxel-purple-300);
+      }
+
+      .check-icon {
+        --icon-color: var(--boxel-highlight);
+        visibility: collapse;
+        display: contents;
+      }
+      .check-icon--selected {
+        visibility: visible;
       }
     </style>
   </template>
