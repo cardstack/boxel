@@ -4,7 +4,7 @@ type Command = 'patch';
 
 class CommandHandler {
   handler: any;
-  functions: Map<Command, ((arg: any) => void)[]>;
+  functions: Map<Command, ((context: any, arg: any) => void)[]>;
   constructor(handler: any) {
     this.handler = handler;
     this.functions = new Map();
