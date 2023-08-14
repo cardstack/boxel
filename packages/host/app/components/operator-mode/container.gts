@@ -311,9 +311,6 @@ export default class OperatorModeContainer extends Component<Signature> {
       sourceItem: CardStackItem,
       destinationItem: CardStackItem,
     ) => {
-      if (!this.cardService.isIndexCard(destinationItem.card)) {
-        throw new Error(`bug: this should never happen`);
-      }
       let token = waiter.beginAsync();
       try {
         let destinationRealmURL = await this.cardService.getRealmURL(
@@ -471,8 +468,10 @@ export default class OperatorModeContainer extends Component<Signature> {
           );
           if (stackItem) {
             let doWithStableScroll = stackItemStableScrolls.get(stackItem);
-            if (doWithStableScroll) doWithStableScroll(changeSizeCallback); // this is perform()ed in the component
-            return;
+            if (doWithStableScroll) {
+              doWithStableScroll(changeSizeCallback); // this is perform()ed in the component
+              return;
+            }
           }
         }
         await changeSizeCallback();

@@ -102,33 +102,31 @@ class Isolated extends Component<typeof CardsGrid> {
     this.refresh();
 
     let url = `${this.args.model[realmURL]}_message`;
-    if (!this.subscription) {
-      this.subscription = {
-        url,
-        unsubscribe: subscribeToRealm(url, ({ data }) => {
-          // we show stale instances during a live refresh while we are
-          // waiting for the new instances to arrive--this eliminates the flash
-          // while we wait
-          this.staleInstances = [...(this.instances ?? [])];
+    this.subscription = {
+      url,
+      unsubscribe: subscribeToRealm(url, ({ data }) => {
+        // we show stale instances during a live refresh while we are
+        // waiting for the new instances to arrive--this eliminates the flash
+        // while we wait
+        this.staleInstances = [...(this.instances ?? [])];
 
-          // we are only interested in events related to index changes.
-          // currently these look like "index: full" and "index: incremental"
-          if (data.startsWith('index:')) {
-            if (this.args.context?.actions) {
-              this.args.context?.actions?.doWithStableScroll(
-                this.args.model as Card,
-                async () => {
-                  this.refresh();
-                  await this.request.ready;
-                },
-              );
-            } else {
-              this.refresh();
-            }
+        // we are only interested in events related to index changes.
+        // currently these look like "index: full" and "index: incremental"
+        if (data.startsWith('index:')) {
+          if (this.args.context?.actions) {
+            this.args.context?.actions?.doWithStableScroll(
+              this.args.model as Card,
+              async () => {
+                this.refresh();
+                await this.request.ready;
+              },
+            );
+          } else {
+            this.refresh();
           }
-        }),
-      };
-    }
+        }
+      }),
+    };
     registerDestructor(this, () => {
       if (this.subscription) {
         this.subscription.unsubscribe();
