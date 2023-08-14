@@ -617,6 +617,7 @@ module('Integration | card-copy', function (hooks) {
           .doesNotExist('card does not initially exist in destiation realm');
 
         await click('[data-test-copy-button]');
+        await percySnapshot(assert);
       },
     );
     await waitFor(
