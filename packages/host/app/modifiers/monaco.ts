@@ -8,7 +8,7 @@ interface Signature {
   Args: {
     Named: {
       content: string;
-      contentChanged: (newContent: string, oldContent?: string) => void;
+      contentChanged: (text: string) => void;
       onSetup?: (editor: MonacoSDK.editor.IStandaloneCodeEditor) => void;
       language?: string;
       monacoSDK: typeof MonacoSDK;
@@ -39,7 +39,6 @@ export default class Monaco extends Modifier<Signature> {
       if (language && language !== this.lastLanguage) {
         monacoSDK.editor.setModelLanguage(this.model, language);
       }
-      this.lastContent = this.model.getValue();
       if (content !== this.lastContent) {
         this.model.setValue(content);
       }
@@ -54,21 +53,20 @@ export default class Monaco extends Modifier<Signature> {
       registerDestructor(this, () => this.editor!.dispose());
 
       this.model = this.editor.getModel()!;
-      this.model.onDidChangeContent(() => {
-        this.onContentChanged.perform(contentChanged);
-      });
+
+      this.model.onDidChangeContent(() =>
+        this.onContentChanged.perform(contentChanged),
+      );
     }
     this.lastLanguage = language;
   }
 
   private onContentChanged = restartableTask(
-    async (
-      contentChanged: (newContent: string, oldContent?: string) => void,
-    ) => {
+    async (contentChanged: (text: string) => void) => {
       timeout(DEBOUNCE_MS);
       if (this.model) {
-        let newContent = this.model.getValue();
-        contentChanged(newContent, this.lastContent);
+        this.lastContent = this.model.getValue();
+        contentChanged(this.lastContent);
       }
     },
   );

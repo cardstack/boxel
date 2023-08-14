@@ -47,8 +47,6 @@ interface Signature {
   };
 }
 
-const DEBOUNCE_MS = 500;
-
 export default class Go extends Component<Signature> {
   <template>
     <div class='main'>
@@ -151,8 +149,8 @@ export default class Go extends Component<Signature> {
   }
 
   @action
-  contentChanged(content: string, oldContent?: string) {
-    this.contentChangedTask.perform(content, oldContent);
+  contentChanged(content: string) {
+    this.contentChangedTask.perform(content);
   }
 
   contentChangedTask = restartableTask(async (content: string) => {
@@ -164,22 +162,21 @@ export default class Go extends Component<Signature> {
       return;
     }
 
-      let isJSON = this.openFile.current.name.endsWith('.json');
-      let json = isJSON && this.safeJSONParse(newContent);
+    let isJSON = this.openFile.current.name.endsWith('.json');
+    let json = isJSON && this.safeJSONParse(content);
 
-      // Here lies the difference in how json files and other source code files
-      // are treated during editing in the code editor
-      if (json && isSingleCardDocument(json)) {
-        // writes json instance but doesn't update state of the file resource
-        // relies on message service subscription to update state
-        await this.saveSingleCardDocument(json);
-        return;
-      } else {
-        //writes source code and updates the state of the file resource
-        await this.writeSourceCodeToFile(this.openFile.current, newContent);
-      }
-    },
-  );
+    // Here lies the difference in how json files and other source code files
+    // are treated during editing in the code editor
+    if (json && isSingleCardDocument(json)) {
+      // writes json instance but doesn't update state of the file resource
+      // relies on message service subscription to update state
+      await this.saveSingleCardDocument(json);
+      return;
+    } else {
+      //writes source code and updates the state of the file resource
+      await this.writeSourceCodeToFile(this.openFile.current, content);
+    }
+  });
 
   safeJSONParse(content: string) {
     try {
