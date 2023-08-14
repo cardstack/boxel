@@ -22,7 +22,7 @@ import {
   type TestContextWithSave,
   type TestContextWithSSE,
 } from '../../helpers';
-import { waitFor, click } from '@ember/test-helpers';
+import { waitUntil, waitFor, click } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type CardService from '@cardstack/host/services/card-service';
@@ -569,7 +569,7 @@ module('Integration | card-copy', function (hooks) {
   });
 
   test<TestContextForCopy>('can copy a card', async function (assert) {
-    assert.expect(12);
+    assert.expect(11);
     let expectedEvents = ['added: Pet/1.json', 'index: incremental'];
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
@@ -620,12 +620,12 @@ module('Integration | card-copy', function (hooks) {
         await percySnapshot(assert);
       },
     );
-    await waitFor(
-      `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
+    await waitUntil(
+      () =>
+        document.querySelectorAll(
+          `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
+        ).length === 2,
     );
-    assert
-      .dom(`[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`)
-      .exists({ count: 2 });
     assert
       .dom(
         `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/1"]`,
@@ -654,7 +654,7 @@ module('Integration | card-copy', function (hooks) {
   });
 
   test<TestContextForCopy>('can copy mulitple cards', async function (assert) {
-    assert.expect(9);
+    assert.expect(8);
     let expectedEvents = [
       'added: Pet/1.json',
       'index: incremental',
@@ -709,12 +709,12 @@ module('Integration | card-copy', function (hooks) {
         await click('[data-test-copy-button]');
       },
     );
-    await waitFor(
-      `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
+    await waitUntil(
+      () =>
+        document.querySelectorAll(
+          `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
+        ).length === 3,
     );
-    assert
-      .dom(`[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`)
-      .exists({ count: 3 });
     assert
       .dom(
         `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/1"]`,
@@ -737,7 +737,7 @@ module('Integration | card-copy', function (hooks) {
   });
 
   test<TestContextForCopy>('can copy a card that has a relative link to card in source realm', async function (assert) {
-    assert.expect(14);
+    assert.expect(13);
     let expectedEvents = ['added: Person/1.json', 'index: incremental'];
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
@@ -803,12 +803,12 @@ module('Integration | card-copy', function (hooks) {
         await click('[data-test-copy-button]');
       },
     );
-    await waitFor(
-      `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
+    await waitUntil(
+      () =>
+        document.querySelectorAll(
+          `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
+        ).length === 2,
     );
-    assert
-      .dom(`[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`)
-      .exists({ count: 2 });
     assert
       .dom(
         `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Person/1"]`,
@@ -823,7 +823,7 @@ module('Integration | card-copy', function (hooks) {
   });
 
   test<TestContextForCopy>('can copy a card that has a link to card in destination realm', async function (assert) {
-    assert.expect(14);
+    assert.expect(13);
     let expectedEvents = ['added: Person/1.json', 'index: incremental'];
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
@@ -889,12 +889,12 @@ module('Integration | card-copy', function (hooks) {
         await click('[data-test-copy-button]');
       },
     );
-    await waitFor(
-      `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
+    await waitUntil(
+      () =>
+        document.querySelectorAll(
+          `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
+        ).length === 2,
     );
-    assert
-      .dom(`[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`)
-      .exists({ count: 2 });
     assert
       .dom(
         `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Person/1"]`,
