@@ -34,6 +34,7 @@ export class Person extends Card {
   static isolated = class Isolated extends Component<typeof Person> {
     <template>
       <div class='demo-card'>
+        <h2><@fields.title /></h2>
         <h2><@fields.firstName /> <@fields.lastName /></h2>
         <div>
           <div>Is Cool: <@fields.isCool /></div>
