@@ -155,10 +155,7 @@ export default class Go extends Component<Signature> {
 
   contentChangedTask = restartableTask(async (content: string) => {
     await timeout(500);
-    if (
-      this.openFile.current?.state !== 'ready' ||
-      content === this.openFile.current?.content
-    ) {
+    if (this.openFile.current?.state !== 'ready') {
       return;
     }
 
