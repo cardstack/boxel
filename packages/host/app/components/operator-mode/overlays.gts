@@ -145,7 +145,6 @@ export default class OperatorModeOverlays extends Component<Signature> {
       .hover-button > svg {
         height: 100%;
       }
-
     </style>
   </template>
 
@@ -184,11 +183,11 @@ export default class OperatorModeOverlays extends Component<Signature> {
       if (this.areEventsRegistered.get(renderedCard)) continue;
       renderedCard.element.addEventListener(
         'mouseenter',
-        (_e: MouseEvent) => (this.currentlyHoveredCard = renderedCard)
+        (_e: MouseEvent) => (this.currentlyHoveredCard = renderedCard),
       );
       renderedCard.element.addEventListener(
         'mouseleave',
-        (_e: MouseEvent) => (this.currentlyHoveredCard = null)
+        (_e: MouseEvent) => (this.currentlyHoveredCard = null),
       );
       renderedCard.element.addEventListener('click', (e: MouseEvent) => {
         // prevent outer nested contains fields from triggering when inner most
@@ -198,7 +197,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
           renderedCard.card,
           renderedCard.stackItem.format,
           renderedCard.fieldType,
-          renderedCard.fieldName
+          renderedCard.fieldName,
         );
       });
       renderedCard.element.style.cursor = 'pointer';
@@ -208,7 +207,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
   }
 
   setCurrentlyHoveredCard = (
-    renderedCard: RenderedCardForOverlayActions | null
+    renderedCard: RenderedCardForOverlayActions | null,
   ) => {
     this.currentlyHoveredCard = renderedCard;
   };
@@ -217,7 +216,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
     card: Card,
     format: Format = 'isolated',
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
-    fieldName?: string
+    fieldName?: string,
   ) {
     if (this.args.toggleSelect && this.args.selectedCards?.length) {
       this.args.toggleSelect(card);
