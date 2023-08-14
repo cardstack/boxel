@@ -275,11 +275,6 @@ export default class Room extends Component<RoomArgs> {
   private cardsToSend: TrackedMap<string, Card | undefined> = new TrackedMap();
   private roomCardResource = getRoomCard(this, () => this.args.roomId);
 
-  constructor(owner: unknown, args: any) {
-    super(owner, args);
-    this.doMatrixEventFlush.perform();
-  }
-
   private get roomCard() {
     return this.roomCardResource.roomCard;
   }
