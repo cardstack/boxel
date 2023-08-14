@@ -75,6 +75,9 @@ class WireTransfer extends Card {
 class EditPaymentMethod extends Component<typeof PaymentMethod> {
   <template>
     <div class='payment-method-card'>
+      <FieldContainer @label='Title'>
+        <@fields.title />
+      </FieldContainer>
       <FieldContainer @label='Payment Method'>
         <@fields.type />
       </FieldContainer>
