@@ -142,7 +142,7 @@ async function sendOption(client: MatrixClient, room: Room, content: string) {
 
   let messageObject = {
     body: content,
-    msgtype: 'm.org.boxel.command',
+    msgtype: 'org.boxel.command',
     formatted_body: 'A patch',
     format: 'org.matrix.custom.html',
     command: {
