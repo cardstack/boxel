@@ -155,15 +155,14 @@ export default class Go extends Component<Signature> {
     this.contentChangedTask.perform(content, oldContent);
   }
 
-  contentChangedTask = restartableTask(
-    async (newContent: string, oldContent?: string) => {
-      await timeout(DEBOUNCE_MS);
-      if (
-        this.openFile.current?.state !== 'ready' ||
-        newContent === oldContent
-      ) {
-        return;
-      }
+  contentChangedTask = restartableTask(async (content: string) => {
+    await timeout(500);
+    if (
+      this.openFile.current?.state !== 'ready' ||
+      content === this.openFile.current?.content
+    ) {
+      return;
+    }
 
       let isJSON = this.openFile.current.name.endsWith('.json');
       let json = isJSON && this.safeJSONParse(newContent);
