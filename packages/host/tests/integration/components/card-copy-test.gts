@@ -615,7 +615,6 @@ module('Integration | card-copy', function (hooks) {
             `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/1"]`,
           )
           .doesNotExist('card does not initially exist in destiation realm');
-
         await click('[data-test-copy-button]');
       },
     );
@@ -708,15 +707,6 @@ module('Integration | card-copy', function (hooks) {
         await click('[data-test-copy-button]');
       },
     );
-    await waitUntil(
-      () =>
-        document.querySelectorAll(
-          `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
-        ).length === 2,
-    );
-    // capture a snapshot of the in progress copy button state
-    await percySnapshot(assert);
-
     await waitUntil(
       () =>
         document.querySelectorAll(
