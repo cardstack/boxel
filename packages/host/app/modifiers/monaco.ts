@@ -1,6 +1,6 @@
 import Modifier from 'ember-modifier';
 import '@cardstack/requirejs-monaco-ember-polyfill';
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, timeout } from 'ember-concurrency';
 import { registerDestructor } from '@ember/destroyable';
 import type * as MonacoSDK from 'monaco-editor';
 
@@ -15,6 +15,8 @@ interface Signature {
     };
   };
 }
+
+const DEBOUNCE_MS = 500;
 
 export default class Monaco extends Modifier<Signature> {
   private model: MonacoSDK.editor.ITextModel | undefined;
@@ -61,6 +63,7 @@ export default class Monaco extends Modifier<Signature> {
 
   private onContentChanged = restartableTask(
     async (contentChanged: (text: string) => void) => {
+      timeout(DEBOUNCE_MS);
       if (this.model) {
         this.lastContent = this.model.getValue();
         contentChanged(this.lastContent);
