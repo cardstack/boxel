@@ -20,6 +20,7 @@ import {
   catalogEntryRef,
 } from '@cardstack/runtime-common';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type CommandService from '../../services/command-service';
 import { type Card, type Format } from 'https://cardstack.com/base/card-api';
 import {
   type RoomCard,
@@ -33,7 +34,6 @@ const TRUE = true;
 interface RoomArgs {
   Args: {
     roomId: string;
-    onCommand: (command: any) => void;
   };
 }
 
@@ -45,13 +45,17 @@ interface CommandArgs {
 }
 
 class CommandMessage extends Component<CommandArgs> {
+  @service private declare commandService: CommandService;
   <template>
     <Button data-test-command-apply {{on 'click' this.clicked}}>Apply</Button>
   </template>
 
   @action
-  private clicked() {
-    this.args.onCommand(this.args.command);
+  async clicked() {
+    await this.commandService.runCommand(
+      this.args.command.type,
+      this.args.command,
+    );
   }
 
   constructor(owner: unknown, args: any) {
@@ -116,12 +120,7 @@ export default class Room extends Component<RoomArgs> {
         </div>
         {{#each this.messageCardComponents as |Message|}}
           {{#if Message.command}}
-            <CommandMessage
-              @command={{Message.command}}
-              @onCommand={{this.onCommand}}
-              @onPreviewCommand={{this.onPreviewCommand}}
-              @onCancelPreviewCommand={{this.onCancelPreviewCommand}}
-            />
+            <CommandMessage @command={{Message.command}} />
           {{else}}
             <Message.component />
           {{/if}}
@@ -298,11 +297,6 @@ export default class Room extends Component<RoomArgs> {
     return this.roomCard.messages
       .filter((m) => m.attachedCard)
       .map((m) => m.attachedCard);
-  }
-
-  @action
-  private onCommand(command: any) {
-    this.args.onCommand(command);
   }
 
   @cached

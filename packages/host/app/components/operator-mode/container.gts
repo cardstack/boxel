@@ -38,6 +38,7 @@ import perform from 'ember-concurrency/helpers/perform';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import OperatorModeStack from './stack';
 import type MatrixService from '../../services/matrix-service';
+import type CommandService from '../../services/command-service';
 import ChatSidebar from '../matrix/chat-sidebar';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
@@ -88,6 +89,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
+  @service declare commandService: CommandService;
   @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
   @tracked searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked isChatVisible = false;
@@ -100,6 +102,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
       this.operatorModeStateService.clearStacks();
     });
+    this.commandService.registerCommandHandler(this, 'patch', this.patchCard);
   }
 
   get stacks() {
@@ -143,12 +146,13 @@ export default class OperatorModeContainer extends Component<Signature> {
     return await this.operatorModeStateService.constructRecentCards();
   });
 
-  @action async onCommand(command: any) {
+  async patchCard(context: any, command: any) {
     // apply patch
+    console.log('patching card', command, context);
     if (command.type == 'patch') {
-      for (let item of this.allStackItems) {
+      for (let item of context.allStackItems) {
         if ('card' in item && item.card.id == command.id) {
-          await this.setFieldValues(item.card, command.patch.attributes);
+          await context.setFieldValues(item.card, command.patch.attributes);
         }
       }
     }

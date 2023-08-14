@@ -29,12 +29,8 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type { RoomCard, RoomMemberCard } from 'https://cardstack.com/base/room';
 
 const TRUE = true;
-interface Args {
-  Args: {
-    onCommand: (command: any) => void;
-  };
-}
-export default class RoomsManager extends Component<Args> {
+
+export default class RoomsManager extends Component {
   <template>
     <div class='header-wrapper'>
       <BoxelHeader
@@ -170,7 +166,7 @@ export default class RoomsManager extends Component<Args> {
     {{/if}}
 
     {{#if this.currentRoomId}}
-      <Room @roomId={{this.currentRoomId}} @onCommand={{this.onCommand}} />
+      <Room @roomId={{this.currentRoomId}} />
     {{/if}}
 
     <style>
@@ -245,11 +241,6 @@ export default class RoomsManager extends Component<Args> {
   constructor(owner: unknown, args: any) {
     super(owner, args);
     this.loadRooms.perform();
-  }
-
-  @action
-  private onCommand(command: any) {
-    this.args.onCommand(command);
   }
 
   @cached

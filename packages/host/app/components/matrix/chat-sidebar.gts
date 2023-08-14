@@ -14,7 +14,6 @@ import type MatrixService from '../../services/matrix-service';
 interface Args {
   Args: {
     onClose: () => void;
-    onCommand: (command: any) => void;
   };
 }
 export default class ChatSidebar extends Component<Args> {
@@ -41,7 +40,7 @@ export default class ChatSidebar extends Component<Args> {
           <span data-test-matrix-ready></span>
           {{#if this.showLoggedInMode}}
             <UserProfile />
-            <RoomsManager @onCommand={{this.onCommand}} />
+            <RoomsManager />
           {{else}}
             {{#if this.isRegistrationMode}}
               <RegisterUser @onCancel={{this.toggleRegistrationMode}} />
@@ -101,11 +100,6 @@ export default class ChatSidebar extends Component<Args> {
 
   get showLoggedInMode() {
     return this.matrixService.isLoggedIn && !this.isRegistrationMode;
-  }
-
-  @action
-  private onCommand(command: any) {
-    this.args.onCommand(command);
   }
 
   @action
