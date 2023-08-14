@@ -60,9 +60,7 @@ interface Signature {
     setupStackItem: (
       stackItem: StackItem,
       clearSelections: () => void,
-      doWithStableScroll: (
-        changeSizeCallback: () => Promise<void>,
-      ) => Promise<void>,
+      doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
     ) => void;
   };
 }
