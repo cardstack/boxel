@@ -59,4 +59,10 @@ export default class CommandService extends Service {
       await handler.handle(command, arg);
     }
   }
+
+  public unregisterCommandHandler(handler: any) {
+    if (this.commandHandlers.has(handler)) {
+      this.commandHandlers.delete(handler);
+    }
+  }
 }

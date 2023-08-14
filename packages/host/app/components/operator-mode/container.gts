@@ -101,6 +101,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     registerDestructor(this, () => {
       delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
       this.operatorModeStateService.clearStacks();
+      this.commandService.unregisterCommandHandler(this);
     });
     this.commandService.registerCommandHandler(this, 'patch', (args) =>
       this.patchCard(args),
