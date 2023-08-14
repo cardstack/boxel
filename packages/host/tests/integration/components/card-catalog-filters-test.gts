@@ -1,39 +1,29 @@
 import { module, test } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
-import { baseRealm } from '@cardstack/runtime-common';
-import { Realm } from '@cardstack/runtime-common/realm';
 import { setupRenderingTest } from 'ember-qunit';
+import OperatorMode from '@cardstack/host/components/operator-mode/container';
+import CardPrerender from '@cardstack/host/components/card-prerender';
 import { renderComponent } from '../../helpers/render-component';
 import {
-  TestRealm,
-  TestRealmAdapter,
   testRealmURL,
   setupLocalIndexing,
+  TestRealmAdapter,
+  TestRealm,
 } from '../../helpers';
-import CardPrerender from '@cardstack/host/components/card-prerender';
-import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import { waitFor, click } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
-import type { Loader } from '@cardstack/runtime-common/loader';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 const realmName = 'Local Workspace';
 let setCardInOperatorModeState: (card: string) => Promise<void>;
-let loader: Loader;
 
-module('Integration | card catalog filters', function (hooks) {
-  let realm: Realm;
+module('Integration | card-catalog filters', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
-  // setupOnSave(hooks);
-  // setupCardLogs(
-  //   hooks,
-  //   async () => await loader.import(`${baseRealm.url}card-api`),
-  // );
 
-  const files = {
+  let adapter = new TestRealmAdapter({
     '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
-    'grid.json': {
+    'index.json': {
       data: {
         type: 'card',
         attributes: {},
@@ -45,50 +35,44 @@ module('Integration | card catalog filters', function (hooks) {
         },
       },
     },
-    'pet.gts': `
-      import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-
-      export class Pet extends Card {
-        static displayName = 'Pet';
-        @field name = contains(StringCard);
-        @field title = contains(StringCard, {
-          computeVia: function (this: Pet) {
-            return this.name;
-          },
-        });
+    'blog-post.gts': `
+      import StringCard from 'https://cardstack.com/base/string';
+      import TextAreaCard from 'https://cardstack.com/base/text-area';
+      import { Card, field, contains, linksTo } from 'https://cardstack.com/base/card-api';
+      import { Author } from './author';
+      export class BlogPost extends Card {
+        @field title = contains(StringCard);
+        @field body = contains(TextAreaCard);
+        @field authorBio = linksTo(Author);
       }
     `,
-    'CatalogEntry/pet.json': {
+    'author.gts': `
+      import StringCard from 'https://cardstack.com/base/string';
+      import { Card, field, contains } from 'https://cardstack.com/base/card-api';
+      export class Author extends Card {
+        @field firstName = contains(StringCard);
+        @field lastName = contains(StringCard);
+      }
+    `,
+    'publishing-packet.gts': `
+      import { Card, field, linksTo } from 'https://cardstack.com/base/card-api';
+      import { BlogPost } from './blog-post';
+      export class PublishingPacket extends Card {
+        @field blogPost = linksTo(BlogPost);
+      }
+    `,
+    'CatalogEntry/publishing-packet.json': {
       data: {
         type: 'card',
         attributes: {
-          title: 'Pet',
-          description: 'Catalog entry for Pet',
+          title: 'Publishing Packet',
+          description: 'Catalog entry for PublishingPacket',
           ref: {
-            module: `${testRealmURL}pet`,
-            name: 'Pet',
-          },
-          demo: {
-            name: 'Jackie',
-          },
-        },
-        relationships: {
-          'demo.blogPost': {
-            links: {
-              self: '../BlogPost/1',
-            },
+            module: `../publishing-packet`,
+            name: 'PublishingPacket',
           },
         },
         meta: {
-          fields: {
-            demo: {
-              adoptsFrom: {
-                module: `./pet`,
-                name: 'Pet',
-              },
-            },
-          },
           adoptsFrom: {
             module: 'https://cardstack.com/base/catalog-entry',
             name: 'CatalogEntry',
@@ -96,12 +80,52 @@ module('Integration | card catalog filters', function (hooks) {
         },
       },
     },
-  };
+    'CatalogEntry/author.json': {
+      data: {
+        type: 'card',
+        attributes: {
+          title: 'Author',
+          description: 'Catalog entry for Author',
+          ref: {
+            module: `${testRealmURL}author`,
+            name: 'Author',
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/catalog-entry',
+            name: 'CatalogEntry',
+          },
+        },
+      },
+    },
+    'CatalogEntry/blog-post.json': {
+      data: {
+        type: 'card',
+        attributes: {
+          title: 'BlogPost',
+          description: 'Catalog entry for BlogPost',
+          ref: {
+            module: `${testRealmURL}blog-post`,
+            name: 'BlogPost',
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/catalog-entry',
+            name: 'CatalogEntry',
+          },
+        },
+      },
+    },
+  });
+
+  let noop = () => {};
 
   hooks.beforeEach(async function () {
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
-    realm = await TestRealm.create(loader, files, this.owner);
+    let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     setCardInOperatorModeState = async (cardURL: string) => {
@@ -123,10 +147,8 @@ module('Integration | card catalog filters', function (hooks) {
     };
   });
 
-  let noop = () => {};
-
-  test('displays all realms by default', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+  test('displays cards on cards-grid', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}index`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -136,14 +158,23 @@ module('Integration | card catalog filters', function (hooks) {
       },
     );
 
-    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await waitFor(`[data-test-stack-card="${testRealmURL}index"]`);
     await click('[data-test-create-new-card-button]');
 
-    await this.pauseTest();
-
-    await waitFor('[data-test-card-catalog-modal] [data-test-realm-name]');
+    await waitFor('[data-test-realm="Local Workspace"]');
     assert
-      .dom('[data-test-card-catalog-modal] [data-test-realm-name]')
-      .exists();
+      .dom('[data-test-realm="Local Workspace"] [data-test-results-count]')
+      .hasText('3 results');
+    assert
+      .dom('[data-test-realm="Local Workspace"] [data-test-card-catalog-item]')
+      .exists({ count: 3 });
+
+    await waitFor('[data-test-realm="Base Workspace"]');
+    assert
+      .dom('[data-test-realm="Base Workspace"] [data-test-results-count]')
+      .hasText('1 result');
+    assert
+      .dom('[data-test-realm="Base Workspace"] [data-test-card-catalog-item]')
+      .exists({ count: 1 });
   });
 });
