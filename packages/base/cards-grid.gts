@@ -109,7 +109,7 @@ class Isolated extends Component<typeof CardsGrid> {
           if (data.startsWith('index:')) {
             if (this.args.context?.actions) {
               this.args.context?.actions?.doWithStableScroll(
-                this.args.model,
+                this.args.model as Card,
                 async () => {
                   this.refresh();
                   await this.request.ready;

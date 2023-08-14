@@ -38,14 +38,14 @@ export default class OperatorModeContainer extends Component<Signature> {
           {{on
             'click'
             (fn
-              this.args.copy
+              @copy
               this.state.sources
               this.state.sourceItem
               this.state.destinationItem
             )
           }}
           data-test-copy-button={{this.state.direction}}
-          disabled={{this.args.isCopying}}
+          disabled={{@isCopying}}
         >
           {{#if (eq this.state.direction 'left')}}
             [LEFT ARROW]
