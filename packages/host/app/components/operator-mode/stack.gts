@@ -82,7 +82,7 @@ export default class OperatorModeStack extends Component<Signature> {
         display: block;
         position: absolute;
         top: 0;
-        left: 0;
+        left: -1px;
       }
       .operator-mode-stack:first-child:before {
         display: none;
