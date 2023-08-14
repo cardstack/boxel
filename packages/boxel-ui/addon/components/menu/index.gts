@@ -79,6 +79,7 @@ export default class Menu extends Component<Signature> {
                   boxel-menu__item--disabled=menuItem.disabled
                 }}
                 data-test-boxel-menu-item
+                data-test-boxel-menu-item-selected={{menuItem.selected}}
               >
                 {{! template-lint-disable require-context-role }}
                 <div

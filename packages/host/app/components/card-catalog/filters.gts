@@ -45,26 +45,24 @@ export default class CardCatalogFilters extends Component<Signature> {
   }
 
   <template>
-    <div class='filters'>
-      <ul class='filter-list'>
-        <li class='filter'>
-          <BoxelDropdown>
-            <:trigger as |bindings|>
-              <button class='pill' {{bindings}}>
-                Realm:
-                {{this.realmFilterSummary}}
-              </button>
-            </:trigger>
-            <:content as |dd|>
-              <Menu @closeMenu={{dd.close}} @items={{this.realmMenuItems}} />
-            </:content>
-          </BoxelDropdown>
-        </li>
-      </ul>
+    <div class='filter-container'>
+      <div class='filter'>
+        <BoxelDropdown>
+          <:trigger as |bindings|>
+            <button class='pill' {{bindings}} data-test-realm-filter-button>
+              Realm:
+              {{this.realmFilterSummary}}
+            </button>
+          </:trigger>
+          <:content as |dd|>
+            <Menu @closeMenu={{dd.close}} @items={{this.realmMenuItems}} />
+          </:content>
+        </BoxelDropdown>
+      </div>
     </div>
 
     <style>
-      .filters {
+      .filter-container {
         --filter-height: 30px;
         display: flex;
         gap: var(--boxel-sp-xs);
@@ -82,14 +80,6 @@ export default class CardCatalogFilters extends Component<Signature> {
       }
       .add-filter-button {
         border-color: var(--boxel-dark);
-      }
-      .filter-list {
-        list-style-type: none;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        flex-flow: row wrap;
-        gap: var(--boxel-sp-xs);
       }
       .filter {
         position: relative;
