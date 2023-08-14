@@ -1,6 +1,8 @@
 import Component from '@glimmer/component';
 import { action } from '@ember/object';
 import { Link } from 'ember-link';
+// @ts-ignore no types
+import cssUrl from 'ember-css-url';
 import { type MenuItem } from '../../helpers/menu-item';
 import { type MenuDivider } from '../../helpers/menu-divider';
 import { type EmptyObject } from '@ember/component/helper';
@@ -91,15 +93,22 @@ export default class Menu extends Component<Signature> {
                   {{on 'click' (fn this.invokeMenuItemAction menuItem.action)}}
                   disabled={{menuItem.disabled}}
                 >
-                  {{#if menuItem.icon}}
-                    {{svgJar
-                      menuItem.icon
-                      width='16'
-                      height='16'
-                      data-test-boxel-menu-item-icon=true
-                    }}
-                  {{/if}}
-                  {{menuItem.text}}
+                  <span class='menu-item'>
+                    {{#if menuItem.icon}}
+                      {{svgJar
+                        menuItem.icon
+                        width='16'
+                        height='16'
+                        data-test-boxel-menu-item-icon=true
+                      }}
+                    {{else if menuItem.iconURL}}
+                      <span
+                        class='menu-item__icon-url'
+                        style={{cssUrl 'background-image' menuItem.iconURL}}
+                      />
+                    {{/if}}
+                    {{menuItem.text}}
+                  </span>
                   <span
                     class={{cn
                       'check-icon'
@@ -184,6 +193,20 @@ export default class Menu extends Component<Signature> {
         border: 0;
         height: 0;
         border-bottom: 1px solid var(--boxel-purple-300);
+      }
+
+      .menu-item {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+      }
+      .menu-item__icon-url {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: contain;
       }
 
       .check-icon {

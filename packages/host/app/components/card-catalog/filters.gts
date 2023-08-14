@@ -31,6 +31,7 @@ export default class CardCatalogFilters extends Component<Signature> {
         selected: this.args.selectedRealms
           .map((realm) => realm.url)
           .includes(realm.url),
+        iconURL: realm.realmInfo.iconURL ?? 'default-realm-icon.png',
       });
     });
   }

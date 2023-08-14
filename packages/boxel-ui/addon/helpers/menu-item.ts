@@ -10,6 +10,7 @@ interface MenuItemOptions {
   dangerous: boolean;
   header: boolean;
   icon: string;
+  iconURL: string;
   inactive: boolean;
   selected: boolean;
   disabled: boolean;
@@ -24,6 +25,7 @@ export class MenuItem {
   disabled: boolean;
   header: boolean;
   icon: string | undefined;
+  iconURL: string | undefined;
   action: ActionType | undefined;
   url: string | undefined;
   inactive: boolean | undefined;
@@ -40,6 +42,7 @@ export class MenuItem {
     this.disabled = options.disabled || false;
     this.header = options.header || false;
     this.icon = options.icon || undefined;
+    this.iconURL = options.iconURL || undefined;
     this.inactive = options.inactive;
     this.tabindex = options.tabindex || 0;
   }
