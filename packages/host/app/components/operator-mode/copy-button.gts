@@ -2,8 +2,10 @@ import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { eq, gt, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { task } from 'ember-concurrency';
+import { BoxelButton } from '@cardstack/boxel-ui';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
@@ -33,8 +35,11 @@ export default class OperatorModeContainer extends Component<Signature> {
   <template>
     {{#if (and this.loadCardService.isIdle (gt this.stacks.length 1))}}
       {{#if this.state}}
-        <button
+        <BoxelButton
           class='copy-button'
+          @kind={{this.buttonKind}}
+          @loading={{@isCopying}}
+          @size='tall'
           {{on
             'click'
             (fn
@@ -45,24 +50,49 @@ export default class OperatorModeContainer extends Component<Signature> {
             )
           }}
           data-test-copy-button={{this.state.direction}}
-          disabled={{@isCopying}}
         >
-          {{#if (eq this.state.direction 'left')}}
-            [LEFT ARROW]
-          {{/if}}
-          Copy
-          {{this.state.sources.length}}
-          {{#if (gt this.state.sources.length 1)}}
-            Cards
+          {{#if @isCopying}}
+            <span class='copy-text'>
+              Copying
+              {{this.state.sources.length}}
+              {{#if (gt this.state.sources.length 1)}}
+                Cards
+              {{else}}
+                Card
+              {{/if}}
+            </span>
           {{else}}
-            Card
+            {{#if (eq this.state.direction 'left')}}
+              {{svgJar 'arrow-left' width='18px' height='18px'}}
+            {{/if}}
+            <span class='copy-text'>
+              Copy
+              {{this.state.sources.length}}
+              {{#if (gt this.state.sources.length 1)}}
+                Cards
+              {{else}}
+                Card
+              {{/if}}
+            </span>
+            {{#if (eq this.state.direction 'right')}}
+              {{svgJar 'arrow-right' width='18px' height='18px'}}
+            {{/if}}
           {{/if}}
-          {{#if (eq this.state.direction 'right')}}
-            [RIGHT ARROW]
-          {{/if}}
-        </button>
+        </BoxelButton>
       {{/if}}
     {{/if}}
+    <style>
+      .copy-button {
+        position: absolute;
+        left: calc(50% - var(--boxel-button-min-width, 5rem));
+        color: white;
+        box-shadow: 0 15px 30px 0 rgba(0, 0, 0, 0.5);
+        border: solid 1px rgba(255, 255, 255, 0.25);
+      }
+      .copy-text {
+        margin: 0 var(--boxel-sp-xxs);
+      }
+    </style>
   </template>
 
   constructor(owner: unknown, args: any) {
@@ -72,6 +102,10 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   get stacks() {
     return this.operatorModeStateService.state?.stacks ?? [];
+  }
+
+  get buttonKind() {
+    return this.args.isCopying ? 'primary-dark' : 'primary';
   }
 
   get state() {

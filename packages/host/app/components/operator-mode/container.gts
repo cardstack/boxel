@@ -11,7 +11,7 @@ import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { Modal, IconButton } from '@cardstack/boxel-ui';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import SearchSheet, { SearchSheetMode } from '../search-sheet';
-import { restartableTask, task } from 'ember-concurrency';
+import { restartableTask, task, dropTask } from 'ember-concurrency';
 import { TrackedArray, TrackedWeakMap } from 'tracked-built-ins';
 import {
   Deferred,
@@ -305,7 +305,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   });
 
-  private copy = restartableTask(
+  private copy = dropTask(
     async (
       sources: Card[],
       sourceItem: CardStackItem,
