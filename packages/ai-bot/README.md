@@ -21,7 +21,7 @@ If you are working on boxel development, you do not need to connect this up to O
 ### Access to GPT4
 
 You can get an OpenAI api key one from the staging parameter store or ask within the team.
-Set this as the `OPENAI_API_KEY` environment variable. Note that if you set this 
+Set this as the `OPENAI_API_KEY` environment variable. Note that if you set this broadly (such as in your bashrc) this will be used by default for many other openai based tools.
 
     OPENAI_API_KEY="sk-..."
 
