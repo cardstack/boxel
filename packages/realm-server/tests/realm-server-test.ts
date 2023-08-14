@@ -49,12 +49,14 @@ module('Realm Server', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  async function expectEvent<
-    T
-  >(assert: Assert, expectedContents: string[], callback: () => Promise<T>): Promise<T> {
+  async function expectEvent<T>(
+    assert: Assert,
+    expectedContents: string[],
+    callback: () => Promise<T>,
+  ): Promise<T> {
     let defer = new Deferred<string[]>();
     let events: string[] = [];
     let es = new eventSource(`${testRealmHref}_message`);
@@ -67,7 +69,9 @@ module('Realm Server', function (hooks) {
     es.onerror = (err: Event) => defer.reject(err);
     let timeout = setTimeout(() => {
       defer.reject(
-        new Error(`expectEvent timed out, saw events ${JSON.stringify(events)}`)
+        new Error(
+          `expectEvent timed out, saw events ${JSON.stringify(events)}`,
+        ),
       );
     }, 5000);
     await new Promise((resolve) => es.addEventListener('open', resolve));
@@ -87,14 +91,14 @@ module('Realm Server', function (hooks) {
     let testRealmServerLoader = new Loader();
     testRealmServerLoader.addURLMapping(
       new URL(baseRealm.url),
-      new URL(localBaseRealm)
+      new URL(localBaseRealm),
     );
     shimExternals(testRealmServerLoader);
 
     let testRealmServer2Loader = new Loader();
     testRealmServer2Loader.addURLMapping(
       new URL(baseRealm.url),
-      new URL(localBaseRealm)
+      new URL(localBaseRealm),
     );
     shimExternals(testRealmServer2Loader);
 
@@ -102,7 +106,7 @@ module('Realm Server', function (hooks) {
       testRealmServerLoader,
       dir.name,
       undefined,
-      testRealmURL
+      testRealmURL,
     );
     request = supertest(testRealmServer);
 
@@ -110,7 +114,7 @@ module('Realm Server', function (hooks) {
       testRealmServer2Loader,
       dir.name,
       undefined,
-      testRealm2URL
+      testRealm2URL,
     );
   });
 
@@ -155,7 +159,7 @@ module('Realm Server', function (hooks) {
   });
 
   test('serves a card POST request', async function (assert) {
-    let expected = ['added: Card', 'added: Card/1.json'];
+    let expected = ['added: Card', 'added: Card/1.json', 'index: incremental'];
     let response = await expectEvent(assert, expected, async () => {
       return await request
         .post('/')
@@ -179,7 +183,7 @@ module('Realm Server', function (hooks) {
       assert.strictEqual(
         json.data.id,
         `${testRealmHref}Card/1`,
-        'the id is correct'
+        'the id is correct',
       );
       assert.ok(json.data.meta.lastModified, 'lastModified is populated');
       let cardFile = join(dir.name, 'Card', '1.json');
@@ -198,7 +202,7 @@ module('Realm Server', function (hooks) {
             },
           },
         },
-        'file contents are correct'
+        'file contents are correct',
       );
     } else {
       assert.ok(false, 'response body is not a card document');
@@ -207,7 +211,7 @@ module('Realm Server', function (hooks) {
 
   test('serves a card PATCH request', async function (assert) {
     let entry = 'person-1.json';
-    let expected = [`changed: ${entry}`];
+    let expected = [`changed: ${entry}`, 'index: incremental'];
     let response = await expectEvent(assert, expected, async () => {
       return await request
         .patch('/person-1')
@@ -236,7 +240,7 @@ module('Realm Server', function (hooks) {
       assert.strictEqual(
         json.data.attributes?.firstName,
         'Van Gogh',
-        'the field data is correct'
+        'the field data is correct',
       );
       assert.ok(json.data.meta.lastModified, 'lastModified is populated');
       delete json.data.meta.lastModified;
@@ -259,7 +263,7 @@ module('Realm Server', function (hooks) {
             },
           },
         },
-        'file contents are correct'
+        'file contents are correct',
       );
     } else {
       assert.ok(false, 'response body is not a card document');
@@ -287,7 +291,7 @@ module('Realm Server', function (hooks) {
 
   test('serves a card DELETE request', async function (assert) {
     let entry = 'person-1.json';
-    let expected = [`removed: ${entry}`];
+    let expected = ['index: incremental', `removed: ${entry}`];
     let response = await expectEvent(assert, expected, async () => {
       return await request
         .delete('/person-1')
@@ -321,7 +325,7 @@ module('Realm Server', function (hooks) {
 
   test('serves a card-source DELETE request', async function (assert) {
     let entry = 'unused-card.gts';
-    let expected = [`removed: ${entry}`];
+    let expected = ['index: incremental', `removed: ${entry}`];
     let response = await expectEvent(assert, expected, async () => {
       return await request
         .delete('/unused-card.gts')
@@ -333,13 +337,13 @@ module('Realm Server', function (hooks) {
     assert.strictEqual(
       existsSync(cardFile),
       false,
-      'card module does not exist'
+      'card module does not exist',
     );
   });
 
   test('serves a card-source POST request', async function (assert) {
     let entry = 'unused-card.gts';
-    let expected = [`changed: ${entry}`];
+    let expected = [`changed: ${entry}`, 'index: incremental'];
     let response = await expectEvent(assert, expected, async () => {
       return await request
         .post('/unused-card.gts')
@@ -355,7 +359,7 @@ module('Realm Server', function (hooks) {
     assert.codeEqual(
       src,
       `//TEST UPDATE
-      ${cardSrc}`
+      ${cardSrc}`,
     );
   });
 
@@ -374,7 +378,7 @@ module('Realm Server', function (hooks) {
     assert.codeEqual(
       body,
       compiledCard('"<id>"', moduleAbsolutePath),
-      'module JS is correct'
+      'module JS is correct',
     );
   });
 
@@ -419,7 +423,7 @@ module('Realm Server', function (hooks) {
           },
         },
       },
-      'the directory response is correct'
+      'the directory response is correct',
     );
   });
 
@@ -445,12 +449,12 @@ module('Realm Server', function (hooks) {
     assert.strictEqual(
       json.data.length,
       1,
-      'the card is returned in the search results'
+      'the card is returned in the search results',
     );
     assert.strictEqual(
       json.data[0].id,
       `${testRealmHref}person-1`,
-      'card ID is correct'
+      'card ID is correct',
     );
   });
 
@@ -474,7 +478,7 @@ module('Realm Server', function (hooks) {
           },
         },
       },
-      '/_info response is correct'
+      '/_info response is correct',
     );
   });
 
@@ -491,13 +495,13 @@ module('Realm Server', function (hooks) {
       },
     };
     let api = await loader.import<typeof CardAPI>(
-      'https://cardstack.com/base/card-api'
+      'https://cardstack.com/base/card-api',
     );
     let person = await api.createFromSerialized<any>(
       doc.data,
       doc,
       undefined,
-      loader
+      loader,
     );
     assert.strictEqual(person.firstName, 'Mango', 'card data is correct');
   });
@@ -515,13 +519,13 @@ module('Realm Server', function (hooks) {
       },
     };
     let api = await loader.import<typeof CardAPI>(
-      'https://cardstack.com/base/card-api'
+      'https://cardstack.com/base/card-api',
     );
     let person = await api.createFromSerialized<any>(
       doc.data,
       doc,
       undefined,
-      loader
+      loader,
     );
     assert.strictEqual(person.firstName, 'Mango', 'card data is correct');
   });
@@ -540,13 +544,13 @@ module('Realm Server', function (hooks) {
       },
     };
     let api = await loader.import<typeof CardAPI>(
-      'https://cardstack.com/base/card-api'
+      'https://cardstack.com/base/card-api',
     );
     let testCard = await api.createFromSerialized<any>(
       doc.data,
       doc,
       undefined,
-      loader
+      loader,
     );
     assert.deepEqual(testCard.ref, ref, 'card data is correct');
   });
@@ -565,7 +569,7 @@ module('Realm Server serving from root', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
   setupBaseRealmServer(hooks, loader);
@@ -577,14 +581,14 @@ module('Realm Server serving from root', function (hooks) {
     let testRealmServerLoader = new Loader();
     testRealmServerLoader.addURLMapping(
       new URL(baseRealm.url),
-      new URL(localBaseRealm)
+      new URL(localBaseRealm),
     );
 
     testRealmServer = await runTestRealmServer(
       testRealmServerLoader,
       dir.name,
       undefined,
-      testRealmURL
+      testRealmURL,
     );
     request = supertest(testRealmServer);
   });
@@ -738,7 +742,7 @@ module('Realm Server serving from root', function (hooks) {
           },
         },
       },
-      'the directory response is correct'
+      'the directory response is correct',
     );
   });
 });
@@ -756,7 +760,7 @@ module('Realm Server serving from a subdirectory', function (hooks) {
 
   setupCardLogs(
     hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
   setupBaseRealmServer(hooks, loader);
@@ -768,14 +772,14 @@ module('Realm Server serving from a subdirectory', function (hooks) {
     let testRealmServerLoader = new Loader();
     testRealmServerLoader.addURLMapping(
       new URL(baseRealm.url),
-      new URL(localBaseRealm)
+      new URL(localBaseRealm),
     );
 
     testRealmServer = await runTestRealmServer(
       testRealmServerLoader,
       dir.name,
       undefined,
-      new URL('http://127.0.0.1:4446/demo/')
+      new URL('http://127.0.0.1:4446/demo/'),
     );
 
     request = supertest(testRealmServer);
@@ -794,13 +798,13 @@ module('Realm Server serving from a subdirectory', function (hooks) {
 
   test('redirection keeps query params intact', async function (assert) {
     let response = await request.get(
-      '/demo?operatorModeState=operatorModeEnabled=true&operatorModeState=%7B%22stacks%22%3A%5B%7B%22items%22%3A%5B%7B%22card%22%3A%7B%22id%22%3A%22http%3A%2F%2Flocalhost%3A4204%2Findex%22%7D%2C%22format%22%3A%22isolated%22%7D%5D%7D%5D%7D'
+      '/demo?operatorModeState=operatorModeEnabled=true&operatorModeState=%7B%22stacks%22%3A%5B%7B%22items%22%3A%5B%7B%22card%22%3A%7B%22id%22%3A%22http%3A%2F%2Flocalhost%3A4204%2Findex%22%7D%2C%22format%22%3A%22isolated%22%7D%5D%7D%5D%7D',
     );
 
     assert.strictEqual(response.status, 302, 'HTTP 302 status');
     assert.ok(
       response.headers['location'],
-      'http://127.0.0.1:4446/demo/?operatorModeEnabled=true&operatorModeState=%7B%22stacks%22%3A%5B%7B%22items%22%3A%5B%7B%22card%22%3A%7B%22id%22%3A%22http%3A%2F%2Flocalhost%3A4204%2Findex%22%7D%2C%22format%22%3A%22isolated%22%7D%5D%7D%5D%7D'
+      'http://127.0.0.1:4446/demo/?operatorModeEnabled=true&operatorModeState=%7B%22stacks%22%3A%5B%7B%22items%22%3A%5B%7B%22card%22%3A%7B%22id%22%3A%22http%3A%2F%2Flocalhost%3A4204%2Findex%22%7D%2C%22format%22%3A%22isolated%22%7D%5D%7D%5D%7D',
     );
   });
 });
