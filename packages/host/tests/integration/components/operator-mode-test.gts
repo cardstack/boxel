@@ -48,7 +48,7 @@ class MockClient {
 
 class MockMatrixService extends Service {
   @service declare loaderService: LoaderService;
-  cardAPI: cardApi;
+  cardAPI?: typeof cardApi;
   // These will be empty in the tests, but we need to define them to satisfy the interface
   roomCards: TrackedMap = new TrackedMap();
   roomObjectives: TrackedMap = new TrackedMap();
