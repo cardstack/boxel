@@ -45,7 +45,11 @@ export default class OperatorModeStack extends Component<Signature> {
   }
 
   <template>
-    <div ...attributes style={{this.backgroundImageStyle}}>
+    <div
+      ...attributes
+      class={{if @backgroundImageURL 'with-bg-image'}}
+      style={{this.backgroundImageStyle}}
+    >
       <div class='inner'>
         {{#each @stackItems as |item i|}}
           <OperatorModeStackItem
@@ -74,7 +78,7 @@ export default class OperatorModeStack extends Component<Signature> {
         padding: var(--boxel-sp-lg) var(--boxel-sp-sm) 0;
         position: relative;
       }
-      .operator-mode-stack:before {
+      .operator-mode-stack.with-bg-image:before {
         content: ' ';
         height: 100%;
         width: 2px;
@@ -84,7 +88,7 @@ export default class OperatorModeStack extends Component<Signature> {
         top: 0;
         left: -1px;
       }
-      .operator-mode-stack:first-child:before {
+      .operator-mode-stack.with-bg-image:first-child:before {
         display: none;
       }
 
