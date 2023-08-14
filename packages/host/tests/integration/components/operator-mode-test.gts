@@ -24,7 +24,6 @@ import {
   click,
   fillIn,
   focus,
-  pauseTest,
   triggerEvent,
 } from '@ember/test-helpers';
 import { addRoomEvent } from '../../../lib/matrix-handlers';
@@ -49,10 +48,13 @@ class MockClient {
 
 class MockMatrixService extends Service {
   @service declare loaderService: LoaderService;
-  roomCards: TrackedMap<string, Promise<RoomCard>> = new TrackedMap();
-  roomObjectives: TrackedMap<string, RoomObjectiveCard> = new TrackedMap();
+  cardAPI: cardApi;
+  // These will be empty in the tests, but we need to define them to satisfy the interface
+  roomCards: TrackedMap = new TrackedMap();
+  roomObjectives: TrackedMap = new TrackedMap();
 
-  async start(auth?: IAuthData) {}
+  async start(_auth?: any) {}
+
   get isLoggedIn() {
     return true;
   }
@@ -65,14 +67,14 @@ class MockMatrixService extends Service {
     return '@testuser:staging';
   }
 
-  async allowedToSetObjective(roomId: string): Promise<boolean> {
+  async allowedToSetObjective(_roomId: string): Promise<boolean> {
     return false;
   }
 
   async createRoom(
-    name: string,
-    invites: string[], // these can be local names
-    topic?: string,
+    _name: string,
+    _invites: string[], // these can be local names
+    _topic?: string,
   ): Promise<string> {
     return 'testroom';
   }
@@ -601,7 +603,7 @@ module('Integration | operator-mode', function (hooks) {
     ) as MockMatrixService;
     matrixService.cardAPI = cardApi;
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-    let component = await renderComponent(
+    await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
           <OperatorMode @onClose={{noop}} />
@@ -614,17 +616,17 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-boxel-header-title]').hasText('Person');
     assert.dom('[data-test-person]').hasText('Fadhlan');
     await click('[data-test-open-chat]');
-    let messageObject;
-    messageObject = {
+
+    addRoomEvent(matrixService, {
       event_id: 'eventname',
       room_id: 'testroom',
       type: 'm.room.name',
       content: {
         name: 'test_a',
       },
-    };
-    addRoomEvent(matrixService, messageObject);
-    messageObject = {
+    });
+
+    addRoomEvent(matrixService, {
       event_id: 'eventname',
       room_id: 'testroom',
       type: 'm.room.create',
@@ -633,9 +635,9 @@ module('Integration | operator-mode', function (hooks) {
         creator: '@testuser:staging',
         room_version: '0',
       },
-    };
-    addRoomEvent(matrixService, messageObject);
-    messageObject = {
+    });
+
+    addRoomEvent(matrixService, {
       event_id: 'eventjoin',
       room_id: 'testroom',
       type: 'm.room.member',
@@ -647,10 +649,9 @@ module('Integration | operator-mode', function (hooks) {
         membershipTs: 1,
         membershipInitiator: '@testuser:staging',
       },
-    };
-    addRoomEvent(matrixService, messageObject);
+    });
 
-    messageObject = {
+    addRoomEvent(matrixService, {
       event_id: 'event1',
       room_id: 'testroom',
       state_key: 'state',
@@ -668,8 +669,7 @@ module('Integration | operator-mode', function (hooks) {
           },
         },
       },
-    };
-    addRoomEvent(matrixService, messageObject);
+    });
 
     await waitFor('[data-test-enter-room="test_a"]');
     await click('[data-test-enter-room="test_a"]');

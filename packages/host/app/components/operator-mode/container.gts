@@ -147,8 +147,6 @@ export default class OperatorModeContainer extends Component<Signature> {
   });
 
   async patchCard(context: any, command: any) {
-    // apply patch
-    console.log('patching card', command, context);
     if (command.type == 'patch') {
       for (let item of context.allStackItems) {
         if ('card' in item && item.card.id == command.id) {
@@ -679,10 +677,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         </div>
         {{#if APP.experimentalAIEnabled}}
           {{#if this.isChatVisible}}
-            <ChatSidebar
-              @onClose={{this.toggleChat}}
-              @onCommand={{this.onCommand}}
-            />
+            <ChatSidebar @onClose={{this.toggleChat}} />
           {{else}}
             <IconButton
               data-test-open-chat

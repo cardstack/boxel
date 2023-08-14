@@ -40,7 +40,6 @@ interface RoomArgs {
 interface CommandArgs {
   Args: {
     command: any;
-    onCommand: (command: any) => void;
   };
 }
 

@@ -16,6 +16,7 @@ class CommandHandler {
     }
     return this.functions.get(command);
   }
+
   public async handle(command: Command, arg: any) {
     if (!this.functions.has(command)) {
       throw new Error(`No handler registered for command ${command}`);
@@ -25,7 +26,7 @@ class CommandHandler {
       await func(this.handler, arg);
     }
   }
-  public setHandler(command: Command, func: (arg: any) => void) {
+  public setHandler(command: Command, func: (context: any, arg: any) => void) {
     if (!this.functions.has(command)) {
       this.functions.set(command, []);
     }
@@ -44,7 +45,7 @@ export default class CommandService extends Service {
   public registerCommandHandler(
     handler: any,
     command: Command,
-    func: (arg: any) => void,
+    func: (context: any, arg: any) => void,
   ) {
     if (!this.commandHandlers.has(handler)) {
       this.commandHandlers.set(handler, new CommandHandler(handler));
