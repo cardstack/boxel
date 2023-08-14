@@ -4,7 +4,7 @@ type Command = 'patch';
 
 class CommandHandler {
   handler: any;
-  functions: Map<Command, ((context: any, arg: any) => void)[]>;
+  functions: Map<Command, ((arg: any) => void)[]>;
   constructor(handler: any) {
     this.handler = handler;
     this.functions = new Map();
@@ -23,10 +23,10 @@ class CommandHandler {
     }
     const functions = this.functions.get(command)!;
     for (const func of functions) {
-      await func(this.handler, arg);
+      await func(arg);
     }
   }
-  public setHandler(command: Command, func: (context: any, arg: any) => void) {
+  public setHandler(command: Command, func: (arg: any) => void) {
     if (!this.functions.has(command)) {
       this.functions.set(command, []);
     }
@@ -45,7 +45,7 @@ export default class CommandService extends Service {
   public registerCommandHandler(
     handler: any,
     command: Command,
-    func: (context: any, arg: any) => void,
+    func: (arg: any) => void,
   ) {
     if (!this.commandHandlers.has(handler)) {
       this.commandHandlers.set(handler, new CommandHandler(handler));

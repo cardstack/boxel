@@ -102,7 +102,9 @@ export default class OperatorModeContainer extends Component<Signature> {
       delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
       this.operatorModeStateService.clearStacks();
     });
-    this.commandService.registerCommandHandler(this, 'patch', this.patchCard);
+    this.commandService.registerCommandHandler(this, 'patch', (args) =>
+      this.patchCard(args),
+    );
   }
 
   get stacks() {
@@ -146,11 +148,11 @@ export default class OperatorModeContainer extends Component<Signature> {
     return await this.operatorModeStateService.constructRecentCards();
   });
 
-  async patchCard(context: any, command: any) {
+  async patchCard(command: any) {
     if (command.type == 'patch') {
-      for (let item of context.allStackItems) {
+      for (let item of this.allStackItems) {
         if ('card' in item && item.card.id == command.id) {
-          await context.setFieldValues(item.card, command.patch.attributes);
+          await this.setFieldValues(item.card, command.patch.attributes);
         }
       }
     }
