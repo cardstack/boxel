@@ -29,7 +29,8 @@ class Isolated extends Component<typeof CardsGrid> {
   <template>
     <div class='cards-grid'>
       <ul class='cards-grid__cards' data-test-cards-grid-cards>
-        {{#each this.request.instances as |card|}}
+        {{! use "key" to keep the list stable between refreshes }}
+        {{#each this.instances key='id' as |card|}}
           <li
             {{@context.cardComponentModifier
               card=card
@@ -93,6 +94,7 @@ class Isolated extends Component<typeof CardsGrid> {
     isLoading: boolean;
     ready: Promise<void>;
   };
+  @tracked staleInstances: Card[] = [];
   private subscription: { url: string; unsubscribe: () => void } | undefined;
 
   constructor(owner: unknown, args: any) {
@@ -104,6 +106,11 @@ class Isolated extends Component<typeof CardsGrid> {
       this.subscription = {
         url,
         unsubscribe: subscribeToRealm(url, ({ data }) => {
+          // we show stale instances during a live refresh while we are
+          // waiting for the new instances to arrive--this eliminates the flash
+          // while we wait
+          this.staleInstances = [...(this.instances ?? [])];
+
           // we are only interested in events related to index changes.
           // currently these look like "index: full" and "index: incremental"
           if (data.startsWith('index:')) {
@@ -127,6 +134,15 @@ class Isolated extends Component<typeof CardsGrid> {
         this.subscription.unsubscribe();
       }
     });
+  }
+
+  get instances() {
+    if (!this.request) {
+      return;
+    }
+    return this.request.isLoading
+      ? this.staleInstances
+      : this.request.instances;
   }
 
   private refresh() {
