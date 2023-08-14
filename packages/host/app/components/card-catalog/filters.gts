@@ -50,7 +50,7 @@ export default class CardCatalogFilters extends Component<Signature> {
       <div class='filter'>
         <BoxelDropdown>
           <:trigger as |bindings|>
-            <button class='pill' {{bindings}} data-test-realm-filter-button>
+            <button {{bindings}} data-test-realm-filter-button>
               Realm:
               {{this.realmFilterSummary}}
             </button>
