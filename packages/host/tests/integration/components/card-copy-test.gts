@@ -569,7 +569,7 @@ module('Integration | card-copy', function (hooks) {
   });
 
   test<TestContextForCopy>('can copy a card', async function (assert) {
-    assert.expect(9);
+    assert.expect(12);
     let expectedEvents = ['added: Pet/1.json', 'index: incremental'];
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
@@ -608,6 +608,9 @@ module('Integration | card-copy', function (hooks) {
           `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.select`,
         );
         assert
+          .dom(`.selected[data-test-overlay-card="${testRealmURL}Pet/mango"]`)
+          .exists('souce card is selected');
+        assert
           .dom(
             `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/1"]`,
           )
@@ -632,6 +635,21 @@ module('Integration | card-copy', function (hooks) {
         `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/1"]`,
       )
       .containsText('Mango');
+
+    // assert that the selected card state is reset properly
+    await waitFor(
+      '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
+    );
+    assert
+      .dom(`.selected[data-test-overlay-card="${testRealmURL}Pet/mango"]`)
+      .doesNotExist('souce card is not selected');
+
+    await click(
+      `[data-test-overlay-card="${testRealm2URL}Pet/paper"] button.select`,
+    );
+    assert
+      .dom('[data-test-copy-button="left"]')
+      .exists('copy button with left arrow exists');
   });
 
   test<TestContextForCopy>('can copy mulitple cards', async function (assert) {

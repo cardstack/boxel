@@ -430,6 +430,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       if (typeof clearSelection === 'function') {
         clearSelection();
       }
+      cardSelections.delete(sourceItem);
       // only do this in test env--this makes sure that we also wait for any
       // interior card instance async as part of our ember-test-waiters
       if (isTesting()) {
