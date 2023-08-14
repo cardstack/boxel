@@ -2,9 +2,10 @@ import Component from '@glimmer/component';
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { htmlSafe } from '@ember/template';
+import OperatorModeStackItem from './stack-item';
 import type { Actions } from '@cardstack/runtime-common';
-import type { StackItem } from '@cardstack/host/components/operator-mode/container';
-import OperatorModeStackItem from '@cardstack/host/components/operator-mode/stack-item';
+import type { StackItem } from './container';
+import type { Card } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Element: HTMLElement;
@@ -17,6 +18,12 @@ interface Signature {
     close: (stackItem: StackItem) => void;
     edit: (stackItem: StackItem) => void;
     save: (stackItem: StackItem, dismiss: boolean) => void;
+    onSelectedCards: (selectedCards: Card[], stackItem: StackItem) => void;
+    setupStackItem: (
+      stackItem: StackItem,
+      clearSelections: () => void,
+      doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
+    ) => void;
   };
   Blocks: {};
 }
@@ -38,7 +45,11 @@ export default class OperatorModeStack extends Component<Signature> {
   }
 
   <template>
-    <div ...attributes style={{this.backgroundImageStyle}}>
+    <div
+      ...attributes
+      class={{if @backgroundImageURL 'with-bg-image'}}
+      style={{this.backgroundImageStyle}}
+    >
       <div class='inner'>
         {{#each @stackItems as |item i|}}
           <OperatorModeStackItem
@@ -50,6 +61,8 @@ export default class OperatorModeStack extends Component<Signature> {
             @close={{@close}}
             @edit={{@edit}}
             @save={{@save}}
+            @onSelectedCards={{@onSelectedCards}}
+            @setupStackItem={{@setupStackItem}}
           />
         {{/each}}
       </div>
@@ -63,6 +76,20 @@ export default class OperatorModeStack extends Component<Signature> {
         background-position: center;
         background-size: cover;
         padding: var(--boxel-sp-lg) var(--boxel-sp-sm) 0;
+        position: relative;
+      }
+      .operator-mode-stack.with-bg-image:before {
+        content: ' ';
+        height: 100%;
+        width: 2px;
+        background-color: black;
+        display: block;
+        position: absolute;
+        top: 0;
+        left: -1px;
+      }
+      .operator-mode-stack.with-bg-image:first-child:before {
+        display: none;
       }
 
       .inner {
@@ -72,7 +99,6 @@ export default class OperatorModeStack extends Component<Signature> {
         position: relative;
         display: flex;
         justify-content: center;
-        overflow: hidden;
         max-width: 50rem;
         padding-top: var(--boxel-sp-xxl);
         margin: 0 auto;

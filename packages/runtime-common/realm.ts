@@ -234,6 +234,7 @@ export class Realm {
     let results = await this.#adapter.write(path, contents);
     await this.#searchIndex.update(this.paths.fileURL(path));
 
+    this.sendUpdateMessages({ type: 'update', data: { index: 'incremental' } });
     return results;
   }
 
@@ -242,6 +243,7 @@ export class Realm {
     await this.#searchIndex.update(this.paths.fileURL(path), {
       delete: true,
     });
+    this.sendUpdateMessages({ type: 'update', data: { index: 'incremental' } });
   }
 
   get loader() {
@@ -254,12 +256,14 @@ export class Realm {
 
   async reindex() {
     await this.#searchIndex.run();
+    this.sendUpdateMessages({ type: 'update', data: { index: 'full' } });
   }
 
   async #startup() {
     await Promise.resolve();
     await this.#warmUpCache();
     await this.#searchIndex.run();
+    this.sendUpdateMessages({ type: 'update', data: { index: 'full' } });
   }
 
   // Take advantage of the fact that the base realm modules are static (for now)
@@ -558,7 +562,14 @@ export class Realm {
     let localPath: LocalPath = this.paths.local(fileURL);
     let { lastModified } = await this.write(
       localPath,
-      JSON.stringify(await this.fileSerialization(json, fileURL), null, 2),
+      JSON.stringify(
+        await this.fileSerialization(
+          merge(json, { data: { meta: { realmURL: this.url } } }),
+          fileURL,
+        ),
+        null,
+        2,
+      ),
     );
     let newURL = fileURL.href.replace(/\.json$/, '');
     let entry = await this.#searchIndex.card(new URL(newURL), {
@@ -643,7 +654,14 @@ export class Realm {
     let path: LocalPath = `${localPath}.json`;
     let { lastModified } = await this.write(
       path,
-      JSON.stringify(await this.fileSerialization(card, url), null, 2),
+      JSON.stringify(
+        await this.fileSerialization(
+          merge(card, { data: { meta: { realmURL: this.url } } }),
+          url,
+        ),
+        null,
+        2,
+      ),
     );
     let instanceURL = url.href.replace(/\.json$/, '');
     let entry = await this.#searchIndex.card(new URL(instanceURL), {

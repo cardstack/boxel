@@ -12,10 +12,11 @@ import {
   testRealmURL,
   setupCardLogs,
   setupLocalIndexing,
+  setupServerSentEvents,
   setupOnSave,
   TestRealmAdapter,
   TestRealm,
-  type AutoSaveTestContext,
+  type TestContextWithSave,
 } from '../../helpers';
 import {
   waitFor,
@@ -51,6 +52,7 @@ module('Integration | operator-mode', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
+  setupServerSentEvents(hooks);
   let noop = () => {};
   async function loadCard(url: string): Promise<Card> {
     let { createFromSerialized, recompute } = cardApi;
@@ -578,7 +580,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-stack-card-index="1"]').includesText('Mango');
   });
 
-  test<AutoSaveTestContext>('it auto saves the field value', async function (assert) {
+  test<TestContextWithSave>('it auto saves the field value', async function (assert) {
     assert.expect(3);
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
 
@@ -603,7 +605,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-first-letter-of-the-name]').hasText('E');
   });
 
-  test<AutoSaveTestContext>('it auto saves changes made to nested contains card', async function (assert) {
+  test<TestContextWithSave>('it auto saves changes made to nested contains card', async function (assert) {
     assert.expect(2);
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
@@ -772,7 +774,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-stack-card-index="1"]`).doesNotExist();
   });
 
-  test<AutoSaveTestContext>('create new card editor opens in the stack at each nesting level', async function (assert) {
+  test<TestContextWithSave>('create new card editor opens in the stack at each nesting level', async function (assert) {
     assert.expect(11);
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
@@ -955,7 +957,7 @@ module('Integration | operator-mode', function (hooks) {
       );
   });
 
-  test<AutoSaveTestContext>('can edit a nested contained card field', async function (assert) {
+  test<TestContextWithSave>('can edit a nested contained card field', async function (assert) {
     assert.expect(6);
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(

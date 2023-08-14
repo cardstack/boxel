@@ -107,7 +107,7 @@ export const boxelUIAssetsDir = '@cardstack/boxel-ui/';
 export type CreateNewCard = (
   ref: CardRef,
   relativeTo: URL | undefined,
-  opts?: { isLinkedCard?: boolean; doc?: LooseSingleCardDocument }
+  opts?: { isLinkedCard?: boolean; doc?: LooseSingleCardDocument },
 ) => Promise<Card | undefined>;
 
 export interface CardChooser {
@@ -117,7 +117,7 @@ export interface CardChooser {
       offerToCreate?: CardRef;
       multiSelect?: boolean;
       createNewCard?: CreateNewCard;
-    }
+    },
   ): Promise<undefined | T>;
 }
 
@@ -127,12 +127,12 @@ export async function chooseCard<T extends Card>(
     offerToCreate?: CardRef;
     multiSelect?: boolean;
     createNewCard?: CreateNewCard;
-  }
+  },
 ): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CARD_CHOOSER) {
     throw new Error(
-      `no cardstack card chooser is available in this environment`
+      `no cardstack card chooser is available in this environment`,
     );
   }
   let chooser: CardChooser = here._CARDSTACK_CARD_CHOOSER;
@@ -143,9 +143,10 @@ export async function chooseCard<T extends Card>(
 export interface CardSearch {
   getCards(
     query: Query,
-    realms?: string[]
+    realms?: string[],
   ): {
     instances: Card[];
+    ready: Promise<void>;
     isLoading: boolean;
   };
 }
@@ -160,19 +161,19 @@ export interface CardCreator {
   create<T extends Card>(
     ref: CardRef,
     relativeTo: URL | undefined,
-    opts?: { doc?: LooseSingleCardDocument }
+    opts?: { doc?: LooseSingleCardDocument },
   ): Promise<undefined | T>;
 }
 
 export async function createNewCard<T extends Card>(
   ref: CardRef,
   relativeTo: URL | undefined,
-  opts?: { doc?: LooseSingleCardDocument }
+  opts?: { doc?: LooseSingleCardDocument },
 ): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CREATE_NEW_CARD) {
     throw new Error(
-      `no cardstack card creator is available in this environment`
+      `no cardstack card creator is available in this environment`,
     );
   }
   let cardCreator: CardCreator = here._CARDSTACK_CREATE_NEW_CARD;
@@ -180,21 +181,46 @@ export async function createNewCard<T extends Card>(
   return await cardCreator.create<T>(ref, relativeTo, opts);
 }
 
+export interface RealmSubscribe {
+  subscribe(realmURL: string, cb: (ev: MessageEvent) => void): () => void;
+}
+
+export function subscribeToRealm(
+  realmURL: string,
+  cb: (ev: MessageEvent) => void,
+): () => void {
+  let here = globalThis as any;
+  if (!here._CARDSTACK_REALM_SUBSCRIBE) {
+    // eventually we'll support subscribing to a realm in node since this will
+    // be how realms will coordinate with one another, but for now do nothing
+    return () => {
+      /* do nothing */
+    };
+  } else {
+    let realmSubscribe: RealmSubscribe = here._CARDSTACK_REALM_SUBSCRIBE;
+    return realmSubscribe.subscribe(realmURL, cb);
+  }
+}
+
 export interface Actions {
   createCard: (
     ref: CardRef,
     relativeTo: URL | undefined,
-    opts?: { isLinkedCard?: boolean; doc?: LooseSingleCardDocument }
+    opts?: { isLinkedCard?: boolean; doc?: LooseSingleCardDocument },
   ) => Promise<Card | undefined>;
   viewCard: (
     card: Card,
     format?: Format,
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
-    fieldName?: string
+    fieldName?: string,
   ) => void;
   createCardDirectly: (
     doc: LooseSingleCardDocument,
-    relativeTo: URL | undefined
+    relativeTo: URL | undefined,
+  ) => Promise<void>;
+  doWithStableScroll: (
+    card: Card,
+    changeSizeCallback: () => Promise<void>,
   ) => Promise<void>;
   // more CRUD ops to come...
 }
@@ -219,7 +245,7 @@ export function trimExecutableExtension(url: URL): URL {
 
 export function internalKeyFor(
   ref: CardRef,
-  relativeTo: URL | undefined
+  relativeTo: URL | undefined,
 ): string {
   if (!('type' in ref)) {
     let module = trimExecutableExtension(new URL(ref.module, relativeTo)).href;

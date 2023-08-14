@@ -25,10 +25,11 @@ export class Search extends Resource<Args> {
   @tracked instances: Card[] = [];
   @tracked instancesByRealm: RealmCards[] = [];
   @service declare cardService: CardService;
+  ready: Promise<void> | undefined;
 
   modify(_positional: never[], named: Args['named']) {
     let { query, realms } = named;
-    this.search.perform(query, realms);
+    this.ready = this.search.perform(query, realms);
   }
 
   private search = restartableTask(async (query: Query, realms?: string[]) => {

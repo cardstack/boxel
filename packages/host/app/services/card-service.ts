@@ -134,7 +134,6 @@ export default class CardService extends Service {
   async saveModel(card: Card): Promise<Card> {
     await this.apiModule.loaded;
     let doc = await this.serializeCard(card, {
-      includeComputeds: true,
       // for a brand new card that has no id yet, we don't know what we are
       // relativeTo because its up to the realm server to assign us an ID, so
       // URL's should be absolute
@@ -162,7 +161,7 @@ export default class CardService extends Service {
     doc: LooseSingleCardDocument,
     url?: URL,
   ): Promise<SingleCardDocument> {
-    let isSaved = !!url;
+    let isSaved = !!doc.data.id;
     url = url ?? this.defaultURL;
     let json = await this.fetchJSON(url, {
       method: isSaved ? 'PATCH' : 'POST',
@@ -175,6 +174,24 @@ export default class CardService extends Service {
       );
     }
     return json;
+  }
+
+  async copyCard(source: Card, destinationRealm: URL): Promise<Card> {
+    let serialized = await this.serializeCard(source, {
+      maybeRelativeURL: null, // forces URL's to be absolute.
+    });
+    delete serialized.data.id;
+    let json = await this.saveCardDocument(serialized, destinationRealm);
+    let result = (await this.api.createFromSerialized(
+      json.data,
+      json,
+      new URL(json.data.id),
+      this.loaderService.loader,
+    )) as Card;
+    if (this.subscriber) {
+      this.subscriber(json);
+    }
+    return result;
   }
 
   async search(query: Query, realmURL: URL): Promise<Card[]> {
@@ -211,13 +228,30 @@ export default class CardService extends Service {
     return this.api.isCard(maybeCard);
   }
 
+  isIndexCard(maybeIndexCard: any): maybeIndexCard is Card {
+    if (!(maybeIndexCard instanceof this.api.Card)) {
+      return false;
+    }
+    let realmURL = maybeIndexCard[this.api.realmURL]?.href;
+    if (!realmURL) {
+      throw new Error(
+        `bug: could not determine realm URL for index card ${maybeIndexCard.id}`,
+      );
+    }
+    return maybeIndexCard.id === `${realmURL}index`;
+  }
+
   async getRealmInfo(card: Card): Promise<RealmInfo | undefined> {
     await this.apiModule.loaded;
     return card[this.api.realmInfo];
   }
 
-  // only for tests!
-  async flushLogs() {
+  async getRealmURL(card: Card): Promise<URL | undefined> {
+    await this.apiModule.loaded;
+    return card[this.api.realmURL];
+  }
+
+  async cardsSettled() {
     await this.apiModule.loaded;
     await this.api.flushLogs();
   }
