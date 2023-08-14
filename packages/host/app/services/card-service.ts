@@ -251,8 +251,7 @@ export default class CardService extends Service {
     return card[this.api.realmURL];
   }
 
-  // only for tests!
-  async flushLogs() {
+  async cardsSettled() {
     await this.apiModule.loaded;
     await this.api.flushLogs();
   }

@@ -43,6 +43,8 @@ import config from '@cardstack/host/config/environment';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { formatDistanceToNow } from 'date-fns';
+import Modifier from 'ember-modifier';
+import { schedule } from '@ember/runloop';
 
 interface Signature {
   Args: {
@@ -55,7 +57,13 @@ interface Signature {
     edit: (item: StackItem) => void;
     save: (item: StackItem, dismiss: boolean) => void;
     onSelectedCards: (selectedCards: Card[], stackItem: StackItem) => void;
-    setupStackItem: (stackItem: StackItem, clearSelections: () => void) => void;
+    setupStackItem: (
+      stackItem: StackItem,
+      clearSelections: () => void,
+      doWithStableScroll: (
+        changeSizeCallback: () => Promise<void>,
+      ) => Promise<void>,
+    ) => void;
   };
 }
 
@@ -78,6 +86,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @tracked lastSavedMsg: string | undefined;
   private refreshSaveMsg: number | undefined;
   private subscribedCard: Card;
+  private contentEl: HTMLElement | undefined;
 
   cardTracker = new ElementTracker<{
     card: Card;
@@ -90,7 +99,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
     super(owner, args);
     this.subscribeToCard.perform();
     this.subscribedCard = this.card;
-    this.args.setupStackItem(this.args.item, this.clearSelections);
+    this.args.setupStackItem(
+      this.args.item,
+      this.clearSelections,
+      this.doWithStableScroll.perform,
+    );
   }
 
   get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
@@ -271,6 +284,25 @@ export default class OperatorModeStackItem extends Component<Signature> {
         : undefined;
   }
 
+  private doWithStableScroll = restartableTask(
+    async (changeSizeCallback: () => Promise<void>) => {
+      if (!this.contentEl) {
+        return;
+      }
+      let el = this.contentEl;
+      let currentScrollTop = this.contentEl.scrollTop;
+      await changeSizeCallback();
+      await this.cardService.cardsSettled();
+      schedule('afterRender', () => {
+        el.scrollTop = currentScrollTop;
+      });
+    },
+  );
+
+  private setupContentEl = (el: HTMLElement) => {
+    this.contentEl = el;
+  };
+
   <template>
     <div
       class='item {{if this.isBuried "buried"}}'
@@ -424,7 +456,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             </div>
           </:detail>
         </Header>
-        <div class='content'>
+        <div class='content' {{ContentElement onSetup=this.setupContentEl}}>
           <Preview
             @card={{this.card}}
             @format={{@item.format}}
@@ -567,6 +599,23 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
     </style>
   </template>
+}
+
+interface ContentElementSignature {
+  Args: {
+    Named: {
+      onSetup: (element: HTMLElement) => void;
+    };
+  };
+}
+class ContentElement extends Modifier<ContentElementSignature> {
+  modify(
+    element: HTMLElement,
+    _positional: [],
+    { onSetup }: ContentElementSignature['Args']['Named'],
+  ) {
+    onSetup(element);
+  }
 }
 
 declare module '@glint/environment-ember-loose/registry' {

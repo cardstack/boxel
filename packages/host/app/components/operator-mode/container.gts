@@ -94,6 +94,10 @@ interface CopyButtonState {
 
 const cardSelections = new TrackedWeakMap<StackItem, TrackedArray<Card>>();
 const clearSelections = new WeakMap<StackItem, () => void>();
+const stackItemStableScrolls = new WeakMap<
+  StackItem,
+  (changeSizeCallback: () => Promise<void>) => Promise<void>
+>();
 
 export default class OperatorModeContainer extends Component<Signature> {
   @service declare loaderService: LoaderService;
@@ -395,7 +399,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       // only do this in test env--this makes sure that we also wait for any
       // interior card instance async as part of our ember-test-waiters
       if (isTesting()) {
-        await this.cardService.flushLogs();
+        await this.cardService.cardsSettled();
       }
       return savedCard;
     } finally {
@@ -434,7 +438,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       // only do this in test env--this makes sure that we also wait for any
       // interior card instance async as part of our ember-test-waiters
       if (isTesting()) {
-        await this.cardService.flushLogs();
+        await this.cardService.cardsSettled();
       }
     } finally {
       waiter.endAsync(token);
@@ -556,6 +560,24 @@ export default class OperatorModeContainer extends Component<Signature> {
         };
         here.addToStack(newItem);
         return;
+      },
+      doWithStableScroll: async (
+        card: Card,
+        changeSizeCallback: () => Promise<void>,
+      ): Promise<void> => {
+        let stackItem: StackItem | undefined;
+        for (let stack of here.operatorModeStateService.state.stacks) {
+          stackItem = stack.find(
+            (item) => item.type === 'card' && item.card === card,
+          );
+          if (stackItem) {
+            let doWithStableScroll = stackItemStableScrolls.get(stackItem);
+            if (doWithStableScroll)
+              await doWithStableScroll(changeSizeCallback);
+            return;
+          }
+        }
+        await changeSizeCallback();
       },
     };
   }
@@ -713,8 +735,15 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.isChatVisible ? 'chat-open' : 'chat-closed';
   }
 
-  setupStackItem = (item: StackItem, doClearSelections: () => void) => {
+  setupStackItem = (
+    item: StackItem,
+    doClearSelections: () => void,
+    doWithStableScroll: (
+      changeSizeCallback: () => Promise<void>,
+    ) => Promise<void>,
+  ) => {
     clearSelections.set(item, doClearSelections);
+    stackItemStableScrolls.set(item, doWithStableScroll);
   };
 
   <template>

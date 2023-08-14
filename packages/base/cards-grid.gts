@@ -88,7 +88,11 @@ class Isolated extends Component<typeof CardsGrid> {
   </template>
 
   @tracked
-  private declare request: { instances: Card[]; isLoading: boolean };
+  private declare request: {
+    instances: Card[];
+    isLoading: boolean;
+    ready: Promise<void>;
+  };
   private subscription: { url: string; unsubscribe: () => void } | undefined;
 
   constructor(owner: unknown, args: any) {
@@ -103,7 +107,17 @@ class Isolated extends Component<typeof CardsGrid> {
           // we are only interested in events related to index changes.
           // currently these look like "index: full" and "index: incremental"
           if (data.startsWith('index:')) {
-            this.refresh();
+            if (this.args.context?.actions) {
+              this.args.context?.actions?.doWithStableScroll(
+                this.args.model,
+                async () => {
+                  this.refresh();
+                  await this.request.ready;
+                },
+              );
+            } else {
+              this.refresh();
+            }
           }
         }),
       };

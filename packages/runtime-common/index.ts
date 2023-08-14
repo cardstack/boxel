@@ -146,6 +146,7 @@ export interface CardSearch {
     realms?: string[],
   ): {
     instances: Card[];
+    ready: Promise<void>;
     isLoading: boolean;
   };
 }
@@ -216,6 +217,10 @@ export interface Actions {
   createCardDirectly: (
     doc: LooseSingleCardDocument,
     relativeTo: URL | undefined,
+  ) => Promise<void>;
+  doWithStableScroll: (
+    card: Card,
+    changeSizeCallback: () => Promise<void>,
   ) => Promise<void>;
   // more CRUD ops to come...
 }
