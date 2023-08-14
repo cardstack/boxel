@@ -99,7 +99,6 @@ export default class OperatorModeStack extends Component<Signature> {
         position: relative;
         display: flex;
         justify-content: center;
-        overflow: hidden;
         max-width: 50rem;
         padding-top: var(--boxel-sp-xxl);
         margin: 0 auto;

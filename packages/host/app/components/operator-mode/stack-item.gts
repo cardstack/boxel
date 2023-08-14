@@ -493,8 +493,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
         width: 89%;
         height: inherit;
         z-index: 0;
-        overflow: hidden;
         pointer-events: none;
+      }
+
+      .item.buried {
+        /* prevents the buried card's box shadows from bleeding thru */
+        overflow: hidden;
       }
 
       .card {
