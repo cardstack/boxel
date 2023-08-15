@@ -12,7 +12,8 @@ import ENV from '@cardstack/host/config/environment';
 import { Modal, IconButton } from '@cardstack/boxel-ui';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import SearchSheet, { SearchSheetMode } from '../search-sheet';
-import { restartableTask, task } from 'ember-concurrency';
+import { restartableTask, task, dropTask } from 'ember-concurrency';
+import { TrackedArray, TrackedWeakMap } from 'tracked-built-ins';
 import {
   Deferred,
   baseCardRef,
@@ -39,11 +40,13 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import OperatorModeStack from './stack';
 import type MatrixService from '../../services/matrix-service';
 import type CommandService from '../../services/command-service';
+import type MessageService from '../../services/message-service';
 import ChatSidebar from '../matrix/chat-sidebar';
+import CopyButton from './copy-button';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 
-let waiter = buildWaiter('operator-mode-container:write-waiter');
+const waiter = buildWaiter('operator-mode-container:write-waiter');
 
 const { APP } = ENV;
 
@@ -84,9 +87,17 @@ enum SearchSheetTrigger {
   DropCardToRightNeighborStackButton = 'drop-card-to-right-neighbor-stack-button',
 }
 
+const cardSelections = new TrackedWeakMap<StackItem, TrackedArray<Card>>();
+const clearSelections = new WeakMap<StackItem, () => void>();
+const stackItemStableScrolls = new WeakMap<
+  StackItem,
+  (changeSizeCallback: () => Promise<void>) => void
+>();
+
 export default class OperatorModeContainer extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
+  @service declare messageService: MessageService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
   @service declare commandService: CommandService;
@@ -97,6 +108,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   constructor(owner: unknown, args: any) {
     super(owner, args);
 
+    this.messageService.register();
     (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
     registerDestructor(this, () => {
       delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
@@ -194,6 +206,22 @@ export default class OperatorModeContainer extends Component<Signature> {
       return card;
     }
     return get(card, path.join('.'));
+  }
+
+  @action
+  onSelectedCards(selectedCards: Card[], stackItem: StackItem) {
+    let selected = cardSelections.get(stackItem);
+    if (!selected) {
+      selected = new TrackedArray([]);
+      cardSelections.set(stackItem, selected);
+    }
+    selected.splice(0, selected.length, ...selectedCards);
+  }
+
+  get selectedCards() {
+    return this.operatorModeStateService
+      .topMostStackItems()
+      .map((i) => cardSelections.get(i) ?? []);
   }
 
   @action onCancelSearchSheet() {
@@ -312,13 +340,49 @@ export default class OperatorModeContainer extends Component<Signature> {
       // only do this in test env--this makes sure that we also wait for any
       // interior card instance async as part of our ember-test-waiters
       if (isTesting()) {
-        await this.cardService.flushLogs();
+        await this.cardService.cardsSettled();
       }
       return savedCard;
     } finally {
       waiter.endAsync(token);
     }
   });
+
+  private copy = dropTask(
+    async (
+      sources: Card[],
+      sourceItem: CardStackItem,
+      destinationItem: CardStackItem,
+    ) => {
+      let token = waiter.beginAsync();
+      try {
+        let destinationRealmURL = await this.cardService.getRealmURL(
+          destinationItem.card,
+        );
+        if (!destinationRealmURL) {
+          throw new Error(
+            `bug: could not determine realm URL for index card ${destinationItem.card.id}`,
+          );
+        }
+        let realmURL = destinationRealmURL;
+        for (let card of sources) {
+          await this.cardService.copyCard(card, realmURL);
+        }
+        let clearSelection = clearSelections.get(sourceItem);
+        if (typeof clearSelection === 'function') {
+          clearSelection();
+        }
+        cardSelections.delete(sourceItem);
+        // only do this in test env--this makes sure that we also wait for any
+        // interior card instance async as part of our ember-test-waiters
+        if (isTesting()) {
+          await this.cardService.cardsSettled();
+        }
+      } finally {
+        waiter.endAsync(token);
+      }
+    },
+  );
 
   // The public API is wrapped in a closure so that whatever calls its methods
   // in the context of operator-mode, the methods can be aware of which stack to deal with (via stackIndex), i.e.
@@ -436,6 +500,25 @@ export default class OperatorModeContainer extends Component<Signature> {
         here.addToStack(newItem);
         return;
       },
+      doWithStableScroll: async (
+        card: Card,
+        changeSizeCallback: () => Promise<void>,
+      ): Promise<void> => {
+        let stackItem: StackItem | undefined;
+        for (let stack of here.stacks) {
+          stackItem = stack.find(
+            (item) => item.type === 'card' && item.card === card,
+          );
+          if (stackItem) {
+            let doWithStableScroll = stackItemStableScrolls.get(stackItem);
+            if (doWithStableScroll) {
+              doWithStableScroll(changeSizeCallback); // this is perform()ed in the component
+              return;
+            }
+          }
+        }
+        await changeSizeCallback();
+      },
     };
   }
 
@@ -520,12 +603,12 @@ export default class OperatorModeContainer extends Component<Signature> {
       SearchSheetTrigger.DropCardToLeftNeighborStackButton
     ) {
       for (
-        let stackIndex = this.operatorModeStateService.state.stacks.length - 1;
+        let stackIndex = this.stacks.length - 1;
         stackIndex >= 0;
         stackIndex--
       ) {
         this.operatorModeStateService.shiftStack(
-          this.operatorModeStateService.state.stacks[stackIndex],
+          this.stacks[stackIndex],
           stackIndex + 1,
         );
       }
@@ -547,7 +630,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         type: 'card',
         card,
         format: 'isolated',
-        stackIndex: this.operatorModeStateService.state.stacks.length,
+        stackIndex: this.stacks.length,
       });
     } else {
       // In case, that the search was accessed directly without clicking right and left buttons,
@@ -578,15 +661,21 @@ export default class OperatorModeContainer extends Component<Signature> {
   // This determines whether we show the left and right button that trigger the search sheet whose card selection will go to the left or right stack
   // (there is a single stack with at least one card in it)
   get canCreateNeighborStack() {
-    return (
-      this.allStackItems.length > 0 &&
-      this.operatorModeStateService.state.stacks.length === 1
-    );
+    return this.allStackItems.length > 0 && this.stacks.length === 1;
   }
 
   get chatVisibilityClass() {
     return this.isChatVisible ? 'chat-open' : 'chat-closed';
   }
+
+  setupStackItem = (
+    item: StackItem,
+    doClearSelections: () => void,
+    doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
+  ) => {
+    clearSelections.set(item, doClearSelections);
+    stackItemStableScrolls.set(item, doWithStableScroll);
+  };
 
   <template>
     <Modal
@@ -630,9 +719,17 @@ export default class OperatorModeContainer extends Component<Signature> {
                 @publicAPI={{this.publicAPI this stackIndex}}
                 @close={{perform this.close}}
                 @edit={{this.edit}}
+                @onSelectedCards={{this.onSelectedCards}}
                 @save={{perform this.save}}
+                @setupStackItem={{this.setupStackItem}}
               />
             {{/each}}
+
+            <CopyButton
+              @selectedCards={{this.selectedCards}}
+              @copy={{fn (perform this.copy)}}
+              @isCopying={{this.copy.isRunning}}
+            />
           {{/if}}
 
           {{#if this.canCreateNeighborStack}}

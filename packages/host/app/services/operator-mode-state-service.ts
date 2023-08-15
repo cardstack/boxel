@@ -22,6 +22,7 @@ interface CardItem {
   type: 'card';
   id: string;
   format: 'isolated' | 'edit';
+  card: Card;
 }
 interface ContainedCardItem {
   type: 'contained';
@@ -133,14 +134,8 @@ export default class OperatorModeStateService extends Service {
     return;
   }
 
-  topCards() {
-    let cards = [];
-    for (let stack of this.state.stacks) {
-      if (stack.length > 0) {
-        cards.push(stack[stack.length - 1].card);
-      }
-    }
-    return cards;
+  topMostStackItems() {
+    return this.state.stacks.map((stack) => stack[stack.length - 1]);
   }
 
   stackIsEmpty(stackIndex: number) {

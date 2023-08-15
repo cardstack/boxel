@@ -406,8 +406,10 @@ export default class Room extends Component<RoomArgs> {
 
   @action
   private sendOpenCards() {
-    for (let card of this.operatorModeStateService.topCards()) {
-      this.doSendMessage.perform('', card);
+    for (let stackItem of this.operatorModeStateService.topMostStackItems()) {
+      if (stackItem.card) {
+        this.doSendMessage.perform('', stackItem.card);
+      }
     }
   }
 
