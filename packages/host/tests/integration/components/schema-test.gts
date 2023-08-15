@@ -14,6 +14,7 @@ import {
   setupCardLogs,
   setupLocalIndexing,
 } from '../../helpers';
+import { isReady } from '@cardstack/host/resources/file';
 import { Realm } from '@cardstack/runtime-common/realm';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -23,15 +24,15 @@ import { OpenFiles } from '@cardstack/host/controllers/code';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { TestContext } from '@ember/test-helpers';
 
-let loader: Loader;
-
 module('Integration | schema', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
   let mockController: CodeController;
   let mockOpenFiles: OpenFiles;
+  let loader: Loader;
 
   setupRenderingTest(hooks);
+  setupLocalIndexing(hooks);
 
   hooks.beforeEach(function (this: TestContext) {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
@@ -41,45 +42,43 @@ module('Integration | schema', function (hooks) {
       new URL('http://localhost:4201/base/'),
     );
   });
-
-  setupLocalIndexing(hooks);
+  hooks.beforeEach(async function () {
+    mockController = new CodeController();
+    mockOpenFiles = new OpenFiles(mockController);
+  });
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  hooks.beforeEach(async function () {
-    adapter = new TestRealmAdapter({});
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    mockController = new CodeController();
-    mockOpenFiles = new OpenFiles(mockController);
-    await realm.ready;
-  });
-
   test('renders card schema view', async function (assert) {
-    await realm.write(
-      'person.gts',
-      `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+    let moduleMap = {
+      'person.gts': `import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
       export class Person extends Card {
         static displayName = 'Person';
         @field firstName = contains(StringCard);
         @field lastName = contains(StringCard);
-      }
-    `,
-    );
+      }`,
+    };
+    adapter = new TestRealmAdapter(moduleMap);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    await realm.ready;
+
     mockOpenFiles.path = 'person.gts';
-    let openFile = await getFileResource(this, testRealmURL, mockOpenFiles);
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
-          <CardPrerender />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+            <CardPrerender />
+          {{/if}}
+          <CardCatalogModal />
         </template>
+
+        openFile = f;
       },
     );
     await waitFor('[data-test-card-id]');
@@ -99,12 +98,9 @@ module('Integration | schema', function (hooks) {
         'Delete firstName - contains - field card ID: https://cardstack.com/base/string/default',
       );
   });
-
   test('renders card schema view with a "/" in template', async function (assert) {
-    await realm.write(
-      'test.gts',
-      `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+    let moduleMap = {
+      'test.gts': `import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import NumberCard from "https://cardstack.com/base/number";
 
       export class Test extends Card {
@@ -115,25 +111,31 @@ module('Integration | schema', function (hooks) {
         });
       }
     `,
-    );
+    };
+    adapter = new TestRealmAdapter(moduleMap);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    await realm.ready;
+
     mockOpenFiles.path = 'test.gts';
-    let openFile = await getFileResource(this, testRealmURL, mockOpenFiles);
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
-          <CardPrerender />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+            <CardPrerender />
+            <CardCatalogModal />
+          {{/if}}
         </template>
+        openFile = f;
       },
     );
     await waitFor('[data-test-card-id]');
     assert.dom('[data-test-card-id]').exists();
   });
-
   test('renders a card schema view for a card that contains itself as a field', async function (assert) {
-    await realm.write(
-      'friend.gts',
-      `
+    let moduleMap = {
+      'friend.gts': `
       import { contains, linksTo, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -142,15 +144,23 @@ module('Integration | schema', function (hooks) {
         @field friend = linksTo(() => Friend);
       }
     `,
-    );
+    };
+    adapter = new TestRealmAdapter(moduleMap);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    await realm.ready;
+
     mockOpenFiles.path = 'friend.gts';
-    let openFile = await getFileResource(this, testRealmURL, mockOpenFiles);
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -179,9 +189,8 @@ module('Integration | schema', function (hooks) {
   });
 
   test('can delete a field from card', async function (assert) {
-    await realm.write(
-      'person.gts',
-      `
+    let moduleMap = {
+      'person.gts': `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -190,14 +199,21 @@ module('Integration | schema', function (hooks) {
         @field lastName = contains(StringCard);
       }
     `,
-    );
+    };
+    adapter = new TestRealmAdapter(moduleMap);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    await realm.ready;
+    //
     mockOpenFiles.path = 'person.gts';
-    let openFile = await getFileResource(this, testRealmURL, mockOpenFiles);
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
+          {{#if (isReady f)}}
+            <Module @file={{f}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
       },
     );
@@ -220,9 +236,8 @@ module('Integration | schema', function (hooks) {
   });
 
   test('can delete a linksTo field with the same type as its enclosing card', async function (assert) {
-    await realm.write(
-      'person.gts',
-      `
+    let moduleMap = {
+      'person.gts': `
       import { contains, field, Card, linksTo } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -231,15 +246,23 @@ module('Integration | schema', function (hooks) {
         @field friend = linksTo(() => Person);
       }
     `,
-    );
+    };
+    adapter = new TestRealmAdapter(moduleMap);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    await realm.ready;
+
     mockOpenFiles.path = 'person.gts';
-    let openFile = await getFileResource(this, testRealmURL, mockOpenFiles);
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -261,9 +284,8 @@ module('Integration | schema', function (hooks) {
   });
 
   test('does not include a delete button for fields that are inherited', async function (assert) {
-    await realm.write(
-      'person.gts',
-      `
+    let moduleMap = {
+      'person.gts': `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -272,10 +294,7 @@ module('Integration | schema', function (hooks) {
         @field lastName = contains(StringCard);
       }
     `,
-    );
-    await realm.write(
-      'fancy-person.gts',
-      `
+      'fancy-person.gts': `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       import { Person } from "./person";
@@ -284,15 +303,23 @@ module('Integration | schema', function (hooks) {
         @field favoriteColor = contains(StringCard);
       }
     `,
-    );
+    };
+    adapter = new TestRealmAdapter(moduleMap);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    await realm.ready;
+
     mockOpenFiles.path = 'fancy-person.gts';
-    let openFile = await getFileResource(this, testRealmURL, mockOpenFiles);
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -309,9 +336,8 @@ module('Integration | schema', function (hooks) {
   });
 
   test('it can add a new contains field to a card', async function (assert) {
-    await realm.write(
-      'person.gts',
-      `
+    let moduleMap = {
+      'person.gts': `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -320,10 +346,7 @@ module('Integration | schema', function (hooks) {
         @field lastName = contains(StringCard);
       }
     `,
-    );
-    await realm.write(
-      'post.gts',
-      `
+      'post.gts': `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -331,10 +354,7 @@ module('Integration | schema', function (hooks) {
         @field title = contains(StringCard);
       }
     `,
-    );
-    await realm.write(
-      'person-entry.json',
-      JSON.stringify({
+      'person-entry.json': JSON.stringify({
         data: {
           type: 'card',
           attributes: {
@@ -353,10 +373,7 @@ module('Integration | schema', function (hooks) {
           },
         },
       }),
-    );
-    await realm.write(
-      'post-entry.json',
-      JSON.stringify({
+      'post-entry.json': JSON.stringify({
         data: {
           type: 'card',
           attributes: {
@@ -375,16 +392,24 @@ module('Integration | schema', function (hooks) {
           },
         },
       }),
-    );
+    };
+    adapter = new TestRealmAdapter(moduleMap);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    await realm.ready;
+
     mockOpenFiles.path = 'post.gts';
-    let openFile = await getFileResource(this, testRealmURL, mockOpenFiles);
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
-          <CardCatalogModal />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+            <CardCatalogModal />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -498,7 +523,7 @@ module('Integration | schema', function (hooks) {
 
     await click(`[data-test-select="${testRealmURL}person-entry"]`);
     await click('[data-test-card-catalog-go-button]');
-    await waitFor('.schema [data-test-field="author"]');
+    await waitFor('[data-test-field="author"]');
     assert.dom('[data-test-field="author"]').exists();
     assert
       .dom('[data-test-field="author"]')
@@ -525,9 +550,8 @@ module('Integration | schema', function (hooks) {
   });
 
   test('it can add containsMany field to a card', async function (assert) {
-    await realm.write(
-      'person.gts',
-      `
+    let moduleMap = {
+      'person.gts': `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -536,16 +560,23 @@ module('Integration | schema', function (hooks) {
         @field lastName = contains(StringCard);
       }
     `,
-    );
+    };
+    adapter = new TestRealmAdapter(moduleMap);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    await realm.ready;
+
     mockOpenFiles.path = 'person.gts';
-    let openFile = await getFileResource(this, testRealmURL, mockOpenFiles);
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
-          <CardCatalogModal />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -588,9 +619,8 @@ module('Integration | schema', function (hooks) {
   });
 
   test('it can add a field with a card whose fields have a cyclic dependency with the enclosing card', async function (assert) {
-    await realm.write(
-      'pet.gts',
-      `
+    let moduleMap = {
+      'pet.gts': `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -598,10 +628,7 @@ module('Integration | schema', function (hooks) {
         @field firstName = contains(StringCard);
       }
     `,
-    );
-    await realm.write(
-      'person.gts',
-      `
+      'person.gts': `
       import { contains, linksTo, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       import { Pet } from "./pet";
@@ -611,10 +638,7 @@ module('Integration | schema', function (hooks) {
         @field pet = linksTo(() => Pet);
       }
     `,
-    );
-    await realm.write(
-      'appointment.gts',
-      `
+      'appointment.gts': `
       import { contains, containsMany, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       import { Person } from "./person";
@@ -624,11 +648,7 @@ module('Integration | schema', function (hooks) {
         @field contacts = containsMany(Person);
       }
     `,
-    );
-
-    await realm.write(
-      'appointment.json',
-      JSON.stringify({
+      'appointment.json': JSON.stringify({
         data: {
           type: 'card',
           attributes: {
@@ -654,17 +674,23 @@ module('Integration | schema', function (hooks) {
           },
         },
       }),
-    );
+    };
+    adapter = new TestRealmAdapter(moduleMap);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    await realm.ready;
 
     mockOpenFiles.path = 'pet.gts';
-    let openFile = await getFileResource(this, testRealmURL, mockOpenFiles);
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
-          <CardCatalogModal />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -712,9 +738,8 @@ module('Integration | schema', function (hooks) {
   });
 
   test('it can add linksTo field to a card', async function (assert) {
-    await realm.write(
-      'person.gts',
-      `
+    let moduleMap = {
+      'person.gts': `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -723,10 +748,7 @@ module('Integration | schema', function (hooks) {
         @field lastName = contains(StringCard);
       }
     `,
-    );
-    await realm.write(
-      'pet.gts',
-      `
+      'pet.gts': `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -734,10 +756,7 @@ module('Integration | schema', function (hooks) {
         @field name = contains(StringCard);
       }
     `,
-    );
-    await realm.write(
-      'pet.json',
-      JSON.stringify({
+      'pet.json': JSON.stringify({
         data: {
           type: 'card',
           attributes: {
@@ -767,16 +786,23 @@ module('Integration | schema', function (hooks) {
           },
         },
       }),
-    );
+    };
+    adapter = new TestRealmAdapter(moduleMap);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    await realm.ready;
+
     mockOpenFiles.path = 'person.gts';
-    let openFile = await getFileResource(this, testRealmURL, mockOpenFiles);
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
-          <CardCatalogModal />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -820,9 +846,8 @@ module('Integration | schema', function (hooks) {
   });
 
   test('it can add a linksTo field with the same type as its enclosing card', async function (assert) {
-    await realm.write(
-      'person.gts',
-      `
+    let moduleMap = {
+      'person.gts': `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -831,10 +856,7 @@ module('Integration | schema', function (hooks) {
         @field lastName = contains(StringCard);
       }
     `,
-    );
-    await realm.write(
-      'person.json',
-      JSON.stringify({
+      'person.json': JSON.stringify({
         data: {
           type: 'card',
           attributes: {
@@ -865,16 +887,23 @@ module('Integration | schema', function (hooks) {
           },
         },
       }),
-    );
+    };
+    adapter = new TestRealmAdapter(moduleMap);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    await realm.ready;
+
     mockOpenFiles.path = 'person.gts';
-    let openFile = await getFileResource(this, testRealmURL, mockOpenFiles);
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
-          <CardCatalogModal />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -914,9 +943,8 @@ module('Integration | schema', function (hooks) {
   });
 
   test('it does not allow duplicate field to be created', async function (assert) {
-    await realm.write(
-      'person.gts',
-      `
+    let moduleMap = {
+      'person.gts': `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -925,10 +953,7 @@ module('Integration | schema', function (hooks) {
         @field lastName = contains(StringCard);
       }
     `,
-    );
-    await realm.write(
-      'employee.gts',
-      `
+      'employee.gts': `
       import { contains, field } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       import { Person } from "./person";
@@ -937,17 +962,23 @@ module('Integration | schema', function (hooks) {
         @field department = contains(StringCard);
       }
     `,
-    );
+    };
+    adapter = new TestRealmAdapter(moduleMap);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    await realm.ready;
 
     mockOpenFiles.path = 'employee.gts';
-    let openFile = await getFileResource(this, testRealmURL, mockOpenFiles);
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
-          <CardCatalogModal />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -977,9 +1008,8 @@ module('Integration | schema', function (hooks) {
   });
 
   test('it can add a linksToMany field to a card', async function (assert) {
-    await realm.write(
-      'person.gts',
-      `
+    let moduleMap = {
+      'person.gts': `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -987,10 +1017,7 @@ module('Integration | schema', function (hooks) {
         @field firstName = contains(StringCard);
       }
     `,
-    );
-    await realm.write(
-      'pet.gts',
-      `
+      'pet.gts': `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -998,10 +1025,8 @@ module('Integration | schema', function (hooks) {
         @field name = contains(StringCard);
       }
     `,
-    );
-    await realm.write(
-      'pet.json',
-      JSON.stringify({
+
+      'pet.json': JSON.stringify({
         data: {
           type: 'card',
           attributes: {
@@ -1031,16 +1056,23 @@ module('Integration | schema', function (hooks) {
           },
         },
       }),
-    );
+    };
+    adapter = new TestRealmAdapter(moduleMap);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    await realm.ready;
+
     mockOpenFiles.path = 'person.gts';
-    let openFile = await getFileResource(this, testRealmURL, mockOpenFiles);
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
-          <CardCatalogModal />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -1085,9 +1117,8 @@ module('Integration | schema', function (hooks) {
   });
 
   test('it can add a linksToMany field with the same type as its enclosing card', async function (assert) {
-    await realm.write(
-      'person.gts',
-      `
+    let moduleMap = {
+      'person.gts': `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -1095,10 +1126,7 @@ module('Integration | schema', function (hooks) {
         @field firstName = contains(StringCard);
       }
     `,
-    );
-    await realm.write(
-      'person.json',
-      JSON.stringify({
+      'person.json': JSON.stringify({
         data: {
           type: 'card',
           attributes: {
@@ -1128,16 +1156,23 @@ module('Integration | schema', function (hooks) {
           },
         },
       }),
-    );
+    };
+    adapter = new TestRealmAdapter(moduleMap);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    await realm.ready;
+
     mockOpenFiles.path = 'person.gts';
-    let openFile = await getFileResource(this, testRealmURL, mockOpenFiles);
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
-          <CardCatalogModal />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -1181,9 +1216,8 @@ module('Integration | schema', function (hooks) {
   });
 
   test('can delete a linksToMany field with the same type as its enclosing card', async function (assert) {
-    await realm.write(
-      'person.gts',
-      `
+    let moduleMap = {
+      'person.gts': `
       import { contains, field, Card, linksToMany } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -1192,15 +1226,23 @@ module('Integration | schema', function (hooks) {
         @field friends = linksToMany(() => Person);
       }
     `,
-    );
+    };
+    adapter = new TestRealmAdapter(moduleMap);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    await realm.ready;
+
     mockOpenFiles.path = 'person.gts';
-    let openFile = await getFileResource(this, testRealmURL, mockOpenFiles);
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -1222,9 +1264,8 @@ module('Integration | schema', function (hooks) {
   });
 
   test('can delete a linksToMany field', async function (assert) {
-    await realm.write(
-      'pet.gts',
-      `
+    let moduleMap = {
+      'pet.gts': `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -1232,10 +1273,7 @@ module('Integration | schema', function (hooks) {
         @field name = contains(StringCard);
       }
     `,
-    );
-    await realm.write(
-      'person.gts',
-      `
+      'person.gts': `
       import { Pet as PetCard } from "${testRealmURL}pet";
       import { contains, field, Card, linksToMany } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
@@ -1245,15 +1283,23 @@ module('Integration | schema', function (hooks) {
         @field pets = linksToMany(PetCard);
       }
     `,
-    );
+    };
+    adapter = new TestRealmAdapter(moduleMap);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    await realm.ready;
+
     mockOpenFiles.path = 'person.gts';
-    let openFile = await getFileResource(this, testRealmURL, mockOpenFiles);
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 

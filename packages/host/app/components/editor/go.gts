@@ -43,7 +43,6 @@ interface Signature {
     openFiles: OpenFiles;
     monaco: MonacoSDK;
     onEditorSetup?(editor: IStandaloneCodeEditor): void;
-    fileResource?: Ready; //Optionally pass file resource for testing
   };
 }
 
@@ -201,24 +200,22 @@ export default class Go extends Component<Signature> {
     return undefined;
   }
 
-  openFile = this.args.fileResource
-    ? { current: this.args.fileResource } //Optionaly pass a file resource for testing
-    : maybe(this, (context) => {
-        const relativePath = this.args.openFiles.path;
-        if (relativePath) {
-          return file(context, () => ({
-            relativePath,
-            realmURL: new RealmPaths(this.cardService.defaultURL).url,
-            onStateChange: (state) => {
-              if (state === 'not-found') {
-                this.args.openFiles.path = undefined;
-              }
-            },
-          }));
-        } else {
-          return undefined;
-        }
-      });
+  openFile = maybe(this, (context) => {
+    const relativePath = this.args.openFiles.path;
+    if (relativePath) {
+      return file(context, () => ({
+        relativePath,
+        realmURL: new RealmPaths(this.cardService.defaultURL).url,
+        onStateChange: (state) => {
+          if (state === 'not-found') {
+            this.args.openFiles.path = undefined;
+          }
+        },
+      }));
+    } else {
+      return undefined;
+    }
+  });
 
   writeSourceCodeToFile(file: FileResource, content: string) {
     if (file.state !== 'ready')

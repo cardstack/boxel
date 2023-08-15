@@ -19,7 +19,6 @@ interface Args {
 
 export interface Loading {
   state: 'loading';
-  ready: (lastModified?: string) => Promise<void>; // Used for test. It enables resource parent context to update file resource state to be Ready
 }
 
 export interface ServerError {
@@ -50,9 +49,6 @@ class _FileResource extends Resource<Args> {
 
   @tracked private innerState: FileResource = {
     state: 'loading',
-    ready: async () => {
-      return this.read.perform();
-    },
   };
 
   @service declare loaderService: LoaderService;
@@ -68,7 +64,7 @@ class _FileResource extends Resource<Args> {
     });
   }
 
-  setSubscription(realmURL: string, callback: () => void) {
+  private setSubscription(realmURL: string, callback: () => void) {
     let messageServiceUrl = `${realmURL}_message`;
     if (this.subscription && this.subscription.url !== messageServiceUrl) {
       this.subscription.unsubscribe();
@@ -128,16 +124,12 @@ class _FileResource extends Resource<Args> {
     }
     let content = await response.text();
     let self = this;
-    // Inside test, The loader occasionally doesn't do a network request and creates Response object manually
-    // This means that reading response.url will give url = '' and we cannot manually alter the url in Response
-    // The below condition is a workaround
-    let url = response.url == '' ? this._url : response.url;
     this.updateState({
       state: 'ready',
       lastModified: lastModified,
       content,
-      name: url.split('/').pop()!,
-      url: url,
+      name: this._url.split('/').pop()!,
+      url: this._url,
       write(content: string, flushLoader?: true) {
         self.writeTask.perform(this, content, flushLoader);
       },
