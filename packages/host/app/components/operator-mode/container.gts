@@ -41,6 +41,7 @@ import type MatrixService from '../../services/matrix-service';
 import type MessageService from '../../services/message-service';
 import ChatSidebar from '../matrix/chat-sidebar';
 import CopyButton from './copy-button';
+import DeleteModal from './delete-modal';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 
@@ -99,6 +100,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
   @tracked searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked isChatVisible = false;
+  private deleteModal: DeleteModal | undefined;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -292,7 +294,15 @@ export default class OperatorModeContainer extends Component<Signature> {
       // the card isn't actually saved yet, so do nothing
       return;
     }
-    // TODO show a confirmation dialog first
+
+    if (!this.deleteModal) {
+      throw new Error(`bug: DeleteModal not instantiated`);
+    }
+    let isDeleteConfirmed = await this.deleteModal.confirmDelete(card);
+    if (!isDeleteConfirmed) {
+      return;
+    }
+
     let items: CardStackItem[] = [];
     for (let stack of this.stacks) {
       items.push(
@@ -304,7 +314,6 @@ export default class OperatorModeContainer extends Component<Signature> {
     for (let item of items) {
       this.operatorModeStateService.trimItemsFromStack(item);
     }
-
     await this.cardService.deleteCard(card);
   });
 
@@ -657,6 +666,10 @@ export default class OperatorModeContainer extends Component<Signature> {
     stackItemStableScrolls.set(item, doWithStableScroll);
   };
 
+  setupDeleteModal = (deleteModal: DeleteModal) => {
+    this.deleteModal = deleteModal;
+  };
+
   <template>
     <Modal
       class='operator-mode'
@@ -711,6 +724,7 @@ export default class OperatorModeContainer extends Component<Signature> {
               @copy={{fn (perform this.copy)}}
               @isCopying={{this.copy.isRunning}}
             />
+            <DeleteModal @onCreate={{this.setupDeleteModal}} />
           {{/if}}
 
           {{#if this.canCreateNeighborStack}}
