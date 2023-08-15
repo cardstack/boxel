@@ -46,11 +46,67 @@ export default class RoomsManager extends Component {
         {{on 'click' this.toggleRooms}}
       />
     </div>
+    {{#if this.isCreateRoomMode}}
+      {{#if this.doCreateRoom.isRunning}}
+        <LoadingIndicator />
+      {{else}}
+        <div class='create-room'>
+          <FieldContainer
+            @label='Room Name:'
+            @tag='label'
+            class='create-room__field'
+          >
+            <BoxelInputValidationState
+              data-test-room-name-field
+              @id=''
+              @state={{this.roomNameInputState}}
+              @value={{this.cleanNewRoomName}}
+              @errorMessage={{this.roomNameError}}
+              @onInput={{this.setNewRoomName}}
+            />
+          </FieldContainer>
+          <FieldContainer
+            @label='Invite:'
+            @tag='label'
+            class='create-room__field'
+          >
+            <BoxelInput
+              data-test-room-invite-field
+              type='text'
+              @value={{this.newRoomInviteFormatted}}
+              @onInput={{this.setNewRoomInvite}}
+            />
+          </FieldContainer>
+        </div>
+        <div class='create-button-wrapper'>
+          <Button
+            data-test-create-room-cancel-btn
+            class='room__button'
+            {{on 'click' this.cancelCreateRoom}}
+          >Cancel</Button>
+          <Button
+            data-test-create-room-btn
+            class='room__button'
+            @kind='primary'
+            @disabled={{not this.newRoomName}}
+            {{on 'click' this.createRoom}}
+          >Create</Button>
+        </div>
+      {{/if}}
+    {{/if}}
     {{#if this.loadRooms.isRunning}}
       <LoadingIndicator />
     {{else}}
       {{#unless this.isCollapsed}}
         {{#unless this.isCreateRoomMode}}
+          <div class='create-button-wrapper'>
+            <Button
+              data-test-create-room-mode-btn
+              class='room__button'
+              {{on 'click' this.showCreateRoomMode}}
+              @disabled={{this.isCreateRoomMode}}
+            >Create Room</Button>
+          </div>
           <div class='create-button-wrapper'>
             <Button
               data-test-create-ai-chat-btn
@@ -272,9 +328,7 @@ export default class RoomsManager extends Component {
   }
 
   private get cleanNewRoomName() {
-    return (
-      this.newRoomName ?? `${moment().format()} - ${this.matrixService.userId}`
-    );
+    return this.newRoomName ?? '';
   }
 
   private get roomNameInputState() {
@@ -334,7 +388,7 @@ export default class RoomsManager extends Component {
 
   @action
   private createAIChat() {
-    this.newRoomName = this.cleanNewRoomName;
+    this.newRoomName = `${moment().format()} - ${this.matrixService.userId}`;
     this.newRoomInvite = ['aibot'];
     this.doCreateRoom.perform();
   }
