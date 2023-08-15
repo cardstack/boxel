@@ -15,12 +15,7 @@ import {
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type CardService from '@cardstack/host/services/card-service';
-import {
-  file,
-  FileResource,
-  isReady,
-  Ready,
-} from '@cardstack/host/resources/file';
+import { file, FileResource, isReady } from '@cardstack/host/resources/file';
 import CardEditor from '@cardstack/host/components/card-editor';
 import Module from './module';
 import FileTree from './file-tree';
