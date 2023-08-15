@@ -18,6 +18,7 @@ import Menu from './components/menu';
 import Message from './components/message';
 import Modal from './components/modal';
 import BoxelDropdown from './components/dropdown';
+import BoxelButton from './components/button';
 import Tooltip from './components/tooltip';
 
 export {
@@ -34,6 +35,7 @@ export {
   GridContainer,
   Header,
   IconButton,
+  BoxelButton,
   Label,
   LoadingIndicator,
   Menu,

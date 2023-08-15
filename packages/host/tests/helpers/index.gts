@@ -7,6 +7,7 @@ import {
   baseRealm,
   createResponse,
   RealmInfo,
+  Deferred,
 } from '@cardstack/runtime-common';
 import GlimmerComponent from '@glimmer/component';
 import { type TestContext, visit } from '@ember/test-helpers';
@@ -29,6 +30,7 @@ import type CardService from '@cardstack/host/services/card-service';
 import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
 import { file, FileResource } from '@cardstack/host/resources/file';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
+import type MessageService from '@cardstack/host/services/message-service';
 import Owner from '@ember/owner';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
@@ -65,9 +67,20 @@ export interface CardDocFiles {
   [filename: string]: LooseSingleCardDocument;
 }
 
-export interface AutoSaveTestContext extends TestContext {
+export interface TestContextWithSave extends TestContext {
   onSave: (subscriber: CardSaveSubscriber) => void;
   unregisterOnSave: () => void;
+}
+
+export interface TestContextWithSSE extends TestContext {
+  expectEvents: (
+    assert: Assert,
+    realm: Realm,
+    adapter: TestRealmAdapter,
+    expectedContents: string[],
+    callback: () => Promise<any>,
+  ) => Promise<any>;
+  subscribers: ((e: { data: string }) => void)[];
 }
 
 interface Options {
@@ -188,10 +201,11 @@ class MockMessageService extends Service {
   subscribe() {
     return () => {};
   }
+  register() {}
 }
 
 export function setupOnSave(hooks: NestedHooks) {
-  hooks.beforeEach<AutoSaveTestContext>(function () {
+  hooks.beforeEach<TestContextWithSave>(function () {
     let cardService = this.owner.lookup('service:card-service') as CardService;
     this.onSave = cardService.onSave.bind(cardService);
     this.unregisterOnSave =
@@ -203,6 +217,87 @@ export function setupMockMessageService(hooks: NestedHooks) {
   hooks.beforeEach(function () {
     this.owner.register('service:message-service', MockMessageService);
   });
+}
+
+export function setupServerSentEvents(hooks: NestedHooks) {
+  hooks.beforeEach<TestContextWithSSE>(function () {
+    this.subscribers = [];
+    let self = this;
+
+    class MockMessageService extends Service {
+      register() {
+        (globalThis as any)._CARDSTACK_REALM_SUBSCRIBE = this;
+      }
+      subscribe(_: never, cb: (e: { data: string }) => void) {
+        self.subscribers.push(cb);
+        return () => {};
+      }
+    }
+    this.owner.register('service:message-service', MockMessageService);
+    let messageService = this.owner.lookup(
+      'service:message-service',
+    ) as MessageService;
+    messageService.register();
+
+    this.expectEvents = async <T,>(
+      assert: Assert,
+      realm: Realm,
+      adapter: TestRealmAdapter,
+      expectedContents: string[],
+      callback: () => Promise<T>,
+    ): Promise<T> => {
+      let defer = new Deferred<string[]>();
+      let events: string[] = [];
+      let response = await realm.handle(
+        new Request(`${realm.url}_message`, {
+          method: 'GET',
+          headers: {
+            Accept: 'text/event-stream',
+          },
+        }),
+      );
+      if (!response.ok) {
+        throw new Error(`failed to connect to realm: ${response.status}`);
+      }
+      let reader = response.body!.getReader();
+      let timeout = setTimeout(() => {
+        defer.reject(
+          new Error(
+            `expectEvent timed out, saw events ${JSON.stringify(events)}`,
+          ),
+        );
+      }, 3000);
+      let result = await callback();
+      let decoder = new TextDecoder();
+      while (events.length < expectedContents.length) {
+        let { done, value } = await reader.read();
+        if (done) {
+          throw new Error('expected more events');
+        }
+        if (value) {
+          let data = getUpdateData(decoder.decode(value, { stream: true }));
+          if (data) {
+            events.push(data);
+            for (let subscriber of this.subscribers) {
+              subscriber({ data });
+            }
+          }
+        }
+      }
+      assert.deepEqual(events, expectedContents, 'sse response is correct');
+      clearTimeout(timeout);
+      adapter.unsubscribe();
+      return result;
+    };
+  });
+}
+
+function getUpdateData(message: string) {
+  let [type, data] = message.split('\n');
+  if (type.trim().split(':')[1].trim() === 'update') {
+    return data.split('data:')[1].trim();
+  }
+  return;
 }
 
 let runnerOptsMgr = new RunnerOptionsManager();

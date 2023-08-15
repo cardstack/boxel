@@ -1927,7 +1927,7 @@ export function serializeCard(
             if (!modelRelativeTo) {
               return url.href;
             }
-            return maybeRelativeURL(url, modelRelativeTo);
+            return maybeRelativeURL(url, modelRelativeTo, model[realmURL]);
           },
         }
       : {}),
@@ -2193,7 +2193,7 @@ async function cardClassFromResource<CardT extends CardBaseConstructor>(
 
     let card: typeof CardBase | undefined = await loadCard(
       resource.meta.adoptsFrom,
-      { loader, relativeTo },
+      { loader, relativeTo: resource.id ? new URL(resource.id) : relativeTo },
     );
     if (!card) {
       throw new Error(

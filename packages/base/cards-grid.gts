@@ -7,6 +7,7 @@ import {
   Component,
   Card,
   realmInfo,
+  realmURL,
   relativeTo,
   type CardBase,
 } from './card-api';
@@ -17,7 +18,10 @@ import {
   getCards,
   baseRealm,
   cardTypeDisplayName,
+  subscribeToRealm,
 } from '@cardstack/runtime-common';
+import { registerDestructor } from '@ember/destroyable';
+import { tracked } from '@glimmer/tracking';
 import { type CatalogEntry } from './catalog-entry';
 import StringCard from './string';
 
@@ -25,7 +29,8 @@ class Isolated extends Component<typeof CardsGrid> {
   <template>
     <div class='cards-grid'>
       <ul class='cards' data-test-cards-grid-cards>
-        {{#each this.request.instances as |card|}}
+        {{! use "key" to keep the list stable between refreshes }}
+        {{#each this.instances key='id' as |card|}}
           <li
             {{@context.cardComponentModifier
               card=card
@@ -90,7 +95,10 @@ class Isolated extends Component<typeof CardsGrid> {
         margin: 0;
         padding: 0;
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(var(--grid-card-width), 1fr));
+        grid-template-columns: repeat(
+          auto-fit,
+          minmax(var(--grid-card-width), 1fr)
+        );
         gap: var(--boxel-sp);
         justify-items: center;
         height: 100%;
@@ -152,36 +160,93 @@ class Isolated extends Component<typeof CardsGrid> {
     </style>
   </template>
 
-  request = getCards(
-    {
-      filter: {
-        not: {
-          any: [
-            { type: catalogEntryRef },
-            {
-              type: {
-                module: `${baseRealm.url}cards-grid`,
-                name: 'CardsGrid',
+  @tracked
+  private declare request: {
+    instances: Card[];
+    isLoading: boolean;
+    ready: Promise<void>;
+  };
+  @tracked staleInstances: Card[] = [];
+  private subscription: { url: string; unsubscribe: () => void } | undefined;
+
+  constructor(owner: unknown, args: any) {
+    super(owner, args);
+    this.refresh();
+
+    let url = `${this.args.model[realmURL]}_message`;
+    this.subscription = {
+      url,
+      unsubscribe: subscribeToRealm(url, ({ data }) => {
+        // we show stale instances during a live refresh while we are
+        // waiting for the new instances to arrive--this eliminates the flash
+        // while we wait
+        this.staleInstances = [...(this.instances ?? [])];
+
+        // we are only interested in events related to index changes.
+        // currently these look like "index: full" and "index: incremental"
+        if (data.startsWith('index:')) {
+          if (this.args.context?.actions) {
+            this.args.context?.actions?.doWithStableScroll(
+              this.args.model as Card,
+              async () => {
+                this.refresh();
+                await this.request.ready;
               },
-            },
-          ],
-        },
-      },
-      // sorting by title so that we can maintain stability in
-      // the ordering of the search results (server sorts results
-      // by order indexed by default)
-      sort: [
-        {
-          on: {
-            module: `${baseRealm.url}card-api`,
-            name: 'Card',
+            );
+          } else {
+            this.refresh();
+          }
+        }
+      }),
+    };
+    registerDestructor(this, () => {
+      if (this.subscription) {
+        this.subscription.unsubscribe();
+      }
+    });
+  }
+
+  get instances() {
+    if (!this.request) {
+      return;
+    }
+    return this.request.isLoading
+      ? this.staleInstances
+      : this.request.instances;
+  }
+
+  private refresh() {
+    this.request = getCards(
+      {
+        filter: {
+          not: {
+            any: [
+              { type: catalogEntryRef },
+              {
+                type: {
+                  module: `${baseRealm.url}cards-grid`,
+                  name: 'CardsGrid',
+                },
+              },
+            ],
           },
-          by: 'title',
         },
-      ],
-    },
-    this.args.model.realmURL ? [this.args.model.realmURL] : undefined
-  );
+        // sorting by title so that we can maintain stability in
+        // the ordering of the search results (server sorts results
+        // by order indexed by default)
+        sort: [
+          {
+            on: {
+              module: `${baseRealm.url}card-api`,
+              name: 'Card',
+            },
+            by: 'title',
+          },
+        ],
+      },
+      this.args.model[realmURL] ? [this.args.model[realmURL].href] : undefined,
+    );
+  }
 
   @action
   createNew() {
@@ -220,15 +285,9 @@ export class CardsGrid extends Card {
       return this[realmInfo]?.name;
     },
   });
-  @field realmURL = contains(StringCard, {
+  @field title = contains(StringCard, {
     computeVia: function (this: CardsGrid) {
-      if (this.id) {
-        // take advantage of the fact the id of the index card is always at the root of the realm
-        let path = this.id.split('/');
-        path.pop();
-        return path.join('/') + '/';
-      }
-      return null;
+      return this.realmName;
     },
   });
 

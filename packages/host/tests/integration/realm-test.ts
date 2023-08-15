@@ -11,14 +11,15 @@ import {
   testRealmInfo,
   setupCardLogs,
   setupLocalIndexing,
+  setupServerSentEvents,
+  type TestContextWithSSE,
 } from '../helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { stringify } from 'qs';
-import { baseRealm, CardRef, Realm } from '@cardstack/runtime-common';
+import { baseRealm, CardRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { shimExternals } from '@cardstack/host/lib/externals';
-import { Deferred } from '@cardstack/runtime-common/deferred';
 import { RenderingTestContext } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
@@ -32,7 +33,7 @@ module('Integration | realm', function (hooks) {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
   });
-
+  setupServerSentEvents(hooks);
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
@@ -42,62 +43,6 @@ module('Integration | realm', function (hooks) {
   hooks.beforeEach(function () {
     shimExternals(loader);
   });
-
-  function getUpdateData(message: string) {
-    let [type, data] = message.split('\n');
-    if (type.trim().split(':')[1].trim() === 'update') {
-      return data.split('data:')[1].trim();
-    }
-    return;
-  }
-
-  async function expectEvent<T>(
-    assert: Assert,
-    realm: Realm,
-    adapter: TestRealmAdapter,
-    expectedContents: string[],
-    callback: () => Promise<T>,
-  ) {
-    let defer = new Deferred<string[]>();
-    let events: string[] = [];
-    let response = await realm.handle(
-      new Request(`${testRealmURL}_message`, {
-        method: 'GET',
-        headers: {
-          Accept: 'text/event-stream',
-        },
-      }),
-    );
-    if (!response.ok) {
-      throw new Error(`failed to connect to realm: ${response.status}`);
-    }
-    let reader = response.body!.getReader();
-    let timeout = setTimeout(() => {
-      defer.reject(
-        new Error(
-          `expectEvent timed out, saw events ${JSON.stringify(events)}`,
-        ),
-      );
-    }, 3000);
-    let result = await callback();
-    let decoder = new TextDecoder();
-    while (events.length < expectedContents.length) {
-      let { done, value } = await reader.read();
-      if (done) {
-        throw new Error('expected more events');
-      }
-      if (value) {
-        let data = getUpdateData(decoder.decode(value, { stream: true }));
-        if (data) {
-          events.push(data);
-        }
-      }
-    }
-    assert.deepEqual(events, expectedContents, 'sse response is correct');
-    clearTimeout(timeout);
-    adapter.unsubscribe();
-    return result;
-  }
 
   test('realm can serve GET card requests', async function (assert) {
     let adapter = new TestRealmAdapter({
@@ -427,12 +372,17 @@ module('Integration | realm', function (hooks) {
     }
   });
 
-  test('realm can serve create card requests', async function (assert) {
+  test<TestContextWithSSE>('realm can serve create card requests', async function (assert) {
     let adapter = new TestRealmAdapter({});
     let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
-    let expected = ['added: Card/1.json', 'added: Card/2.json'];
-    await expectEvent(assert, realm, adapter, expected, async () => {
+    let expected = [
+      'added: Card/1.json',
+      'index: incremental',
+      'added: Card/2.json',
+      'index: incremental',
+    ];
+    await this.expectEvents(assert, realm, adapter, expected, async () => {
       {
         let response = await realm.handle(
           new Request(testRealmURL, {
@@ -703,7 +653,7 @@ module('Integration | realm', function (hooks) {
     );
   });
 
-  test('realm can serve patch card requests', async function (assert) {
+  test<TestContextWithSSE>('realm can serve patch card requests', async function (assert) {
     let adapter = new TestRealmAdapter({
       'dir/card.json': {
         data: {
@@ -723,7 +673,7 @@ module('Integration | realm', function (hooks) {
     let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let expected = ['updated: dir/card.json'];
-    let response = await expectEvent(
+    let response = await this.expectEvents(
       assert,
       realm,
       adapter,
@@ -1938,7 +1888,7 @@ module('Integration | realm', function (hooks) {
     );
   });
 
-  test('realm can serve delete card requests', async function (assert) {
+  test<TestContextWithSSE>('realm can serve delete card requests', async function (assert) {
     let adapter = new TestRealmAdapter({
       'cards/1.json': {
         data: {
@@ -1982,7 +1932,7 @@ module('Integration | realm', function (hooks) {
     );
 
     let expected = ['removed: cards/2.json'];
-    let response = await expectEvent(
+    let response = await this.expectEvents(
       assert,
       realm,
       adapter,
@@ -2081,14 +2031,14 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 404, '404 HTTP status');
   });
 
-  test('realm can serve card source post request', async function (assert) {
+  test<TestContextWithSSE>('realm can serve card source post request', async function (assert) {
     let adapter = new TestRealmAdapter({});
     let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
     {
       let expected = ['added: dir/person.gts'];
-      let response = await expectEvent(
+      let response = await this.expectEvents(
         assert,
         realm,
         adapter,
@@ -2126,7 +2076,7 @@ module('Integration | realm', function (hooks) {
     }
   });
 
-  test('realm can serve card source delete request', async function (assert) {
+  test<TestContextWithSSE>('realm can serve card source delete request', async function (assert) {
     let adapter = new TestRealmAdapter({
       'person.gts': `
       import { contains, field, Card } from 'https://cardstack.com/base/card-api';
@@ -2142,7 +2092,7 @@ module('Integration | realm', function (hooks) {
     await realm.ready;
 
     let expected = ['removed: person.gts'];
-    let response = await expectEvent(
+    let response = await this.expectEvents(
       assert,
       realm,
       adapter,

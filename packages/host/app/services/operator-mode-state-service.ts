@@ -133,6 +133,10 @@ export default class OperatorModeStateService extends Service {
     return;
   }
 
+  topMostStackItems() {
+    return this.state.stacks.map((stack) => stack[stack.length - 1]);
+  }
+
   stackIsEmpty(stackIndex: number) {
     return this.state.stacks[stackIndex].length === 0;
   }

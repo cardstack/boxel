@@ -7,6 +7,10 @@ export default class MessageService extends Service {
   @tracked subscriptions: Map<string, EventSource> = new Map();
   @service declare loaderService: LoaderService;
 
+  register() {
+    (globalThis as any)._CARDSTACK_REALM_SUBSCRIBE = this;
+  }
+
   subscribe(realmURL: string, cb: (ev: MessageEvent) => void): () => void {
     let resolvedRealmURL = this.loaderService.loader.resolve(realmURL);
     let maybeEventSource = this.subscriptions.get(resolvedRealmURL.href);

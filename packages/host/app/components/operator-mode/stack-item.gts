@@ -43,6 +43,8 @@ import config from '@cardstack/host/config/environment';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { formatDistanceToNow } from 'date-fns';
+import Modifier from 'ember-modifier';
+import { schedule } from '@ember/runloop';
 
 interface Signature {
   Args: {
@@ -54,6 +56,12 @@ interface Signature {
     dismissStackedCardsAbove: (stackIndex: number) => void;
     edit: (item: StackItem) => void;
     save: (item: StackItem, dismiss: boolean) => void;
+    onSelectedCards: (selectedCards: Card[], stackItem: StackItem) => void;
+    setupStackItem: (
+      stackItem: StackItem,
+      clearSelections: () => void,
+      doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
+    ) => void;
   };
 }
 
@@ -76,6 +84,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @tracked lastSavedMsg: string | undefined;
   private refreshSaveMsg: number | undefined;
   private subscribedCard: Card;
+  private contentEl: HTMLElement | undefined;
 
   cardTracker = new ElementTracker<{
     card: Card;
@@ -88,6 +97,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
     super(owner, args);
     this.subscribeToCard.perform();
     this.subscribedCard = this.card;
+    this.args.setupStackItem(
+      this.args.item,
+      this.clearSelections,
+      this.doWithStableScroll.perform,
+    );
   }
 
   get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
@@ -145,6 +159,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
     } else {
       this.selectedCards.splice(index, 1);
     }
+
+    // pass a copy of the array so that this doesn't become a
+    // back door into mutating the state of this component
+    this.args.onSelectedCards([...this.selectedCards], this.args.item);
   }
 
   copyToClipboard = restartableTask(async () => {
@@ -161,6 +179,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this,
     async () => await this.cardService.getRealmInfo(this.card),
   );
+
+  clearSelections = () => {
+    this.selectedCards.splice(0, this.selectedCards.length);
+  };
 
   @cached
   get iconURL() {
@@ -259,6 +281,25 @@ export default class OperatorModeStackItem extends Component<Signature> {
         ? `Saved ${formatDistanceToNow(this.lastSaved)} ago`
         : undefined;
   }
+
+  private doWithStableScroll = restartableTask(
+    async (changeSizeCallback: () => Promise<void>) => {
+      if (!this.contentEl) {
+        return;
+      }
+      let el = this.contentEl;
+      let currentScrollTop = this.contentEl.scrollTop;
+      await changeSizeCallback();
+      await this.cardService.cardsSettled();
+      schedule('afterRender', () => {
+        el.scrollTop = currentScrollTop;
+      });
+    },
+  );
+
+  private setupContentEl = (el: HTMLElement) => {
+    this.contentEl = el;
+  };
 
   <template>
     <div
@@ -413,7 +454,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             </div>
           </:detail>
         </Header>
-        <div class='content'>
+        <div class='content' {{ContentElement onSetup=this.setupContentEl}}>
           <Preview
             @card={{this.card}}
             @format={{@item.format}}
@@ -452,7 +493,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
         width: 89%;
         height: inherit;
         z-index: 0;
-        overflow: hidden;
         pointer-events: none;
       }
 
@@ -556,6 +596,23 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
     </style>
   </template>
+}
+
+interface ContentElementSignature {
+  Args: {
+    Named: {
+      onSetup: (element: HTMLElement) => void;
+    };
+  };
+}
+class ContentElement extends Modifier<ContentElementSignature> {
+  modify(
+    element: HTMLElement,
+    _positional: [],
+    { onSetup }: ContentElementSignature['Args']['Named'],
+  ) {
+    onSetup(element);
+  }
 }
 
 declare module '@glint/environment-ember-loose/registry' {
