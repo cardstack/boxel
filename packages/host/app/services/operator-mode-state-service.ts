@@ -133,6 +133,16 @@ export default class OperatorModeStateService extends Service {
     return;
   }
 
+  topCards() {
+    let cards = [];
+    for (let stack of this.state.stacks) {
+      if (stack.length > 0) {
+        cards.push(stack[stack.length - 1].card);
+      }
+    }
+    return cards;
+  }
+
   stackIsEmpty(stackIndex: number) {
     return this.state.stacks[stackIndex].length === 0;
   }

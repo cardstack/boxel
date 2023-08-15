@@ -79,7 +79,8 @@ Option 3: Description\
 The data in the option block will be used to update things for the user behind a button so they will not see the content directly - you must give a short text summary before the option block. The option block should not contain the description. Make sure you use the option xml tags.\
 Return only JSON inside each option block, in a compatible format with the one you receive. The contents of any field will be automatically replaced with your changes, and must follow a subset of the same format - you may miss out fields but cannot add new ones. Do not add new nested components, it will fail validation.\
 Modify only the parts you are asked to. Only return modified fields.\
-You must not return any fields that you do not see in the input data..';
+You must not return any fields that you do not see in the input data.\
+If the user hasn\'t shared any cards with you or what they\'re asking for doesn\'t make sense for the card type, you can ask them to "send their open cards" to you.';
 
 enum ParsingMode {
   Text,

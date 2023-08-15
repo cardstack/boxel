@@ -157,6 +157,11 @@ export default class Room extends Component<RoomArgs> {
           @disabled={{this.doChooseCard.isRunning}}
           {{on 'click' this.chooseCard}}
         >Choose Card</Button>
+        <Button
+          data-test-send-open-cards-btn
+          @loading={{this.doSendMessage.isRunning}}
+          {{on 'click' this.sendOpenCards}}
+        >Send open cards</Button>
       {{/if}}
       <Button
         data-test-send-message-btn
@@ -267,6 +272,7 @@ export default class Room extends Component<RoomArgs> {
 
   @service private declare matrixService: MatrixService;
   @service private declare cardService: CardService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
   @tracked private isInviteMode = false;
   @tracked private membersToInvite: string[] = [];
   @tracked private allowedToSetObjective: boolean | undefined;
@@ -396,6 +402,13 @@ export default class Room extends Component<RoomArgs> {
       );
     }
     this.doSendMessage.perform(this.messageToSend, this.cardtoSend);
+  }
+
+  @action
+  private sendOpenCards() {
+    for (let card of this.operatorModeStateService.topCards()) {
+      this.doSendMessage.perform('', card);
+    }
   }
 
   @action
