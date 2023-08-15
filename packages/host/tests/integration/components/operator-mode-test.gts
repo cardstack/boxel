@@ -428,6 +428,7 @@ module('Integration | operator-mode', function (hooks) {
       'blog-post.gts': `
         import StringCard from 'https://cardstack.com/base/string';
         import TextAreaCard from 'https://cardstack.com/base/text-area';
+        import DateTimeCard from 'https://cardstack.com/base/datetime';
         import {
           Card,
           field,
@@ -455,6 +456,22 @@ module('Integration | operator-mode', function (hooks) {
               </div>
             </template>
           };
+        }
+      `,
+      'example-time.gts': `
+        import StringCard from 'https://cardstack.com/base/string';
+        import DateTimeCard from 'https://cardstack.com/base/datetime';
+        import {
+          Card,
+          field,
+          contains,
+          linksTo,
+          Component,
+        } from 'https://cardstack.com/base/card-api';
+
+        export class ExampleTime extends Card {
+          @field body = contains(StringCard);
+          @field timeField = contains(DateTimeCard);
         }
       `,
       'author.gts': `
@@ -533,6 +550,21 @@ module('Integration | operator-mode', function (hooks) {
             adoptsFrom: {
               module: 'https://cardstack.com/base/catalog-entry',
               name: 'CatalogEntry',
+            },
+          },
+        },
+      },
+      'ExampleTime/1.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            body: 'Hello world',
+            timeField: '2023-02-19T02:00:00.000Z',
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../example-time',
+              name: 'ExampleTime',
             },
           },
         },
@@ -738,6 +770,56 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor('[data-test-person="Fadhlan"]');
     assert.dom('[data-test-person]').hasText('Fadhlan');
+  });
+
+  test<TestContextWithSave>('can update dates in cards from a patch command', async function (assert) {
+    this.owner.register('service:matrixService', MockMatrixService);
+    let matrixService = this.owner.lookup(
+      'service:matrixService',
+    ) as MockMatrixService;
+    matrixService.cardAPI = cardApi;
+    await setCardInOperatorModeState(`${testRealmURL}ExampleTime/1`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}ExampleTime/1"]`);
+    await click('[data-test-open-chat]');
+
+    matrixService.createAndJoinRoom('testroom');
+
+    addRoomEvent(matrixService, {
+      event_id: 'event1',
+      room_id: 'testroom',
+      state_key: 'state',
+      type: 'm.room.message',
+      content: {
+        body: 'i am the body',
+        msgtype: 'org.boxel.command',
+        formatted_body: 'A patch',
+        format: 'org.matrix.custom.html',
+        command: {
+          type: 'patch',
+          id: `${testRealmURL}ExampleTime/1`,
+          patch: {
+            attributes: { timeField: '2019-09-07T10:50', body: 'Updated' },
+          },
+        },
+      },
+    });
+
+    await waitFor('[data-test-enter-room="test_a"]');
+    await click('[data-test-enter-room="test_a"]');
+
+    await waitFor('[data-test-command-apply]');
+    await click('[data-test-command-apply]');
+    await waitFor('[data-test-field="TimeField"]');
+    assert.dom('[data-test-field="TimeField"]').hasText('Jan 1, 2020, 1:00 AM');
   });
 
   test('it loads a card and renders its isolated view', async function (assert) {
