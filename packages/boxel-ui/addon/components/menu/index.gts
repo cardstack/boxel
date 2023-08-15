@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
 import { action } from '@ember/object';
 import { Link } from 'ember-link';
+import cssUrl from 'ember-css-url';
 import { type MenuItem } from '../../helpers/menu-item';
 import { type MenuDivider } from '../../helpers/menu-divider';
 import { type EmptyObject } from '@ember/component/helper';
@@ -79,6 +80,7 @@ export default class Menu extends Component<Signature> {
                   boxel-menu__item--disabled=menuItem.disabled
                 }}
                 data-test-boxel-menu-item
+                data-test-boxel-menu-item-selected={{menuItem.selected}}
               >
                 {{! template-lint-disable require-context-role }}
                 <div
@@ -90,15 +92,30 @@ export default class Menu extends Component<Signature> {
                   {{on 'click' (fn this.invokeMenuItemAction menuItem.action)}}
                   disabled={{menuItem.disabled}}
                 >
-                  {{#if menuItem.icon}}
-                    {{svgJar
-                      menuItem.icon
-                      width='16'
-                      height='16'
-                      data-test-boxel-menu-item-icon=true
+                  <span class='menu-item'>
+                    {{#if menuItem.icon}}
+                      {{svgJar
+                        menuItem.icon
+                        width='16'
+                        height='16'
+                        data-test-boxel-menu-item-icon=true
+                      }}
+                    {{else if menuItem.iconURL}}
+                      <span
+                        class='menu-item__icon-url'
+                        style={{cssUrl 'background-image' menuItem.iconURL}}
+                      />
+                    {{/if}}
+                    {{menuItem.text}}
+                  </span>
+                  <span
+                    class={{cn
+                      'check-icon'
+                      check-icon--selected=menuItem.selected
                     }}
-                  {{/if}}
-                  {{menuItem.text}}
+                  >
+                    {{svgJar 'check-mark' width='20' height='20'}}
+                  </span>
                 </div>
               </li>
             </:item>
@@ -112,7 +129,7 @@ export default class Menu extends Component<Signature> {
         --boxel-menu-current-color: var(--boxel-light-100);
         --boxel-menu-selected-color: var(--boxel-highlight);
         --boxel-menu-disabled-color: var(--boxel-highlight);
-        --boxel-menu-font: var(--boxel-font-sm);
+        --boxel-menu-font: 500 var(--boxel-font-sm);
 
         list-style-type: none;
         margin: 0;
@@ -143,10 +160,11 @@ export default class Menu extends Component<Signature> {
       }
 
       .boxel-menu__item > .boxel-menu__item__content {
-        width: max-content;
+        width: 100%;
         padding: var(--boxel-sp-xs) var(--boxel-sp);
 
         display: flex;
+        justify-content: space-between;
         align-items: center;
         gap: 10px;
       }
@@ -163,11 +181,6 @@ export default class Menu extends Component<Signature> {
         color: var(--boxel-error-200);
       }
 
-      .boxel-menu__item--selected,
-      .boxel-menu__item--selected.boxel-menu__item:hover {
-        background-color: var(--boxel-menu-selected-color);
-      }
-
       .boxel-menu__item--disabled,
       .boxel-menu__item--disabled.boxel-menu__item:hover {
         background-color: initial;
@@ -179,6 +192,29 @@ export default class Menu extends Component<Signature> {
         border: 0;
         height: 0;
         border-bottom: 1px solid var(--boxel-purple-300);
+      }
+
+      .menu-item {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+      }
+      .menu-item__icon-url {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: contain;
+      }
+
+      .check-icon {
+        --icon-color: var(--boxel-highlight);
+        visibility: collapse;
+        display: contents;
+      }
+      .check-icon--selected {
+        visibility: visible;
       }
     </style>
   </template>
