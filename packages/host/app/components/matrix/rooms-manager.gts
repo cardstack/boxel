@@ -18,6 +18,7 @@ import {
 } from '@cardstack/boxel-ui';
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import { eventDebounceMs } from '@cardstack/host/lib/matrix-utils';
+import moment from 'moment';
 import {
   getRoomCard,
   RoomCardResource,
@@ -45,54 +46,6 @@ export default class RoomsManager extends Component {
         {{on 'click' this.toggleRooms}}
       />
     </div>
-    {{#if this.isCreateRoomMode}}
-      {{#if this.doCreateRoom.isRunning}}
-        <LoadingIndicator />
-      {{else}}
-        <div class='create-room'>
-          <FieldContainer
-            @label='Room Name:'
-            @tag='label'
-            class='create-room__field'
-          >
-            <BoxelInputValidationState
-              data-test-room-name-field
-              @id=''
-              @state={{this.roomNameInputState}}
-              @value={{this.cleanNewRoomName}}
-              @errorMessage={{this.roomNameError}}
-              @onInput={{this.setNewRoomName}}
-            />
-          </FieldContainer>
-          <FieldContainer
-            @label='Invite:'
-            @tag='label'
-            class='create-room__field'
-          >
-            <BoxelInput
-              data-test-room-invite-field
-              type='text'
-              @value={{this.newRoomInviteFormatted}}
-              @onInput={{this.setNewRoomInvite}}
-            />
-          </FieldContainer>
-        </div>
-        <div class='create-button-wrapper'>
-          <Button
-            data-test-create-room-cancel-btn
-            class='room__button'
-            {{on 'click' this.cancelCreateRoom}}
-          >Cancel</Button>
-          <Button
-            data-test-create-room-btn
-            class='room__button'
-            @kind='primary'
-            @disabled={{not this.newRoomName}}
-            {{on 'click' this.createRoom}}
-          >Create</Button>
-        </div>
-      {{/if}}
-    {{/if}}
     {{#if this.loadRooms.isRunning}}
       <LoadingIndicator />
     {{else}}
@@ -100,44 +53,43 @@ export default class RoomsManager extends Component {
         {{#unless this.isCreateRoomMode}}
           <div class='create-button-wrapper'>
             <Button
-              data-test-create-room-mode-btn
+              data-test-create-ai-chat-btn
               class='room__button'
-              {{on 'click' this.showCreateRoomMode}}
-              @disabled={{this.isCreateRoomMode}}
-            >Create Room</Button>
+              {{on 'click' this.createAIChat}}
+            >Start new AI chat</Button>
           </div>
         {{/unless}}
-        <div class='room-list' data-test-invites-list>
-          <h3>Invites</h3>
-          {{#each this.sortedInvites as |invite|}}
-            <div class='room' data-test-invited-room={{invite.room.name}}>
-              <span class='room-item'>
-                {{invite.room.name}}
-                (from:
-                <span
-                  data-test-invite-sender={{niceName
-                    invite.member.membershipInitiator
-                  }}
-                >{{niceName invite.member.membershipInitiator}})</span>
-              </span>
-              <Button
-                data-test-decline-room-btn={{invite.room.name}}
-                {{on 'click' (fn this.leaveRoom invite.room.roomId)}}
-              >Decline</Button>
-              <Button
-                data-test-join-room-btn={{invite.room.name}}
-                {{on 'click' (fn this.joinRoom invite.room.roomId)}}
-              >Join</Button>
-              {{#if (eq invite.room.roomId this.roomIdForCurrentAction)}}
-                <LoadingIndicator />
-              {{/if}}
-            </div>
-          {{else}}
-            (No invites)
-          {{/each}}
-        </div>
+        {{#if this.hasInvites}}
+          <div class='room-list' data-test-invites-list>
+            <h3>Invites</h3>
+            {{#each this.sortedInvites as |invite|}}
+              <div class='room' data-test-invited-room={{invite.room.name}}>
+                <span class='room-item'>
+                  {{invite.room.name}}
+                  (from:
+                  <span
+                    data-test-invite-sender={{niceName
+                      invite.member.membershipInitiator
+                    }}
+                  >{{niceName invite.member.membershipInitiator}})</span>
+                </span>
+                <Button
+                  data-test-decline-room-btn={{invite.room.name}}
+                  {{on 'click' (fn this.leaveRoom invite.room.roomId)}}
+                >Decline</Button>
+                <Button
+                  data-test-join-room-btn={{invite.room.name}}
+                  {{on 'click' (fn this.joinRoom invite.room.roomId)}}
+                >Join</Button>
+                {{#if (eq invite.room.roomId this.roomIdForCurrentAction)}}
+                  <LoadingIndicator />
+                {{/if}}
+              </div>
+            {{/each}}
+          </div>
+        {{/if}}
         <div class='room-list' data-test-rooms-list>
-          <h3>Rooms</h3>
+          <h3>Existing chats</h3>
           {{#each this.sortedJoinedRooms as |joined|}}
             <div class='room' data-test-joined-room={{joined.room.name}}>
               <span class='room-item'>
@@ -315,8 +267,14 @@ export default class RoomsManager extends Component {
     return this.currentRoomCardResource.roomCard;
   }
 
+  private get hasInvites() {
+    return this.myRooms.invited.length > 0;
+  }
+
   private get cleanNewRoomName() {
-    return this.newRoomName ?? '';
+    return (
+      this.newRoomName ?? `${moment().format()} - ${this.matrixService.userId}`
+    );
   }
 
   private get roomNameInputState() {
@@ -374,6 +332,13 @@ export default class RoomsManager extends Component {
     this.isCollapsed = true;
   }
 
+  @action
+  private createAIChat() {
+    this.newRoomName = this.cleanNewRoomName;
+    this.newRoomInvite = ['aibot'];
+    this.doCreateRoom.perform();
+  }
+
   private doCreateRoom = restartableTask(async () => {
     if (!this.newRoomName) {
       throw new Error(
@@ -381,7 +346,11 @@ export default class RoomsManager extends Component {
       );
     }
     try {
-      await this.matrixService.createRoom(this.newRoomName, this.newRoomInvite);
+      let newRoomId = await this.matrixService.createRoom(
+        this.newRoomName,
+        this.newRoomInvite,
+      );
+      this.enterRoom(newRoomId);
     } catch (e) {
       if (isMatrixError(e) && e.data.errcode === 'M_ROOM_IN_USE') {
         this.roomNameError = 'Room already exists';
@@ -420,7 +389,6 @@ export default class RoomsManager extends Component {
 
   private resetCreateRoom() {
     this.newRoomName = undefined;
-    this.newRoomInvite = [];
     this.isCreateRoomMode = false;
   }
 }
