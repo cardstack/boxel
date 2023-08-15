@@ -46,6 +46,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
           }}
           {{velcro renderedCard.element middleware=(Array this.offset)}}
           data-test-overlay-selected={{if isSelected card.id}}
+          data-test-overlay-card={{card.id}}
           data-test-overlay-card-display-name={{cardTypeDisplayName card}}
         >
           {{#if (this.isEmbeddedCard renderedCard)}}

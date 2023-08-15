@@ -1473,12 +1473,18 @@ importers:
       flat:
         specifier: ^5.0.2
         version: 5.0.2
+      glimmer-scoped-css:
+        specifier: ^0.3.2
+        version: 0.3.2
       http-status-codes:
         specifier: ^2.2.0
         version: 2.2.0
       ignore:
         specifier: ^5.2.0
         version: 5.2.0
+      js-string-escape:
+        specifier: ^1.0.1
+        version: 1.0.1
       json-typescript:
         specifier: ^1.1.2
         version: 1.1.2
@@ -1510,6 +1516,9 @@ importers:
       '@types/dompurify':
         specifier: ^3.0.2
         version: 3.0.2
+      '@types/js-string-escape':
+        specifier: ^1.0.1
+        version: 1.0.1
       '@types/qunit':
         specifier: ^2.11.3
         version: 2.19.3
@@ -6521,6 +6530,10 @@ packages:
 
   /@types/js-levenshtein@1.1.1:
     resolution: {integrity: sha512-qC4bCqYGy1y/NP7dDVr7KJarn+PbX1nSpwA7JXdu0HxT3QYjO8MJ+cntENtHFVy2dRAyBV23OZ6MxsW1AM1L8g==}
+    dev: true
+
+  /@types/js-string-escape@1.0.1:
+    resolution: {integrity: sha512-s3Tz/P+u4X78n0TdgNR0l9Yu1jyH2dRwofi/DqGLpbbjiuIs0n6W8W4XfUI6+9K0lPK1fF4KHA5HcqtOsy1V0Q==}
     dev: true
 
   /@types/jsdom@21.1.1:
@@ -16470,6 +16483,17 @@ packages:
     transitivePeerDependencies:
       - supports-color
 
+  /glimmer-scoped-css@0.3.2:
+    resolution: {integrity: sha512-DW8LyfbH1XUMgswPxXJOl3b/bMNZ6UjbYeWSoiALHFRsIeTZgf0oYgSrzxTX/QArMvuLn42O2UbZ9trwZRD6LQ==}
+    dependencies:
+      '@embroider/addon-shim': 1.8.5
+      js-string-escape: 1.0.1
+      postcss: 8.4.25
+      postcss-selector-parser: 6.0.13
+      super-fast-md5: 1.0.1
+    transitivePeerDependencies:
+      - supports-color
+
   /glob-parent@3.1.0:
     resolution: {integrity: sha512-E8Ak/2+dZY6fnzlR7+ueWvhsH1SjHr4jjss4YS/h4py44jY9MhK/VFdaZJAWDz6BbL21KeteKxFSFpq8OS5gVA==}
     requiresBuild: true
@@ -26366,8 +26390,10 @@ packages:
       ember-concurrency-async-plugin: link:vendor/ember-concurrency-async-plugin
       ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0)
       flat: 5.0.2
+      glimmer-scoped-css: 0.3.2
       http-status-codes: 2.2.0
       ignore: 5.2.4
+      js-string-escape: 1.0.1
       json-typescript: 1.1.2
       lodash: 4.17.21
       loglevel: 1.8.1

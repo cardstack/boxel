@@ -6,6 +6,8 @@ import { RealmPaths } from './paths';
 import { CardError } from './error';
 import flatMap from 'lodash/flatMap';
 import { type RunnerOpts } from './search-index';
+import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
+import jsEscapeString from 'js-string-escape';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
@@ -115,7 +117,7 @@ export type RequestHandler = (req: Request) => Promise<Response | null>;
 export class Loader {
   private log = logger('loader');
   private modules = new Map<string, Module>();
-  private urlHandlers: RequestHandler[] = [];
+  private urlHandlers: RequestHandler[] = [maybeHandleScopedCSSRequest];
 
   // use a tuple array instead of a map so that we can support reversing
   // different resolutions back to the same URL. the resolution that we apply
@@ -820,4 +822,26 @@ function isEvaluatable(
     return false;
   }
   return stateOrder[module.state] >= stateOrder['registered-completing-deps'];
+}
+
+async function maybeHandleScopedCSSRequest(req: Request) {
+  if (isScopedCSSRequest(req.url)) {
+    if (isFastBoot) {
+      return Promise.resolve(new Response('', { status: 204 }));
+    } else {
+      let decodedCSS = decodeScopedCSSRequest(req.url);
+      return Promise.resolve(
+        new Response(`
+          let styleNode = document.createElement('style');
+          let styleText = document.createTextNode('${jsEscapeString(
+            decodedCSS
+          )}');
+          styleNode.appendChild(styleText);
+          document.body.appendChild(styleNode);
+        `)
+      );
+    }
+  } else {
+    return Promise.resolve(null);
+  }
 }

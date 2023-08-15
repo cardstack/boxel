@@ -1,6 +1,8 @@
+import { RealmPaths } from './paths';
+
 export function maybeURL(
   possibleURL: string,
-  relativeTo?: string | URL | undefined
+  relativeTo?: string | URL | undefined,
 ): URL | undefined {
   try {
     return new URL(possibleURL, relativeTo);
@@ -12,9 +14,20 @@ export function maybeURL(
   }
 }
 
-export function relativeURL(url: URL, relativeTo: URL): string | undefined {
+export function relativeURL(
+  url: URL,
+  relativeTo: URL,
+  realmURL: URL | undefined,
+): string | undefined {
   if (url.origin !== relativeTo.origin) {
     return undefined;
+  }
+  if (realmURL) {
+    let realmPath = new RealmPaths(realmURL);
+    // don't return a relative URL for URL that is outside of our realm
+    if (realmPath.inRealm(relativeTo) && !realmPath.inRealm(url)) {
+      return undefined;
+    }
   }
   let ourParts = url.pathname.split('/');
   let theirParts = relativeTo.pathname.split('/');
@@ -43,8 +56,12 @@ export function relativeURL(url: URL, relativeTo: URL): string | undefined {
   }
 }
 
-export function maybeRelativeURL(url: URL, relativeTo: URL): string {
-  let rel = relativeURL(url, relativeTo);
+export function maybeRelativeURL(
+  url: URL,
+  relativeTo: URL,
+  realmURL: URL | undefined,
+): string {
+  let rel = relativeURL(url, relativeTo, realmURL);
   if (rel) {
     return rel;
   } else {

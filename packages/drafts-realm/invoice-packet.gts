@@ -156,6 +156,10 @@ class InvoiceTemplate extends Component<typeof InvoicePacket> {
     <div class='invoice-template'>
       <section class='invoice'>
         <section>
+          <h2>Title</h2>
+          <@fields.title />
+        </section>
+        <section>
           <h2>Vendor</h2>
           <@fields.vendor />
         </section>

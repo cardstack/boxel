@@ -57,6 +57,12 @@ const personCardSource = `
           <p>Last name: <@fields.lastName /></p>
           <p>Title: <@fields.title /></p>
         </div>
+        <style>
+          div {
+            color: green;
+            content: '';
+          }
+        </style>
       </template>
     };
   }
@@ -209,6 +215,13 @@ module('Acceptance | basic tests', function (hooks) {
         },
       },
     });
+
+    assert.dom('[data-test-person]').hasStyle(
+      {
+        color: 'rgb(0, 128, 0)',
+      },
+      'expected scoped CSS to apply to card instance',
+    );
   });
 
   test('Can view a card schema', async function (assert) {

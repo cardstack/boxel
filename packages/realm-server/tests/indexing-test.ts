@@ -14,6 +14,7 @@ import {
 } from './helpers';
 import isEqual from 'lodash/isEqual';
 import { shimExternals } from '../lib/externals';
+import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 
 function cleanWhiteSpace(text: string) {
   return text.replace(/\s+/g, ' ').trim();
@@ -209,7 +210,7 @@ module('indexing', function (hooks) {
       new URL(`${testRealm}mango`)
     );
     assert.strictEqual(
-      trimCardContainer(entry!.html!),
+      trimCardContainer(stripScopedCSSAttributes(entry!.html!)),
       cleanWhiteSpace(`<h1> Mango </h1>`),
       'pre-rendered html is correct'
     );
@@ -237,8 +238,8 @@ module('indexing', function (hooks) {
             new URL(`${testRealm}vangogh`)
           )) ?? {};
         assert.strictEqual(
-          trimCardContainer(html!),
-          cleanWhiteSpace(`<h1> Van Gogh </h1>`)
+          trimCardContainer(stripScopedCSSAttributes(html!)),
+          cleanWhiteSpace(`<h1> Van Gogh </h1>`),
         );
       } else {
         assert.ok(
