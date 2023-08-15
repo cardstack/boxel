@@ -73,11 +73,47 @@ class MockMatrixService extends Service {
   }
 
   async createRoom(
-    _name: string,
+    name: string,
     _invites: string[], // these can be local names
     _topic?: string,
   ): Promise<string> {
-    return 'testroom';
+    return name;
+  }
+
+  public createAndJoinRoom(roomId: string) {
+    addRoomEvent(this, {
+      event_id: 'eventname',
+      room_id: roomId,
+      type: 'm.room.name',
+      content: {
+        name: 'test_a',
+      },
+    });
+
+    addRoomEvent(this, {
+      event_id: 'eventname',
+      room_id: roomId,
+      type: 'm.room.create',
+      origin_server_ts: 0,
+      content: {
+        creator: '@testuser:staging',
+        room_version: '0',
+      },
+    });
+
+    addRoomEvent(this, {
+      event_id: 'eventjoin',
+      room_id: roomId,
+      type: 'm.room.member',
+      sender: '@testuser:staging',
+      state_key: '@testuser:staging',
+      content: {
+        displayname: 'testuser',
+        membership: 'join',
+        membershipTs: 1,
+        membershipInitiator: '@testuser:staging',
+      },
+    });
   }
 }
 
@@ -619,39 +655,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-person]').hasText('Fadhlan');
     await click('[data-test-open-chat]');
 
-    addRoomEvent(matrixService, {
-      event_id: 'eventname',
-      room_id: 'testroom',
-      type: 'm.room.name',
-      content: {
-        name: 'test_a',
-      },
-    });
-
-    addRoomEvent(matrixService, {
-      event_id: 'eventname',
-      room_id: 'testroom',
-      type: 'm.room.create',
-      origin_server_ts: 0,
-      content: {
-        creator: '@testuser:staging',
-        room_version: '0',
-      },
-    });
-
-    addRoomEvent(matrixService, {
-      event_id: 'eventjoin',
-      room_id: 'testroom',
-      type: 'm.room.member',
-      sender: '@testuser:staging',
-      state_key: '@testuser:staging',
-      content: {
-        displayname: 'testuser',
-        membership: 'join',
-        membershipTs: 1,
-        membershipInitiator: '@testuser:staging',
-      },
-    });
+    matrixService.createAndJoinRoom('testroom');
 
     addRoomEvent(matrixService, {
       event_id: 'event1',
@@ -681,6 +685,59 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor('[data-test-person="Dave"]');
     assert.dom('[data-test-person]').hasText('Dave');
+  });
+
+  test<TestContextWithSave>('it allows only applies changes from the chat if the stack contains a card with that ID', async function (assert) {
+    this.owner.register('service:matrixService', MockMatrixService);
+    let matrixService = this.owner.lookup(
+      'service:matrixService',
+    ) as MockMatrixService;
+    matrixService.cardAPI = cardApi;
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor('[data-test-person]');
+    assert.dom('[data-test-boxel-header-title]').hasText('Person');
+    assert.dom('[data-test-person]').hasText('Fadhlan');
+    await click('[data-test-open-chat]');
+
+    matrixService.createAndJoinRoom('testroom');
+
+    addRoomEvent(matrixService, {
+      event_id: 'event1',
+      room_id: 'testroom',
+      state_key: 'state',
+      type: 'm.room.message',
+      content: {
+        body: 'i am the body',
+        msgtype: 'org.boxel.command',
+        formatted_body: 'A patch',
+        format: 'org.matrix.custom.html',
+        command: {
+          type: 'patch',
+          id: `${testRealmURL}Person/anotherPerson`,
+          patch: {
+            attributes: { firstName: 'Dave' },
+          },
+        },
+      },
+    });
+
+    await waitFor('[data-test-enter-room="test_a"]');
+    await click('[data-test-enter-room="test_a"]');
+
+    await waitFor('[data-test-command-apply]');
+    await click('[data-test-command-apply]');
+
+    await waitFor('[data-test-person="Fadhlan"]');
+    assert.dom('[data-test-person]').hasText('Fadhlan');
   });
 
   test('it loads a card and renders its isolated view', async function (assert) {
