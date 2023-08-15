@@ -1,7 +1,6 @@
 import Component from '@glimmer/component';
 import { action } from '@ember/object';
 import { Link } from 'ember-link';
-// @ts-ignore no types
 import cssUrl from 'ember-css-url';
 import { type MenuItem } from '../../helpers/menu-item';
 import { type MenuDivider } from '../../helpers/menu-divider';

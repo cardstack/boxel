@@ -1,5 +1,4 @@
 import Component from '@glimmer/component';
-// @ts-ignore no types
 import cssUrl from 'ember-css-url';
 import { eq, gt, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import cn from '@cardstack/boxel-ui/helpers/cn';
