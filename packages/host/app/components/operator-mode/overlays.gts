@@ -1,6 +1,6 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { fn } from '@ember/helper';
+import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type { MiddlewareState } from '@floating-ui/dom';
@@ -9,7 +9,8 @@ import { velcro } from 'ember-velcro';
 
 import type { Card, Format } from 'https://cardstack.com/base/card-api';
 import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
-import { IconButton } from '@cardstack/boxel-ui';
+import { IconButton, BoxelDropdown, Menu } from '@cardstack/boxel-ui';
+import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import { and, bool, eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import OperatorModeOverlayItemHeader from './overlay-item-header';
@@ -19,6 +20,7 @@ interface Signature {
   Args: {
     renderedCardsForOverlayActions: RenderedCardForOverlayActions[];
     publicAPI: Actions;
+    delete: (card: Card) => void;
     toggleSelect?: (card: Card) => void;
     selectedCards?: TrackedArray<Card>;
   };
@@ -83,13 +85,31 @@ export default class OperatorModeOverlays extends Component<Signature> {
               @icon='eye'
               aria-label='preview card'
             />
-            <IconButton
-              {{on 'mouseenter' (fn this.setCurrentlyHoveredCard renderedCard)}}
-              {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
-              class='hover-button more-actions'
-              @icon='three-dots-horizontal'
-              aria-label='more actions'
-            />
+            <BoxelDropdown>
+              <:trigger as |bindings|>
+                <IconButton
+                  {{on
+                    'mouseenter'
+                    (fn this.setCurrentlyHoveredCard renderedCard)
+                  }}
+                  {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
+                  class='hover-button more-actions'
+                  @icon='three-dots-horizontal'
+                  aria-label='more actions'
+                  {{bindings}}
+                />
+              </:trigger>
+              <:content as |dd|>
+                <Menu
+                  @closeMenu={{dd.close}}
+                  @items={{array (menuItem 'Delete' (fn @delete card))}}
+                  {{on
+                    'mouseenter'
+                    (fn this.setCurrentlyHoveredCard renderedCard)
+                  }}
+                />
+              </:content>
+            </BoxelDropdown>
           {{/if}}
         </div>
       {{/let}}

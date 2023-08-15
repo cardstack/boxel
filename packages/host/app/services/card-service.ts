@@ -69,7 +69,7 @@ export default class CardService extends Service {
   private async fetchJSON(
     url: string | URL,
     args?: RequestInit,
-  ): Promise<CardDocument> {
+  ): Promise<CardDocument | void> {
     let response = await this.loaderService.loader.fetch(url, {
       headers: { Accept: SupportedMimeType.CardJson },
       ...args,
@@ -80,7 +80,9 @@ export default class CardService extends Service {
         ${response.statusText}. ${await response.text()}`,
       );
     }
-    return await response.json();
+    if (response.status !== 204) {
+      return await response.json();
+    }
   }
 
   async createFromSerialized(
@@ -192,6 +194,14 @@ export default class CardService extends Service {
       this.subscriber(json);
     }
     return result;
+  }
+
+  async deleteCard(card: Card): Promise<void> {
+    if (!card.id) {
+      // the card isn't actually saved yet, so do nothing
+      return;
+    }
+    await this.fetchJSON(card.id, { method: 'DELETE' });
   }
 
   async search(query: Query, realmURL: URL): Promise<Card[]> {

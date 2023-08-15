@@ -33,7 +33,11 @@ import { TrackedArray } from 'tracked-built-ins';
 import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
 import BoxelMenu from '@cardstack/boxel-ui/components/menu';
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
-import { StackItem, getCardStackItem, getPathToStackItem } from './container';
+import {
+  type StackItem,
+  getCardStackItem,
+  getPathToStackItem,
+} from './container';
 import { registerDestructor } from '@ember/destroyable';
 
 import { htmlSafe, SafeString } from '@ember/template';
@@ -56,6 +60,7 @@ interface Signature {
     dismissStackedCardsAbove: (stackIndex: number) => void;
     edit: (item: StackItem) => void;
     save: (item: StackItem, dismiss: boolean) => void;
+    delete: (card: Card) => void;
     onSelectedCards: (selectedCards: Card[], stackItem: StackItem) => void;
     setupStackItem: (
       stackItem: StackItem,
@@ -203,11 +208,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @action
   hoverOnRealmIcon() {
     this.isHoverOnRealmIcon = !this.isHoverOnRealmIcon;
-  }
-
-  @action
-  delete() {
-    throw new Error(`delete is not implemented`);
   }
 
   get headerIcon() {
@@ -412,13 +412,24 @@ export default class OperatorModeStackItem extends Component<Signature> {
                           icon='icon-link'
                           disabled=(eq @item.type 'contained')
                         )
-                        (menuItem 'Delete' this.delete icon='icon-trash')
+                        (menuItem
+                          'Delete'
+                          (fn @delete this.addressableCard)
+                          icon='icon-trash'
+                          disabled=(eq @item.type 'contained')
+                        )
                       )
                       (array
                         (menuItem
                           'Copy Card URL'
                           (perform this.copyToClipboard)
                           icon='icon-link'
+                          disabled=(eq @item.type 'contained')
+                        )
+                        (menuItem
+                          'Delete'
+                          (fn @delete this.addressableCard)
+                          icon='icon-trash'
                           disabled=(eq @item.type 'contained')
                         )
                       )
@@ -463,6 +474,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
           <OperatorModeOverlays
             @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
             @publicAPI={{@publicAPI}}
+            @delete={{@delete}}
             @toggleSelect={{this.toggleSelect}}
             @selectedCards={{this.selectedCards}}
           />

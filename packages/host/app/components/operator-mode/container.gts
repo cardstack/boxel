@@ -286,6 +286,28 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   });
 
+  // dropTask will ignore any subsequent delete requests until the one in progress is done
+  delete = dropTask(async (card: Card) => {
+    if (!card.id) {
+      // the card isn't actually saved yet, so do nothing
+      return;
+    }
+    // TODO show a confirmation dialog first
+    let items: CardStackItem[] = [];
+    for (let stack of this.stacks) {
+      items.push(
+        ...(stack.filter(
+          (i) => i.type === 'card' && i.card.id === card.id,
+        ) as CardStackItem[]),
+      );
+    }
+    for (let item of items) {
+      this.operatorModeStateService.trimItemsFromStack(item);
+    }
+
+    await this.cardService.deleteCard(card);
+  });
+
   // we debounce saves in the stack item--by the time they reach
   // this level we need to handle every request (so not restartable). otherwise
   // we might drop writes from different stack items that want to save
@@ -305,6 +327,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   });
 
+  // dropTask will ignore any subsequent copy requests until the one in progress is done
   private copy = dropTask(
     async (
       sources: Card[],
@@ -678,6 +701,7 @@ export default class OperatorModeContainer extends Component<Signature> {
                 @edit={{this.edit}}
                 @onSelectedCards={{this.onSelectedCards}}
                 @save={{perform this.save}}
+                @delete={{perform this.delete}}
                 @setupStackItem={{this.setupStackItem}}
               />
             {{/each}}
