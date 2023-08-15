@@ -5,10 +5,6 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 
-interface Signature {
-  Element: HTMLElement;
-}
-
 export default class AddButtonUsage extends Component {
   @action log(message: string): void {
     // eslint-disable-next-line no-console
