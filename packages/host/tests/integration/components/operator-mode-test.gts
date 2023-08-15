@@ -598,7 +598,7 @@ module('Integration | operator-mode', function (hooks) {
     };
   });
 
-  test<AutoSaveTestContext>('it allows chat commands to change cards in the stack', async function (assert) {
+  test<TestContextWithSave>('it allows chat commands to change cards in the stack', async function (assert) {
     this.owner.register('service:matrixService', MockMatrixService);
     let matrixService = this.owner.lookup(
       'service:matrixService',

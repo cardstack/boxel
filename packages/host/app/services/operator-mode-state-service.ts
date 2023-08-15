@@ -22,7 +22,6 @@ interface CardItem {
   type: 'card';
   id: string;
   format: 'isolated' | 'edit';
-  card: Card;
 }
 interface ContainedCardItem {
   type: 'contained';

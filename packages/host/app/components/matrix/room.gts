@@ -21,6 +21,7 @@ import {
 } from '@cardstack/runtime-common';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type CommandService from '../../services/command-service';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import { type Card, type Format } from 'https://cardstack.com/base/card-api';
 import {
   type RoomCard,
@@ -407,7 +408,7 @@ export default class Room extends Component<RoomArgs> {
   @action
   private sendOpenCards() {
     for (let stackItem of this.operatorModeStateService.topMostStackItems()) {
-      if (stackItem.card) {
+      if (stackItem.type == 'card') {
         this.doSendMessage.perform('', stackItem.card);
       }
     }
