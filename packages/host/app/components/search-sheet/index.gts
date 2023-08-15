@@ -53,6 +53,7 @@ interface Signature {
 
 export default class SearchSheet extends Component<Signature> {
   @tracked searchKey = '';
+  @tracked isSearching = false;
   searchCardResults: Card[] = new TrackedArray<Card>();
   @tracked cardURL = '';
   @tracked hasCardURLError = false;
@@ -178,6 +179,7 @@ export default class SearchSheet extends Component<Signature> {
   debouncedSearchFieldUpdate = debounce(() => {
     if (!this.searchKey) {
       this.searchCardResults.splice(0, this.searchCardResults.length);
+      this.isSearching = false;
       return;
     }
     this.onSearchFieldUpdated();
@@ -194,6 +196,7 @@ export default class SearchSheet extends Component<Signature> {
   @action
   setSearchKey(searchKey: string) {
     this.searchKey = searchKey;
+    this.isSearching = true;
     this.debouncedSearchFieldUpdate();
   }
 
@@ -229,10 +232,16 @@ export default class SearchSheet extends Component<Signature> {
 
     if (cards.length > 0) {
       this.searchCardResults.push(...cards);
-      return;
+    } else {
+      this.searchCardResults.splice(0, this.searchCardResults.length);
     }
-    this.searchCardResults.splice(0, this.searchCardResults.length);
+
+    this.isSearching = false;
   });
+
+  get isSearchKeyNotEmpty() {
+    return this.searchKey && this.searchKey !== '';
+  }
 
   <template>
     <div class='search-sheet {{this.sheetSize}}' data-test-search-sheet>
@@ -253,9 +262,13 @@ export default class SearchSheet extends Component<Signature> {
       />
       <div class='search-sheet-content'>
         {{! @glint-ignore Argument of type 'string' is not assignable to parameter of type 'boolean' }}
-        {{#if (or (gt this.searchCardResults.length 0) this.searchKey)}}
+        {{#if (or (gt this.searchCardResults.length 0) this.isSearchKeyNotEmpty)}}
           <div class='search-result'>
-            <Label data-test-search-label>{{this.searchCardResults.length}} Results for "{{this.searchKey}}"</Label>
+            {{#if this.isSearching}}
+              <Label data-test-search-label>Searching for "{{this.searchKey}}"</Label>
+            {{else}}
+              <Label data-test-search-result-label>{{this.searchCardResults.length}} Results for "{{this.searchKey}}"</Label>
+            {{/if}}
             <div class='search-result__body'>
               <div class='search-result__cards'>
                 {{#each this.searchCardResults as |card i|}}

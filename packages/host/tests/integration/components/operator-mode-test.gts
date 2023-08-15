@@ -1498,8 +1498,12 @@ module('Integration | operator-mode', function (hooks) {
 
     await focus(`[data-test-search-input] input`);
     await fillIn(`[data-test-search-input] input`, 'Ma');
+    assert.dom(`[data-test-search-label]`).containsText('Searching for "Ma"');
+
     await waitFor(`[data-test-search-sheet-search-result]`);
-    assert.dom(`[data-test-search-label]`).containsText('2 Results for "Ma"');
+    assert
+      .dom(`[data-test-search-result-label]`)
+      .containsText('2 Results for "Ma"');
     assert.dom(`[data-test-search-sheet-search-result]`).exists({ count: 2 });
     assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
     assert.dom(`[data-test-search-result="${testRealmURL}Author/mark"]`);
@@ -1513,11 +1517,17 @@ module('Integration | operator-mode', function (hooks) {
     //No cards match
     await focus(`[data-test-search-input] input`);
     await fillIn(`[data-test-search-input] input`, 'No Cards');
-    await waitUntil(
-      () => !document.querySelector('[data-test-search-sheet-search-result]'),
-    );
     assert
       .dom(`[data-test-search-label]`)
+      .containsText('Searching for "No Cards"');
+
+    await waitUntil(
+      () =>
+        !document.querySelector('[data-test-search-sheet-search-result]') &&
+        document.querySelector('[data-test-search-result-label]'),
+    );
+    assert
+      .dom(`[data-test-search-result-label]`)
       .containsText('0 Results for "No Cards"');
     assert.dom(`[data-test-search-sheet-search-result]`).doesNotExist();
   });
