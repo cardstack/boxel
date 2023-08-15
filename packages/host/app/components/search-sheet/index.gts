@@ -13,14 +13,24 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import SearchResult from './search-result';
 import { Label } from '@cardstack/boxel-ui';
-import { gt } from '../../helpers/truth-helpers';
+import { gt, or } from '../../helpers/truth-helpers';
 import { service } from '@ember/service';
 import { restartableTask } from 'ember-concurrency';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
-import { isSingleCardDocument } from '@cardstack/runtime-common';
+import {
+  isSingleCardDocument,
+  baseRealm,
+  catalogEntryRef,
+} from '@cardstack/runtime-common';
 import { Card } from 'https://cardstack.com/base/card-api';
+import debounce from 'lodash/debounce';
+import flatMap from 'lodash/flatMap';
+import { TrackedArray } from 'tracked-built-ins';
+import ENV from '@cardstack/host/config/environment';
+
+const { otherRealmURLs } = ENV;
 
 export enum SearchSheetMode {
   Closed = 'closed',
@@ -42,7 +52,9 @@ interface Signature {
 }
 
 export default class SearchSheet extends Component<Signature> {
-  @tracked searchInputValue = '';
+  @tracked searchKey = '';
+  @tracked isSearching = false;
+  searchCardResults: Card[] = new TrackedArray<Card>();
   @tracked cardURL = '';
   @tracked hasCardURLError = false;
   @service declare operatorModeStateService: OperatorModeStateService;
@@ -72,7 +84,7 @@ export default class SearchSheet extends Component<Signature> {
     // TODO after we have ember concurrency task for search implemented,
     // make sure to also include the task.isRunning as criteria for
     // disabling the go button
-    return (!this.searchInputValue && !this.cardURL) || this.getCard.isRunning;
+    return (!this.searchKey && !this.cardURL) || this.getCard.isRunning;
   }
 
   get cardURLFieldState() {
@@ -152,15 +164,83 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   resetState() {
-    this.searchInputValue = '';
+    this.searchKey = '';
     this.cardURL = '';
     this.hasCardURLError = false;
+    this.searchCardResults.splice(0, this.searchCardResults.length);
   }
 
   @cached
   get orderedRecentCards() {
     // Most recently added first
     return [...this.operatorModeStateService.recentCards].reverse();
+  }
+
+  debouncedSearchFieldUpdate = debounce(() => {
+    if (!this.searchKey) {
+      this.searchCardResults.splice(0, this.searchCardResults.length);
+      this.isSearching = false;
+      return;
+    }
+    this.onSearchFieldUpdated();
+  }, 500);
+
+  @action
+  onSearchFieldUpdated() {
+    if (this.searchKey) {
+      this.searchCardResults.splice(0, this.searchCardResults.length);
+      this.searchCard.perform(this.searchKey);
+    }
+  }
+
+  @action
+  setSearchKey(searchKey: string) {
+    this.searchKey = searchKey;
+    this.isSearching = true;
+    this.debouncedSearchFieldUpdate();
+  }
+
+  private searchCard = restartableTask(async (searchKey: string) => {
+    let query = {
+      filter: {
+        every: [
+          {
+            not: {
+              type: catalogEntryRef,
+            },
+          },
+          {
+            contains: {
+              title: searchKey,
+            },
+          },
+        ],
+      },
+    };
+
+    let cards = flatMap(
+      await Promise.all(
+        [
+          this.cardService.defaultURL.href,
+          baseRealm.url,
+          ...otherRealmURLs,
+        ].map(
+          async (realm) => await this.cardService.search(query, new URL(realm)),
+        ),
+      ),
+    );
+
+    if (cards.length > 0) {
+      this.searchCardResults.push(...cards);
+    } else {
+      this.searchCardResults.splice(0, this.searchCardResults.length);
+    }
+
+    this.isSearching = false;
+  });
+
+  get isSearchKeyNotEmpty() {
+    return this.searchKey && this.searchKey !== '';
   }
 
   <template>
@@ -175,22 +255,43 @@ export default class SearchSheet extends Component<Signature> {
       </div>
       <SearchInput
         @bottomTreatment={{this.inputBottomTreatment}}
-        @value={{this.searchInputValue}}
+        @value={{this.searchKey}}
         @placeholder='Enter search term or type a command'
         @onFocus={{@onFocus}}
-        @onInput={{fn (mut this.searchInputValue)}}
+        @onInput={{this.setSearchKey}}
       />
       <div class='search-sheet-content'>
+        {{! @glint-ignore Argument of type 'string' is not assignable to parameter of type 'boolean' }}
+        {{#if (or (gt this.searchCardResults.length 0) this.isSearchKeyNotEmpty)}}
+          <div class='search-result'>
+            {{#if this.isSearching}}
+              <Label data-test-search-label>Searching for "{{this.searchKey}}"</Label>
+            {{else}}
+              <Label data-test-search-result-label>{{this.searchCardResults.length}} Results for "{{this.searchKey}}"</Label>
+            {{/if}}
+            <div class='search-result__body'>
+              <div class='search-result__cards'>
+                {{#each this.searchCardResults as |card i|}}
+                  <SearchResult
+                    @card={{card}}
+                    {{on 'click' (fn @onCardSelect card)}}
+                    data-test-search-sheet-search-result={{i}}
+                  />
+                {{/each}}
+              </div>
+            </div>
+          </div>
+        {{/if}}
         {{#if (gt this.operatorModeStateService.recentCards.length 0)}}
-          <div class='search-sheet-content__recent-access'>
+          <div class='search-result'>
             <Label>Recent</Label>
-            <div class='search-sheet-content__recent-access__body'>
-              <div class='search-sheet-content__recent-access__cards'>
+            <div class='search-result__body'>
+              <div class='search-result__cards'>
                 {{#each this.orderedRecentCards as |card i|}}
                   <SearchResult
                     @card={{card}}
                     {{on 'click' (fn @onCardSelect card)}}
-                    data-test-search-result-index={{i}}
+                    data-test-search-sheet-recent-card={{i}}
                   />
                 {{/each}}
               </div>
@@ -308,18 +409,18 @@ export default class SearchSheet extends Component<Signature> {
         display: flex;
         flex-direction: column;
       }
-      .search-sheet-content__recent-access {
+      .search-result {
         display: flex;
         flex-direction: column;
         width: 100%;
       }
-      .search-sheet-content__recent-access .boxel-label {
+      .search-result .boxel-label {
         font: 700 var(--boxel-font);
       }
-      .search-sheet-content__recent-access__body {
+      .search-result__body {
         overflow: auto;
       }
-      .search-sheet-content__recent-access__cards {
+      .search-result__cards {
         display: flex;
         flex-direction: row;
         width: min-content;
