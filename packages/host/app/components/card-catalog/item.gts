@@ -1,7 +1,6 @@
 import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import cn from '@cardstack/boxel-ui/helpers/cn';
-//@ts-ignore no types available
 import cssUrl from 'ember-css-url';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type { CardContext } from 'https://cardstack.com/base/card-api';
