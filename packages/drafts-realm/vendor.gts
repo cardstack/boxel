@@ -13,6 +13,7 @@ import { FieldContainer } from '@cardstack/boxel-ui';
 import { startCase } from 'lodash';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { PaymentMethod } from './payment-method';
+import GlimmerComponent from '@glimmer/component';
 
 class VendorDetails extends Card {
   static displayName = 'Vendor';
@@ -37,7 +38,7 @@ class VendorDetails extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div class='vendor-card'>
+      <VendorContainer>
         {{#each-in @fields as |key value|}}
           {{#unless (eq key 'id')}}
             <FieldContainer
@@ -49,7 +50,7 @@ class VendorDetails extends Card {
             </FieldContainer>
           {{/unless}}
         {{/each-in}}
-      </div>
+      </VendorContainer>
     </template>
   };
 }
@@ -66,7 +67,7 @@ class Contact extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div class='vendor-card'>
+      <VendorContainer>
         {{#each-in @fields as |key value|}}
           {{#unless (eq key 'id')}}
             <FieldContainer
@@ -78,7 +79,7 @@ class Contact extends Card {
             </FieldContainer>
           {{/unless}}
         {{/each-in}}
-      </div>
+      </VendorContainer>
     </template>
   };
 }
@@ -111,10 +112,6 @@ export class Vendor extends Card {
         <img src={{@model.vendor.logoHref}} />
       </div>
       <style>
-        .vendor-card .boxel-field + .boxel-field {
-          margin-top: var(--boxel-sp);
-        }
-
         .vendor-card--embedded {
           display: grid;
           grid-template-columns: 1fr auto;
@@ -124,7 +121,7 @@ export class Vendor extends Card {
   };
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <div class='vendor-card'>
+      <VendorContainer>
         <section>
           <h2>Title</h2>
           <@fields.title />
@@ -155,12 +152,12 @@ export class Vendor extends Card {
             <@fields.alternatePaymentMethod />
           {{/if}}
         </section>
-      </div>
+      </VendorContainer>
     </template>
   };
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <div class='vendor-card'>
+      <VendorContainer>
         <section>
           <h2>Vendor</h2>
           <@fields.vendor />
@@ -185,7 +182,27 @@ export class Vendor extends Card {
           <h2>Alternate Payment Method</h2>
           <@fields.alternatePaymentMethod />
         </section>
-      </div>
+      </VendorContainer>
     </template>
   };
+}
+
+interface Signature {
+  Element: HTMLElement;
+  Blocks: {
+    default: [];
+  };
+}
+
+class VendorContainer extends GlimmerComponent<Signature> {
+  <template>
+    <div class='vendor' ...attributes>
+      {{yield}}
+    </div>
+    <style>
+      .vendor :deep(.boxel-field + .boxel-field) {
+        margin-top: var(--boxel-sp);
+      }
+    </style>
+  </template>
 }
