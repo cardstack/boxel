@@ -807,7 +807,7 @@ module('Integration | operator-mode', function (hooks) {
           type: 'patch',
           id: `${testRealmURL}ExampleTime/1`,
           patch: {
-            attributes: { timeField: '2019-09-07T10:50', body: 'Updated' },
+            attributes: { timeField: '2020-01-01T01:00', body: 'Updated' },
           },
         },
       },
@@ -818,8 +818,10 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor('[data-test-command-apply]');
     await click('[data-test-command-apply]');
-    await waitFor('[data-test-field="TimeField"]');
-    assert.dom('[data-test-field="TimeField"]').hasText('Jan 1, 2020, 1:00 AM');
+    await waitFor('[data-test-field="timeField"]');
+    assert
+      .dom('[data-test-field="timeField"]')
+      .containsText('Jan 1, 2020, 1:00 AM');
   });
 
   test('it loads a card and renders its isolated view', async function (assert) {

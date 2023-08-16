@@ -187,7 +187,7 @@ export default class OperatorModeContainer extends Component<Signature> {
             values[fieldName],
           );
         } else {
-          (card as any)[fieldName] = values[fieldName];
+          (card as any)[fieldName] = await field.deserialize(values[fieldName]);
         }
       } catch (e) {
         console.log(e);
