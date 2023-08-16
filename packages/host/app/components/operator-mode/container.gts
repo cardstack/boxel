@@ -794,13 +794,14 @@ export default class OperatorModeContainer extends Component<Signature> {
           {{/if}}
         {{/if}}
       </div>
-
-      <SearchSheet
-        @mode={{this.searchSheetMode}}
-        @onCancel={{this.onCancelSearchSheet}}
-        @onFocus={{this.onFocusSearchInput}}
-        @onCardSelect={{this.onCardSelectFromSearch}}
-      />
+      {{#unless this.isChatVisible}}
+        <SearchSheet
+          @mode={{this.searchSheetMode}}
+          @onCancel={{this.onCancelSearchSheet}}
+          @onFocus={{this.onFocusSearchInput}}
+          @onCardSelect={{this.onCardSelectFromSearch}}
+        />
+      {{/unless}}
     </Modal>
 
     <style>

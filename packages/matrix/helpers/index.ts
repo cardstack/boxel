@@ -84,7 +84,6 @@ export async function leaveRoom(page: Page, roomName: string) {
 
 export async function openRoom(page: Page, roomName: string) {
   await page.locator(`[data-test-enter-room="${roomName}"]`).click();
-  await page.locator(`[data-test-toggle-rooms-view]`).click();
 }
 
 export async function setObjective(page: Page, objectiveURI: string) {
