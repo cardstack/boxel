@@ -74,8 +74,8 @@ module('Integration | schema', function (hooks) {
         <template>
           {{#if (isReady this.openFile)}}
             <Module @file={{this.openFile}} />
-            <CardPrerender />
           {{/if}}
+          <CardPrerender />
           <CardCatalogModal />
         </template>
 
@@ -123,9 +123,9 @@ module('Integration | schema', function (hooks) {
         <template>
           {{#if (isReady this.openFile)}}
             <Module @file={{this.openFile}} />
-            <CardPrerender />
-            <CardCatalogModal />
           {{/if}}
+          <CardPrerender />
+          <CardCatalogModal />
         </template>
         openFile = f;
       },
@@ -205,12 +205,13 @@ module('Integration | schema', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          {{#if (isReady f)}}
-            <Module @file={{f}} />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
           {{/if}}
           <CardPrerender />
           <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -406,7 +407,6 @@ module('Integration | schema', function (hooks) {
         <template>
           {{#if (isReady this.openFile)}}
             <Module @file={{this.openFile}} />
-            <CardCatalogModal />
           {{/if}}
           <CardPrerender />
           <CardCatalogModal />
@@ -533,7 +533,6 @@ module('Integration | schema', function (hooks) {
         `Delete author - contains - field card ID: ${testRealmURL}person/Person`,
       );
 
-    mockOpenFiles.path = 'post.gts';
     let fileRef = await adapter.openFile('post.gts');
     let src = fileRef?.content as string;
     assert.codeEqual(
