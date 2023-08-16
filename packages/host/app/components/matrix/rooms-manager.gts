@@ -13,7 +13,6 @@ import {
   LoadingIndicator,
   BoxelInputValidationState,
   Button,
-  IconButton,
   FieldContainer,
 } from '@cardstack/boxel-ui';
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
