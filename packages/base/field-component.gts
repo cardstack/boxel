@@ -99,6 +99,14 @@ export function getBoxComponent(
       .field-component-card {
         padding: var(--boxel-sp);
       }
+
+      .isolated-card {
+        padding: var(--boxel-sp-xl);
+      }
+
+      .edit-card.saved {
+        padding: var(--boxel-sp-xl);
+      }
     </style>
   </template>;
 
