@@ -1,13 +1,13 @@
 import Component from '@glimmer/component';
-// @ts-ignore no types
 import cssUrl from 'ember-css-url';
 import { eq, gt, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import cn from '@cardstack/boxel-ui/helpers/cn';
-import type { RealmCards } from './index';
+import type { RealmInfo } from '@cardstack/runtime-common';
 
 interface Signature {
   Args: {
-    realm: RealmCards;
+    realm: RealmInfo;
+    resultsCount: number;
   };
 }
 
@@ -22,10 +22,10 @@ export default class CardCatalogResultsHeader extends Component<Signature> {
         {{@realm.name}}
       </span>
       <span class='results-count' data-test-results-count>
-        {{#if (gt @realm.cards.length 1)}}
-          {{@realm.cards.length}}
+        {{#if (gt @resultsCount 1)}}
+          {{@resultsCount}}
           results
-        {{else if (eq @realm.cards.length 1)}}
+        {{else if (eq @resultsCount 1)}}
           1 result
         {{/if}}
       </span>
