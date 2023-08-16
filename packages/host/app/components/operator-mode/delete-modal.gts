@@ -1,6 +1,6 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { enqueueTask } from 'ember-concurrency';
+import { enqueueTask, dropTask, timeout, all } from 'ember-concurrency';
 import { Deferred } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
@@ -30,20 +30,26 @@ export default class DeleteModal extends Component<Signature> {
           >{{this.currentConfirmation.card.title}}</strong>?</div>
         <div class='content disclaimer'>This action is not reversable</div>
         <div class='buttons'>
-          <BoxelButton
-            @size='tall'
-            @kind='secondary-light'
-            {{on 'click' (fn this.choose false)}}
-          >
-            Cancel
-          </BoxelButton>
-          <BoxelButton
-            @size='tall'
-            @kind='danger'
-            {{on 'click' (fn this.choose true)}}
-          >
-            Delete
-          </BoxelButton>
+          {{#if this.waitForDelete.isRunning}}
+            <BoxelButton @size='tall' @kind='danger' @loading={{true}}>
+              Deleting
+            </BoxelButton>
+          {{else}}
+            <BoxelButton
+              @size='tall'
+              @kind='secondary-light'
+              {{on 'click' (fn this.choose false)}}
+            >
+              Cancel
+            </BoxelButton>
+            <BoxelButton
+              @size='tall'
+              @kind='danger'
+              {{on 'click' (fn this.choose true)}}
+            >
+              Delete
+            </BoxelButton>
+          {{/if}}
         </div>
       </div>
     </Modal>
@@ -83,31 +89,57 @@ export default class DeleteModal extends Component<Signature> {
   }
 
   @tracked private currentConfirmation:
-    | { card: Card; deferred: Deferred<boolean> }
+    | {
+        card: Card;
+        choiceDeferred: Deferred<boolean>;
+        deleteDeferred: Deferred<void>;
+      }
     | undefined;
 
   // public API for callers to use this component
-  async confirmDelete(card: Card) {
-    return await this.presentChoice.perform(card);
+  async confirmDelete(
+    card: Card,
+    setDeferred: (deleteDeferred: Deferred<void>) => void,
+  ) {
+    let deleteDeferred = new Deferred<void>();
+    setDeferred(deleteDeferred);
+    return await this.presentChoice.perform(card, deleteDeferred);
   }
 
   private get showModal() {
     return !!this.currentConfirmation;
   }
 
-  private presentChoice = enqueueTask(async (card: Card) => {
-    this.currentConfirmation = {
-      card,
-      deferred: new Deferred(),
-    };
-    let choice = await this.currentConfirmation.deferred.promise;
-    return choice ?? false;
+  private presentChoice = enqueueTask(
+    async (card: Card, deleteDeferred: Deferred<void>) => {
+      this.currentConfirmation = {
+        card,
+        choiceDeferred: new Deferred(),
+        deleteDeferred,
+      };
+      let choice = await this.currentConfirmation.choiceDeferred.promise;
+      return choice ?? false;
+    },
+  );
+
+  private waitForDelete = dropTask(async () => {
+    if (this.currentConfirmation) {
+      await all([
+        this.currentConfirmation.deleteDeferred.promise,
+        timeout(500), // display the message long enough for the user to read it
+      ]);
+      this.currentConfirmation = undefined;
+    }
   });
 
   @action private choose(choice: boolean) {
     if (this.currentConfirmation) {
-      this.currentConfirmation.deferred.fulfill(choice);
-      this.currentConfirmation = undefined;
+      this.currentConfirmation.choiceDeferred.fulfill(choice);
+      if (choice) {
+        this.waitForDelete.perform();
+      } else {
+        this.currentConfirmation = undefined;
+      }
     }
   }
 }

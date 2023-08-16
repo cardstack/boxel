@@ -298,7 +298,11 @@ export default class OperatorModeContainer extends Component<Signature> {
     if (!this.deleteModal) {
       throw new Error(`bug: DeleteModal not instantiated`);
     }
-    let isDeleteConfirmed = await this.deleteModal.confirmDelete(card);
+    let deferred: Deferred<void>;
+    let isDeleteConfirmed = await this.deleteModal.confirmDelete(
+      card,
+      (_deferred) => (deferred = _deferred),
+    );
     if (!isDeleteConfirmed) {
       return;
     }
@@ -315,6 +319,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       this.operatorModeStateService.trimItemsFromStack(item);
     }
     await this.cardService.deleteCard(card);
+    deferred!.fulfill();
   });
 
   // we debounce saves in the stack item--by the time they reach
