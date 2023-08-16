@@ -838,7 +838,7 @@ async function maybeHandleScopedCSSRequest(req: Request) {
             decodedCSS
           )}');
           styleNode.appendChild(styleText);
-          document.body.appendChild(styleNode);
+          document.head.appendChild(styleNode);
         `)
       );
     }
