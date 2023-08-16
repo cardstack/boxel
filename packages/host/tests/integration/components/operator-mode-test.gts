@@ -1454,16 +1454,12 @@ module('Integration | operator-mode', function (hooks) {
 
     await focus(`[data-test-search-input] input`);
     assert.dom(`[data-test-search-sheet-recent-card]`).exists({ count: 2 });
-    assert
-      .dom(
-        `[data-test-search-sheet-recent-card=0] [data-test-search-result="${testRealmURL}Person/burcu"]`,
-      )
-      .exists();
-    assert
-      .dom(
-        `[data-test-search-sheet-recent-card=1] [data-test-search-result="${testRealmURL}Person/fadhlan"]`,
-      )
-      .exists();
+    assert.dom(
+      `[data-test-search-sheet-recent-card=0] [data-test-search-result="${testRealmURL}Person/burcu"]`,
+    );
+    assert.dom(
+      `[data-test-search-sheet-recent-card=1] [data-test-search-result="${testRealmURL}Person/fadhlan"]`,
+    );
   });
 
   test(`displays recently accessed card, maximum 10 cards`, async function (assert) {
