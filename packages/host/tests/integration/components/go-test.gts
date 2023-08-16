@@ -93,7 +93,6 @@ module('Integration | Component | go', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
   let monacoService: MonacoService;
-  let mockController: CodeController;
   let mockOpenFiles: OpenFiles;
   let editor: IStandaloneCodeEditor;
   let monacoContext: MonacoSDK;
@@ -117,8 +116,7 @@ module('Integration | Component | go', function (hooks) {
     monacoService = this.owner.lookup(
       'service:monaco-service',
     ) as MonacoService;
-    mockController = new CodeController();
-    mockOpenFiles = new OpenFiles(mockController);
+    mockOpenFiles = new OpenFiles(new CodeController());
     await realm.ready;
     setupLoaderWithHandler(loader, realm, moduleMap);
   });

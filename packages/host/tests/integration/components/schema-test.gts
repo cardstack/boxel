@@ -27,7 +27,6 @@ import { TestContext } from '@ember/test-helpers';
 module('Integration | schema', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
-  let mockController: CodeController;
   let mockOpenFiles: OpenFiles;
   let loader: Loader;
 
@@ -43,8 +42,10 @@ module('Integration | schema', function (hooks) {
     );
   });
   hooks.beforeEach(async function () {
-    mockController = new CodeController();
-    mockOpenFiles = new OpenFiles(mockController);
+    mockOpenFiles = new OpenFiles(new CodeController());
+    adapter = new TestRealmAdapter({});
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    await realm.ready;
   });
   setupCardLogs(
     hooks,
@@ -52,19 +53,19 @@ module('Integration | schema', function (hooks) {
   );
 
   test('renders card schema view', async function (assert) {
-    let moduleMap = {
-      'person.gts': `import { contains, field, Card } from "https://cardstack.com/base/card-api";
+    await realm.write(
+      'person.gts',
+      `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
       export class Person extends Card {
         static displayName = 'Person';
         @field firstName = contains(StringCard);
         @field lastName = contains(StringCard);
-      }`,
-    };
-    adapter = new TestRealmAdapter(moduleMap);
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
+      }
+    `,
+    );
 
     mockOpenFiles.path = 'person.gts';
     let f = await getFileResource(this, testRealmURL, mockOpenFiles);
@@ -99,8 +100,10 @@ module('Integration | schema', function (hooks) {
       );
   });
   test('renders card schema view with a "/" in template', async function (assert) {
-    let moduleMap = {
-      'test.gts': `import { contains, field, Card } from "https://cardstack.com/base/card-api";
+    await realm.write(
+      'test.gts',
+      `
+      import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import NumberCard from "https://cardstack.com/base/number";
 
       export class Test extends Card {
@@ -111,10 +114,7 @@ module('Integration | schema', function (hooks) {
         });
       }
     `,
-    };
-    adapter = new TestRealmAdapter(moduleMap);
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
+    );
 
     mockOpenFiles.path = 'test.gts';
     let f = await getFileResource(this, testRealmURL, mockOpenFiles);
@@ -133,9 +133,11 @@ module('Integration | schema', function (hooks) {
     await waitFor('[data-test-card-id]');
     assert.dom('[data-test-card-id]').exists();
   });
+
   test('renders a card schema view for a card that contains itself as a field', async function (assert) {
-    let moduleMap = {
-      'friend.gts': `
+    await realm.write(
+      'friend.gts',
+      `
       import { contains, linksTo, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -144,10 +146,7 @@ module('Integration | schema', function (hooks) {
         @field friend = linksTo(() => Friend);
       }
     `,
-    };
-    adapter = new TestRealmAdapter(moduleMap);
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
+    );
 
     mockOpenFiles.path = 'friend.gts';
     let f = await getFileResource(this, testRealmURL, mockOpenFiles);
@@ -189,8 +188,9 @@ module('Integration | schema', function (hooks) {
   });
 
   test('can delete a field from card', async function (assert) {
-    let moduleMap = {
-      'person.gts': `
+    await realm.write(
+      'person.gts',
+      `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -199,11 +199,7 @@ module('Integration | schema', function (hooks) {
         @field lastName = contains(StringCard);
       }
     `,
-    };
-    adapter = new TestRealmAdapter(moduleMap);
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
-    //
+    );
     mockOpenFiles.path = 'person.gts';
     let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
@@ -236,8 +232,9 @@ module('Integration | schema', function (hooks) {
   });
 
   test('can delete a linksTo field with the same type as its enclosing card', async function (assert) {
-    let moduleMap = {
-      'person.gts': `
+    await realm.write(
+      'person.gts',
+      `
       import { contains, field, Card, linksTo } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -246,10 +243,7 @@ module('Integration | schema', function (hooks) {
         @field friend = linksTo(() => Person);
       }
     `,
-    };
-    adapter = new TestRealmAdapter(moduleMap);
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
+    );
 
     mockOpenFiles.path = 'person.gts';
     let f = await getFileResource(this, testRealmURL, mockOpenFiles);
@@ -284,8 +278,9 @@ module('Integration | schema', function (hooks) {
   });
 
   test('does not include a delete button for fields that are inherited', async function (assert) {
-    let moduleMap = {
-      'person.gts': `
+    await realm.write(
+      'person.gts',
+      `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -294,7 +289,10 @@ module('Integration | schema', function (hooks) {
         @field lastName = contains(StringCard);
       }
     `,
-      'fancy-person.gts': `
+    );
+    await realm.write(
+      'fancy-person.gts',
+      `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       import { Person } from "./person";
@@ -303,10 +301,7 @@ module('Integration | schema', function (hooks) {
         @field favoriteColor = contains(StringCard);
       }
     `,
-    };
-    adapter = new TestRealmAdapter(moduleMap);
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
+    );
 
     mockOpenFiles.path = 'fancy-person.gts';
     let f = await getFileResource(this, testRealmURL, mockOpenFiles);
@@ -336,8 +331,9 @@ module('Integration | schema', function (hooks) {
   });
 
   test('it can add a new contains field to a card', async function (assert) {
-    let moduleMap = {
-      'person.gts': `
+    await realm.write(
+      'person.gts',
+      `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -346,7 +342,10 @@ module('Integration | schema', function (hooks) {
         @field lastName = contains(StringCard);
       }
     `,
-      'post.gts': `
+    );
+    await realm.write(
+      'post.gts',
+      `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -354,7 +353,10 @@ module('Integration | schema', function (hooks) {
         @field title = contains(StringCard);
       }
     `,
-      'person-entry.json': JSON.stringify({
+    );
+    await realm.write(
+      'person-entry.json',
+      JSON.stringify({
         data: {
           type: 'card',
           attributes: {
@@ -373,7 +375,10 @@ module('Integration | schema', function (hooks) {
           },
         },
       }),
-      'post-entry.json': JSON.stringify({
+    );
+    await realm.write(
+      'post-entry.json',
+      JSON.stringify({
         data: {
           type: 'card',
           attributes: {
@@ -392,10 +397,7 @@ module('Integration | schema', function (hooks) {
           },
         },
       }),
-    };
-    adapter = new TestRealmAdapter(moduleMap);
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
+    );
 
     mockOpenFiles.path = 'post.gts';
     let f = await getFileResource(this, testRealmURL, mockOpenFiles);
@@ -550,8 +552,9 @@ module('Integration | schema', function (hooks) {
   });
 
   test('it can add containsMany field to a card', async function (assert) {
-    let moduleMap = {
-      'person.gts': `
+    await realm.write(
+      'person.gts',
+      `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -560,10 +563,7 @@ module('Integration | schema', function (hooks) {
         @field lastName = contains(StringCard);
       }
     `,
-    };
-    adapter = new TestRealmAdapter(moduleMap);
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
+    );
 
     mockOpenFiles.path = 'person.gts';
     let f = await getFileResource(this, testRealmURL, mockOpenFiles);
@@ -619,8 +619,9 @@ module('Integration | schema', function (hooks) {
   });
 
   test('it can add a field with a card whose fields have a cyclic dependency with the enclosing card', async function (assert) {
-    let moduleMap = {
-      'pet.gts': `
+    await realm.write(
+      'pet.gts',
+      `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -628,7 +629,10 @@ module('Integration | schema', function (hooks) {
         @field firstName = contains(StringCard);
       }
     `,
-      'person.gts': `
+    );
+    await realm.write(
+      'person.gts',
+      `
       import { contains, linksTo, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       import { Pet } from "./pet";
@@ -638,7 +642,10 @@ module('Integration | schema', function (hooks) {
         @field pet = linksTo(() => Pet);
       }
     `,
-      'appointment.gts': `
+    );
+    await realm.write(
+      'appointment.gts',
+      `
       import { contains, containsMany, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       import { Person } from "./person";
@@ -648,7 +655,11 @@ module('Integration | schema', function (hooks) {
         @field contacts = containsMany(Person);
       }
     `,
-      'appointment.json': JSON.stringify({
+    );
+
+    await realm.write(
+      'appointment.json',
+      JSON.stringify({
         data: {
           type: 'card',
           attributes: {
@@ -674,10 +685,7 @@ module('Integration | schema', function (hooks) {
           },
         },
       }),
-    };
-    adapter = new TestRealmAdapter(moduleMap);
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
+    );
 
     mockOpenFiles.path = 'pet.gts';
     let f = await getFileResource(this, testRealmURL, mockOpenFiles);
@@ -738,8 +746,9 @@ module('Integration | schema', function (hooks) {
   });
 
   test('it can add linksTo field to a card', async function (assert) {
-    let moduleMap = {
-      'person.gts': `
+    await realm.write(
+      'person.gts',
+      `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -748,7 +757,10 @@ module('Integration | schema', function (hooks) {
         @field lastName = contains(StringCard);
       }
     `,
-      'pet.gts': `
+    );
+    await realm.write(
+      'pet.gts',
+      `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -756,7 +768,10 @@ module('Integration | schema', function (hooks) {
         @field name = contains(StringCard);
       }
     `,
-      'pet.json': JSON.stringify({
+    );
+    await realm.write(
+      'pet.json',
+      JSON.stringify({
         data: {
           type: 'card',
           attributes: {
@@ -786,10 +801,7 @@ module('Integration | schema', function (hooks) {
           },
         },
       }),
-    };
-    adapter = new TestRealmAdapter(moduleMap);
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
+    );
 
     mockOpenFiles.path = 'person.gts';
     let f = await getFileResource(this, testRealmURL, mockOpenFiles);
@@ -846,8 +858,9 @@ module('Integration | schema', function (hooks) {
   });
 
   test('it can add a linksTo field with the same type as its enclosing card', async function (assert) {
-    let moduleMap = {
-      'person.gts': `
+    await realm.write(
+      'person.gts',
+      `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -856,7 +869,10 @@ module('Integration | schema', function (hooks) {
         @field lastName = contains(StringCard);
       }
     `,
-      'person.json': JSON.stringify({
+    );
+    await realm.write(
+      'person.json',
+      JSON.stringify({
         data: {
           type: 'card',
           attributes: {
@@ -887,10 +903,7 @@ module('Integration | schema', function (hooks) {
           },
         },
       }),
-    };
-    adapter = new TestRealmAdapter(moduleMap);
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
+    );
 
     mockOpenFiles.path = 'person.gts';
     let f = await getFileResource(this, testRealmURL, mockOpenFiles);
@@ -943,8 +956,9 @@ module('Integration | schema', function (hooks) {
   });
 
   test('it does not allow duplicate field to be created', async function (assert) {
-    let moduleMap = {
-      'person.gts': `
+    await realm.write(
+      'person.gts',
+      `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -953,7 +967,10 @@ module('Integration | schema', function (hooks) {
         @field lastName = contains(StringCard);
       }
     `,
-      'employee.gts': `
+    );
+    await realm.write(
+      'employee.gts',
+      `
       import { contains, field } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       import { Person } from "./person";
@@ -962,10 +979,7 @@ module('Integration | schema', function (hooks) {
         @field department = contains(StringCard);
       }
     `,
-    };
-    adapter = new TestRealmAdapter(moduleMap);
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
+    );
 
     mockOpenFiles.path = 'employee.gts';
     let f = await getFileResource(this, testRealmURL, mockOpenFiles);
@@ -1008,8 +1022,9 @@ module('Integration | schema', function (hooks) {
   });
 
   test('it can add a linksToMany field to a card', async function (assert) {
-    let moduleMap = {
-      'person.gts': `
+    await realm.write(
+      'person.gts',
+      `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -1017,7 +1032,10 @@ module('Integration | schema', function (hooks) {
         @field firstName = contains(StringCard);
       }
     `,
-      'pet.gts': `
+    );
+    await realm.write(
+      'pet.gts',
+      `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -1025,8 +1043,10 @@ module('Integration | schema', function (hooks) {
         @field name = contains(StringCard);
       }
     `,
-
-      'pet.json': JSON.stringify({
+    );
+    await realm.write(
+      'pet.json',
+      JSON.stringify({
         data: {
           type: 'card',
           attributes: {
@@ -1056,10 +1076,7 @@ module('Integration | schema', function (hooks) {
           },
         },
       }),
-    };
-    adapter = new TestRealmAdapter(moduleMap);
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
+    );
 
     mockOpenFiles.path = 'person.gts';
     let f = await getFileResource(this, testRealmURL, mockOpenFiles);
@@ -1117,8 +1134,9 @@ module('Integration | schema', function (hooks) {
   });
 
   test('it can add a linksToMany field with the same type as its enclosing card', async function (assert) {
-    let moduleMap = {
-      'person.gts': `
+    await realm.write(
+      'person.gts',
+      `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -1126,7 +1144,10 @@ module('Integration | schema', function (hooks) {
         @field firstName = contains(StringCard);
       }
     `,
-      'person.json': JSON.stringify({
+    );
+    await realm.write(
+      'person.json',
+      JSON.stringify({
         data: {
           type: 'card',
           attributes: {
@@ -1156,11 +1177,7 @@ module('Integration | schema', function (hooks) {
           },
         },
       }),
-    };
-    adapter = new TestRealmAdapter(moduleMap);
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
-
+    );
     mockOpenFiles.path = 'person.gts';
     let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
@@ -1216,8 +1233,9 @@ module('Integration | schema', function (hooks) {
   });
 
   test('can delete a linksToMany field with the same type as its enclosing card', async function (assert) {
-    let moduleMap = {
-      'person.gts': `
+    await realm.write(
+      'person.gts',
+      `
       import { contains, field, Card, linksToMany } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -1226,10 +1244,7 @@ module('Integration | schema', function (hooks) {
         @field friends = linksToMany(() => Person);
       }
     `,
-    };
-    adapter = new TestRealmAdapter(moduleMap);
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
+    );
 
     mockOpenFiles.path = 'person.gts';
     let f = await getFileResource(this, testRealmURL, mockOpenFiles);
@@ -1264,8 +1279,9 @@ module('Integration | schema', function (hooks) {
   });
 
   test('can delete a linksToMany field', async function (assert) {
-    let moduleMap = {
-      'pet.gts': `
+    await realm.write(
+      'pet.gts',
+      `
       import { contains, field, Card } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
@@ -1273,7 +1289,10 @@ module('Integration | schema', function (hooks) {
         @field name = contains(StringCard);
       }
     `,
-      'person.gts': `
+    );
+    await realm.write(
+      'person.gts',
+      `
       import { Pet as PetCard } from "${testRealmURL}pet";
       import { contains, field, Card, linksToMany } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
@@ -1283,10 +1302,7 @@ module('Integration | schema', function (hooks) {
         @field pets = linksToMany(PetCard);
       }
     `,
-    };
-    adapter = new TestRealmAdapter(moduleMap);
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
+    );
 
     mockOpenFiles.path = 'person.gts';
     let f = await getFileResource(this, testRealmURL, mockOpenFiles);
