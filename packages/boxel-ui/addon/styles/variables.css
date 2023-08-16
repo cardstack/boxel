@@ -108,7 +108,7 @@
 
   --boxel-highlight: var(--boxel-teal);
   --boxel-highlight-hover: var(--boxel-dark-teal);
-  --boxel-danger: var(--boxel-error-100);
+  --boxel-danger: var(--boxel-red); /* formerly boxel-error-100: the latest design docs (8/16/2023) use this color for danger instead */
   --boxel-danger-hover: #fa1521;
 
   /* Boxel purples */

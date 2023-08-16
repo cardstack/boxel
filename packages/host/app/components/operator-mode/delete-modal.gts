@@ -19,21 +19,29 @@ export default class DeleteModal extends Component<Signature> {
   <template>
     <Modal
       @layer='urgent'
-      @size='small'
+      @size='x-small'
       @isOpen={{this.showModal}}
       @onClose={{fn this.choose false}}
       style={{cssVar boxel-modal-offset-top='40vh'}}
     >
       <div class='delete'>
-        <p>Delete the card {{this.currentConfirmation.card.title}}?</p>
+        <div class='content'>Delete the card</div>
+        <div class='content'><strong
+          >{{this.currentConfirmation.card.title}}</strong>?</div>
+        <div class='content disclaimer'>This action is not reversable</div>
         <div class='buttons'>
           <BoxelButton
+            @size='tall'
             @kind='secondary-light'
             {{on 'click' (fn this.choose false)}}
           >
             Cancel
           </BoxelButton>
-          <BoxelButton @kind='primary' {{on 'click' (fn this.choose true)}}>
+          <BoxelButton
+            @size='tall'
+            @kind='danger'
+            {{on 'click' (fn this.choose true)}}
+          >
             Delete
           </BoxelButton>
         </div>
@@ -41,25 +49,30 @@ export default class DeleteModal extends Component<Signature> {
     </Modal>
 
     <style>
-      p {
+      .content {
         width: 100%;
         font-size: var(--boxel-font-size);
         text-align: center;
       }
+      .disclaimer {
+        margin-top: var(--boxel-sp-xs);
+        color: var(--boxel-danger);
+        font-size: var(--boxel-font-size-xs);
+      }
       .delete {
-        padding: var(--boxel-sp-xl);
+        padding: var(--boxel-sp-lg) var(--boxel-sp-xl) var(--boxel-sp);
         background-color: white;
         border-radius: var(--boxel-border-radius-xl);
-        box-shadow: 0 15px 50px 0 rgba(0, 0, 0, 0.16);
+        box-shadow: 0 15px 50px 0 rgba(0, 0, 0, 0.4);
       }
       .buttons {
-        margin-top: var(--boxel-sp-xl);
+        margin-top: var(--boxel-sp-lg);
         display: flex;
         justify-content: center;
         width: 100%;
       }
       button:first-child {
-        margin-right: var(--boxel-sp);
+        margin-right: var(--boxel-sp-xs);
       }
     </style>
   </template>

@@ -416,6 +416,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                           'Delete'
                           (fn @delete this.addressableCard)
                           icon='icon-trash'
+                          dangerous=true
                           disabled=(eq @item.type 'contained')
                         )
                       )
@@ -430,6 +431,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                           'Delete'
                           (fn @delete this.addressableCard)
                           icon='icon-trash'
+                          dangerous=true
                           disabled=(eq @item.type 'contained')
                         )
                       )

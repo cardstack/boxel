@@ -8,7 +8,7 @@ interface Signature {
   Element: HTMLDialogElement;
   Args: {
     imgURL?: string;
-    size?: 'small' | 'medium' | 'large' | 'full-screen';
+    size?: 'x-small' | 'small' | 'medium' | 'large' | 'full-screen';
     layer?: 'urgent';
     isOpen?: boolean;
     isOverlayDismissalDisabled?: boolean;
@@ -94,12 +94,16 @@ export default class Modal extends Component<Signature> {
         height: 100%;
         padding: 0;
         border: none;
-        background-color: var(--boxel-modal-overlay-color, rgb(0 0 0 / 75%));
+        background-color: var(--boxel-modal-overlay-color, rgb(0 0 0 / 40%));
         background-image: var(--boxel-modal-background-image-url);
         background-position: center;
         background-size: cover;
         text-align: left;
         z-index: calc(var(--boxel-modal-z-index) - 1);
+      }
+
+      .x-small {
+        --boxel-modal-max-width: 20rem;
       }
 
       .small {

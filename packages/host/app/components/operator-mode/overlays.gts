@@ -102,7 +102,14 @@ export default class OperatorModeOverlays extends Component<Signature> {
               <:content as |dd|>
                 <Menu
                   @closeMenu={{dd.close}}
-                  @items={{array (menuItem 'Delete' (fn @delete card))}}
+                  @items={{array
+                    (menuItem
+                      'Delete'
+                      (fn @delete card)
+                      icon='icon-trash'
+                      dangerous=true
+                    )
+                  }}
                   {{on
                     'mouseenter'
                     (fn this.setCurrentlyHoveredCard renderedCard)
