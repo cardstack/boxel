@@ -53,7 +53,7 @@ export default class OperatorModeStateService extends Service {
     }
     this.state.stacks[stackIndex].push(item);
     if (item.type === 'card') {
-      this.addRecentCards(item.card);
+      this.addRecentCard(item.card);
     }
     this.schedulePersist();
   }
@@ -273,7 +273,7 @@ export default class OperatorModeStateService extends Service {
     }
   }
 
-  addRecentCards(card: Card) {
+  addRecentCard(card: Card) {
     const existingCardIndex = this.recentCards.findIndex(
       (recentCard) => recentCard.id === card.id,
     );
@@ -289,5 +289,17 @@ export default class OperatorModeStateService extends Service {
       .map((recentCard) => recentCard.id)
       .filter(Boolean); // don't include cards that don't have an ID
     localStorage.setItem('recent-cards', JSON.stringify(recentCardIds));
+  }
+
+  removeRecentCard(id: string) {
+    let index = this.recentCards.findIndex((c) => c.id === id);
+    if (index === -1) {
+      return;
+    }
+    this.recentCards.splice(index, 1);
+    localStorage.setItem(
+      'recent-cards',
+      JSON.stringify(this.recentCards.map((c) => c.id)),
+    );
   }
 }

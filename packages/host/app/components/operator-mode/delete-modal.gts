@@ -18,6 +18,7 @@ interface Signature {
 export default class DeleteModal extends Component<Signature> {
   <template>
     <Modal
+      data-test-delete-modal={{this.currentConfirmation.card.id}}
       @layer='urgent'
       @size='x-small'
       @isOpen={{this.showModal}}
@@ -36,6 +37,7 @@ export default class DeleteModal extends Component<Signature> {
             </BoxelButton>
           {{else}}
             <BoxelButton
+              data-test-confirm-cancel-button
               @size='tall'
               @kind='secondary-light'
               {{on 'click' (fn this.choose false)}}
@@ -43,6 +45,7 @@ export default class DeleteModal extends Component<Signature> {
               Cancel
             </BoxelButton>
             <BoxelButton
+              data-test-confirm-delete-button
               @size='tall'
               @kind='danger'
               {{on 'click' (fn this.choose true)}}

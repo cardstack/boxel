@@ -301,7 +301,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     let deferred: Deferred<void>;
     let isDeleteConfirmed = await this.deleteModal.confirmDelete(
       card,
-      (_deferred) => (deferred = _deferred),
+      (d) => (deferred = d),
     );
     if (!isDeleteConfirmed) {
       return;
@@ -318,8 +318,11 @@ export default class OperatorModeContainer extends Component<Signature> {
     for (let item of items) {
       this.operatorModeStateService.trimItemsFromStack(item);
     }
-    await this.cardService.deleteCard(card);
-    deferred!.fulfill();
+    this.operatorModeStateService.removeRecentCard(card.id);
+    await this.withTestWaiters(async () => {
+      await this.cardService.deleteCard(card);
+      deferred!.fulfill();
+    });
   });
 
   // we debounce saves in the stack item--by the time they reach
@@ -327,18 +330,9 @@ export default class OperatorModeContainer extends Component<Signature> {
   // we might drop writes from different stack items that want to save
   // at the same time
   private write = task(async (card: Card) => {
-    let token = waiter.beginAsync();
-    try {
-      let savedCard = await this.cardService.saveModel(card);
-      // only do this in test env--this makes sure that we also wait for any
-      // interior card instance async as part of our ember-test-waiters
-      if (isTesting()) {
-        await this.cardService.cardsSettled();
-      }
-      return savedCard;
-    } finally {
-      waiter.endAsync(token);
-    }
+    return await this.withTestWaiters(async () => {
+      return await this.cardService.saveModel(card);
+    });
   });
 
   // dropTask will ignore any subsequent copy requests until the one in progress is done
@@ -348,8 +342,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       sourceItem: CardStackItem,
       destinationItem: CardStackItem,
     ) => {
-      let token = waiter.beginAsync();
-      try {
+      await this.withTestWaiters(async () => {
         let destinationRealmURL = await this.cardService.getRealmURL(
           destinationItem.card,
         );
@@ -367,16 +360,24 @@ export default class OperatorModeContainer extends Component<Signature> {
           clearSelection();
         }
         cardSelections.delete(sourceItem);
-        // only do this in test env--this makes sure that we also wait for any
-        // interior card instance async as part of our ember-test-waiters
-        if (isTesting()) {
-          await this.cardService.cardsSettled();
-        }
-      } finally {
-        waiter.endAsync(token);
-      }
+      });
     },
   );
+
+  private async withTestWaiters<T>(cb: () => Promise<T>) {
+    let token = waiter.beginAsync();
+    try {
+      let result = await cb();
+      // only do this in test env--this makes sure that we also wait for any
+      // interior card instance async as part of our ember-test-waiters
+      if (isTesting()) {
+        await this.cardService.cardsSettled();
+      }
+      return result;
+    } finally {
+      waiter.endAsync(token);
+    }
+  }
 
   // The public API is wrapped in a closure so that whatever calls its methods
   // in the context of operator-mode, the methods can be aware of which stack to deal with (via stackIndex), i.e.

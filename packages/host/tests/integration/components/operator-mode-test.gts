@@ -1427,7 +1427,9 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-create-new-card-button]`).isNotVisible();
 
     await focus(`[data-test-search-input] input`);
-    assert.dom(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`);
+    assert
+      .dom(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`)
+      .exists();
     await click(`[data-test-search-sheet-cancel-button]`);
     await click(`[data-test-stack-card-index="1"] [data-test-close-button]`);
 
@@ -1441,12 +1443,16 @@ module('Integration | operator-mode', function (hooks) {
         `.search-sheet-content__recent-access__cards [data-test-search-result]`,
       )
       .exists({ count: 2 });
-    assert.dom(
-      `.search-sheet-content__recent-access__cards [data-test-search-result-index=0] [data-test-search-result="${testRealmURL}Person/burcu"]`,
-    );
-    assert.dom(
-      `.search-sheet-content__recent-access__cards [data-test-search-result-index=1] [data-test-search-result="${testRealmURL}Person/fadhlan"]`,
-    );
+    assert
+      .dom(
+        `.search-sheet-content__recent-access__cards [data-test-search-result-index=0] [data-test-search-result="${testRealmURL}Person/burcu"]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `.search-sheet-content__recent-access__cards [data-test-search-result-index=1] [data-test-search-result="${testRealmURL}Person/fadhlan"]`,
+      )
+      .exists();
   });
 
   test(`displays recently accessed card, maximum 10 cards`, async function (assert) {
