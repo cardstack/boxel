@@ -107,6 +107,14 @@ export function getBoxComponent(
       .edit-card.saved {
         padding: var(--boxel-sp-xl);
       }
+
+      /* Add some padding to accomodate for overlaid header for embedded cards in operator mode */
+      .operator-mode-stack .embedded-card,
+      .operator-mode-stack .edit-card.not-saved {
+        padding-top: calc(
+          var(--overlay-embedded-card-header-height) + var(--boxel-sp-lg)
+        );
+      }
     </style>
   </template>;
 
