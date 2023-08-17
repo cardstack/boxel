@@ -100,7 +100,6 @@ module('Integration | Component | go', function (hooks) {
 
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
-  // setupMockMessageService(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
