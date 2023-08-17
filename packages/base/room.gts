@@ -23,11 +23,11 @@ import {
   type CardRef,
 } from '@cardstack/runtime-common';
 
-type CardEventData = {
+type VersionData = {
   eventId: string;
   serverTimeOrigin: number;
 };
-const cardVersions = new Map<Card, CardEventData>();
+const cardVersions = new Map<Card, VersionData>();
 
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember({
