@@ -471,7 +471,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     </div>
     <style>
       :global(:root) {
-        --stack-card-footer-height: 5rem;
+        --stack-card-footer-height: 6rem;
         --buried-operator-mode-header-height: 2.5rem;
       }
 

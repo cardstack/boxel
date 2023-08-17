@@ -16,7 +16,7 @@ import {
   Deferred,
 } from '@cardstack/runtime-common';
 import type { Query, Filter } from '@cardstack/runtime-common/query';
-import { Button, SearchInput } from '@cardstack/boxel-ui';
+import { Button, SearchInput, BoxelInputValidationState } from '@cardstack/boxel-ui';
 import { and, eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import cn from '@cardstack/boxel-ui/helpers/cn';
@@ -59,7 +59,7 @@ export default class CardCatalogModal extends Component<Signature> {
         data-test-card-catalog-modal
       >
         <:header>
-          <SearchInput
+          {{!-- <SearchInput
             class='card-catalog-modal__search-field'
             @value={{this.searchKey}}
             @onInput={{this.setSearchKey}}
@@ -68,7 +68,7 @@ export default class CardCatalogModal extends Component<Signature> {
             @errorMessage={{this.searchErrorMessage}}
             @placeholder='Search for a card type or enter card URL'
             data-test-search-field
-          />
+          /> --}}
           <CardCatalogFilters
             @availableRealms={{this.availableRealms}}
             @selectedRealms={{this.selectedRealms}}
@@ -115,6 +115,19 @@ export default class CardCatalogModal extends Component<Signature> {
                 Create New
                 {{this.cardRefName}}
               </Button>
+            {{else}}
+              <label class='url-search'>
+                <span>Enter Card URL:</span>
+                <BoxelInputValidationState
+                  data-test-url-field
+                  placeholder='http://'
+                  @value={{this.cardURL}}
+                  @onInput={{this.setCardURL}}
+                  @onKeyPress={{this.onURLFieldKeypress}}
+                  @state={{this.cardURLFieldState}}
+                  @errorMessage={{this.cardURLErrorMessage}}
+                />
+              </label>
             {{/if}}
             <div>
               <Button
@@ -148,10 +161,18 @@ export default class CardCatalogModal extends Component<Signature> {
       }
       .footer {
         display: flex;
-        justify-content: flex-end;
-      }
-      .footer.with-create-button {
         justify-content: space-between;
+      }
+      .url-search {
+        flex-grow: 0.5;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        justify-items: flex-start;
+        gap: var(--boxel-sp-xs);
+      }
+      .url-search > span {
+        padding-top: var(--boxel-sp-xxs);
+        font: 700 var(--boxel-font-sm);
       }
       .footer-button + .footer-button {
         margin-left: var(--boxel-sp-xs);
@@ -178,8 +199,8 @@ export default class CardCatalogModal extends Component<Signature> {
     | undefined = undefined;
   @tracked zIndex = 20;
   @tracked selectedCard?: Card = undefined;
-  @tracked searchKey = '';
-  @tracked hasSearchError = false;
+  @tracked cardURL = '';
+  @tracked hasCardURLError = false;
   @tracked urlSearchVisible = false;
   @tracked chooseCardTitle = DEFAULT_CHOOOSE_CARD_TITLE;
   @tracked dismissModal = false;
@@ -194,12 +215,12 @@ export default class CardCatalogModal extends Component<Signature> {
     });
   }
 
-  get searchFieldState() {
-    return this.hasSearchError ? 'invalid' : 'initial';
+  get cardURLFieldState() {
+    return this.hasCardURLError ? 'invalid' : 'initial';
   }
 
-  get searchErrorMessage() {
-    return this.hasSearchError ? 'Not a valid search key' : undefined;
+  get cardURLErrorMessage() {
+    return this.hasCardURLError ? 'Not a valid Card URL' : undefined;
   }
 
   get cardRefName() {
@@ -242,8 +263,8 @@ export default class CardCatalogModal extends Component<Signature> {
   }
 
   private resetState() {
-    this.searchKey = '';
-    this.hasSearchError = false;
+    this.cardURL = '';
+    this.hasCardURLError = false;
     this.selectedCard = undefined;
     this.urlSearchVisible = false;
     this.dismissModal = false;
@@ -301,19 +322,19 @@ export default class CardCatalogModal extends Component<Signature> {
       }
     }
     this.selectedCard = undefined;
-    this.hasSearchError = true;
+    this.hasCardURLError = true;
   });
 
-  debouncedSearchFieldUpdate = debounce(() => {
-    if (!this.searchKey) {
+  debouncedURLFieldUpdate = debounce(() => {
+    if (!this.cardURL) {
       this.selectedCard = undefined;
       return;
     }
-    //TODO: Remove this URL validation after implementing search feature with non-URL.
     try {
-      new URL(this.searchKey);
+      new URL(this.cardURL);
     } catch (e: any) {
       if (e instanceof TypeError && e.message.includes('Invalid URL')) {
+        this.hasCardURLError = true;
         return;
       }
       throw e;
@@ -328,36 +349,36 @@ export default class CardCatalogModal extends Component<Signature> {
 
   @action
   hideURLSearchIfBlank() {
-    if (!this.searchKey.trim()) {
+    if (!this.cardURL.trim()) {
       this.urlSearchVisible = false;
     }
   }
 
   @action
-  setSearchKey(searchKey: string) {
-    this.hasSearchError = false;
+  setCardURL(cardURL: string) {
+    this.hasCardURLError = false;
     this.selectedCard = undefined;
-    this.searchKey = searchKey;
-    this.debouncedSearchFieldUpdate();
+    this.cardURL = cardURL;
+    this.debouncedURLFieldUpdate();
   }
 
   @action
-  onSearchFieldKeypress(e: KeyboardEvent) {
-    if (e.key === 'Enter' && this.searchKey) {
-      this.getCard.perform(this.searchKey);
+  onURLFieldKeypress(e: KeyboardEvent) {
+    if (e.key === 'Enter' && this.cardURL) {
+      this.getCard.perform(this.cardURL);
     }
   }
 
   @action
   onSearchFieldUpdated() {
-    if (this.searchKey) {
+    if (this.cardURL) {
       this.selectedCard = undefined;
-      this.getCard.perform(this.searchKey);
+      this.getCard.perform(this.cardURL);
     }
   }
 
   @action toggleSelect(card?: Card): void {
-    this.searchKey = '';
+    this.cardURL = '';
     if (this.selectedCard?.id === card?.id) {
       this.selectedCard = undefined;
       return;
