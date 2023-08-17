@@ -13,13 +13,13 @@ import {
 import Directory from './directory';
 import { IconButton, Tooltip } from '@cardstack/boxel-ui';
 import config from '@cardstack/host/config/environment';
+import { OpenFiles } from '@cardstack/host/controllers/code';
 const { ownRealmURL } = config;
 
 interface Args {
   Args: {
     url: string;
-    openFile: string | undefined;
-    openDirs: string[];
+    openFiles: OpenFiles;
   };
 }
 
@@ -27,8 +27,7 @@ export default class FileTree extends Component<Args> {
   <template>
     <nav>
       <Directory
-        @openDirs={{@openDirs}}
-        @openFile={{@openFile}}
+        @openFiles={{@openFiles}}
         @relativePath=''
         @realmURL={{@url}}
       />
@@ -76,6 +75,6 @@ export default class FileTree extends Component<Args> {
       );
     }
     let path = `${newCard.id.slice(ownRealmURL.length)}.json`;
-    this.router.transitionTo('code', { queryParams: { path } });
+    this.args.openFiles.path = path;
   });
 }

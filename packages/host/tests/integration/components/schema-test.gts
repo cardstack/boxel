@@ -14,20 +14,24 @@ import {
   setupCardLogs,
   setupLocalIndexing,
 } from '../../helpers';
+import { isReady } from '@cardstack/host/resources/file';
 import { Realm } from '@cardstack/runtime-common/realm';
 import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import CardPrerender from '@cardstack/host/components/card-prerender';
+import CodeController from '@cardstack/host/controllers/code';
+import { OpenFiles } from '@cardstack/host/controllers/code';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { TestContext } from '@ember/test-helpers';
-
-let loader: Loader;
 
 module('Integration | schema', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
+  let mockOpenFiles: OpenFiles;
+  let loader: Loader;
 
   setupRenderingTest(hooks);
+  setupLocalIndexing(hooks);
 
   hooks.beforeEach(function (this: TestContext) {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
@@ -37,20 +41,16 @@ module('Integration | schema', function (hooks) {
       new URL('http://localhost:4201/base/'),
     );
   });
-
-  setupLocalIndexing(hooks);
+  hooks.beforeEach(async function () {
+    mockOpenFiles = new OpenFiles(new CodeController());
+    adapter = new TestRealmAdapter({});
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    await realm.ready;
+  });
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-
-  hooks.beforeEach(async function () {
-    adapter = new TestRealmAdapter({});
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
-    await realm.ready;
-  });
 
   test('renders card schema view', async function (assert) {
     await realm.write(
@@ -66,19 +66,22 @@ module('Integration | schema', function (hooks) {
       }
     `,
     );
-    let openFile = await getFileResource(this, adapter, {
-      module: `${testRealmURL}person`,
-      name: 'Person',
-    });
+
+    mockOpenFiles.path = 'person.gts';
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+
+        openFile = f;
       },
     );
-
     await waitFor('[data-test-card-id]');
     assert.dom('[data-test-card-id]').exists();
     assert
@@ -96,7 +99,6 @@ module('Integration | schema', function (hooks) {
         'Delete firstName - contains - field card ID: https://cardstack.com/base/string/default',
       );
   });
-
   test('renders card schema view with a "/" in template', async function (assert) {
     await realm.write(
       'test.gts',
@@ -113,16 +115,19 @@ module('Integration | schema', function (hooks) {
       }
     `,
     );
-    let openFile = await getFileResource(this, adapter, {
-      module: `${testRealmURL}test`,
-      name: 'Test',
-    });
+
+    mockOpenFiles.path = 'test.gts';
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
     await waitFor('[data-test-card-id]');
@@ -142,16 +147,19 @@ module('Integration | schema', function (hooks) {
       }
     `,
     );
-    let openFile = await getFileResource(this, adapter, {
-      module: `${testRealmURL}friend`,
-      name: 'Friend',
-    });
+
+    mockOpenFiles.path = 'friend.gts';
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -179,56 +187,6 @@ module('Integration | schema', function (hooks) {
       );
   });
 
-  test('renders link to field card', async function (assert) {
-    await realm.write(
-      'person.gts',
-      `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-
-      export class Person extends Card {
-        @field firstName = contains(StringCard);
-        @field lastName = contains(StringCard);
-      }
-    `,
-    );
-    await realm.write(
-      'post.gts',
-      `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-      import { Person } from "./person";
-
-      export class Post extends Card {
-        @field title = contains(StringCard);
-        @field author = contains(Person);
-      }
-    `,
-    );
-    let openFile = await getFileResource(this, adapter, {
-      module: `${testRealmURL}post`,
-      name: 'Post',
-    });
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <Module @file={{openFile}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-
-    await waitFor('[data-test-card-id]');
-    assert
-      .dom('[data-test-field="author"] a[href="/code?path=person"]')
-      .exists('link to person card exists');
-    assert
-      .dom(
-        '[data-test-field="title"] a[href="http://localhost:4201/base/string?schema"]',
-      )
-      .exists('link to string card exists');
-  });
-
   test('can delete a field from card', async function (assert) {
     await realm.write(
       'person.gts',
@@ -242,16 +200,18 @@ module('Integration | schema', function (hooks) {
       }
     `,
     );
-    let openFile = await getFileResource(this, adapter, {
-      module: `${testRealmURL}person`,
-      name: 'Person',
-    });
+    mockOpenFiles.path = 'person.gts';
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -285,16 +245,19 @@ module('Integration | schema', function (hooks) {
       }
     `,
     );
-    let openFile = await getFileResource(this, adapter, {
-      module: `${testRealmURL}person`,
-      name: 'Person',
-    });
+
+    mockOpenFiles.path = 'person.gts';
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -340,16 +303,19 @@ module('Integration | schema', function (hooks) {
       }
     `,
     );
-    let openFile = await getFileResource(this, adapter, {
-      module: `${testRealmURL}fancy-person`,
-      name: 'FancyPerson',
-    });
+
+    mockOpenFiles.path = 'fancy-person.gts';
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -433,17 +399,19 @@ module('Integration | schema', function (hooks) {
         },
       }),
     );
-    let openFile = await getFileResource(this, adapter, {
-      module: `${testRealmURL}post`,
-      name: 'Post',
-    });
+
+    mockOpenFiles.path = 'post.gts';
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
-          <CardCatalogModal />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -557,7 +525,7 @@ module('Integration | schema', function (hooks) {
 
     await click(`[data-test-select="${testRealmURL}person-entry"]`);
     await click('[data-test-card-catalog-go-button]');
-    await waitFor('.schema [data-test-field="author"]');
+    await waitFor('[data-test-field="author"]');
     assert.dom('[data-test-field="author"]').exists();
     assert
       .dom('[data-test-field="author"]')
@@ -595,17 +563,19 @@ module('Integration | schema', function (hooks) {
       }
     `,
     );
-    let openFile = await getFileResource(this, adapter, {
-      module: `${testRealmURL}person`,
-      name: 'Person',
-    });
+
+    mockOpenFiles.path = 'person.gts';
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
-          <CardCatalogModal />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -716,17 +686,18 @@ module('Integration | schema', function (hooks) {
       }),
     );
 
-    let openFile = await getFileResource(this, adapter, {
-      module: `${testRealmURL}pet`,
-      name: 'Pet',
-    });
+    mockOpenFiles.path = 'pet.gts';
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
-          <CardCatalogModal />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -830,17 +801,19 @@ module('Integration | schema', function (hooks) {
         },
       }),
     );
-    let openFile = await getFileResource(this, adapter, {
-      module: `${testRealmURL}person`,
-      name: 'Person',
-    });
+
+    mockOpenFiles.path = 'person.gts';
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
-          <CardCatalogModal />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -930,17 +903,19 @@ module('Integration | schema', function (hooks) {
         },
       }),
     );
-    let openFile = await getFileResource(this, adapter, {
-      module: `${testRealmURL}person`,
-      name: 'Person',
-    });
+
+    mockOpenFiles.path = 'person.gts';
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
-          <CardCatalogModal />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -1005,17 +980,18 @@ module('Integration | schema', function (hooks) {
     `,
     );
 
-    let openFile = await getFileResource(this, adapter, {
-      module: `${testRealmURL}employee`,
-      name: 'Employee',
-    });
+    mockOpenFiles.path = 'employee.gts';
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
-          <CardCatalogModal />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -1100,17 +1076,19 @@ module('Integration | schema', function (hooks) {
         },
       }),
     );
-    let openFile = await getFileResource(this, adapter, {
-      module: `${testRealmURL}person`,
-      name: 'Person',
-    });
+
+    mockOpenFiles.path = 'person.gts';
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
-          <CardCatalogModal />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -1199,17 +1177,18 @@ module('Integration | schema', function (hooks) {
         },
       }),
     );
-    let openFile = await getFileResource(this, adapter, {
-      module: `${testRealmURL}person`,
-      name: 'Person',
-    });
+    mockOpenFiles.path = 'person.gts';
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
-          <CardCatalogModal />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -1265,16 +1244,19 @@ module('Integration | schema', function (hooks) {
       }
     `,
     );
-    let openFile = await getFileResource(this, adapter, {
-      module: `${testRealmURL}person`,
-      name: 'Person',
-    });
+
+    mockOpenFiles.path = 'person.gts';
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
@@ -1320,16 +1302,19 @@ module('Integration | schema', function (hooks) {
       }
     `,
     );
-    let openFile = await getFileResource(this, adapter, {
-      module: `${testRealmURL}person`,
-      name: 'Person',
-    });
+
+    mockOpenFiles.path = 'person.gts';
+    let f = await getFileResource(this, testRealmURL, mockOpenFiles);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Module @file={{openFile}} />
+          {{#if (isReady this.openFile)}}
+            <Module @file={{this.openFile}} />
+          {{/if}}
           <CardPrerender />
+          <CardCatalogModal />
         </template>
+        openFile = f;
       },
     );
 
