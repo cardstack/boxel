@@ -2564,7 +2564,10 @@ module('Integration | search-index', function (hooks) {
     let refs = (await indexer.searchEntry(new URL(`${testRealmURL}person-1`)))
       ?.deps;
     assert.deepEqual(
-      [...refs!.keys()].sort(),
+      [...refs!.keys()]
+        .sort()
+        // Exclude synthetic imports that encapsulate scoped CSS
+        .filter((key) => !key.includes('glimmer-scoped.css')),
       [
         '@cardstack/boxel-ui',
         '@cardstack/boxel-ui/helpers/pick',

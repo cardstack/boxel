@@ -16,7 +16,6 @@ import { eq } from '@cardstack/host/helpers/truth-helpers';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 //@ts-ignore cached not available yet in definitely typed
 import { cached, tracked } from '@glimmer/tracking';
-import { LinkTo } from '@ember/routing';
 //@ts-ignore glint does not think this is consumed-but it is consumed in the template
 import { hash } from '@ember/helper';
 import CatalogEntryEditor from './catalog-entry-editor';
@@ -25,7 +24,7 @@ import Modifier from 'ember-modifier';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type CardService from '@cardstack/host/services/card-service';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
-import type { FileResource } from '@cardstack/host/resources/file';
+import type { Ready } from '@cardstack/host/resources/file';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import type { Card, FieldType } from 'https://cardstack.com/base/card-api';
 import {
@@ -40,7 +39,7 @@ import type { Filter } from '@cardstack/runtime-common/query';
 interface Signature {
   Args: {
     card: typeof Card;
-    file: FileResource;
+    file: Ready;
     moduleSyntax: ModuleSyntax;
   };
 }
@@ -78,18 +77,9 @@ export default class Schema extends Component<Signature> {
                   {{cardId field.card}}
                   (this card)
                 {{else if (this.inRealm (cardModule field.card))}}
-                  <LinkTo
-                    @route='code'
-                    @query={{hash
-                      path=(this.modulePath (cardModule field.card))
-                    }}
-                  >
-                    {{cardId field.card}}
-                  </LinkTo>
+                  <div>{{cardId field.card}}</div>
                 {{else}}
-                  <a
-                    href={{this.moduleSchemaURL (cardModule field.card)}}
-                  >{{cardId field.card}}</a>
+                  <div>{{cardId field.card}}</div>
                 {{/if}}
               </li>
             {{/each}}
@@ -344,7 +334,7 @@ export default class Schema extends Component<Signature> {
     // note that this write will cause the component to rerender, so
     // any code after this write will not be executed since the component will
     // get torn down before subsequent code can execute
-    this.args.file.writeTask.perform(src, true);
+    this.args.file.write(src, true);
   });
 }
 

@@ -1,6 +1,6 @@
 export function createResponse(
   body?: BodyInit | null | undefined,
-  init?: ResponseInit | undefined
+  init?: ResponseInit | undefined,
 ): Response {
   return new Response(body, {
     ...init,

@@ -95,6 +95,27 @@ export function getBoxComponent(
         @context={{context}}
       />
     {{/if}}
+    <style>
+      .field-component-card {
+        padding: var(--boxel-sp);
+      }
+
+      .isolated-card {
+        padding: var(--boxel-sp-xl);
+      }
+
+      .edit-card.saved {
+        padding: var(--boxel-sp-xl);
+      }
+
+      /* Add some padding to accomodate for overlaid header for embedded cards in operator mode */
+      .operator-mode-stack .embedded-card,
+      .operator-mode-stack .edit-card.not-saved {
+        padding-top: calc(
+          var(--overlay-embedded-card-header-height) + var(--boxel-sp-lg)
+        );
+      }
+    </style>
   </template>;
 
   // when viewed from *outside*, our component is both an invokable component
@@ -229,6 +250,17 @@ export function getPluralViewComponent(
           {{/let}}
         {{/each}}
       </ul>
+      <style>
+        .plural-field {
+          list-style: none;
+          padding: 0;
+          margin: 0;
+        }
+
+        .plural-field > li + li {
+          margin-top: var(--boxel-sp);
+        }
+      </style>
     </template>
   };
   return new Proxy(defaultComponent, {

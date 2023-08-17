@@ -15,6 +15,7 @@ import { Vendor } from './vendor';
 import { formatUSD, balanceInCurrency } from './currency-format';
 import { FieldContainer, Label, Message } from '@cardstack/boxel-ui';
 import { Token, Currency } from './asset';
+import GlimmerComponent from '@glimmer/component';
 
 class Details extends Card {
   @field invoiceNo = contains(StringCard);
@@ -30,8 +31,8 @@ class Details extends Card {
   });
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div class='details'>
-        <div class='details__fields'>
+      <DetailsContainer>
+        <DetailsFieldsContainer>
           <FieldContainer @label='Invoice No.'><@fields.invoiceNo
             /></FieldContainer>
           <FieldContainer @label='Invoice Date'><@fields.invoiceDate
@@ -40,15 +41,15 @@ class Details extends Card {
           <FieldContainer @label='Terms'><@fields.terms /></FieldContainer>
           <FieldContainer @label='Invoice Document'><@fields.invoiceDocument
             /></FieldContainer>
-        </div>
+        </DetailsFieldsContainer>
         <FieldContainer @label='Memo'><@fields.memo /></FieldContainer>
-      </div>
+      </DetailsContainer>
     </template>
   };
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <div class='details details--edit'>
-        <div class='details__fields'>
+      <DetailsContainer class='edit'>
+        <DetailsFieldsContainer>
           <FieldContainer @tag='label' @label='Invoice No.'><@fields.invoiceNo
             /></FieldContainer>
           <FieldContainer
@@ -63,15 +64,58 @@ class Details extends Card {
             @tag='label'
             @label='Invoice Document'
           ><@fields.invoiceDocument /></FieldContainer>
-        </div>
+        </DetailsFieldsContainer>
         <FieldContainer
           @tag='label'
           @vertical={{true}}
           @label='Memo'
         ><@fields.memo /></FieldContainer>
-      </div>
+      </DetailsContainer>
+      <style>
+        .edit {
+          padding: var(--boxel-sp);
+        }
+      </style>
     </template>
   };
+}
+
+interface GenericContainerSignature {
+  Element: HTMLElement;
+  Blocks: {
+    default: [];
+  };
+}
+
+class DetailsContainer extends GlimmerComponent<GenericContainerSignature> {
+  <template>
+    <div class='details' ...attributes>
+      {{yield}}
+    </div>
+    <style>
+      .details {
+        --boxel-field-label-size: 35%;
+        --boxel-field-label-align: center;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--boxel-sp-xl);
+      }
+    </style>
+  </template>
+}
+
+class DetailsFieldsContainer extends GlimmerComponent<GenericContainerSignature> {
+  <template>
+    <div class='fields' ...attributes>
+      {{yield}}
+    </div>
+    <style>
+      .fields {
+        display: grid;
+        grid-gap: var(--boxel-sp) 0;
+      }
+    </style>
+  </template>
 }
 
 class LineItem extends Card {
@@ -87,32 +131,43 @@ class LineItem extends Card {
           <div><strong><@fields.name /></strong></div>
           <@fields.description />
         </div>
-        <div class='line-item__qty'><@fields.quantity /></div>
-        <div class='line-item__amount'>
+        <div class='qty'><@fields.quantity /></div>
+        <div class='amount'>
           <strong>{{formatUSD @model.amount}}</strong>
         </div>
       </div>
+      <style>
+        .line-item {
+          display: grid;
+          grid-template-columns: 3fr 1fr 2fr;
+        }
+
+        .qty {
+          justify-self: center;
+        }
+
+        .amount {
+          justify-self: end;
+        }
+      </style>
     </template>
   };
 
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <div class='line-item--edit'>
-        <div class='line-item__row'>
+      <div class='edit'>
+        <div class='row'>
           <FieldContainer
-            class='line-item__field'
             @tag='label'
             @label='Goods / Services Rendered'
             @vertical={{true}}
           ><@fields.name /></FieldContainer>
           <FieldContainer
-            class='line-item__field'
             @tag='label'
             @label='Qty'
             @vertical={{true}}
           ><@fields.quantity /></FieldContainer>
           <FieldContainer
-            class='line-item__field'
             @tag='label'
             @label='Amount'
             @vertical={{true}}
@@ -124,6 +179,19 @@ class LineItem extends Card {
           @vertical={{true}}
         ><@fields.description /></FieldContainer>
       </div>
+      <style>
+        .edit {
+          display: grid;
+          gap: var(--boxel-sp-sm);
+        }
+
+        .row {
+          display: grid;
+          grid-template-columns: 3fr 1fr 2fr;
+          gap: var(--boxel-sp);
+          align-items: end;
+        }
+      </style>
     </template>
   };
 }
@@ -153,8 +221,8 @@ class Note extends Card {
 
 class InvoiceTemplate extends Component<typeof InvoicePacket> {
   <template>
-    <div class='invoice-template'>
-      <section class='invoice'>
+    <InvoiceContainer>
+      <:default>
         <section>
           <h2>Title</h2>
           <@fields.title />
@@ -181,7 +249,7 @@ class InvoiceTemplate extends Component<typeof InvoicePacket> {
         <div class='payment'>
           <section>
             <h2>Payment Methods</h2>
-            <div class='payment-methods'>
+            <PaymentMethodsContainer>
               <FieldContainer
                 @label='Primary Payment Method'
                 @vertical={{true}}
@@ -215,30 +283,83 @@ class InvoiceTemplate extends Component<typeof InvoicePacket> {
                   </div>
                 </FieldContainer>
               {{/if}}
-            </div>
+            </PaymentMethodsContainer>
           </section>
-          <FieldContainer
-            @vertical={{true}}
-            @label='Balance Due'
-            class='balance-due'
-          >
-            <span class='balance-due__total'>
-              {{formatUSD @model.balanceDue}}
-            </span>
-          </FieldContainer>
+          <BalanceDue @balanceDue={{@model.balanceDue}} />
         </div>
-      </section>
-      {{#if @model.notes.length}}
-        <section class='extras'>
-          <section>
-            <h2>Notes</h2>
-            <div class='notes'>
-              <@fields.notes />
-            </div>
+      </:default>
+      <:extras>
+        {{#if @model.notes.length}}
+          <section class='extras'>
+            <section>
+              <h2>Notes</h2>
+              <div class='notes'>
+                <@fields.notes />
+              </div>
+            </section>
           </section>
-        </section>
-      {{/if}}
-    </div>
+        {{/if}}
+      </:extras>
+    </InvoiceContainer>
+    <style>
+      .line-items__title-row {
+        display: grid;
+        grid-template-columns: 3fr 1fr 2fr;
+        margin-bottom: var(--boxel-sp-xxxs);
+      }
+
+      .line-items__title-row > *:nth-child(2) {
+        justify-self: center;
+      }
+
+      .line-items__title-row > *:last-child {
+        justify-self: end;
+      }
+
+      .line-items__rows {
+        padding: var(--boxel-sp-lg) 0;
+        border-top: 1px solid var(--boxel-200);
+        border-bottom: 1px solid var(--boxel-200);
+      }
+
+      .line-items__rows > * + * {
+        margin-top: var(--boxel-sp-xs);
+      }
+
+      .payment {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 var(--boxel-sp-xs);
+      }
+
+      .payment-method__item {
+        display: inline-grid;
+        grid-template-columns: var(--boxel-sp) 1fr;
+        gap: var(--boxel-sp-xxxs);
+        font: 700 var(--boxel-font);
+      }
+
+      .payment-methods__bal {
+        margin-left: var(--boxel-sp-lg);
+      }
+
+      .extras {
+        padding: var(--boxel-sp-xl);
+        background-color: var(--boxel-100);
+      }
+
+      .notes,
+      .history {
+        --boxel-border-radius: 20px;
+      }
+
+      .notes > * + *,
+      .history > * + * {
+        margin-top: var(--boxel-sp);
+        padding-top: var(--boxel-sp);
+        border-top: 1px solid var(--boxel-200);
+      }
+    </style>
   </template>
 }
 
@@ -260,7 +381,7 @@ class EditTemplate extends Component<typeof InvoicePacket> {
         </section>
         <section>
           <h2>Payment Methods</h2>
-          <div class='payment-methods'>
+          <PaymentMethodsContainer>
             <FieldContainer
               @tag='label'
               @label='Primary Payment Method'
@@ -275,19 +396,92 @@ class EditTemplate extends Component<typeof InvoicePacket> {
             >
               <@fields.alternatePayment />
             </FieldContainer>
-          </div>
+          </PaymentMethodsContainer>
         </section>
-        <FieldContainer
-          @label='Balance Due'
-          class='balance-due'
-          @vertical={{true}}
-        >
-          <span class='balance-due__total'>
-            {{formatUSD @model.balanceDue}}
-          </span>
-        </FieldContainer>
+        <BalanceDue @balanceDue={{@model.balanceDue}} />
       </section>
     </div>
+  </template>
+}
+
+interface InvoiceContainerSignature {
+  Element: HTMLElement;
+  Blocks: {
+    default: [];
+    extras: [];
+  };
+}
+
+class InvoiceContainer extends GlimmerComponent<InvoiceContainerSignature> {
+  <template>
+    <div class='invoice-template' ...attributes>
+      <section class='invoice'>
+        {{yield}}
+      </section>
+      {{yield to='extras'}}
+    </div>
+    <style>
+      .invoice-template {
+        max-width: 50rem;
+        font: var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+        overflow: hidden;
+      }
+
+      .invoice-template :deep(h2) {
+        margin-top: 0;
+        margin-bottom: var(--boxel-sp);
+        font: 700 var(--boxel-font);
+      }
+
+      .invoice {
+        padding: var(--boxel-sp-lg);
+        display: grid;
+        gap: var(--boxel-sp-xxl) 0;
+      }
+    </style>
+  </template>
+}
+
+class PaymentMethodsContainer extends GlimmerComponent<GenericContainerSignature> {
+  <template>
+    <div class='payment-methods'>
+      {{yield}}
+    </div>
+    <style>
+      .payment-methods {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 var(--boxel-sp-xs);
+      }
+    </style>
+  </template>
+}
+
+interface BalanceDueSignature {
+  Element: HTMLElement;
+  Args: {
+    balanceDue?: number;
+  };
+}
+
+class BalanceDue extends GlimmerComponent<BalanceDueSignature> {
+  <template>
+    <FieldContainer @label='Balance Due' class='balance-due' @vertical={{true}}>
+      <span class='total'>
+        {{formatUSD @balanceDue}}
+      </span>
+    </FieldContainer>
+    <style>
+      .balance-due {
+        justify-items: end;
+        text-align: right;
+      }
+
+      .total {
+        font: 700 var(--boxel-font-lg);
+      }
+    </style>
   </template>
 }
 

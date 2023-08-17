@@ -1,8 +1,7 @@
 import Component from '@glimmer/component';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, timeout } from 'ember-concurrency';
 import { service } from '@ember/service';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
@@ -16,7 +15,7 @@ import {
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type CardService from '@cardstack/host/services/card-service';
-import type { FileResource } from '@cardstack/host/resources/file';
+import { file, FileResource, isReady } from '@cardstack/host/resources/file';
 import CardEditor from '@cardstack/host/components/card-editor';
 import Module from './module';
 import FileTree from './file-tree';
@@ -24,17 +23,21 @@ import type { Card } from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
 import momentFrom from 'ember-moment/helpers/moment-from';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
-import type { MonacoContext } from '@cardstack/host/services/monaco-service';
+import type {
+  MonacoSDK,
+  IStandaloneCodeEditor,
+} from '@cardstack/host/services/monaco-service';
+import type { OpenFiles } from '@cardstack/host/controllers/code';
+import { maybe } from '@cardstack/host/resources/maybe';
 
 const { ownRealmURL } = ENV;
 const log = logger('component:go');
 
 interface Signature {
   Args: {
-    openFile: FileResource | undefined;
-    openDirs: string[];
-    path: string | undefined;
-    monacoContext?: MonacoContext;
+    openFiles: OpenFiles;
+    monaco: MonacoSDK;
+    onEditorSetup?(editor: IStandaloneCodeEditor): void;
   };
 }
 
@@ -42,13 +45,9 @@ export default class Go extends Component<Signature> {
   <template>
     <div class='main'>
       <div class='main-column'>
-        <FileTree
-          @url={{ownRealmURL}}
-          @openFile={{@path}}
-          @openDirs={{@openDirs}}
-        />
+        <FileTree @url={{ownRealmURL}} @openFiles={{@openFiles}} />
       </div>
-      {{#if this.openFile}}
+      {{#if (isReady this.openFile.current)}}
         <div class='editor-column'>
           <menu class='editor-menu'>
             <li>
@@ -62,33 +61,28 @@ export default class Go extends Component<Signature> {
             </li>
             {{#if this.contentChangedTask.last.isError}}
               <li data-test-failed-to-save>Failed to save</li>
-            {{else if this.openFile.lastModified}}
+            {{else if this.openFile.current.lastModified}}
               <li data-test-last-edit>Last edit was
-                {{momentFrom this.openFile.lastModified}}</li>
-              <li data-test-editor-lang>Lang: {{@monacoContext.language}}</li>
+                {{momentFrom this.openFile.current.lastModified}}</li>
+              <li data-test-editor-lang>Lang: {{this.language}}</li>
             {{/if}}
           </menu>
-          {{#if @monacoContext.sdk}}
-            {{#if (eq @openFile.state 'ready')}}
-              <div
-                class='editor-container'
-                data-test-editor
-                {{monacoModifier
-                  content=this.openFile.content
-                  contentChanged=this.contentChanged
-                  monacoSDK=@monacoContext.sdk
-                  language=@monacoContext.language
-                  onSetup=@monacoContext.onEditorSetup
-                }}
-              >
-
-              </div>
-            {{/if}}
-          {{/if}}
+          <div
+            class='editor-container'
+            data-test-editor
+            {{monacoModifier
+              content=this.openFile.current.content
+              contentChanged=this.contentChanged
+              monacoSDK=@monaco
+              language=this.language
+              onSetup=@onEditorSetup
+            }}
+          >
+          </div>
         </div>
         <div class='main-column'>
-          {{#if (isRunnable this.openFile.name)}}
-            <Module @file={{this.openFile}} />
+          {{#if this.isRunnable}}
+            <Module @file={{this.openFile.current}} />
           {{else if this.openFileCardJSON}}
             {{#if this.card}}
               <CardEditor
@@ -104,6 +98,7 @@ export default class Go extends Component<Signature> {
           <button {{on 'click' this.removeFile}}>Delete</button>
         </div>
       {{/if}}
+
     </div>
     <style>
       .main {
@@ -132,7 +127,6 @@ export default class Go extends Component<Signature> {
         display: flex;
         gap: var(--boxel-sp-sm);
       }
-
       .editor-container {
         flex: 1;
       }
@@ -154,22 +148,28 @@ export default class Go extends Component<Signature> {
   }
 
   contentChangedTask = restartableTask(async (content: string) => {
+    await timeout(500);
     if (
-      this.args.openFile?.state !== 'ready' ||
-      content === this.args.openFile.content
+      this.openFile.current?.state !== 'ready' ||
+      content === this.openFile.current?.content
     ) {
       return;
     }
 
-    let isJSON = this.args.openFile.name.endsWith('.json');
+    let isJSON = this.openFile.current.name.endsWith('.json');
     let json = isJSON && this.safeJSONParse(content);
 
+    // Here lies the difference in how json files and other source code files
+    // are treated during editing in the code editor
     if (json && isSingleCardDocument(json)) {
+      // writes json instance but doesn't update state of the file resource
+      // relies on message service subscription to update state
       await this.saveSingleCardDocument(json);
       return;
+    } else {
+      //writes source code and updates the state of the file resource
+      await this.writeSourceCodeToFile(this.openFile.current, content);
     }
-
-    await this.writeContentToFile(this.args.openFile, content);
   });
 
   safeJSONParse(content: string) {
@@ -177,25 +177,57 @@ export default class Go extends Component<Signature> {
       return JSON.parse(content);
     } catch (err) {
       log.warn(
-        `content for ${this.args.path} is not valid JSON, skipping write`,
+        `content for ${this.args.openFiles.path} is not valid JSON, skipping write`,
       );
       return;
     }
   }
 
-  writeContentToFile(file: FileResource, content: string) {
+  get language(): string | undefined {
+    if (this.args.openFiles.path) {
+      const editorLanguages = this.args.monaco.languages.getLanguages();
+      let extension = '.' + this.args.openFiles.path.split('.').pop();
+      let language = editorLanguages.find((lang) =>
+        lang.extensions?.find((ext) => ext === extension),
+      );
+      return language?.id ?? 'plaintext';
+    }
+    return undefined;
+  }
+
+  openFile = maybe(this, (context) => {
+    const relativePath = this.args.openFiles.path;
+    if (relativePath) {
+      return file(context, () => ({
+        relativePath,
+        realmURL: new RealmPaths(this.cardService.defaultURL).url,
+        onStateChange: (state) => {
+          if (state === 'not-found') {
+            this.args.openFiles.path = undefined;
+          }
+        },
+      }));
+    } else {
+      return undefined;
+    }
+  });
+
+  writeSourceCodeToFile(file: FileResource, content: string) {
     if (file.state !== 'ready')
       throw new Error('File is not ready to be written to');
 
-    return file.writeTask.perform(content);
+    return file.write(content);
   }
 
   async saveSingleCardDocument(json: any) {
     let realmPath = new RealmPaths(this.cardService.defaultURL);
-    let url = realmPath.fileURL(this.args.path!.replace(/\.json$/, ''));
+    let url = realmPath.fileURL(
+      this.args.openFiles.path!.replace(/\.json$/, ''),
+    );
 
     try {
       await this.cardService.saveCardDocument(json, url);
+      await this.loadCard.perform(url);
     } catch (e) {
       console.log('Failed to save single card document', e);
     }
@@ -205,18 +237,18 @@ export default class Go extends Component<Signature> {
   get openFileCardJSON() {
     this.jsonError = undefined;
     if (
-      this.args.openFile?.state === 'ready' &&
-      this.args.openFile.name.endsWith('.json')
+      this.openFile.current?.state === 'ready' &&
+      this.openFile.current.name.endsWith('.json')
     ) {
       let maybeCard: any;
       try {
-        maybeCard = JSON.parse(this.args.openFile.content);
+        maybeCard = JSON.parse(this.openFile.current.content);
       } catch (err: any) {
         this.jsonError = err.message;
         return undefined;
       }
       if (isCardDocument(maybeCard)) {
-        let url = this.args.openFile?.url.replace(/\.json$/, '');
+        let url = this.openFile.current.url.replace(/\.json$/, '');
         if (!url) {
           return undefined;
         }
@@ -236,23 +268,23 @@ export default class Go extends Component<Signature> {
     this.card = card;
   }
 
-  get openFile() {
-    if (this.args.openFile?.state !== 'ready') {
-      return undefined;
-    }
-    return this.args.openFile;
+  get path() {
+    return this.args.openFiles.path ?? '/';
   }
 
-  get path() {
-    return this.args.path ?? '/';
+  get isRunnable(): boolean {
+    let filename = this.path;
+    return ['.gjs', '.js', '.gts', '.ts'].some((extension) =>
+      filename.endsWith(extension),
+    );
   }
 
   @action
   removeFile() {
-    if (!this.openFile) {
+    if (!this.openFile.current || !('url' in this.openFile.current)) {
       return;
     }
-    this.remove.perform(this.openFile.url);
+    this.remove.perform(this.openFile.current.url);
   }
 
   private remove = restartableTask(async (url: string) => {
@@ -272,12 +304,6 @@ export default class Go extends Component<Signature> {
       );
     }
   });
-}
-
-function isRunnable(filename: string): boolean {
-  return ['.gjs', '.js', '.gts', '.ts'].some((extension) =>
-    filename.endsWith(extension),
-  );
 }
 
 declare module '@glint/environment-ember-loose/registry' {

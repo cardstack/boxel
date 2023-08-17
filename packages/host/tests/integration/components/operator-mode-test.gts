@@ -1454,12 +1454,16 @@ module('Integration | operator-mode', function (hooks) {
 
     await focus(`[data-test-search-input] input`);
     assert.dom(`[data-test-search-sheet-recent-card]`).exists({ count: 2 });
-    assert.dom(
-      `[data-test-search-sheet-recent-card=0] [data-test-search-result="${testRealmURL}Person/burcu"]`,
-    );
-    assert.dom(
-      `[data-test-search-sheet-recent-card=1] [data-test-search-result="${testRealmURL}Person/fadhlan"]`,
-    );
+    assert
+      .dom(
+        `[data-test-search-sheet-recent-card="0"][data-test-search-result="${testRealmURL}Person/burcu"]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-search-sheet-recent-card="1"][data-test-search-result="${testRealmURL}Person/fadhlan"]`,
+      )
+      .exists();
   });
 
   test(`displays recently accessed card, maximum 10 cards`, async function (assert) {
@@ -1509,8 +1513,10 @@ module('Integration | operator-mode', function (hooks) {
       .dom(`[data-test-search-result-label]`)
       .containsText('2 Results for "Ma"');
     assert.dom(`[data-test-search-sheet-search-result]`).exists({ count: 2 });
-    assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
-    assert.dom(`[data-test-search-result="${testRealmURL}Author/mark"]`);
+    assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
+    assert
+      .dom(`[data-test-search-result="${testRealmURL}Author/mark"]`)
+      .exists();
 
     //Ensures that there is no cards when reopen the search sheet
     await click(`[data-test-search-sheet-cancel-button]`);
