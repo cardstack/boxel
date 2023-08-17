@@ -7,11 +7,8 @@ import { service } from '@ember/service';
 import { registerDestructor } from '@ember/destroyable';
 import { enqueueTask, restartableTask } from 'ember-concurrency';
 import debounce from 'lodash/debounce';
-import flatMap from 'lodash/flatMap';
 import type { Card, CardContext } from 'https://cardstack.com/base/card-api';
 import {
-  baseRealm,
-  catalogEntryRef,
   createNewCard,
   isSingleCardDocument,
   type CardRef,
@@ -35,9 +32,6 @@ import CardCatalog from './card-catalog/index';
 import CardCatalogFilters from './card-catalog/filters';
 import { type RealmInfo } from '@cardstack/runtime-common';
 import { TrackedArray } from 'tracked-built-ins';
-import ENV from '@cardstack/host/config/environment';
-
-const { otherRealmURLs } = ENV;
 
 interface Signature {
   Args: {
@@ -68,6 +62,7 @@ export default class CardCatalogModal extends Component<Signature> {
           <SearchInput
             @value={{this.searchKey}}
             @onInput={{this.setSearchKey}}
+            @onKeyPress={{this.onSearchFieldKeypress}}
             @placeholder='Search for a card'
             data-test-search-field
           />
@@ -83,7 +78,7 @@ export default class CardCatalogModal extends Component<Signature> {
             Loading...
           {{else}}
             <CardCatalog
-              @results={{this.displayedRealms}}
+              @results={{if this.searchKey this.searchResults this.displayedRealms}}
               @toggleSelect={{this.toggleSelect}}
               @selectedCard={{this.selectedCard}}
               @context={{@context}}
@@ -185,8 +180,6 @@ export default class CardCatalogModal extends Component<Signature> {
     </style>
   </template>
 
-  _selectedRealms = new TrackedArray<RealmCards>([]);
-  searchCardResults = new TrackedArray<Card>();
   @tracked currentRequest:
     | {
         search: Search;
@@ -200,6 +193,7 @@ export default class CardCatalogModal extends Component<Signature> {
   @tracked zIndex = 20;
   @tracked selectedCard?: Card = undefined;
   @tracked searchKey = '';
+  @tracked searchResults: RealmCards[] = [];
   @tracked cardURL = '';
   @tracked hasCardURLError = false;
   @tracked chooseCardTitle = DEFAULT_CHOOOSE_CARD_TITLE;
@@ -245,12 +239,15 @@ export default class CardCatalogModal extends Component<Signature> {
     return this.currentRequest?.search.instancesByRealm ?? [];
   }
 
+  _selectedRealms = new TrackedArray<RealmCards>([]);
+
   get selectedRealms(): RealmCards[] {
     return this._selectedRealms;
   }
 
   @action onSelectRealm(realm: RealmCards) {
     this._selectedRealms.push(realm);
+    this.onSearchFieldUpdated();
   }
 
   @action onDeselectRealm(realm: RealmCards) {
@@ -258,15 +255,16 @@ export default class CardCatalogModal extends Component<Signature> {
       (r) => r.url === realm.url,
     );
     this._selectedRealms.splice(selectedRealmIndex, 1);
+    this.onSearchFieldUpdated();
   }
 
   private resetState() {
     this.searchKey = '';
+    this.searchResults = [];
     this.cardURL = '';
     this.hasCardURLError = false;
     this.selectedCard = undefined;
     this.dismissModal = false;
-    this.searchCardResults.splice(0, this.searchCardResults.length);
   }
 
   // This is part of our public API for runtime-common to invoke the card chooser
@@ -343,17 +341,15 @@ export default class CardCatalogModal extends Component<Signature> {
 
   @action
   setSearchKey(searchKey: string) {
-    this.searchKey = searchKey;
-    this.debouncedSearchFieldUpdate();
+    this.searchKey = searchKey.trim().toLowerCase();
+    if (!this.searchKey) {
+      this.resetState();
+    } else {
+      this.debouncedSearchFieldUpdate();
+    }
   }
 
-  debouncedSearchFieldUpdate = debounce(() => {
-    if (!this.searchKey) {
-      this.searchCardResults.splice(0, this.searchCardResults.length);
-      return;
-    }
-    this.onSearchFieldUpdated();
-  }, 500);
+  debouncedSearchFieldUpdate = debounce(() => this.onSearchFieldUpdated(), 500);
 
   @action
   setCardURL(cardURL: string) {
@@ -371,11 +367,27 @@ export default class CardCatalogModal extends Component<Signature> {
   }
 
   @action
-  onSearchFieldUpdated() {
-    if (this.searchKey) {
-      this.searchCardResults.splice(0, this.searchCardResults.length);
-      this.searchCard.perform(this.searchKey);
+  onSearchFieldKeypress(e: KeyboardEvent) {
+    if (e.key === 'Enter') {
+      this.onSearchFieldUpdated();
     }
+  }
+
+  @action
+  onSearchFieldUpdated() {
+    if (!this.searchKey) {
+      return this.resetState();
+    }
+    let results: RealmCards[] = [];
+    for (let { url, realmInfo, cards } of this.displayedRealms) {
+      let filteredCards = cards.filter(c => c.title.trim().toLowerCase().includes(this.searchKey));
+      if (filteredCards.length) {
+        results.push({
+          url, realmInfo, cards: filteredCards
+        });
+      }
+    }
+    this.searchResults = results;
   }
 
   @action
@@ -385,40 +397,6 @@ export default class CardCatalogModal extends Component<Signature> {
       this.getCard.perform(this.cardURL);
     }
   }
-
-  private searchCard = restartableTask(async (searchKey: string) => {
-    let query = {
-      filter: {
-        every: [
-          { type: catalogEntryRef },
-          {
-            contains: {
-              title: searchKey
-            },
-          },
-        ],
-      },
-    };
-
-    let cards = flatMap(
-      await Promise.all(
-        [...new Set([
-          this.cardService.defaultURL.href,
-          baseRealm.url,
-          ...otherRealmURLs,
-        ])].map(
-          async (realm) => await this.cardService.search(query, new URL(realm)),
-        ),
-      ),
-    );
-
-    if (cards.length > 0) {
-      this.searchCardResults.push(...cards);
-    } else {
-      this.searchCardResults.splice(0, this.searchCardResults.length);
-    }
-    console.log(searchKey, ...this.searchCardResults);
-  });
 
   @action toggleSelect(card?: Card): void {
     this.cardURL = '';
