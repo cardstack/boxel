@@ -23,10 +23,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type CommandService from '../../services/command-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import { type Card, type Format } from 'https://cardstack.com/base/card-api';
-import {
-  type RoomCard,
-  type MessageCard,
-} from 'https://cardstack.com/base/room';
+import { type MessageCard } from 'https://cardstack.com/base/room';
 import type CardService from '@cardstack/host/services/card-service';
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
@@ -65,7 +62,7 @@ class CommandMessage extends Component<CommandArgs> {
 
 export default class Room extends Component<RoomArgs> {
   <template>
-    <div>Number of cards: {{this.currentCards.size}}</div>
+    <div>Number of cards: {{this.totalCards}}</div>
     <div class='room-members'>
       <div data-test-room-members class='members'><b>Members:</b>
         {{this.memberNames}}
@@ -306,26 +303,11 @@ export default class Room extends Component<RoomArgs> {
   }
 
   @cached
-  private get currentCards() {
+  private get totalCards() {
     if (!this.roomCard) {
-      return new Map();
+      return 0;
     }
-    let getVersion = (
-      Reflect.getPrototypeOf(this.roomCard)!.constructor as typeof RoomCard
-    ).getVersion;
-    return this.cards.reduce((accumulator, card) => {
-      let latestInstance = accumulator.get(card.id);
-      if (!latestInstance) {
-        accumulator.set(card.id, card);
-      } else {
-        let latestInstanceVer = getVersion(latestInstance)!;
-        let cardVer = getVersion(card)!;
-        if (cardVer > latestInstanceVer) {
-          accumulator.set(card.id, card);
-        }
-      }
-      return accumulator;
-    }, new Map<string, Card>());
+    return new Set(this.cards.map((card) => card.id)).size;
   }
 
   private get objectiveComponent() {

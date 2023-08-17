@@ -229,12 +229,6 @@ const roomMemberCache = new WeakMap<RoomCard, Map<string, RoomMemberCard>>();
 const roomStateCache = new WeakMap<RoomCard, RoomState>();
 
 export class RoomCard extends Card {
-  // This can be used  to get the version of `cardInstance` like:
-  //   Reflect.getProtypeOf(roomCardInstance).constructor.getVersion(cardInstance);
-  static getVersion(card: Card) {
-    return cardVersions.get(card);
-  }
-
   // the only writeable field for this card should be the "events" field.
   // All other fields should derive from the "events" field.
   @field events = containsMany(MatrixEventCard);
@@ -466,8 +460,6 @@ export class RoomCard extends Card {
   static edit = class Edit extends Component<typeof this> {
     <template>
       <div>Cannot edit room card</div>
-
-
     </template>
   };
 }
