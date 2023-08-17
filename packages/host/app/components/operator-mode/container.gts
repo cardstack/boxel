@@ -150,6 +150,10 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   }
 
+  @action onSearch(_term: string) {
+    this.searchSheetMode = SearchSheetMode.SearchResults;
+  }
+
   constructRecentCards = restartableTask(async () => {
     return await this.operatorModeStateService.constructRecentCards();
   });
@@ -586,7 +590,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     ) {
       return htmlSafe(`background-image: url(${this.backgroundImageURLs[0]});`);
     }
-    return '';
+    return htmlSafe('');
   }
 
   get differingBackgroundImageURLs() {
@@ -815,6 +819,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         @mode={{this.searchSheetMode}}
         @onCancel={{this.onCancelSearchSheet}}
         @onFocus={{this.onFocusSearchInput}}
+        @onSearch={{this.onSearch}}
         @onCardSelect={{this.onCardSelectFromSearch}}
       />
     </Modal>

@@ -36,6 +36,7 @@ const SearchInput: TemplateOnlyComponent<Signature> = <template>
   >
     <label>
       <span class='boxel-sr-only'>Search</span>
+      {{! template-lint-disable no-inline-styles }}
       <BoxelInputValidationState
         @value={{@value}}
         @onInput={{@onInput}}
@@ -44,6 +45,7 @@ const SearchInput: TemplateOnlyComponent<Signature> = <template>
         @state={{if @state @state 'initial'}}
         @errorMessage={{@errorMessage}}
         @placeholder={{if @placeholder @placeholder 'Search'}}
+        style='--input-height: var(--search-input-height); --input-font-size: var(--search-input-font-size)'
       />
     </label>
     <span class='search-input-icon'>
@@ -53,6 +55,7 @@ const SearchInput: TemplateOnlyComponent<Signature> = <template>
   <style>
     .search-input {
       --search-icon-width: var(--boxel-sp-xxl);
+      --search-input-height: var(--boxel-sp-xxxl);
       position: relative;
       width: 100%;
       font: var(--boxel-font);
@@ -61,18 +64,19 @@ const SearchInput: TemplateOnlyComponent<Signature> = <template>
       --icon-color: var(--boxel-highlight);
       position: absolute;
       top: var(--boxel-sp);
-      left: 0;
+      bottom: var(--boxel-sp);
+      right: 0;
       width: var(--search-icon-width);
       display: flex;
       justify-content: center;
       align-items: center;
     }
     :global(.search-input .boxel-input) {
-      --input-height: 3.75rem;
+      --input-height: var(--search-input-height);
       --boxel-form-control-border-color: var(--boxel-dark);
       --boxel-form-control-border-radius: var(--boxel-border-radius-xl);
 
-      padding-left: var(--search-icon-width);
+      padding-left: var(--boxel-sp);
       background-color: var(--boxel-dark);
       color: var(--boxel-light);
       font: var(--boxel-font);
@@ -82,7 +86,6 @@ const SearchInput: TemplateOnlyComponent<Signature> = <template>
       --boxel-form-control-border-radius: var(--boxel-border-radius-xl)
         var(--boxel-border-radius-xl) 0 0;
     }
-
   </style>
 </template>;
 
