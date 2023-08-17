@@ -94,7 +94,7 @@ export default class Modal extends Component<Signature> {
         height: 100%;
         padding: 0;
         border: none;
-        background-color: var(--boxel-modal-overlay-color, rgb(0 0 0 / 40%));
+        background-color: var(--boxel-modal-overlay-color, rgb(39 45 48 / 50%));
         background-image: var(--boxel-modal-background-image-url);
         background-position: center;
         background-size: cover;
@@ -103,7 +103,7 @@ export default class Modal extends Component<Signature> {
       }
 
       .x-small {
-        --boxel-modal-max-width: 20rem;
+        --boxel-modal-max-width: 23.25rem; /* 300px */
       }
 
       .small {

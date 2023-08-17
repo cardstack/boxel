@@ -62,6 +62,8 @@ export default class DeleteModal extends Component<Signature> {
         width: 100%;
         font-size: var(--boxel-font-size);
         text-align: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       .disclaimer {
         margin-top: var(--boxel-sp-xs);
@@ -72,7 +74,7 @@ export default class DeleteModal extends Component<Signature> {
         padding: var(--boxel-sp-lg) var(--boxel-sp-xl) var(--boxel-sp);
         background-color: white;
         border-radius: var(--boxel-border-radius-xl);
-        box-shadow: 0 15px 50px 0 rgba(0, 0, 0, 0.4);
+        box-shadow: 0 15px 30px 0 rgba(0, 0, 0, 0.35);
       }
       .buttons {
         margin-top: var(--boxel-sp-lg);
