@@ -12,7 +12,7 @@ import { Modal, IconButton } from '@cardstack/boxel-ui';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import SearchSheet, { SearchSheetMode } from '../search-sheet';
 import { restartableTask, task, dropTask } from 'ember-concurrency';
-import { TrackedArray, TrackedWeakMap } from 'tracked-built-ins';
+import { TrackedArray, TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 import {
   Deferred,
   baseCardRef,
@@ -84,7 +84,7 @@ enum SearchSheetTrigger {
   DropCardToRightNeighborStackButton = 'drop-card-to-right-neighbor-stack-button',
 }
 
-const cardSelections = new TrackedWeakMap<StackItem, TrackedArray<Card>>();
+const cardSelections = new TrackedWeakMap<StackItem, TrackedSet<Card>>();
 const clearSelections = new WeakMap<StackItem, () => void>();
 const stackItemStableScrolls = new WeakMap<
   StackItem,
@@ -171,16 +171,19 @@ export default class OperatorModeContainer extends Component<Signature> {
   onSelectedCards(selectedCards: Card[], stackItem: StackItem) {
     let selected = cardSelections.get(stackItem);
     if (!selected) {
-      selected = new TrackedArray([]);
+      selected = new TrackedSet([]);
       cardSelections.set(stackItem, selected);
     }
-    selected.splice(0, selected.length, ...selectedCards);
+    selected.clear();
+    for (let card of selectedCards) {
+      selected.add(card);
+    }
   }
 
   get selectedCards() {
     return this.operatorModeStateService
       .topMostStackItems()
-      .map((i) => cardSelections.get(i) ?? []);
+      .map((i) => [...(cardSelections.get(i) ?? [])]);
   }
 
   @action onCancelSearchSheet() {
@@ -314,11 +317,24 @@ export default class OperatorModeContainer extends Component<Signature> {
           (i) => i.type === 'card' && i.card.id === card.id,
         ) as CardStackItem[]),
       );
+      // remove all selections for the deleted card
+      for (let item of stack) {
+        let selections = cardSelections.get(item);
+        if (!selections) {
+          continue;
+        }
+        let removedCard = [...selections].find((c) => c.id === card.id);
+        if (removedCard) {
+          selections.delete(removedCard);
+        }
+      }
     }
+    // remove all stack items for the deleted card
     for (let item of items) {
       this.operatorModeStateService.trimItemsFromStack(item);
     }
     this.operatorModeStateService.removeRecentCard(card.id);
+
     await this.withTestWaiters(async () => {
       await this.cardService.deleteCard(card);
       deferred!.fulfill();

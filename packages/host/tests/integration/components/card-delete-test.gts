@@ -619,4 +619,66 @@ module('Integration | card-delete', function (hooks) {
       .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
       .doesNotExist('recent item removed');
   });
+
+  test<TestContextWithSSE>('can delete a card that is a selected item', async function (assert) {
+    assert.expect(6);
+    let expectedEvents = ['removed: Pet/mango.json', 'index: incremental'];
+    await setCardInOperatorModeState(
+      [`${testRealmURL}index`],
+      [`http://localhost:4202/test/`],
+    );
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    let fileRef = await adapter.openFile('Pet/mango.json');
+    assert.ok(fileRef, 'card instance exists in file system');
+    await this.expectEvents(
+      assert,
+      realm,
+      adapter,
+      expectedEvents,
+      async () => {
+        await waitFor(
+          `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]`,
+        );
+        await waitFor(
+          `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
+        );
+        await click(
+          `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.select`,
+        );
+        await click(
+          `[data-test-overlay-card="${testRealmURL}Pet/vangogh"] button.select`,
+        );
+        assert
+          .dom('[data-test-copy-button]')
+          .containsText('Copy 2 Cards', 'button text is correct');
+        await click(
+          `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.more-actions`,
+        );
+        await click('[data-test-boxel-menu-item-text="Delete"]');
+        await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
+        assert
+          .dom(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`)
+          .containsText('Delete the card Mango?');
+        await click('[data-test-confirm-delete-button]');
+      },
+    );
+    await waitUntil(
+      () =>
+        document.querySelectorAll(
+          `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]`,
+        ).length === 1,
+    );
+    let notFound = await adapter.openFile('Pet/mango.json');
+    assert.strictEqual(notFound, undefined, 'file ref does not exist');
+    assert
+      .dom('[data-test-copy-button]')
+      .containsText('Copy 1 Card', 'button text is correct');
+  });
 });
