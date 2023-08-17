@@ -830,8 +830,9 @@ function isEvaluatable(
 
 async function maybeHandleScopedCSSRequest(req: Request) {
   if (isScopedCSSRequest(req.url)) {
-    if (isFastBoot) {
-      return Promise.resolve(new Response('', { status: 204 }));
+    // isFastBoot doesn’t work here because this runs outside FastBoot but inside Node
+    if (typeof (globalThis as any).document == 'undefined') {
+      return Promise.resolve(new Response('', { status: 200 }));
     } else {
       let decodedCSS = decodeScopedCSSRequest(req.url);
       return Promise.resolve(
@@ -841,7 +842,7 @@ async function maybeHandleScopedCSSRequest(req: Request) {
             decodedCSS
           )}');
           styleNode.appendChild(styleText);
-          document.body.appendChild(styleNode);
+          document.head.appendChild(styleNode);
         `)
       );
     }

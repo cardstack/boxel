@@ -11,7 +11,7 @@ import {
   createNewCard,
 } from '@cardstack/runtime-common';
 import Directory from './directory';
-import { IconButton, Tooltip } from '@cardstack/boxel-ui';
+import { AddButton, Tooltip } from '@cardstack/boxel-ui';
 import config from '@cardstack/host/config/environment';
 import { OpenFiles } from '@cardstack/host/controllers/code';
 const { ownRealmURL } = config;
@@ -34,13 +34,8 @@ export default class FileTree extends Component<Args> {
     </nav>
     <Tooltip @placement='left'>
       <:trigger>
-        <IconButton
-          @icon='icon-plus-circle'
-          @width='40px'
-          @height='40px'
-          class='add-button'
+        <AddButton
           {{on 'click' this.createNew}}
-          data-test-create-new-card-button
         />
       </:trigger>
       <:content>
