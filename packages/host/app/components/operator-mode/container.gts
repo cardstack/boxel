@@ -12,7 +12,7 @@ import { Modal, IconButton } from '@cardstack/boxel-ui';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import SearchSheet, { SearchSheetMode } from '../search-sheet';
 import { restartableTask, task, dropTask } from 'ember-concurrency';
-import { TrackedArray, TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
+import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 import {
   Deferred,
   baseCardRef,
