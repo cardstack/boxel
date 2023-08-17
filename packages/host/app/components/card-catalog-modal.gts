@@ -66,7 +66,6 @@ export default class CardCatalogModal extends Component<Signature> {
       >
         <:header>
           <SearchInput
-            class='card-catalog-modal__search-field'
             @value={{this.searchKey}}
             @onInput={{this.setSearchKey}}
             @placeholder='Search for a card'
@@ -158,10 +157,6 @@ export default class CardCatalogModal extends Component<Signature> {
       </ModalContainer>
     {{/if}}
     <style>
-      .card-catalog-modal__search-field {
-        /* This is neccesary to show card URL error messages */
-        height: 5.625rem;
-      }
       .footer {
         display: flex;
         justify-content: space-between;
@@ -190,6 +185,7 @@ export default class CardCatalogModal extends Component<Signature> {
     </style>
   </template>
 
+  _selectedRealms = new TrackedArray<RealmCards>([]);
   searchCardResults = new TrackedArray<Card>();
   @tracked currentRequest:
     | {
@@ -252,8 +248,6 @@ export default class CardCatalogModal extends Component<Signature> {
   get selectedRealms(): RealmCards[] {
     return this._selectedRealms;
   }
-
-  @tracked _selectedRealms = new TrackedArray<RealmCards>([]);
 
   @action onSelectRealm(realm: RealmCards) {
     this._selectedRealms.push(realm);
@@ -423,6 +417,7 @@ export default class CardCatalogModal extends Component<Signature> {
     } else {
       this.searchCardResults.splice(0, this.searchCardResults.length);
     }
+    console.log(searchKey, ...this.searchCardResults);
   });
 
   @action toggleSelect(card?: Card): void {
