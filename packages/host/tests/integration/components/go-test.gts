@@ -117,7 +117,6 @@ module('Integration | Component | go', function (hooks) {
     ) as MonacoService;
     mockOpenFiles = new OpenFiles(new CodeController());
     await realm.ready;
-    setupLoaderWithHandler(loader, realm, moduleMap);
   });
 
   setupCardLogs(
