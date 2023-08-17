@@ -320,8 +320,10 @@ export default class Room extends Component<RoomArgs> {
       } else {
         let latestInstanceVer = getVersion(latestInstance)!;
         let cardVer = getVersion(card)!;
-        if (cardVer > latestInstanceVer) {
-          accumulator.set(card.id, card);
+        if (latestInstanceVer !== undefined && cardVer !== undefined) {
+          if (cardVer > latestInstanceVer) {
+            accumulator.set(card.id, card);
+          }
         }
       }
       return accumulator;

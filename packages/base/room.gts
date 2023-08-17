@@ -23,7 +23,11 @@ import {
   type CardRef,
 } from '@cardstack/runtime-common';
 
-const cardVersions = new Map<Card, string>();
+type CardEventData = {
+  eventId: string;
+  serverTimeOrigin: number;
+};
+const cardVersions = new Map<Card, CardEventData>();
 
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember({
@@ -230,9 +234,11 @@ const roomStateCache = new WeakMap<RoomCard, RoomState>();
 
 export class RoomCard extends Card {
   // This can be used  to get the version of `cardInstance` like:
-  //   Reflect.getProtypeOf(roomCardInstance).constructor.getVersion(cardInstance);
+  // Reflect.getProtypeOf(roomCardInstance).constructor.getVersion(cardInstance);
+  // Note: this does make a SERIOUS assumption about time
+  // Events from different homeservers may be different
   static getVersion(card: Card) {
-    return cardVersions.get(card);
+    return cardVersions.get(card)?.serverTimeOrigin;
   }
 
   // the only writeable field for this card should be the "events" field.
@@ -382,56 +388,62 @@ export class RoomCard extends Card {
       let index = cache.size;
       let newMessages = new Map<string, MessageCard>();
       for (let event of this.events) {
-        if (event.type !== 'm.room.message') {
-          continue;
-        }
-        let event_id = event.event_id;
-        let update = false;
-        if (event.content['m.relates_to']?.rel_type === 'm.replace') {
-          event_id = event.content['m.relates_to'].event_id;
-          update = true;
-        }
-        if (cache.has(event_id) && !update) {
-          continue;
-        }
+        if (this.roomId == event.room_id) {
+          if (event.type !== 'm.room.message') {
+            continue;
+          }
+          let event_id = event.event_id;
+          let update = false;
+          if (event.content['m.relates_to']?.rel_type === 'm.replace') {
+            event_id = event.content['m.relates_to'].event_id;
+            update = true;
+          }
+          if (cache.has(event_id) && !update) {
+            continue;
+          }
 
-        let author = upsertRoomMember({ roomCard: this, userId: event.sender });
-        let formattedMessage =
-          event.content.msgtype === 'org.boxel.objective'
-            ? `<em>${author.name} has set the room objectives</em>`
-            : event.content.formatted_body;
-        let cardArgs = {
-          author,
-          created: new Date(event.origin_server_ts),
-          message: event.content.body,
-          formattedMessage,
-          index,
-          attachedCard: null,
-          command: null,
-        };
-        if (event.content.msgtype === 'org.boxel.command') {
-          cardArgs['command'] = event.content.command;
-        }
-        if (event.content.msgtype === 'org.boxel.card') {
-          let cardDoc = event.content.instance;
-          if (cardDoc.data.id == null) {
-            throw new Error(`cannot handle cards in room without an ID`);
+          let author = upsertRoomMember({
+            roomCard: this,
+            userId: event.sender,
+          });
+          let formattedMessage =
+            event.content.msgtype === 'org.boxel.objective'
+              ? `<em>${author.name} has set the room objectives</em>`
+              : event.content.formatted_body;
+          let cardArgs = {
+            author,
+            created: new Date(event.origin_server_ts),
+            message: event.content.body,
+            formattedMessage,
+            index,
+            attachedCard: null,
+            command: null,
+          };
+          if (event.content.msgtype === 'org.boxel.command') {
+            cardArgs['command'] = event.content.command;
           }
-          let attachedCard = await createFromSerialized<typeof Card>(
-            cardDoc.data,
-            cardDoc,
-            new URL(cardDoc.data.id),
-            loader,
-          );
-          newMessages.set(
-            event_id,
-            new MessageCard({ ...cardArgs, attachedCard }),
-          );
-          if (!cardVersions.get(attachedCard)) {
-            cardVersions.set(attachedCard, event.unsigned.transaction_id);
+          if (event.content.msgtype === 'org.boxel.card') {
+            let cardDoc = event.content.instance;
+            if (cardDoc.data.id == null) {
+              throw new Error(`cannot handle cards in room without an ID`);
+            }
+            let attachedCard = await createFromSerialized<typeof Card>(
+              cardDoc.data,
+              cardDoc,
+              new URL(cardDoc.data.id),
+              loader,
+            );
+            newMessages.set(
+              event_id,
+              new MessageCard({ ...cardArgs, attachedCard }),
+            );
+            cardVersions.set(attachedCard, {
+              eventId: event_id,
+              serverTimeOrigin: event.origin_server_ts,
+            });
+          } else {
+            newMessages.set(event_id, new MessageCard(cardArgs));
           }
-        } else {
-          newMessages.set(event_id, new MessageCard(cardArgs));
         }
 
         index++;
@@ -466,8 +478,6 @@ export class RoomCard extends Card {
   static edit = class Edit extends Component<typeof this> {
     <template>
       <div>Cannot edit room card</div>
-
-
     </template>
   };
 }
