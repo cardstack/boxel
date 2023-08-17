@@ -27,8 +27,9 @@ export default class DeleteModal extends Component<Signature> {
     >
       <div class='delete'>
         <div class='content'>Delete the card</div>
-        <div class='content'><strong
-          >{{this.currentConfirmation.card.title}}</strong>?</div>
+        <div class='content'>
+          <strong>{{this.currentConfirmation.card.title}}</strong>?
+        </div>
         <div class='content disclaimer'>This action is not reversable</div>
         <div class='buttons'>
           {{#if this.waitForDelete.isRunning}}
