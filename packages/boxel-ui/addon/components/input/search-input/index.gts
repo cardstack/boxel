@@ -5,6 +5,7 @@ import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import BoxelInputValidationState, {
   InputValidationState,
 } from '@cardstack/boxel-ui/components/input/validation-state';
+import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 
 export enum SearchInputBottomTreatment {
   Flat = 'flat',
@@ -36,7 +37,6 @@ const SearchInput: TemplateOnlyComponent<Signature> = <template>
   >
     <label>
       <span class='boxel-sr-only'>Search</span>
-      {{! template-lint-disable no-inline-styles }}
       <BoxelInputValidationState
         @value={{@value}}
         @onInput={{@onInput}}
@@ -45,7 +45,10 @@ const SearchInput: TemplateOnlyComponent<Signature> = <template>
         @state={{if @state @state 'initial'}}
         @errorMessage={{@errorMessage}}
         @placeholder={{if @placeholder @placeholder 'Search'}}
-        style='--input-height: var(--search-input-height); --input-font-size: var(--search-input-font-size)'
+        style={{cssVar
+          --input-height='var(--search-input-height)'
+          --input-font-size='var(--search-font-size)'
+        }}
       />
     </label>
     <span class='search-input-icon'>
