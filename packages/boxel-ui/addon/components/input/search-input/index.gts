@@ -46,8 +46,8 @@ const SearchInput: TemplateOnlyComponent<Signature> = <template>
         @errorMessage={{@errorMessage}}
         @placeholder={{if @placeholder @placeholder 'Search'}}
         style={{cssVar
-          --input-height='var(--search-input-height)'
-          --input-font-size='var(--search-font-size)'
+          input-height='var(--search-input-height)'
+          input-font-size='var(--search-font-size)'
         }}
       />
     </label>
