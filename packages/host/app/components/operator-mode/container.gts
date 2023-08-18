@@ -590,7 +590,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     ) {
       return htmlSafe(`background-image: url(${this.backgroundImageURLs[0]});`);
     }
-    return htmlSafe('');
+    return false;
   }
 
   get differingBackgroundImageURLs() {

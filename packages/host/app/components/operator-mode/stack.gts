@@ -40,7 +40,7 @@ export default class OperatorModeStack extends Component<Signature> {
 
   get backgroundImageStyle() {
     if (!this.args.backgroundImageURL) {
-      return htmlSafe('');
+      return false;
     }
     return htmlSafe(`background-image: url(${this.args.backgroundImageURL});`);
   }
