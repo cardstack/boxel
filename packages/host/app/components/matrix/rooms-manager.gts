@@ -13,7 +13,6 @@ import {
   LoadingIndicator,
   BoxelInputValidationState,
   Button,
-  IconButton,
   FieldContainer,
 } from '@cardstack/boxel-ui';
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
@@ -34,16 +33,27 @@ const TRUE = true;
 export default class RoomsManager extends Component {
   <template>
     <div class='header-wrapper'>
+      {{#unless this.isCreateRoomMode}}
+        <div class='create-button-wrapper'>
+          <Button
+            data-test-create-room-mode-btn
+            class='room__button'
+            {{on 'click' this.showCreateRoomMode}}
+            @disabled={{this.isCreateRoomMode}}
+          >Create Room</Button>
+        </div>
+        <div class='create-button-wrapper'>
+          <Button
+            data-test-create-ai-chat-btn
+            class='room__button'
+            {{on 'click' this.createAIChat}}
+          >Start new AI chat</Button>
+        </div>
+      {{/unless}}
       <BoxelHeader
         class='matrix'
         @title={{this.headerTitle}}
         @hasBackground={{TRUE}}
-      />
-      <IconButton
-        class='toggle-btn'
-        data-test-toggle-rooms-view
-        @icon={{this.toggleIcon}}
-        {{on 'click' this.toggleRooms}}
       />
     </div>
     {{#if this.isCreateRoomMode}}
@@ -97,84 +107,66 @@ export default class RoomsManager extends Component {
     {{#if this.loadRooms.isRunning}}
       <LoadingIndicator />
     {{else}}
-      {{#unless this.isCollapsed}}
-        {{#unless this.isCreateRoomMode}}
-          <div class='create-button-wrapper'>
-            <Button
-              data-test-create-room-mode-btn
-              class='room__button'
-              {{on 'click' this.showCreateRoomMode}}
-              @disabled={{this.isCreateRoomMode}}
-            >Create Room</Button>
-          </div>
-          <div class='create-button-wrapper'>
-            <Button
-              data-test-create-ai-chat-btn
-              class='room__button'
-              {{on 'click' this.createAIChat}}
-            >Start new AI chat</Button>
-          </div>
-        {{/unless}}
-        {{#if this.hasInvites}}
-          <div class='room-list' data-test-invites-list>
-            <h3>Invites</h3>
-            {{#each this.sortedInvites as |invite|}}
-              <div class='room' data-test-invited-room={{invite.room.name}}>
-                <span class='room-item'>
-                  {{invite.room.name}}
-                  (from:
-                  <span
-                    data-test-invite-sender={{niceName
-                      invite.member.membershipInitiator
-                    }}
-                  >{{niceName invite.member.membershipInitiator}})</span>
-                </span>
-                <Button
-                  data-test-decline-room-btn={{invite.room.name}}
-                  {{on 'click' (fn this.leaveRoom invite.room.roomId)}}
-                >Decline</Button>
-                <Button
-                  data-test-join-room-btn={{invite.room.name}}
-                  {{on 'click' (fn this.joinRoom invite.room.roomId)}}
-                >Join</Button>
-                {{#if (eq invite.room.roomId this.roomIdForCurrentAction)}}
-                  <LoadingIndicator />
-                {{/if}}
-              </div>
-            {{/each}}
-          </div>
-        {{/if}}
-        <div class='room-list' data-test-rooms-list>
-          <h3>Existing chats</h3>
-          {{#each this.sortedJoinedRooms as |joined|}}
-            <div class='room' data-test-joined-room={{joined.room.name}}>
+
+      {{#if this.currentRoomId}}
+        <Room @roomId={{this.currentRoomId}} />
+      {{/if}}
+
+      <hr />
+      {{#if this.hasInvites}}
+        <div class='room-list' data-test-invites-list>
+          <h3>Invites</h3>
+          {{#each this.sortedInvites as |invite|}}
+            <div class='room' data-test-invited-room={{invite.room.name}}>
               <span class='room-item'>
-                <button
-                  class='enter-room link'
-                  data-test-enter-room={{joined.room.name}}
-                  {{on 'click' (fn this.enterRoom joined.room.roomId)}}
-                >
-                  {{joined.room.name}}
-                </button>
+                {{invite.room.name}}
+                (from:
+                <span
+                  data-test-invite-sender={{niceName
+                    invite.member.membershipInitiator
+                  }}
+                >{{niceName invite.member.membershipInitiator}})</span>
               </span>
               <Button
-                data-test-leave-room-btn={{joined.room.name}}
-                {{on 'click' (fn this.leaveRoom joined.room.roomId)}}
-              >Leave</Button>
-              {{#if (eq joined.room.roomId this.roomIdForCurrentAction)}}
+                data-test-decline-room-btn={{invite.room.name}}
+                {{on 'click' (fn this.leaveRoom invite.room.roomId)}}
+              >Decline</Button>
+              <Button
+                data-test-join-room-btn={{invite.room.name}}
+                {{on 'click' (fn this.joinRoom invite.room.roomId)}}
+              >Join</Button>
+              {{#if (eq invite.room.roomId this.roomIdForCurrentAction)}}
                 <LoadingIndicator />
               {{/if}}
             </div>
-          {{else}}
-            (No rooms)
           {{/each}}
         </div>
-        <hr />
-      {{/unless}}
-    {{/if}}
-
-    {{#if this.currentRoomId}}
-      <Room @roomId={{this.currentRoomId}} />
+      {{/if}}
+      <div class='room-list' data-test-rooms-list>
+        <h3>Existing chats</h3>
+        {{#each this.sortedJoinedRooms as |joined|}}
+          <div class='room' data-test-joined-room={{joined.room.name}}>
+            <span class='room-item'>
+              <button
+                class='enter-room link'
+                data-test-enter-room={{joined.room.name}}
+                {{on 'click' (fn this.enterRoom joined.room.roomId)}}
+              >
+                {{joined.room.name}}
+              </button>
+            </span>
+            <Button
+              data-test-leave-room-btn={{joined.room.name}}
+              {{on 'click' (fn this.leaveRoom joined.room.roomId)}}
+            >Leave</Button>
+            {{#if (eq joined.room.roomId this.roomIdForCurrentAction)}}
+              <LoadingIndicator />
+            {{/if}}
+          </div>
+        {{else}}
+          (No rooms)
+        {{/each}}
+      </div>
     {{/if}}
 
     <style>
@@ -209,12 +201,6 @@ export default class RoomsManager extends Component {
         position: relative;
       }
 
-      .toggle-btn {
-        position: absolute;
-        z-index: 1;
-        margin-top: calc(-2 * var(--boxel-sp-xl) + 2px);
-      }
-
       .create-room {
         padding: 0 var(--boxel-sp);
       }
@@ -243,7 +229,6 @@ export default class RoomsManager extends Component {
   @tracked private roomNameError: string | undefined;
   @tracked private roomIdForCurrentAction: string | undefined;
   @tracked private currentRoomId: string | undefined;
-  @tracked private isCollapsed = false;
   private currentRoomCardResource = getRoomCard(this, () => this.currentRoomId);
 
   constructor(owner: unknown, args: any) {
@@ -335,15 +320,6 @@ export default class RoomsManager extends Component {
     return this.roomNameError ? 'invalid' : 'initial';
   }
 
-  private get toggleIcon() {
-    return this.isCollapsed ? 'icon-plus-circle' : 'icon-minus-circle';
-  }
-
-  @action
-  private toggleRooms() {
-    this.isCollapsed = !this.isCollapsed;
-  }
-
   @action
   private showCreateRoomMode() {
     this.isCreateRoomMode = true;
@@ -383,7 +359,6 @@ export default class RoomsManager extends Component {
   @action
   private enterRoom(roomId: string) {
     this.currentRoomId = roomId;
-    this.isCollapsed = true;
   }
 
   @action

@@ -14,6 +14,7 @@ import CardRefCard from './card-ref';
 import { baseCardRef, loadCard, Loader } from '@cardstack/runtime-common';
 import { isEqual } from 'lodash';
 import { FieldContainer } from '@cardstack/boxel-ui';
+import GlimmerComponent from '@glimmer/component';
 
 export class CatalogEntry extends Card {
   static displayName = 'Catalog Entry';
@@ -64,7 +65,7 @@ export class CatalogEntry extends Card {
   // right now in the edit view.
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <div class='catalog-entry catalog-entry--edit'>
+      <CatalogEntryContainer>
         <FieldContainer @tag='label' @label='Title' data-test-field='title'>
           <@fields.title />
         </FieldContainer>
@@ -84,26 +85,43 @@ export class CatalogEntry extends Card {
         <FieldContainer @vertical={{true}} @label='Demo' data-test-field='demo'>
           <@fields.demo />
         </FieldContainer>
-      </div>
+      </CatalogEntryContainer>
     </template>
   };
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div class='catalog-entry catalog-entry--embedded'>
-        <header class='catalog-entry--embedded__title'>
+      <CatalogEntryContainer class='embedded'>
+        <header class='title'>
           <@fields.title />
         </header>
-        <p class='catalog-entry-embedded__description' data-test-description>
+        <p class='description' data-test-description>
           <@fields.description />
         </p>
-      </div>
+      </CatalogEntryContainer>
+      <style>
+        .embedded > * {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .title {
+          font: 700 var(--boxel-font-sm);
+        }
+
+        .description {
+          margin: 0;
+          color: var(--boxel-500);
+          font-size: var(--boxel-font-size-xs);
+        }
+      </style>
     </template>
   };
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <div class='catalog-entry'>
+      <CatalogEntryContainer>
         <h1 data-test-title><@fields.title /></h1>
         <em data-test-description><@fields.description /></em>
         <div data-test-ref>
@@ -112,14 +130,42 @@ export class CatalogEntry extends Card {
           Name:
           {{@model.ref.name}}
         </div>
-        <div class='catalog-entry__realm-name' data-test-realm-name>
+        <div class='realm-name' data-test-realm-name>
           in
           <@fields.realmName />
         </div>
         {{#if @model.showDemo}}
           <div data-test-demo><@fields.demo /></div>
         {{/if}}
-      </div>
+      </CatalogEntryContainer>
+      <style>
+        .realm-name {
+          color: var(--boxel-teal);
+          font-size: var(--boxel-font-size-xs);
+        }
+      </style>
     </template>
   };
+}
+
+interface Signature {
+  Element: HTMLElement;
+  Blocks: {
+    default: [];
+  };
+}
+
+class CatalogEntryContainer extends GlimmerComponent<Signature> {
+  <template>
+    <div class='entry' ...attributes>
+      {{yield}}
+    </div>
+    <style>
+      .entry {
+        display: grid;
+        gap: 3px;
+        font: var(--boxel-font-sm);
+      }
+    </style>
+  </template>
 }

@@ -27,7 +27,10 @@ export default class MenuUsage extends Component {
             (menuItem 'Share' (fn this.log 'Share menu item clicked'))
             (menuDivider)
             (menuItem
-              'Remove' (fn this.log 'Remove menu item clicked') dangerous=true
+              'Remove'
+              (fn this.log 'Remove menu item clicked')
+              icon='icon-trash'
+              dangerous=true
             )
           }}
         />

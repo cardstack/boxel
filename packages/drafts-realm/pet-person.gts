@@ -9,6 +9,7 @@ import {
 import StringCard from 'https://cardstack.com/base/string';
 import { Pet } from './pet';
 import { Person } from './person';
+import { GridContainer } from '@cardstack/boxel-ui';
 
 export class PetPerson extends Card {
   static displayName = 'Pet Person';
@@ -23,26 +24,26 @@ export class PetPerson extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div class='demo-card'>
+      <GridContainer>
         <h3><@fields.firstName /></h3>
         Pets:
         <@fields.pets />
         Friend:
         <@fields.friend />
-      </div>
+      </GridContainer>
     </template>
   };
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <div class='demo-card'>
+      <GridContainer>
         <h2><@fields.title /></h2>
         <h2><@fields.firstName /></h2>
         Pets:
         <@fields.pets />
         Friend:
         <@fields.friend />
-      </div>
+      </GridContainer>
     </template>
   };
 }

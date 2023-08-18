@@ -101,6 +101,9 @@ importers:
         specifier: ^3.12.7
         version: 3.12.7
     devDependencies:
+      '@cardstack/runtime-common':
+        specifier: workspace:^
+        version: link:../runtime-common
       matrix-js-sdk:
         specifier: ^25.0.0
         version: 25.0.0(patch_hash=vlqn3jrrd7zoh7xnqjj35ihq2i)
@@ -679,8 +682,8 @@ importers:
         specifier: ^7.4.3
         version: 7.4.3
       glimmer-scoped-css:
-        specifier: ^0.3.1
-        version: 0.3.1
+        specifier: ^0.4.0
+        version: 0.4.0
       lodash:
         specifier: ^4.17.21
         version: 4.17.21
@@ -769,6 +772,9 @@ importers:
       ember-cli-terser:
         specifier: ^4.0.2
         version: 4.0.2
+      ember-css-url:
+        specifier: ^1.0.0
+        version: 1.0.0
       ember-export-application-global:
         specifier: ^2.0.1
         version: 2.0.1
@@ -1137,8 +1143,8 @@ importers:
         specifier: ^5.0.2
         version: 5.0.2
       glimmer-scoped-css:
-        specifier: ^0.3.1
-        version: 0.3.1
+        specifier: ^0.4.0
+        version: 0.4.0
       ignore:
         specifier: ^5.2.0
         version: 5.2.0
@@ -1478,8 +1484,8 @@ importers:
         specifier: ^5.0.2
         version: 5.0.2
       glimmer-scoped-css:
-        specifier: ^0.3.2
-        version: 0.3.2
+        specifier: ^0.4.0
+        version: 0.4.0
       http-status-codes:
         specifier: ^2.2.0
         version: 2.2.0
@@ -16730,19 +16736,8 @@ packages:
       through: 2.2.7
     dev: true
 
-  /glimmer-scoped-css@0.3.1:
-    resolution: {integrity: sha512-dYQqZIIj5bFHAy6GVxy+hOAqy26KbrBjHmIGt2YIhXZgERzgXJKpf1YNd/SfzD1d4zgiiHDfCUnJ3MlQu1l23w==}
-    dependencies:
-      '@embroider/addon-shim': 1.8.5
-      js-string-escape: 1.0.1
-      postcss: 8.4.23
-      postcss-selector-parser: 6.0.12
-      super-fast-md5: 1.0.1
-    transitivePeerDependencies:
-      - supports-color
-
-  /glimmer-scoped-css@0.3.2:
-    resolution: {integrity: sha512-DW8LyfbH1XUMgswPxXJOl3b/bMNZ6UjbYeWSoiALHFRsIeTZgf0oYgSrzxTX/QArMvuLn42O2UbZ9trwZRD6LQ==}
+  /glimmer-scoped-css@0.4.0:
+    resolution: {integrity: sha512-ZiUZzseqXQ0vHxwM8OSKwclPL16UnYOFo/W6QrIAi6PF1el/RtkQNvCgWwAQFv2QsJHXcBXxb9BFzPFNtgAexw==}
     dependencies:
       '@embroider/addon-shim': 1.8.5
       js-string-escape: 1.0.1
@@ -21444,13 +21439,6 @@ packages:
       indexes-of: 1.0.1
       uniq: 1.0.1
 
-  /postcss-selector-parser@6.0.12:
-    resolution: {integrity: sha512-NdxGCAZdRrwVI1sy59+Wzrh+pMMHxapGnpfenDVlMEXoOcvt4pGE0JLK9YY2F5dLxcFYA/YbVQKhcGU+FtSYQg==}
-    engines: {node: '>=4'}
-    dependencies:
-      cssesc: 3.0.0
-      util-deprecate: 1.0.2
-
   /postcss-selector-parser@6.0.13:
     resolution: {integrity: sha512-EaV1Gl4mUEV4ddhDnv/xtj7sxwrwxdetHdWUGnT4VJQf+4d05v6lHYZr8N573k5Z0BViss7BDhfWtKS3+sfAqQ==}
     engines: {node: '>=4'}
@@ -21477,14 +21465,6 @@ packages:
       picocolors: 1.0.0
       source-map-js: 1.0.2
     dev: true
-
-  /postcss@8.4.23:
-    resolution: {integrity: sha512-bQ3qMcpF6A/YjR55xtoTr0jGOlnPOKAIMdOWiv0EIT6HVPEaJiJB4NLljSbiHoC2RX7DN5Uvjtpbg1NPdwv1oA==}
-    engines: {node: ^10 || ^12 || >=14}
-    dependencies:
-      nanoid: 3.3.6
-      picocolors: 1.0.0
-      source-map-js: 1.0.2
 
   /postcss@8.4.25:
     resolution: {integrity: sha512-7taJ/8t2av0Z+sQEvNzCkpDynl0tX3uJMCODi6nT3PfASC7dYCWV9aQ+uiCf+KBD4SEFcu+GvJdGdwzQ6OSjCw==}
@@ -26663,7 +26643,7 @@ packages:
       ember-concurrency-async-plugin: link:vendor/ember-concurrency-async-plugin
       ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0)
       flat: 5.0.2
-      glimmer-scoped-css: 0.3.2
+      glimmer-scoped-css: 0.4.0
       http-status-codes: 2.2.0
       ignore: 5.2.4
       js-string-escape: 1.0.1

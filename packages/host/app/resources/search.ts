@@ -1,13 +1,14 @@
 import { Resource } from 'ember-resources';
 import { restartableTask } from 'ember-concurrency';
 import { tracked } from '@glimmer/tracking';
-import { baseRealm, type RealmInfo } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 import { service } from '@ember/service';
 import flatMap from 'lodash/flatMap';
 import ENV from '@cardstack/host/config/environment';
 import type CardService from '../services/card-service';
 import type { Query } from '@cardstack/runtime-common/query';
 import type { Card } from 'https://cardstack.com/base/card-api';
+import { type RealmCards } from '../components/card-catalog-modal';
 
 interface Args {
   named: {
@@ -22,7 +23,7 @@ const { otherRealmURLs } = ENV;
 
 export class Search extends Resource<Args> {
   @tracked instances: Card[] = [];
-  @tracked instancesWithRealmInfo: { realmInfo: RealmInfo; card: Card }[] = [];
+  @tracked instancesByRealm: RealmCards[] = [];
   @service declare cardService: CardService;
   ready: Promise<void> | undefined;
 
@@ -34,30 +35,38 @@ export class Search extends Resource<Args> {
   private search = restartableTask(async (query: Query, realms?: string[]) => {
     // until we have realm index rollup, search all the realms as separate
     // queries that we merge together
+    let realmsToSearch = realms ?? [
+      ...new Set(
+        realms ?? [
+          this.cardService.defaultURL.href,
+          baseRealm.url,
+          ...otherRealmURLs,
+        ],
+      ),
+    ];
     this.instances = flatMap(
       await Promise.all(
         // use a Set since the default URL may actually be the base realm
-        [
-          ...new Set(
-            realms ?? [
-              this.cardService.defaultURL.href,
-              baseRealm.url,
-              ...otherRealmURLs,
-            ],
-          ),
-        ].map(
+        realmsToSearch.map(
           async (realm) => await this.cardService.search(query, new URL(realm)),
         ),
       ),
     );
 
-    this.instancesWithRealmInfo = await Promise.all(
-      this.instances.map(async (card) => {
-        let realmInfo = await this.cardService.getRealmInfo(card);
+    let realmsWithCards = realmsToSearch
+      .map((url) => {
+        let cards = this.instances.filter((card) => card.id.startsWith(url));
+        return { url, cards };
+      })
+      .filter((r) => r.cards.length > 0);
+
+    this.instancesByRealm = await Promise.all(
+      realmsWithCards.map(async ({ url, cards }) => {
+        let realmInfo = await this.cardService.getRealmInfo(cards[0]);
         if (!realmInfo) {
-          throw new Error(`Could not find realm info for ${card.id}`);
+          throw new Error(`Could not find realm info for card ${cards[0].id}`);
         }
-        return { realmInfo, card };
+        return { url, realmInfo, cards };
       }),
     );
   });

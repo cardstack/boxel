@@ -6,6 +6,7 @@ import {
   field,
   contains,
 } from 'https://cardstack.com/base/card-api';
+import { GridContainer } from '@cardstack/boxel-ui';
 
 export class Author extends Card {
   static displayName = 'Author Bio';
@@ -21,10 +22,10 @@ export class Author extends Card {
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div class='demo-card'>
+      <GridContainer>
         <@fields.firstName />
         <@fields.lastName />
-      </div>
+      </GridContainer>
     </template>
   };
 }

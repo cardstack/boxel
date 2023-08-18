@@ -848,6 +848,7 @@ export class Realm {
       backgroundURL: null,
       iconURL: null,
     };
+
     if (realmConfig) {
       try {
         let realmConfigJson = JSON.parse(realmConfig.content);
