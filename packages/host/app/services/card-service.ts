@@ -212,12 +212,35 @@ export default class CardService extends Service {
         ${JSON.stringify(json, null, 2)}`,
       );
     }
-    // TODO the fact that the loader cannot handle a concurrent form of this is
-    // indicative of a loader issue. Need to work with Ed around this as I think
-    // there is probably missing state in our loader's state machine.
     let results: Card[] = [];
+
+    // TODO let's deserialize the search results concurrently for better performance
     for (let doc of json.data) {
-      results.push(await this.createFromSerialized(doc, json, new URL(doc.id)));
+      // TODO temporarily ignoring errors during deserialization until we have a
+      // better solution here so that index cards aren't broken when a search
+      // result item encounters an error while being deserialized. Specifically
+      // we may encounter broken links which throw a NotFound error (as
+      // designed). The indexer does not yet track card instances that are
+      // consumed by each index instance so during deletion of instances we
+      // don't have anything to invalidate which means that broken links may
+      // live in our index. although there is nothing stopping a realm server
+      // from going down which may also cause a broken link...
+      try {
+        results.push(
+          await this.createFromSerialized(doc, json, new URL(doc.id)),
+        );
+      } catch (e) {
+        console.error(
+          `Encountered error deserializing '${
+            doc.id
+          }' from search result for query ${JSON.stringify(
+            query,
+            null,
+            2,
+          )} against realm ${realmURL}`,
+          e,
+        );
+      }
     }
     return results;
   }
