@@ -380,7 +380,6 @@ export default class SearchSheet extends Component<Signature> {
         left: 20px;
         height: calc(var(--search-sheet-closed-height) + 20px);
         padding: 0;
-        width: 172px;
       }
 
       .closed .search-input {
