@@ -535,6 +535,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
         margin-bottom: var(--stack-card-footer-height);
       }
 
+      .card {
+        overflow: hidden;
+      }
+
       .buried .card {
         background-color: var(--boxel-200);
         grid-template-rows: var(--buried-operator-mode-header-height) auto;
