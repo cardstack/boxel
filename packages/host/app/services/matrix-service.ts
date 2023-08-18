@@ -73,6 +73,7 @@ export default class MatrixService extends Service {
     await this.cardAPIModule.loaded;
     // The matrix SDK is VERY big so we only load it when we need it
     this.#matrixSDK = await import('matrix-js-sdk');
+    console.log("Using ", matrixURL);
     this._client = this.matrixSDK.createClient({ baseUrl: matrixURL });
     // building the event bindings like this so that we can consistently bind
     // and unbind these events programmatically--this way if we add a new event

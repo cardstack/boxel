@@ -10,16 +10,19 @@ import {
   assertLoggedOut,
   login,
   logout,
-  rootPath,
+  openRoot,
   openChat,
   reloadAndOpenChat,
   toggleOperatorMode,
+  setupMatrixOverride
 } from '../helpers';
+
 
 test.describe('Login', () => {
   let synapse: SynapseInstance;
-  test.beforeEach(async () => {
+  test.beforeEach(async ({page}) => {
     synapse = await synapseStart();
+    //await setupMatrixOverride(page);
     await registerUser(synapse, 'user1', 'pass');
   });
 
@@ -28,7 +31,7 @@ test.describe('Login', () => {
   });
 
   test('it can login', async ({ page }) => {
-    await page.goto(rootPath);
+    await openRoot(page);
     await toggleOperatorMode(page);
     await openChat(page);
 
@@ -70,7 +73,7 @@ test.describe('Login', () => {
   test('it shows an error when invalid credentials are provided', async ({
     page,
   }) => {
-    await page.goto(rootPath);
+    await openRoot(page);
     await toggleOperatorMode(page);
     await openChat(page);
     await page.locator('[data-test-username-field]').fill('user1');

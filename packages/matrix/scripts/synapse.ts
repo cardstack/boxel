@@ -10,8 +10,8 @@ let dataDir = process.env.SYNAPSE_DATA_DIR
   if (command === 'start') {
     await synapseStart({ template: 'dev', dataDir });
   } else if (command === 'stop') {
-    await dockerStop({ containerId: 'boxel-synapse' });
-    console.log(`stopped container 'boxel-synapse'`);
+    await dockerStop({ containerId: 'boxel-synapse-test' });
+    console.log(`stopped container 'boxel-synapse-test'`);
   } else {
     console.error(
       `Unknown command "${command}", available commands are "start" and "stop"`

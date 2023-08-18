@@ -13,7 +13,14 @@ interface LoginOptions {
 }
 
 export async function reloadAndOpenChat(page: Page) {
-  await page.reload();
+  let url = page.url();
+  if (url.includes("?")) {
+    url += "&";
+  } else {
+    url += "?";
+  }
+  url += "matrixURL=http://localhost:8002&playWrightTestMode=true"
+  await page.goto(url);
   await openChat(page);
 }
 
@@ -28,8 +35,12 @@ export async function openChat(page: Page) {
   );
 }
 
+export async function openRoot(page: Page) {
+  await page.goto(rootPath + "?matrixURL=http://localhost:8002&playWrightTestMode=true")
+}
+
 export async function gotoRegistration(page: Page) {
-  await page.goto(rootPath);
+  await openRoot(page);
   await toggleOperatorMode(page);
   await openChat(page);
   await page.locator('[data-test-register-user]').click();
@@ -41,7 +52,7 @@ export async function login(
   password: string,
   opts?: LoginOptions
 ) {
-  await page.goto(rootPath);
+  await openRoot(page);
   await toggleOperatorMode(page);
   await openChat(page);
   await page.locator('[data-test-username-field]').fill(username);
