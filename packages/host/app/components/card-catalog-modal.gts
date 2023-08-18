@@ -123,6 +123,7 @@ export default class CardCatalogModal extends Component<Signature> {
                   @onKeyPress={{this.onURLFieldKeypress}}
                   @state={{this.cardURLFieldState}}
                   @errorMessage={{this.cardURLErrorMessage}}
+                  data-test-url-search
                 />
               </label>
             {{/if}}

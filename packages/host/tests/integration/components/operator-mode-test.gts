@@ -1594,7 +1594,7 @@ module('Integration | operator-mode', function (hooks) {
     await click(`[data-test-create-new-card-button]`);
     await waitFor(`[data-test-card-catalog-item]`);
     await fillIn(
-      `[data-test-search-field] input`,
+      `[data-test-url-search] input`,
       `https://cardstack.com/base/types/room-objective`,
     );
     await waitUntil(
@@ -1631,15 +1631,15 @@ module('Integration | operator-mode', function (hooks) {
       .doesNotExist('invalid state is not shown');
 
     await fillIn(
-      `[data-test-search-field] input`,
+      `[data-test-url-search] input`,
       `https://cardstack.com/base/not-a-card`,
     );
     await waitFor(`[data-test-boxel-input-validation-state="invalid"]`);
     assert
       .dom(`[data-test-boxel-input-error-message]`)
-      .containsText('Not a valid search key');
+      .containsText('Not a valid Card URL');
     await fillIn(
-      `[data-test-search-field] input`,
+      `[data-test-url-search] input`,
       `https://cardstack.com/base/types/room-objective`,
     );
     assert
@@ -1672,7 +1672,7 @@ module('Integration | operator-mode', function (hooks) {
       .exists('card is selected');
 
     await fillIn(
-      `[data-test-search-field] input`,
+      `[data-test-url-search] input`,
       `https://cardstack.com/base/types/room-objective`,
     );
 
@@ -1686,11 +1686,11 @@ module('Integration | operator-mode', function (hooks) {
       `[data-test-card-catalog-item="https://cardstack.com/base/types/room-objective"] button`,
     );
     assert
-      .dom(`[data-test-search-field] input`)
+      .dom(`[data-test-url-search] input`)
       .hasNoValue('card URL field is cleared');
   });
 
-  test(`can search by card type in card chooser`, async function (assert) {
+  test(`can search by card title in card chooser`, async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1709,10 +1709,12 @@ module('Integration | operator-mode', function (hooks) {
 
     await fillIn(
       `[data-test-search-field] input`,
-      `PublishingPacket`,
+      `publishing packet`,
     );
-    assert.dom(`[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"][data-test-card-catalog-item-selected]`).exists();
+    await waitFor(`[data-test-card-catalog-item]`);
+    assert.dom(`[data-test-card-catalog-item]`).exists({ count: 1 });
 
+    await click(`[data-test-select="${testRealmURL}CatalogEntry/publishing-packet"]`);
     await waitUntil(
       () =>
         (
@@ -1723,7 +1725,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     await click(`[data-test-card-catalog-go-button]`);
     assert.dom('[data-test-stack-card-index="1"]').exists();
-    assert.dom('[data-test-stack-card-index="1"] [data-test-boxel-header-title]').hasText('Person');
+    assert.dom('[data-test-stack-card-index="1"] [data-test-boxel-header-title]').hasText('Publishing Packet');
   });
 
   test(`can add a card to the stack by URL from search sheet`, async function (assert) {
