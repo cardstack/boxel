@@ -32,6 +32,7 @@ import { file, FileResource } from '@cardstack/host/resources/file';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type MessageService from '@cardstack/host/services/message-service';
 import Owner from '@ember/owner';
+import { OpenFiles } from '@cardstack/host/controllers/code';
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
@@ -557,21 +558,23 @@ export function delay(delayAmountMs: number): Promise<void> {
 
 export async function getFileResource(
   context: TestContext,
-  adapter: TestRealmAdapter,
-  ref: { name: string; module: string; lastModified?: string },
+  realmURL: string,
+  openFiles: OpenFiles,
 ): Promise<FileResource> {
-  let fileURL = ref.module.endsWith('.gts') ? ref.module : `${ref.module}.gts`;
-  let paths = new RealmPaths(testRealmURL);
-  let relativePath = paths.local(fileURL);
-  let content = (await adapter.openFile(relativePath))?.content as
-    | string
-    | undefined;
-  return file(context, () => ({
+  if (openFiles.path === undefined) {
+    throw new Error('Wrong relativePath undefined');
+  }
+  let relativePath = openFiles.path;
+  let f = file(context, () => ({
     relativePath,
-    realmURL: paths.url,
-    lastModified: ref.lastModified,
-    content,
+    realmURL: new RealmPaths(realmURL).url,
+    onStateChange: (state) => {
+      if (state === 'not-found') {
+        openFiles.path = undefined;
+      }
+    },
   }));
+  return f;
 }
 
 function changedEntry(
@@ -604,4 +607,21 @@ export function diff(
     removed: removed.map((e) => e.path),
     changed: changed.map((e) => e.path),
   };
+}
+
+export class MockResponse extends Response {
+  private _mockUrl: string;
+
+  constructor(
+    body?: BodyInit | null | undefined,
+    init?: ResponseInit,
+    url?: string,
+  ) {
+    super(body, init);
+    this._mockUrl = url || '';
+  }
+
+  get url() {
+    return this._mockUrl;
+  }
 }

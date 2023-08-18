@@ -1,7 +1,7 @@
 import { Resource } from 'ember-resources';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-import { restartableTask, Task, TaskInstance } from 'ember-concurrency';
+import { restartableTask } from 'ember-concurrency';
 import { registerDestructor } from '@ember/destroyable';
 import { logger } from '@cardstack/runtime-common';
 import LoaderService from '../services/loader-service';
@@ -13,41 +13,44 @@ interface Args {
   named: {
     relativePath: string;
     realmURL: string;
-    content: string | undefined;
-    lastModified: string | undefined;
     onStateChange?: (state: FileResource['state']) => void;
   };
 }
 
-export type FileResource =
-  | {
-      state: 'server-error';
-      url: string;
-      loading: TaskInstance<void> | null;
-    }
-  | {
-      state: 'not-found';
-      url: string;
-      loading: TaskInstance<void> | null;
-    }
-  | {
-      state: 'ready';
-      content: string;
-      name: string;
-      url: string;
-      loading: TaskInstance<void> | null;
-      lastModified: string;
-      writeTask: Task<void, [content: string, flushLoader?: boolean]>;
-      close(): void;
-    };
+export interface Loading {
+  state: 'loading';
+}
+
+export interface ServerError {
+  state: 'server-error';
+  url: string;
+}
+
+export interface NotFound {
+  state: 'not-found';
+  url: string;
+}
+
+export interface Ready {
+  state: 'ready';
+  content: string;
+  name: string;
+  url: string;
+  lastModified: string | undefined;
+  write(content: string, flushLoader?: boolean): void;
+}
+
+export type FileResource = Loading | ServerError | NotFound | Ready;
 
 class _FileResource extends Resource<Args> {
   private declare _url: string;
   private onStateChange?: ((state: FileResource['state']) => void) | undefined;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
-  @tracked content: string | undefined;
-  @tracked state: FileResource['state'] = 'ready';
-  @tracked lastModified: string | undefined;
+
+  @tracked private innerState: FileResource = {
+    state: 'loading',
+  };
+
   @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
 
@@ -61,115 +64,155 @@ class _FileResource extends Resource<Args> {
     });
   }
 
-  modify(_positional: never[], named: Args['named']) {
-    let { relativePath, realmURL, content, lastModified, onStateChange } =
-      named;
-    this._url = realmURL + relativePath;
-    this.onStateChange = onStateChange;
-    if (content !== undefined) {
-      this.content = content;
-      this.lastModified = lastModified;
-    } else {
-      // get the initial content if we haven't already been seeded with initial content
-      this.read.perform();
-    }
-
-    let path = `${realmURL}_message`;
-
-    if (this.subscription && this.subscription.url !== path) {
+  private setSubscription(realmURL: string, callback: () => void) {
+    let messageServiceUrl = `${realmURL}_message`;
+    if (this.subscription && this.subscription.url !== messageServiceUrl) {
       this.subscription.unsubscribe();
       this.subscription = undefined;
     }
 
     if (!this.subscription) {
       this.subscription = {
-        url: path,
-        unsubscribe: this.messageService.subscribe(path, () =>
-          this.read.perform(),
-        ),
+        url: messageServiceUrl,
+        unsubscribe: this.messageService.subscribe(messageServiceUrl, callback),
       };
     }
   }
 
-  get url() {
-    return this._url;
+  modify(_positional: never[], named: Args['named']) {
+    let { relativePath, realmURL, onStateChange } = named;
+    this._url = realmURL + relativePath;
+    this.onStateChange = onStateChange;
+    this.read.perform(); //initial read
+    this.setSubscription(realmURL, () => this.read.perform());
   }
 
-  get name() {
-    return this._url.split('/').pop()!;
-  }
-
-  get loading() {
-    return this.read.last;
+  private updateState(newState: FileResource): void {
+    let prevState = this.innerState;
+    this.innerState = newState;
+    if (this.onStateChange && this.innerState.state !== prevState.state) {
+      this.onStateChange(this.innerState.state);
+    }
   }
 
   private read = restartableTask(async () => {
-    let prevState = this.state;
-    let response = await this.loaderService.loader.fetch(this.url, {
+    let response = await this.loaderService.loader.fetch(this._url, {
       headers: {
         Accept: 'application/vnd.card+source',
       },
     });
     if (!response.ok) {
       log.error(
-        `Could not get file ${this.url}, status ${response.status}: ${
+        `Could not get file ${this._url}, status ${response.status}: ${
           response.statusText
         } - ${await response.text()}`,
       );
       if (response.status === 404) {
-        this.state = 'not-found';
+        this.updateState({ state: 'not-found', url: this._url });
       } else {
-        this.state = 'server-error';
-      }
-      if (this.onStateChange && this.state !== prevState) {
-        this.onStateChange(this.state);
+        this.updateState({ state: 'server-error', url: this._url });
       }
       return;
     }
     let lastModified = response.headers.get('last-modified') || undefined;
-    if (this.lastModified === lastModified) {
+    if (
+      lastModified &&
+      this.innerState.state === 'ready' &&
+      this.innerState.lastModified === lastModified
+    ) {
       return;
     }
-    this.lastModified = lastModified;
-    this.content = await response.text();
-    this.state = 'ready';
-    if (this.onStateChange && this.state !== prevState) {
-      this.onStateChange(this.state);
-    }
-  });
-
-  writeTask = restartableTask(async (content: string, flushLoader?: true) => {
-    let response = await this.loaderService.loader.fetch(this.url, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/vnd.card+source',
+    let content = await response.text();
+    let self = this;
+    this.updateState({
+      state: 'ready',
+      lastModified: lastModified,
+      content,
+      name: this._url.split('/').pop()!,
+      url: this._url,
+      write(content: string, flushLoader?: true) {
+        self.writeTask.perform(this, content, flushLoader);
       },
-      body: content,
     });
-    if (!response.ok) {
-      let errorMessage = `Could not write file ${this.url}, status ${
-        response.status
-      }: ${response.statusText} - ${await response.text()}`;
-      log.error(errorMessage);
-      throw new Error(errorMessage);
-    }
-    if (this.state === 'not-found') {
-      // TODO think about the "unauthorized" scenario
-      throw new Error(
-        'this should be impossible--we are creating the specified path',
-      );
-    }
-
-    this.content = content;
-    this.lastModified = response.headers.get('last-modified') || undefined;
-    if (flushLoader) {
-      this.loaderService.reset();
-    }
   });
+
+  writeTask = restartableTask(
+    async (state: Ready, content: string, flushLoader?: true) => {
+      let response = await this.loaderService.loader.fetch(this._url, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.card+source',
+        },
+        body: content,
+      });
+      if (!response.ok) {
+        let errorMessage = `Could not write file ${this._url}, status ${
+          response.status
+        }: ${response.statusText} - ${await response.text()}`;
+        log.error(errorMessage);
+        throw new Error(errorMessage);
+      }
+      if (this.innerState.state === 'not-found') {
+        // TODO think about the "unauthorized" scenario
+        throw new Error(
+          'this should be impossible--we are creating the specified path',
+        );
+      }
+
+      this.updateState({
+        state: 'ready',
+        content,
+        lastModified: response.headers.get('last-modified') || undefined,
+        url: state.url,
+        name: state.name,
+        write: state.write,
+      });
+
+      if (flushLoader) {
+        this.loaderService.reset();
+      }
+    },
+  );
+
+  async ready(lastModified?: string) {
+    await this.read.perform();
+    if (this.innerState.state != 'ready') {
+      throw new Error('File not ready');
+    }
+    this.innerState.lastModified = lastModified;
+  }
+
+  get state() {
+    return this.innerState.state;
+  }
+
+  get content() {
+    return (this.innerState as Ready).content;
+  }
+
+  get name() {
+    return (this.innerState as Ready).name;
+  }
+
+  get url() {
+    return (this.innerState as Ready).url;
+  }
+
+  get lastModified() {
+    return (this.innerState as Ready).lastModified;
+  }
+
+  get write() {
+    return (this.innerState as Ready).write;
+  }
 }
 
 export function file(parent: object, args: () => Args['named']): FileResource {
   return _FileResource.from(parent, () => ({
     named: args(),
   })) as unknown as FileResource;
+}
+
+export function isReady(f: FileResource | undefined): f is Ready {
+  return f?.state === 'ready';
 }

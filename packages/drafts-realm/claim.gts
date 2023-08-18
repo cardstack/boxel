@@ -10,7 +10,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { getMetamaskResource } from './utils/resources/metamask';
 import { tracked } from '@glimmer/tracking';
-import { Button, FieldContainer } from '@cardstack/boxel-ui';
+import { Button, FieldContainer, GridContainer } from '@cardstack/boxel-ui';
 import EthereumAddressCard from 'https://cardstack.com/base/ethereum-address';
 
 // @ts-ignore
@@ -89,7 +89,7 @@ class Isolated extends Component<typeof Claim> {
   web3Provider: CardPaySDK.Web3Provider | undefined;
   getSDK: typeof CardPaySDK.getSDK | undefined;
   <template>
-    <div class='demo-card'>
+    <GridContainer>
       {{! include title field in template so that it can be indexed }}
       <@fields.title />
       <FieldContainer @label='Module Address.'><@fields.moduleAddress
@@ -129,7 +129,7 @@ class Isolated extends Component<typeof Claim> {
           {{/if}}
         </Button>
       {{/if}}
-    </div>
+    </GridContainer>
   </template>
 
   // chainId is not explicitly passed to resource
@@ -308,7 +308,7 @@ class Embedded extends Component<typeof Claim> {
   }
 
   <template>
-    <div class='demo-card'>
+    <GridContainer>
       <FieldContainer @label='Title'><@fields.title /></FieldContainer>
       <FieldContainer @label='Explanation'><@fields.explanation
         /></FieldContainer>
@@ -326,7 +326,7 @@ class Embedded extends Component<typeof Claim> {
           View Claim
         {{/if}}
       </Button>
-    </div>
+    </GridContainer>
   </template>
 }
 

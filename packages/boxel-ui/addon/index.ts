@@ -1,3 +1,4 @@
+import AddButton from './components/add-button';
 import BoxelInput from './components/input';
 import SearchInput, {
   SearchInputBottomTreatment,
@@ -8,6 +9,7 @@ import BoxelMessage from './components/message';
 import Button from './components/button';
 import CardContainer from './components/card-container';
 import FieldContainer from './components/field-container';
+import GridContainer from './components/grid-container';
 import Header from './components/header';
 import IconButton from './components/icon-button';
 import Label from './components/label';
@@ -20,6 +22,7 @@ import BoxelButton from './components/button';
 import Tooltip from './components/tooltip';
 
 export {
+  AddButton,
   BoxelHeader,
   BoxelInput,
   SearchInput,
@@ -29,6 +32,7 @@ export {
   Button,
   CardContainer,
   FieldContainer,
+  GridContainer,
   Header,
   IconButton,
   BoxelButton,

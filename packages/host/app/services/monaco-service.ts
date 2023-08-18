@@ -1,107 +1,74 @@
 import Service from '@ember/service';
 import { task } from 'ember-concurrency';
-import type * as MonacoSDK from 'monaco-editor';
+import type * as _MonacoSDK from 'monaco-editor';
 import {
   type MonacoLanguageConfig,
   extendDefinition,
   extendConfig,
   languageConfigs,
 } from '@cardstack/host/utils/editor-language';
-import { FileResource } from '../resources/file';
 
-export interface MonacoContext {
-  sdk: typeof MonacoSDK;
-  language?: string;
-  onEditorSetup?(editor: MonacoSDK.editor.IStandaloneCodeEditor): void;
-}
+export type MonacoSDK = typeof _MonacoSDK;
+export type IStandaloneCodeEditor = _MonacoSDK.editor.IStandaloneCodeEditor;
 
 export default class MonacoService extends Service {
-  #sdk: typeof MonacoSDK | undefined;
-  #ready: Promise<void>;
+  #ready: Promise<MonacoSDK>;
 
   constructor(properties: object) {
     super(properties);
     this.#ready = this.loadMonacoSDK.perform();
   }
 
-  get ready() {
-    return this.#ready;
-  }
-
-  get isLoading() {
-    return this.loadMonacoSDK.isRunning;
-  }
-
-  loadMonacoSDK = task(async () => {
+  private loadMonacoSDK = task(async () => {
     const monaco = await import('monaco-editor');
-    this.#sdk = monaco;
-    this.setCompilerOptions();
+    monaco.languages.typescript.javascriptDefaults.setCompilerOptions(
+      this.defaultCompilerOptions(monaco),
+    );
     let promises = languageConfigs.map((lang) =>
-      this.extendMonacoLanguage(lang),
+      this.extendMonacoLanguage(lang, monaco),
     );
     await Promise.all(promises);
+    return monaco;
   });
 
-  get sdk() {
-    if (!this.#sdk) {
-      throw new Error(`cannot use monaco SDK before it has loaded`);
-    }
-    return this.#sdk;
-  }
   // === context ===
   // A context is needed to pass a loaded sdk into components and modifiers
   // The monaco sdk is dyanmically loaded when visiting /code route
-  async getMonacoContext(
-    openFile?: FileResource,
-    onEditorSetup?: (editor: MonacoSDK.editor.IStandaloneCodeEditor) => void,
-  ): Promise<MonacoContext> {
-    let language: string | undefined;
-    let sdk = this.sdk;
-    if (openFile && openFile.state == 'ready') {
-      language = await this.getLangFromFileExtension(openFile.name);
-    }
-    return {
-      sdk,
-      language,
-      onEditorSetup,
-    };
+  async getMonacoContext(): Promise<MonacoSDK> {
+    return await this.#ready;
   }
 
-  // ==== languages ====
-  async getLangFromFileExtension(fileName: string): Promise<string> {
-    const editorLanguages = this.sdk.languages.getLanguages();
-    let extension = '.' + fileName.split('.').pop();
-    let language = editorLanguages.find(
-      (lang) => lang.extensions?.find((ext) => ext === extension),
-    );
-    return language?.id ?? 'plaintext';
-  }
-  async extendMonacoLanguage({
-    baseId,
-    langInfo,
-    rules,
-  }: MonacoLanguageConfig) {
-    const baseLanguage = this.sdk.languages
+  private async extendMonacoLanguage(
+    { baseId, langInfo, rules }: MonacoLanguageConfig,
+    sdk: MonacoSDK,
+  ) {
+    const baseLanguage = sdk.languages
       .getLanguages()
       .find((lang) => lang.id === baseId);
 
-    // @ts-ignore-next-line
+    if (!baseLanguage) {
+      throw new Error(`missing language ${baseId}`);
+    }
+
+    // @ts-expect-error: types don't declare loader
     let { conf, language } = await baseLanguage.loader();
 
     let extendedConfig = extendConfig(conf);
     let extendedDef = extendDefinition(language, rules);
     let { id } = langInfo;
 
-    this.sdk.languages.register(langInfo);
-    this.sdk.languages.setMonarchTokensProvider(id, extendedDef);
-    this.sdk.languages.setLanguageConfiguration(id, extendedConfig);
+    sdk.languages.register(langInfo);
+    sdk.languages.setMonarchTokensProvider(id, extendedDef);
+    sdk.languages.setLanguageConfiguration(id, extendedConfig);
   }
-  get defaultCompilerOptions(): MonacoSDK.languages.typescript.CompilerOptions {
+
+  private defaultCompilerOptions(
+    sdk: MonacoSDK,
+  ): _MonacoSDK.languages.typescript.CompilerOptions {
     return {
-      target: this.sdk.languages.typescript.ScriptTarget.ES2020,
-      module: this.sdk.languages.typescript.ModuleKind.ES2015,
-      moduleResolution:
-        this.sdk.languages.typescript.ModuleResolutionKind.NodeJs,
+      target: sdk.languages.typescript.ScriptTarget.ES2020,
+      module: sdk.languages.typescript.ModuleKind.ES2015,
+      moduleResolution: sdk.languages.typescript.ModuleResolutionKind.NodeJs,
       allowJs: true,
       allowSyntheticDefaultImports: true,
       noImplicitAny: true,
@@ -120,13 +87,5 @@ export default class MonacoService extends Service {
       experimentalDecorators: true,
       allowNonTsExtensions: true,
     };
-  }
-
-  setCompilerOptions(
-    compilerOptions?: MonacoSDK.languages.typescript.CompilerOptions,
-  ) {
-    this.sdk.languages.typescript.javascriptDefaults.setCompilerOptions(
-      compilerOptions ?? this.defaultCompilerOptions,
-    );
   }
 }

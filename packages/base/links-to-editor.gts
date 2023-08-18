@@ -30,7 +30,7 @@ interface Signature {
 
 class LinksToEditor extends GlimmerComponent<Signature> {
   <template>
-    <div class='links-to-editor{{if this.isEmpty "--empty"}}'>
+    <div class='links-to-editor {{if this.isEmpty "empty"}}'>
       {{#if this.isEmpty}}
         <Button @size='small' {{on 'click' this.choose}} data-test-choose-card>
           Choose
@@ -46,7 +46,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
           @icon='icon-minus-circle'
           @width='20px'
           @height='20px'
-          class='remove-icon-button'
+          class='remove'
           aria-label='Remove'
           {{on 'click' this.remove}}
           disabled={{this.isEmpty}}
@@ -54,6 +54,28 @@ class LinksToEditor extends GlimmerComponent<Signature> {
         />
       {{/if}}
     </div>
+    <style>
+      .links-to-editor {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: var(--boxel-sp-xs);
+        align-items: center;
+      }
+
+      .empty {
+        display: block;
+      }
+
+      .remove {
+        --icon-bg: var(--boxel-highlight);
+        --icon-border: var(--icon-bg);
+        --icon-color: var(--boxel-light);
+      }
+
+      .remove:hover {
+        --icon-bg: var(--boxel-dark);
+      }
+    </style>
   </template>
 
   choose = () => {

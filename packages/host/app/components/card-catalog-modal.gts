@@ -28,13 +28,21 @@ import {
   getSuggestionWithLowestDepth,
 } from '../utils/text-suggestion';
 import ModalContainer from './modal-container';
-import CardCatalog from './card-catalog';
+import CardCatalog from './card-catalog/index';
 import CardCatalogFilters from './card-catalog/filters';
+import { type RealmInfo } from '@cardstack/runtime-common';
+import { TrackedArray } from 'tracked-built-ins';
 
 interface Signature {
   Args: {
     context?: CardContext;
   };
+}
+
+export interface RealmCards {
+  url: string | null;
+  realmInfo: RealmInfo;
+  cards: Card[];
 }
 
 const DEFAULT_CHOOOSE_CARD_TITLE = 'Choose a Card';
@@ -61,14 +69,19 @@ export default class CardCatalogModal extends Component<Signature> {
             @placeholder='Search for a card type or enter card URL'
             data-test-search-field
           />
-          <CardCatalogFilters />
+          <CardCatalogFilters
+            @availableRealms={{this.availableRealms}}
+            @selectedRealms={{this.selectedRealms}}
+            @onSelectRealm={{this.onSelectRealm}}
+            @onDeselectRealm={{this.onDeselectRealm}}
+          />
         </:header>
         <:content>
           {{#if this.currentRequest.search.isLoading}}
             Loading...
           {{else}}
             <CardCatalog
-              @results={{this.results}}
+              @results={{this.displayedRealms}}
               @toggleSelect={{this.toggleSelect}}
               @selectedCard={{this.selectedCard}}
               @context={{@context}}
@@ -181,10 +194,6 @@ export default class CardCatalogModal extends Component<Signature> {
     });
   }
 
-  get results() {
-    return this.currentRequest?.search.instancesWithRealmInfo ?? [];
-  }
-
   get searchFieldState() {
     return this.hasSearchError ? 'invalid' : 'initial';
   }
@@ -202,6 +211,34 @@ export default class CardCatalogModal extends Component<Signature> {
         }
       ).name ?? 'Card'
     );
+  }
+
+  get displayedRealms(): RealmCards[] {
+    // if no realms are selected, display all realms
+    return this.selectedRealms.length
+      ? this.selectedRealms
+      : this.availableRealms;
+  }
+
+  get availableRealms(): RealmCards[] {
+    return this.currentRequest?.search.instancesByRealm ?? [];
+  }
+
+  get selectedRealms(): RealmCards[] {
+    return this._selectedRealms;
+  }
+
+  @tracked _selectedRealms = new TrackedArray<RealmCards>([]);
+
+  @action onSelectRealm(realm: RealmCards) {
+    this._selectedRealms.push(realm);
+  }
+
+  @action onDeselectRealm(realm: RealmCards) {
+    let selectedRealmIndex = this._selectedRealms.findIndex(
+      (r) => r.url === realm.url,
+    );
+    this._selectedRealms.splice(selectedRealmIndex, 1);
   }
 
   private resetState() {

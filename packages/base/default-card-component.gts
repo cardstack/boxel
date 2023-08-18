@@ -24,6 +24,12 @@ class DefaultTemplate extends GlimmerComponent<{
         {{/unless}}
       {{/each-in}}
     </div>
+    <style>
+      .default-card-template {
+        display: grid;
+        gap: var(--boxel-sp-lg);
+      }
+    </style>
   </template>
 }
 

@@ -7,13 +7,13 @@ import { fn } from '@ember/helper';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { directory } from '@cardstack/host/resources/directory';
 import { concat } from '@ember/helper';
+import { OpenFiles } from '@cardstack/host/controllers/code';
 
 interface Args {
   Args: {
-    openDirs: string[];
-    realmURL: string;
+    openFiles: OpenFiles;
     relativePath: string;
-    openFile: string | undefined;
+    realmURL: string;
   };
 }
 
@@ -27,7 +27,7 @@ export default class Directory extends Component<Args> {
               data-test-file={{entryPath}}
               role='button'
               {{on 'click' (fn this.openFile entryPath)}}
-              class='file {{if (eq entryPath @openFile) "selected"}}'
+              class='file {{if (eq entryPath @openFiles.path) "selected"}}'
             >
               {{entry.name}}
             </div>
@@ -37,14 +37,13 @@ export default class Directory extends Component<Args> {
               role='button'
               {{on 'click' (fn this.toggleDirectory entryPath)}}
               class='directory
-                {{if (isSelected entryPath @openFile) "selected"}}'
+                {{if (isSelected entryPath @openFiles.path) "selected"}}'
             >
               {{entry.name}}
             </div>
-            {{#if (isOpen entryPath @openDirs)}}
+            {{#if (isOpen entryPath @openFiles.openDirs)}}
               <Directory
-                @openFile={{@openFile}}
-                @openDirs={{@openDirs}}
+                @openFiles={{@openFiles}}
                 @relativePath='{{@relativePath}}{{entry.name}}'
                 @realmURL={{@realmURL}}
               />
@@ -72,6 +71,7 @@ export default class Directory extends Component<Args> {
       .file:active {
         color: var(--boxel-highlight);
       }
+
     </style>
   </template>
 
@@ -84,38 +84,13 @@ export default class Directory extends Component<Args> {
 
   @action
   openFile(entryPath: string) {
-    this.router.transitionTo({ queryParams: { path: entryPath } });
+    this.args.openFiles.path = entryPath;
   }
 
   @action
   toggleDirectory(entryPath: string) {
-    let openDirs = editOpenDirsQuery(entryPath, this.args.openDirs);
-    this.router.transitionTo({
-      queryParams: {
-        openDirs: openDirs.length ? openDirs.join(',') : undefined,
-      },
-    });
+    this.args.openFiles.toggleOpenDir(entryPath);
   }
-}
-
-function editOpenDirsQuery(entryPath: string, openDirs: string[]): string[] {
-  let dirs = openDirs.slice();
-  for (let i = 0; i < dirs.length; i++) {
-    if (dirs[i].startsWith(entryPath)) {
-      let localParts = entryPath.split('/').filter((p) => p.trim() != '');
-      localParts.pop();
-      if (localParts.length) {
-        dirs[i] = localParts.join('/') + '/';
-      } else {
-        dirs.splice(i, 1);
-      }
-      return dirs;
-    } else if (entryPath.startsWith(dirs[i])) {
-      dirs[i] = entryPath;
-      return dirs;
-    }
-  }
-  return [...dirs, entryPath];
 }
 
 function isSelected(localPath: string, openFile: string | undefined) {
