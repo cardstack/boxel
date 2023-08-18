@@ -355,9 +355,9 @@ export default class SearchSheet extends Component<Signature> {
         display: flex;
         flex-direction: column;
         justify-content: stretch;
-        left: 10px;
-        right: 10px;
-        width: calc(100% - 20px);
+        left: var(--boxel-sp-xs);
+        right: var(--boxel-sp-xs);
+        width: calc(100% - var(--boxel-sp-xs) * 2);
         position: absolute;
         transition:
           height var(--boxel-transition),
@@ -377,8 +377,8 @@ export default class SearchSheet extends Component<Signature> {
       }
 
       .closed {
-        left: 20px;
-        height: calc(var(--search-sheet-closed-height) + 20px);
+        left: var(--boxel-sp);
+        height: calc(var(--search-sheet-closed-height) + var(--boxel-sp));
         padding: 0;
       }
 
@@ -393,7 +393,7 @@ export default class SearchSheet extends Component<Signature> {
       }
 
       .results {
-        height: calc(100% - 10px);
+        height: calc(100% - var(--boxel-sp-xs));
       }
 
       .footer {
