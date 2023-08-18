@@ -343,17 +343,17 @@ module('Integration | card-basics', function (hooks) {
       assert.strictEqual(
         eventCount,
         1,
-        'the change event was fired the correct amount of times'
+        'the change event was fired the correct amount of times',
       );
       assert.strictEqual(
         changeEvent?.fieldName,
         'firstName',
-        'the fieldName was correctly specified in change event'
+        'the fieldName was correctly specified in change event',
       );
       assert.strictEqual(
         changeEvent?.value,
         'Van Gogh',
-        'the field value was correctly specified in change event'
+        'the field value was correctly specified in change event',
       );
     } finally {
       unsubscribeFromChanges(mango, subscriber);
@@ -363,17 +363,17 @@ module('Integration | card-basics', function (hooks) {
     assert.strictEqual(
       eventCount,
       1,
-      'the change event was fired the correct amount of times'
+      'the change event was fired the correct amount of times',
     );
     assert.strictEqual(
       changeEvent?.fieldName,
       'firstName',
-      'the fieldName was correctly specified in change event'
+      'the fieldName was correctly specified in change event',
     );
     assert.strictEqual(
       changeEvent?.value,
       'Van Gogh',
-      'the field value was correctly specified in change event'
+      'the field value was correctly specified in change event',
     );
   });
 
@@ -416,17 +416,17 @@ module('Integration | card-basics', function (hooks) {
       assert.strictEqual(
         eventCount,
         1,
-        'the change event was fired the correct amount of times'
+        'the change event was fired the correct amount of times',
       );
       assert.strictEqual(
         changeEvent?.fieldName,
         'favoriteColors',
-        'the fieldName was correctly specified in change event'
+        'the fieldName was correctly specified in change event',
       );
       assert.deepEqual(
         changeEvent?.value,
         ['brown', 'green'],
-        'the field value was correctly specified in change event'
+        'the field value was correctly specified in change event',
       );
     } finally {
       unsubscribeFromChanges(mango, subscriber);
@@ -437,17 +437,17 @@ module('Integration | card-basics', function (hooks) {
     assert.strictEqual(
       eventCount,
       1,
-      'the change event was fired the correct amount of times'
+      'the change event was fired the correct amount of times',
     );
     assert.strictEqual(
       changeEvent?.fieldName,
       'favoriteColors',
-      'the fieldName was correctly specified in change event'
+      'the fieldName was correctly specified in change event',
     );
     assert.deepEqual(
       changeEvent?.value,
       ['brown', 'green'],
-      'the field value was correctly specified in change event'
+      'the field value was correctly specified in change event',
     );
   });
 
@@ -505,17 +505,17 @@ module('Integration | card-basics', function (hooks) {
       assert.strictEqual(
         eventCount,
         1,
-        'the change event was fired the correct amount of times'
+        'the change event was fired the correct amount of times',
       );
       assert.strictEqual(
         changeEvent?.fieldName,
         'pet',
-        'the fieldName was correctly specified in change event'
+        'the fieldName was correctly specified in change event',
       );
       assert.strictEqual(
         changeEvent?.value,
         vanGogh,
-        'the field value was correctly specified in change event'
+        'the field value was correctly specified in change event',
       );
     } finally {
       unsubscribeFromChanges(hassan, subscriber);
@@ -525,17 +525,17 @@ module('Integration | card-basics', function (hooks) {
     assert.strictEqual(
       eventCount,
       1,
-      'the change event was fired the correct amount of times'
+      'the change event was fired the correct amount of times',
     );
     assert.strictEqual(
       changeEvent?.fieldName,
       'pet',
-      'the fieldName was correctly specified in change event'
+      'the fieldName was correctly specified in change event',
     );
     assert.strictEqual(
       changeEvent?.value,
       vanGogh,
-      'the field value was correctly specified in change event'
+      'the field value was correctly specified in change event',
     );
   });
 
@@ -595,17 +595,17 @@ module('Integration | card-basics', function (hooks) {
       assert.strictEqual(
         eventCount,
         1,
-        'the change event was fired the correct amount of times'
+        'the change event was fired the correct amount of times',
       );
       assert.strictEqual(
         changeEvent?.fieldName,
         'pets',
-        'the fieldName was correctly specified in change event'
+        'the fieldName was correctly specified in change event',
       );
       assert.deepEqual(
         (changeEvent?.value as Pet[]).map((p) => p.firstName),
         ['Mango', 'Van Gogh'],
-        'the field value was correctly specified in change event'
+        'the field value was correctly specified in change event',
       );
     } finally {
       unsubscribeFromChanges(hassan, subscriber);
@@ -616,17 +616,17 @@ module('Integration | card-basics', function (hooks) {
     assert.strictEqual(
       eventCount,
       1,
-      'the change event was fired the correct amount of times'
+      'the change event was fired the correct amount of times',
     );
     assert.strictEqual(
       changeEvent?.fieldName,
       'pets',
-      'the fieldName was correctly specified in change event'
+      'the fieldName was correctly specified in change event',
     );
     assert.deepEqual(
       (changeEvent?.value as Pet[]).map((p) => p.firstName),
       ['Mango', 'Van Gogh'],
-      'the field value was correctly specified in change event'
+      'the field value was correctly specified in change event',
     );
   });
 
