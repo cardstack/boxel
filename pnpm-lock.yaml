@@ -101,6 +101,9 @@ importers:
         specifier: ^3.12.7
         version: 3.12.7
     devDependencies:
+      '@cardstack/runtime-common':
+        specifier: workspace:^
+        version: link:../runtime-common
       matrix-js-sdk:
         specifier: ^25.0.0
         version: 25.0.0(patch_hash=vlqn3jrrd7zoh7xnqjj35ihq2i)
