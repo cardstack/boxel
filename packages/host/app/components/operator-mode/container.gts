@@ -12,7 +12,7 @@ import { Modal, IconButton } from '@cardstack/boxel-ui';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import SearchSheet, { SearchSheetMode } from '../search-sheet';
 import { restartableTask, task, dropTask } from 'ember-concurrency';
-import { TrackedArray, TrackedWeakMap } from 'tracked-built-ins';
+import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 import {
   Deferred,
   baseCardRef,
@@ -41,6 +41,7 @@ import type MatrixService from '../../services/matrix-service';
 import type MessageService from '../../services/message-service';
 import ChatSidebar from '../matrix/chat-sidebar';
 import CopyButton from './copy-button';
+import DeleteModal from './delete-modal';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 
@@ -83,7 +84,7 @@ enum SearchSheetTrigger {
   DropCardToRightNeighborStackButton = 'drop-card-to-right-neighbor-stack-button',
 }
 
-const cardSelections = new TrackedWeakMap<StackItem, TrackedArray<Card>>();
+const cardSelections = new TrackedWeakMap<StackItem, TrackedSet<Card>>();
 const clearSelections = new WeakMap<StackItem, () => void>();
 const stackItemStableScrolls = new WeakMap<
   StackItem,
@@ -99,6 +100,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
   @tracked searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked isChatVisible = false;
+  private deleteModal: DeleteModal | undefined;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -169,16 +171,19 @@ export default class OperatorModeContainer extends Component<Signature> {
   onSelectedCards(selectedCards: Card[], stackItem: StackItem) {
     let selected = cardSelections.get(stackItem);
     if (!selected) {
-      selected = new TrackedArray([]);
+      selected = new TrackedSet([]);
       cardSelections.set(stackItem, selected);
     }
-    selected.splice(0, selected.length, ...selectedCards);
+    selected.clear();
+    for (let card of selectedCards) {
+      selected.add(card);
+    }
   }
 
   get selectedCards() {
     return this.operatorModeStateService
       .topMostStackItems()
-      .map((i) => cardSelections.get(i) ?? []);
+      .map((i) => [...(cardSelections.get(i) ?? [])]);
   }
 
   @action onCancelSearchSheet() {
@@ -286,33 +291,74 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   });
 
+  // dropTask will ignore any subsequent delete requests until the one in progress is done
+  delete = dropTask(async (card: Card) => {
+    if (!card.id) {
+      // the card isn't actually saved yet, so do nothing
+      return;
+    }
+
+    if (!this.deleteModal) {
+      throw new Error(`bug: DeleteModal not instantiated`);
+    }
+    let deferred: Deferred<void>;
+    let isDeleteConfirmed = await this.deleteModal.confirmDelete(
+      card,
+      (d) => (deferred = d),
+    );
+    if (!isDeleteConfirmed) {
+      return;
+    }
+
+    let items: CardStackItem[] = [];
+    for (let stack of this.stacks) {
+      items.push(
+        ...(stack.filter(
+          (i) => i.type === 'card' && i.card.id === card.id,
+        ) as CardStackItem[]),
+      );
+      // remove all selections for the deleted card
+      for (let item of stack) {
+        let selections = cardSelections.get(item);
+        if (!selections) {
+          continue;
+        }
+        let removedCard = [...selections].find((c) => c.id === card.id);
+        if (removedCard) {
+          selections.delete(removedCard);
+        }
+      }
+    }
+    // remove all stack items for the deleted card
+    for (let item of items) {
+      this.operatorModeStateService.trimItemsFromStack(item);
+    }
+    this.operatorModeStateService.removeRecentCard(card.id);
+
+    await this.withTestWaiters(async () => {
+      await this.cardService.deleteCard(card);
+      deferred!.fulfill();
+    });
+  });
+
   // we debounce saves in the stack item--by the time they reach
   // this level we need to handle every request (so not restartable). otherwise
   // we might drop writes from different stack items that want to save
   // at the same time
   private write = task(async (card: Card) => {
-    let token = waiter.beginAsync();
-    try {
-      let savedCard = await this.cardService.saveModel(card);
-      // only do this in test env--this makes sure that we also wait for any
-      // interior card instance async as part of our ember-test-waiters
-      if (isTesting()) {
-        await this.cardService.cardsSettled();
-      }
-      return savedCard;
-    } finally {
-      waiter.endAsync(token);
-    }
+    return await this.withTestWaiters(async () => {
+      return await this.cardService.saveModel(card);
+    });
   });
 
+  // dropTask will ignore any subsequent copy requests until the one in progress is done
   private copy = dropTask(
     async (
       sources: Card[],
       sourceItem: CardStackItem,
       destinationItem: CardStackItem,
     ) => {
-      let token = waiter.beginAsync();
-      try {
+      await this.withTestWaiters(async () => {
         let destinationRealmURL = await this.cardService.getRealmURL(
           destinationItem.card,
         );
@@ -330,16 +376,24 @@ export default class OperatorModeContainer extends Component<Signature> {
           clearSelection();
         }
         cardSelections.delete(sourceItem);
-        // only do this in test env--this makes sure that we also wait for any
-        // interior card instance async as part of our ember-test-waiters
-        if (isTesting()) {
-          await this.cardService.cardsSettled();
-        }
-      } finally {
-        waiter.endAsync(token);
-      }
+      });
     },
   );
+
+  private async withTestWaiters<T>(cb: () => Promise<T>) {
+    let token = waiter.beginAsync();
+    try {
+      let result = await cb();
+      // only do this in test env--this makes sure that we also wait for any
+      // interior card instance async as part of our ember-test-waiters
+      if (isTesting()) {
+        await this.cardService.cardsSettled();
+      }
+      return result;
+    } finally {
+      waiter.endAsync(token);
+    }
+  }
 
   // The public API is wrapped in a closure so that whatever calls its methods
   // in the context of operator-mode, the methods can be aware of which stack to deal with (via stackIndex), i.e.
@@ -634,6 +688,10 @@ export default class OperatorModeContainer extends Component<Signature> {
     stackItemStableScrolls.set(item, doWithStableScroll);
   };
 
+  setupDeleteModal = (deleteModal: DeleteModal) => {
+    this.deleteModal = deleteModal;
+  };
+
   <template>
     <Modal
       class='operator-mode'
@@ -678,6 +736,7 @@ export default class OperatorModeContainer extends Component<Signature> {
                 @edit={{this.edit}}
                 @onSelectedCards={{this.onSelectedCards}}
                 @save={{perform this.save}}
+                @delete={{perform this.delete}}
                 @setupStackItem={{this.setupStackItem}}
               />
             {{/each}}
@@ -687,6 +746,7 @@ export default class OperatorModeContainer extends Component<Signature> {
               @copy={{fn (perform this.copy)}}
               @isCopying={{this.copy.isRunning}}
             />
+            <DeleteModal @onCreate={{this.setupDeleteModal}} />
           {{/if}}
 
           {{#if this.canCreateNeighborStack}}
