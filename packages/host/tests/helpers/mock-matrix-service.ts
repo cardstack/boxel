@@ -20,6 +20,7 @@ export class MockMatrixService extends Service {
   cardAPI!: typeof cardApi;
   // These will be empty in the tests, but we need to define them to satisfy the interface
   roomCards: TrackedMap<string, Promise<RoomCard>> = new TrackedMap();
+  roomObjectives: TrackedMap<string, RoomObjectiveCard> = new TrackedMap();
 
   async start(_auth?: any) {}
 
