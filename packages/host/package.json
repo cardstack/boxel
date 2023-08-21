@@ -171,6 +171,7 @@
     ]
   },
   "dependencies": {
-    "ember-async-data": "^1.0.1"
+    "ember-async-data": "^1.0.1",
+    "ember-composable-helpers": "^5.0.0"
   }
 }
