@@ -8,7 +8,7 @@ exports.isTemplateLiteral = (callExpressionPath) => {
     callee.isIdentifier() &&
     callee.referencesImport(
       exports.TEMPLATE_LITERAL_MODULE_SPECIFIER,
-      exports.TEMPLATE_LITERAL_IDENTIFIER
+      exports.TEMPLATE_LITERAL_IDENTIFIER,
     )
   );
 };
@@ -29,9 +29,9 @@ exports.buildPrecompileTemplateCall = (t, callExpressionPath, state) => {
     state.importUtil.import(
       callExpressionPath.get('callee'),
       '@ember/template-compilation',
-      'precompileTemplate'
+      'precompileTemplate',
     ),
-    callExpressionPath.node.arguments
+    callExpressionPath.node.arguments,
   );
 };
 
@@ -39,7 +39,7 @@ exports.registerRefs = (newPath, getRefPaths) => {
   if (Array.isArray(newPath)) {
     if (newPath.length > 1) {
       throw new Error(
-        'registerRefs is only meant to handle single node transformations. Received more than one path node.'
+        'registerRefs is only meant to handle single node transformations. Received more than one path node.',
       );
     }
 

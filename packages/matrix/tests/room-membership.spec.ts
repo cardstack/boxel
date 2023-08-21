@@ -86,7 +86,7 @@ test.describe('Room membership', () => {
 
     await openRoom(page, 'Room 1');
     await expect(page.locator('[data-test-room-members]')).toHaveText(
-      `Members: user1, user2 (invited), user3 (invited)`
+      `Members: user1, user2 (invited), user3 (invited)`,
     );
     await logout(page);
 
@@ -94,7 +94,7 @@ test.describe('Room membership', () => {
     await joinRoom(page, 'Room 1');
     await openRoom(page, 'Room 1');
     await expect(page.locator('[data-test-room-members]')).toHaveText(
-      `Members: user1, user2, user3 (invited)`
+      `Members: user1, user2, user3 (invited)`,
     );
 
     await leaveRoom(page, 'Room 1');
@@ -107,7 +107,7 @@ test.describe('Room membership', () => {
     await login(page, 'user1', 'pass');
     await openRoom(page, 'Room 1');
     await expect(page.locator('[data-test-room-members]')).toHaveText(
-      `Members: user1`
+      `Members: user1`,
     );
   });
 
@@ -120,19 +120,19 @@ test.describe('Room membership', () => {
     });
     await openRoom(page, 'Room 1');
     await expect(page.locator('[data-test-room-members]')).toHaveText(
-      `Members: user1`
+      `Members: user1`,
     );
     expect(
       page.locator('[data-test-room-invite-field]'),
-      'the invite dialog is not displayed'
+      'the invite dialog is not displayed',
     ).toHaveCount(0);
     await inviteToRoom(page, ['user2']);
     expect(
       page.locator('[data-test-room-invite-field]'),
-      'the invite dialog is not displayed'
+      'the invite dialog is not displayed',
     ).toHaveCount(0);
     await expect(page.locator('[data-test-room-members]')).toHaveText(
-      `Members: user1, user2 (invited)`
+      `Members: user1, user2 (invited)`,
     );
     await logout(page);
 
@@ -140,7 +140,7 @@ test.describe('Room membership', () => {
     await joinRoom(page, 'Room 1');
     await openRoom(page, 'Room 1');
     await expect(page.locator('[data-test-room-members]')).toHaveText(
-      `Members: user1, user2`
+      `Members: user1, user2`,
     );
   });
 
@@ -152,17 +152,17 @@ test.describe('Room membership', () => {
     await openRoom(page, 'Room 1');
     expect(
       page.locator('[data-test-room-invite-field]'),
-      'the invite dialog is not displayed'
+      'the invite dialog is not displayed',
     ).toHaveCount(0);
     await page.locator(`[data-test-invite-mode-btn]`).click();
     expect(
       page.locator('[data-test-room-invite-field]'),
-      'the invite dialog is displayed'
+      'the invite dialog is displayed',
     ).toHaveCount(1);
     await page.locator(`[data-test-room-invite-cancel-btn]`).click();
     expect(
       page.locator('[data-test-room-invite-field]'),
-      'the invite dialog is not displayed'
+      'the invite dialog is not displayed',
     ).toHaveCount(0);
   });
 });

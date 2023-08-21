@@ -839,11 +839,11 @@ async function maybeHandleScopedCSSRequest(req: Request) {
         new Response(`
           let styleNode = document.createElement('style');
           let styleText = document.createTextNode('${jsEscapeString(
-            decodedCSS
+            decodedCSS,
           )}');
           styleNode.appendChild(styleText);
           document.head.appendChild(styleNode);
-        `)
+        `),
       );
     }
   } else {

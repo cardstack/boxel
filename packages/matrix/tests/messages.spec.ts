@@ -137,7 +137,7 @@ test.describe('Room messages', () => {
       },
     ]);
     await expect(
-      page.locator(`[data-test-message-idx="0"] .content em`)
+      page.locator(`[data-test-message-idx="0"] .content em`),
     ).toContainText('style');
   });
 
@@ -153,11 +153,11 @@ test.describe('Room messages', () => {
     await page.locator('[data-test-message-field]').fill('room 2 message');
     await openRoom(page, 'Room 1');
     await expect(page.locator('[data-test-message-field]')).toHaveValue(
-      'room 1 message'
+      'room 1 message',
     );
     await openRoom(page, 'Room 2');
     await expect(page.locator('[data-test-message-field]')).toHaveValue(
-      'room 2 message'
+      'room 2 message',
     );
   });
 
@@ -172,7 +172,7 @@ test.describe('Room messages', () => {
     await page.locator('[data-test-card-catalog-go-button]').click();
     await expect(page.locator('[data-test-send-message-btn]')).toBeEnabled();
     await expect(
-      page.locator(`[data-test-selected-card="${testCard}"]`)
+      page.locator(`[data-test-selected-card="${testCard}"]`),
     ).toContainText('Person: Hassan');
 
     await page.locator('[data-test-message-field]').fill('This is _my_ card');
@@ -186,7 +186,7 @@ test.describe('Room messages', () => {
       },
     ]);
     await expect(
-      page.locator(`[data-test-message-idx="0"] .content em`)
+      page.locator(`[data-test-message-idx="0"] .content em`),
     ).toContainText('my');
   });
 
@@ -215,7 +215,7 @@ test.describe('Room messages', () => {
     await page.locator(`[data-test-select="${testCard}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
     await expect(
-      page.locator(`[data-test-selected-card="${testCard}"]`)
+      page.locator(`[data-test-selected-card="${testCard}"]`),
     ).toContainText('Person: Hassan');
     await page.locator('[data-test-remove-card-btn]').click();
     await expect(page.locator(`[data-test-selected-card]`)).toHaveCount(0);

@@ -35,18 +35,18 @@ test.describe('Room objectives', () => {
     await sendMessage(page, `I'm not saying Hello yet...`);
 
     await expect(page.locator(`[data-test-objective-progress]`)).toContainText(
-      `Completed 0 of 2 (0%)`
+      `Completed 0 of 2 (0%)`,
     );
     await expect(page.locator(`[data-test-objective-remaining]`)).toContainText(
-      `user1, user2`
+      `user1, user2`,
     );
 
     await sendMessage(page, `_Hello_`);
     await expect(page.locator(`[data-test-objective-progress]`)).toContainText(
-      `Completed 1 of 2 (50%)`
+      `Completed 1 of 2 (50%)`,
     );
     await expect(page.locator(`[data-test-objective-remaining]`)).toContainText(
-      `user1`
+      `user1`,
     );
   });
 
@@ -57,14 +57,14 @@ test.describe('Room objectives', () => {
 
     await setObjective(page, 'https://cardstack.com/base/types/room-objective');
     await expect(page.locator(`[data-test-objective]`)).toContainText(
-      'Objective: Make sure that all room members greet each other by saying "Hello"'
+      'Objective: Make sure that all room members greet each other by saying "Hello"',
     );
     await assertMessages(page, [
       { from: 'user1', message: 'user1 has set the room objectives' },
     ]);
     await expect(
       page.locator(`[data-test-set-objective-btn]`),
-      'The set objective button does not appear after an objective has been set'
+      'The set objective button does not appear after an objective has been set',
     ).toHaveCount(0);
   });
 
@@ -78,7 +78,7 @@ test.describe('Room objectives', () => {
 
     await expect(
       page.locator(`[data-test-set-objective-btn]`),
-      'The set objective button does not appear'
+      'The set objective button does not appear',
     ).toHaveCount(0);
   });
 
@@ -91,10 +91,10 @@ test.describe('Room objectives', () => {
 
     await setObjective(page, 'https://cardstack.com/base/types/room-objective');
     await expect(page.locator(`[data-test-objective-progress]`)).toContainText(
-      `Completed 0 of 1 (0%)`
+      `Completed 0 of 1 (0%)`,
     );
     await expect(page.locator(`[data-test-objective-remaining]`)).toContainText(
-      `user1`
+      `user1`,
     );
 
     await logout(page);
@@ -103,10 +103,10 @@ test.describe('Room objectives', () => {
     await openRoom(page, 'Room 1');
 
     await expect(page.locator(`[data-test-objective-progress]`)).toContainText(
-      `Completed 0 of 2 (0%)`
+      `Completed 0 of 2 (0%)`,
     );
     await expect(page.locator(`[data-test-objective-remaining]`)).toContainText(
-      `user1, user2`
+      `user1, user2`,
     );
   });
 
@@ -119,10 +119,10 @@ test.describe('Room objectives', () => {
     await sendMessage(page, `hello!`);
 
     await expect(page.locator(`[data-test-objective-progress]`)).toContainText(
-      `Completed 1 of 1 (100%)`
+      `Completed 1 of 1 (100%)`,
     );
     await expect(
-      page.locator(`[data-test-objective-is-complete]`)
+      page.locator(`[data-test-objective-is-complete]`),
     ).toContainText('The objective is completed');
   });
 
@@ -136,7 +136,7 @@ test.describe('Room objectives', () => {
     await setObjective(page, 'https://cardstack.com/base/types/room-objective');
     await sendMessage(page, `hello`);
     await expect(
-      page.locator(`[data-test-objective-is-complete]`)
+      page.locator(`[data-test-objective-is-complete]`),
     ).toContainText('The objective is completed');
 
     await logout(page);
@@ -145,21 +145,21 @@ test.describe('Room objectives', () => {
     await openRoom(page, 'Room 1');
 
     await expect(page.locator(`[data-test-objective-progress]`)).toContainText(
-      `Completed 1 of 2 (50%)`
+      `Completed 1 of 2 (50%)`,
     );
     await expect(page.locator(`[data-test-objective-remaining]`)).toContainText(
-      `user2`
+      `user2`,
     );
     await expect(page.locator(`[data-test-objective-is-complete]`)).toHaveCount(
-      0
+      0,
     );
 
     await sendMessage(page, `Hello`);
     await expect(page.locator(`[data-test-objective-progress]`)).toContainText(
-      `Completed 2 of 2 (100%)`
+      `Completed 2 of 2 (100%)`,
     );
     await expect(
-      page.locator(`[data-test-objective-is-complete]`)
+      page.locator(`[data-test-objective-is-complete]`),
     ).toContainText('The objective is completed');
   });
 });

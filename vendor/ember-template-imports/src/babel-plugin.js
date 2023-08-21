@@ -64,7 +64,7 @@ module.exports = function (babel) {
         if (state.hadTaggedTemplate) {
           state.importUtil.removeImport(
             util.TEMPLATE_LITERAL_MODULE_SPECIFIER,
-            util.TEMPLATE_LITERAL_IDENTIFIER
+            util.TEMPLATE_LITERAL_IDENTIFIER,
           );
         }
       },
