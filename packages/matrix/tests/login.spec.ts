@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test as base, expect } from '@playwright/test';
 import {
   synapseStart,
   synapseStop,
@@ -14,21 +14,36 @@ import {
   openChat,
   reloadAndOpenChat,
   toggleOperatorMode,
-  setupMatrixOverride
+  setupMatrixOverride,
 } from '../helpers';
 
+export const test = base.extend<{ synapse: SynapseInstance }>({
+  synapse: async ({}, use) => {
+    // Collecting logs during the test.
+    let synapseInstance = await synapseStart();
+    await registerUser(synapseInstance, 'user1', 'pass');
+    await use(synapseInstance);
+    await synapseStop(synapseInstance.synapseId);
+  },
+
+  page: async ({ page, synapse }, use) => {
+    // Setup overrides
+    await setupMatrixOverride(page, synapse);
+    await use(page);
+  },
+});
 
 test.describe('Login', () => {
-  let synapse: SynapseInstance;
-  test.beforeEach(async ({page}) => {
-    synapse = await synapseStart();
-    await setupMatrixOverride(page, synapse);
-    await registerUser(synapse, 'user1', 'pass');
+  //let synapse: SynapseInstance;
+  /*
+  test.beforeEach(async ({ page, synapse }) => {
+    //synapse = await synapseStart();
+    //await setupMatrixOverride(page, synapse);
   });
-
   test.afterEach(async () => {
     await synapseStop(synapse.synapseId);
   });
+*/
 
   test('it can login', async ({ page }) => {
     await openRoot(page);
@@ -50,7 +65,7 @@ test.describe('Login', () => {
     await page.locator('[data-test-displayName-field]').fill('New Name');
     await page.locator('[data-test-profile-save-btn]').click();
     await expect(
-      page.locator('[data-test-field-value="displayName"]')
+      page.locator('[data-test-field-value="displayName"]'),
     ).toContainText('New Name');
 
     // reload to page to show that the access token persists
@@ -80,17 +95,17 @@ test.describe('Login', () => {
     await page.locator('[data-test-password-field]').fill('bad pass');
     await expect(
       page.locator('[data-test-login-error]'),
-      'login error message is not displayed'
+      'login error message is not displayed',
     ).toHaveCount(0);
     await page.locator('[data-test-login-btn]').click();
     await expect(page.locator('[data-test-login-error]')).toContainText(
-      'Invalid username or password'
+      'Invalid username or password',
     );
 
     await page.locator('[data-test-password-field]').fill('pass');
     await expect(
       page.locator('[data-test-login-error]'),
-      'login error message is not displayed'
+      'login error message is not displayed',
     ).toHaveCount(0);
     await page.locator('[data-test-login-btn]').click();
 
