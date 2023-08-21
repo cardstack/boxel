@@ -22,7 +22,7 @@ test.describe('Login', () => {
   let synapse: SynapseInstance;
   test.beforeEach(async ({page}) => {
     synapse = await synapseStart();
-    //await setupMatrixOverride(page);
+    await setupMatrixOverride(page, synapse);
     await registerUser(synapse, 'user1', 'pass');
   });
 
