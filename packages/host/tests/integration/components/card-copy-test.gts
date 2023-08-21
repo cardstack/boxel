@@ -769,6 +769,7 @@ module('Integration | card-copy', function (hooks) {
         </template>
       },
     );
+    // auto save triggers this to occur twice
     onFetch = (req, body) => {
       if (req.method !== 'GET') {
         let json = JSON.parse(body);
@@ -867,6 +868,7 @@ module('Integration | card-copy', function (hooks) {
         </template>
       },
     );
+    // auto save triggers this to occur twice
     onFetch = (req, body) => {
       if (req.method !== 'GET') {
         let json = JSON.parse(body);
