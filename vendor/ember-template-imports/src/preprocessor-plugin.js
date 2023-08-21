@@ -90,7 +90,7 @@ module.exports = class TemplateImportPreprocessor {
         }
 
         return preprocessEmbeddedTemplates(string, config).output;
-      }
+      },
     );
 
     return stew.rename(compiled, (name) => {

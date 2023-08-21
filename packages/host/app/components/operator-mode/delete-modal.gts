@@ -75,7 +75,7 @@ export default class DeleteModal extends Component<Signature> {
         padding: var(--boxel-sp-lg) var(--boxel-sp-xl) var(--boxel-sp);
         background-color: white;
         border-radius: var(--boxel-border-radius-xl);
-        box-shadow: 0 15px 30px 0 rgba(0, 0, 0, 0.35);
+        box-shadow: var(--boxel-deep-box-shadow);
       }
       .buttons {
         margin-top: var(--boxel-sp-lg);

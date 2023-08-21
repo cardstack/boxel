@@ -61,13 +61,13 @@ export function isCard(card: any): card is typeof CardBase {
 
 export async function loadCard(
   ref: CardRef,
-  opts: { loader: Loader; relativeTo?: URL }
+  opts: { loader: Loader; relativeTo?: URL },
 ): Promise<typeof CardBase> {
   let maybeCard: unknown;
   let loader = opts.loader;
   if (!('type' in ref)) {
     let module = await loader.import<Record<string, any>>(
-      new URL(ref.module, opts?.relativeTo).href
+      new URL(ref.module, opts?.relativeTo).href,
     );
     maybeCard = module[ref.name];
   } else if (ref.type === 'ancestorOf') {
@@ -94,7 +94,7 @@ export async function loadCard(
 
 export function identifyCard(
   card: unknown,
-  maybeRelativeURL?: ((possibleURL: string) => string) | null
+  maybeRelativeURL?: ((possibleURL: string) => string) | null,
 ): CardRef | undefined {
   if (!isCard(card)) {
     return undefined;
@@ -131,7 +131,7 @@ export function identifyCard(
 
 export function getField<CardT extends CardBaseConstructor>(
   card: CardT,
-  fieldName: string
+  fieldName: string,
 ): Field<CardBaseConstructor> | undefined {
   let obj: object | null = card.prototype;
   while (obj) {
@@ -153,7 +153,7 @@ export function getField<CardT extends CardBaseConstructor>(
 }
 
 export function getAncestor(
-  card: CardBaseConstructor
+  card: CardBaseConstructor,
 ): CardBaseConstructor | undefined {
   let superCard = Reflect.getPrototypeOf(card);
   if (isCard(superCard)) {

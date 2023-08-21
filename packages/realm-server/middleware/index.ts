@@ -14,7 +14,7 @@ interface ProxyOptions {
 export function proxyAsset(
   from: string,
   assetsURL: URL,
-  opts?: ProxyOptions
+  opts?: ProxyOptions,
 ): Koa.Middleware<Koa.DefaultState, Koa.DefaultContext> {
   let filename = from.split('/').pop()!;
   return proxy(from, {
@@ -53,7 +53,7 @@ export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
     logger.info(
       `${ctxt.method} ${ctxt.req.headers.accept} ${
         fullRequestURL(ctxt).href
-      }: ${ctxt.status}`
+      }: ${ctxt.status}`,
     );
     logger.debug(JSON.stringify(ctxt.req.headers));
   });
@@ -64,20 +64,20 @@ export function ecsMetadata(ctxt: Koa.Context, next: Koa.Next) {
   if (process.env['ECS_CONTAINER_METADATA_URI_V4']) {
     ctxt.set(
       'X-ECS-Container-Metadata-URI-v4',
-      process.env['ECS_CONTAINER_METADATA_URI_V4']
+      process.env['ECS_CONTAINER_METADATA_URI_V4'],
     );
   }
   return next();
 }
 
 export function assetRedirect(
-  assetsURL: URL
+  assetsURL: URL,
 ): (ctxt: Koa.Context, next: Koa.Next) => void {
   return (ctxt: Koa.Context, next: Koa.Next) => {
     if (ctxt.path.startsWith(`/${assetsDir}`)) {
       let redirectURL = new URL(
         `./${ctxt.path.slice(assetsDir.length + 1)}`,
-        assetsURL
+        assetsURL,
       ).href;
 
       if (redirectURL !== ctxt.href) {
@@ -98,7 +98,7 @@ export function assetRedirect(
 // technically inside the realm (as the realm includes the trailing '/').
 // So issue a redirect in those scenarios.
 export function rootRealmRedirect(
-  realms: Realm[]
+  realms: Realm[],
 ): (ctxt: Koa.Context, next: Koa.Next) => void {
   return (ctxt: Koa.Context, next: Koa.Next) => {
     let url = fullRequestURL(ctxt);
@@ -109,7 +109,7 @@ export function rootRealmRedirect(
       realms.find(
         (r) =>
           r.loader.reverseResolution(`${realmUrlWithoutQueryParams}/`).href ===
-          r.url
+          r.url,
       )
     ) {
       url.pathname = `${url.pathname}/`;

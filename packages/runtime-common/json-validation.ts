@@ -10,11 +10,11 @@ export function assertJSONValue(v: any, pointer: string[]) {
     case 'object':
       if (Array.isArray(v)) {
         v.every((value, index) =>
-          assertJSONValue(value, pointer.concat(`[${index}]`))
+          assertJSONValue(value, pointer.concat(`[${index}]`)),
         );
       } else {
         Object.entries(v).every(([key, value]) =>
-          assertJSONValue(value, pointer.concat(key))
+          assertJSONValue(value, pointer.concat(key)),
         );
       }
       return;
@@ -34,8 +34,8 @@ export function assertJSONPrimitive(p: any, pointer: string[]) {
     default:
       throw new Error(
         `${pointer.join(
-          '/'
-        )}: JSON primitive must be of type string, number, boolean, or null`
+          '/',
+        )}: JSON primitive must be of type string, number, boolean, or null`,
       );
   }
 }

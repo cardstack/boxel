@@ -515,7 +515,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         height: 100%;
         display: grid;
         grid-template-rows: 3.5rem auto;
-        box-shadow: 0 15px 30px 0 rgb(0 0 0 / 35%);
+        box-shadow: var(--boxel-deep-box-shadow);
         pointer-events: auto;
       }
 

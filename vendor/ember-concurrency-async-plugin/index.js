@@ -82,7 +82,7 @@ const TransformAsyncMethodsIntoGeneratorMethods = {
       // Now we need to check if the last argument is an async ArrowFunctionExpress
 
       const maybeAsyncArrowPath = path.get(
-        `value.arguments.${value.arguments.length - 1}`
+        `value.arguments.${value.arguments.length - 1}`,
       );
       if (!maybeAsyncArrowPath && !maybeAsyncArrowPath.node) {
         return;
@@ -96,7 +96,7 @@ const TransformAsyncMethodsIntoGeneratorMethods = {
         convertFunctionExpressionIntoGenerator(
           maybeAsyncArrowPath,
           state,
-          factoryFunctionName
+          factoryFunctionName,
         );
       }
     }
@@ -106,7 +106,7 @@ const TransformAsyncMethodsIntoGeneratorMethods = {
 function convertFunctionExpressionIntoGenerator(
   path,
   state,
-  factoryFunctionName
+  factoryFunctionName,
 ) {
   if (path && path.node.async) {
     if (isArrowFunctionExpression(path)) {
@@ -133,7 +133,7 @@ function convertFunctionExpressionIntoGenerator(
         path.node.id,
         path.node.params,
         asyncArrowFnBody,
-        true
+        true,
       );
 
       const contextFn = arrowFunctionExpression(
@@ -141,7 +141,7 @@ function convertFunctionExpressionIntoGenerator(
         objectExpression([
           objectProperty(identifier('context'), thisExpression()),
           objectProperty(identifier('generator'), taskGeneratorFn),
-        ])
+        ]),
       );
 
       // Add an import to buildTask (if one hasn't already been added)
@@ -149,7 +149,7 @@ function convertFunctionExpressionIntoGenerator(
         state._buildTaskImport = addNamed(
           state.root,
           'buildTask',
-          'ember-concurrency/-private/async-arrow-runtime'
+          'ember-concurrency/-private/async-arrow-runtime',
         );
       }
 
@@ -174,7 +174,7 @@ function convertFunctionExpressionIntoGenerator(
           break;
         default:
           throw new Error(
-            `The task() syntax you're using for the task named ${taskName} is incorrect.`
+            `The task() syntax you're using for the task named ${taskName} is incorrect.`,
           );
       }
 
@@ -190,7 +190,7 @@ function convertFunctionExpressionIntoGenerator(
           optionsOrNull,
           stringLiteral(taskName),
           bufferPolicyName ? stringLiteral(bufferPolicyName) : nullLiteral(),
-        ]
+        ],
       );
 
       let newPath = path.parentPath.replaceWith(buildTaskCall)[0];
@@ -261,17 +261,17 @@ export default declare((api) => {
             ClassDeclaration(path, innerState) {
               path.traverse(
                 TransformAsyncMethodsIntoGeneratorMethods,
-                innerState
+                innerState,
               );
             },
             ClassExpression(path, innerState) {
               path.traverse(
                 TransformAsyncMethodsIntoGeneratorMethods,
-                innerState
+                innerState,
               );
             },
           },
-          state
+          state,
         );
       },
     },

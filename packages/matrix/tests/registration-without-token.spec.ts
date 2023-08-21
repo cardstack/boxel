@@ -25,7 +25,7 @@ test.describe('User Registration w/o Token', () => {
     await gotoRegistration(page);
     await expect(
       page.locator('[data-test-token-field]'),
-      'token field is not displayed'
+      'token field is not displayed',
     ).toHaveCount(0);
     await page.locator('[data-test-username-field]').fill('user1');
     await page.locator('[data-test-password-field]').fill('mypassword');

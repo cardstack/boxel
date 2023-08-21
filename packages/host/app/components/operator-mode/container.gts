@@ -863,6 +863,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         border-radius: 50%;
         background-color: var(--boxel-light-100);
         border-color: transparent;
+        box-shadow: var(--boxel-deep-box-shadow);
       }
       .add-card-to-neighbor-stack:hover,
       .add-card-to-neighbor-stack--active {
@@ -912,7 +913,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         border-radius: var(--boxel-border-radius);
         background-color: var(--boxel-light-100);
         border: solid 1px var(--boxel-border-color);
-        box-shadow: var(--boxel-box-shadow);
+        box-shadow: var(--boxel-deep-box-shadow);
       }
       .chat-btn:hover {
         --icon-color: var(--boxel-highlight);
