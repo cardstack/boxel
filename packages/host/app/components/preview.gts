@@ -29,3 +29,9 @@ export default class Preview extends Component<Signature> {
     );
   }
 }
+
+declare module '@glint/environment-ember-loose/registry' {
+  export default interface Registry {
+    Preview: typeof Preview;
+  }
+}

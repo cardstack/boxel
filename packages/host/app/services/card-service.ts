@@ -25,6 +25,8 @@ import ENV from '@cardstack/host/config/environment';
 export type CardSaveSubscriber = (json: SingleCardDocument) => void;
 const { ownRealmURL } = ENV;
 
+const indexCards: Map<string, Card> = new Map();
+
 export default class CardService extends Service {
   @service declare loaderService: LoaderService;
   private subscriber: CardSaveSubscriber | undefined;
@@ -110,6 +112,11 @@ export default class CardService extends Service {
   }
 
   async loadModel(url: URL): Promise<Card> {
+    let index = indexCards.get(url.href);
+    if (index) {
+      return index;
+    }
+
     await this.apiModule.loaded;
     let json = await this.fetchJSON(url);
     if (!isSingleCardDocument(json)) {
@@ -118,11 +125,15 @@ export default class CardService extends Service {
         ${JSON.stringify(json, null, 2)}`,
       );
     }
-    return await this.createFromSerialized(
+    let card = await this.createFromSerialized(
       json.data,
       json,
       typeof url === 'string' ? new URL(url) : url,
     );
+    if (this.isIndexCard(card)) {
+      indexCards.set(url.href, card);
+    }
+    return card;
   }
 
   async serializeCard(
