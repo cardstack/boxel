@@ -554,6 +554,53 @@ module('Realm Server', function (hooks) {
     );
     assert.deepEqual(testCard.ref, ref, 'card data is correct');
   });
+
+  module('BOXEL_HTTP_BASIC_PW env var', function (hooks) {
+    hooks.afterEach(function () {
+      delete process.env.BOXEL_HTTP_BASIC_PW;
+    });
+
+    test('serves a text/html GET request', async function (assert) {
+      let response = await request.get('/').set('Accept', 'text/html');
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+
+      process.env.BOXEL_HTTP_BASIC_PW = '1';
+
+      response = await request.get('/').set('Accept', 'text/html');
+      assert.strictEqual(response.status, 401, 'HTTP 401 status');
+      assert.strictEqual(
+        response.headers['www-authenticate'],
+        'Basic realm="Boxel realm server"',
+      );
+
+      response = await request
+        .get('/')
+        .set('Accept', 'text/html')
+        .auth('cardstack', 'wrong-password');
+      assert.strictEqual(response.status, 401, 'HTTP 401 status');
+      assert.strictEqual(
+        response.text,
+        'Authorization Required',
+        'the text returned is correct',
+      );
+      assert.strictEqual(
+        response.headers['www-authenticate'],
+        'Basic realm="Boxel realm server"',
+      );
+
+      response = await request
+        .get('/')
+        .set('Accept', 'text/html')
+        .auth('cardstack', process.env.BOXEL_HTTP_BASIC_PW);
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      assert.ok(
+        /<script src="\/__boxel\/assets\/vendor.js"><\/script>/.test(
+          response.text,
+        ),
+        'the HTML returned is correct',
+      );
+    });
+  });
 });
 
 module('Realm Server serving from root', function (hooks) {
