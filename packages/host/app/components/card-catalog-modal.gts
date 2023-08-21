@@ -16,7 +16,11 @@ import {
   Deferred,
 } from '@cardstack/runtime-common';
 import type { Query, Filter } from '@cardstack/runtime-common/query';
-import { Button, SearchInput, BoxelInputValidationState } from '@cardstack/boxel-ui';
+import {
+  Button,
+  SearchInput,
+  BoxelInputValidationState,
+} from '@cardstack/boxel-ui';
 import { and, eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import cn from '@cardstack/boxel-ui/helpers/cn';
@@ -78,7 +82,11 @@ export default class CardCatalogModal extends Component<Signature> {
             Loading...
           {{else}}
             <CardCatalog
-              @results={{if this.searchKey this.searchResults this.displayedRealms}}
+              @results={{if
+                this.searchKey
+                this.searchResults
+                this.displayedRealms
+              }}
               @toggleSelect={{this.toggleSelect}}
               @selectedCard={{this.selectedCard}}
               @context={{@context}}
@@ -342,7 +350,7 @@ export default class CardCatalogModal extends Component<Signature> {
 
   @action
   setSearchKey(searchKey: string) {
-    this.searchKey = searchKey.trim().toLowerCase();
+    this.searchKey = searchKey;
     if (!this.searchKey) {
       this.resetState();
     } else {
@@ -381,10 +389,17 @@ export default class CardCatalogModal extends Component<Signature> {
     }
     let results: RealmCards[] = [];
     for (let { url, realmInfo, cards } of this.displayedRealms) {
-      let filteredCards = cards.filter(c => c.title.trim().toLowerCase().includes(this.searchKey));
+      let filteredCards = cards.filter((c) =>
+        c.title
+          .trim()
+          .toLowerCase()
+          .includes(this.searchKey.trim().toLowerCase()),
+      );
       if (filteredCards.length) {
         results.push({
-          url, realmInfo, cards: filteredCards
+          url,
+          realmInfo,
+          cards: filteredCards,
         });
       }
     }
