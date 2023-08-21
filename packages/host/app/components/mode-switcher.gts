@@ -2,10 +2,8 @@ import Component from '@glimmer/component';
 import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { menuItemFunc, MenuItem } from '@cardstack/boxel-ui/helpers/menu-item';
-import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
-import map from 'ember-composable-helpers/helpers/map';
 import { on } from '@ember/modifier';
 
 interface Signature {
@@ -45,7 +43,7 @@ export default class ModeSwitcher extends Component<Signature> {
           <Menu
             class='content'
             @closeMenu={{dd.close}}
-            @items={{map (fn this.buildMenuItem this.select) this.modes}}
+            @items={{this.buildMenuItems}}
           />
         </:content>
       </BoxelDropdown>
@@ -117,10 +115,9 @@ export default class ModeSwitcher extends Component<Signature> {
   toogleDropdown() {
     this.isExpanded = !this.isExpanded;
   }
-  
-  @action 
-  buildMenuItem(onChoose: (mode: Mode) => void, mode: Mode): MenuItem {
-    return menuItemFunc([mode.label, () => onChoose(mode)], {icon: mode.icon});
+   
+  get buildMenuItems(): MenuItem[] {
+    return this.modes.map(mode => menuItemFunc([mode.label, () => this.select(mode)], {icon: mode.icon})) ;
   }
 
   @action
