@@ -6,10 +6,6 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import map from 'ember-composable-helpers/helpers/map';
-import { service } from '@ember/service';
-import RouterService from '@ember/routing/router-service';
-import type OperatorModeStateService from '../services/operator-mode-state-service';
-import type CardService from '../services/card-service';
 import { on } from '@ember/modifier';
 
 interface Signature {
@@ -115,9 +111,6 @@ export default class ModeSwitcher extends Component<Signature> {
     }
   ]
   @tracked selectedMode: Mode = this.modes[0];
-  @service declare operatorModeStateService: OperatorModeStateService;
-  @service declare cardService: CardService;
-  @service private declare router: RouterService;
   @tracked isExpanded  = false;
 
   @action
