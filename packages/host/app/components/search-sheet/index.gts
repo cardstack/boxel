@@ -346,6 +346,7 @@ export default class SearchSheet extends Component<Signature> {
     <style>
       :global(:root) {
         --search-sheet-closed-height: 40px;
+        --search-sheet-closed-width: 172px;
         --search-sheet-prompt-height: 130px;
       }
 
@@ -379,13 +380,14 @@ export default class SearchSheet extends Component<Signature> {
       .closed {
         left: var(--boxel-sp);
         height: calc(var(--search-sheet-closed-height) + var(--boxel-sp));
+        width: var(--search-sheet-closed-width);
         padding: 0;
       }
 
       .closed .search-input {
         border-radius: var(--boxel-border-radius-xl);
         height: var(--search-sheet-closed-height);
-        width: 172px;
+        width: var(--search-sheet-closed-width);
       }
 
       .prompt {

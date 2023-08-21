@@ -47,10 +47,10 @@ const SearchInput: TemplateOnlyComponent<Signature> = <template>
         @placeholder={{if @placeholder @placeholder 'Search'}}
         style={{cssVar input-font-size='var(--search-font-size)'}}
       />
+      <span class='search-input-icon'>
+        {{svgJar 'icon-search' width='20' height='20'}}
+      </span>
     </label>
-    <span class='search-input-icon'>
-      {{svgJar 'icon-search' width='20' height='20'}}
-    </span>
   </div>
   <style>
     .search-input {
@@ -60,11 +60,15 @@ const SearchInput: TemplateOnlyComponent<Signature> = <template>
       width: 100%;
       font: var(--boxel-font);
     }
+    label {
+      height: var(--search-input-height);
+      position: relative;
+    }
     .search-input-icon {
       --icon-color: var(--boxel-highlight);
       position: absolute;
-      top: var(--boxel-sp);
-      bottom: var(--boxel-sp);
+      top: 0;
+      bottom: 0;
       right: 0;
       width: var(--search-icon-width);
       display: flex;
