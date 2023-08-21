@@ -8,7 +8,6 @@ import { tracked } from '@glimmer/tracking';
 import map from 'ember-composable-helpers/helpers/map';
 import { service } from '@ember/service';
 import RouterService from '@ember/routing/router-service';
-import { restartableTask } from 'ember-concurrency';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type CardService from '../services/card-service';
 import { on } from '@ember/modifier';
@@ -134,37 +133,5 @@ export default class ModeSwitcher extends Component<Signature> {
   select(mode: Mode) {
     if (this.selectedMode.label === mode.label) return;
     this.selectedMode = mode;
-
-    switch (this.selectedMode.label) {
-      case 'Code':
-        this.openCodeMode.perform();
-        break;
-      case 'Interact':
-        this.openOperatorMode.perform();
-        break;
-    }
   }
-
-  openCodeMode = restartableTask(async () => {
-    let topMostStackItems = this.operatorModeStateService.topMostStackItems();
-    let topMostStackItem;
-    let counter = 0;
-    do {
-      counter++;
-      topMostStackItem = topMostStackItems[topMostStackItems.length - counter];
-    } while (topMostStackItem.type !== 'card' && counter < topMostStackItems.length);
-    if (!topMostStackItem || topMostStackItem.type !== 'card') return;
-
-    let realmURL = await this.cardService.getRealmURL(topMostStackItem.card);
-    let path = topMostStackItem.card.id.replace(realmURL!.toString(), '') + '.json';
-    let pathArray = path.split('/');
-    pathArray.pop();
-    let openDirs = pathArray.length > 0 ? pathArray.join('/') + '/' : undefined;
-    this.router.transitionTo('code', { queryParams: { openDirs, path }});
-  });
-
-  openOperatorMode = restartableTask(async () => {
-    let operatorModeState = this.operatorModeStateService.serialize();
-    this.router.transitionTo('card', { queryParams: { operatorModeEnabled: true, operatorModeState }});
-  });
 }
