@@ -191,8 +191,6 @@ module('Acceptance | basic tests', function (hooks) {
 
     await click('[data-test-file="Person/1.json"]');
 
-    await percySnapshot(assert);
-
     assert.strictEqual(
       currentURL(),
       '/code?openDirs=Person%2F&path=Person%2F1.json',
@@ -225,6 +223,19 @@ module('Acceptance | basic tests', function (hooks) {
       },
       'expected scoped CSS to apply to card instance',
     );
+
+    let selectorForJsonDataProperty = '.view-line span span:nth-child(2)';
+
+    await waitUntil(
+      () =>
+        find(selectorForJsonDataProperty)
+          ?.computedStyleMap()
+          ?.get('color')
+          ?.toString() === 'rgb(163, 21, 21)',
+      { timeoutMessage: 'timed out waiting for syntax highlighting' },
+    );
+
+    await percySnapshot(assert);
   });
 
   test('Can view a card schema', async function (assert) {
@@ -232,8 +243,6 @@ module('Acceptance | basic tests', function (hooks) {
     await waitFor('[data-test-file]');
     await click('[data-test-file="person.gts"]');
     await waitFor('[data-test-card-id]');
-
-    await percySnapshot(assert);
 
     assert.strictEqual(currentURL(), '/code?path=person.gts');
     assert
@@ -249,6 +258,19 @@ module('Acceptance | basic tests', function (hooks) {
       personCardSource,
       'the monaco content is correct',
     );
+
+    let selectorForImportKeyword = '.view-line span span:nth-child(2)';
+
+    await waitUntil(
+      () =>
+        find(selectorForImportKeyword)
+          ?.computedStyleMap()
+          ?.get('color')
+          ?.toString() === 'rgb(0, 0, 255)',
+      { timeoutMessage: 'timed out waiting for syntax highlighting' },
+    );
+
+    await percySnapshot(assert);
   });
 
   test('glimmer-scoped-css smoke test', async function (assert) {
