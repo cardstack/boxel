@@ -233,6 +233,8 @@ module('Acceptance | basic tests', function (hooks) {
     await click('[data-test-file="person.gts"]');
     await waitFor('[data-test-card-id]');
 
+    await percySnapshot(assert);
+
     assert.strictEqual(currentURL(), '/code?path=person.gts');
     assert
       .dom('[data-test-card-id]')
