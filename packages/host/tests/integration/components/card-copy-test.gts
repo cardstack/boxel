@@ -258,7 +258,6 @@ module('Integration | card-copy', function (hooks) {
 
     realm2 = await TestRealm.createWithAdapter(adapter2, loader, this.owner, {
       realmURL: testRealm2URL,
-      onFetch: wrappedOnFetch(),
     });
     await realm2.ready;
 
@@ -755,7 +754,7 @@ module('Integration | card-copy', function (hooks) {
   });
 
   test<TestContextForCopy>('can copy a card that has a relative link to card in source realm', async function (assert) {
-    assert.expect(17);
+    assert.expect(15);
     let expectedEvents = ['added: Person/1.json', 'index: incremental'];
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
@@ -769,7 +768,6 @@ module('Integration | card-copy', function (hooks) {
         </template>
       },
     );
-    // auto save triggers this to occur twice
     onFetch = (req, body) => {
       if (req.method !== 'GET') {
         let json = JSON.parse(body);
@@ -854,7 +852,7 @@ module('Integration | card-copy', function (hooks) {
   });
 
   test<TestContextForCopy>('can copy a card that has a link to card in destination realm', async function (assert) {
-    assert.expect(17);
+    assert.expect(15);
     let expectedEvents = ['added: Person/1.json', 'index: incremental'];
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
@@ -868,7 +866,6 @@ module('Integration | card-copy', function (hooks) {
         </template>
       },
     );
-    // auto save triggers this to occur twice
     onFetch = (req, body) => {
       if (req.method !== 'GET') {
         let json = JSON.parse(body);
