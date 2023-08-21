@@ -63,6 +63,7 @@ const SearchInput: TemplateOnlyComponent<Signature> = <template>
     label {
       height: var(--search-input-height);
       position: relative;
+      display: block;
     }
     .search-input-icon {
       --icon-color: var(--boxel-highlight);
