@@ -82,11 +82,7 @@ export default class CardCatalogModal extends Component<Signature> {
             Loading...
           {{else}}
             <CardCatalog
-              @results={{if
-                this.searchKey
-                this.searchResults
-                this.displayedRealms
-              }}
+              @results={{this.displayedResults}}
               @toggleSelect={{this.toggleSelect}}
               @selectedCard={{this.selectedCard}}
               @context={{@context}}
@@ -237,15 +233,23 @@ export default class CardCatalogModal extends Component<Signature> {
     );
   }
 
+  get availableRealms(): RealmCards[] {
+    // returns all available realms and their cards that match a certain type criteria
+    // realm filters and search key filter these groups of cards
+    // filters dropdown menu will always display all available realms
+    return this.currentRequest?.search.instancesByRealm ?? [];
+  }
+
   get displayedRealms(): RealmCards[] {
-    // if no realms are selected, display all realms
+    // filters the available realm cards by selected realms
     return this.selectedRealms.length
       ? this.selectedRealms
       : this.availableRealms;
   }
 
-  get availableRealms(): RealmCards[] {
-    return this.currentRequest?.search.instancesByRealm ?? [];
+  get displayedResults(): RealmCards[] {
+    // filters the displayed realm cards by search key
+    return this.searchKey ? this.searchResults : this.displayedRealms;
   }
 
   _selectedRealms = new TrackedArray<RealmCards>([]);
