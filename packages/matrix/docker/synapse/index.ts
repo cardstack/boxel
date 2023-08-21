@@ -9,12 +9,11 @@ import {
   dockerLogs,
   dockerRun,
   dockerStop,
-  getHostPort
+  getHostPort,
 } from '../index';
 
 export const SYNAPSE_IP_ADDRESS = '172.20.0.5';
 export const SYNAPSE_PORT = 8008;
-//export const SYNAPSE_PORT_HOST = 8002;
 
 interface SynapseConfig {
   configDir: string;
@@ -38,7 +37,7 @@ function randB64Bytes(numBytes: number): string {
 
 async function cfgDirFromTemplate(
   template: string,
-  dataDir?: string
+  dataDir?: string,
 ): Promise<SynapseConfig> {
   const templateDir = path.join(__dirname, template);
 
@@ -66,7 +65,7 @@ async function cfgDirFromTemplate(
   console.log(`Gen ${path.join(templateDir, 'homeserver.yaml')}`);
   let hsYaml = await fse.readFile(
     path.join(templateDir, 'homeserver.yaml'),
-    'utf8'
+    'utf8',
   );
   hsYaml = hsYaml.replace(/{{REGISTRATION_SECRET}}/g, registrationSecret);
   hsYaml = hsYaml.replace(/{{MACAROON_SECRET_KEY}}/g, macaroonSecret);
@@ -82,7 +81,7 @@ async function cfgDirFromTemplate(
   console.log(`Gen ${path.join(templateDir, 'localhost.signing.key')}`);
   await fse.writeFile(
     path.join(configDir, 'localhost.signing.key'),
-    `ed25519 x ${signingKey}`
+    `ed25519 x ${signingKey}`,
   );
 
   return {
@@ -101,11 +100,11 @@ interface StartOptions {
   dataDir?: string;
 }
 export async function synapseStart(
-  opts?: StartOptions
+  opts?: StartOptions,
 ): Promise<SynapseInstance> {
   const synCfg = await cfgDirFromTemplate(
     opts?.template ?? 'test',
-    opts?.dataDir
+    opts?.dataDir,
   );
   let containerName = path.basename(synCfg.configDir);
   console.log(`Starting synapse with config dir ${synCfg.configDir}...`);
@@ -129,7 +128,9 @@ export async function synapseStart(
 
   let port = await getHostPort(synapseId, synCfg.port);
 
-  console.log(`Started synapse with id ${synapseId} on port ${synCfg.port} mapped to ${port}.`);
+  console.log(
+    `Started synapse with id ${synapseId} on port ${synCfg.port} mapped to ${port}.`,
+  );
 
   // Await Synapse healthcheck
   await dockerExec({
@@ -188,7 +189,7 @@ export async function registerUser(
   username: string,
   password: string,
   admin = false,
-  displayName?: string
+  displayName?: string,
 ): Promise<Credentials> {
   const url = `http://localhost:${synapse.mappedPort}/_synapse/admin/v1/register`;
   const context = await request.newContext({ baseURL: url });
@@ -222,13 +223,11 @@ export async function registerUser(
   };
 }
 
-
-// TODO: needs synapse instance passed in
 export async function createRegistrationToken(
   synapse: SynapseInstance,
   adminAccessToken: string,
   registrationToken: string,
-  usesAllowed = 1000
+  usesAllowed = 1000,
 ) {
   let res = await fetch(
     `http://localhost:${synapse.mappedPort}/_synapse/admin/v1/registration_tokens/new`,
@@ -241,11 +240,13 @@ export async function createRegistrationToken(
         token: registrationToken,
         uses_allowed: usesAllowed,
       }),
-    }
+    },
   );
   if (!res.ok) {
     throw new Error(
-      `could not create registration token: ${res.status} - ${await res.text()}`
+      `could not create registration token: ${
+        res.status
+      } - ${await res.text()}`,
     );
   }
 }

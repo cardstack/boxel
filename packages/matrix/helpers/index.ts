@@ -29,8 +29,10 @@ export const test = base.extend<{ synapse: SynapseInstance }>({
   },
 });
 
-
-export async function setupMatrixOverride(page: Page, synapse: SynapseInstance) {
+export async function setupMatrixOverride(
+  page: Page,
+  synapse: SynapseInstance,
+) {
   // Save the original goto function
   const originalGoto = page.goto.bind(page);
 
@@ -45,15 +47,15 @@ export async function setupMatrixOverride(page: Page, synapse: SynapseInstance) 
 
     // Update the URL's search parameters
     newUrl.search = params.toString();
-    console.log("Changing url to", newUrl.toString())
+    console.log('Changing url to', newUrl.toString());
 
     // Call the original goto function with the new URL
     return originalGoto(newUrl.toString(), options);
   };
 
-   // Patch the reload function
+  // Patch the reload function
   page.reload = async (options) => {
-     return page.goto(page.url(), options)
+    return page.goto(page.url(), options);
   };
 }
 
@@ -69,12 +71,12 @@ export async function toggleOperatorMode(page: Page) {
 export async function openChat(page: Page) {
   await page.locator('[data-test-open-chat]').click();
   await page.waitForFunction(() =>
-    document.querySelector('[data-test-matrix-ready]')
+    document.querySelector('[data-test-matrix-ready]'),
   );
 }
 
 export async function openRoot(page: Page) {
-  await page.goto(testHost); //addMatrixOverride(testHost))
+  await page.goto(testHost);
 }
 
 export async function gotoRegistration(page: Page) {
@@ -88,7 +90,7 @@ export async function login(
   page: Page,
   username: string,
   password: string,
-  opts?: LoginOptions
+  opts?: LoginOptions,
 ) {
   await openRoot(page);
   await toggleOperatorMode(page);
@@ -111,7 +113,7 @@ export async function logout(page: Page) {
 
 export async function createRoom(
   page: Page,
-  roomDetails: { name: string; invites?: string[] }
+  roomDetails: { name: string; invites?: string[] },
 ) {
   await page.locator('[data-test-create-room-mode-btn]').click();
   await page.locator('[data-test-room-name-field]').fill(roomDetails.name);
@@ -146,11 +148,11 @@ export async function setObjective(page: Page, objectiveURI: string) {
 export async function sendMessage(
   page: Page,
   message: string | undefined,
-  cardId?: string
+  cardId?: string,
 ) {
   if (message == null && cardId == null) {
     throw new Error(
-      `sendMessage requires at least a message or a card ID be specified`
+      `sendMessage requires at least a message or a card ID be specified`,
     );
   }
   if (message != null) {
@@ -176,45 +178,45 @@ export async function assertMessages(
     from: string;
     message?: string;
     card?: { id: string; text?: string };
-  }[]
+  }[],
 ) {
   await expect(page.locator('[data-test-message-idx]')).toHaveCount(
-    messages.length
+    messages.length,
   );
   for (let [index, { from, message, card }] of messages.entries()) {
     await expect(
       page.locator(
-        `[data-test-message-idx="${index}"] [data-test-boxel-message-name]`
-      )
+        `[data-test-message-idx="${index}"] [data-test-boxel-message-name]`,
+      ),
     ).toContainText(from);
     if (message != null) {
       await expect(
-        page.locator(`[data-test-message-idx="${index}"] .content`)
+        page.locator(`[data-test-message-idx="${index}"] .content`),
       ).toContainText(message);
     }
     if (card) {
       await expect(
         page.locator(
-          `[data-test-message-idx="${index}"][data-test-message-card="${card.id}"]`
-        )
+          `[data-test-message-idx="${index}"][data-test-message-card="${card.id}"]`,
+        ),
       ).toHaveCount(1);
       if (card.text) {
         if (message != null && card.text.includes(message)) {
           throw new Error(
-            `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.text}'`
+            `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.text}'`,
           );
         }
         await expect(
           page.locator(
-            `[data-test-message-idx="${index}"][data-test-message-card="${card.id}"]`
-          )
+            `[data-test-message-idx="${index}"][data-test-message-card="${card.id}"]`,
+          ),
         ).toContainText(card.text);
       }
     } else {
       await expect(
         page.locator(
-          `[data-test-message-idx="${index}"][data-test-message-card]`
-        )
+          `[data-test-message-idx="${index}"][data-test-message-card]`,
+        ),
       ).toHaveCount(0);
     }
   }
@@ -231,18 +233,18 @@ export async function assertRooms(page: Page, rooms: RoomAssertions) {
       (rooms: RoomAssertions) =>
         document.querySelectorAll('[data-test-joined-room]').length ===
         rooms.joinedRooms!.length,
-      rooms
+      rooms,
     );
     for (let { name } of rooms.joinedRooms) {
       await expect(
         page.locator(`[data-test-joined-room="${name}"]`),
-        `the joined room '${name}' is displayed`
+        `the joined room '${name}' is displayed`,
       ).toHaveCount(1);
     }
   } else {
     await expect(
       page.locator('[data-test-joined-room]'),
-      `joined rooms are not displayed`
+      `joined rooms are not displayed`,
     ).toHaveCount(0);
   }
   if (rooms.invitedRooms && rooms.invitedRooms.length > 0) {
@@ -250,20 +252,20 @@ export async function assertRooms(page: Page, rooms: RoomAssertions) {
       (rooms: RoomAssertions) =>
         document.querySelectorAll('[data-test-invited-room]').length ===
         rooms.invitedRooms!.length,
-      rooms
+      rooms,
     );
     for (let { name, sender } of rooms.invitedRooms) {
       await expect(
         page.locator(
-          `[data-test-invited-room="${name}"] [data-test-invite-sender="${sender}"]`
+          `[data-test-invited-room="${name}"] [data-test-invite-sender="${sender}"]`,
         ),
-        `the invited room '${name}' from '${sender}' is displayed`
+        `the invited room '${name}' from '${sender}' is displayed`,
       ).toHaveCount(1);
     }
   } else {
     await expect(
       page.locator('[data-test-invited-room]'),
-      `invited rooms are not displayed`
+      `invited rooms are not displayed`,
     ).toHaveCount(0);
   }
 }
@@ -271,35 +273,35 @@ export async function assertRooms(page: Page, rooms: RoomAssertions) {
 export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
   await expect(
     page.locator('[data-test-username-field]'),
-    'username field is not displayed'
+    'username field is not displayed',
   ).toHaveCount(0);
   await expect(
     page.locator('[data-test-password-field]'),
-    'password field is not displayed'
+    'password field is not displayed',
   ).toHaveCount(0);
   await expect(page.locator('[data-test-field-value="userId"]')).toContainText(
-    opts?.userId ?? '@user1:localhost'
+    opts?.userId ?? '@user1:localhost',
   );
   await expect(
-    page.locator('[data-test-field-value="displayName"]')
+    page.locator('[data-test-field-value="displayName"]'),
   ).toContainText(opts?.displayName ?? 'user1');
 }
 
 export async function assertLoggedOut(page: Page) {
   await expect(
     page.locator('[data-test-username-field]'),
-    'username field is displayed'
+    'username field is displayed',
   ).toHaveCount(1);
   await expect(
     page.locator('[data-test-password-field]'),
-    'password field is displayed'
+    'password field is displayed',
   ).toHaveCount(1);
   await expect(
     page.locator('[data-test-field-value="userId"]'),
-    'user profile - user ID is not displayed'
+    'user profile - user ID is not displayed',
   ).toHaveCount(0);
   await expect(
     page.locator('[data-test-field-value="displayName"]'),
-    'user profile - display name is not displayed'
+    'user profile - display name is not displayed',
   ).toHaveCount(0);
 }
