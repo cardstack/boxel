@@ -25,6 +25,7 @@ export default class ModeSwitcher extends Component<Signature> {
   <template>
     <div
       class='mode-switcher' 
+      data-test-mode-switcher
       ...attributes>
       <BoxelDropdown>
         <:trigger as |bindings|>
