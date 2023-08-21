@@ -35,12 +35,7 @@ class CommandHandler {
 }
 
 export default class CommandService extends Service {
-  commandHandlers: Map<any, CommandHandler>;
-
-  constructor(properties: object) {
-    super(properties);
-    this.commandHandlers = new Map();
-  }
+  commandHandlers: Map<any, CommandHandler> = new Map();;
 
   public registerCommandHandler(
     handler: any,
