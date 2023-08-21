@@ -12,7 +12,7 @@ class CommandHandler {
 
   public get(command: Command) {
     if (!this.functions.has(command)) {
-      this.functions.set(command, []);
+      return [];
     }
     return this.functions.get(command);
   }
