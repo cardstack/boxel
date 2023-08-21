@@ -2,7 +2,6 @@ import { expect, type Page, test as base } from '@playwright/test';
 import {
   synapseStart,
   synapseStop,
-  registerUser,
   type SynapseInstance,
 } from '../docker/synapse';
 export const testHost = 'http://localhost:4202/test';
