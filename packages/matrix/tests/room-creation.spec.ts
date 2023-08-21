@@ -29,18 +29,18 @@ test.describe('Room creation', () => {
     await login(page, 'user1', 'pass');
     await expect(
       page.locator('[data-test-joined-room]'),
-      'joined rooms not displayed'
+      'joined rooms not displayed',
     ).toHaveCount(0);
     await expect(
       page.locator('[data-test-invited-room]'),
-      'invited rooms not displayed'
+      'invited rooms not displayed',
     ).toHaveCount(0);
 
     await page.locator('[data-test-create-room-mode-btn]').click();
 
     await expect(page.locator('[data-test-create-room-btn]')).toBeDisabled();
     await expect(
-      page.locator('[data-test-create-room-cancel-btn]')
+      page.locator('[data-test-create-room-cancel-btn]'),
     ).toBeEnabled();
 
     await page.locator('[data-test-room-name-field]').fill('Room 1');
@@ -76,11 +76,11 @@ test.describe('Room creation', () => {
 
     await assertRooms(page, {});
     await expect(
-      page.locator('[data-test-create-room-mode-btn]')
+      page.locator('[data-test-create-room-mode-btn]'),
     ).toBeEnabled();
     await page.locator('[data-test-create-room-mode-btn]').click();
     await expect(await page.locator('[data-test-room-name-field]')).toHaveValue(
-      ''
+      '',
     );
   });
 
@@ -143,42 +143,42 @@ test.describe('Room creation', () => {
     await page.locator('[data-test-room-name-field]').fill('Room 1');
     await expect(
       page.locator(
-        '[data-test-room-name-field] [data-test-boxel-input-validation-state="initial"]'
+        '[data-test-room-name-field] [data-test-boxel-input-validation-state="initial"]',
       ),
-      'room name field displays initial validation state'
+      'room name field displays initial validation state',
     ).toHaveCount(1);
     await expect(
       page.locator(
-        '[data-test-room-name-field] [data-test-boxel-input-error-message]'
+        '[data-test-room-name-field] [data-test-boxel-input-error-message]',
       ),
-      'no error message is displayed'
+      'no error message is displayed',
     ).toHaveCount(0);
     await page.locator('[data-test-create-room-btn]').click();
 
     await expect(
       page.locator(
-        '[data-test-room-name-field] [data-test-boxel-input-validation-state="invalid"]'
+        '[data-test-room-name-field] [data-test-boxel-input-validation-state="invalid"]',
       ),
-      'room name field displays invalid validation state'
+      'room name field displays invalid validation state',
     ).toHaveCount(1);
     await expect(
       page.locator(
-        '[data-test-room-name-field] [data-test-boxel-input-error-message]'
-      )
+        '[data-test-room-name-field] [data-test-boxel-input-error-message]',
+      ),
     ).toContainText('Room already exists');
 
     await page.locator('[data-test-room-name-field]').fill('Room 2');
     await expect(
       page.locator(
-        '[data-test-room-name-field] [data-test-boxel-input-validation-state="initial"]'
+        '[data-test-room-name-field] [data-test-boxel-input-validation-state="initial"]',
       ),
-      'room name field displays initial validation state'
+      'room name field displays initial validation state',
     ).toHaveCount(1);
     await expect(
       page.locator(
-        '[data-test-room-name-field] [data-test-boxel-input-error-message]'
+        '[data-test-room-name-field] [data-test-boxel-input-error-message]',
       ),
-      'no error message is displayed'
+      'no error message is displayed',
     ).toHaveCount(0);
     await page.locator('[data-test-create-room-btn]').click();
 

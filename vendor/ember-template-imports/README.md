@@ -4,7 +4,7 @@ This addon provides a number of different formats for using template imports
 within Ember!
 
 ```js
-import MyComponent from './my-component';
+import MyComponent from "./my-component";
 
 <template>
   <MyComponent />
@@ -23,7 +23,7 @@ So far, this addon supports two different potential formats:
 - Template tags, embedded in `.gjs` files
 
   ```js
-  import MyComponent from './my-component';
+  import MyComponent from "./my-component";
 
   <template>
     <MyComponent />
@@ -33,8 +33,8 @@ So far, this addon supports two different potential formats:
 - Template literals, similar to the existing `hbs` helper in tests:
 
   ```js
-  import { hbs } from 'ember-template-imports';
-  import MyComponent from './my-component';
+  import { hbs } from "ember-template-imports";
+  import MyComponent from "./my-component";
 
   export default hbs`
     <MyComponent/>
@@ -157,7 +157,7 @@ define templates for Ember components.
 
 ```js
 // components/hello.js
-import { hbs } from 'ember-template-imports';
+import { hbs } from "ember-template-imports";
 
 export default hbs`
   <span>Hello, {{@name}}!</span>
@@ -170,8 +170,8 @@ like so:
 
 ```js
 // components/hello-world.js
-import { hbs } from 'ember-template-imports';
-import Hello from './hello';
+import { hbs } from "ember-template-imports";
+import Hello from "./hello";
 
 export default hbs`
   <Hello @name="world" />
@@ -182,7 +182,7 @@ In addition, you can define template-only components and assign them to
 variables, allowing you to export components with named exports:
 
 ```js
-import { hbs } from 'ember-template-imports';
+import { hbs } from "ember-template-imports";
 
 export const First = hbs`First`;
 
@@ -195,7 +195,7 @@ This also allows you to create components that are only used locally, in the
 same file:
 
 ```js
-import { hbs } from 'ember-template-imports';
+import { hbs } from "ember-template-imports";
 
 const Option = hbs`
   <option selected={{@selected}} value={{@value}}>
@@ -219,9 +219,9 @@ Helpers and modifiers can also be defined in the same file as your components,
 making them very flexible:
 
 ```js
-import { hbs } from 'ember-template-imports';
-import { helper } from '@ember/component/helper';
-import { modifier } from 'ember-modifier';
+import { hbs } from "ember-template-imports";
+import { helper } from "@ember/component/helper";
+import { modifier } from "ember-modifier";
 
 const plusOne = helper(([num]) => num + 1);
 
@@ -243,11 +243,11 @@ the template to the `static template` property of the class:
 
 ```js
 // components/hello.js
-import Component from '@glimmer/component';
-import { hbs } from 'ember-template-imports';
+import Component from "@glimmer/component";
+import { hbs } from "ember-template-imports";
 
 export default class Hello extends Component {
-  name = 'world';
+  name = "world";
 
   static template = hbs`
     <span>Hello, {{this.name}}!</span>

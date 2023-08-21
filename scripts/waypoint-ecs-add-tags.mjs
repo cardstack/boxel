@@ -29,11 +29,11 @@ export function getServices(cluster, appName) {
   do {
     const startingTokenArg = nextToken ? `--starting-token ${nextToken}` : '';
     const responseJson = execute(
-      `aws ecs list-services --cluster ${cluster} ${startingTokenArg}`
+      `aws ecs list-services --cluster ${cluster} ${startingTokenArg}`,
     );
     const response = JSON.parse(responseJson);
     const filtered = response.serviceArns.filter(
-      (arn) => getAppNameFromServiceArn(arn) === appName
+      (arn) => getAppNameFromServiceArn(arn) === appName,
     );
     serviceArns = serviceArns.concat(filtered);
     nextToken = response.nextToken;
@@ -43,13 +43,13 @@ export function getServices(cluster, appName) {
   for (let i = 0; i < serviceArns.length; i += 10) {
     const slicedServiceNames = serviceArns.slice(
       i,
-      i + 10 > serviceArns.length ? serviceArns.length : i + 10
+      i + 10 > serviceArns.length ? serviceArns.length : i + 10,
     );
 
     const responseJson = execute(
       `aws ecs describe-services --include TAGS --cluster ${cluster} --services ${slicedServiceNames.join(
-        ' '
-      )}`
+        ' ',
+      )}`,
     );
     const response = JSON.parse(responseJson);
     services = services.concat(response.services);
@@ -90,7 +90,7 @@ function tagResources(cluster, service, tags) {
 
   console.log(`-> Tagging service: ${service.serviceName}`);
   execute(
-    `aws ecs tag-resource --resource-arn ${service.serviceArn} --tags ${tagsArgs}`
+    `aws ecs tag-resource --resource-arn ${service.serviceArn} --tags ${tagsArgs}`,
   );
 }
 

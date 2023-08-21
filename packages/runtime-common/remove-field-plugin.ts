@@ -37,7 +37,7 @@ export function removeFieldPlugin() {
 
 function maybeRemoveFieldDecoratorImport(
   path: NodePath<t.ImportDeclaration>,
-  state: State
+  state: State,
 ) {
   if (path.node.source.value !== state.opts.field.decorator.module) {
     return;
@@ -51,7 +51,7 @@ function maybeRemoveFieldDecoratorImport(
   let references = getOtherReferences(
     path,
     specifier.node.local.name,
-    (state.opts.field.path.node.key as t.Identifier).name
+    (state.opts.field.path.node.key as t.Identifier).name,
   );
   if (references?.length === 0) {
     specifier.remove();
@@ -60,7 +60,7 @@ function maybeRemoveFieldDecoratorImport(
 
 function maybeRemoveFieldTypeImport(
   path: NodePath<t.ImportDeclaration>,
-  state: State
+  state: State,
 ) {
   if (path.node.source.value !== state.opts.field.type.module) {
     return;
@@ -74,7 +74,7 @@ function maybeRemoveFieldTypeImport(
   let references = getOtherReferences(
     path,
     specifier.node.local.name,
-    (state.opts.field.path.node.key as t.Identifier).name
+    (state.opts.field.path.node.key as t.Identifier).name,
   );
   if (references?.length === 0) {
     specifier.remove();
@@ -83,7 +83,7 @@ function maybeRemoveFieldTypeImport(
 
 function maybeRemoveFieldClassImport(
   path: NodePath<t.ImportDeclaration>,
-  state: State
+  state: State,
 ) {
   if (
     state.opts.field.card.type !== 'external' ||
@@ -98,7 +98,7 @@ function maybeRemoveFieldClassImport(
   let references = getOtherReferences(
     path,
     specifier.node.local.name,
-    (state.opts.field.path.node.key as t.Identifier).name
+    (state.opts.field.path.node.key as t.Identifier).name,
   );
   if (references?.length === 0) {
     if (path.get('specifiers').length === 1) {
@@ -111,7 +111,7 @@ function maybeRemoveFieldClassImport(
 
 function getImportSpecifier(
   path: NodePath<t.ImportDeclaration>,
-  name: string
+  name: string,
 ):
   | NodePath<t.ImportSpecifier>
   | NodePath<t.ImportDefaultSpecifier>
@@ -127,14 +127,14 @@ function getImportSpecifier(
     .get('specifiers')
     .find(
       (s) =>
-        s.node.type === 'ImportSpecifier' && getName(s.node.imported) === name
+        s.node.type === 'ImportSpecifier' && getName(s.node.imported) === name,
     ) as NodePath<t.ImportSpecifier> | undefined;
 }
 
 function getOtherReferences(
   path: NodePath<t.ImportDeclaration>,
   localName: string,
-  fieldName: string
+  fieldName: string,
 ): NodePath<t.Node>[] | undefined {
   let binding = path.scope.getBinding(localName);
   if (!binding) {

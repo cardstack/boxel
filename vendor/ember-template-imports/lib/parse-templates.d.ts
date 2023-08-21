@@ -32,5 +32,5 @@ export interface TemplateLiteralMatch {
 export declare function parseTemplates(
   template: string,
   relativePath: string,
-  templateTag?: string
+  templateTag?: string,
 ): TemplateMatch[];

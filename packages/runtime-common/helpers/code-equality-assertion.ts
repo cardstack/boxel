@@ -59,7 +59,7 @@ function preprocessTemplateTags(code: string): string {
     output.push(
       code
         .slice(match.start.index! + match.start[0].length, match.end.index)
-        .replace(/`/g, '\\`')
+        .replace(/`/g, '\\`'),
     );
     output.push('`)]');
     offset = match.end.index! + match.end[0].length;
@@ -72,7 +72,7 @@ function codeEqual(
   this: Assert,
   actual: string,
   expected: string,
-  message = 'code should be equal'
+  message = 'code should be equal',
 ) {
   let parsedActual = standardize(actual)!;
   let parsedExpected = standardize(expected)!;

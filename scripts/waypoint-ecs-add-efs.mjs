@@ -14,7 +14,7 @@ function taskDefinitionHasVolume(
   taskDefinition,
   name,
   fileSystemId,
-  accessPointId
+  accessPointId,
 ) {
   if (taskDefinition.volumes?.length === 0) return false;
 
@@ -36,12 +36,12 @@ function addVolume(
   volumeName,
   fileSystemId,
   accessPointId,
-  containerPath
+  containerPath,
 ) {
   const taskDefinition = JSON.parse(
     execute(
-      `aws ecs describe-task-definition --task-definition ${service.taskDefinition}`
-    )
+      `aws ecs describe-task-definition --task-definition ${service.taskDefinition}`,
+    ),
   );
 
   if (
@@ -49,7 +49,7 @@ function addVolume(
       taskDefinition.taskDefinition,
       volumeName,
       fileSystemId,
-      accessPointId
+      accessPointId,
     )
   ) {
     console.log('» Volume already attached');
@@ -89,7 +89,7 @@ function addVolume(
 
   fs.writeFileSync(
     'modified-task-definition.json',
-    JSON.stringify(taskDefinition.taskDefinition, null, 2)
+    JSON.stringify(taskDefinition.taskDefinition, null, 2),
   );
 
   const family = taskDefinition.taskDefinition.family;
@@ -97,8 +97,8 @@ function addVolume(
     execute(
       `aws ecs register-task-definition` +
         ` --family ${family}` +
-        ` --cli-input-json file://modified-task-definition.json`
-    )
+        ` --cli-input-json file://modified-task-definition.json`,
+    ),
   );
 
   console.log(`-> Updating service: ${service.serviceName}`);
@@ -109,7 +109,7 @@ function addVolume(
       ` --task-definition ${registeredTaskDefinition.taskDefinition.taskDefinitionArn}` +
       ` --force-new-deployment` +
       ` --health-check-grace-period-seconds 330` +
-      ` --enable-ecs-managed-tags`
+      ` --enable-ecs-managed-tags`,
   );
 }
 
@@ -137,7 +137,7 @@ function main() {
     volumeName,
     fileSystemId,
     accessPointId,
-    containerPath
+    containerPath,
   );
 }
 

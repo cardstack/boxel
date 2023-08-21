@@ -1,15 +1,15 @@
 {
-    "name": "@cardstack/ai-bot",
-    "devDependencies": {
-        "matrix-js-sdk": "^25.0.0",
-        "ts-node": "^10.9.1",
-        "typescript": "^5.1.6",
-        "openai": "4.0.0-beta.4"
-    },
-    "scripts": {
-        "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main"
-    },
-    "volta": {
-        "extends": "../../package.json"
-    }
+  "name": "@cardstack/ai-bot",
+  "devDependencies": {
+    "matrix-js-sdk": "^25.0.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.1.6",
+    "openai": "4.0.0-beta.4"
+  },
+  "scripts": {
+    "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main"
+  },
+  "volta": {
+    "extends": "../../package.json"
+  }
 }
