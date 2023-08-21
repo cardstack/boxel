@@ -9,6 +9,7 @@ import {
   dockerLogs,
   dockerRun,
   dockerStop,
+  getHostPort
 } from '../index';
 
 export const SYNAPSE_IP_ADDRESS = '172.20.0.5';
@@ -33,10 +34,6 @@ const synapses = new Map<string, SynapseInstance>();
 
 function randB64Bytes(numBytes: number): string {
   return crypto.randomBytes(numBytes).toString('base64').replace(/=*$/, '');
-}
-
-function randomPort(): number {
-  return crypto.randomInt(10000, 11000);
 }
 
 async function cfgDirFromTemplate(
@@ -110,12 +107,12 @@ export async function synapseStart(
     opts?.template ?? 'test',
     opts?.dataDir
   );
-  let port = randomPort();
+  let containerName = path.basename(synCfg.configDir);
   console.log(`Starting synapse with config dir ${synCfg.configDir}...`);
   await dockerCreateNetwork({ networkName: 'boxel' });
   const synapseId = await dockerRun({
     image: 'matrixdotorg/synapse:develop',
-    containerName: `boxel-synapse-test-${port}`,
+    containerName: containerName,
     dockerParams: [
       '--rm',
       '-v',
@@ -124,11 +121,13 @@ export async function synapseStart(
        * When using -p flag with --ip, the docker internal port must be used to access from the host
        */
       '-p',
-      `${port}:${synCfg.port}/tcp`,
+      `${synCfg.port}/tcp`,
       '--network=boxel',
     ],
     applicationParams: ['run'],
   });
+
+  let port = await getHostPort(synapseId, synCfg.port);
 
   console.log(`Started synapse with id ${synapseId} on port ${synCfg.port} mapped to ${port}.`);
 
