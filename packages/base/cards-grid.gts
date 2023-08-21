@@ -11,7 +11,7 @@ import {
   relativeTo,
   type CardBase,
 } from './card-api';
-import { IconButton, Tooltip } from '@cardstack/boxel-ui';
+import { AddButton, Tooltip } from '@cardstack/boxel-ui';
 import {
   chooseCard,
   catalogEntryRef,
@@ -28,7 +28,7 @@ import StringCard from './string';
 class Isolated extends Component<typeof CardsGrid> {
   <template>
     <div class='cards-grid'>
-      <ul class='cards-grid__cards' data-test-cards-grid-cards>
+      <ul class='cards' data-test-cards-grid-cards>
         {{! use "key" to keep the list stable between refreshes }}
         {{#each this.instances key='id' as |card|}}
           <li
@@ -41,18 +41,18 @@ class Isolated extends Component<typeof CardsGrid> {
             data-test-cards-grid-item={{card.id}}
           >
             <div class='grid-card'>
-              <div class='grid-card__thumbnail'>
+              <div class='grid-thumbnail'>
                 <div
-                  class='grid-card__thumbnail-text'
+                  class='grid-thumbnail-text'
                   data-test-cards-grid-item-thumbnail-text
                 >{{cardTypeDisplayName card}}</div>
               </div>
               <h3
-                class='grid-card__title'
+                class='grid-title'
                 data-test-cards-grid-item-title
               >{{card.title}}</h3>
               <h4
-                class='grid-card__display-name'
+                class='grid-display-name'
                 data-test-cards-grid-item-display-name
               >{{cardTypeDisplayName card}}</h4>
             </div>
@@ -67,17 +67,10 @@ class Isolated extends Component<typeof CardsGrid> {
       </ul>
 
       {{#if @context.actions.createCard}}
-        <div class='cards-grid__add-button'>
+        <div class='add-button'>
           <Tooltip @placement='left' @offset={{6}}>
             <:trigger>
-              <IconButton
-                @icon='icon-plus-circle'
-                @width='40px'
-                @height='40px'
-                class='add-button'
-                {{on 'click' this.createNew}}
-                data-test-create-new-card-button
-              />
+              <AddButton {{on 'click' this.createNew}} />
             </:trigger>
             <:content>
               Add a new card to this collection
@@ -86,6 +79,85 @@ class Isolated extends Component<typeof CardsGrid> {
         </div>
       {{/if}}
     </div>
+    <style>
+      .cards-grid {
+        --grid-card-text-thumbnail-height: 6.25rem;
+        --grid-card-label-color: #919191;
+        --grid-card-width: 10.125rem;
+        --grid-card-height: 15.125rem;
+
+        position: relative; /* Do not change this */
+        max-width: 70rem;
+        margin: 0 auto;
+      }
+      .cards {
+        list-style-type: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        grid-template-columns: repeat(
+          auto-fit,
+          minmax(var(--grid-card-width), 1fr)
+        );
+        gap: var(--boxel-sp);
+        justify-items: center;
+        height: 100%;
+      }
+      .operator-mode .buried .cards,
+      .operator-mode .buried .add-button {
+        display: none;
+      }
+      .content > .boxel-card-container > header {
+        display: none;
+      }
+      .add-button {
+        display: inline-block;
+        position: sticky;
+        left: 100%;
+        bottom: var(--boxel-sp-xl);
+        z-index: 1;
+      }
+      .grid-card {
+        width: var(--grid-card-width);
+        height: var(--grid-card-height);
+        padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
+      }
+      .grid-card > *,
+      .grid-thumbnail-text {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .grid-thumbnail {
+        display: flex;
+        align-items: center;
+        height: var(--grid-card-text-thumbnail-height);
+        background-color: var(--boxel-teal);
+        color: var(--boxel-light);
+        padding: var(--boxel-sp-lg) var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius);
+        font: 700 var(--boxel-font);
+        letter-spacing: var(--boxel-lsp);
+      }
+      .grid-title {
+        margin: 0;
+        font: 500 var(--boxel-font-sm);
+        text-align: center;
+      }
+      .grid-display-name {
+        margin: 0;
+        font: 500 var(--boxel-font-xs);
+        text-align: center;
+        color: var(--grid-card-label-color);
+      }
+      .grid-thumbnail + * {
+        margin-top: var(--boxel-sp-lg);
+      }
+      .grid-title + .grid-display-name {
+        margin-top: 0.2em;
+      }
+    </style>
   </template>
 
   @tracked

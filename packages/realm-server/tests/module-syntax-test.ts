@@ -10,7 +10,7 @@ module('module-syntax', function () {
   let loader = new Loader();
   loader.addURLMapping(
     new URL(baseRealm.url),
-    new URL('http://localhost:4201/base/')
+    new URL('http://localhost:4201/base/'),
   );
   shimExternals(loader);
 
@@ -52,7 +52,7 @@ module('module-syntax', function () {
         module: 'https://cardstack.com/base/number',
         name: 'default',
       },
-      'contains'
+      'contains',
     );
 
     assert.codeEqual(
@@ -69,7 +69,7 @@ module('module-syntax', function () {
             <template><h1><@fields.firstName/></h1></template>
           }
         }
-      `
+      `,
     );
 
     let card = mod.possibleCards.find((c) => c.exportedAs === 'Person');
@@ -82,7 +82,7 @@ module('module-syntax', function () {
         module: 'https://cardstack.com/base/number',
         name: 'default',
       },
-      'the field card is correct'
+      'the field card is correct',
     );
     assert.deepEqual(
       field?.type,
@@ -91,7 +91,7 @@ module('module-syntax', function () {
         module: 'https://cardstack.com/base/card-api',
         name: 'contains',
       },
-      'the field type is correct'
+      'the field type is correct',
     );
     assert.deepEqual(
       field?.decorator,
@@ -100,7 +100,7 @@ module('module-syntax', function () {
         module: 'https://cardstack.com/base/card-api',
         name: 'field',
       },
-      'the field decorator is correct'
+      'the field decorator is correct',
     );
 
     // add another field which will assert that the field path is correct since
@@ -112,7 +112,7 @@ module('module-syntax', function () {
         module: 'https://cardstack.com/base/string',
         name: 'default',
       },
-      'contains'
+      'contains',
     );
     assert.codeEqual(
       mod.code(),
@@ -129,7 +129,7 @@ module('module-syntax', function () {
             <template><h1><@fields.firstName/></h1></template>
           }
         }
-      `
+      `,
     );
   });
 
@@ -148,7 +148,7 @@ module('module-syntax', function () {
         module: 'https://cardstack.com/base/string',
         name: 'default',
       },
-      'contains'
+      'contains',
     );
 
     assert.codeEqual(
@@ -160,7 +160,7 @@ module('module-syntax', function () {
           export class Person extends Card {
             @field firstName = contains(StringCard);
           }
-        `
+        `,
     );
   });
 
@@ -189,7 +189,7 @@ module('module-syntax', function () {
         module: 'https://cardstack.com/base/number',
         name: 'default',
       },
-      'contains'
+      'contains',
     );
 
     assert.codeEqual(
@@ -210,7 +210,7 @@ module('module-syntax', function () {
         export class FancyPerson extends Person {
           @field favoriteColor = contains(StringCard);
         }
-      `
+      `,
     );
   });
 
@@ -235,7 +235,7 @@ module('module-syntax', function () {
         module: 'https://cardstack.com/base/string',
         name: 'default',
       },
-      'containsMany'
+      'containsMany',
     );
 
     assert.codeEqual(
@@ -251,7 +251,7 @@ module('module-syntax', function () {
             <template><h1><@fields.firstName/></h1></template>
           }
         }
-      `
+      `,
     );
     let card = mod.possibleCards.find((c) => c.exportedAs === 'Person');
     let field = card!.possibleFields.get('aliases');
@@ -263,7 +263,7 @@ module('module-syntax', function () {
         module: 'https://cardstack.com/base/card-api',
         name: 'containsMany',
       },
-      'the field type is correct'
+      'the field type is correct',
     );
   });
 
@@ -294,7 +294,7 @@ module('module-syntax', function () {
         module: `${testRealm}dir/pet`,
         name: 'Pet',
       },
-      'linksTo'
+      'linksTo',
     );
 
     assert.codeEqual(
@@ -307,7 +307,7 @@ module('module-syntax', function () {
           @field firstName = contains(StringCard);
           @field pet = linksTo(() => PetCard);
         }
-      `
+      `,
     );
     let card = mod.possibleCards.find((c) => c.exportedAs === 'Person');
     let field = card!.possibleFields.get('pet');
@@ -319,7 +319,7 @@ module('module-syntax', function () {
         module: 'https://cardstack.com/base/card-api',
         name: 'linksTo',
       },
-      'the field type is correct'
+      'the field type is correct',
     );
   });
 
@@ -340,7 +340,7 @@ module('module-syntax', function () {
         module: `${testRealm}dir/person`,
         name: 'Person',
       },
-      'linksTo'
+      'linksTo',
     );
 
     assert.codeEqual(
@@ -353,7 +353,7 @@ module('module-syntax', function () {
           @field firstName = contains(StringCard);
           @field friend = linksTo(() => Person);
         }
-      `
+      `,
     );
     let card = mod.possibleCards.find((c) => c.exportedAs === 'Person');
     let field = card!.possibleFields.get('friend');
@@ -365,7 +365,7 @@ module('module-syntax', function () {
         module: 'https://cardstack.com/base/card-api',
         name: 'linksTo',
       },
-      'the field type is correct'
+      'the field type is correct',
     );
   });
 
@@ -389,7 +389,7 @@ module('module-syntax', function () {
         module: 'https://cardstack.com/base/number',
         name: 'default',
       },
-      'contains'
+      'contains',
     );
 
     assert.codeEqual(
@@ -405,7 +405,7 @@ module('module-syntax', function () {
           @field firstName = contains(StringCard);
           @field age = contains(NumberCard0);
         }
-      `
+      `,
     );
   });
 
@@ -430,13 +430,13 @@ module('module-syntax', function () {
           module: 'https://cardstack.com/base/string',
           name: 'default',
         },
-        'contains'
+        'contains',
       );
       throw new Error('expected error was not thrown');
     } catch (err: any) {
       assert.ok(
         err.message.match(/field "firstName" already exists/),
-        'expected error was thrown'
+        'expected error was thrown',
       );
     }
   });
@@ -463,7 +463,7 @@ module('module-syntax', function () {
         export class Person extends Card {
           @field lastName = contains(StringCard);
         }
-      `
+      `,
     );
 
     let card = mod.possibleCards.find((c) => c.exportedAs === 'Person');
@@ -489,7 +489,7 @@ module('module-syntax', function () {
       `
         import { Card } from "https://cardstack.com/base/card-api";
         export class Person extends Card { }
-      `
+      `,
     );
   });
 
@@ -515,7 +515,7 @@ module('module-syntax', function () {
         export class Friend extends Card {
           @field firstName = contains(StringCard);
         }
-      `
+      `,
     );
 
     let card = mod.possibleCards.find((c) => c.exportedAs === 'Friend');
@@ -553,7 +553,7 @@ module('module-syntax', function () {
         export class FancyPerson extends Person {
           @field favoriteColor = contains(StringCard);
         }
-      `
+      `,
     );
   });
 
@@ -574,7 +574,7 @@ module('module-syntax', function () {
     } catch (err: any) {
       assert.ok(
         err.message.match(/field "foo" does not exist/),
-        'expected error was thrown'
+        'expected error was thrown',
       );
     }
   });

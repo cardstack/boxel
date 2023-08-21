@@ -70,13 +70,13 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
                   : undefined;
                 if (binding) {
                   let maybeExportSpecifierLocal = binding.referencePaths.find(
-                    (b) => b.parentPath?.isExportSpecifier()
+                    (b) => b.parentPath?.isExportSpecifier(),
                   ) as NodePath<t.Identifier> | undefined;
                   if (maybeExportSpecifierLocal) {
                     exportedAs = getName(
                       (
                         maybeExportSpecifierLocal.parentPath as NodePath<t.ExportSpecifier>
-                      ).node.exported
+                      ).node.exported,
                     );
                   }
                 }
@@ -109,7 +109,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
         }
         let decoratorInfo = getNamedImportInfo(
           path.scope,
-          expression.node.name
+          expression.node.name,
         );
         if (!decoratorInfo) {
           return; // our @field decorator must originate from a named import
@@ -138,7 +138,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
 
         let fieldTypeInfo = getNamedImportInfo(
           path.scope,
-          maybeFieldTypeFunction.name
+          maybeFieldTypeFunction.name,
         );
         if (!fieldTypeInfo) {
           return; // our field type function (e.g. contains()) must originate from a named import
@@ -162,7 +162,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
         let fieldCard = makeClassReference(
           path.scope,
           maybeFieldCardName,
-          state
+          state,
         );
         if (!fieldCard) {
           return; // the first argument to our field type function must be a card reference
@@ -210,7 +210,7 @@ class CompilerError extends Error {
 function makeClassReference(
   scope: Scope,
   name: string,
-  state: State
+  state: State,
 ): ClassReference | undefined {
   let binding = scope.getBinding(name);
   if (
@@ -230,7 +230,7 @@ function makeClassReference(
   if (binding?.path.isClassDeclaration()) {
     let superClassNode = binding.path.node;
     let superClassIndex = state.opts.possibleCards.findIndex(
-      (card) => card.path.node === superClassNode
+      (card) => card.path.node === superClassNode,
     );
     if (superClassIndex >= 0) {
       return {
@@ -245,7 +245,7 @@ function makeClassReference(
 
 function getNamedImportInfo(
   scope: Scope,
-  name: string
+  name: string,
 ):
   | {
       declaration: NodePath<t.ImportDeclaration>;

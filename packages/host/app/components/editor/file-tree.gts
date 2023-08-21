@@ -11,15 +11,15 @@ import {
   createNewCard,
 } from '@cardstack/runtime-common';
 import Directory from './directory';
-import { IconButton, Tooltip } from '@cardstack/boxel-ui';
+import { AddButton, Tooltip } from '@cardstack/boxel-ui';
 import config from '@cardstack/host/config/environment';
+import { OpenFiles } from '@cardstack/host/controllers/code';
 const { ownRealmURL } = config;
 
 interface Args {
   Args: {
     url: string;
-    openFile: string | undefined;
-    openDirs: string[];
+    openFiles: OpenFiles;
   };
 }
 
@@ -27,21 +27,15 @@ export default class FileTree extends Component<Args> {
   <template>
     <nav>
       <Directory
-        @openDirs={{@openDirs}}
-        @openFile={{@openFile}}
+        @openFiles={{@openFiles}}
         @relativePath=''
         @realmURL={{@url}}
       />
     </nav>
     <Tooltip @placement='left'>
       <:trigger>
-        <IconButton
-          @icon='icon-plus-circle'
-          @width='40px'
-          @height='40px'
-          class='add-button'
+        <AddButton
           {{on 'click' this.createNew}}
-          data-test-create-new-card-button
         />
       </:trigger>
       <:content>
@@ -76,6 +70,6 @@ export default class FileTree extends Component<Args> {
       );
     }
     let path = `${newCard.id.slice(ownRealmURL.length)}.json`;
-    this.router.transitionTo('code', { queryParams: { path } });
+    this.args.openFiles.path = path;
   });
 }

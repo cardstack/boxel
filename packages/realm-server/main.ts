@@ -61,13 +61,13 @@ let {
 
 if (!(fromUrls.length === toUrls.length)) {
   console.error(
-    `Mismatched number of URLs, the --fromUrl params must be matched to the --toUrl params`
+    `Mismatched number of URLs, the --fromUrl params must be matched to the --toUrl params`,
   );
   process.exit(-1);
 }
 if (fromUrls.length < paths.length) {
   console.error(
-    `not enough url pairs were provided to satisfy the paths provided. There must be at least one --fromUrl/--toUrl pair for each --path parameter`
+    `not enough url pairs were provided to satisfy the paths provided. There must be at least one --fromUrl/--toUrl pair for each --path parameter`,
   );
   process.exit(-1);
 }
@@ -98,7 +98,7 @@ if (distURL) {
     let manager = new RunnerOptionsManager();
     let { getRunner, distPath } = await makeFastBootIndexRunner(
       dist,
-      manager.getOptions.bind(manager)
+      manager.getOptions.bind(manager),
     );
     realms.push(
       new Realm(
@@ -115,8 +115,8 @@ if (distURL) {
                 useTestingDomain,
               }
             : {}),
-        }
-      )
+        },
+      ),
     );
   }
 
@@ -144,14 +144,14 @@ if (distURL) {
       `Realm ${realm.url} has started (${JSON.stringify(
         realm.searchIndex.stats,
         null,
-        2
-      )})`
+        2,
+      )})`,
     );
   }
 })().catch((e: any) => {
   console.error(
     `Unexpected error encountered starting realm, stopping server`,
-    e
+    e,
   );
   process.exit(1);
 });

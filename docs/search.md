@@ -98,12 +98,12 @@ let { data: matching } = await indexer.search({
 ```
 
 ```js
-  let { data: matching } = await indexer.search({
-    filter: {
-      on: { module: `https://my.realm/person`, name: 'Person' },
-      contains: { firstName : 'Carl' },
-    },
-  });
+let { data: matching } = await indexer.search({
+  filter: {
+    on: { module: `https://my.realm/person`, name: 'Person' },
+    contains: { firstName: 'Carl' },
+  },
+});
 ```
 
 ### Sort Order

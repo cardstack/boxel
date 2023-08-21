@@ -34,24 +34,24 @@ interface LogDefinitions {
 }
 
 export function makeLogDefinitions(
-  serializedLogLevels: string
+  serializedLogLevels: string,
 ): LogDefinitions {
   return Object.fromEntries(
     serializedLogLevels.split(',').map((pattern) => {
       let [logName, level] = pattern.split('=');
       assertLogLevelDesc(level);
       return [logName, level];
-    })
+    }),
   );
 }
 
 export function logger(
   logName: string,
-  logDefinitions: LogDefinitions = (globalThis as any)._logDefinitions
+  logDefinitions: LogDefinitions = (globalThis as any)._logDefinitions,
 ): LogLevel.Logger {
   if (!logDefinitions) {
     throw new Error(
-      `Missing logDefinitions. Make sure that 'makeLogDefinitions()' is called before any module scoped code. The best way to ensure this is to evaluate makeLogDefinitions() in the module scope in its own module that is imported for side effect from the entry point module.`
+      `Missing logDefinitions. Make sure that 'makeLogDefinitions()' is called before any module scoped code. The best way to ensure this is to evaluate makeLogDefinitions() in the module scope in its own module that is imported for side effect from the entry point module.`,
     );
   }
   let log = LogLevel.getLogger(logName);
@@ -64,14 +64,14 @@ export function logger(
 
 function getLevelForLog(
   logName: string,
-  logDefinitions: LogDefinitions
+  logDefinitions: LogDefinitions,
 ): LogLevel.LogLevelDesc {
   if (Object.keys(logDefinitions).includes(logName)) {
     return logDefinitions[logName];
   }
   let matchingDefinitions = Object.keys(logDefinitions).filter(
     (candidate) =>
-      logName.startsWith(candidate.slice(0, -1)) && candidate.endsWith('*')
+      logName.startsWith(candidate.slice(0, -1)) && candidate.endsWith('*'),
   );
   matchingDefinitions.sort((a, b) => a.length - b.length);
   let matchingLogName = matchingDefinitions[0];
@@ -81,7 +81,7 @@ function getLevelForLog(
 function assertLogLevelDesc(level: any): asserts level is LogLevelDesc {
   if (!validLevels.includes(level)) {
     throw new Error(
-      `${level} is not a valid log level. valid values are ${validLevels.join()}`
+      `${level} is not a valid log level. valid values are ${validLevels.join()}`,
     );
   }
 }

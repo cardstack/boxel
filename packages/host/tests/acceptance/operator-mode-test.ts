@@ -254,6 +254,9 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-operator-mode-stack]').exists();
       assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
 
+      await waitFor(
+        '[data-test-cards-grid-item="http://test-realm/test/Pet/mango"]',
+      );
       await percySnapshot(assert);
 
       // In the URL, operatorModeEnabled is set to true and operatorModeState is set to the current stack
