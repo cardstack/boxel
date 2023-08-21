@@ -61,7 +61,7 @@ export class ModuleSyntax {
     let preprocessedSrc = generate(this.ast).code;
     return preprocessedSrc.replace(
       /\[templte\(`([^`].*?)`\)\];/gs,
-      `<template>$1</template>`
+      `<template>$1</template>`,
     );
   }
 
@@ -71,7 +71,7 @@ export class ModuleSyntax {
       | { type: 'localName'; name: string },
     fieldName: string,
     fieldRef: { name: string; module: string },
-    fieldType: FieldType
+    fieldType: FieldType,
   ) {
     let card = this.getCard(cardName);
     if (card.possibleFields.has(fieldName)) {
@@ -86,7 +86,7 @@ export class ModuleSyntax {
       fieldRef,
       fieldType,
       fieldName,
-      cardName.name
+      cardName.name,
     );
     let src = this.code();
     this.analyze(src); // reanalyze to update node start/end positions based on AST mutation
@@ -97,7 +97,7 @@ export class ModuleSyntax {
       lastField = [...this.getCard(cardName).possibleFields.values()].pop()!;
       if (typeof lastField.path.node.end !== 'number') {
         throw new Error(
-          `bug: could not determine the string end position to insert the new field`
+          `bug: could not determine the string end position to insert the new field`,
         );
       }
       insertPosition = lastField.path.node.end;
@@ -105,7 +105,7 @@ export class ModuleSyntax {
       let bodyStart = this.getCard(cardName).path.get('body').node.start;
       if (typeof bodyStart !== 'number') {
         throw new Error(
-          `bug: could not determine the string end position to insert the new field`
+          `bug: could not determine the string end position to insert the new field`,
         );
       }
       insertPosition = bodyStart + 1;
@@ -131,7 +131,7 @@ export class ModuleSyntax {
     cardName:
       | { type: 'exportedName'; name: string }
       | { type: 'localName'; name: string },
-    fieldName: string
+    fieldName: string,
   ) {
     let card = this.getCard(cardName);
     let field = card.possibleFields.get(fieldName);
@@ -156,7 +156,7 @@ export class ModuleSyntax {
   private getCard(
     card:
       | { type: 'exportedName'; name: string }
-      | { type: 'localName'; name: string }
+      | { type: 'localName'; name: string },
   ): PossibleCardClass {
     let cardName = card.name;
     let cardClass: PossibleCardClass | undefined;
@@ -168,8 +168,8 @@ export class ModuleSyntax {
     if (!cardClass) {
       throw new Error(
         `cannot find card with ${startCase(
-          card.type
-        ).toLowerCase()} of "${cardName}" in module`
+          card.type,
+        ).toLowerCase()} of "${cardName}" in module`,
       );
     }
     return cardClass;
@@ -188,7 +188,7 @@ function preprocessTemplateTags(src: string): string {
     output.push(
       src
         .slice(match.start.index! + match.start[0].length, match.end.index)
-        .replace(/`/g, '\\`')
+        .replace(/`/g, '\\`'),
     );
     output.push('`)]        ');
     offset = match.end.index! + match.end[0].length;
@@ -202,7 +202,7 @@ function makeNewField(
   fieldRef: { name: string; module: string },
   fieldType: FieldType,
   fieldName: string,
-  cardName: string
+  cardName: string,
 ): string {
   let programPath = getProgramPath(target);
   //@ts-ignore ImportUtil doesn't seem to believe our Babel.types is a
@@ -213,12 +213,12 @@ function makeNewField(
     // target.parentPath to be non-nullable, but unable to express that in types
     target as NodePath<any>,
     `${baseRealm.url}card-api`,
-    'field'
+    'field',
   );
   let fieldTypeIdentifier = importUtil.import(
     target as NodePath<any>,
     `${baseRealm.url}card-api`,
-    fieldType
+    fieldType,
   );
 
   if (
@@ -233,7 +233,7 @@ function makeNewField(
     target as NodePath<any>,
     fieldRef.module,
     fieldRef.name,
-    suggestedCardName(fieldRef)
+    suggestedCardName(fieldRef),
   );
 
   if (

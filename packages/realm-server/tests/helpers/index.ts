@@ -26,12 +26,12 @@ export async function createRealm(
   loader: Loader,
   dir: string,
   flatFiles: Record<string, string | LooseSingleCardDocument> = {},
-  realmURL = testRealm
+  realmURL = testRealm,
 ): Promise<Realm> {
   if (!getRunner) {
     ({ getRunner } = await makeFastBootIndexRunner(
       distPath,
-      manager.getOptions.bind(manager)
+      manager.getOptions.bind(manager),
     ));
   }
   for (let [filename, contents] of Object.entries(flatFiles)) {
@@ -47,7 +47,7 @@ export async function createRealm(
     loader,
     getRunner,
     manager,
-    async () => readFileSync(join(distPath, 'index.html')).toString()
+    async () => readFileSync(join(distPath, 'index.html')).toString(),
   );
 }
 
@@ -70,7 +70,7 @@ export async function runBaseRealmServer(loader: Loader) {
     loader,
     basePath,
     undefined,
-    baseRealm.url
+    baseRealm.url,
   );
   await testBaseRealm.ready;
   let testBaseRealmServer = new RealmServer([testBaseRealm]);
@@ -81,7 +81,7 @@ export async function runTestRealmServer(
   loader: Loader,
   dir: string,
   flatFiles: Record<string, string | LooseSingleCardDocument> = {},
-  testRealmURL: URL
+  testRealmURL: URL,
 ) {
   let testRealm = await createRealm(loader, dir, flatFiles, testRealmURL.href);
   await testRealm.ready;
@@ -91,7 +91,7 @@ export async function runTestRealmServer(
 
 export function setupCardLogs(
   hooks: NestedHooks,
-  apiThunk: () => Promise<typeof CardAPI>
+  apiThunk: () => Promise<typeof CardAPI>,
 ) {
   hooks.afterEach(async function () {
     let api = await apiThunk();

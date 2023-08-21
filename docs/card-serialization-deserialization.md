@@ -74,6 +74,7 @@ The mechanism employed for this procedure is facilitated by the `serializeCard` 
 - `contains` Field: Values can be single primitive types or JSON objects. If the field comprises a non-primitive card, it will be represented as a JSON object within the `attributes` field.
 
 Example:
+
 ```
 {
   "data": {
@@ -106,6 +107,7 @@ Example:
 - `containsMany` Field: Values can be arrays of primitive types or JSON arrays. Similar to `contains`, if the field involves a non-primitive card, it becomes a JSON array within the `attributes` field.
 
 Example:
+
 ```
 {
   "data": {
@@ -121,6 +123,7 @@ Example:
 - `linksTo` Field: Unlike `contains`/`containsMany` fields, the field value isn't stored directly. Instead, the JSON file's file path is saved. The file path is extracted from the ID of the field value. The `relativeTo` value is employed to determine whether the URL is relative or absolute.
 
 Example:
+
 ```
 {
   "data": {
@@ -140,6 +143,7 @@ Example:
 - `linksToMany` Field: Similar to `linksTo` fields, the value of this field is displayed as a file path. However, the value is not an array; instead, it's an object where index numbers are included in the property names.
 
 Example:
+
 ```
 {
   "data": {

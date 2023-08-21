@@ -5,7 +5,7 @@ export class NotReady extends Error {
   constructor(
     readonly instance: any,
     readonly fieldName: string,
-    readonly computeVia: string | Function
+    readonly computeVia: string | Function,
   ) {
     super(`The field ${instance.constructor.name}.${fieldName} is not ready`);
   }
