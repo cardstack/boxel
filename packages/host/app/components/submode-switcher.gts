@@ -78,7 +78,6 @@ export default class SubmodeSwitcher extends Component<Signature> {
       .mode-switcher__content-menu {
         border-radius: var(--boxel-border-radius);
         width: 190px;
-        background: rgba(0, 0, 0, 0.45);
         color: var(--boxel-light);
         font: 500 var(--boxel-font-sm);
 
