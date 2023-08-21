@@ -38,11 +38,29 @@ let setCardInOperatorModeState: (
 type TestContextForCopy = TestContextWithSave & TestContextWithSSE;
 
 module('Integration | card-copy', function (hooks) {
+  let onFetch: ((req: Request, body: string) => void) | undefined;
   let adapter1: TestRealmAdapter;
   let adapter2: TestRealmAdapter;
   let realm1: Realm;
   let realm2: Realm;
   let noop = () => {};
+  function wrappedOnFetch() {
+    return async (req: Request) => {
+      if (!onFetch) {
+        return Promise.resolve(req);
+      }
+      let { headers, method } = req;
+      let body = await req.text();
+      onFetch(req, body);
+      // need to return a new request since we just read the body
+      return new Request(req.url, {
+        method,
+        headers,
+        ...(body ? { body } : {}),
+      });
+    };
+  }
+
   setupRenderingTest(hooks);
   hooks.beforeEach(function () {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
@@ -234,11 +252,13 @@ module('Integration | card-copy', function (hooks) {
 
     realm1 = await TestRealm.createWithAdapter(adapter1, loader, this.owner, {
       realmURL: testRealmURL,
+      onFetch: wrappedOnFetch(),
     });
     await realm1.ready;
 
     realm2 = await TestRealm.createWithAdapter(adapter2, loader, this.owner, {
       realmURL: testRealm2URL,
+      onFetch: wrappedOnFetch(),
     });
     await realm2.ready;
 
@@ -735,7 +755,7 @@ module('Integration | card-copy', function (hooks) {
   });
 
   test<TestContextForCopy>('can copy a card that has a relative link to card in source realm', async function (assert) {
-    assert.expect(13);
+    assert.expect(17);
     let expectedEvents = ['added: Person/1.json', 'index: incremental'];
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
@@ -749,6 +769,18 @@ module('Integration | card-copy', function (hooks) {
         </template>
       },
     );
+    onFetch = (req, body) => {
+      if (req.method !== 'GET') {
+        let json = JSON.parse(body);
+        assert.strictEqual(json.data.attributes.firstName, 'Hassan');
+        assert.strictEqual(
+          json.included,
+          undefined,
+          'included not being sent over the wire',
+        );
+      }
+    };
+
     this.onSave((json) => {
       assert.strictEqual(json.data.id, `${testRealm2URL}Person/1`);
       assert.strictEqual(json.data.attributes?.firstName, 'Hassan');
@@ -821,7 +853,7 @@ module('Integration | card-copy', function (hooks) {
   });
 
   test<TestContextForCopy>('can copy a card that has a link to card in destination realm', async function (assert) {
-    assert.expect(13);
+    assert.expect(17);
     let expectedEvents = ['added: Person/1.json', 'index: incremental'];
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
@@ -835,6 +867,17 @@ module('Integration | card-copy', function (hooks) {
         </template>
       },
     );
+    onFetch = (req, body) => {
+      if (req.method !== 'GET') {
+        let json = JSON.parse(body);
+        assert.strictEqual(json.data.attributes.firstName, 'Sakura');
+        assert.strictEqual(
+          json.included,
+          undefined,
+          'included not being sent over the wire',
+        );
+      }
+    };
     this.onSave((json) => {
       assert.strictEqual(json.data.id, `${testRealm2URL}Person/1`);
       assert.strictEqual(json.data.attributes?.firstName, 'Sakura');

@@ -130,7 +130,9 @@ export default class CardService extends Service {
     opts?: SerializeOpts,
   ): Promise<LooseSingleCardDocument> {
     await this.apiModule.loaded;
-    return this.api.serializeCard(card, opts);
+    let serialized = this.api.serializeCard(card, opts);
+    delete serialized.included;
+    return serialized;
   }
 
   async saveModel(card: Card): Promise<Card> {
@@ -141,7 +143,6 @@ export default class CardService extends Service {
       // URL's should be absolute
       maybeRelativeURL: null, // forces URL's to be absolute.
     });
-    delete doc.included;
     // send doc over the wire with absolute URL's. The realm server will convert
     // to relative URL's as it serializes the cards
     let json = await this.saveCardDocument(
