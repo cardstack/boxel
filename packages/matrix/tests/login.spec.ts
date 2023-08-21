@@ -1,9 +1,6 @@
-import { test as base, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
 import {
-  synapseStart,
-  synapseStop,
   registerUser,
-  type SynapseInstance,
 } from '../docker/synapse';
 import {
   assertLoggedIn,
@@ -14,36 +11,14 @@ import {
   openChat,
   reloadAndOpenChat,
   toggleOperatorMode,
-  setupMatrixOverride,
+  test
 } from '../helpers';
 
-export const test = base.extend<{ synapse: SynapseInstance }>({
-  synapse: async ({}, use) => {
-    // Collecting logs during the test.
-    let synapseInstance = await synapseStart();
-    await registerUser(synapseInstance, 'user1', 'pass');
-    await use(synapseInstance);
-    await synapseStop(synapseInstance.synapseId);
-  },
-
-  page: async ({ page, synapse }, use) => {
-    // Setup overrides
-    await setupMatrixOverride(page, synapse);
-    await use(page);
-  },
-});
-
 test.describe('Login', () => {
-  //let synapse: SynapseInstance;
-  /*
-  test.beforeEach(async ({ page, synapse }) => {
-    //synapse = await synapseStart();
-    //await setupMatrixOverride(page, synapse);
+
+  test.beforeEach(async ({ synapse }) => {
+    await registerUser(synapse, 'user1', 'pass');
   });
-  test.afterEach(async () => {
-    await synapseStop(synapse.synapseId);
-  });
-*/
 
   test('it can login', async ({ page }) => {
     await openRoot(page);

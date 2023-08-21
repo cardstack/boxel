@@ -1,8 +1,10 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Page, test as base } from '@playwright/test';
 import {
+  synapseStart,
+  synapseStop,
+  registerUser,
   type SynapseInstance,
 } from '../docker/synapse';
-
 export const testHost = 'http://localhost:4202/test';
 
 interface ProfileAssertions {
@@ -12,6 +14,21 @@ interface ProfileAssertions {
 interface LoginOptions {
   expectFailure?: true;
 }
+
+export const test = base.extend<{ synapse: SynapseInstance }>({
+  synapse: async ({}, use) => {
+    let synapseInstance = await synapseStart();
+    await use(synapseInstance);
+    await synapseStop(synapseInstance.synapseId);
+  },
+
+  page: async ({ page, synapse }, use) => {
+    // Setup overrides
+    await setupMatrixOverride(page, synapse);
+    await use(page);
+  },
+});
+
 
 export async function setupMatrixOverride(page: Page, synapse: SynapseInstance) {
   // Save the original goto function

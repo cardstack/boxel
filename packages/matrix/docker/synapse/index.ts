@@ -13,7 +13,7 @@ import {
 
 export const SYNAPSE_IP_ADDRESS = '172.20.0.5';
 export const SYNAPSE_PORT = 8008;
-export const SYNAPSE_PORT_HOST = 8002;
+//export const SYNAPSE_PORT_HOST = 8002;
 
 interface SynapseConfig {
   configDir: string;
@@ -33,6 +33,10 @@ const synapses = new Map<string, SynapseInstance>();
 
 function randB64Bytes(numBytes: number): string {
   return crypto.randomBytes(numBytes).toString('base64').replace(/=*$/, '');
+}
+
+function randomPort(): number {
+  return crypto.randomInt(10000, 11000);
 }
 
 async function cfgDirFromTemplate(
@@ -106,11 +110,12 @@ export async function synapseStart(
     opts?.template ?? 'test',
     opts?.dataDir
   );
+  let port = randomPort();
   console.log(`Starting synapse with config dir ${synCfg.configDir}...`);
   await dockerCreateNetwork({ networkName: 'boxel' });
   const synapseId = await dockerRun({
     image: 'matrixdotorg/synapse:develop',
-    containerName: `boxel-synapse-test`,
+    containerName: `boxel-synapse-test-${port}`,
     dockerParams: [
       '--rm',
       '-v',
@@ -119,13 +124,13 @@ export async function synapseStart(
        * When using -p flag with --ip, the docker internal port must be used to access from the host
        */
       '-p',
-      `${SYNAPSE_PORT_HOST}:${synCfg.port}/tcp`,
+      `${port}:${synCfg.port}/tcp`,
       '--network=boxel',
     ],
     applicationParams: ['run'],
   });
 
-  console.log(`Started synapse with id ${synapseId} on port ${synCfg.port} mapped to ${SYNAPSE_PORT_HOST}.`);
+  console.log(`Started synapse with id ${synapseId} on port ${synCfg.port} mapped to ${port}.`);
 
   // Await Synapse healthcheck
   await dockerExec({
@@ -144,7 +149,7 @@ export async function synapseStart(
     ],
   });
 
-  const synapse: SynapseInstance = { synapseId, mappedPort: SYNAPSE_PORT_HOST, ...synCfg };
+  const synapse: SynapseInstance = { synapseId, mappedPort: port, ...synCfg };
   synapses.set(synapseId, synapse);
   return synapse;
 }
@@ -186,7 +191,7 @@ export async function registerUser(
   admin = false,
   displayName?: string
 ): Promise<Credentials> {
-  const url = `http://localhost:${SYNAPSE_PORT_HOST}/_synapse/admin/v1/register`;
+  const url = `http://localhost:${synapse.mappedPort}/_synapse/admin/v1/register`;
   const context = await request.newContext({ baseURL: url });
   const { nonce } = await (await context.get(url)).json();
   const mac = admin
@@ -218,13 +223,16 @@ export async function registerUser(
   };
 }
 
+
+// TODO: needs synapse instance passed in
 export async function createRegistrationToken(
+  synapse: SynapseInstance,
   adminAccessToken: string,
   registrationToken: string,
   usesAllowed = 1000
 ) {
   let res = await fetch(
-    `http://localhost:${SYNAPSE_PORT_HOST}/_synapse/admin/v1/registration_tokens/new`,
+    `http://localhost:${synapse.mappedPort}/_synapse/admin/v1/registration_tokens/new`,
     {
       method: 'POST',
       headers: {
