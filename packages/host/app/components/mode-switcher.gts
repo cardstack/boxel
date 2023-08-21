@@ -11,6 +11,7 @@ import RouterService from '@ember/routing/router-service';
 import { restartableTask } from 'ember-concurrency';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type CardService from '../services/card-service';
+import { on } from '@ember/modifier';
 
 interface Signature {
   Element: HTMLElement;
@@ -32,11 +33,16 @@ export default class ModeSwitcher extends Component<Signature> {
             class='trigger'
             aria-label='Options'
             data-test-embedded-card-options-button
+            {{on 'click' this.toogleDropdown}}
             {{bindings}}
           >
             {{svgJar this.selectedMode.icon width='18px' height='18px'}}
             {{this.selectedMode.label}}
-            <div class='last-icon'>{{svgJar 'check-mark' width='22px' height='22px'}}</div>
+            {{#if this.isExpanded}}
+              <div class='arrow-icon'>{{svgJar 'dropdown-arrow-up' width='22px' height='22px'}}</div>
+            {{else}}
+              <div class='arrow-icon'>{{svgJar 'dropdown-arrow-down' width='22px' height='22px'}}</div>
+            {{/if}}
           </Button>
         </:trigger>
         <:content as |dd|>
@@ -66,7 +72,7 @@ export default class ModeSwitcher extends Component<Signature> {
 
         --icon-color: var(--boxel-cyan);
       }
-      .last-icon {
+      .arrow-icon {
         margin-left: auto;
         
         display: flex;
@@ -112,6 +118,12 @@ export default class ModeSwitcher extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare cardService: CardService;
   @service private declare router: RouterService;
+  @tracked isExpanded  = false;
+
+  @action
+  toogleDropdown() {
+    this.isExpanded = !this.isExpanded;
+  }
   
   @action 
   buildMenuItem(onChoose: (mode: Mode) => void, mode: Mode): MenuItem {
