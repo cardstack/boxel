@@ -81,12 +81,18 @@ export default class CardCatalogModal extends Component<Signature> {
           {{#if this.currentRequest.search.isLoading}}
             Loading...
           {{else}}
-            <CardCatalog
-              @results={{this.displayedResults}}
-              @toggleSelect={{this.toggleSelect}}
-              @selectedCard={{this.selectedCard}}
-              @context={{@context}}
-            />
+            {{#if this.availableRealms}}
+              <CardCatalog
+                @results={{if
+                  this.searchKey
+                  this.searchResults
+                  this.displayedRealms
+                }}
+                @toggleSelect={{this.toggleSelect}}
+                @selectedCard={{this.selectedCard}}
+                @context={{@context}}
+              />
+            {{/if}}
           {{/if}}
         </:content>
         <:footer>
@@ -237,6 +243,9 @@ export default class CardCatalogModal extends Component<Signature> {
     // returns all available realms and their cards that match a certain type criteria
     // realm filters and search key filter these groups of cards
     // filters dropdown menu will always display all available realms
+    if (this.currentRequest?.search.instancesByRealm.length) {
+      this.searchResults = this.currentRequest?.search.instancesByRealm;
+    }
     return this.currentRequest?.search.instancesByRealm ?? [];
   }
 
@@ -245,11 +254,6 @@ export default class CardCatalogModal extends Component<Signature> {
     return this.selectedRealms.length
       ? this.selectedRealms
       : this.availableRealms;
-  }
-
-  get displayedResults(): RealmCards[] {
-    // filters the displayed realm cards by search key
-    return this.searchKey ? this.searchResults : this.displayedRealms;
   }
 
   _selectedRealms = new TrackedArray<RealmCards>([]);
@@ -273,7 +277,7 @@ export default class CardCatalogModal extends Component<Signature> {
 
   private resetState() {
     this.searchKey = '';
-    this.searchResults = [];
+    this.searchResults = this.availableRealms;
     this.cardURL = '';
     this.hasCardURLError = false;
     this.selectedCard = undefined;

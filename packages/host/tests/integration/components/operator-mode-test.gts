@@ -456,26 +456,37 @@ module('Integration | operator-mode', function (hooks) {
           },
         },
       },
-      'CatalogEntry/person-card.json': {
+      'pet-room.gts': `
+        import { contains, field, Card } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        export class PetRoom extends Card {
+          static displayName = 'Pet Room';
+          @field name = contains(StringCard);
+          @field title = contains(StringCard, {
+            computeVia: function (this: PetRoom) {
+              return this.name;
+            },
+          });
+        }
+      `,
+      'CatalogEntry/pet-room.json': {
         data: {
           type: 'card',
           attributes: {
-            title: 'Person',
-            description: 'Catalog entry for Person',
+            title: 'Pet Room',
+            description: 'Catalog entry for Pet Room Card',
             ref: {
-              module: `${testRealmURL}person`,
-              name: 'Person',
-            },
-            demo: {
-              firstName: 'Alicia',
+              module: `${testRealmURL}pet-room`,
+              name: 'PetRoom',
             },
           },
           meta: {
             fields: {
               demo: {
                 adoptsFrom: {
-                  module: `../person`,
-                  name: 'Person',
+                  module: `../pet-room`,
+                  name: 'PetRoom',
                 },
               },
             },
@@ -1732,14 +1743,23 @@ module('Integration | operator-mode', function (hooks) {
         `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
       )
       .exists();
-    assert
-      .dom(
-        `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"][data-test-card-catalog-item-selected]`,
-      )
-      .doesNotExist();
+
+    await fillIn(`[data-test-search-field] input`, `pet`);
+    await waitUntil(
+      () =>
+        !document.querySelector(
+          `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
+        ),
+    );
+    assert.dom(`[data-test-card-catalog-item]`).exists({ count: 2 });
 
     await fillIn(`[data-test-search-field] input`, `publishing packet`);
-    await waitFor(`[data-test-card-catalog-item]`);
+    await waitUntil(
+      () =>
+        !document.querySelector(
+          `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-card"]`,
+        ),
+    );
     assert.dom(`[data-test-card-catalog-item]`).exists({ count: 1 });
 
     await click(
@@ -1805,7 +1825,9 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-card-catalog-item]');
 
     await fillIn(`[data-test-search-field] input`, `friend`);
-    assert.dom(`[data-test-card-catalog-item]`).doesNotExist();
+    await waitUntil(
+      () => !document.querySelector(`[data-test-card-catalog-item]`),
+    );
     assert.dom(`[data-test-card-catalog]`).hasText('No cards available');
   });
 
@@ -1825,42 +1847,69 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-card-catalog-item]');
     assert.dom(`[data-test-card-catalog-item]`).exists({ count: 4 });
 
-    await fillIn(`[data-test-search-field] input`, `p`);
-    await waitFor(`[data-test-card-catalog-item]`);
-    assert.dom(`[data-test-card-catalog-item]`).exists({ count: 3 });
-
-    await fillIn(`[data-test-search-field] input`, `pe`);
-    await waitFor(`[data-test-card-catalog-item]`);
+    await fillIn(`[data-test-search-field] input`, `room`);
     await waitUntil(
       () =>
         !document.querySelector(
-          `[data-test-select="${testRealmURL}CatalogEntry/publishing-packet"]`,
+          `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-card"]`,
         ),
     );
-    assert.dom('[data-test-realm-name]').hasText('Operator Mode Workspace');
     assert.dom(`[data-test-card-catalog-item]`).exists({ count: 2 });
-    assert.dom('[data-test-results-count]').hasText('2 results');
+    assert.dom(`[data-test-realm]`).exists({ count: 2 });
+    assert.dom('[data-test-realm="Operator Mode Workspace"]').exists();
     assert
-      .dom(`[data-test-select="${testRealmURL}CatalogEntry/person-card"]`)
+      .dom(
+        '[data-test-realm="Operator Mode Workspace"] [data-test-results-count]',
+      )
+      .hasText('1 result');
+    assert
+      .dom(
+        `[data-test-realm="Operator Mode Workspace"] [data-test-select="${testRealmURL}CatalogEntry/pet-room"]`,
+      )
       .exists();
+    assert.dom('[data-test-realm="Base Workspace"]').exists();
     assert
-      .dom(`[data-test-select="${testRealmURL}CatalogEntry/pet-card"]`)
+      .dom('[data-test-realm="Base Workspace"] [data-test-results-count]')
+      .hasText('1 result');
+    assert
+      .dom(
+        `[data-test-realm="Base Workspace"] [data-test-select="${baseRealm.url}types/room-objective"]`,
+      )
       .exists();
 
     await click('[data-test-realm-filter-button]');
     await click('[data-test-boxel-menu-item-text="Base Workspace"]');
-    assert.dom('[data-test-card-catalog]').hasText('No cards available');
+    assert.dom(`[data-test-realm]`).exists({ count: 1 });
+    assert.dom('[data-test-realm="Operator Mode Workspace"]').doesNotExist();
+    assert.dom('[data-test-realm="Base Workspace"]').exists();
+    assert
+      .dom(`[data-test-select="${baseRealm.url}types/room-objective"]`)
+      .exists();
 
     await click('[data-test-realm-filter-button]');
     await click('[data-test-boxel-menu-item-text="Operator Mode Workspace"]');
-    assert.dom('[data-test-results-count]').hasText('2 results');
+    assert.dom('[data-test-realm="Operator Mode Workspace"]').exists();
+    assert.dom('[data-test-realm="Base Workspace"]').exists();
     assert.dom(`[data-test-card-catalog-item]`).exists({ count: 2 });
 
     await fillIn(`[data-test-search-field] input`, '');
-    await waitFor(`[data-test-card-catalog-item]`);
+    await waitFor(
+      `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-card"]`,
+    );
     assert
       .dom(`[data-test-card-catalog-item]`)
       .exists({ count: 4 }, 'can clear search input');
+
+    await fillIn(`[data-test-search-field] input`, 'pet');
+    await waitFor(
+      `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-card"]`,
+    );
+    await click('[data-test-realm-filter-button]');
+    await click('[data-test-boxel-menu-item-text="Operator Mode Workspace"]');
+    await waitUntil(
+      () => !document.querySelector('[data-test-card-catalog-item]'),
+    );
+    assert.dom('[data-test-card-catalog]').hasText('No cards available');
   });
 
   test(`can open new card editor in the stack after searching in card catalog`, async function (assert) {
@@ -1879,10 +1928,13 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-card-catalog-item]');
 
     await fillIn(`[data-test-search-field] input`, `pet`);
-    await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-card"]`,
+    await waitUntil(
+      () =>
+        !document.querySelector(
+          `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
+        ),
     );
-    assert.dom(`[data-test-card-catalog-item]`).exists({ count: 1 });
+    assert.dom(`[data-test-card-catalog-item]`).exists({ count: 2 });
 
     await click(`[data-test-select="${testRealmURL}CatalogEntry/pet-card"]`);
     assert
