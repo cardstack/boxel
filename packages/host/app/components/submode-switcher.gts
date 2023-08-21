@@ -15,13 +15,14 @@ type Mode = {
   label: string,
 }
 
-export default class ModeSwitcher extends Component<Signature> {
+export default class SubmodeSwitcher extends Component<Signature> {
   <template>
     <div
       class='mode-switcher' 
       data-test-mode-switcher
       ...attributes>
-      <BoxelDropdown>
+      <BoxelDropdown
+        @contentClass='mode-switcher__content'>
         <:trigger as |bindings|>
           <Button
             class='trigger'
@@ -41,7 +42,7 @@ export default class ModeSwitcher extends Component<Signature> {
         </:trigger>
         <:content as |dd|>
           <Menu
-            class='content'
+            class='mode-switcher__content-menu'
             @closeMenu={{dd.close}}
             @items={{this.buildMenuItems}}
           />
@@ -71,7 +72,10 @@ export default class ModeSwitcher extends Component<Signature> {
         
         display: flex;
       }
-      .content {
+      :global(.mode-switcher__content) {
+        background: none;
+      }
+      .mode-switcher__content-menu {
         border-radius: var(--boxel-border-radius);
         width: 190px;
         background: rgba(0, 0, 0, 0.45);
@@ -79,21 +83,10 @@ export default class ModeSwitcher extends Component<Signature> {
         font: 500 var(--boxel-font-sm);
 
         --icon-color: var(--boxel-light);
-      }
-      :global(.ember-basic-dropdown-content) {
-        background: none;
-      }
-      :global(.content .boxel-menu__item) {
-        background: none;
-      }
-      :global(.content .boxel-menu__item:hover) {
-        background: rgba(0, 0, 0, 0.3);
-      }
-      :global(.content .boxel-menu__item > .boxel-menu__item__content) {
-        padding: var(--boxel-sp-xs);
-      }
-      :global(.content .menu-item) {
-        gap: var(--boxel-sp-sm);
+        --boxel-menu-color: rgba(0, 0, 0, 0.45);
+        --boxel-menu-current-color: rgba(0, 0, 0, 0.3);
+        --boxel-menu-item-gap: var(--boxel-sp-sm);
+        --boxel-menu-item-content-padding: var(--boxel-sp-xs);
       }
     </style>
   </template>

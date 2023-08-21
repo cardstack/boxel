@@ -43,7 +43,7 @@ import ChatSidebar from '../matrix/chat-sidebar';
 import CopyButton from './copy-button';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
-import ModeSwitcher from '../mode-switcher';
+import SubmodeSwitcher from '../submode-switcher';
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
 
@@ -732,7 +732,7 @@ export default class OperatorModeContainer extends Component<Signature> {
               {{svgJar 'download' width='30px' height='30px'}}
             </button>
           {{/if}}
-          <ModeSwitcher class='mode-switcher' />
+          <SubmodeSwitcher class='mode-switcher' />
         </div>
 
         {{#if this.isChatVisible}}

@@ -130,6 +130,8 @@ export default class Menu extends Component<Signature> {
         --boxel-menu-selected-color: var(--boxel-highlight);
         --boxel-menu-disabled-color: var(--boxel-highlight);
         --boxel-menu-font: 500 var(--boxel-font-sm);
+        --boxel-menu-item-gap: var(--boxel-sp-xxs);
+        --boxel-menu-item-content-padding: var(--boxel-sp-xs) var(--boxel-sp);
 
         list-style-type: none;
         margin: 0;
@@ -161,7 +163,7 @@ export default class Menu extends Component<Signature> {
 
       .boxel-menu__item > .boxel-menu__item__content {
         width: 100%;
-        padding: var(--boxel-sp-xs) var(--boxel-sp);
+        padding: var(--boxel-menu-item-content-padding);
 
         display: flex;
         justify-content: space-between;
@@ -197,7 +199,7 @@ export default class Menu extends Component<Signature> {
       .menu-item {
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-xxs);
+        gap: var(--boxel-menu-item-gap);
       }
       .menu-item__icon-url {
         display: inline-block;
