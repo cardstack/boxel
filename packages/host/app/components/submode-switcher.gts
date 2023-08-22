@@ -5,17 +5,18 @@ import { menuItemFunc, MenuItem } from '@cardstack/boxel-ui/helpers/menu-item';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
+import { capitalize } from '@ember/string';
 
 export enum Submode {
-  INTERACT = 'Interact',
-  CODE = 'Code',
+  INTERACT = 'interact',
+  CODE = 'code',
 }
 
 interface Signature {
   Element: HTMLElement;
   Args: {
-    submode?: Submode;
-    onSubmodeSelect?: (submode: Submode) => void;
+    submode: Submode;
+    onSubmodeSelect: (submode: Submode) => void;
   };
 }
 
@@ -35,7 +36,7 @@ export default class SubmodeSwitcher extends Component<Signature> {
             {{bindings}}
           >
             {{svgJar this.selectedSubmodeIcon width='18px' height='18px'}}
-            {{this.selectedSubmode}}
+            {{capitalize this.selectedSubmode}}
             <div class='arrow-icon'>
               {{svgJar (if this.isExpanded 'dropdown-arrow-up' 'dropdown-arrow-down') width='22px' height='22px'}}
             </div>
@@ -102,7 +103,7 @@ export default class SubmodeSwitcher extends Component<Signature> {
     [Submode.INTERACT]: 'eye',
     [Submode.CODE]: 'icon-code',
   };
-  @tracked selectedSubmode: Submode = this.args.submode ?? Submode.INTERACT;
+  @tracked selectedSubmode: Submode = this.args.submode;
   @tracked isExpanded = false;
 
   @action
@@ -112,7 +113,7 @@ export default class SubmodeSwitcher extends Component<Signature> {
 
   get buildMenuItems(): MenuItem[] {
     return Object.values(Submode).map((submode) =>
-      menuItemFunc([submode, () => this.select(submode)], {
+      menuItemFunc([capitalize(submode), () => this.select(submode)], {
         icon: this.submodeIcons[submode],
       }),
     );
@@ -126,6 +127,6 @@ export default class SubmodeSwitcher extends Component<Signature> {
   select(submode: Submode) {
     if (this.selectedSubmode === submode) return;
     this.selectedSubmode = submode;
-    this.args.onSubmodeSelect?.(submode);
+    this.args.onSubmodeSelect(submode);
   }
 }
