@@ -10,14 +10,15 @@ export default class Application extends Route<Model> {
   @service declare fastboot: { isFastBoot: boolean };
 
   async beforeModel(transition: any): Promise<void> {
-    if (transition.to.queryParams.playWrightTestMode == 'true') {
-      let modifiedMatrixURL = transition.to.queryParams.matrixURL;
-      // Override the environment variable with the query parameter value
-      ENV.matrixURL = modifiedMatrixURL;
-      console.log(
-        'Matrix URL has been modified for testing to: ',
-        ENV.matrixURL,
-      );
+    // Override the matrix URL for testing
+    if (ENV.environment === 'test' || ENV.environment === 'development') {
+      if (transition.to.queryParams.matrixURL) {
+        ENV.matrixURL = transition.to.queryParams.matrixURL;
+        console.log(
+          'Matrix URL has been modified for testing to: ',
+          ENV.matrixURL,
+        );
+      }
     }
   }
 

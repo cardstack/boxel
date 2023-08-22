@@ -40,13 +40,9 @@ export async function setupMatrixOverride(
     const newUrl = new URL(url);
     const params = new URLSearchParams(newUrl.search);
 
-    // Set the new query parameters
+    // Override the matrix URL
     params.set('matrixURL', `http://localhost:${synapse.mappedPort}`);
-    params.set('playWrightTestMode', 'true');
-
-    // Update the URL's search parameters
     newUrl.search = params.toString();
-    console.log('Changing url to', newUrl.toString());
 
     // Call the original goto function with the new URL
     return originalGoto(newUrl.toString(), options);
