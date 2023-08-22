@@ -140,7 +140,9 @@ export default class CardService extends Service {
     opts?: SerializeOpts,
   ): Promise<LooseSingleCardDocument> {
     await this.apiModule.loaded;
-    return this.api.serializeCard(card, opts);
+    let serialized = this.api.serializeCard(card, opts);
+    delete serialized.included;
+    return serialized;
   }
 
   async saveModel(card: Card): Promise<Card> {
