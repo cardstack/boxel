@@ -96,33 +96,29 @@ export default class CardCatalogModal extends Component<Signature> {
           {{/if}}
         </:content>
         <:footer>
-          <div
-            class={{cn
-              'footer'
-              (if this.currentRequest.opts.offerToCreate 'with-create-button')
-            }}
-          >
-            {{#if this.currentRequest.opts.offerToCreate}}
-              <Button
-                @kind='secondary-light'
-                @size='tall'
-                class='create-new-button'
-                {{on
-                  'click'
-                  (fn this.createNew this.currentRequest.opts.offerToCreate)
-                }}
-                data-test-card-catalog-create-new-button
-              >
-                {{svgJar
-                  'icon-plus'
-                  width='20'
-                  height='20'
-                  role='presentation'
-                }}
-                Create New
-                {{this.cardRefName}}
-              </Button>
-            {{else}}
+          <div class='footer'>
+            <div class='footer__actions-left'>
+              {{#if this.currentRequest.opts.offerToCreate}}
+                <Button
+                  @kind='secondary-light'
+                  @size='tall'
+                  class='create-new-button'
+                  {{on
+                    'click'
+                    (fn this.createNew this.currentRequest.opts.offerToCreate)
+                  }}
+                  data-test-card-catalog-create-new-button
+                >
+                  {{svgJar
+                    'icon-plus'
+                    width='20'
+                    height='20'
+                    role='presentation'
+                  }}
+                  Create New
+                  {{this.cardRefName}}
+                </Button>
+              {{/if}}
               <label class='url-search'>
                 <span>Enter Card URL:</span>
                 <BoxelInputValidationState
@@ -136,7 +132,7 @@ export default class CardCatalogModal extends Component<Signature> {
                   data-test-url-search
                 />
               </label>
-            {{/if}}
+            </div>
             <div>
               <Button
                 @kind='secondary-light'
@@ -166,6 +162,12 @@ export default class CardCatalogModal extends Component<Signature> {
       .footer {
         display: flex;
         justify-content: space-between;
+        gap: var(--boxel-sp);
+      }
+      .footer__actions-left {
+        display: flex;
+        gap: var(--boxel-sp);
+        flex-grow: 1;
       }
       .url-search {
         flex-grow: 0.5;
