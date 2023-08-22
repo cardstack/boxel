@@ -182,7 +182,7 @@ module('Acceptance | basic tests', function (hooks) {
       .doesNotExist('Person/1.json file entry is not rendered');
   });
 
-  test('recent files are shown', async function (assert) {
+  test('recent file links are shown', async function (assert) {
     await visit('/code');
     await waitFor('[data-test-file]');
 
@@ -203,6 +203,19 @@ module('Acceptance | basic tests', function (hooks) {
     assert
       .dom('[data-test-recent-file]:nth-child(2)')
       .containsText('Person/1.json');
+
+    await click('[data-test-recent-file]:nth-child(2)');
+
+    assert
+      .dom('[data-test-file="Person/1.json"]')
+      .exists('Person/1.json file entry is rendered');
+
+    assert
+      .dom('[data-test-recent-file]:first-child')
+      .containsText('Person/1.json');
+    assert
+      .dom('[data-test-recent-file]:nth-child(2)')
+      .containsText('person.gts');
   });
 
   test('Can view a card instance', async function (assert) {
