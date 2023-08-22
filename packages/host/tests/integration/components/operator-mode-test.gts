@@ -1863,7 +1863,7 @@ module('Integration | operator-mode', function (hooks) {
       .includesText('Author');
   });
 
-  test(`toogles mode switcher`, async function (assert) {
+  test(`toggles mode switcher`, async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
