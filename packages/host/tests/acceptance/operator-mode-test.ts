@@ -258,7 +258,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       await waitFor(
         '[data-test-cards-grid-item="http://test-realm/test/Pet/mango"]',
       );
-      //await percySnapshot(assert);
+      await percySnapshot(assert);
 
       // In the URL, operatorModeEnabled is set to true and operatorModeState is set to the current stack
       assert.strictEqual(
@@ -303,7 +303,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         )}`,
       );
 
-      //await percySnapshot(assert);
+      await percySnapshot(assert);
 
       assert
         .dom('[data-test-stack-card-index="0"] [data-test-boxel-header-title]')
@@ -418,7 +418,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         )}`,
       );
 
-      //await percySnapshot(assert);
+      await percySnapshot(assert);
 
       assert
         .dom('[data-test-stack-card-index="0"] [data-test-boxel-header-title]')
@@ -546,7 +546,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         )}`,
       );
 
-      //await percySnapshot(assert);
+      await percySnapshot(assert);
 
       assert.dom('[data-test-field="firstName"] input').exists(); // Existence of an input field means it is in edit mode
     });
@@ -758,7 +758,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         )}`,
       );
 
-      //await percySnapshot(assert); // 2 stacks from the same realm share the same background
+      await percySnapshot(assert); // 2 stacks from the same realm share the same background
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
       assert.dom('[data-test-operator-mode-stack="0"]').includesText('Fadhlan');
@@ -826,7 +826,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         )}`,
       );
 
-      //await percySnapshot(assert); // 2 stacks from the different realms have different backgrounds
+      await percySnapshot(assert); // 2 stacks from the different realms have different backgrounds
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
     });

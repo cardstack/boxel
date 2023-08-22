@@ -676,7 +676,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
 
-    //await percySnapshot(assert);
+    await percySnapshot(assert);
 
     await click(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
     await click('[data-test-card-catalog-go-button]');
@@ -700,7 +700,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
     await waitFor(`[data-test-cards-grid-item]`);
 
-    //await percySnapshot(assert);
+    await percySnapshot(assert);
 
     assert.dom(`[data-test-stack-card-index="0"]`).exists();
     assert.dom(`[data-test-cards-grid-item]`).exists();
