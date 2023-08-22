@@ -23,7 +23,6 @@ import {
 } from '@cardstack/boxel-ui';
 import { and, eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import cn from '@cardstack/boxel-ui/helpers/cn';
 import type CardService from '../services/card-service';
 import type LoaderService from '../services/loader-service';
 import { getSearchResults, Search } from '../resources/search';
