@@ -392,7 +392,7 @@ export default class CardCatalogModal extends Component<Signature> {
 
   @action
   onSearchFieldUpdated() {
-    if (!this.searchKey) {
+    if (!this.searchKey && !this.selectedRealms.length) {
       return this.resetState();
     }
     let results: RealmCards[] = [];
