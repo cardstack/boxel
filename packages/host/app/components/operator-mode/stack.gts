@@ -5,7 +5,7 @@ import { htmlSafe } from '@ember/template';
 import OperatorModeStackItem from './stack-item';
 import type { Actions } from '@cardstack/runtime-common';
 import type { StackItem } from './container';
-import type { Card } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Element: HTMLElement;
@@ -18,8 +18,8 @@ interface Signature {
     close: (stackItem: StackItem) => void;
     edit: (stackItem: StackItem) => void;
     save: (stackItem: StackItem, dismiss: boolean) => void;
-    delete: (card: Card) => void;
-    onSelectedCards: (selectedCards: Card[], stackItem: StackItem) => void;
+    delete: (card: CardDef) => void;
+    onSelectedCards: (selectedCards: CardDef[], stackItem: StackItem) => void;
     setupStackItem: (
       stackItem: StackItem,
       clearSelections: () => void,

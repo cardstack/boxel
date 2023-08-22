@@ -3,7 +3,7 @@
 In addition to linking to or containing card fields, a card can have a “computed” field. Its value will be determined by the output of the `computeVia` function and update when its constituent fields changes.
 
 ```typescript
-export class Person extends Card {
+export class Person extends CardDef {
   @field firstName = contains(StringCard);
   @field lastName = contains(StringCard);
 

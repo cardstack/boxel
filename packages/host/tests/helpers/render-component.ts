@@ -3,7 +3,7 @@ import { precompileTemplate } from '@ember/template-compilation';
 import { render, getContext } from '@ember/test-helpers';
 import { ComponentLike } from '@glint/template';
 import type {
-  CardBase,
+  BaseDef,
   Format,
   Field,
   CardContext,
@@ -22,7 +22,7 @@ export async function renderComponent(C: ComponentLike) {
 
 export async function renderCard(
   loader: Loader,
-  card: CardBase,
+  card: BaseDef,
   format: Format,
   field?: Field,
   context?: CardContext,

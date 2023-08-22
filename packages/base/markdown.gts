@@ -1,4 +1,4 @@
-import { primitive, Component, CardBase, useIndexBasedKey } from './card-api';
+import { primitive, Component, useIndexBasedKey, FieldDef } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui';
 import { marked } from 'marked';
 import { sanitizeHtml } from '@cardstack/runtime-common';
@@ -12,7 +12,7 @@ function toHtml(markdown: string | null) {
   return markdown ? sanitizeHtml(marked(markdown, markdownOpts)) : '';
 }
 
-export default class MarkdownCard extends CardBase {
+export default class MarkdownField extends FieldDef {
   static [primitive]: string;
   static [useIndexBasedKey]: never;
 

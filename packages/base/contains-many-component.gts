@@ -6,7 +6,8 @@ import {
   type Box,
   type Format,
   type Field,
-  type CardBase,
+  type FieldDef,
+  type BaseDef,
 } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
 import type { ComponentLike } from '@glint/template';
@@ -14,22 +15,20 @@ import { Button, IconButton } from '@cardstack/boxel-ui';
 
 interface Signature {
   Args: {
-    model: Box<CardBase>;
-    arrayField: Box<CardBase[]>;
+    model: Box<FieldDef>;
+    arrayField: Box<FieldDef[]>;
     format: Format;
-    field: Field<typeof CardBase>;
+    field: Field<typeof FieldDef>;
     cardTypeFor(
-      field: Field<typeof CardBase>,
-      boxedElement: Box<CardBase>,
-    ): typeof CardBase;
+      field: Field<typeof BaseDef>,
+      boxedElement: Box<BaseDef>,
+    ): typeof BaseDef;
   };
 }
 
 class ContainsManyEditor extends GlimmerComponent<Signature> {
   <template>
-    <div
-      data-test-contains-many={{this.args.field.name}}
-    >
+    <div data-test-contains-many={{this.args.field.name}}>
       {{#if @arrayField.children.length}}
         <ul class='list'>
           {{#each @arrayField.children as |boxedElement i|}}
@@ -111,14 +110,14 @@ export function getContainsManyComponent({
   field,
   cardTypeFor,
 }: {
-  model: Box<CardBase>;
-  arrayField: Box<CardBase[]>;
+  model: Box<FieldDef>;
+  arrayField: Box<FieldDef[]>;
   format: Format;
-  field: Field<typeof CardBase>;
+  field: Field<typeof FieldDef>;
   cardTypeFor(
-    field: Field<typeof CardBase>,
-    boxedElement: Box<CardBase>,
-  ): typeof CardBase;
+    field: Field<typeof BaseDef>,
+    boxedElement: Box<BaseDef>,
+  ): typeof BaseDef;
 }): ComponentLike<{ Args: {}; Blocks: {} }> {
   if (format === 'edit') {
     return class ContainsManyEditorTemplate extends GlimmerComponent {

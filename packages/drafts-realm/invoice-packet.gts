@@ -3,7 +3,8 @@ import {
   containsMany,
   linksTo,
   field,
-  Card,
+  CardDef,
+  FieldDef,
   Component,
 } from 'https://cardstack.com/base/card-api';
 import DateCard from 'https://cardstack.com/base/date';
@@ -17,7 +18,7 @@ import { FieldContainer, Label, Message } from '@cardstack/boxel-ui';
 import { Token, Currency } from './asset';
 import GlimmerComponent from '@glimmer/component';
 
-class Details extends Card {
+class Details extends CardDef {
   @field invoiceNo = contains(StringCard);
   @field invoiceDate = contains(DateCard);
   @field dueDate = contains(DateCard);
@@ -118,7 +119,7 @@ class DetailsFieldsContainer extends GlimmerComponent<GenericContainerSignature>
   </template>
 }
 
-class LineItem extends Card {
+class LineItem extends FieldDef {
   @field name = contains(StringCard);
   @field quantity = contains(NumberCard);
   @field amount = contains(NumberCard);
@@ -196,7 +197,7 @@ class LineItem extends Card {
   };
 }
 
-class Note extends Card {
+class Note extends FieldDef {
   @field text = contains(TextAreaCard);
   @field authorName = contains(StringCard); /* computed */
   @field authorImage = contains(StringCard); /* computed */
@@ -485,7 +486,7 @@ class BalanceDue extends GlimmerComponent<BalanceDueSignature> {
   </template>
 }
 
-export class InvoicePacket extends Card {
+export class InvoicePacket extends CardDef {
   static displayName = 'Invoice Packet';
   @field vendor = linksTo(Vendor);
   @field details = contains(Details);

@@ -38,9 +38,9 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a synchronous computed field', async function (assert) {
-    let { field, contains, Card, Component } = cardApi;
+    let { field, contains, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class Person extends Card {
+    class Person extends CardDef {
       @field firstName = contains(StringCard);
       @field lastName = contains(StringCard);
       @field fullName = contains(StringCard, {
@@ -61,9 +61,9 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a synchronous computed field (using a string in `computeVia`)', async function (assert) {
-    let { field, contains, Card, Component } = cardApi;
+    let { field, contains, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class Person extends Card {
+    class Person extends CardDef {
       @field firstName = contains(StringCard);
       @field lastName = contains(StringCard);
       @field fullName = contains(StringCard, { computeVia: 'getFullName' });
@@ -83,13 +83,13 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a computed that consumes a nested property', async function (assert) {
-    let { field, contains, Card, Component } = cardApi;
+    let { field, contains, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class Person extends Card {
+    class Person extends CardDef {
       @field firstName = contains(StringCard);
     }
 
-    class Post extends Card {
+    class Post extends CardDef {
       @field title = contains(StringCard);
       @field author = contains(Person);
       @field summary = contains(StringCard, {
@@ -114,9 +114,9 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a computed that is a composite type', async function (assert) {
-    let { field, contains, Card, Component } = cardApi;
+    let { field, contains, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class Person extends Card {
+    class Person extends CardDef {
       @field firstName = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -125,7 +125,7 @@ module('Integration | computeds', function (hooks) {
       };
     }
 
-    class Post extends Card {
+    class Post extends CardDef {
       @field title = contains(StringCard);
       @field author = contains(Person, {
         computeVia: function (this: Post) {
@@ -147,9 +147,9 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render an asynchronous computed field', async function (assert) {
-    let { field, contains, Card, Component } = cardApi;
+    let { field, contains, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class Person extends Card {
+    class Person extends CardDef {
       @field firstName = contains(StringCard);
       @field slowName = contains(StringCard, { computeVia: 'computeSlowName' });
       async computeSlowName() {
@@ -169,9 +169,9 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render an asynchronous computed field (using an async function in `computeVia`)', async function (assert) {
-    let { field, contains, Card, Component } = cardApi;
+    let { field, contains, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class Person extends Card {
+    class Person extends CardDef {
       @field firstName = contains(StringCard);
       @field slowName = contains(StringCard, {
         computeVia: async function (this: Person) {
@@ -192,9 +192,9 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can indirectly render an asynchronous computed field', async function (assert) {
-    let { field, contains, Card, Component } = cardApi;
+    let { field, contains, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class Person extends Card {
+    class Person extends CardDef {
       @field firstName = contains(StringCard);
       @field slowName = contains(StringCard, { computeVia: 'computeSlowName' });
       @field slowNameAlias = contains(StringCard, {
@@ -219,9 +219,9 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a async computed that depends on an async computed: consumer field is first', async function (assert) {
-    let { field, contains, Card, Component } = cardApi;
+    let { field, contains, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class Person extends Card {
+    class Person extends CardDef {
       @field firstName = contains(StringCard);
       @field verySlowName = contains(StringCard, {
         computeVia: async function (this: Person) {
@@ -247,9 +247,9 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a nested asynchronous computed field', async function (assert) {
-    let { field, contains, Card, Component } = cardApi;
+    let { field, contains, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class Person extends Card {
+    class Person extends CardDef {
       @field firstName = contains(StringCard);
       @field slowName = contains(StringCard, { computeVia: 'computeSlowName' });
       async computeSlowName() {
@@ -258,7 +258,7 @@ module('Integration | computeds', function (hooks) {
       }
     }
 
-    class Post extends Card {
+    class Post extends CardDef {
       @field title = contains(StringCard);
       @field author = contains(Person);
       static isolated = class Isolated extends Component<typeof this> {
@@ -281,9 +281,9 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render an asynchronous computed composite field', async function (assert) {
-    let { field, contains, Card, Component } = cardApi;
+    let { field, contains, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class Person extends Card {
+    class Person extends CardDef {
       @field firstName = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -292,7 +292,7 @@ module('Integration | computeds', function (hooks) {
       };
     }
 
-    class Post extends Card {
+    class Post extends CardDef {
       @field title = contains(StringCard);
       @field author = contains(Person, { computeVia: 'computeSlowAuthor' });
       async computeSlowAuthor() {
@@ -314,9 +314,9 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a containsMany computed primitive field', async function (assert) {
-    let { field, contains, containsMany, Card, Component } = cardApi;
+    let { field, contains, containsMany, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class Person extends Card {
+    class Person extends CardDef {
       @field firstName = contains(StringCard);
       @field languagesSpoken = containsMany(StringCard);
       @field slowLanguagesSpoken = containsMany(StringCard, {
@@ -346,9 +346,9 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('supports an empty containsMany computed primitive field', async function (assert) {
-    let { field, contains, containsMany, Card, Component } = cardApi;
+    let { field, contains, containsMany, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class Person extends Card {
+    class Person extends CardDef {
       @field firstName = contains(StringCard);
       @field languagesSpoken = containsMany(StringCard);
       @field slowLanguagesSpoken = containsMany(StringCard, {
@@ -375,9 +375,9 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a containsMany computed composite field', async function (this: RenderingTestContext, assert) {
-    let { field, contains, containsMany, Card, Component } = cardApi;
+    let { field, contains, containsMany, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class Person extends Card {
+    class Person extends CardDef {
       @field firstName = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -386,7 +386,7 @@ module('Integration | computeds', function (hooks) {
       };
     }
 
-    class Family extends Card {
+    class Family extends CardDef {
       @field people = containsMany(Person);
       @field slowPeople = containsMany(Person, {
         computeVia: 'computeSlowPeople',
@@ -424,9 +424,9 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('supports an empty containsMany computed composite field', async function (assert) {
-    let { field, contains, containsMany, Card, Component } = cardApi;
+    let { field, contains, containsMany, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class Person extends Card {
+    class Person extends CardDef {
       @field firstName = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -435,7 +435,7 @@ module('Integration | computeds', function (hooks) {
       };
     }
 
-    class Family extends Card {
+    class Family extends CardDef {
       @field people = containsMany(Person);
       @field slowPeople = containsMany(Person, {
         computeVia: 'computeSlowPeople',
@@ -460,16 +460,16 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can recompute containsMany field', async function (assert) {
-    let { field, contains, containsMany, Card, recompute } = cardApi;
+    let { field, contains, containsMany, CardDef, recompute } = cardApi;
     let { default: StringCard } = string;
     let { default: NumberCard } = number;
 
-    class Person extends Card {
+    class Person extends CardDef {
       @field firstName = contains(StringCard);
       @field age = contains(NumberCard);
     }
 
-    class Family extends Card {
+    class Family extends CardDef {
       @field people = containsMany(Person);
       @field totalAge = contains(NumberCard, {
         computeVia: 'computeTotalAge',
@@ -500,9 +500,9 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('computed fields render as embedded in the edit format', async function (assert) {
-    let { field, contains, Card } = cardApi;
+    let { field, contains, CardDef } = cardApi;
     let { default: StringCard } = string;
-    class Person extends Card {
+    class Person extends CardDef {
       @field firstName = contains(StringCard);
       @field alias = contains(StringCard, {
         computeVia: function (this: Person) {
@@ -520,9 +520,9 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can maintain data consistency for async computed fields', async function (assert) {
-    let { field, contains, Card, Component } = cardApi;
+    let { field, contains, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class Location extends Card {
+    class Location extends CardDef {
       @field city = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -530,7 +530,7 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    class Person extends Card {
+    class Person extends CardDef {
       @field firstName = contains(StringCard);
       @field slowName = contains(StringCard, { computeVia: 'computeSlowName' });
       @field homeTown = contains(Location);
@@ -590,9 +590,9 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a computed linksTo relationship', async function (assert) {
-    let { field, contains, linksTo, Card, Component } = cardApi;
+    let { field, contains, linksTo, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class Pet extends Card {
+    class Pet extends CardDef {
       @field name = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -600,7 +600,7 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    class Person extends Card {
+    class Person extends CardDef {
       @field firstName = contains(StringCard);
       @field bestFriend = linksTo(Pet);
       static embedded = class Embedded extends Component<typeof this> {
@@ -610,7 +610,7 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    class Post extends Card {
+    class Post extends CardDef {
       @field title = contains(StringCard);
       @field author = contains(Person);
       @field friend = linksTo(Pet, {
@@ -635,9 +635,9 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render an asynchronous computed linksTo field', async function (assert) {
-    let { field, contains, linksTo, Card, Component } = cardApi;
+    let { field, contains, linksTo, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class Pet extends Card {
+    class Pet extends CardDef {
       @field name = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -645,7 +645,7 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    class Person extends Card {
+    class Person extends CardDef {
       @field firstName = contains(StringCard);
       @field bestFriend = linksTo(Pet);
       static embedded = class Embedded extends Component<typeof this> {
@@ -655,7 +655,7 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    class Post extends Card {
+    class Post extends CardDef {
       @field title = contains(StringCard);
       @field author = contains(Person);
       @field friend = linksTo(Pet, {
@@ -682,9 +682,9 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render a computed linksToMany relationship', async function (this: RenderingTestContext, assert) {
-    let { field, contains, linksTo, linksToMany, Card, Component } = cardApi;
+    let { field, contains, linksTo, linksToMany, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class Pet extends Card {
+    class Pet extends CardDef {
       @field name = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -692,7 +692,7 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    class Person extends Card {
+    class Person extends CardDef {
       @field firstName = contains(StringCard);
       @field pets = linksToMany(Pet);
       static embedded = class Embedded extends Component<typeof this> {
@@ -701,7 +701,7 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    class Post extends Card {
+    class Post extends CardDef {
       @field title = contains(StringCard);
       @field author = linksTo(Person);
       @field factCheckers = linksToMany(Pet);
@@ -742,9 +742,9 @@ module('Integration | computeds', function (hooks) {
   });
 
   test('can render an asynchronous computed linksToMany field', async function (this: RenderingTestContext, assert) {
-    let { field, contains, linksTo, linksToMany, Card, Component } = cardApi;
+    let { field, contains, linksTo, linksToMany, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class Pet extends Card {
+    class Pet extends CardDef {
       @field name = contains(StringCard);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -752,7 +752,7 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    class Person extends Card {
+    class Person extends CardDef {
       @field firstName = contains(StringCard);
       @field pets = linksToMany(Pet);
       static embedded = class Embedded extends Component<typeof this> {
@@ -761,7 +761,7 @@ module('Integration | computeds', function (hooks) {
         </template>
       };
     }
-    class Post extends Card {
+    class Post extends CardDef {
       @field title = contains(StringCard);
       @field author = linksTo(Person);
       @field factCheckers = linksToMany(Pet);

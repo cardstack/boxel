@@ -31,9 +31,9 @@ export function suggestCardChooserTitle(
   }
   if (isCardTypeFilter(filter)) {
     let cardRefName = (filter.type as { module: string; name: string }).name;
-    if (cardRefName == 'Card') {
+    if (cardRefName == 'CardDef') {
       suggestions.push({
-        suggestion: titleText(cardRefName, 'instance', textOpts),
+        suggestion: titleText('Card', 'instance', textOpts),
         depth,
       });
     } else {

@@ -2,11 +2,11 @@ import {
   contains,
   field,
   Component,
-  Card,
+  FieldDef,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 
-export class Address extends Card {
+export class Address extends FieldDef {
   static displayName = 'Address';
   @field streetAddress = contains(StringCard); // required
   @field city = contains(StringCard); // required

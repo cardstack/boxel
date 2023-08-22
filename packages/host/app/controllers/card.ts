@@ -52,7 +52,6 @@ export default class CardController extends Controller {
         stacks: [
           [
             {
-              type: 'card',
               id: this.model?.id,
               format: 'isolated',
             },

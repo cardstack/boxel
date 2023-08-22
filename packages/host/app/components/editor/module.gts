@@ -5,7 +5,7 @@ import ImportModule from './import-module';
 import { cached } from '@glimmer/tracking';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import type { Ready } from '@cardstack/host/resources/file';
-import type { Card } from 'https://cardstack.com/base/card-api';
+import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
@@ -41,8 +41,8 @@ export default class Module extends Component<Signature> {
 function cardsFromModule(
   module: Record<string, any>,
   _never?: never, // glint insists that w/o this last param that there are actually no params
-): (typeof Card)[] {
+): (typeof BaseDef)[] {
   return Object.values(module).filter(
-    (maybeCard) => typeof maybeCard === 'function' && 'baseCard' in maybeCard,
+    (maybeCard) => typeof maybeCard === 'function' && 'baseDef' in maybeCard,
   );
 }

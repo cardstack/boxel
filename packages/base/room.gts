@@ -3,16 +3,16 @@ import {
   containsMany,
   field,
   Component,
-  Card,
+  CardDef,
   primitive,
   useIndexBasedKey,
-  CardBase,
   createFromSerialized,
+  FieldDef,
 } from './card-api';
-import StringCard from './string';
+import StringField from './string';
 import DateTimeCard from './datetime';
-import NumberCard from './number';
-import MarkdownCard from './markdown';
+import NumberField from './number';
+import MarkdownField from './markdown';
 import { BoxelMessage } from '@cardstack/boxel-ui';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import { formatRFC3339 } from 'date-fns';
@@ -25,10 +25,10 @@ import {
   Deferred,
   type LooseSingleCardDocument,
   type SingleCardDocument,
-  type CardRef,
+  type CodeRef,
 } from '@cardstack/runtime-common';
 
-const attachedCards = new Map<string, Promise<Card>>();
+const attachedCards = new Map<string, Promise<CardDef>>();
 
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember({
@@ -83,7 +83,7 @@ function upsertRoomMember({
   return member;
 }
 
-class JSONView extends Component<typeof MatrixEventCard> {
+class JSONView extends Component<typeof MatrixEventField> {
   <template>
     <pre>{{this.json}}</pre>
   </template>
@@ -93,7 +93,7 @@ class JSONView extends Component<typeof MatrixEventCard> {
   }
 }
 
-class MatrixEventCard extends CardBase {
+class MatrixEventField extends FieldDef {
   static [primitive]: MatrixEvent;
   static embedded = class Embedded extends JSONView {};
   static isolated = class Isolated extends JSONView {};
@@ -126,7 +126,7 @@ class RoomMemberView extends Component<typeof RoomMemberCard> {
   </template>
 }
 
-class RoomMembershipCard extends CardBase {
+class RoomMembershipField extends FieldDef {
   static [primitive]: 'invite' | 'join' | 'leave';
   static [useIndexBasedKey]: never;
   static embedded = class Embedded extends Component<typeof this> {
@@ -142,14 +142,14 @@ class RoomMembershipCard extends CardBase {
   };
 }
 
-export class RoomMemberCard extends Card {
-  @field userId = contains(StringCard);
-  @field roomId = contains(StringCard);
-  @field displayName = contains(StringCard);
-  @field membership = contains(RoomMembershipCard);
+export class RoomMemberCard extends CardDef {
+  @field userId = contains(StringField);
+  @field roomId = contains(StringField);
+  @field displayName = contains(StringField);
+  @field membership = contains(RoomMembershipField);
   @field membershipDateTime = contains(DateTimeCard);
-  @field membershipInitiator = contains(StringCard);
-  @field name = contains(StringCard, {
+  @field membershipInitiator = contains(StringField);
+  @field name = contains(StringField, {
     computeVia: function (this: RoomMemberCard) {
       return this.displayName ?? this.userId.split(':')[0].substring(1);
     },
@@ -191,7 +191,7 @@ class EmbeddedMessageCard extends Component<typeof MessageCard> {
     </BoxelMessage>
   </template>
 
-  @tracked attachedCard: Card | undefined;
+  @tracked attachedCard: CardDef | undefined;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -224,7 +224,7 @@ class EmbeddedMessageCard extends Component<typeof MessageCard> {
       this.attachedCard = await cached;
       return;
     }
-    let deferred = new Deferred<Card>();
+    let deferred = new Deferred<CardDef>();
     attachedCards.set(this.args.model.attachedCardId, deferred.promise);
     let response = await fetch(this.args.model.attachedCardId, {
       headers: { Accept: SupportedMimeType.CardJson },
@@ -240,7 +240,7 @@ class EmbeddedMessageCard extends Component<typeof MessageCard> {
     if (!loader) {
       throw new Error('Could not obtain a loader');
     }
-    let card = await createFromSerialized<typeof Card>(
+    let card = await createFromSerialized<typeof CardDef>(
       doc.data,
       doc,
       new URL(doc.data.id),
@@ -251,14 +251,14 @@ class EmbeddedMessageCard extends Component<typeof MessageCard> {
   });
 }
 
-class MessageCard extends Card {
+class MessageCard extends FieldDef {
   @field author = contains(RoomMemberCard);
-  @field message = contains(MarkdownCard);
-  @field formattedMessage = contains(StringCard);
+  @field message = contains(MarkdownField);
+  @field formattedMessage = contains(StringField);
   @field created = contains(DateTimeCard);
-  @field attachedCardId = contains(StringCard);
-  @field index = contains(NumberCard);
-  @field transactionId = contains(StringCard);
+  @field attachedCardId = contains(StringField);
+  @field index = contains(NumberField);
+  @field transactionId = contains(StringField);
 
   static embedded = EmbeddedMessageCard;
   // The edit template is meant to be read-only, this field card is not mutable
@@ -278,22 +278,22 @@ const messageCache = new WeakMap<RoomCard, Map<string, MessageCard>>();
 const roomMemberCache = new WeakMap<RoomCard, Map<string, RoomMemberCard>>();
 const roomStateCache = new WeakMap<RoomCard, RoomState>();
 
-export class RoomCard extends Card {
+export class RoomCard extends CardDef {
   // This can be used  to get the attached `cardInstance` like:
   //   Reflect.getProtypeOf(roomCardInstance).constructor.getAttachedCard(cardInstance);
   static getAttachedCard(id: string) {
     return attachedCards.get(id);
   }
-  static setAttachedCard(id: string, cardPromise: Promise<Card>) {
+  static setAttachedCard(id: string, cardPromise: Promise<CardDef>) {
     attachedCards.set(id, cardPromise);
   }
 
   // the only writeable field for this card should be the "events" field.
   // All other fields should derive from the "events" field.
-  @field events = containsMany(MatrixEventCard);
+  @field events = containsMany(MatrixEventField);
 
   // This works well for synchronous computeds only
-  @field newEvents = containsMany(MatrixEventCard, {
+  @field newEvents = containsMany(MatrixEventField, {
     computeVia: function (this: RoomCard) {
       let cache = eventCache.get(this);
       if (!cache) {
@@ -312,13 +312,13 @@ export class RoomCard extends Card {
     },
   });
 
-  @field roomId = contains(StringCard, {
+  @field roomId = contains(StringField, {
     computeVia: function (this: RoomCard) {
       return this.events.length > 0 ? this.events[0].room_id : undefined;
     },
   });
 
-  @field name = contains(StringCard, {
+  @field name = contains(StringField, {
     computeVia: function (this: RoomCard) {
       let roomState = roomStateCache.get(this);
       if (!roomState) {
@@ -631,7 +631,7 @@ interface ObjectiveEvent extends BaseMatrixEvent {
     };
     msgtype: 'org.boxel.objective';
     body: string;
-    ref: CardRef;
+    ref: CodeRef;
   };
   unsigned: {
     age: number;
