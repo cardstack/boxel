@@ -6,6 +6,7 @@ import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { capitalize } from '@ember/string';
+import get from 'lodash/get';
 
 export enum Submode {
   INTERACT = 'interact',
@@ -35,7 +36,7 @@ export default class SubmodeSwitcher extends Component<Signature> {
             {{on 'click' this.toogleDropdown}}
             {{bindings}}
           >
-            {{svgJar this.selectedSubmodeIcon width='18px' height='18px'}}
+            {{svgJar (get this.submodeIcons this.selectedSubmode) width='18px' height='18px'}}
             {{capitalize this.selectedSubmode}}
             <div class='arrow-icon'>
               {{svgJar (if this.isExpanded 'dropdown-arrow-up' 'dropdown-arrow-down') width='22px' height='22px'}}
@@ -117,10 +118,6 @@ export default class SubmodeSwitcher extends Component<Signature> {
         icon: this.submodeIcons[submode],
       }),
     );
-  }
-
-  get selectedSubmodeIcon() {
-    return this.submodeIcons[this.selectedSubmode];
   }
 
   @action
