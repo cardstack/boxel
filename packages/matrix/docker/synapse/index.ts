@@ -98,6 +98,8 @@ async function cfgDirFromTemplate(
 interface StartOptions {
   template?: string;
   dataDir?: string;
+  containerName?: string;
+  hostPort?: number;
 }
 export async function synapseStart(
   opts?: StartOptions,
@@ -106,9 +108,14 @@ export async function synapseStart(
     opts?.template ?? 'test',
     opts?.dataDir,
   );
-  let containerName = path.basename(synCfg.configDir);
-  console.log(`Starting synapse with config dir ${synCfg.configDir}...`);
+  let containerName = opts?.containerName || path.basename(synCfg.configDir);
+  console.log(
+    `Starting synapse with config dir ${synCfg.configDir} in container ${containerName}...`,
+  );
   await dockerCreateNetwork({ networkName: 'boxel' });
+  const portMapping = opts?.hostPort
+    ? `${opts.hostPort}:${synCfg.port}/tcp`
+    : `${synCfg.port}/tcp`;
   const synapseId = await dockerRun({
     image: 'matrixdotorg/synapse:develop',
     containerName: containerName,
@@ -116,17 +123,14 @@ export async function synapseStart(
       '--rm',
       '-v',
       `${synCfg.configDir}:/data`,
-      /**
-       * When using -p flag with --ip, the docker internal port must be used to access from the host
-       */
       '-p',
-      `${synCfg.port}/tcp`,
+      portMapping,
       '--network=boxel',
     ],
     applicationParams: ['run'],
   });
 
-  let port = await getHostPort(synapseId, synCfg.port);
+  const port = await getHostPort(synapseId, synCfg.port);
 
   console.log(
     `Started synapse with id ${synapseId} on port ${synCfg.port} mapped to ${port}.`,
