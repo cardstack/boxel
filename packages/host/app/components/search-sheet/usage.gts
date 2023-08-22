@@ -21,6 +21,10 @@ export default class SearchSheetUsage extends Component {
     this.mode = SearchSheetMode.Closed;
   }
 
+  @action onSearch(_term: string) {
+    // noop
+  }
+
   @action onCardSelect() {
     // noop
   }
@@ -36,6 +40,7 @@ export default class SearchSheetUsage extends Component {
             @mode={{this.mode}}
             @onCancel={{this.onCancel}}
             @onFocus={{this.onFocus}}
+            @onSearch={{this.onSearch}}
             @onCardSelect={{this.onCardSelect}}
           />
         </div>
@@ -56,6 +61,10 @@ export default class SearchSheetUsage extends Component {
         <Args.Action
           @name='onFocus'
           @description='Action to call when the user focuses the search input'
+        />
+        <Args.Action
+          @name='onSearch'
+          @description='Action to call when the user issues a search'
         />
         <Args.Action
           @name='onCardSelect'
