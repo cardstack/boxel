@@ -108,7 +108,7 @@ export default class SubmodeSwitcher extends Component<Signature> {
   @tracked isExpanded = false;
 
   @action
-  toogleDropdown() {
+  toggleDropdown() {
     this.isExpanded = !this.isExpanded;
   }
 
