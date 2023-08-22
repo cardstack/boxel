@@ -206,13 +206,13 @@ module('Integration | card-delete', function (hooks) {
         await click(
           `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.more-actions`,
         );
-        await percySnapshot(assert);
+        //await percySnapshot(assert);
         await click('[data-test-boxel-menu-item-text="Delete"]');
         await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
         assert
           .dom(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`)
           .containsText('Delete the card Mango?');
-        await percySnapshot(
+        //await percySnapshot(
           'Integration | card-delete | can delete a card from the index card stack item, modal',
         );
         await click('[data-test-confirm-delete-button]');

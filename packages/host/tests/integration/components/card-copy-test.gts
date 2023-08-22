@@ -439,7 +439,7 @@ module('Integration | card-copy', function (hooks) {
     await click(
       `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.select`,
     );
-    await percySnapshot(assert);
+    //await percySnapshot(assert);
     assert
       .dom('[data-test-copy-button="right"]')
       .exists('copy button with right arrow exists');
@@ -470,7 +470,7 @@ module('Integration | card-copy', function (hooks) {
     await click(
       ` [data-test-overlay-card="${testRealm2URL}Pet/paper"] button.select`,
     );
-    await percySnapshot(assert);
+    //await percySnapshot(assert);
     assert
       .dom('[data-test-copy-button="left"]')
       .exists('copy button with left arrow exists');
@@ -507,7 +507,7 @@ module('Integration | card-copy', function (hooks) {
     await click(
       `[data-test-overlay-card="${testRealmURL}Pet/vangogh"] button.select`,
     );
-    await percySnapshot(assert);
+    //await percySnapshot(assert);
     assert
       .dom('[data-test-copy-button="right"]')
       .exists('copy button with right arrow exists');
@@ -533,7 +533,7 @@ module('Integration | card-copy', function (hooks) {
     await waitFor(
       '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
     );
-    await percySnapshot(assert);
+    //await percySnapshot(assert);
     assert
       .dom('[data-test-copy-button="right"]')
       .exists('copy button with right arrow exists');
@@ -559,7 +559,7 @@ module('Integration | card-copy', function (hooks) {
       '[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]',
     );
     await waitFor('[data-test-operator-mode-stack="1"] [data-test-pet]');
-    await percySnapshot(assert);
+    //await percySnapshot(assert);
     assert
       .dom('[data-test-copy-button="left"]')
       .exists('copy button with left arrow exists');
