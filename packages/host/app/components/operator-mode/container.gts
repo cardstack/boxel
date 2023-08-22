@@ -100,6 +100,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
   @tracked searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked isChatVisible = false;
+  @tracked subMode = Submode.INTERACT;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -732,7 +733,7 @@ export default class OperatorModeContainer extends Component<Signature> {
               {{svgJar 'download' width='30px' height='30px'}}
             </button>
           {{/if}}
-          <SubmodeSwitcher @submode={{Submode.INTERACT}} @onSubmodeSelect={{fn console.log 'Submode:'}} />
+          <SubmodeSwitcher @submode={{this.subMode}} @onSubmodeSelect={{fn (mut this.subMode)}} />
         </div>
 
         {{#if this.isChatVisible}}

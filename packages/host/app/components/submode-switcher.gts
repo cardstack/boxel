@@ -36,8 +36,8 @@ export default class SubmodeSwitcher extends Component<Signature> {
             {{on 'click' this.toggleDropdown}}
             {{bindings}}
           >
-            {{svgJar (get this.submodeIcons this.selectedSubmode) width='18px' height='18px'}}
-            {{capitalize this.selectedSubmode}}
+            {{svgJar (get this.submodeIcons @submode) width='18px' height='18px'}}
+            {{capitalize @submode}}
             <div class='arrow-icon'>
               {{svgJar (if this.isExpanded 'dropdown-arrow-up' 'dropdown-arrow-down') width='22px' height='22px'}}
             </div>
@@ -104,7 +104,6 @@ export default class SubmodeSwitcher extends Component<Signature> {
     [Submode.INTERACT]: 'eye',
     [Submode.CODE]: 'icon-code',
   };
-  @tracked selectedSubmode: Submode = this.args.submode;
   @tracked isExpanded = false;
 
   @action
@@ -114,16 +113,9 @@ export default class SubmodeSwitcher extends Component<Signature> {
 
   get buildMenuItems(): MenuItem[] {
     return Object.values(Submode).map((submode) =>
-      menuItemFunc([capitalize(submode), () => this.select(submode)], {
+      menuItemFunc([capitalize(submode), () => this.args.onSubmodeSelect(submode)], {
         icon: this.submodeIcons[submode],
       }),
     );
-  }
-
-  @action
-  select(submode: Submode) {
-    if (this.selectedSubmode === submode) return;
-    this.selectedSubmode = submode;
-    this.args.onSubmodeSelect(submode);
   }
 }
