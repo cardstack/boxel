@@ -13,8 +13,7 @@ export default class SearchInputUsage extends Component {
   @tracked bottomTreatment = this.defaultBottomTreatment;
   @tracked value = '';
   @tracked errorMessage = '';
-  @tracked placeholder =
-    'Boxel search input with validation.Boxel search input with validation.';
+  @tracked placeholder = 'Boxel search input with validation.';
   @tracked state: InputValidationState = 'initial';
 
   @action onFocus() {
