@@ -81,18 +81,18 @@ export default class CardCatalogModal extends Component<Signature> {
           {{#if this.currentRequest.search.isLoading}}
             Loading...
           {{else}}
-            {{#if this.availableRealms}}
-              <CardCatalog
-                @results={{if
-                  this.searchKey
-                  this.searchResults
-                  this.displayedRealms
-                }}
-                @toggleSelect={{this.toggleSelect}}
-                @selectedCard={{this.selectedCard}}
-                @context={{@context}}
-              />
-            {{/if}}
+            {{! The getter for availableRealms is necessary because
+                it's a resource that needs to load the search results }}
+            <CardCatalog
+              @results={{if
+                this.availableRealms.length
+                this.searchResults
+                this.availableRealms
+              }}
+              @toggleSelect={{this.toggleSelect}}
+              @selectedCard={{this.selectedCard}}
+              @context={{@context}}
+            />
           {{/if}}
         </:content>
         <:footer>
