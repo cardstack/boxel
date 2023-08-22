@@ -19,6 +19,7 @@ import { file, FileResource, isReady } from '@cardstack/host/resources/file';
 import CardEditor from '@cardstack/host/components/card-editor';
 import Module from './module';
 import FileTree from './file-tree';
+import RecentFiles from './recent-files';
 import type { Card } from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
 import momentFrom from 'ember-moment/helpers/moment-from';
@@ -45,6 +46,7 @@ export default class Go extends Component<Signature> {
   <template>
     <div class='main'>
       <div class='main-column'>
+        <RecentFiles />
         <FileTree @url={{ownRealmURL}} @openFiles={{@openFiles}} />
       </div>
       {{#if (isReady this.openFile.current)}}

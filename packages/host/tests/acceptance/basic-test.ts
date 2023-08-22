@@ -182,6 +182,29 @@ module('Acceptance | basic tests', function (hooks) {
       .doesNotExist('Person/1.json file entry is not rendered');
   });
 
+  test('recent files are shown', async function (assert) {
+    await visit('/code');
+    await waitFor('[data-test-file]');
+
+    assert.dom('[data-test-recent-file]').doesNotExist();
+
+    await click('[data-test-directory="Person/"]');
+    await waitFor('[data-test-file="Person/1.json"]');
+
+    await click('[data-test-file="Person/1.json"]');
+
+    assert.dom('[data-test-recent-file]').containsText('Person/1.json');
+
+    await click('[data-test-file="person.gts"]');
+
+    assert
+      .dom('[data-test-recent-file]:first-child')
+      .containsText('person.gts');
+    assert
+      .dom('[data-test-recent-file]:nth-child(2)')
+      .containsText('Person/1.json');
+  });
+
   test('Can view a card instance', async function (assert) {
     await visit('/code');
     await waitFor('[data-test-file]');
