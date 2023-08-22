@@ -250,7 +250,7 @@ module('Acceptance | basic tests', function (hooks) {
       'the monaco content is correct',
     );
 
-    await waitForSyntaxHighlighting('&lt;/template&gt;', 'rgb(128, 0, 0)');
+    await waitForSyntaxHighlighting("''", 'rgb(163, 21, 21)');
     await percySnapshot(assert);
   });
 
