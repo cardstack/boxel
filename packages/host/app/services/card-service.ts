@@ -28,6 +28,7 @@ const { ownRealmURL } = ENV;
 export default class CardService extends Service {
   @service declare loaderService: LoaderService;
   private subscriber: CardSaveSubscriber | undefined;
+  private indexCards: Map<string, Card> = new Map();
 
   private apiModule = importResource(
     this,
@@ -110,6 +111,11 @@ export default class CardService extends Service {
   }
 
   async loadModel(url: URL): Promise<Card> {
+    let index = this.indexCards.get(url.href);
+    if (index) {
+      return index;
+    }
+
     await this.apiModule.loaded;
     let json = await this.fetchJSON(url);
     if (!isSingleCardDocument(json)) {
@@ -118,11 +124,15 @@ export default class CardService extends Service {
         ${JSON.stringify(json, null, 2)}`,
       );
     }
-    return await this.createFromSerialized(
+    let card = await this.createFromSerialized(
       json.data,
       json,
       typeof url === 'string' ? new URL(url) : url,
     );
+    if (this.isIndexCard(card)) {
+      this.indexCards.set(url.href, card);
+    }
+    return card;
   }
 
   async serializeCard(
@@ -130,7 +140,9 @@ export default class CardService extends Service {
     opts?: SerializeOpts,
   ): Promise<LooseSingleCardDocument> {
     await this.apiModule.loaded;
-    return this.api.serializeCard(card, opts);
+    let serialized = this.api.serializeCard(card, opts);
+    delete serialized.included;
+    return serialized;
   }
 
   async saveModel(card: Card): Promise<Card> {

@@ -4,6 +4,7 @@ import {
   currentURL,
   click,
   triggerEvent,
+  triggerKeyEvent,
   waitFor,
 } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
@@ -704,6 +705,29 @@ module('Acceptance | operator mode tests', function (hooks) {
           '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"]',
         )
         .doesNotExist();
+    });
+
+    test('search can be dismissed with escape', async function (assert) {
+      let operatorModeStateParam = stringify({
+        stacks: [],
+      })!;
+
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam,
+        )}`,
+      );
+      await click('[data-test-search-input] input');
+
+      assert.dom('[data-test-search-sheet]').hasClass('prompt');
+
+      await triggerKeyEvent(
+        '[data-test-search-sheet] input',
+        'keydown',
+        'Escape',
+      );
+
+      assert.dom('[data-test-search-sheet]').hasClass('closed');
     });
   });
 

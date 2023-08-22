@@ -44,6 +44,7 @@ import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
+import SubmodeSwitcher, { Submode } from '../submode-switcher';
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
 
@@ -100,6 +101,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
   @tracked searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked isChatVisible = false;
+  @tracked submode = Submode.INTERACT;
   private deleteModal: DeleteModal | undefined;
 
   constructor(owner: unknown, args: any) {
@@ -148,6 +150,10 @@ export default class OperatorModeContainer extends Component<Signature> {
     if (this.operatorModeStateService.recentCards.length === 0) {
       this.constructRecentCards.perform();
     }
+  }
+
+  @action onSearch(_term: string) {
+    this.searchSheetMode = SearchSheetMode.SearchResults;
   }
 
   constructRecentCards = restartableTask(async () => {
@@ -586,7 +592,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     ) {
       return htmlSafe(`background-image: url(${this.backgroundImageURLs[0]});`);
     }
-    return '';
+    return false;
   }
 
   get differingBackgroundImageURLs() {
@@ -791,6 +797,7 @@ export default class OperatorModeContainer extends Component<Signature> {
               {{svgJar 'download' width='30px' height='30px'}}
             </button>
           {{/if}}
+          <SubmodeSwitcher @submode={{this.submode}} @onSubmodeSelect={{fn (mut this.submode)}} class='submode-switcher' />
         </div>
 
         {{#if this.isChatVisible}}
@@ -815,6 +822,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         @mode={{this.searchSheetMode}}
         @onCancel={{this.onCancelSearchSheet}}
         @onFocus={{this.onFocusSearchInput}}
+        @onSearch={{this.onSearch}}
         @onCardSelect={{this.onCardSelectFromSearch}}
       />
     </Modal>
@@ -918,6 +926,14 @@ export default class OperatorModeContainer extends Component<Signature> {
       .chat-btn:hover {
         --icon-color: var(--boxel-highlight);
         background-color: var(--boxel-light);
+      }
+
+      .submode-switcher {
+        position: absolute;
+        top: 0;
+        left: 0;
+
+        padding: var(--boxel-sp);
       }
     </style>
   </template>
