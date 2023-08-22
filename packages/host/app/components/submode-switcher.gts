@@ -33,7 +33,7 @@ export default class SubmodeSwitcher extends Component<Signature> {
           <Button
             class='trigger'
             aria-label='Options'
-            {{on 'click' this.toogleDropdown}}
+            {{on 'click' this.toggleDropdown}}
             {{bindings}}
           >
             {{svgJar (get this.submodeIcons this.selectedSubmode) width='18px' height='18px'}}
