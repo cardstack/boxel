@@ -405,6 +405,7 @@ export default class SearchSheet extends Component<Signature> {
         flex-shrink: 0;
         justify-content: space-between;
         opacity: 1;
+        overflow: hidden;
         height: 40px;
         padding: var(--boxel-sp-xl) var(--boxel-sp) var(--boxel-sp-lg)
           var(--boxel-sp);
@@ -413,6 +414,7 @@ export default class SearchSheet extends Component<Signature> {
           opacity calc(var(--boxel-transition) / 4);
       }
 
+      .closed .footer,
       .prompt .footer {
         height: 0;
         padding: 0;
