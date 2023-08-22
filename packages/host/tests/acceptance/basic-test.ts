@@ -76,7 +76,13 @@ module('Acceptance | basic tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupMockMessageService(hooks);
 
+  hooks.afterEach(async function () {
+    localStorage.removeItem('recent-files');
+  });
+
   hooks.beforeEach(async function () {
+    localStorage.removeItem('recent-files');
+
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     adapter = new TestRealmAdapter({
@@ -183,10 +189,17 @@ module('Acceptance | basic tests', function (hooks) {
   });
 
   test('recent file links are shown', async function (assert) {
+    localStorage.setItem('recent-files', JSON.stringify(['index.json']));
+
+    console.log('visiting code');
     await visit('/code');
+
     await waitFor('[data-test-file]');
 
-    assert.dom('[data-test-recent-file]').doesNotExist();
+    assert
+      .dom('[data-test-recent-file]')
+      .exists({ count: 1 })
+      .containsText('index.json');
 
     await click('[data-test-directory="Person/"]');
     await waitFor('[data-test-file="Person/1.json"]');
@@ -216,6 +229,12 @@ module('Acceptance | basic tests', function (hooks) {
     assert
       .dom('[data-test-recent-file]:nth-child(2)')
       .containsText('person.gts');
+
+    assert.deepEqual(JSON.parse(localStorage.getItem('recent-files') || '[]'), [
+      'Person/1.json',
+      'person.gts',
+      'index.json',
+    ]);
   });
 
   test('Can view a card instance', async function (assert) {

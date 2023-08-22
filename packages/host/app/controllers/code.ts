@@ -29,6 +29,7 @@ export default class CodeController extends Controller {
       }
 
       this.codeService.recentFiles.unshift(newPath);
+      this.codeService.persistRecentFiles();
     }
   }
 }
