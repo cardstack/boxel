@@ -24,11 +24,10 @@ interface Signature {
 export default class SubmodeSwitcher extends Component<Signature> {
   <template>
     <div
-      class='submode-switcher' 
       data-test-submode-switcher
       ...attributes>
       <BoxelDropdown
-        @contentClass='submode-switcher__content'>
+        @contentClass='submode-switcher-dropdown'>
         <:trigger as |bindings|>
           <Button
             class='trigger'
@@ -53,13 +52,6 @@ export default class SubmodeSwitcher extends Component<Signature> {
       </BoxelDropdown>
     </div>
     <style>
-      .submode-switcher {
-        position: absolute;
-        top: 0;
-        left: 0;
-
-        padding: var(--boxel-sp);
-      }
       .trigger {
         border: none;
         padding: var(--boxel-sp-xs);
@@ -82,7 +74,7 @@ export default class SubmodeSwitcher extends Component<Signature> {
         
         display: flex;
       }
-      :global(.submode-switcher__content) {
+      :global(.submode-switcher-dropdown) {
         background: none;
       }
       .menu {
