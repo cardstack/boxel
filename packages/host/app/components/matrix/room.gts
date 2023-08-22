@@ -5,7 +5,7 @@ import { on } from '@ember/modifier';
 //@ts-expect-error the types don't recognize the cached export
 import { tracked, cached } from '@glimmer/tracking';
 import { not, and } from '@cardstack/host/helpers/truth-helpers';
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, task, timeout, all } from 'ember-concurrency';
 import {
   BoxelInput,
   LoadingIndicator,
@@ -19,13 +19,15 @@ import {
   baseCardRef,
   catalogEntryRef,
 } from '@cardstack/runtime-common';
+import { registerDestructor } from '@ember/destroyable';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type Card } from 'https://cardstack.com/base/card-api';
 import { type RoomCard } from 'https://cardstack.com/base/room';
 import type CardService from '@cardstack/host/services/card-service';
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+import config from '@cardstack/host/config/environment';
 
-const TRUE = true;
+const { environment } = config;
 
 interface RoomArgs {
   Args: {
@@ -80,7 +82,10 @@ export default class Room extends Component<RoomArgs> {
       <div class='room__objective'> <this.objectiveComponent /> </div>
     {{/if}}
 
-    <div class='messages-wrapper'>
+    <div
+      class='messages-wrapper'
+      data-test-room-settled={{this.doWhenCardChanges.isIdle}}
+    >
       <div class='messages'>
         <div class='notices'>
           <div data-test-timeline-start class='timeline-start'>
@@ -101,7 +106,7 @@ export default class Room extends Component<RoomArgs> {
       <BoxelInput
         data-test-message-field
         type='text'
-        @multiline={{TRUE}}
+        @multiline={{true}}
         @value={{this.messageToSend}}
         @onInput={{this.setMessage}}
         rows='4'
@@ -236,6 +241,7 @@ export default class Room extends Component<RoomArgs> {
   @tracked private isInviteMode = false;
   @tracked private membersToInvite: string[] = [];
   @tracked private allowedToSetObjective: boolean | undefined;
+  @tracked private subscribedCard: Card | undefined;
   private messagesToSend: TrackedMap<string, string | undefined> =
     new TrackedMap();
   private cardsToSend: TrackedMap<string, Card | undefined> = new TrackedMap();
@@ -244,6 +250,14 @@ export default class Room extends Component<RoomArgs> {
   constructor(owner: unknown, args: any) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
+
+    // We use a signal in DOM for playwright to be able to tell if the interior
+    // card async has settled. This is akin to test-waiters in ember-test. (playwright
+    // runs against the development environment of ember serve)
+    if (environment === 'development') {
+      registerDestructor(this, this.cleanup);
+      this.subscribeToRoomChanges.perform();
+    }
   }
 
   private get roomCard() {
@@ -253,6 +267,43 @@ export default class Room extends Component<RoomArgs> {
   private get objective() {
     return this.matrixService.roomObjectives.get(this.args.roomId);
   }
+
+  private subscribeToRoomChanges = task(async () => {
+    await this.cardService.ready;
+    while (true) {
+      if (this.roomCard && this.subscribedCard !== this.roomCard) {
+        if (this.subscribedCard) {
+          this.cardService.unsubscribeFromCard(
+            this.subscribedCard,
+            this.onCardChange,
+          );
+        }
+        this.subscribedCard = this.roomCard;
+        this.cardService.subscribeToCard(
+          this.subscribedCard,
+          this.onCardChange,
+        );
+      }
+      await timeout(50);
+    }
+  });
+
+  private onCardChange = () => {
+    this.doWhenCardChanges.perform();
+  };
+
+  private doWhenCardChanges = restartableTask(async () => {
+    await all([this.cardService.cardsSettled(), timeout(500)]);
+  });
+
+  private cleanup = () => {
+    if (this.subscribedCard) {
+      this.cardService.unsubscribeFromCard(
+        this.subscribedCard,
+        this.onCardChange,
+      );
+    }
+  };
 
   @cached
   private get cards() {
