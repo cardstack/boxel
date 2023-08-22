@@ -1863,7 +1863,6 @@ module('Integration | operator-mode', function (hooks) {
       .includesText('Author');
   });
 
-  //TODO: Update this test after adding code mode
   test(`toogles mode switcher`, async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
     await renderComponent(
@@ -1875,15 +1874,15 @@ module('Integration | operator-mode', function (hooks) {
       },
     );
 
-    assert.dom('[data-test-mode-switcher]').exists();
-    assert.dom('[data-test-mode-switcher]').hasText('Interact');
+    assert.dom('[data-test-submode-switcher]').exists();
+    assert.dom('[data-test-submode-switcher]').hasText('Interact');
 
-    await click('[data-test-mode-switcher] .trigger');
+    await click('[data-test-submode-switcher] .trigger');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    assert.dom('[data-test-mode-switcher]').hasText('Code');
+    assert.dom('[data-test-submode-switcher]').hasText('Code');
 
-    await click('[data-test-mode-switcher] .trigger');
+    await click('[data-test-submode-switcher] .trigger');
     await click('[data-test-boxel-menu-item-text="Interact"]');
-    assert.dom('[data-test-mode-switcher]').hasText('Interact');
+    assert.dom('[data-test-submode-switcher]').hasText('Interact');
   });
 });

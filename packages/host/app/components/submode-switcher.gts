@@ -6,43 +6,44 @@ import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 
-interface Signature {
-  Element: HTMLElement;
+export enum Submode {
+  INTERACT = 'Interact',
+  CODE = 'Code',
 }
 
-type Mode = {
-  icon: string,
-  label: string,
+interface Signature {
+  Element: HTMLElement;
+  Args: {
+    submode?: Submode;
+    onSubmodeSelect?: (submode: Submode) => void;
+  };
 }
 
 export default class SubmodeSwitcher extends Component<Signature> {
   <template>
     <div
-      class='mode-switcher' 
-      data-test-mode-switcher
+      class='submode-switcher' 
+      data-test-submode-switcher
       ...attributes>
       <BoxelDropdown
-        @contentClass='mode-switcher__content'>
+        @contentClass='submode-switcher__content'>
         <:trigger as |bindings|>
           <Button
             class='trigger'
             aria-label='Options'
-            data-test-embedded-card-options-button
             {{on 'click' this.toogleDropdown}}
             {{bindings}}
           >
-            {{svgJar this.selectedMode.icon width='18px' height='18px'}}
-            {{this.selectedMode.label}}
-            {{#if this.isExpanded}}
-              <div class='arrow-icon'>{{svgJar 'dropdown-arrow-up' width='22px' height='22px'}}</div>
-            {{else}}
-              <div class='arrow-icon'>{{svgJar 'dropdown-arrow-down' width='22px' height='22px'}}</div>
-            {{/if}}
+            {{svgJar this.selectedSubmodeIcon width='18px' height='18px'}}
+            {{this.selectedSubmode}}
+            <div class='arrow-icon'>
+              {{svgJar (if this.isExpanded 'dropdown-arrow-up' 'dropdown-arrow-down') width='22px' height='22px'}}
+            </div>
           </Button>
         </:trigger>
         <:content as |dd|>
           <Menu
-            class='mode-switcher__content-menu'
+            class='menu'
             @closeMenu={{dd.close}}
             @items={{this.buildMenuItems}}
           />
@@ -50,6 +51,13 @@ export default class SubmodeSwitcher extends Component<Signature> {
       </BoxelDropdown>
     </div>
     <style>
+      .submode-switcher {
+        position: absolute;
+        top: 0;
+        left: 0;
+
+        padding: var(--boxel-sp);
+      }
       .trigger {
         border: none;
         padding: var(--boxel-sp-xs);
@@ -72,10 +80,10 @@ export default class SubmodeSwitcher extends Component<Signature> {
         
         display: flex;
       }
-      :global(.mode-switcher__content) {
+      :global(.submode-switcher__content) {
         background: none;
       }
-      .mode-switcher__content-menu {
+      .menu {
         border-radius: var(--boxel-border-radius);
         width: 190px;
         color: var(--boxel-light);
@@ -90,31 +98,34 @@ export default class SubmodeSwitcher extends Component<Signature> {
     </style>
   </template>
 
-  modes: Mode[] = [
-    {
-      icon: 'eye',
-      label: 'Interact',
-    },
-    {
-      icon: 'icon-code',
-      label: 'Code',
-    }
-  ]
-  @tracked selectedMode: Mode = this.modes[0];
-  @tracked isExpanded  = false;
+  submodeIcons = {
+    [Submode.INTERACT]: 'eye',
+    [Submode.CODE]: 'icon-code',
+  };
+  @tracked selectedSubmode: Submode = this.args.submode ?? Submode.INTERACT;
+  @tracked isExpanded = false;
 
   @action
   toogleDropdown() {
     this.isExpanded = !this.isExpanded;
   }
-   
+
   get buildMenuItems(): MenuItem[] {
-    return this.modes.map(mode => menuItemFunc([mode.label, () => this.select(mode)], {icon: mode.icon})) ;
+    return Object.values(Submode).map((submode) =>
+      menuItemFunc([submode, () => this.select(submode)], {
+        icon: this.submodeIcons[submode],
+      }),
+    );
+  }
+
+  get selectedSubmodeIcon() {
+    return this.submodeIcons[this.selectedSubmode];
   }
 
   @action
-  select(mode: Mode) {
-    if (this.selectedMode.label === mode.label) return;
-    this.selectedMode = mode;
+  select(submode: Submode) {
+    if (this.selectedSubmode === submode) return;
+    this.selectedSubmode = submode;
+    this.args.onSubmodeSelect?.(submode);
   }
 }
