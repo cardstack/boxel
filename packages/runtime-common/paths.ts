@@ -8,7 +8,7 @@ export class RealmPaths {
     this.url =
       (typeof realmURL === 'string' ? realmURL : realmURL.href).replace(
         /\/$/,
-        ''
+        '',
       ) + '/';
   }
 

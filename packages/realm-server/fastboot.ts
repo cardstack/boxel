@@ -11,7 +11,7 @@ import { JSDOM } from 'jsdom';
 const appName = '@cardstack/host';
 export async function makeFastBootIndexRunner(
   dist: URL | string,
-  getRunnerOpts: (optsId: number) => RunnerOpts
+  getRunnerOpts: (optsId: number) => RunnerOpts,
 ): Promise<{ getRunner: IndexRunner; distPath: string }> {
   let fastboot: FastBootInstance;
   let distPath: string;
@@ -46,7 +46,7 @@ export async function makeFastBootIndexRunner(
           _logDefinitions: (globalThis as any)._logDefinitions,
           jsdom: new JSDOM(''),
         });
-      }
+      },
     ));
   }
   return {

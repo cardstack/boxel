@@ -33,14 +33,6 @@ export default class CardController extends Controller {
     });
   }
 
-  get getIsolatedComponent() {
-    if (this.model) {
-      return this.model.constructor.getComponent(this.model, 'isolated');
-    }
-
-    return null;
-  }
-
   getCards(query: Query, realms?: string[]): Search {
     return getSearchResults(
       this,

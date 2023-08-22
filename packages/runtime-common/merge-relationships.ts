@@ -3,21 +3,21 @@ import mergeWith from 'lodash/mergeWith';
 
 export function mergeRelationships(
   relData: LooseCardResource['relationships'],
-  otherRelData: LooseCardResource['relationships']
+  otherRelData: LooseCardResource['relationships'],
 ): LooseCardResource['relationships'] {
   let merged = mergeWith(
     _formatForMerge(relData),
     _formatForMerge(otherRelData),
     (_objectValue: any, sourceValue: any) => {
       return Array.isArray(sourceValue) ? sourceValue : undefined;
-    }
+    },
   );
 
   return _revertMergeFormat(merged);
 }
 
 function _formatForMerge(
-  resource: LooseCardResource['relationships']
+  resource: LooseCardResource['relationships'],
 ): Record<string, Relationship | Relationship[]> {
   let data: Record<string, Relationship | Relationship[]> = {};
 
@@ -34,7 +34,7 @@ function _formatForMerge(
 }
 
 function _revertMergeFormat(
-  data: Record<string, Relationship | Relationship[]>
+  data: Record<string, Relationship | Relationship[]>,
 ): LooseCardResource['relationships'] {
   let relationships: LooseCardResource['relationships'] = {};
 

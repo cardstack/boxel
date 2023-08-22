@@ -14,10 +14,10 @@ export function loaderPlugin(babel: typeof Babel) {
             t.memberExpression(
               t.memberExpression(
                 t.metaProperty(t.identifier('import'), t.identifier('meta')),
-                t.identifier('loader')
+                t.identifier('loader'),
               ),
-              t.identifier('fetch')
-            )
+              t.identifier('fetch'),
+            ),
           );
         } else if (callee.node.type === 'Import') {
           // import() => import.meta.loader.import
@@ -25,10 +25,10 @@ export function loaderPlugin(babel: typeof Babel) {
             t.memberExpression(
               t.memberExpression(
                 t.metaProperty(t.identifier('import'), t.identifier('meta')),
-                t.identifier('loader')
+                t.identifier('loader'),
               ),
-              t.identifier('import')
-            )
+              t.identifier('import'),
+            ),
           );
         }
       },

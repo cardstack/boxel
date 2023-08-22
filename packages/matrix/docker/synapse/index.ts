@@ -35,7 +35,7 @@ function randB64Bytes(numBytes: number): string {
 
 async function cfgDirFromTemplate(
   template: string,
-  dataDir?: string
+  dataDir?: string,
 ): Promise<SynapseConfig> {
   const templateDir = path.join(__dirname, template);
 
@@ -63,7 +63,7 @@ async function cfgDirFromTemplate(
   console.log(`Gen ${path.join(templateDir, 'homeserver.yaml')}`);
   let hsYaml = await fse.readFile(
     path.join(templateDir, 'homeserver.yaml'),
-    'utf8'
+    'utf8',
   );
   hsYaml = hsYaml.replace(/{{REGISTRATION_SECRET}}/g, registrationSecret);
   hsYaml = hsYaml.replace(/{{MACAROON_SECRET_KEY}}/g, macaroonSecret);
@@ -79,7 +79,7 @@ async function cfgDirFromTemplate(
   console.log(`Gen ${path.join(templateDir, 'localhost.signing.key')}`);
   await fse.writeFile(
     path.join(configDir, 'localhost.signing.key'),
-    `ed25519 x ${signingKey}`
+    `ed25519 x ${signingKey}`,
   );
 
   return {
@@ -98,11 +98,11 @@ interface StartOptions {
   dataDir?: string;
 }
 export async function synapseStart(
-  opts?: StartOptions
+  opts?: StartOptions,
 ): Promise<SynapseInstance> {
   const synCfg = await cfgDirFromTemplate(
     opts?.template ?? 'test',
-    opts?.dataDir
+    opts?.dataDir,
   );
   console.log(`Starting synapse with config dir ${synCfg.configDir}...`);
   await dockerCreateNetwork({ networkName: 'boxel' });
@@ -183,7 +183,7 @@ export async function registerUser(
   username: string,
   password: string,
   admin = false,
-  displayName?: string
+  displayName?: string,
 ): Promise<Credentials> {
   const url = `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v1/register`;
   const context = await request.newContext({ baseURL: url });
@@ -220,7 +220,7 @@ export async function registerUser(
 export async function createRegistrationToken(
   adminAccessToken: string,
   registrationToken: string,
-  usesAllowed = 1000
+  usesAllowed = 1000,
 ) {
   let res = await fetch(
     `http://localhost:${SYNAPSE_PORT}/_synapse/admin/v1/registration_tokens/new`,
@@ -233,11 +233,13 @@ export async function createRegistrationToken(
         token: registrationToken,
         uses_allowed: usesAllowed,
       }),
-    }
+    },
   );
   if (!res.ok) {
     throw new Error(
-      `could not create registration token: ${res.status} - ${await res.text()}`
+      `could not create registration token: ${
+        res.status
+      } - ${await res.text()}`,
     );
   }
 }

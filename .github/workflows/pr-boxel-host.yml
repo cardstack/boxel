@@ -3,10 +3,10 @@ name: CI [boxel-host]
 on:
   pull_request:
     paths:
-      - "packages/host/**"
-      - ".github/workflows/pr-boxel-host.yml"
-      - "package.json"
-      - "pnpm-lock.yaml"
+      - 'packages/host/**'
+      - '.github/workflows/pr-boxel-host.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
 
 permissions:
   contents: read

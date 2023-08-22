@@ -59,6 +59,6 @@ declare type GetTemplateLocals = (template: string) => string[];
  */
 export declare function preprocessEmbeddedTemplates(
   template: string,
-  options: PreprocessOptions
+  options: PreprocessOptions,
 ): PreprocessedOutput;
 export {};

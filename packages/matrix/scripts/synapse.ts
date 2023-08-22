@@ -14,7 +14,7 @@ let dataDir = process.env.SYNAPSE_DATA_DIR
     console.log(`stopped container 'boxel-synapse'`);
   } else {
     console.error(
-      `Unknown command "${command}", available commands are "start" and "stop"`
+      `Unknown command "${command}", available commands are "start" and "stop"`,
     );
     process.exit(1);
   }

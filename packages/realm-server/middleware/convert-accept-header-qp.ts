@@ -3,7 +3,7 @@ import qs from 'qs';
 
 const convertAcceptHeaderMiddleware = async (
   ctx: Context,
-  next: Next
+  next: Next,
 ): Promise<void> => {
   const acceptHeader = Array.isArray(ctx.query.acceptHeader)
     ? ctx.query.acceptHeader.join(',')

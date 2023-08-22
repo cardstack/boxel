@@ -34,19 +34,19 @@ export interface FastBootInstance {
 export async function instantiateFastBoot(
   appName: string,
   distURL: URL,
-  buildSandboxGlobals: (defaultGlobals: any) => any
+  buildSandboxGlobals: (defaultGlobals: any) => any,
 ): Promise<{ fastboot: FastBootInstance; distPath: string }> {
   let pkgJSONHref = new URL('./package.json', distURL).href;
   let pkgJSON = await (await fetch(pkgJSONHref)).json();
   let pkgFastboot = pkgJSON?.fastboot;
   if (!pkgFastboot) {
     throw new Error(
-      `${distURL.href} does not appear to be an ember app built for fastboot, ${pkgJSONHref} doesn't contain 'fastboot' entry`
+      `${distURL.href} does not appear to be an ember app built for fastboot, ${pkgJSONHref} doesn't contain 'fastboot' entry`,
     );
   }
   if (pkgFastboot.schemaVersion < 5) {
     throw new Error(
-      `${distURL.href} is built for fastboot schema version that is less than the supported version "5"`
+      `${distURL.href} is built for fastboot schema version that is less than the supported version "5"`,
     );
   }
   let htmlEntrypointHref = new URL(pkgFastboot.htmlEntrypoint, distURL).href;
@@ -58,7 +58,7 @@ export async function instantiateFastBoot(
     let fastbootMerged = mergeContent(
       element,
       config,
-      '/config/fastboot-environment'
+      '/config/fastboot-environment',
     );
     if (fastbootMerged) {
       element.remove();
@@ -70,7 +70,7 @@ export async function instantiateFastBoot(
   let distPath = tmpDirSync().name;
 
   for (let element of dom.window.document.querySelectorAll(
-    'script,fastboot-script'
+    'script,fastboot-script',
   )) {
     let src = extractSrc(element);
     if (src && !extractIgnore(element)) {
@@ -113,12 +113,12 @@ export async function instantiateFastBoot(
 function mergeContent(
   metaElement: HTMLMetaElement,
   config: any,
-  configName: string
+  configName: string,
 ) {
   let name = metaElement.getAttribute('name');
   if (name && name.endsWith(configName)) {
     let content = JSON.parse(
-      decodeURIComponent(metaElement.getAttribute('content')!)
+      decodeURIComponent(metaElement.getAttribute('content')!),
     );
     content.APP = Object.assign({ autoboot: false }, content.APP);
     config[name.slice(0, -1 * configName.length)] = content;

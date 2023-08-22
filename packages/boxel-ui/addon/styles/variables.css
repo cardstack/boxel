@@ -62,6 +62,7 @@
   --boxel-box-shadow-hover: 0 3px 10px rgb(0 0 0 / 15%);
   --boxel-outline-color: var(--boxel-blue);
   --boxel-outline: 2px solid var(--boxel-outline-color);
+  --boxel-deep-box-shadow: 0 15px 30px 0 rgba(0, 0, 0, 0.35);
 
   /* Container sizes */
   --boxel-xxs-container: 15.625rem; /* 250px */
@@ -108,7 +109,9 @@
 
   --boxel-highlight: var(--boxel-teal);
   --boxel-highlight-hover: var(--boxel-dark-teal);
-  --boxel-danger: var(--boxel-error-100);
+  --boxel-danger: var(
+    --boxel-red
+  ); /* formerly boxel-error-100: the latest design docs (8/16/2023) use this color for danger instead */
   --boxel-danger-hover: #fa1521;
 
   /* Boxel purples */

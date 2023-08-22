@@ -34,7 +34,7 @@ export function dockerRun(args: {
           reject(err);
         }
         resolve(stdout.trim());
-      }
+      },
     );
   });
 }
@@ -56,7 +56,7 @@ export function dockerExec(args: {
           return;
         }
         resolve();
-      }
+      },
     );
   });
 }
@@ -76,7 +76,7 @@ export function dockerCreateNetwork(args: {
         if (err) {
           if (
             stderr.includes(
-              `network with name ${args.networkName} already exists`
+              `network with name ${args.networkName} already exists`,
             )
           ) {
             // Don't consider this as error
@@ -86,7 +86,7 @@ export function dockerCreateNetwork(args: {
           return;
         }
         resolve();
-      }
+      },
     );
   });
 }

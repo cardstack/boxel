@@ -33,6 +33,8 @@ import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type MessageService from '@cardstack/host/services/message-service';
 import Owner from '@ember/owner';
 import { OpenFiles } from '@cardstack/host/controllers/code';
+import { buildWaiter } from '@ember/test-waiters';
+const waiter = buildWaiter('@cardstack/host/test/helpers/index:onFetch-waiter');
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
 
@@ -87,6 +89,7 @@ export interface TestContextWithSSE extends TestContext {
 interface Options {
   realmURL?: string;
   isAcceptanceTest?: true;
+  onFetch?: (req: Request) => Promise<Request>;
 }
 
 // We use a rendered component to facilitate our indexing (this emulates
@@ -109,6 +112,7 @@ export const TestRealm = {
       loader,
       owner,
       opts?.realmURL,
+      opts?.onFetch,
     );
   },
 
@@ -123,7 +127,7 @@ export const TestRealm = {
     } else {
       await makeRenderer();
     }
-    return makeRealm(adapter, loader, owner, opts?.realmURL);
+    return makeRealm(adapter, loader, owner, opts?.realmURL, opts?.onFetch);
   },
 };
 
@@ -307,11 +311,26 @@ function makeRealm(
   loader: Loader,
   owner: Owner,
   realmURL = testRealmURL,
+  onFetch?: (req: Request) => Promise<Request>,
 ) {
   let localIndexer = owner.lookup(
     'service:local-indexer',
   ) as unknown as MockLocalIndexer;
-  return new Realm(
+  let realm: Realm;
+  if (onFetch) {
+    // we need to register this before the realm is created so
+    // that it is in prime position in the url handlers list
+    loader.registerURLHandler(async (req: Request) => {
+      let token = waiter.beginAsync();
+      try {
+        req = await onFetch(req);
+      } finally {
+        waiter.endAsync(token);
+      }
+      return realm.maybeHandle(req);
+    });
+  }
+  realm = new Realm(
     realmURL,
     adapter,
     loader,
@@ -323,6 +342,7 @@ function makeRealm(
     async () =>
       `<html><body>Intentionally empty index.html (these tests will not exercise this capability)</body></html>`,
   );
+  return realm;
 }
 
 export async function saveCard(instance: Card, id: string, loader: Loader) {

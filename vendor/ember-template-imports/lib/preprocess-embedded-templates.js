@@ -16,12 +16,12 @@ function getMatchStartAndEnd(match) {
   return {
     start: (0, debug_1.expect)(
       match.index,
-      'Expected regular expression match to have an index'
+      'Expected regular expression match to have an index',
     ),
     end:
       (0, debug_1.expect)(
         match.index,
-        'Expected regular expression match to have an index'
+        'Expected regular expression match to have an index',
       ) + match[0].length,
   };
 }
@@ -29,7 +29,7 @@ function findImportedName(template, importPath, importIdentifier) {
   for (const $import of (0, parse_static_imports_1.default)(template)) {
     if ($import.moduleName === importPath) {
       const match = $import.namedImports.find(
-        ({ name }) => name === importIdentifier
+        ({ name }) => name === importIdentifier,
       );
       return (
         (match === null || match === void 0 ? void 0 : match.alias) ||
@@ -42,7 +42,7 @@ function findImportedName(template, importPath, importIdentifier) {
 function replacementFrom(template, index, oldLength, newLength, type) {
   const loc = (0, debug_1.expect)(
     (0, line_column_1.default)(template).fromIndex(index),
-    'BUG: expected to find a line/column based on index'
+    'BUG: expected to find a line/column based on index',
   );
   return {
     type,
@@ -69,7 +69,7 @@ function replaceMatch(
   endReplacement,
   template,
   getTemplateLocals,
-  includeTemplateTokens
+  includeTemplateTokens,
 ) {
   const { start: openStart, end: openEnd } = getMatchStartAndEnd(match.start);
   const { start: closeStart, end: closeEnd } = getMatchStartAndEnd(match.end);
@@ -92,14 +92,14 @@ function replaceMatch(
       openStart,
       openEnd - openStart,
       newStart.length,
-      'start'
+      'start',
     ),
     replacementFrom(
       template,
       closeStart,
       closeEnd - closeStart,
       newEnd.length,
-      'end'
+      'end',
     ),
   ];
 }
@@ -143,7 +143,7 @@ function preprocessEmbeddedTemplates(template, options) {
   } else {
     getTemplateLocals = loadGetTemplateLocals(
       options.getTemplateLocalsRequirePath,
-      options.getTemplateLocalsExportPath
+      options.getTemplateLocalsExportPath,
     );
   }
   if (importPath && importIdentifier) {
@@ -158,7 +158,7 @@ function preprocessEmbeddedTemplates(template, options) {
   const matches = (0, parse_templates_1.parseTemplates)(
     template,
     relativePath,
-    templateTag
+    templateTag,
   );
   const replacements = [];
   const s = new magic_string_1.default(template);
@@ -175,8 +175,8 @@ function preprocessEmbeddedTemplates(template, options) {
           ')',
           template,
           getTemplateLocals,
-          includeTemplateTokens
-        )
+          includeTemplateTokens,
+        ),
       );
     } else if (match.type === 'template-tag') {
       replacements.push(
@@ -187,8 +187,8 @@ function preprocessEmbeddedTemplates(template, options) {
           ')]',
           template,
           getTemplateLocals,
-          includeTemplateTokens
-        )
+          includeTemplateTokens,
+        ),
       );
     }
   }

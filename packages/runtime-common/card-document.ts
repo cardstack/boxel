@@ -104,7 +104,7 @@ export function isCardFields(fields: any): fields is CardFields {
     return false;
   }
   for (let [fieldName, fieldItem] of Object.entries(
-    fields as { [fieldName: string | symbol]: any }
+    fields as { [fieldName: string | symbol]: any },
   )) {
     if (typeof fieldName !== 'string') {
       return false;
@@ -145,7 +145,7 @@ export function isMeta(meta: any, allowPartial = false) {
 }
 
 export function isRelationship(
-  relationship: any
+  relationship: any,
 ): relationship is Relationship {
   if (typeof relationship !== 'object' || relationship == null) {
     return false;
@@ -212,7 +212,7 @@ export function isSingleCardDocument(doc: any): doc is SingleCardDocument {
 }
 
 export function isCardCollectionDocument(
-  doc: any
+  doc: any,
 ): doc is CardCollectionDocument {
   if (typeof doc !== 'object' || doc == null) {
     return false;

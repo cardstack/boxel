@@ -21,7 +21,7 @@ function isHTTPMethod(method: unknown): method is Method {
 }
 
 export function extractSupportedMimeType(
-  rawAcceptHeader: null | string | [string]
+  rawAcceptHeader: null | string | [string],
 ): SupportedMimeType | undefined {
   if (!rawAcceptHeader) {
     return undefined;
@@ -67,7 +67,7 @@ export class Router {
     mimeType: SupportedMimeType,
     method: Method,
     path: string,
-    handler: Handler
+    handler: Handler,
   ) {
     let routeFamily = this.#routeTable.get(mimeType);
     if (!routeFamily) {
@@ -106,7 +106,7 @@ export class Router {
 
   private lookupHandler(request: Request): Handler | undefined {
     let acceptMimeType = extractSupportedMimeType(
-      request.headers.get('Accept') as unknown as null | string | [string]
+      request.headers.get('Accept') as unknown as null | string | [string],
     );
     if (!acceptMimeType) {
       return;
