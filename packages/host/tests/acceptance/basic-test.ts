@@ -1,6 +1,7 @@
 import { module, test } from 'qunit';
 import {
   find,
+  findAll,
   visit,
   currentURL,
   click,
@@ -224,17 +225,7 @@ module('Acceptance | basic tests', function (hooks) {
       'expected scoped CSS to apply to card instance',
     );
 
-    let selectorForJsonDataProperty = '.view-line span span:nth-child(2)';
-
-    await waitUntil(
-      () =>
-        find(selectorForJsonDataProperty)
-          ?.computedStyleMap()
-          ?.get('color')
-          ?.toString() === 'rgb(163, 21, 21)',
-      { timeoutMessage: 'timed out waiting for syntax highlighting' },
-    );
-
+    await waitForSyntaxHighlighting('"Person"', 'rgb(4, 81, 165)');
     await percySnapshot(assert);
   });
 
@@ -259,17 +250,7 @@ module('Acceptance | basic tests', function (hooks) {
       'the monaco content is correct',
     );
 
-    let selectorForImportKeyword = '.view-line span span:nth-child(2)';
-
-    await waitUntil(
-      () =>
-        find(selectorForImportKeyword)
-          ?.computedStyleMap()
-          ?.get('color')
-          ?.toString() === 'rgb(0, 0, 255)',
-      { timeoutMessage: 'timed out waiting for syntax highlighting' },
-    );
-
+    await waitForSyntaxHighlighting('&lt;/template&gt;', 'rgb(128, 0, 0)');
     await percySnapshot(assert);
   });
 
@@ -369,3 +350,26 @@ module('Acceptance | basic tests', function (hooks) {
     );
   });
 });
+
+async function waitForSyntaxHighlighting(textContent: string, color: string) {
+  let codeTokens;
+  let finalHighlightedToken: Element | undefined;
+
+  await waitUntil(
+    () => {
+      codeTokens = findAll('.view-line span span');
+      finalHighlightedToken = codeTokens.find(
+        (t) => t.innerHTML === textContent,
+      );
+      return finalHighlightedToken;
+    },
+    { timeoutMessage: `timed out waiting for \`${textContent}\` token` },
+  );
+
+  await waitUntil(
+    () =>
+      finalHighlightedToken?.computedStyleMap()?.get('color')?.toString() ===
+      color,
+    { timeoutMessage: 'timed out waiting for syntax highlighting' },
+  );
+}
