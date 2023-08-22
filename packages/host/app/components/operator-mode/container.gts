@@ -797,7 +797,11 @@ export default class OperatorModeContainer extends Component<Signature> {
               {{svgJar 'download' width='30px' height='30px'}}
             </button>
           {{/if}}
-          <SubmodeSwitcher @submode={{this.submode}} @onSubmodeSelect={{fn (mut this.submode)}} class='submode-switcher' />
+          <SubmodeSwitcher
+            @submode={{this.submode}}
+            @onSubmodeSelect={{fn (mut this.submode)}}
+            class='submode-switcher'
+          />
         </div>
 
         {{#if this.isChatVisible}}
@@ -932,8 +936,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         position: absolute;
         top: 0;
         left: 0;
-
-        padding: var(--boxel-sp);
+        margin: var(--boxel-sp);
       }
     </style>
   </template>
