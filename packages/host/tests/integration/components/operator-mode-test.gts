@@ -2159,4 +2159,27 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-stack-card-index="1"] [data-test-boxel-header-title]')
       .includesText('Author');
   });
+
+  test(`toggles mode switcher`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    assert.dom('[data-test-submode-switcher]').exists();
+    assert.dom('[data-test-submode-switcher]').hasText('Interact');
+
+    await click('[data-test-submode-switcher] .trigger');
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    assert.dom('[data-test-submode-switcher]').hasText('Code');
+
+    await click('[data-test-submode-switcher] .trigger');
+    await click('[data-test-boxel-menu-item-text="Interact"]');
+    assert.dom('[data-test-submode-switcher]').hasText('Interact');
+  });
 });
