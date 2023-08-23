@@ -247,6 +247,7 @@ class EmbeddedMessageCard extends Component<typeof MessageCard> {
       loader,
     );
     this.attachedCard = card;
+    deferred.fulfill(card);
   });
 }
 
