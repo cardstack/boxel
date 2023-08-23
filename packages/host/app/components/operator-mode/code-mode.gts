@@ -61,7 +61,7 @@ export default class OperatorModeCodeMode extends Component<Signature> {
         display: block;
         width: 100%;
         height: 100%;
-        filter: blur(5px);
+        filter: blur(15px);
         background-size: cover;
       }
 
