@@ -274,6 +274,7 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
+            submode: 'interact',
           })!,
         )}`,
       );
@@ -330,6 +331,7 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
+            submode: 'interact',
           })!,
         )}`,
       );
@@ -356,6 +358,7 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
+            submode: 'interact',
           })!,
         )}`,
       );
@@ -382,6 +385,7 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
+            submode: 'interact',
           })!,
         )}`,
       );
@@ -452,6 +456,7 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
+            submode: 'interact',
           })!,
         )}`,
       );
@@ -489,6 +494,7 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
+            submode: 'interact',
           })!,
         )}`,
       );
@@ -522,6 +528,7 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
+            submode: 'interact',
           })!,
         )}`,
       );
@@ -788,6 +795,7 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
+            submode: 'interact',
           })!,
         )}`,
       );

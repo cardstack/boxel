@@ -35,7 +35,7 @@ type SerializedStack = SerializedItem[];
 
 export type SerializedState = {
   stacks: SerializedStack[];
-  submode: Submode;
+  submode?: Submode;
 };
 
 export default class OperatorModeStateService extends Service {
