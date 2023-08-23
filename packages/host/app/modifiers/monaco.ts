@@ -3,6 +3,7 @@ import '@cardstack/requirejs-monaco-ember-polyfill';
 import { restartableTask, timeout } from 'ember-concurrency';
 import { registerDestructor } from '@ember/destroyable';
 import type * as MonacoSDK from 'monaco-editor';
+import { isTesting } from '@embroider/macros';
 
 interface Signature {
   Args: {
@@ -43,10 +44,18 @@ export default class Monaco extends Modifier<Signature> {
         this.model.setValue(content);
       }
     } else {
-      this.editor = monacoSDK.editor.create(element, {
-        value: content,
-        language,
-      });
+      let editorOptions: MonacoSDK.editor.IStandaloneEditorConstructionOptions =
+        {
+          value: content,
+          language,
+        };
+
+      // Code rendering is inconsistently wrapped without this, producing spurious visual diffs
+      if (isTesting()) {
+        editorOptions.wordWrap = 'on';
+      }
+
+      this.editor = monacoSDK.editor.create(element, editorOptions);
 
       onSetup?.(this.editor);
 
