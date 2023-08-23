@@ -6,6 +6,7 @@ import {
   type Realm,
 } from '@cardstack/runtime-common';
 import type Koa from 'koa';
+import basicAuth from 'basic-auth';
 
 interface ProxyOptions {
   responseHeaders?: Record<string, string>;
@@ -57,6 +58,29 @@ export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
     );
     logger.debug(JSON.stringify(ctxt.req.headers));
   });
+  return next();
+}
+
+const BASIC_AUTH_USERNAME = 'cardstack';
+
+export function httpBasicAuth(ctxt: Koa.Context, next: Koa.Next) {
+  if (
+    process.env['BOXEL_HTTP_BASIC_PW'] &&
+    ctxt.header.accept?.includes('text/html')
+  ) {
+    let credentials = basicAuth(ctxt.request as any);
+    if (
+      !credentials ||
+      credentials.name !== BASIC_AUTH_USERNAME ||
+      credentials.pass !== process.env['BOXEL_HTTP_BASIC_PW']
+    ) {
+      ctxt.type = 'html';
+      ctxt.status = 401;
+      ctxt.body = 'Authorization Required';
+      ctxt.set('WWW-Authenticate', 'Basic realm="Boxel realm server"');
+      return;
+    }
+  }
   return next();
 }
 
