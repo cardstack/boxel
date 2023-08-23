@@ -60,7 +60,6 @@ export default class ChatSidebar extends Component<Args> {
     <style>
       .chat-sidebar {
         background-color: var(--boxel-light);
-        height: 100vh;
         overflow-y: auto;
       }
       .chat-sidebar__inner {
