@@ -203,39 +203,42 @@ module('Acceptance | basic tests', function (hooks) {
       .exists({ count: 1 })
       .containsText('index.json');
 
+    await click('[data-test-file="index.json"]');
+    assert.dom('[data-test-recent-file]').doesNotExist();
+
     await click('[data-test-directory="Person/"]');
     await waitFor('[data-test-file="Person/1.json"]');
 
     await click('[data-test-file="Person/1.json"]');
 
-    assert.dom('[data-test-recent-file]').containsText('Person/1.json');
+    assert
+      .dom('[data-test-recent-file]')
+      .exists({ count: 1 })
+      .containsText('index.json');
 
     await click('[data-test-file="person.gts"]');
 
     assert
       .dom('[data-test-recent-file]:first-child')
-      .containsText('person.gts');
+      .containsText('Person/1.json');
     assert
       .dom('[data-test-recent-file]:nth-child(2)')
-      .containsText('Person/1.json');
+      .containsText('index.json');
 
     await click('[data-test-recent-file]:nth-child(2)');
-
-    assert
-      .dom('[data-test-file="Person/1.json"]')
-      .exists('Person/1.json file entry is rendered');
+    assert.dom('[data-test-index-card]').exists('index card is rendered');
 
     assert
       .dom('[data-test-recent-file]:first-child')
-      .containsText('Person/1.json');
+      .containsText('person.gts');
     assert
       .dom('[data-test-recent-file]:nth-child(2)')
-      .containsText('person.gts');
+      .containsText('Person/1.json');
 
     assert.deepEqual(JSON.parse(localStorage.getItem('recent-files') || '[]'), [
-      'Person/1.json',
-      'person.gts',
       'index.json',
+      'person.gts',
+      'Person/1.json',
     ]);
   });
 

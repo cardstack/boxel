@@ -6,6 +6,7 @@ import { inject as controller } from '@ember/controller';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 interface Args {
   Args: {};
@@ -23,13 +24,15 @@ export default class RecentFiles extends Component<Args> {
   <template>
     <ul data-test-recent-files>
       {{#each this.codeService.recentFiles as |file|}}
-        <li
-          data-test-recent-file={{file}}
-          role='button'
-          {{on 'click' (fn this.openFile file)}}
-        >
-          {{file}}
-        </li>
+        {{#unless (eq file this.code.path)}}
+          <li
+            data-test-recent-file={{file}}
+            role='button'
+            {{on 'click' (fn this.openFile file)}}
+          >
+            {{file}}
+          </li>
+        {{/unless}}
       {{/each}}
     </ul>
   </template>
