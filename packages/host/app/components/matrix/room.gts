@@ -12,7 +12,8 @@ import {
   FieldContainer,
   Button,
 } from '@cardstack/boxel-ui';
-import { getRoomCard } from '@cardstack/host/resources/room-card';
+import { getRoomCard } from '../../resources/room-card';
+import { getAttachedCards } from '../../resources/attached-cards';
 import { TrackedMap } from 'tracked-built-ins';
 import {
   chooseCard,
@@ -22,7 +23,6 @@ import {
 import { registerDestructor } from '@ember/destroyable';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type Card } from 'https://cardstack.com/base/card-api';
-import { type RoomCard } from 'https://cardstack.com/base/room';
 import type CardService from '@cardstack/host/services/card-service';
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import config from '@cardstack/host/config/environment';
@@ -36,7 +36,7 @@ interface RoomArgs {
 }
 export default class Room extends Component<RoomArgs> {
   <template>
-    <div>Number of cards: {{this.currentCards.size}}</div>
+    <div>Number of cards: {{this.attachedCards.instances.length}}</div>
     <div class='room-members'>
       <div data-test-room-members class='members'><b>Members:</b>
         {{this.memberNames}}
@@ -242,6 +242,11 @@ export default class Room extends Component<RoomArgs> {
   @tracked private membersToInvite: string[] = [];
   @tracked private allowedToSetObjective: boolean | undefined;
   @tracked private subscribedCard: Card | undefined;
+  @tracked private attachedCards = getAttachedCards(
+    this,
+    () => this.roomCard,
+    () => this.attachedCardIds,
+  );
   private messagesToSend: TrackedMap<string, string | undefined> =
     new TrackedMap();
   private cardsToSend: TrackedMap<string, Card | undefined> = new TrackedMap();
@@ -306,37 +311,44 @@ export default class Room extends Component<RoomArgs> {
   };
 
   @cached
-  private get cards() {
+  private get attachedCardIds() {
     if (!this.roomCard) {
       return [];
     }
     return this.roomCard.messages
-      .filter((m) => m.attachedCard)
-      .map((m) => m.attachedCard);
+      .filter((m) => m.attachedCardId)
+      .map((m) => m.attachedCardId);
   }
 
-  @cached
-  private get currentCards() {
-    if (!this.roomCard) {
-      return new Map();
-    }
-    let getVersion = (
-      Reflect.getPrototypeOf(this.roomCard)!.constructor as typeof RoomCard
-    ).getVersion;
-    return this.cards.reduce((accumulator, card) => {
-      let latestInstance = accumulator.get(card.id);
-      if (!latestInstance) {
-        accumulator.set(card.id, card);
-      } else {
-        let latestInstanceVer = getVersion(latestInstance)!;
-        let cardVer = getVersion(card)!;
-        if (cardVer > latestInstanceVer) {
-          accumulator.set(card.id, card);
-        }
-      }
-      return accumulator;
-    }, new Map<string, Card>());
-  }
+  // private loadAttachedCards = restartableTask(async () => {
+  //   if (!this.roomCard) {
+  //     return new Map();
+  //   }
+  //   await this.loadAttachedCards.perform();
+  //   let cardIds = new Set(
+  //     this.roomCard.messages
+  //       .filter((m) => m.attachedCardId)
+  //       .map((m) => m.attachedCardId),
+  //   );
+  //   let getAttachedCard = (
+  //     Reflect.getPrototypeOf(this.roomCard)!.constructor as typeof RoomCard
+  //   ).getAttachedCard;
+  //   let attachedCards = [...cardIds].map((id) => getAttachedCard(id));
+  //   this.attachedCards = attachedCards;
+  // return messageWithAttachments.reduce((accumulator, card) => {
+  //   let latestInstance = accumulator.get(card.id);
+  //   if (!latestInstance) {
+  //     accumulator.set(card.id, card);
+  //   } else {
+  //     let latestInstanceVer = getVersion(latestInstance)!;
+  //     let cardVer = getVersion(card)!;
+  //     if (cardVer > latestInstanceVer) {
+  //       accumulator.set(card.id, card);
+  //     }
+  //   }
+  //   return accumulator;
+  // }, new Map<string, string>());
+  // });
 
   private get objectiveComponent() {
     if (this.objective) {

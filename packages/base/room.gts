@@ -22,15 +22,13 @@ import { tracked } from '@glimmer/tracking';
 import {
   Loader,
   SupportedMimeType,
+  Deferred,
   type LooseSingleCardDocument,
   type SingleCardDocument,
   type CardRef,
 } from '@cardstack/runtime-common';
 
-// this is a speculative feature. remove if it doens't make sense
-const cardVersions = new Map<Card, string | undefined>(); // the value is the transactionId which is a stand in for the card version
-
-const attachedCards = new Map<string, Card>(); // the key is the transactionId which is a stand-in for the card version
+const attachedCards = new Map<string, Promise<Card>>();
 
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember({
@@ -217,19 +215,17 @@ class EmbeddedMessageCard extends Component<typeof MessageCard> {
     );
   }
 
-  private loadAttachedCard = restartableTask(async () => {
+  loadAttachedCard = restartableTask(async () => {
     if (!this.args.model.attachedCardId) {
       return;
     }
-    // the transactinoId might be undefined, in that case we fall
-    // back to the card ID and no longer recognize versions for the card
-    let cached = attachedCards.get(
-      this.args.model.transactionId ?? this.args.model.attachedCardId,
-    );
+    let cached = attachedCards.get(this.args.model.attachedCardId);
     if (cached) {
-      this.attachedCard = cached;
+      this.attachedCard = await cached;
       return;
     }
+    let deferred = new Deferred<Card>();
+    attachedCards.set(this.args.model.attachedCardId, deferred.promise);
     let response = await fetch(this.args.model.attachedCardId, {
       headers: { Accept: SupportedMimeType.CardJson },
     });
@@ -244,16 +240,13 @@ class EmbeddedMessageCard extends Component<typeof MessageCard> {
     if (!loader) {
       throw new Error('Could not obtain a loader');
     }
-    this.attachedCard = await createFromSerialized<typeof Card>(
+    let card = await createFromSerialized<typeof Card>(
       doc.data,
       doc,
       new URL(doc.data.id),
       loader,
     );
-    cardVersions.set(
-      this.attachedCard,
-      this.args.model.transactionId ?? this.args.model.attachedCardId,
-    );
+    this.attachedCard = card;
   });
 }
 
@@ -285,10 +278,13 @@ const roomMemberCache = new WeakMap<RoomCard, Map<string, RoomMemberCard>>();
 const roomStateCache = new WeakMap<RoomCard, RoomState>();
 
 export class RoomCard extends Card {
-  // This can be used  to get the version of `cardInstance` like:
-  //   Reflect.getProtypeOf(roomCardInstance).constructor.getVersion(cardInstance);
-  static getVersion(card: Card) {
-    return cardVersions.get(card);
+  // This can be used  to get the attached `cardInstance` like:
+  //   Reflect.getProtypeOf(roomCardInstance).constructor.getAttachedCard(cardInstance);
+  static getAttachedCard(id: string) {
+    return attachedCards.get(id);
+  }
+  static setAttachedCard(id: string, cardPromise: Promise<Card>) {
+    attachedCards.set(id, cardPromise);
   }
 
   // the only writeable field for this card should be the "events" field.
