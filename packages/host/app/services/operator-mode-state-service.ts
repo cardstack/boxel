@@ -13,6 +13,7 @@ import { getOwner } from '@ember/application';
 import { scheduleOnce } from '@ember/runloop';
 import stringify from 'safe-stable-stringify';
 import type { Card } from 'https://cardstack.com/base/card-api';
+import { Submode } from '@cardstack/host/components/submode-switcher';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
@@ -32,11 +33,15 @@ interface ContainedCardItem {
 type SerializedItem = CardItem | ContainedCardItem;
 type SerializedStack = SerializedItem[];
 
-export type SerializedState = { stacks: SerializedStack[] };
+export type SerializedState = {
+  stacks: SerializedStack[];
+  submode: Submode;
+};
 
 export default class OperatorModeStateService extends Service {
   @tracked state: OperatorModeState = new TrackedObject({
     stacks: new TrackedArray([]),
+    submode: Submode.Interact,
   });
   @tracked recentCards = new TrackedArray<Card>([]);
 
@@ -152,6 +157,11 @@ export default class OperatorModeStateService extends Service {
     return this.schedulePersist();
   }
 
+  updateSubmode(submode: Submode) {
+    this.state.submode = submode;
+    this.schedulePersist();
+  }
+
   clearStacks() {
     this.state.stacks.splice(0);
     this.schedulePersist();
@@ -182,7 +192,7 @@ export default class OperatorModeStateService extends Service {
   // clicking on "Crate New" in linked card editor. Here we want to draw a boundary
   // between navigatable states in the query parameter
   rawStateWithSavedCardsOnly() {
-    let state: SerializedState = { stacks: [] };
+    let state: SerializedState = { stacks: [], submode: this.state.submode };
 
     for (let stack of this.state.stacks) {
       let serializedStack: SerializedStack = [];
@@ -227,6 +237,7 @@ export default class OperatorModeStateService extends Service {
   async deserialize(rawState: SerializedState): Promise<OperatorModeState> {
     let newState: OperatorModeState = new TrackedObject({
       stacks: new TrackedArray([]),
+      submode: rawState.submode ?? Submode.Interact,
     });
 
     let stackIndex = 0;
