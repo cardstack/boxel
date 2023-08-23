@@ -5,11 +5,13 @@ import { CardContainer } from '@cardstack/boxel-ui';
 import { trackedFunction } from 'ember-resources/util/function';
 import type CardService from '../../../services/card-service';
 import { service } from '@ember/service';
+import cn from '@cardstack/boxel-ui/helpers/cn';
 
 interface Signature {
   Element: HTMLElement;
   Args: {
     card: Card;
+    compact?: boolean;
   };
 }
 
@@ -17,7 +19,7 @@ export default class SearchResult extends Component<Signature> {
   <template>
     <CardContainer
       @displayBoundaries={{true}}
-      class='search-result'
+      class={{cn 'search-result' is-compact=@compact}}
       data-test-search-result={{@card.id}}
       ...attributes
     >
@@ -31,11 +33,20 @@ export default class SearchResult extends Component<Signature> {
         width: 250px;
         cursor: pointer;
       }
+      .search-result.is-compact {
+        width: 199px;
+        height: 50px;
+        padding: var(--boxel-sp-xxs);
+        overflow: hidden;
+      }
       .search-result__title {
         margin-bottom: var(--boxel-sp-xs);
         font: 500 var(--boxel-font-sm);
         overflow: hidden;
         text-wrap: nowrap;
+      }
+      .is-compact .search-result__title {
+        margin-bottom: 0;
       }
       .search-result__display-name {
         margin: 0;
@@ -46,6 +57,13 @@ export default class SearchResult extends Component<Signature> {
         margin: 0;
         color: var(--boxel-teal);
         font-size: var(--boxel-font-size-xs);
+      }
+      .is-compact .search-result__display-name,
+      .is-compact .search-result__realm-name {
+        display: inline-block;
+      }
+      .is-compact .search-result__display-name:after {
+        content: ', ';
       }
     </style>
   </template>

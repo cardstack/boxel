@@ -1,5 +1,9 @@
 <div class='card-isolated-component'>
-  <this.getIsolatedComponent />
+  {{#if this.model}}
+    <Preview @card={{this.model}} @format="isolated"/>
+  {{else}}
+    <div>ERROR: cannot load card</div>
+  {{/if}}
 </div>
 
 <Editor::CodeLink />

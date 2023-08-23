@@ -84,10 +84,12 @@ export default class BoxelInputValidationState extends Component<Signature> {
         --input-height: 2.5rem;
         --input-icon-size: var(--boxel-icon-sm);
         --input-icon-space: var(--boxel-sp-xs);
+        --input-font-size: inherit;
 
         position: relative;
         width: 100%;
         font-family: var(--boxel-font-family);
+        font-size: var(--input-font-size);
         line-height: calc(27 / 20);
         letter-spacing: var(--boxel-lsp-xs);
       }

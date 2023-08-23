@@ -1,6 +1,7 @@
 import { module, test } from 'qunit';
 import {
   find,
+  findAll,
   visit,
   currentURL,
   click,
@@ -19,6 +20,7 @@ import {
 } from '../helpers';
 import { Realm } from '@cardstack/runtime-common/realm';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import percySnapshot from '@percy/ember';
 
 function getMonacoContent(): string {
   return (window as any).monaco.editor.getModels()[0].getValue();
@@ -277,6 +279,9 @@ module('Acceptance | basic tests', function (hooks) {
       },
       'expected scoped CSS to apply to card instance',
     );
+
+    await waitForSyntaxHighlighting('"Person"', 'rgb(4, 81, 165)');
+    await percySnapshot(assert);
   });
 
   test('Can view a card schema', async function (assert) {
@@ -299,6 +304,10 @@ module('Acceptance | basic tests', function (hooks) {
       personCardSource,
       'the monaco content is correct',
     );
+
+    // Syntax highlighting is breadth-first, this is the latest and deepest token
+    await waitForSyntaxHighlighting("''", 'rgb(163, 21, 21)');
+    await percySnapshot(assert);
   });
 
   test('glimmer-scoped-css smoke test', async function (assert) {
@@ -397,3 +406,26 @@ module('Acceptance | basic tests', function (hooks) {
     );
   });
 });
+
+async function waitForSyntaxHighlighting(textContent: string, color: string) {
+  let codeTokens;
+  let finalHighlightedToken: Element | undefined;
+
+  await waitUntil(
+    () => {
+      codeTokens = findAll('.view-line span span');
+      finalHighlightedToken = codeTokens.find(
+        (t) => t.innerHTML === textContent,
+      );
+      return finalHighlightedToken;
+    },
+    { timeoutMessage: `timed out waiting for \`${textContent}\` token` },
+  );
+
+  await waitUntil(
+    () =>
+      finalHighlightedToken?.computedStyleMap()?.get('color')?.toString() ===
+      color,
+    { timeoutMessage: 'timed out waiting for syntax highlighting' },
+  );
+}

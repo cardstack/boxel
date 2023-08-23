@@ -40,7 +40,7 @@ export default class OperatorModeStack extends Component<Signature> {
 
   get backgroundImageStyle() {
     if (!this.args.backgroundImageURL) {
-      return '';
+      return false;
     }
     return htmlSafe(`background-image: url(${this.args.backgroundImageURL});`);
   }
@@ -96,14 +96,16 @@ export default class OperatorModeStack extends Component<Signature> {
 
       .inner {
         height: calc(
-          100% - var(--search-sheet-closed-height) + var(--boxel-sp)
+          100% - var(--boxel-sp-xxl) - var(--search-sheet-closed-height) +
+            var(--boxel-sp)
         );
         position: relative;
         display: flex;
         justify-content: center;
         max-width: 50rem;
-        padding-top: var(--boxel-sp-xxl);
-        margin: 0 auto;
+        margin-top: var(--boxel-sp-xxl);
+        margin-left: auto;
+        margin-right: auto;
         border-bottom-left-radius: var(--boxel-border-radius);
         border-bottom-right-radius: var(--boxel-border-radius);
       }
