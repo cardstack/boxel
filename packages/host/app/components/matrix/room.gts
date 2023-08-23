@@ -242,7 +242,7 @@ export default class Room extends Component<RoomArgs> {
   @tracked private membersToInvite: string[] = [];
   @tracked private allowedToSetObjective: boolean | undefined;
   @tracked private subscribedCard: Card | undefined;
-  @tracked private attachedCards = getAttachedCards(
+  private attachedCards = getAttachedCards(
     this,
     () => this.roomCard,
     () => this.attachedCardIds,
