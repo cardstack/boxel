@@ -98,8 +98,8 @@ export default class SubmodeSwitcher extends Component<Signature> {
   </template>
 
   submodeIcons = {
-    [Submode.INTERACT]: 'eye',
-    [Submode.CODE]: 'icon-code',
+    [Submode.Interact]: 'eye',
+    [Submode.Code]: 'icon-code',
   };
   @tracked isExpanded = false;
 
