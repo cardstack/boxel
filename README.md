@@ -72,7 +72,7 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 
 #### Using `start:development`
 
-You can also use `start:development` if you want the functionality of `start:all`, but without running the test realms. `start:development` will enable you to open http://localhost:4201 and allow to select between the cards in the /base and /demo realm.
+You can also use `start:development` if you want the functionality of `start:all`, but without running the test realms. `start:development` will enable you to open http://localhost:4201 and allow to select between the cards in the /base and /drafts realm.
 
 ### Card Pre-rendering
 
