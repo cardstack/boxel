@@ -21,7 +21,11 @@ import {
   Tooltip,
 } from '@cardstack/boxel-ui';
 import get from 'lodash/get';
-import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
+import {
+  type Actions,
+  type RealmInfo,
+  cardTypeDisplayName,
+} from '@cardstack/runtime-common';
 import { task, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
@@ -269,7 +273,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private doWhenCardChanges = restartableTask(async () => {
     await timeout(autoSaveDelayMs);
     this.isSaving = true;
-    await this.args.save(this.args.item, false);
+    this.args.save(this.args.item, false);
     this.isSaving = false;
     this.lastSaved = Date.now();
     this.calculateLastSavedMsg();
@@ -333,12 +337,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
           <:icon>
             {{#if this.isContainedItem}}
               {{svgJar 'icon-turn-down-right' width='22px' height='18px'}}
-            {{else if this.headerIcon}}
+            {{else if this.headerIcon.URL}}
               <img
                 class='header-icon'
                 src={{this.headerIcon.URL}}
                 data-test-boxel-header-icon={{this.headerIcon.URL}}
-                alt='Header icon'
+                alt=''
+                role='presentation'
                 {{on 'mouseenter' this.headerIcon.onMouseEnter}}
                 {{on 'mouseleave' this.headerIcon.onMouseLeave}}
               />
