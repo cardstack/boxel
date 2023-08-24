@@ -6,7 +6,7 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import { Loader } from '@cardstack/runtime-common/loader';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import CardPrerender from '@cardstack/host/components/card-prerender';
-import { Card } from 'https://cardstack.com/base/card-api';
+import { CardDef } from 'https://cardstack.com/base/card-api';
 import { renderComponent } from '../../helpers/render-component';
 import {
   testRealmURL,
@@ -54,7 +54,7 @@ module('Integration | operator-mode', function (hooks) {
   );
   setupServerSentEvents(hooks);
   let noop = () => {};
-  async function loadCard(url: string): Promise<Card> {
+  async function loadCard(url: string): Promise<CardDef> {
     let { createFromSerialized, recompute } = cardApi;
     let result = await realm.searchIndex.card(new URL(url));
     if (!result || result.type === 'error') {
@@ -64,7 +64,7 @@ module('Integration | operator-mode', function (hooks) {
         }`,
       );
     }
-    let card = await createFromSerialized<typeof Card>(
+    let card = await createFromSerialized<typeof CardDef>(
       result.doc.data,
       result.doc,
       new URL(url),
@@ -115,10 +115,10 @@ module('Integration | operator-mode', function (hooks) {
 
     adapter = new TestRealmAdapter({
       'pet.gts': `
-        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
-        export class Pet extends Card {
+        export class Pet extends CardDef {
           static displayName = 'Pet';
           @field name = contains(StringCard);
           @field title = contains(StringCard, {
@@ -136,9 +136,9 @@ module('Integration | operator-mode', function (hooks) {
         }
       `,
       'shipping-info.gts': `
-        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
-        export class ShippingInfo extends Card {
+        export class ShippingInfo extends FieldDef {
           static displayName = 'Shipping Info';
           @field preferredCarrier = contains(StringCard);
           @field remarks = contains(StringCard);
@@ -156,12 +156,12 @@ module('Integration | operator-mode', function (hooks) {
         }
       `,
       'address.gts': `
-        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { ShippingInfo } from "./shipping-info";
         import { FieldContainer } from '@cardstack/boxel-ui';
 
-        export class Address extends Card {
+        export class Address extends CardDef {
           static displayName = 'Address';
           @field city = contains(StringCard);
           @field country = contains(StringCard);
@@ -194,12 +194,12 @@ module('Integration | operator-mode', function (hooks) {
         }
       `,
       'person.gts': `
-        import { contains, linksTo, field, Component, Card, linksToMany } from "https://cardstack.com/base/card-api";
+        import { contains, linksTo, field, Component, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { Pet } from "./pet";
         import { Address } from "./address";
 
-        export class Person extends Card {
+        export class Person extends CardDef {
           static displayName = 'Person';
           @field firstName = contains(StringCard);
           @field pet = linksTo(Pet);
@@ -348,7 +348,7 @@ module('Integration | operator-mode', function (hooks) {
         import StringCard from 'https://cardstack.com/base/string';
         import TextAreaCard from 'https://cardstack.com/base/text-area';
         import {
-          Card,
+          CardDef,
           field,
           contains,
           linksTo,
@@ -356,7 +356,7 @@ module('Integration | operator-mode', function (hooks) {
         } from 'https://cardstack.com/base/card-api';
         import { Author } from './author';
 
-        export class BlogPost extends Card {
+        export class BlogPost extends CardDef {
           static displayName = 'Blog Post';
           @field title = contains(StringCard);
           @field slug = contains(StringCard);
@@ -380,12 +380,12 @@ module('Integration | operator-mode', function (hooks) {
         import StringCard from 'https://cardstack.com/base/string';
         import {
           Component,
-          Card,
+          CardDef,
           field,
           contains,
         } from 'https://cardstack.com/base/card-api';
 
-        export class Author extends Card {
+        export class Author extends CardDef {
           static displayName = 'Author';
           @field firstName = contains(StringCard);
           @field lastName = contains(StringCard);
@@ -406,14 +406,14 @@ module('Integration | operator-mode', function (hooks) {
       'publishing-packet.gts': `
         import TextAreaCard from 'https://cardstack.com/base/text-area';
         import {
-          Card,
+          CardDef,
           field,
           contains,
           linksTo,
         } from 'https://cardstack.com/base/card-api';
         import { BlogPost } from './blog-post';
 
-        export class PublishingPacket extends Card {
+        export class PublishingPacket extends CardDef {
           static displayName = 'Publishing Packet';
           @field blogPost = linksTo(BlogPost);
           @field socialBlurb = contains(TextAreaCard);
@@ -457,10 +457,10 @@ module('Integration | operator-mode', function (hooks) {
         },
       },
       'pet-room.gts': `
-        import { contains, field, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
-        export class PetRoom extends Card {
+        export class PetRoom extends CardDef {
           static displayName = 'Pet Room';
           @field name = contains(StringCard);
           @field title = contains(StringCard, {
@@ -629,7 +629,6 @@ module('Integration | operator-mode', function (hooks) {
         stacks: [
           [
             {
-              type: 'card',
               id: cardURL,
               format: 'isolated',
             },
@@ -689,38 +688,6 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-person="EditedName"]');
     assert.dom('[data-test-person]').hasText('EditedName');
     assert.dom('[data-test-first-letter-of-the-name]').hasText('E');
-  });
-
-  test<TestContextWithSave>('it auto saves changes made to nested contains card', async function (assert) {
-    assert.expect(2);
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-
-    await waitFor('[data-test-person]');
-    await click(
-      '[data-test-shippinginfo-field] [data-test-field-component-card]',
-    );
-    await waitFor('[data-test-stack-card-index="2"]');
-    await click(`[data-test-stack-card-index="2"] [data-test-edit-button]`);
-
-    this.onSave((json) => {
-      assert.strictEqual(
-        json.data.attributes?.address?.shippingInfo?.preferredCarrier,
-        'FedEx',
-      );
-    });
-
-    await fillIn(`[data-test-field="preferredCarrier"] input`, `FedEx`);
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-    await waitFor('[data-test-preferredcarrier]');
-    assert.dom('[data-test-preferredcarrier="FedEx"]').exists();
   });
 
   test('displays add card button if user closes the only card in the stack and opens a card from card chooser', async function (assert) {
@@ -963,145 +930,6 @@ module('Integration | operator-mode', function (hooks) {
       .containsText(
         'Everyone knows that Alice ran the show in the Brady household.',
       );
-  });
-
-  test('can open a nested contained card field in the stack', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-
-    await waitFor('[data-test-person]');
-    await click(
-      '[data-test-shippinginfo-field] [data-test-field-component-card]',
-    );
-    await waitFor('[data-test-stack-card-index="2"]');
-
-    assert
-      .dom(
-        `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Person/fadhlan/address"]`,
-      )
-      .exists('Address contained card stack item exists');
-    assert
-      .dom(
-        `[data-test-stack-card-index="2"][data-test-stack-card="${testRealmURL}Person/fadhlan/address/shippingInfo"]`,
-      )
-      .exists('Shipping Info contained card stack item exists');
-    assert
-      .dom(
-        `[data-test-stack-card-index="2"][data-test-stack-card="${testRealmURL}Person/fadhlan/address/shippingInfo"]`,
-      )
-      .containsText(
-        `Don't let bob deliver the package--he's always bringing it to the wrong address`,
-      );
-  });
-
-  test('contained card action headers', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-
-    await waitFor('[data-test-person]');
-
-    assert
-      .dom('[data-test-embedded-card-edit-button]')
-      .doesNotExist(
-        "Contained card header has no 'edit' button when parent card is not in edit mode",
-      );
-
-    await click('[data-test-edit-button]');
-
-    await click(
-      '[data-test-overlay-card-display-name="Address"] [data-test-embedded-card-edit-button]',
-    );
-
-    assert
-      .dom(`[data-test-stack-card-index="1"] .card.edit`)
-      .exists('Address card opened in edit mode');
-
-    await click('[data-test-stack-card-index="1"] [data-test-close-button]');
-    await click(
-      '[data-test-overlay-card-display-name="Address"] [data-test-embedded-card-options-button]',
-    );
-    await click('[data-test-boxel-menu-item-text="View card"]');
-
-    assert
-      .dom(`[data-test-stack-card-index="1"]`)
-      .exists(
-        'Address card opened in view mode after clicking on View Card in options menu',
-      );
-  });
-
-  test<TestContextWithSave>('can edit a nested contained card field', async function (assert) {
-    assert.expect(6);
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-
-    await waitFor('[data-test-person]');
-    await click(
-      '[data-test-shippinginfo-field] [data-test-field-component-card]',
-    );
-    await waitFor('[data-test-stack-card-index="2"]');
-    await click(`[data-test-stack-card-index="2"] [data-test-edit-button]`);
-
-    // the entire chain of contained fields and the parent card should be put into edit mode
-    assert
-      .dom(
-        `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}Person/fadhlan"] > .card.edit`,
-      )
-      .exists('Person card is in edit mode');
-    assert
-      .dom(
-        `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}Person/fadhlan/address"] > .card.edit`,
-      )
-      .exists('Address contained card header in edit mode');
-    assert
-      .dom(
-        `[data-test-stack-card-index="2"][data-test-stack-card="${testRealmURL}Person/fadhlan/address/shippingInfo"] > .card.edit`,
-      )
-      .exists('Shipping Info contained card header in edit mode');
-
-    await fillIn(`[data-test-field="preferredCarrier"] input`, `FedEx`);
-    this.onSave((json) => {
-      assert.strictEqual(
-        json.data.attributes?.address.shippingInfo.preferredCarrier,
-        'FedEx',
-      );
-    });
-    await click(' [data-test-stack-card-index="2"] [data-test-edit-button]');
-
-    // all the nested contains fields are popped from the stack
-    await waitUntil(
-      () =>
-        !document.querySelector('[data-test-stack-card-index="1"]') &&
-        !document.querySelector('[data-test-stack-card-index="2"]'),
-    );
-    assert
-      .dom('.operator-mode [data-test-preferredCarrier="FedEx"]')
-      .exists('changed contained card reflected in parent card');
-    assert
-      .dom(
-        `[data-test-stack-card-index="0"][data-test-stack-card="${testRealmURL}Person/fadhlan"] > .card.edit`,
-      )
-      .doesNotExist('Person card is not in edit mode');
   });
 
   test('can choose a card for a linksTo field that has an existing value', async function (assert) {
@@ -2081,53 +1909,9 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-more-options-button]');
     await click('[data-test-boxel-menu-item-text="Copy Card URL"]');
     assert.dom('[data-test-boxel-menu-item]').doesNotExist();
-
-    await click(
-      '[data-test-addresses] > [data-test-boxel-card-container] > [data-test-field-component-card]',
-    );
-
-    await waitFor(
-      `[data-test-stack-card='${testRealmURL}Person/burcu/address']`,
-    );
-    await click(
-      `[data-test-stack-card='${testRealmURL}Person/burcu/address'] [data-test-more-options-button]`,
-    );
-    assert
-      .dom('[data-test-boxel-menu-item-text="Copy Card URL"]')
-      .hasAttribute('disabled');
-
-    await click(`[data-test-boxel-menu-item]`);
-    assert
-      .dom('[data-test-boxel-menu-item]')
-      .exists('can not copy url of a contained card');
   });
 
-  test(`composite "contains one" field has an overlay header and click on the contains card will open it on the stack`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-
-    assert
-      .dom(
-        '[data-test-overlay-card-display-name="Address"] [data-test-overlay-header]',
-      )
-      .includesText('Address');
-
-    await click('[data-test-address]');
-
-    assert.dom('[data-test-stack-card-index]').exists({ count: 2 });
-    assert
-      .dom('[data-test-stack-card-index="1"] [data-test-boxel-header-title]')
-      .includesText('Address');
-  });
-
-  test(`"links to" field has an overlay header and click on the contains card will open it on the stack`, async function (assert) {
+  test(`"links to" field has an overlay header and click on the embedded card will open it on the stack`, async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {

@@ -5,11 +5,11 @@ import {
   contains,
   field,
   Component,
-  Card,
+  CardDef,
   realmInfo,
   realmURL,
   relativeTo,
-  type CardBase,
+  type BaseDef,
 } from './card-api';
 import { AddButton, Tooltip } from '@cardstack/boxel-ui';
 import {
@@ -23,7 +23,7 @@ import {
 import { registerDestructor } from '@ember/destroyable';
 import { tracked } from '@glimmer/tracking';
 import { type CatalogEntry } from './catalog-entry';
-import StringCard from './string';
+import StringField from './string';
 
 class Isolated extends Component<typeof CardsGrid> {
   <template>
@@ -162,11 +162,11 @@ class Isolated extends Component<typeof CardsGrid> {
 
   @tracked
   private declare request: {
-    instances: Card[];
+    instances: CardDef[];
     isLoading: boolean;
     ready: Promise<void>;
   };
-  @tracked staleInstances: Card[] = [];
+  @tracked staleInstances: CardDef[] = [];
   private subscription: { url: string; unsubscribe: () => void } | undefined;
 
   constructor(owner: unknown, args: any) {
@@ -187,7 +187,7 @@ class Isolated extends Component<typeof CardsGrid> {
         if (data.startsWith('index:')) {
           if (this.args.context?.actions) {
             this.args.context?.actions?.doWithStableScroll(
-              this.args.model as Card,
+              this.args.model as CardDef,
               async () => {
                 this.refresh();
                 await this.request.ready;
@@ -238,7 +238,7 @@ class Isolated extends Component<typeof CardsGrid> {
           {
             on: {
               module: `${baseRealm.url}card-api`,
-              name: 'Card',
+              name: 'CardDef',
             },
             by: 'title',
           },
@@ -277,21 +277,24 @@ class Isolated extends Component<typeof CardsGrid> {
   });
 }
 
-export class CardsGrid extends Card {
+export class CardsGrid extends CardDef {
   static displayName = 'Cards Grid';
   static isolated = Isolated;
-  @field realmName = contains(StringCard, {
+  @field realmName = contains(StringField, {
     computeVia: function (this: CardsGrid) {
       return this[realmInfo]?.name;
     },
   });
-  @field title = contains(StringCard, {
+  @field title = contains(StringField, {
     computeVia: function (this: CardsGrid) {
       return this.realmName;
     },
   });
 
-  static getDisplayName(instance: CardBase) {
-    return instance[realmInfo]?.name ?? this.displayName;
+  static getDisplayName(instance: BaseDef) {
+    if (instance instanceof CardDef) {
+      return instance[realmInfo]?.name ?? this.displayName;
+    }
+    return this.displayName;
   }
 }

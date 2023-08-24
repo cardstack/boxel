@@ -21,9 +21,9 @@ import { CardError, type SerializedError } from './error';
 import { URLMap } from './url-map';
 import flatMap from 'lodash/flatMap';
 import { type Ignore } from 'ignore';
-import type { CardBase, Field } from 'https://cardstack.com/base/card-api';
+import type { BaseDef, Field } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { type CardRef, getField, identifyCard, loadCard } from './card-ref';
+import { type CodeRef, getField, identifyCard, loadCard } from './code-ref';
 import {
   isSingleCardDocument,
   type SingleCardDocument,
@@ -264,7 +264,7 @@ export class SearchIndex {
   async search(query: Query, opts?: Options): Promise<CardCollectionDocument> {
     let matcher = await this.buildMatcher(query.filter, {
       module: `${baseRealm.url}card-api`,
-      name: 'Card',
+      name: 'CardDef',
     });
 
     let doc: CardCollectionDocument = {
@@ -352,16 +352,16 @@ export class SearchIndex {
     return this.loader.import<typeof CardAPI>(`${baseRealm.url}card-api`);
   }
 
-  private cardHasType(entry: SearchEntry, ref: CardRef): boolean {
+  private cardHasType(entry: SearchEntry, ref: CodeRef): boolean {
     return Boolean(
       entry.types?.find((t) => t === internalKeyFor(ref, undefined)), // assumes ref refers to absolute module URL
     );
   }
 
-  private async loadField(ref: CardRef, fieldPath: string): Promise<Field> {
-    let card: typeof CardBase | undefined;
+  private async loadField(ref: CodeRef, fieldPath: string): Promise<Field> {
+    let composite: typeof BaseDef | undefined;
     try {
-      card = await loadCard(ref, { loader: this.loader });
+      composite = await loadCard(ref, { loader: this.loader });
     } catch (err: any) {
       if (!('type' in ref)) {
         throw new Error(
@@ -384,11 +384,11 @@ export class SearchIndex {
     while (segments.length) {
       let fieldName = segments.shift()!;
       let prevField = field;
-      field = getField(card, fieldName);
+      field = getField(composite, fieldName);
       if (!field) {
         throw new Error(
           `Your filter refers to nonexistent field "${fieldName}" on type ${JSON.stringify(
-            identifyCard(prevField ? prevField.card : card),
+            identifyCard(prevField ? prevField.card : composite),
           )}`,
         );
       }
@@ -456,7 +456,7 @@ export class SearchIndex {
   // (`false`)
   private async buildMatcher(
     filter: Filter | undefined,
-    onRef: CardRef,
+    onRef: CodeRef,
   ): Promise<(entry: SearchEntry) => boolean | null> {
     if (!filter) {
       return (_entry) => true;
@@ -508,7 +508,7 @@ export class SearchIndex {
 
   private async buildRangeMatchers(
     range: RangeFilter['range'],
-    ref: CardRef,
+    ref: CodeRef,
   ): Promise<(entry: SearchEntry) => boolean | null> {
     // TODO when we are ready to execute queries within computeds, we'll need to
     // use the loader instance from current-run and not the global loader, as
@@ -521,7 +521,7 @@ export class SearchIndex {
     for (let [name, value] of Object.entries(range)) {
       // Load the stack of fields we're accessing
       let fields: Field[] = [];
-      let nextRef: CardRef | undefined = ref;
+      let nextRef: CodeRef | undefined = ref;
       let segments = name.split('.');
       while (segments.length > 0) {
         let fieldName = segments.shift()!;
@@ -585,7 +585,7 @@ export class SearchIndex {
 
   private async buildEqOrContainsMatchers(
     filter: EqFilter | ContainsFilter,
-    ref: CardRef,
+    ref: CodeRef,
   ): Promise<(entry: SearchEntry) => boolean | null> {
     let filterType: 'eq' | 'contains';
     let filterValue: EqFilter['eq'] | ContainsFilter['contains'];
@@ -609,7 +609,7 @@ export class SearchIndex {
     for (let [name, value] of Object.entries(filterValue)) {
       // Load the stack of fields we're accessing
       let fields: Field[] = [];
-      let nextRef: CardRef | undefined = ref;
+      let nextRef: CodeRef | undefined = ref;
       let segments = name.split('.');
       while (segments.length > 0) {
         let fieldName = segments.shift()!;

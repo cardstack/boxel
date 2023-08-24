@@ -1,8 +1,8 @@
 import { Component } from './card-api';
-import StringCard from './string';
+import StringField from './string';
 import { BoxelInput } from '@cardstack/boxel-ui';
 
-export default class TextAreaCard extends StringCard {
+export default class TextAreaCard extends StringField {
   static edit = class Edit extends Component<typeof this> {
     <template>
       <BoxelInput

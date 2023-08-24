@@ -6,7 +6,7 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import { Loader } from '@cardstack/runtime-common/loader';
 import CardEditor from '@cardstack/host/components/card-editor';
 import { renderComponent } from '../../helpers/render-component';
-import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
+import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 import {
   testRealmURL,
   setupCardLogs,
@@ -25,7 +25,7 @@ import {
   RenderingTestContext,
 } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
-import { Card } from 'https://cardstack.com/base/card-api';
+import { CardDef } from 'https://cardstack.com/base/card-api';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import { shimExternals } from '@cardstack/host/lib/externals';
@@ -40,7 +40,7 @@ module('Integration | text-input-filter', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
 
-  async function loadCard(url: string): Promise<Card> {
+  async function loadCard(url: string): Promise<CardDef> {
     let { createFromSerialized, recompute } = cardApi;
     let result = await realm.searchIndex.card(new URL(url));
     if (!result || result.type === 'error') {
@@ -50,7 +50,7 @@ module('Integration | text-input-filter', function (hooks) {
         }`,
       );
     }
-    let card = await createFromSerialized<typeof Card>(
+    let card = await createFromSerialized<typeof CardDef>(
       result.doc.data,
       result.doc,
       new URL(result.doc.data.id),
@@ -73,10 +73,10 @@ module('Integration | text-input-filter', function (hooks) {
 
     adapter = new TestRealmAdapter({
       'sample.gts': `
-        import { contains, field, Card } from 'https://cardstack.com/base/card-api';
+        import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
         import BigIntegerCard from 'https://cardstack.com/base/big-integer';
 
-        export class Sample extends Card {
+        export class Sample extends CardDef {
         static displayName = 'Sample';
         @field someBigInt = contains(BigIntegerCard);
         @field anotherBigInt = contains(BigIntegerCard);

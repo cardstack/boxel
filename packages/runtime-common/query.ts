@@ -2,7 +2,7 @@ import * as JSON from 'json-typescript';
 import isEqual from 'lodash/isEqual';
 import { assertJSONValue, assertJSONPrimitive } from './json-validation';
 import qs from 'qs';
-import { type CardRef, isCardRef } from './index';
+import { type CodeRef, isCodeRef } from './index';
 
 export interface Query {
   filter?: Filter;
@@ -21,12 +21,12 @@ export type Filter =
   | CardTypeFilter;
 
 export interface TypedFilter {
-  on?: CardRef;
+  on?: CodeRef;
 }
 
 interface SortExpression {
   by: string;
-  on: CardRef;
+  on: CodeRef;
   direction?: 'asc' | 'desc';
 }
 
@@ -36,7 +36,7 @@ export type Sort = SortExpression[];
 // adopt from some particular card type--no other predicates are included in
 // this filter.
 export interface CardTypeFilter {
-  type: CardRef;
+  type: CodeRef;
 }
 
 export interface AnyFilter extends TypedFilter {
@@ -242,7 +242,7 @@ function assertFilter(
 }
 
 function assertCardType(type: any, pointer: string[]) {
-  if (!isCardRef(type)) {
+  if (!isCodeRef(type)) {
     throw new Error(`${pointer.join('/') || '/'}: type is not valid`);
   }
 }

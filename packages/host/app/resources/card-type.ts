@@ -12,17 +12,16 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import { getOwner } from '@ember/application';
 import type LoaderService from '../services/loader-service';
 import type {
-  Card,
-  CardBase,
+  BaseDef,
   Field,
   FieldType,
 } from 'https://cardstack.com/base/card-api';
-import { isCardRef, type CardRef } from '@cardstack/runtime-common/card-ref';
+import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 interface Args {
   named: {
-    card: typeof Card;
+    definition: typeof BaseDef;
     loader: Loader;
   };
 }
@@ -31,7 +30,7 @@ export interface Type {
   module: string;
   displayName: string;
   super: Type | undefined;
-  fields: { name: string; card: Type | CardRef; type: FieldType }[];
+  fields: { name: string; card: Type | CodeRef; type: FieldType }[];
 }
 
 export class CardType extends Resource<Args> {
@@ -40,23 +39,23 @@ export class CardType extends Resource<Args> {
   typeCache: Map<string, Type> = new Map();
 
   modify(_positional: never[], named: Args['named']) {
-    let { card, loader } = named;
+    let { definition, loader } = named;
     this.loader = loader;
-    this.assembleType.perform(card);
+    this.assembleType.perform(definition);
   }
 
-  private assembleType = restartableTask(async (card: typeof Card) => {
+  private assembleType = restartableTask(async (card: typeof BaseDef) => {
     let maybeType = await this.toType(card);
-    if (isCardRef(maybeType)) {
+    if (isCodeRef(maybeType)) {
       throw new Error(`bug: should never get here`);
     }
     this.type = maybeType;
   });
 
   async toType(
-    card: typeof CardBase,
-    stack: (typeof CardBase)[] = [],
-  ): Promise<Type | CardRef> {
+    card: typeof BaseDef,
+    stack: (typeof BaseDef)[] = [],
+  ): Promise<Type | CodeRef> {
     let maybeRef = identifyCard(card);
     if (!maybeRef) {
       throw new Error(`cannot identify card ${card.name}`);
@@ -76,11 +75,11 @@ export class CardType extends Resource<Args> {
     );
     let { id: _remove, ...fields } = api.getFields(card);
     let superCard = getAncestor(card);
-    let superType: Type | CardRef | undefined;
+    let superType: Type | CodeRef | undefined;
     if (superCard && card !== superCard) {
       superType = await this.toType(superCard, [card, ...stack]);
     }
-    if (isCardRef(superType)) {
+    if (isCodeRef(superType)) {
       throw new Error(
         `bug: encountered cycle in card ancestor: ${[
           superType,
@@ -92,7 +91,7 @@ export class CardType extends Resource<Args> {
     }
     let fieldTypes: Type['fields'] = await Promise.all(
       Object.entries(fields).map(
-        async ([name, field]: [string, Field<typeof CardBase, any>]) => ({
+        async ([name, field]: [string, Field<typeof BaseDef, any>]) => ({
           name,
           type: field.fieldType,
           card: await this.toType(field.card, [card, ...stack]),
@@ -111,10 +110,10 @@ export class CardType extends Resource<Args> {
   }
 }
 
-export function getCardType(parent: object, card: () => typeof Card) {
+export function getCardType(parent: object, card: () => typeof BaseDef) {
   return CardType.from(parent, () => ({
     named: {
-      card: card(),
+      definition: card(),
       loader: (
         (getOwner(parent) as any).lookup(
           'service:loader-service',

@@ -38,10 +38,10 @@ module('Integration | card-prerender', function (hooks) {
   hooks.beforeEach(async function (this: RenderingTestContext) {
     adapter = new TestRealmAdapter({
       'pet.gts': `
-        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
-        export class Pet extends Card {
+        export class Pet extends CardDef {
           @field firstName = contains(StringCard);
           static isolated = class Isolated extends Component<typeof this> {
             <template>

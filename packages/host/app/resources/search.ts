@@ -7,8 +7,8 @@ import flatMap from 'lodash/flatMap';
 import ENV from '@cardstack/host/config/environment';
 import type CardService from '../services/card-service';
 import type { Query } from '@cardstack/runtime-common/query';
-import type { Card } from 'https://cardstack.com/base/card-api';
-import { type RealmCards } from '../components/card-catalog-modal';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+import { type RealmCards } from '../components/card-catalog/modal';
 
 interface Args {
   named: {
@@ -22,7 +22,7 @@ interface Args {
 const { otherRealmURLs } = ENV;
 
 export class Search extends Resource<Args> {
-  @tracked instances: Card[] = [];
+  @tracked instances: CardDef[] = [];
   @tracked instancesByRealm: RealmCards[] = [];
   @service declare cardService: CardService;
   ready: Promise<void> | undefined;

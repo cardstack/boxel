@@ -1,7 +1,7 @@
 import {
   contains,
   field,
-  Card,
+  CardDef,
   Component,
   relativeTo,
 } from 'https://cardstack.com/base/card-api';
@@ -16,7 +16,7 @@ let EXCHANGE_RATES: Record<string, number> = {
   EUR: 0.94,
 };
 
-class Asset extends Card {
+class Asset extends CardDef {
   static displayName = 'Asset';
   @field name = contains(StringCard);
   @field symbol = contains(StringCard);

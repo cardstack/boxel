@@ -1,6 +1,6 @@
 import Component from '@glimmer/component';
 import type {
-  CardBase,
+  BaseDef,
   CardContext,
   Format,
   Field,
@@ -8,7 +8,7 @@ import type {
 
 interface Signature {
   Args: {
-    card: CardBase;
+    card: BaseDef;
     format?: Format;
     field?: Field;
     context?: CardContext;

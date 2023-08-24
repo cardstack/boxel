@@ -3,7 +3,6 @@ import {
   type Stack,
   type StackItem,
 } from '../components/operator-mode/container';
-import { getCardStackItem } from '../components/operator-mode/container';
 import Service from '@ember/service';
 import type CardService from '../services/card-service';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
@@ -12,7 +11,7 @@ import { tracked } from '@glimmer/tracking';
 import { getOwner } from '@ember/application';
 import { scheduleOnce } from '@ember/runloop';
 import stringify from 'safe-stable-stringify';
-import type { Card } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 import { Submode } from '@cardstack/host/components/submode-switcher';
 
 // Below types form a raw POJO representation of operator mode state.
@@ -20,17 +19,11 @@ import { Submode } from '@cardstack/host/components/submode-switcher';
 // This is because we don't have a way to serialize a stack configuration of linked cards that have not been saved yet.
 
 interface CardItem {
-  type: 'card';
   id: string;
   format: 'isolated' | 'edit';
 }
-interface ContainedCardItem {
-  type: 'contained';
-  fieldOfIndex: number; // index of the item in the stack that this is a field of
-  fieldName: string;
-  format: 'isolated' | 'edit';
-}
-type SerializedItem = CardItem | ContainedCardItem;
+
+type SerializedItem = CardItem;
 type SerializedStack = SerializedItem[];
 
 export type SerializedState = {
@@ -43,7 +36,7 @@ export default class OperatorModeStateService extends Service {
     stacks: new TrackedArray([]),
     submode: Submode.Interact,
   });
-  @tracked recentCards = new TrackedArray<Card>([]);
+  @tracked recentCards = new TrackedArray<CardDef>([]);
 
   @service declare cardService: CardService;
 
@@ -57,9 +50,7 @@ export default class OperatorModeStateService extends Service {
       this.state.stacks[stackIndex] = new TrackedArray([]);
     }
     this.state.stacks[stackIndex].push(item);
-    if (item.type === 'card') {
-      this.addRecentCard(item.card);
-    }
+    this.addRecentCard(item.card);
     this.schedulePersist();
   }
 
@@ -200,25 +191,11 @@ export default class OperatorModeStateService extends Service {
         if (item.format !== 'isolated' && item.format !== 'edit') {
           throw new Error(`Unknown format for card on stack ${item.format}`);
         }
-        if (item.type === 'card') {
-          if (item.card.id) {
-            serializedStack.push({
-              type: 'card',
-              id: item.card.id,
-              format: item.format,
-            });
-          }
-        } else {
-          let { fieldName, fieldOfIndex } = item;
-          let addressableCard = getCardStackItem(item, stack).card;
-          if (addressableCard.id) {
-            serializedStack.push({
-              type: 'contained',
-              fieldName,
-              fieldOfIndex,
-              format: item.format,
-            });
-          }
+        if (item.card.id) {
+          serializedStack.push({
+            id: item.card.id,
+            format: item.format,
+          });
         }
       }
       state.stacks.push(serializedStack);
@@ -245,24 +222,12 @@ export default class OperatorModeStateService extends Service {
       let newStack: Stack = new TrackedArray([]);
       for (let item of stack) {
         let { format } = item;
-        if (item.type === 'card') {
-          let card = await this.cardService.loadModel(new URL(item.id));
-          newStack.push({
-            type: 'card',
-            card,
-            format,
-            stackIndex,
-          });
-        } else {
-          let { fieldName, fieldOfIndex } = item;
-          newStack.push({
-            type: 'contained',
-            fieldName,
-            fieldOfIndex,
-            format,
-            stackIndex,
-          });
-        }
+        let card = await this.cardService.loadModel(new URL(item.id));
+        newStack.push({
+          card,
+          format,
+          stackIndex,
+        });
       }
       newState.stacks.push(newStack);
       stackIndex++;
@@ -284,7 +249,7 @@ export default class OperatorModeStateService extends Service {
     }
   }
 
-  addRecentCard(card: Card) {
+  addRecentCard(card: CardDef) {
     const existingCardIndex = this.recentCards.findIndex(
       (recentCard) => recentCard.id === card.id,
     );

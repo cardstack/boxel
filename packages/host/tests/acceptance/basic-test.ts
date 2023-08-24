@@ -27,9 +27,9 @@ function getMonacoContent(): string {
 }
 
 const indexCardSource = `
-  import { Card, Component } from "https://cardstack.com/base/card-api";
+  import { CardDef, Component } from "https://cardstack.com/base/card-api";
 
-  export class Index extends Card {
+  export class Index extends CardDef {
     static isolated = class Isolated extends Component<typeof this> {
       <template>
         <div data-test-index-card>
@@ -41,10 +41,10 @@ const indexCardSource = `
 `;
 
 const personCardSource = `
-  import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+  import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
   import StringCard from "https://cardstack.com/base/string";
 
-  export class Person extends Card {
+  export class Person extends CardDef {
     @field firstName = contains(StringCard);
     @field lastName = contains(StringCard);
     @field title = contains(StringCard, {

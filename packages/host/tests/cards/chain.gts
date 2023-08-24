@@ -1,4 +1,4 @@
-import { contains, field, Card } from 'https://cardstack.com/base/card-api';
+import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
 import NumberCard from 'https://cardstack.com/base/number';
 import StringCard from 'https://cardstack.com/base/string';
 
@@ -7,7 +7,7 @@ let CHAIN_IDS: Record<string, number> = {
   'Gnosis Chain': 100,
   Polygon: 137,
 };
-export class Chain extends Card {
+export class Chain extends CardDef {
   @field name = contains(StringCard);
   @field chainId = contains(NumberCard, {
     computeVia: function (this: Chain) {
