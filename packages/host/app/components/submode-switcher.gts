@@ -80,7 +80,7 @@ export default class SubmodeSwitcher extends Component<Signature> {
         display: flex;
       }
       :global(.submode-switcher-dropdown) {
-        background: none;
+        background-color: rgba(0, 0, 0, 0.45);
       }
       .menu {
         border-radius: var(--boxel-border-radius);
