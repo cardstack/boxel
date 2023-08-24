@@ -7,7 +7,7 @@ import type { MiddlewareState } from '@floating-ui/dom';
 import { TrackedWeakMap, type TrackedArray } from 'tracked-built-ins';
 import { velcro } from 'ember-velcro';
 
-import type { Card, Format } from 'https://cardstack.com/base/card-api';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 import { IconButton, BoxelDropdown, Menu } from '@cardstack/boxel-ui';
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
@@ -20,9 +20,9 @@ interface Signature {
   Args: {
     renderedCardsForOverlayActions: RenderedCardForOverlayActions[];
     publicAPI: Actions;
-    delete: (card: Card) => void;
-    toggleSelect?: (card: Card) => void;
-    selectedCards?: TrackedArray<Card>;
+    delete: (card: CardDef) => void;
+    toggleSelect?: (card: CardDef) => void;
+    selectedCards?: TrackedArray<CardDef>;
   };
 }
 
@@ -241,7 +241,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
   };
 
   @action openOrSelectCard(
-    card: Card,
+    card: CardDef,
     format: Format = 'isolated',
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
     fieldName?: string,
@@ -253,8 +253,8 @@ export default class OperatorModeOverlays extends Component<Signature> {
     }
   }
 
-  @action isSelected(card: Card) {
-    return this.args.selectedCards?.some((c: Card) => c === card);
+  @action isSelected(card: CardDef) {
+    return this.args.selectedCards?.some((c: CardDef) => c === card);
   }
 
   // TODO: actions for 'preview' and 'more-actions' buttons

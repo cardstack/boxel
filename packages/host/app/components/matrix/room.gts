@@ -22,7 +22,7 @@ import {
 } from '@cardstack/runtime-common';
 import { registerDestructor } from '@ember/destroyable';
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import { type Card } from 'https://cardstack.com/base/card-api';
+import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type CardService from '@cardstack/host/services/card-service';
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import config from '@cardstack/host/config/environment';
@@ -241,7 +241,7 @@ export default class Room extends Component<RoomArgs> {
   @tracked private isInviteMode = false;
   @tracked private membersToInvite: string[] = [];
   @tracked private allowedToSetObjective: boolean | undefined;
-  @tracked private subscribedCard: Card | undefined;
+  @tracked private subscribedCard: CardDef | undefined;
   private attachedCards = getAttachedCards(
     this,
     () => this.roomCard,
@@ -249,7 +249,8 @@ export default class Room extends Component<RoomArgs> {
   );
   private messagesToSend: TrackedMap<string, string | undefined> =
     new TrackedMap();
-  private cardsToSend: TrackedMap<string, Card | undefined> = new TrackedMap();
+  private cardsToSend: TrackedMap<string, CardDef | undefined> =
+    new TrackedMap();
   private roomCardResource = getRoomCard(this, () => this.args.roomId);
 
   constructor(owner: unknown, args: any) {
@@ -319,36 +320,6 @@ export default class Room extends Component<RoomArgs> {
       .filter((m) => m.attachedCardId)
       .map((m) => m.attachedCardId);
   }
-
-  // private loadAttachedCards = restartableTask(async () => {
-  //   if (!this.roomCard) {
-  //     return new Map();
-  //   }
-  //   await this.loadAttachedCards.perform();
-  //   let cardIds = new Set(
-  //     this.roomCard.messages
-  //       .filter((m) => m.attachedCardId)
-  //       .map((m) => m.attachedCardId),
-  //   );
-  //   let getAttachedCard = (
-  //     Reflect.getPrototypeOf(this.roomCard)!.constructor as typeof RoomCard
-  //   ).getAttachedCard;
-  //   let attachedCards = [...cardIds].map((id) => getAttachedCard(id));
-  //   this.attachedCards = attachedCards;
-  // return messageWithAttachments.reduce((accumulator, card) => {
-  //   let latestInstance = accumulator.get(card.id);
-  //   if (!latestInstance) {
-  //     accumulator.set(card.id, card);
-  //   } else {
-  //     let latestInstanceVer = getVersion(latestInstance)!;
-  //     let cardVer = getVersion(card)!;
-  //     if (cardVer > latestInstanceVer) {
-  //       accumulator.set(card.id, card);
-  //     }
-  //   }
-  //   return accumulator;
-  // }, new Map<string, string>());
-  // });
 
   private get objectiveComponent() {
     if (this.objective) {
@@ -456,7 +427,7 @@ export default class Room extends Component<RoomArgs> {
   }
 
   private doSendMessage = restartableTask(
-    async (message: string | undefined, card?: Card) => {
+    async (message: string | undefined, card?: CardDef) => {
       this.messagesToSend.set(this.args.roomId, undefined);
       this.cardsToSend.set(this.args.roomId, undefined);
       await this.matrixService.sendMessage(this.args.roomId, message, card);
@@ -478,7 +449,7 @@ export default class Room extends Component<RoomArgs> {
   });
 
   private doChooseCard = restartableTask(async () => {
-    let chosenCard: Card | undefined = await chooseCard({
+    let chosenCard: CardDef | undefined = await chooseCard({
       filter: { type: baseCardRef },
     });
     if (chosenCard) {

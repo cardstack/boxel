@@ -3,13 +3,13 @@ import {
   contains,
   linksToMany,
   field,
-  Card,
+  CardDef,
   Component,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import { Claim } from './claim';
 
-export class ClaimList extends Card {
+export class ClaimList extends CardDef {
   static displayName = 'List of Claims';
   @field description = contains(StringCard);
   @field claims = linksToMany(Claim);

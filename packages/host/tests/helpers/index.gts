@@ -17,7 +17,7 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import { renderComponent } from './render-component';
 import Service from '@ember/service';
 import CardPrerender from '@cardstack/host/components/card-prerender';
-import { type Card } from 'https://cardstack.com/base/card-api';
+import { type CardDef } from 'https://cardstack.com/base/card-api';
 import {
   RunnerOptionsManager,
   type RunState,
@@ -345,7 +345,7 @@ function makeRealm(
   return realm;
 }
 
-export async function saveCard(instance: Card, id: string, loader: Loader) {
+export async function saveCard(instance: CardDef, id: string, loader: Loader) {
   let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
   let doc = api.serializeCard(instance);
   doc.data.id = id;

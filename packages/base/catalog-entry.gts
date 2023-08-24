@@ -2,26 +2,26 @@ import {
   contains,
   field,
   Component,
-  Card,
-  CardBase,
+  CardDef,
+  BaseDef,
   primitive,
   relativeTo,
   realmInfo,
 } from './card-api';
-import StringCard from './string';
-import BooleanCard from './boolean';
-import CardRefCard from './card-ref';
+import StringField from './string';
+import BooleanField from './boolean';
+import CardRefCard from './code-ref';
 import { baseCardRef, loadCard, Loader } from '@cardstack/runtime-common';
 import { isEqual } from 'lodash';
 import { FieldContainer } from '@cardstack/boxel-ui';
 import GlimmerComponent from '@glimmer/component';
 
-export class CatalogEntry extends Card {
+export class CatalogEntry extends CardDef {
   static displayName = 'Catalog Entry';
-  @field title = contains(StringCard);
-  @field description = contains(StringCard);
+  @field title = contains(StringField);
+  @field description = contains(StringField);
   @field ref = contains(CardRefCard);
-  @field isPrimitive = contains(BooleanCard, {
+  @field isPrimitive = contains(BooleanField, {
     computeVia: async function (this: CatalogEntry) {
       let loader = Loader.getLoaderFor(Object.getPrototypeOf(this).constructor);
 
@@ -31,7 +31,7 @@ export class CatalogEntry extends Card {
         );
       }
 
-      let card: typeof CardBase | undefined = await loadCard(this.ref, {
+      let card: typeof BaseDef | undefined = await loadCard(this.ref, {
         loader,
         relativeTo: this[relativeTo],
       });
@@ -43,18 +43,18 @@ export class CatalogEntry extends Card {
       return primitive in card || isEqual(baseCardRef, this.ref);
     },
   });
-  @field moduleHref = contains(StringCard, {
+  @field moduleHref = contains(StringField, {
     computeVia: function (this: CatalogEntry) {
       return new URL(this.ref.module, this[relativeTo]).href;
     },
   });
-  @field demo = contains(Card);
-  @field realmName = contains(StringCard, {
+  @field demo = contains(CardDef);
+  @field realmName = contains(StringField, {
     computeVia: function (this: CatalogEntry) {
       return this[realmInfo]?.name;
     },
   });
-  @field thumbnailURL = contains(StringCard, { computeVia: () => null }); // remove this if we want card type entries to have images
+  @field thumbnailURL = contains(StringField, { computeVia: () => null }); // remove this if we want card type entries to have images
 
   get showDemo() {
     return !this.isPrimitive;

@@ -1,6 +1,6 @@
 import {
   Component,
-  Card,
+  CardDef,
   queryableValue,
   primitive,
 } from 'https://cardstack.com/base/card-api';
@@ -17,7 +17,7 @@ class View extends Component<typeof SillyNumberCard> {
   }
 }
 
-export default class SillyNumberCard extends Card {
+export default class SillyNumberCard extends CardDef {
   static [primitive]: string[];
   static [queryableValue](value: string[] | undefined) {
     if (!value) {

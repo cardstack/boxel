@@ -2,7 +2,7 @@ import {
   contains,
   field,
   Component,
-  Card,
+  CardDef,
   linksTo,
 } from 'https://cardstack.com/base/card-api';
 import BooleanCard from 'https://cardstack.com/base/boolean';
@@ -13,7 +13,7 @@ import NumberCard from 'https://cardstack.com/base/number';
 import { Chain } from './chain';
 import EthereumAddressCard from 'https://cardstack.com/base/ethereum-address';
 
-export class Transaction extends Card {
+export class Transaction extends CardDef {
   static displayName = 'Transaction';
   @field transactionHash = contains(StringCard);
   @field status = contains(BooleanCard);

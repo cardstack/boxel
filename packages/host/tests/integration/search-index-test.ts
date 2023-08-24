@@ -16,7 +16,7 @@ import { SearchIndex } from '@cardstack/runtime-common/search-index';
 import {
   baseRealm,
   baseCardRef,
-  type CardRef,
+  type CodeRef,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { RenderingTestContext } from '@ember/test-helpers';
@@ -50,7 +50,7 @@ module('Integration | search-index', function (hooks) {
           meta: {
             adoptsFrom: {
               module: 'https://cardstack.com/base/card-api',
-              name: 'Card',
+              name: 'CardDef',
             },
           },
         },
@@ -72,7 +72,7 @@ module('Integration | search-index', function (hooks) {
         meta: {
           adoptsFrom: {
             module: 'https://cardstack.com/base/card-api',
-            name: 'Card',
+            name: 'CardDef',
           },
           lastModified: adapter.lastModified.get(`${testRealmURL}empty.json`),
           realmInfo: testRealmInfo,
@@ -336,13 +336,13 @@ module('Integration | search-index', function (hooks) {
     }
   });
 
-  test('can index a card with relative card-ref fields', async function (assert) {
+  test('can index a card with relative code-ref fields', async function (assert) {
     let adapter = new TestRealmAdapter({
       'person.gts': `
-        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
-        export class Person extends Card {
+        export class Person extends CardDef {
           @field firstName = contains(StringCard);
         }
       `,
@@ -432,10 +432,10 @@ module('Integration | search-index', function (hooks) {
     {
       let adapter = new TestRealmAdapter({
         'person.gts': `
-          import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+          import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
           import StringCard from "https://cardstack.com/base/string";
 
-          export class Person extends Card {
+          export class Person extends CardDef {
             @field firstName = contains(StringCard);
             static isolated = class Isolated extends Component<typeof this> {
               <template>
@@ -445,10 +445,10 @@ module('Integration | search-index', function (hooks) {
           }
         `,
         'boom.gts': `
-          import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+          import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
           import StringCard from "https://cardstack.com/base/string";
 
-          export class Boom extends Card {
+          export class Boom extends CardDef {
             @field firstName = contains(StringCard);
             static isolated = class Isolated extends Component<typeof this> {
               <template>
@@ -530,10 +530,10 @@ module('Integration | search-index', function (hooks) {
       // perform a new index to assert that render stack is still consistent
       let adapter = new TestRealmAdapter({
         'person.gts': `
-          import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+          import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
           import StringCard from "https://cardstack.com/base/string";
 
-          export class Person extends Card {
+          export class Person extends CardDef {
             @field firstName = contains(StringCard);
             static isolated = class Isolated extends Component<typeof this> {
               <template>
@@ -587,11 +587,11 @@ module('Integration | search-index', function (hooks) {
   test('can recover from rendering a card that has a nested card with a template error', async function (assert) {
     let adapter = new TestRealmAdapter({
       'boom-person.gts': `
-        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { Boom } from "./boom";
 
-        export class BoomPerson extends Card {
+        export class BoomPerson extends CardDef {
           @field firstName = contains(StringCard);
           @field boom = contains(Boom);
           static isolated = class Isolated extends Component<typeof this> {
@@ -603,10 +603,10 @@ module('Integration | search-index', function (hooks) {
         }
         `,
       'boom.gts': `
-        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
-        export class Boom extends Card {
+        export class Boom extends CardDef {
           @field firstName = contains(StringCard);
           static embedded = class Embedded extends Component<typeof this> {
             <template>
@@ -635,10 +635,10 @@ module('Integration | search-index', function (hooks) {
         },
       },
       'person.gts': `
-        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
-        export class Person extends Card {
+        export class Person extends CardDef {
           @field firstName = contains(StringCard);
           static isolated = class Isolated extends Component<typeof this> {
             <template>
@@ -700,11 +700,11 @@ module('Integration | search-index', function (hooks) {
   test('can recover from rendering a card that encounters a template error in its own custom component', async function (assert) {
     let adapter = new TestRealmAdapter({
       'boom-person2.gts': `
-        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { CustomBoom } from "./custom-boom";
 
-        export class BoomPerson2 extends Card {
+        export class BoomPerson2 extends CardDef {
           @field firstName = contains(StringCard);
           @field boom = contains(CustomBoom);
           static isolated = class Isolated extends Component<typeof this> {
@@ -717,10 +717,10 @@ module('Integration | search-index', function (hooks) {
         `,
       'custom-boom.gts': `
         import GlimmerComponent from '@glimmer/component';
-        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
-        export class CustomBoom extends Card {
+        export class CustomBoom extends CardDef {
           @field firstName = contains(StringCard);
           static embedded = class Embedded extends Component<typeof this> {
             <template>
@@ -752,10 +752,10 @@ module('Integration | search-index', function (hooks) {
         },
       },
       'person.gts': `
-        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
-        export class Person extends Card {
+        export class Person extends CardDef {
           @field firstName = contains(StringCard);
           static isolated = class Isolated extends Component<typeof this> {
             <template>
@@ -818,11 +818,11 @@ module('Integration | search-index', function (hooks) {
   test('can index a card that has a cyclic relationship with the field of a card in its fields', async function (assert) {
     let adapter = new TestRealmAdapter({
       'person-card.gts': `
-      import { contains, linksTo, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       import { PetCard } from "./pet-card";
 
-      export class PersonCard extends Card {
+      export class PersonCard extends CardDef {
         @field firstName = contains(StringCard);
         @field pet = linksTo(() => PetCard);
         @field title = contains(StringCard, {
@@ -833,21 +833,21 @@ module('Integration | search-index', function (hooks) {
       }
     `,
       'appointment.gts': `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       import { PersonCard } from "./person-card";
 
-      export class Appointment extends Card {
+      export class Appointment extends CardDef {
         @field title = contains(StringCard);
         @field contact = contains(() => PersonCard);
       }
     `,
       'pet-card.gts': `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       import { Appointment } from "./appointment";
 
-      export class PetCard extends Card {
+      export class PetCard extends CardDef {
         @field firstName = contains(StringCard);
         @field appointment = contains(() => Appointment);
         @field title = contains(StringCard, {
@@ -3312,7 +3312,7 @@ posts/ignore-me.json
         );
       }
 
-      let cardRef: CardRef = {
+      let cardRef: CodeRef = {
         type: 'fieldOf',
         field: 'name',
         card: {

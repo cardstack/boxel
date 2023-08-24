@@ -61,10 +61,10 @@ module('indexing', function (hooks) {
     dir = dirSync().name;
     realm = await createRealm(testRealmLoader, dir, {
       'person.gts': `
-        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
-        export class Person extends Card {
+        export class Person extends CardDef {
           @field firstName = contains(StringCard);
           static isolated = class Isolated extends Component<typeof this> {
             <template>
@@ -74,15 +74,15 @@ module('indexing', function (hooks) {
         }
       `,
       'pet.gts': `
-        import { contains, field, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
-        export class Pet extends Card {
+        export class Pet extends CardDef {
           @field firstName = contains(StringCard);
         }
       `,
       'fancy-person.gts': `
-        import { contains, field, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { Person } from "./person";
 
@@ -91,12 +91,12 @@ module('indexing', function (hooks) {
         }
       `,
       'post.gts': `
-        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import { contains, field, linksTo, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { Person } from "./person";
 
-        export class Post extends Card {
-          @field author = contains(Person);
+        export class Post extends CardDef {
+          @field author = linksTo(Person);
           @field message = contains(StringCard);
           static isolated = class Isolated extends Component<typeof this> {
             <template>
@@ -107,10 +107,10 @@ module('indexing', function (hooks) {
         }
       `,
       'boom.gts': `
-        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
-        export class Boom extends Card {
+        export class Boom extends CardDef {
           @field firstName = contains(StringCard);
           static isolated = class Isolated extends Component<typeof this> {
             <template>
@@ -164,10 +164,14 @@ module('indexing', function (hooks) {
       'post-1.json': {
         data: {
           attributes: {
-            author: {
-              firstName: 'Van Gogh',
-            },
             message: 'Who wants to fetch?!',
+          },
+          relationships: {
+            author: {
+              links: {
+                self: './vangogh',
+              },
+            },
           },
           meta: {
             adoptsFrom: {
@@ -196,7 +200,7 @@ module('indexing', function (hooks) {
           meta: {
             adoptsFrom: {
               module: 'https://cardstack.com/base/card-api',
-              name: 'Card',
+              name: 'CardDef',
             },
           },
         },
@@ -292,9 +296,9 @@ module('indexing', function (hooks) {
     await realm.write(
       'pet.gts',
       `
-          import { contains, field, Card } from "https://cardstack.com/base/card-api";
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
           import StringCard from "https://cardstack.com/base/string";
-          export class Pet extends Card {
+          export class Pet extends CardDef {
             @field firstName = contains(StringCard);
           }
           throw new Error('boom!');
@@ -338,10 +342,10 @@ module('indexing', function (hooks) {
     await realm.write(
       'person.gts',
       `
-          import { contains, field, Card } from "https://cardstack.com/base/card-api";
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
           import StringCard from "https://cardstack.com/base/string";
 
-          export class Person extends Card {
+          export class Person extends CardDef {
             @field firstName = contains(StringCard);
           }
         `,
@@ -394,12 +398,12 @@ module('indexing', function (hooks) {
     await realm.write(
       'post.gts',
       `
-        import { contains, field, Card } from "https://cardstack.com/base/card-api";
+        import { contains, linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { Person } from "./person";
 
-        export class Post extends Card {
-          @field author = contains(Person);
+        export class Post extends CardDef {
+          @field author = linksTo(Person);
           @field message = contains(StringCard);
           @field nickName = contains(StringCard, {
             computeVia: function() {
@@ -432,10 +436,10 @@ module('indexing', function (hooks) {
     await realm.write(
       'person.gts',
       `
-          import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+          import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
           import StringCard from "https://cardstack.com/base/string";
 
-          export class Person extends Card {
+          export class Person extends CardDef {
             @field firstName = contains(StringCard);
             @field nickName = contains(StringCard, {
               computeVia: function() {
@@ -518,12 +522,12 @@ module('indexing', function (hooks) {
     await realm.write(
       'post.gts',
       `
-        import { contains, field, Card } from "https://cardstack.com/base/card-api";
+        import { contains, linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { Person } from "./person";
 
-        export class Post extends Card {
-          @field author = contains(Person);
+        export class Post extends CardDef {
+          @field author = linksTo(Person);
           @field message = contains(StringCard);
           @field nickName = contains(StringCard, {
             computeVia: function() {

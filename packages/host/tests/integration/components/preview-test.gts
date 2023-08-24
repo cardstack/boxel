@@ -32,9 +32,9 @@ module('Integration | preview', function (hooks) {
   });
 
   test('renders card', async function (assert) {
-    let { field, contains, Card, Component } = cardApi;
+    let { field, contains, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class TestCard extends Card {
+    class TestCard extends CardDef {
       @field firstName = contains(StringCard);
       static isolated = class Isolated extends Component<typeof this> {
         <template>

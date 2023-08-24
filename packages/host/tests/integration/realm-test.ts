@@ -16,7 +16,7 @@ import {
 } from '../helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { stringify } from 'qs';
-import { baseRealm, CardRef } from '@cardstack/runtime-common';
+import { baseRealm, CodeRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { shimExternals } from '@cardstack/host/lib/externals';
@@ -51,7 +51,7 @@ module('Integration | realm', function (hooks) {
           meta: {
             adoptsFrom: {
               module: 'https://cardstack.com/base/card-api',
-              name: 'Card',
+              name: 'CardDef',
             },
           },
         },
@@ -82,7 +82,7 @@ module('Integration | realm', function (hooks) {
         meta: {
           adoptsFrom: {
             module: 'https://cardstack.com/base/card-api',
-            name: 'Card',
+            name: 'CardDef',
           },
           lastModified: adapter.lastModified.get(
             `${testRealmURL}dir/empty.json`,
@@ -322,7 +322,7 @@ module('Integration | realm', function (hooks) {
             meta: {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/card-api',
-                name: 'Card',
+                name: 'CardDef',
               },
             },
           },
@@ -377,9 +377,9 @@ module('Integration | realm', function (hooks) {
     let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let expected = [
-      'added: Card/1.json',
+      'added: CardDef/1.json',
       'index: incremental',
-      'added: Card/2.json',
+      'added: CardDef/2.json',
       'index: incremental',
     ];
     await this.expectEvents(assert, realm, adapter, expected, async () => {
@@ -397,7 +397,7 @@ module('Integration | realm', function (hooks) {
                   meta: {
                     adoptsFrom: {
                       module: 'https://cardstack.com/base/card-api',
-                      name: 'Card',
+                      name: 'CardDef',
                     },
                   },
                 },
@@ -412,11 +412,11 @@ module('Integration | realm', function (hooks) {
         if (isSingleCardDocument(json)) {
           assert.strictEqual(
             json.data.id,
-            `${testRealmURL}Card/1`,
+            `${testRealmURL}CardDef/1`,
             'the id is correct',
           );
           assert.ok(json.data.meta.lastModified, 'lastModified is populated');
-          let fileRef = await adapter.openFile('Card/1.json');
+          let fileRef = await adapter.openFile('CardDef/1.json');
           if (!fileRef) {
             throw new Error('file not found');
           }
@@ -428,7 +428,7 @@ module('Integration | realm', function (hooks) {
                 meta: {
                   adoptsFrom: {
                     module: 'https://cardstack.com/base/card-api',
-                    name: 'Card',
+                    name: 'CardDef',
                   },
                 },
               },
@@ -448,7 +448,7 @@ module('Integration | realm', function (hooks) {
         }
         assert.strictEqual(
           result?.doc.data.id,
-          `${testRealmURL}Card/1`,
+          `${testRealmURL}CardDef/1`,
           'found card in index',
         );
       }
@@ -468,7 +468,7 @@ module('Integration | realm', function (hooks) {
                   meta: {
                     adoptsFrom: {
                       module: 'https://cardstack.com/base/card-api',
-                      name: 'Card',
+                      name: 'CardDef',
                     },
                   },
                 },
@@ -483,11 +483,11 @@ module('Integration | realm', function (hooks) {
         if (isSingleCardDocument(json)) {
           assert.strictEqual(
             json.data.id,
-            `${testRealmURL}Card/2`,
+            `${testRealmURL}CardDef/2`,
             'the id is correct',
           );
           assert.ok(
-            (await adapter.openFile('Card/2.json'))?.content,
+            (await adapter.openFile('CardDef/2.json'))?.content,
             'file contents exist',
           );
         } else {
@@ -503,7 +503,7 @@ module('Integration | realm', function (hooks) {
         }
         assert.strictEqual(
           result?.doc.data.id,
-          `${testRealmURL}Card/2`,
+          `${testRealmURL}CardDef/2`,
           'found card in index',
         );
       }
@@ -1895,7 +1895,7 @@ module('Integration | realm', function (hooks) {
           meta: {
             adoptsFrom: {
               module: 'https://cardstack.com/base/card-api',
-              name: 'Card',
+              name: 'CardDef',
             },
           },
         },
@@ -1905,7 +1905,7 @@ module('Integration | realm', function (hooks) {
           meta: {
             adoptsFrom: {
               module: 'https://cardstack.com/base/card-api',
-              name: 'Card',
+              name: 'CardDef',
             },
           },
         },
@@ -2079,10 +2079,10 @@ module('Integration | realm', function (hooks) {
   test<TestContextWithSSE>('realm can serve card source delete request', async function (assert) {
     let adapter = new TestRealmAdapter({
       'person.gts': `
-      import { contains, field, Card } from 'https://cardstack.com/base/card-api';
+      import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
       import StringCard from 'https://cardstack.com/base/string';
 
-      export class Person extends Card {
+      export class Person extends CardDef {
         @field firstName = contains(StringCard);
         @field lastName = contains(StringCard);
       }
@@ -2203,7 +2203,7 @@ module('Integration | realm', function (hooks) {
             meta: {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/card-api',
-                name: 'Card',
+                name: 'CardDef',
               },
             },
           },
@@ -2301,7 +2301,7 @@ module('Integration | realm', function (hooks) {
           sort: [
             {
               by: 'id',
-              on: { module: `${baseRealm.url}card-api`, name: 'Card' },
+              on: { module: `${baseRealm.url}card-api`, name: 'CardDef' },
             },
           ],
         })}`,
@@ -2446,7 +2446,7 @@ module('Integration | realm', function (hooks) {
             meta: {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/card-api',
-                name: 'Card',
+                name: 'CardDef',
               },
             },
           },
@@ -2497,8 +2497,8 @@ module('Integration | realm', function (hooks) {
 
   test('requests do not contain entries that match patterns in ignore files', async function (assert) {
     const cardSource = `
-      import { Card } from 'https://cardstack.com/base/card-api';
-      export class Post extends Card {}
+      import { CardDef } from 'https://cardstack.com/base/card-api';
+      export class Post extends CardDef {}
     `;
 
     let realm = await TestRealm.create(
@@ -2528,7 +2528,7 @@ posts/ignore-me.gts
             type: 'exportedCard',
             module: 'posts/ignore-me.gts',
             name: 'Post',
-          } as CardRef)}`,
+          } as CodeRef)}`,
           {
             headers: {
               Accept: 'application/vnd.api+json',

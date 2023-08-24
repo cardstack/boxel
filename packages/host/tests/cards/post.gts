@@ -2,14 +2,14 @@ import {
   contains,
   field,
   Component,
-  Card,
+  CardDef,
 } from 'https://cardstack.com/base/card-api';
 import DatetimeCard from 'https://cardstack.com/base/datetime';
 import NumberCard from 'https://cardstack.com/base/number';
 import StringCard from 'https://cardstack.com/base/string';
 import { Person } from './person';
 
-export class Post extends Card {
+export class Post extends CardDef {
   @field title = contains(StringCard);
   @field description = contains(StringCard);
   @field author = contains(Person);

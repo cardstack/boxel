@@ -1,5 +1,5 @@
 import { getField } from './index';
-import type { Card } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 export class NotLoaded extends Error {
   readonly isNotLoadedError: true = true;
@@ -9,7 +9,7 @@ export class NotLoaded extends Error {
     readonly fieldName: string,
   ) {
     let message: string;
-    let card = Reflect.getPrototypeOf(instance)!.constructor as typeof Card;
+    let card = Reflect.getPrototypeOf(instance)!.constructor as typeof CardDef;
     let field = getField(card, fieldName);
     if (!field) {
       throw new Error(

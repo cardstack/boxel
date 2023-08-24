@@ -5,11 +5,11 @@ import { trackedFunction } from 'ember-resources/util/function';
 import CardService from '@cardstack/host/services/card-service';
 import { htmlSafe } from '@ember/template';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type { Card } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
-    card: Card;
+    card: CardDef;
   };
 }
 

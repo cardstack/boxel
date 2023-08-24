@@ -6,7 +6,7 @@ import {
   internalKeyFor,
   moduleFrom,
 } from '@cardstack/runtime-common';
-import { isCardRef, type CardRef } from '@cardstack/runtime-common/card-ref';
+import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
 import { getCardType, type Type } from '@cardstack/host/resources/card-type';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -26,7 +26,7 @@ import type CardService from '@cardstack/host/services/card-service';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import type { Ready } from '@cardstack/host/resources/file';
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
-import type { Card, FieldType } from 'https://cardstack.com/base/card-api';
+import type { BaseDef, FieldType } from 'https://cardstack.com/base/card-api';
 import {
   BoxelInput,
   Button,
@@ -38,7 +38,7 @@ import type { Filter } from '@cardstack/runtime-common/query';
 
 interface Signature {
   Args: {
-    card: typeof Card;
+    card: typeof BaseDef;
     file: Ready;
     moduleSyntax: ModuleSyntax;
   };
@@ -251,10 +251,10 @@ export default class Schema extends Component<Signature> {
     ).includes(fieldName);
   }
   @action
-  isThisCard(card: Type | CardRef): boolean {
+  isThisCard(card: Type | CodeRef): boolean {
     return (
       internalKeyFor(this.ref, undefined) ===
-      (isCardRef(card) ? internalKeyFor(card, undefined) : card.id)
+      (isCodeRef(card) ? internalKeyFor(card, undefined) : card.id)
     );
   }
 
@@ -338,16 +338,16 @@ export default class Schema extends Component<Signature> {
   });
 }
 
-function cardId(card: Type | CardRef): string {
-  if (isCardRef(card)) {
+function cardId(card: Type | CodeRef): string {
+  if (isCodeRef(card)) {
     return internalKeyFor(card, undefined);
   } else {
     return card.id;
   }
 }
 
-function cardModule(card: Type | CardRef): string {
-  if (isCardRef(card)) {
+function cardModule(card: Type | CodeRef): string {
+  if (isCodeRef(card)) {
     return moduleFrom(card);
   } else {
     return card.module;

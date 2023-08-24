@@ -4,16 +4,16 @@ import {
   serialize,
   deserialize,
   queryableValue,
-  Card,
-  CardBaseConstructor,
-  CardInstanceType,
-  CardBase,
+  CardDef,
+  BaseDefConstructor,
+  BaseInstanceType,
+  FieldDef,
   relativeTo,
   type SerializeOpts,
   type JSONAPISingleResourceDocument,
 } from './card-api';
 
-class BaseView extends Component<typeof CardRefCard> {
+class BaseView extends Component<typeof CodeRefField> {
   <template>
     <div data-test-ref>
       Module:
@@ -26,7 +26,7 @@ class BaseView extends Component<typeof CardRefCard> {
 
 type CardId = { name: string; module: string };
 
-export default class CardRefCard extends CardBase {
+export default class CodeRefField extends FieldDef {
   static [primitive]: CardId;
 
   static [serialize](
@@ -42,13 +42,13 @@ export default class CardRefCard extends CardBase {
         : {}),
     };
   }
-  static async [deserialize]<T extends CardBaseConstructor>(
+  static async [deserialize]<T extends BaseDefConstructor>(
     this: T,
     cardRef: CardId,
-  ): Promise<CardInstanceType<T>> {
-    return { ...cardRef } as CardInstanceType<T>; // return a new object so that the model cannot be mutated from the outside
+  ): Promise<BaseInstanceType<T>> {
+    return { ...cardRef } as BaseInstanceType<T>; // return a new object so that the model cannot be mutated from the outside
   }
-  static [queryableValue](cardRef: CardId | undefined, stack: Card[] = []) {
+  static [queryableValue](cardRef: CardId | undefined, stack: CardDef[] = []) {
     if (cardRef) {
       // if a stack is passed in, use the containing card to resolve relative references
       let moduleHref =

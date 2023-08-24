@@ -6,7 +6,8 @@ import {
   type Box,
   type Format,
   type Field,
-  type CardBase,
+  type FieldDef,
+  type BaseDef,
 } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
 import type { ComponentLike } from '@glint/template';
@@ -15,14 +16,14 @@ import { getPlural } from '@cardstack/runtime-common';
 
 interface Signature {
   Args: {
-    model: Box<CardBase>;
-    arrayField: Box<CardBase[]>;
+    model: Box<FieldDef>;
+    arrayField: Box<FieldDef[]>;
     format: Format;
-    field: Field<typeof CardBase>;
+    field: Field<typeof FieldDef>;
     cardTypeFor(
-      field: Field<typeof CardBase>,
-      boxedElement: Box<CardBase>,
-    ): typeof CardBase;
+      field: Field<typeof BaseDef>,
+      boxedElement: Box<BaseDef>,
+    ): typeof BaseDef;
   };
 }
 
@@ -117,14 +118,14 @@ export function getContainsManyComponent({
   field,
   cardTypeFor,
 }: {
-  model: Box<CardBase>;
-  arrayField: Box<CardBase[]>;
+  model: Box<FieldDef>;
+  arrayField: Box<FieldDef[]>;
   format: Format;
-  field: Field<typeof CardBase>;
+  field: Field<typeof FieldDef>;
   cardTypeFor(
-    field: Field<typeof CardBase>,
-    boxedElement: Box<CardBase>,
-  ): typeof CardBase;
+    field: Field<typeof BaseDef>,
+    boxedElement: Box<BaseDef>,
+  ): typeof BaseDef;
 }): ComponentLike<{ Args: {}; Blocks: {} }> {
   if (format === 'edit') {
     return class ContainsManyEditorTemplate extends GlimmerComponent {

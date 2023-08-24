@@ -7,7 +7,7 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { Modal, BoxelButton } from '@cardstack/boxel-ui';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
-import type { Card } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
@@ -96,7 +96,7 @@ export default class DeleteModal extends Component<Signature> {
 
   @tracked private currentConfirmation:
     | {
-        card: Card;
+        card: CardDef;
         choiceDeferred: Deferred<boolean>;
         deleteDeferred: Deferred<void>;
       }
@@ -104,7 +104,7 @@ export default class DeleteModal extends Component<Signature> {
 
   // public API for callers to use this component
   async confirmDelete(
-    card: Card,
+    card: CardDef,
     setDeferred: (deleteDeferred: Deferred<void>) => void,
   ) {
     let deleteDeferred = new Deferred<void>();
@@ -117,7 +117,7 @@ export default class DeleteModal extends Component<Signature> {
   }
 
   private presentChoice = enqueueTask(
-    async (card: Card, deleteDeferred: Deferred<void>) => {
+    async (card: CardDef, deleteDeferred: Deferred<void>) => {
       this.currentConfirmation = {
         card,
         choiceDeferred: new Deferred(),

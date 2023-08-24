@@ -4,14 +4,14 @@ import {
   linksToMany,
   field,
   Component,
-  Card,
+  CardDef,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import { Pet } from './pet';
 import { Person } from './person';
 import { GridContainer } from '@cardstack/boxel-ui';
 
-export class PetPerson extends Card {
+export class PetPerson extends CardDef {
   static displayName = 'Pet Person';
   @field firstName = contains(StringCard);
   @field friend = linksTo(Person);

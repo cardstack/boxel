@@ -19,7 +19,7 @@ import { file, FileResource, isReady } from '@cardstack/host/resources/file';
 import CardEditor from '@cardstack/host/components/card-editor';
 import Module from './module';
 import FileTree from './file-tree';
-import type { Card } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
 import momentFrom from 'ember-moment/helpers/moment-from';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
@@ -136,7 +136,7 @@ export default class Go extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @tracked jsonError: string | undefined;
-  @tracked card: Card | undefined;
+  @tracked card: CardDef | undefined;
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
@@ -264,7 +264,7 @@ export default class Go extends Component<Signature> {
   });
 
   @action
-  onSave(card: Card) {
+  onSave(card: CardDef) {
     this.card = card;
   }
 

@@ -4,7 +4,7 @@ import {
   type Field,
   type Format,
   type FieldsTypeFor,
-  type CardBase,
+  type BaseDef,
   CardContext,
   isCard,
   isSaved,
@@ -17,14 +17,14 @@ import { eq, not, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import Modifier from 'ember-modifier';
 
 const componentCache = new WeakMap<
-  Box<CardBase>,
+  Box<BaseDef>,
   ComponentLike<{ Args: {}; Blocks: {} }>
 >();
 
 export function getBoxComponent(
-  card: typeof CardBase,
+  card: typeof BaseDef,
   format: Format,
-  model: Box<CardBase>,
+  model: Box<BaseDef>,
   field: Field | undefined,
   context: CardContext = {},
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
@@ -149,7 +149,7 @@ function defaultFieldFormat(format: Format): Format {
   }
 }
 
-function fieldsComponentsFor<T extends CardBase>(
+function fieldsComponentsFor<T extends BaseDef>(
   target: object,
   model: Box<T>,
   defaultFormat: Format,
@@ -175,11 +175,7 @@ function fieldsComponentsFor<T extends CardBase>(
       let format = getField(modelValue.constructor, property)?.computeVia
         ? 'embedded'
         : defaultFormat;
-      return field.component(
-        model as unknown as Box<CardBase>,
-        format,
-        context,
-      );
+      return field.component(model as unknown as Box<BaseDef>, format, context);
     },
     getPrototypeOf() {
       // This is necessary for Ember to be able to locate the template associated
@@ -223,13 +219,13 @@ function fieldsComponentsFor<T extends CardBase>(
 }
 
 export function getPluralViewComponent(
-  model: Box<CardBase[]>,
-  field: Field<typeof CardBase>,
+  model: Box<BaseDef[]>,
+  field: Field<typeof BaseDef>,
   format: Format,
   cardTypeFor: (
-    field: Field<typeof CardBase>,
-    boxedElement: Box<CardBase>,
-  ) => typeof CardBase,
+    field: Field<typeof BaseDef>,
+    boxedElement: Box<BaseDef>,
+  ) => typeof BaseDef,
   context?: CardContext,
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   let components = model.children.map((child) =>
