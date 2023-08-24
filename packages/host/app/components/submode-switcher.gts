@@ -109,13 +109,15 @@ export default class SubmodeSwitcher extends Component<Signature> {
   }
 
   get buildMenuItems(): MenuItem[] {
-    return Object.values(Submode).map((submode) =>
-      menuItemFunc(
-        [capitalize(submode), () => this.args.onSubmodeSelect(submode)],
-        {
-          icon: this.submodeIcons[submode],
-        },
-      ),
-    );
+    return Object.values(Submode)
+      .filter((submode) => submode !== this.args.submode)
+      .map((submode) =>
+        menuItemFunc(
+          [capitalize(submode), () => this.args.onSubmodeSelect(submode)],
+          {
+            icon: this.submodeIcons[submode],
+          },
+        ),
+      );
   }
 }
