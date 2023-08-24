@@ -105,7 +105,8 @@ export function getBoxComponent(
       }
 
       .edit-card.saved {
-        padding: var(--boxel-sp-xl);
+        padding: var(--boxel-sp-xl) var(--boxel-sp-xxl) var(--boxel-sp-xl)
+          var(--boxel-sp-xl);
       }
 
       /* Add some padding to accomodate for overlaid header for embedded cards in operator mode */
