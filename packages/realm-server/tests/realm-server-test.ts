@@ -160,9 +160,9 @@ module('Realm Server', function (hooks) {
 
   test('serves a card POST request', async function (assert) {
     let expected = [
-      'index: incremental',
       'added: CardDef',
       'added: CardDef/1.json',
+      'index: incremental',
     ];
     let response = await expectEvent(assert, expected, async () => {
       return await request
@@ -215,7 +215,7 @@ module('Realm Server', function (hooks) {
 
   test('serves a card PATCH request', async function (assert) {
     let entry = 'person-1.json';
-    let expected = ['index: incremental', `changed: ${entry}`];
+    let expected = [`changed: ${entry}`, 'index: incremental'];
     let response = await expectEvent(assert, expected, async () => {
       return await request
         .patch('/person-1')
