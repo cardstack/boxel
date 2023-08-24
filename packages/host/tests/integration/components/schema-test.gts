@@ -16,7 +16,7 @@ import {
 } from '../../helpers';
 import { isReady } from '@cardstack/host/resources/file';
 import { Realm } from '@cardstack/runtime-common/realm';
-import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
+import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import CodeController from '@cardstack/host/controllers/code';
@@ -56,10 +56,10 @@ module('Integration | schema', function (hooks) {
     await realm.write(
       'person.gts',
       `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
+      export class Person extends CardDef {
         static displayName = 'Person';
         @field firstName = contains(StringCard);
         @field lastName = contains(StringCard);
@@ -91,7 +91,7 @@ module('Integration | schema', function (hooks) {
     assert.dom('[data-test-adopts-from').exists();
     assert
       .dom('[data-test-adopts-from')
-      .hasText('Adopts From: https://cardstack.com/base/card-api/Card');
+      .hasText('Adopts From: https://cardstack.com/base/card-api/CardDef');
     assert.dom('[data-test-field="firstName"]').exists();
     assert
       .dom('[data-test-field="firstName"]')
@@ -103,10 +103,10 @@ module('Integration | schema', function (hooks) {
     await realm.write(
       'test.gts',
       `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import NumberCard from "https://cardstack.com/base/number";
 
-      export class Test extends Card {
+      export class Test extends CardDef {
         @field test = contains(NumberCard, {
           computeVia: function () {
             return 10 / 2;
@@ -138,10 +138,10 @@ module('Integration | schema', function (hooks) {
     await realm.write(
       'friend.gts',
       `
-      import { contains, linksTo, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Friend extends Card {
+      export class Friend extends CardDef {
         @field firstName = contains(StringCard);
         @field friend = linksTo(() => Friend);
       }
@@ -172,7 +172,7 @@ module('Integration | schema', function (hooks) {
     assert.dom('[data-test-adopts-from').exists();
     assert
       .dom('[data-test-adopts-from')
-      .hasText('Adopts From: https://cardstack.com/base/card-api/Card');
+      .hasText('Adopts From: https://cardstack.com/base/card-api/CardDef');
     assert.dom('[data-test-field="firstName"]').exists();
     assert
       .dom('[data-test-field="firstName"]')
@@ -191,10 +191,10 @@ module('Integration | schema', function (hooks) {
     await realm.write(
       'person.gts',
       `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
+      export class Person extends CardDef {
         @field firstName = contains(StringCard);
         @field lastName = contains(StringCard);
       }
@@ -222,10 +222,10 @@ module('Integration | schema', function (hooks) {
     assert.codeEqual(
       src,
       `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
+      export class Person extends CardDef {
         @field lastName = contains(StringCard);
       }
     `,
@@ -236,10 +236,10 @@ module('Integration | schema', function (hooks) {
     await realm.write(
       'person.gts',
       `
-      import { contains, field, Card, linksTo } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
+      export class Person extends CardDef {
         @field name = contains(StringCard);
         @field friend = linksTo(() => Person);
       }
@@ -268,10 +268,10 @@ module('Integration | schema', function (hooks) {
     assert.codeEqual(
       src,
       `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
+      export class Person extends CardDef {
         @field name = contains(StringCard);
       }
     `,
@@ -282,10 +282,10 @@ module('Integration | schema', function (hooks) {
     await realm.write(
       'person.gts',
       `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
+      export class Person extends CardDef {
         @field firstName = contains(StringCard);
         @field lastName = contains(StringCard);
       }
@@ -294,7 +294,7 @@ module('Integration | schema', function (hooks) {
     await realm.write(
       'fancy-person.gts',
       `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       import { Person } from "./person";
 
@@ -335,10 +335,10 @@ module('Integration | schema', function (hooks) {
     await realm.write(
       'person.gts',
       `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
+      export class Person extends CardDef {
         @field firstName = contains(StringCard);
         @field lastName = contains(StringCard);
       }
@@ -347,10 +347,10 @@ module('Integration | schema', function (hooks) {
     await realm.write(
       'post.gts',
       `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Post extends Card {
+      export class Post extends CardDef {
         @field title = contains(StringCard);
       }
     `,
@@ -487,7 +487,7 @@ module('Integration | schema', function (hooks) {
       .exists('base realm primitive field displayed');
     assert
       .dom(
-        `[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/card-ref-field`,
+        `[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/code-ref-field`,
       )
       .exists('base realm primitive field displayed');
     assert
@@ -539,10 +539,10 @@ module('Integration | schema', function (hooks) {
       src,
       `
       import { Person as PersonCard } from "${testRealmURL}person";
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Post extends Card {
+      export class Post extends CardDef {
         @field title = contains(StringCard);
         @field author = contains(() => PersonCard);
       }
@@ -554,10 +554,10 @@ module('Integration | schema', function (hooks) {
     await realm.write(
       'person.gts',
       `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
+      export class Person extends CardDef {
         @field firstName = contains(StringCard);
         @field lastName = contains(StringCard);
       }
@@ -605,10 +605,10 @@ module('Integration | schema', function (hooks) {
     assert.codeEqual(
       src,
       `
-      import { contains, field, Card, containsMany } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef, containsMany } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
+      export class Person extends CardDef {
         @field firstName = contains(StringCard);
         @field lastName = contains(StringCard);
         @field aliases = containsMany(StringCard);
@@ -621,10 +621,10 @@ module('Integration | schema', function (hooks) {
     await realm.write(
       'pet.gts',
       `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Pet extends Card {
+      export class Pet extends CardDef {
         @field firstName = contains(StringCard);
       }
     `,
@@ -632,11 +632,11 @@ module('Integration | schema', function (hooks) {
     await realm.write(
       'person.gts',
       `
-      import { contains, linksTo, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, linksTo, field, FieldDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       import { Pet } from "./pet";
 
-      export class Person extends Card {
+      export class Person extends FieldDef {
         @field firstName = contains(StringCard);
         @field pet = linksTo(() => Pet);
       }
@@ -645,11 +645,11 @@ module('Integration | schema', function (hooks) {
     await realm.write(
       'appointment.gts',
       `
-      import { contains, containsMany, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, containsMany, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       import { Person } from "./person";
 
-      export class Appointment extends Card {
+      export class Appointment extends CardDef {
         @field title = contains(StringCard);
         @field contacts = containsMany(Person);
       }
@@ -733,10 +733,10 @@ module('Integration | schema', function (hooks) {
       src,
       `
       import { Appointment as AppointmentCard } from "${testRealmURL}appointment";
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Pet extends Card {
+      export class Pet extends CardDef {
         @field firstName = contains(StringCard);
         @field appointment = contains(() => AppointmentCard);
       }
@@ -748,10 +748,10 @@ module('Integration | schema', function (hooks) {
     await realm.write(
       'person.gts',
       `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
+      export class Person extends CardDef {
         @field firstName = contains(StringCard);
         @field lastName = contains(StringCard);
       }
@@ -760,10 +760,10 @@ module('Integration | schema', function (hooks) {
     await realm.write(
       'pet.gts',
       `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Pet extends Card {
+      export class Pet extends CardDef {
         @field name = contains(StringCard);
       }
     `,
@@ -844,10 +844,10 @@ module('Integration | schema', function (hooks) {
       src,
       `
       import { Pet as PetCard } from "${testRealmURL}pet";
-      import { contains, field, Card, linksTo } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
+      export class Person extends CardDef {
         @field firstName = contains(StringCard);
         @field lastName = contains(StringCard);
         @field pet = linksTo(() => PetCard);
@@ -860,10 +860,10 @@ module('Integration | schema', function (hooks) {
     await realm.write(
       'person.gts',
       `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
+      export class Person extends CardDef {
         @field firstName = contains(StringCard);
         @field lastName = contains(StringCard);
       }
@@ -942,10 +942,10 @@ module('Integration | schema', function (hooks) {
     assert.codeEqual(
       src,
       `
-      import { contains, field, Card, linksTo } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
+      export class Person extends CardDef {
         @field firstName = contains(StringCard);
         @field lastName = contains(StringCard);
         @field friend = linksTo(() => Person);
@@ -958,10 +958,10 @@ module('Integration | schema', function (hooks) {
     await realm.write(
       'person.gts',
       `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
+      export class Person extends CardDef {
         @field firstName = contains(StringCard);
         @field lastName = contains(StringCard);
       }
@@ -1024,10 +1024,10 @@ module('Integration | schema', function (hooks) {
     await realm.write(
       'person.gts',
       `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
+      export class Person extends CardDef {
         @field firstName = contains(StringCard);
       }
     `,
@@ -1035,10 +1035,10 @@ module('Integration | schema', function (hooks) {
     await realm.write(
       'pet.gts',
       `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Pet extends Card {
+      export class Pet extends CardDef {
         @field name = contains(StringCard);
       }
     `,
@@ -1121,10 +1121,10 @@ module('Integration | schema', function (hooks) {
       src,
       `
       import { Pet as PetCard } from "${testRealmURL}pet";
-      import { contains, field, Card, linksToMany } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
+      export class Person extends CardDef {
         @field firstName = contains(StringCard);
         @field pets = linksToMany(() => PetCard);
       }
@@ -1136,10 +1136,10 @@ module('Integration | schema', function (hooks) {
     await realm.write(
       'person.gts',
       `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
+      export class Person extends CardDef {
         @field firstName = contains(StringCard);
       }
     `,
@@ -1220,10 +1220,10 @@ module('Integration | schema', function (hooks) {
     assert.codeEqual(
       src,
       `
-      import { contains, field, Card, linksToMany } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
+      export class Person extends CardDef {
         @field firstName = contains(StringCard);
         @field friends = linksToMany(() => Person);
       }
@@ -1235,10 +1235,10 @@ module('Integration | schema', function (hooks) {
     await realm.write(
       'person.gts',
       `
-      import { contains, field, Card, linksToMany } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
+      export class Person extends CardDef {
         @field firstName = contains(StringCard);
         @field friends = linksToMany(() => Person);
       }
@@ -1267,10 +1267,10 @@ module('Integration | schema', function (hooks) {
     assert.codeEqual(
       src,
       `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
+      export class Person extends CardDef {
         @field firstName = contains(StringCard);
       }
     `,
@@ -1281,10 +1281,10 @@ module('Integration | schema', function (hooks) {
     await realm.write(
       'pet.gts',
       `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Pet extends Card {
+      export class Pet extends CardDef {
         @field name = contains(StringCard);
       }
     `,
@@ -1293,10 +1293,10 @@ module('Integration | schema', function (hooks) {
       'person.gts',
       `
       import { Pet as PetCard } from "${testRealmURL}pet";
-      import { contains, field, Card, linksToMany } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
+      export class Person extends CardDef {
         @field firstName = contains(StringCard);
         @field pets = linksToMany(PetCard);
       }
@@ -1325,10 +1325,10 @@ module('Integration | schema', function (hooks) {
     assert.codeEqual(
       src,
       `
-      import { contains, field, Card } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
 
-      export class Person extends Card {
+      export class Person extends CardDef {
         @field firstName = contains(StringCard);
       }
     `,

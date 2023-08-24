@@ -1,12 +1,12 @@
 import GlimmerComponent from '@glimmer/component';
 import { startCase } from 'lodash';
-import type { CardBase } from './card-api';
+import type { BaseDef } from './card-api';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { FieldContainer } from '@cardstack/boxel-ui';
 
 class DefaultTemplate extends GlimmerComponent<{
   Args: {
-    model: CardBase;
+    model: BaseDef;
     fields: Record<string, new () => GlimmerComponent>;
   };
 }> {

@@ -4,7 +4,7 @@ import { restartableTask, all } from 'ember-concurrency';
 import { service } from '@ember/service';
 import type CardService from '../services/card-service';
 import { type RoomCard } from 'https://cardstack.com/base/room';
-import type { Card } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 interface Args {
   named: { roomCard: RoomCard | undefined; ids: string[] };
@@ -12,7 +12,7 @@ interface Args {
 
 export class AttachedCards extends Resource<Args> {
   @service declare cardService: CardService;
-  @tracked instances: Card[] = [];
+  @tracked instances: CardDef[] = [];
 
   modify(_positional: never[], named: Args['named']) {
     let { roomCard, ids } = named;
@@ -27,7 +27,7 @@ export class AttachedCards extends Resource<Args> {
       }
       let RoomCardClazz = Reflect.getPrototypeOf(roomCard)!
         .constructor as typeof RoomCard;
-      let pendingCards: Promise<Card>[] = [];
+      let pendingCards: Promise<CardDef>[] = [];
       for (let id of ids) {
         let pendingCard = RoomCardClazz.getAttachedCard(id);
         if (!pendingCard) {

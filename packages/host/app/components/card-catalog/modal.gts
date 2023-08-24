@@ -7,11 +7,11 @@ import { service } from '@ember/service';
 import { registerDestructor } from '@ember/destroyable';
 import { enqueueTask, restartableTask } from 'ember-concurrency';
 import debounce from 'lodash/debounce';
-import type { Card, CardContext } from 'https://cardstack.com/base/card-api';
+import type { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
 import {
   createNewCard,
   isSingleCardDocument,
-  type CardRef,
+  type CodeRef,
   type CreateNewCard,
   Deferred,
 } from '@cardstack/runtime-common';
@@ -23,16 +23,16 @@ import {
 } from '@cardstack/boxel-ui';
 import { and, eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import type CardService from '../services/card-service';
-import type LoaderService from '../services/loader-service';
-import { getSearchResults, Search } from '../resources/search';
+import type CardService from '../../services/card-service';
+import type LoaderService from '../../services/loader-service';
+import { getSearchResults, Search } from '../../resources/search';
 import {
   suggestCardChooserTitle,
   getSuggestionWithLowestDepth,
-} from '../utils/text-suggestion';
-import ModalContainer from './modal-container';
-import CardCatalog from './card-catalog/index';
-import CardCatalogFilters from './card-catalog/filters';
+} from '../../utils/text-suggestion';
+import ModalContainer from '../modal-container';
+import CardCatalog from './index';
+import CardCatalogFilters from './filters';
 import { type RealmInfo } from '@cardstack/runtime-common';
 import { TrackedArray } from 'tracked-built-ins';
 
@@ -45,7 +45,7 @@ interface Signature {
 export interface RealmCards {
   url: string | null;
   realmInfo: RealmInfo;
-  cards: Card[];
+  cards: CardDef[];
 }
 
 const DEFAULT_CHOOOSE_CARD_TITLE = 'Choose a Card';
@@ -195,15 +195,15 @@ export default class CardCatalogModal extends Component<Signature> {
   @tracked currentRequest:
     | {
         search: Search;
-        deferred: Deferred<Card | undefined>;
+        deferred: Deferred<CardDef | undefined>;
         opts?: {
-          offerToCreate?: CardRef;
+          offerToCreate?: CodeRef;
           createNewCard?: CreateNewCard;
         };
       }
     | undefined = undefined;
   @tracked zIndex = 20;
-  @tracked selectedCard?: Card = undefined;
+  @tracked selectedCard?: CardDef = undefined;
   @tracked searchKey = '';
   @tracked searchResults: RealmCards[] = [];
   @tracked cardURL = '';
@@ -286,10 +286,10 @@ export default class CardCatalogModal extends Component<Signature> {
   }
 
   // This is part of our public API for runtime-common to invoke the card chooser
-  async chooseCard<T extends Card>(
+  async chooseCard<T extends CardDef>(
     query: Query,
     opts?: {
-      offerToCreate?: CardRef;
+      offerToCreate?: CodeRef;
       multiSelect?: boolean;
       createNewCard?: CreateNewCard;
     },
@@ -300,9 +300,9 @@ export default class CardCatalogModal extends Component<Signature> {
   }
 
   private _chooseCard = enqueueTask(
-    async <T extends Card>(
+    async <T extends CardDef>(
       query: Query,
-      opts: { offerToCreate?: CardRef } = {},
+      opts: { offerToCreate?: CodeRef } = {},
     ) => {
       this.currentRequest = {
         search: getSearchResults(this, () => query),
@@ -422,7 +422,7 @@ export default class CardCatalogModal extends Component<Signature> {
     }
   }
 
-  @action toggleSelect(card?: Card): void {
+  @action toggleSelect(card?: CardDef): void {
     this.cardURL = '';
     if (this.selectedCard?.id === card?.id) {
       this.selectedCard = undefined;
@@ -431,7 +431,7 @@ export default class CardCatalogModal extends Component<Signature> {
     this.selectedCard = card;
   }
 
-  @action pick(card?: Card) {
+  @action pick(card?: CardDef) {
     if (this.currentRequest) {
       this.currentRequest.deferred.fulfill(card);
       this.currentRequest = undefined;
@@ -443,7 +443,7 @@ export default class CardCatalogModal extends Component<Signature> {
     this.resetState();
   }
 
-  @action async createNew(ref: CardRef): Promise<void> {
+  @action async createNew(ref: CodeRef): Promise<void> {
     let newCard;
     this.dismissModal = true;
     if (this.currentRequest?.opts?.createNewCard) {
@@ -472,6 +472,6 @@ function chooseCardTitle(
 
 declare module '@glint/environment-ember-loose/registry' {
   export default interface Registry {
-    CardCatalogModal: typeof CardCatalogModal;
+    'CardCatalog::Modal': typeof CardCatalogModal;
   }
 }

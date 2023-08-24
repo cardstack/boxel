@@ -1,5 +1,5 @@
-import { contains, containsMany, field, Component, Card } from './card-api';
-import BooleanCard from './boolean';
+import { contains, containsMany, field, Component, CardDef } from './card-api';
+import BooleanField from './boolean';
 import { RoomCard, RoomMemberCard } from './room';
 
 class View extends Component<typeof RoomObjectiveCard> {
@@ -50,7 +50,7 @@ class View extends Component<typeof RoomObjectiveCard> {
   }
 }
 
-export class RoomObjectiveCard extends Card {
+export class RoomObjectiveCard extends CardDef {
   @field room = contains(RoomCard);
   @field usersThatFinishedTask = containsMany(RoomMemberCard, {
     computeVia: function (this: RoomObjectiveCard) {
@@ -67,7 +67,7 @@ export class RoomObjectiveCard extends Card {
       return allUsers.filter((u) => !completedUserIds.includes(u.userId));
     },
   });
-  @field isComplete = contains(BooleanCard, {
+  @field isComplete = contains(BooleanField, {
     computeVia: function (this: RoomObjectiveCard) {
       return this.usersThatNeedToCompleteTask.length === 0;
     },

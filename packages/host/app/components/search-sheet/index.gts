@@ -23,7 +23,7 @@ import {
   baseRealm,
   catalogEntryRef,
 } from '@cardstack/runtime-common';
-import { Card } from 'https://cardstack.com/base/card-api';
+import { CardDef } from 'https://cardstack.com/base/card-api';
 import debounce from 'lodash/debounce';
 import flatMap from 'lodash/flatMap';
 import { TrackedArray } from 'tracked-built-ins';
@@ -47,7 +47,7 @@ interface Signature {
     onCancel: () => void;
     onFocus: () => void;
     onSearch: (term: string) => void;
-    onCardSelect: (card: Card) => void;
+    onCardSelect: (card: CardDef) => void;
   };
   Blocks: {};
 }
@@ -55,7 +55,7 @@ interface Signature {
 export default class SearchSheet extends Component<Signature> {
   @tracked searchKey = '';
   @tracked isSearching = false;
-  searchCardResults: Card[] = new TrackedArray<Card>();
+  searchCardResults: CardDef[] = new TrackedArray<CardDef>();
   @tracked cardURL = '';
   @tracked hasCardURLError = false;
   @service declare operatorModeStateService: OperatorModeStateService;

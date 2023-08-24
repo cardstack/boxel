@@ -6,8 +6,8 @@ import {
 } from 'ember-concurrency';
 import { getBoxComponent } from './field-component';
 import {
-  type Card,
-  type CardBase,
+  type CardDef,
+  type BaseDef,
   type Box,
   type Field,
   CardContext,
@@ -22,8 +22,8 @@ import { Button, IconButton } from '@cardstack/boxel-ui';
 
 interface Signature {
   Args: {
-    model: Box<Card | null>;
-    field: Field<typeof Card>;
+    model: Box<CardDef | null>;
+    field: Field<typeof CardDef>;
     context?: CardContext;
   };
 }
@@ -101,11 +101,11 @@ class LinksToEditor extends GlimmerComponent<Signature> {
       );
     }
     let card = Reflect.getPrototypeOf(this.args.model.value)!
-      .constructor as typeof CardBase;
+      .constructor as typeof BaseDef;
     return getBoxComponent(
       card,
       'embedded',
-      this.args.model as Box<CardBase>,
+      this.args.model as Box<BaseDef>,
       this.args.field,
       this.args.context,
     );
@@ -113,7 +113,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
 
   private chooseCard = restartableTask(async () => {
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let chosenCard: Card | undefined = this.args.context?.actions?.createCard
+    let chosenCard: CardDef | undefined = this.args.context?.actions?.createCard
       ? await chooseCard({ filter: { type } })
       : await chooseCard({ filter: { type } }, { offerToCreate: type });
     if (chosenCard) {
@@ -123,7 +123,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
 
   private createCard = restartableTask(async () => {
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let newCard: Card | undefined =
+    let newCard: CardDef | undefined =
       await this.args.context?.actions?.createCard(type, undefined, {
         isLinkedCard: true,
       });
@@ -134,8 +134,8 @@ class LinksToEditor extends GlimmerComponent<Signature> {
 }
 
 export function getLinksToEditor(
-  model: Box<Card | null>,
-  field: Field<typeof Card>,
+  model: Box<CardDef | null>,
+  field: Field<typeof CardDef>,
   context?: CardContext,
 ): ComponentLike<{ Args: {}; Blocks: {} }> {
   return class LinksToEditTemplate extends GlimmerComponent {

@@ -1,15 +1,15 @@
 import { RealmPaths } from './paths';
-import type { CardRef } from './card-ref';
+import type { CodeRef } from './code-ref';
 
 export const baseRealm = new RealmPaths('https://cardstack.com/base/');
 
-export const catalogEntryRef: CardRef = {
+export const catalogEntryRef: CodeRef = {
   module: `${baseRealm.url}catalog-entry`,
   name: 'CatalogEntry',
 };
-export const baseCardRef: CardRef = {
+export const baseCardRef: CodeRef = {
   module: `${baseRealm.url}card-api`,
-  name: 'Card',
+  name: 'CardDef',
 };
 
 export const isField = Symbol('cardstack-field');

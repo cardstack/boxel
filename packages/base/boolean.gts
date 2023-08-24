@@ -3,8 +3,8 @@ import {
   serialize,
   queryableValue,
   Component,
-  CardBase,
   useIndexBasedKey,
+  FieldDef,
 } from './card-api';
 import { on } from '@ember/modifier';
 import Modifier from 'ember-modifier';
@@ -15,7 +15,7 @@ import pick from '@cardstack/boxel-ui/helpers/pick';
 // to stay independent of one another.
 let groupNumber = 0;
 
-class View extends Component<typeof BooleanCard> {
+class View extends Component<typeof BooleanField> {
   <template>
     {{@model}}
   </template>
@@ -28,7 +28,7 @@ class View extends Component<typeof BooleanCard> {
   }
 }
 
-export default class BooleanCard extends CardBase {
+export default class BooleanField extends FieldDef {
   static [primitive]: boolean;
   static [useIndexBasedKey]: never;
   static [serialize](val: any) {

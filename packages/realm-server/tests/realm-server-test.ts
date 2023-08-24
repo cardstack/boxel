@@ -159,7 +159,11 @@ module('Realm Server', function (hooks) {
   });
 
   test('serves a card POST request', async function (assert) {
-    let expected = ['added: Card', 'added: Card/1.json', 'index: incremental'];
+    let expected = [
+      'added: CardDef',
+      'added: CardDef/1.json',
+      'index: incremental',
+    ];
     let response = await expectEvent(assert, expected, async () => {
       return await request
         .post('/')
@@ -169,7 +173,7 @@ module('Realm Server', function (hooks) {
             meta: {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/card-api',
-                name: 'Card',
+                name: 'CardDef',
               },
             },
           },
@@ -182,11 +186,11 @@ module('Realm Server', function (hooks) {
     if (isSingleCardDocument(json)) {
       assert.strictEqual(
         json.data.id,
-        `${testRealmHref}Card/1`,
+        `${testRealmHref}CardDef/1`,
         'the id is correct',
       );
       assert.ok(json.data.meta.lastModified, 'lastModified is populated');
-      let cardFile = join(dir.name, 'Card', '1.json');
+      let cardFile = join(dir.name, 'CardDef', '1.json');
       assert.ok(existsSync(cardFile), 'card json exists');
       let card = readJSONSync(cardFile);
       assert.deepEqual(
@@ -197,7 +201,7 @@ module('Realm Server', function (hooks) {
             meta: {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/card-api',
-                name: 'Card',
+                name: 'CardDef',
               },
             },
           },
@@ -530,9 +534,9 @@ module('Realm Server', function (hooks) {
     assert.strictEqual(person.firstName, 'Mango', 'card data is correct');
   });
 
-  test('can instantiate a card that uses a card-ref field', async function (assert) {
+  test('can instantiate a card that uses a code-ref field', async function (assert) {
     let adoptsFrom = {
-      module: `${testRealm2Href}card-ref-test`,
+      module: `${testRealm2Href}code-ref-test`,
       name: 'TestCard',
     };
     await loadCard(adoptsFrom, { loader });
@@ -682,9 +686,9 @@ module('Realm Server serving from root', function (hooks) {
                 kind: 'file',
               },
             },
-            'card-ref-test.gts': {
+            'code-ref-test.gts': {
               links: {
-                related: `${testRealmHref}card-ref-test.gts`,
+                related: `${testRealmHref}code-ref-test.gts`,
               },
               meta: {
                 kind: 'file',

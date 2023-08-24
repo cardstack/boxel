@@ -1,10 +1,10 @@
-import { type CardRef, isCardRef } from './card-ref';
+import { type CodeRef, isCodeRef } from './code-ref';
 import { RealmInfo } from './realm';
 
 export type Saved = string;
 export type Unsaved = string | undefined;
 export interface Meta {
-  adoptsFrom: CardRef;
+  adoptsFrom: CodeRef;
   fields?: CardFields;
 }
 export interface CardFields {
@@ -96,7 +96,7 @@ export function isCardResource(resource: any): resource is CardResource {
     return false;
   }
   let { adoptsFrom } = meta;
-  return isCardRef(adoptsFrom);
+  return isCodeRef(adoptsFrom);
 }
 
 export function isCardFields(fields: any): fields is CardFields {
@@ -128,7 +128,7 @@ export function isMeta(meta: any, allowPartial = false) {
   }
   if ('adoptsFrom' in meta) {
     let { adoptsFrom } = meta;
-    if (!isCardRef(adoptsFrom)) {
+    if (!isCodeRef(adoptsFrom)) {
       return false;
     }
   } else {
