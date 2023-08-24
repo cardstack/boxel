@@ -1,11 +1,11 @@
 import {
   Component,
-  CardDef,
+  FieldDef,
   queryableValue,
   primitive,
 } from 'https://cardstack.com/base/card-api';
 
-class View extends Component<typeof SillyNumberCard> {
+class View extends Component<typeof SillyNumberField> {
   <template>
     {{this.value}}
   </template>
@@ -17,7 +17,7 @@ class View extends Component<typeof SillyNumberCard> {
   }
 }
 
-export default class SillyNumberCard extends CardDef {
+export default class SillyNumberField extends FieldDef {
   static [primitive]: string[];
   static [queryableValue](value: string[] | undefined) {
     if (!value) {
