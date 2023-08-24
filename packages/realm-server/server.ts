@@ -15,6 +15,7 @@ import {
   livenessCheck,
   healthCheck,
   httpLogging,
+  httpBasicAuth,
   ecsMetadata,
   assetRedirect,
   rootRealmRedirect,
@@ -90,6 +91,7 @@ export class RealmServer {
       .use(monacoMiddleware(this.assetsURL))
       .use(assetRedirect(this.assetsURL))
       .use(convertAcceptHeaderQueryParam)
+      .use(httpBasicAuth)
       .use(rootRealmRedirect(this.realms))
       .use(router.routes())
       .use(this.serveFromRealm);

@@ -41,12 +41,14 @@ export default class CardCatalog extends Component<Signature> {
 
           <ul class='card-catalog__group'>
             {{#each realm.displayedCards as |card|}}
+              {{#let (eq @selectedCard.id card.id) as |isSelected|}}
               <li
-                class={{cn 'item' selected=(eq @selectedCard.id card.id)}}
+                class={{cn 'item' selected=isSelected}}
                 data-test-card-catalog-item={{card.id}}
+                data-test-card-catalog-item-selected={{isSelected}}
               >
                 <CardCatalogItem
-                  @isSelected={{eq @selectedCard.id card.id}}
+                  @isSelected={{isSelected}}
                   @title={{card.title}}
                   @description={{card.description}}
                   @thumbnailURL={{card.thumbnailURL}}
@@ -64,6 +66,7 @@ export default class CardCatalog extends Component<Signature> {
                   aria-label='preview'
                 />
               </li>
+              {{/let}}
             {{/each}}
           </ul>
           {{#if (gt realm.cards.length realm.displayedCards.length)}}

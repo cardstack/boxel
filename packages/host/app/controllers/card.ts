@@ -13,6 +13,7 @@ import { getSearchResults, type Search } from '../resources/search';
 import OperatorModeStateService, {
   SerializedState as OperatorModeSerializedState,
 } from '@cardstack/host/services/operator-mode-state-service';
+import { Submode } from '@cardstack/host/components/submode-switcher';
 
 export default class CardController extends Controller {
   queryParams = ['operatorModeState', 'operatorModeEnabled'];
@@ -57,6 +58,7 @@ export default class CardController extends Controller {
             },
           ],
         ],
+        submode: Submode.Interact,
       } as OperatorModeSerializedState)!;
     } else {
       this.operatorModeState = null;
