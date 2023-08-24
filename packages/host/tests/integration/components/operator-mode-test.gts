@@ -1745,11 +1745,9 @@ module('Integration | operator-mode', function (hooks) {
       .exists();
 
     await fillIn(`[data-test-search-field] input`, `pet`);
-    await waitUntil(
-      () =>
-        !document.querySelector(
-          `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
-        ),
+    await waitFor(
+      `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
+      { count: 0 },
     );
     assert.dom(`[data-test-card-catalog-item]`).exists({ count: 2 });
 
@@ -1825,9 +1823,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-card-catalog-item]');
 
     await fillIn(`[data-test-search-field] input`, `friend`);
-    await waitUntil(
-      () => !document.querySelector(`[data-test-card-catalog-item]`),
-    );
+    await waitFor('[data-test-card-catalog-item]', { count: 0 });
     assert.dom(`[data-test-card-catalog]`).hasText('No cards available');
   });
 
@@ -1848,11 +1844,9 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-card-catalog-item]`).exists({ count: 4 });
 
     await fillIn(`[data-test-search-field] input`, `room`);
-    await waitUntil(
-      () =>
-        !document.querySelector(
-          `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-card"]`,
-        ),
+    await waitFor(
+      `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-card"]`,
+      { count: 0 },
     );
     assert.dom(`[data-test-card-catalog-item]`).exists({ count: 2 });
     assert.dom(`[data-test-realm]`).exists({ count: 2 });
@@ -1906,9 +1900,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     await click('[data-test-realm-filter-button]');
     await click('[data-test-boxel-menu-item-text="Operator Mode Workspace"]');
-    await waitUntil(
-      () => !document.querySelector('[data-test-card-catalog-item]'),
-    );
+    await waitFor('[data-test-card-catalog-item]', { count: 0 });
     assert.dom('[data-test-card-catalog]').hasText('No cards available');
   });
 
@@ -1928,11 +1920,9 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-card-catalog-item]');
 
     await fillIn(`[data-test-search-field] input`, `pet`);
-    await waitUntil(
-      () =>
-        !document.querySelector(
-          `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
-        ),
+    await waitFor(
+      `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
+      { count: 0 },
     );
     assert.dom(`[data-test-card-catalog-item]`).exists({ count: 2 });
 

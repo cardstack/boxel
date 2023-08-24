@@ -122,7 +122,7 @@ export default class CardCatalogModal extends Component<Signature> {
                 <span>Enter Card URL:</span>
                 <BoxelInputValidationState
                   data-test-url-field
-                  placeholder='http://'
+                  placeholder='https://'
                   @value={{this.cardURL}}
                   @onInput={{this.setCardURL}}
                   @onKeyPress={{this.onURLFieldKeypress}}
@@ -319,7 +319,6 @@ export default class CardCatalogModal extends Component<Signature> {
   );
 
   private getCard = restartableTask(async (searchKey: string) => {
-    //TODO: Handle fetching card using non-URL search key
     let response = await this.loaderService.loader.fetch(searchKey, {
       headers: {
         Accept: 'application/vnd.card+json',
