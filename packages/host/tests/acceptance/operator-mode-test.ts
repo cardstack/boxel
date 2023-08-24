@@ -274,6 +274,7 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
+            submode: 'interact',
           })!,
         )}`,
       );
@@ -330,6 +331,7 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
+            submode: 'interact',
           })!,
         )}`,
       );
@@ -356,6 +358,7 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
+            submode: 'interact',
           })!,
         )}`,
       );
@@ -382,6 +385,7 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
+            submode: 'interact',
           })!,
         )}`,
       );
@@ -452,6 +456,7 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
+            submode: 'interact',
           })!,
         )}`,
       );
@@ -489,6 +494,7 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
+            submode: 'interact',
           })!,
         )}`,
       );
@@ -522,6 +528,7 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
+            submode: 'interact',
           })!,
         )}`,
       );
@@ -788,6 +795,7 @@ module('Acceptance | operator mode tests', function (hooks) {
                 },
               ],
             ],
+            submode: 'interact',
           })!,
         )}`,
       );
@@ -902,6 +910,99 @@ module('Acceptance | operator mode tests', function (hooks) {
           '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="1"]',
         )
         .doesNotExist();
+    });
+
+    test('Toggling submode will open code mode and toggling back will restore the stack', async function (assert) {
+      let operatorModeStateParam = stringify({
+        stacks: [
+          [
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Person/fadhlan',
+              format: 'isolated',
+            },
+          ],
+          [
+            {
+              type: 'card',
+              id: 'http://test-realm/test/Pet/mango',
+              format: 'isolated',
+            },
+          ],
+        ],
+      })!;
+
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam,
+        )}`,
+      );
+
+      // Toggle from interactive (default) to code mode
+      await click('[data-test-submode-switcher] button');
+      await click('[data-test-boxel-menu-item-text="Code"]');
+
+      assert.dom('[data-test-submode-switcher] button').hasText('Code');
+      assert.dom('[data-test-code-mode]').exists();
+
+      // Submode is reflected in the URL
+      assert.strictEqual(
+        currentURL(),
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          stringify({
+            stacks: [
+              [
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/Person/fadhlan',
+                  format: 'isolated',
+                },
+              ],
+              [
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/Pet/mango',
+                  format: 'isolated',
+                },
+              ],
+            ],
+            submode: 'code',
+          })!,
+        )}`,
+      );
+
+      // Toggle back to interactive mode
+      await click('[data-test-submode-switcher] button');
+      await click('[data-test-boxel-menu-item-text="Interact"]');
+
+      // Stacks are restored
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
+
+      // Submode is reflected in the URL
+      assert.strictEqual(
+        currentURL(),
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          stringify({
+            stacks: [
+              [
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/Person/fadhlan',
+                  format: 'isolated',
+                },
+              ],
+              [
+                {
+                  type: 'card',
+                  id: 'http://test-realm/test/Pet/mango',
+                  format: 'isolated',
+                },
+              ],
+            ],
+            submode: 'interact',
+          })!,
+        )}`,
+      );
     });
   });
 });

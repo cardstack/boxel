@@ -45,6 +45,7 @@ import DeleteModal from './delete-modal';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import SubmodeSwitcher, { Submode } from '../submode-switcher';
+import CodeMode from '@cardstack/host/components/operator-mode/code-mode';
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
 
@@ -56,6 +57,7 @@ interface Signature {
 
 export interface OperatorModeState {
   stacks: Stack[];
+  submode: Submode;
 }
 
 export type Stack = StackItem[];
@@ -101,7 +103,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
   @tracked searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked isChatVisible = false;
-  @tracked submode = Submode.INTERACT;
+
   private deleteModal: DeleteModal | undefined;
 
   constructor(owner: unknown, args: any) {
@@ -608,6 +610,19 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.operatorModeStateService.state?.stacks.flat() ?? [];
   }
 
+  get cardForCodeMode() {
+    // Last card in rightmost stack
+    return (
+      this.allStackItems.filter(
+        (item) => item.type === 'card',
+      ) as CardStackItem[]
+    ).reverse()[0].card;
+  }
+
+  get isCodeMode() {
+    return this.operatorModeStateService.state?.submode === Submode.Code;
+  }
+
   @action onCardSelectFromSearch(card: Card) {
     let searchSheetTrigger = this.searchSheetTrigger; // Will be set by onFocusSearchInput
 
@@ -698,6 +713,10 @@ export default class OperatorModeContainer extends Component<Signature> {
     this.deleteModal = deleteModal;
   };
 
+  @action updateSubmode(submode: Submode) {
+    this.operatorModeStateService.updateSubmode(submode);
+  }
+
   <template>
     <Modal
       class='operator-mode'
@@ -707,102 +726,106 @@ export default class OperatorModeContainer extends Component<Signature> {
       @isOverlayDismissalDisabled={{true}}
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
     >
-
       <CardCatalogModal />
 
       <div class='operator-mode__with-chat {{this.chatVisibilityClass}}'>
-        <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
-          {{#if (eq this.allStackItems.length 0)}}
-            <div class='no-cards'>
-              <p class='add-card-title'>
-                Add a card to get started
-              </p>
+        <SubmodeSwitcher
+          @submode={{this.operatorModeStateService.state.submode}}
+          @onSubmodeSelect={{this.updateSubmode}}
+          class='submode-switcher'
+        />
 
-              <button
-                class='add-card-button'
-                {{on 'click' (fn (perform this.addCard))}}
-                data-test-add-card-button
-              >
-                {{svgJar 'icon-plus' width='50px' height='50px'}}
-              </button>
-            </div>
-          {{else}}
-            {{#each this.stacks as |stack stackIndex|}}
-              <OperatorModeStack
-                data-test-operator-mode-stack={{stackIndex}}
-                class='operator-mode-stack'
-                @stackItems={{stack}}
-                @backgroundImageURL={{get
-                  this.differingBackgroundImageURLs
-                  stackIndex
-                }}
-                @stackIndex={{stackIndex}}
-                @publicAPI={{this.publicAPI this stackIndex}}
-                @close={{perform this.close}}
-                @edit={{this.edit}}
-                @onSelectedCards={{this.onSelectedCards}}
-                @save={{perform this.save}}
-                @delete={{perform this.delete}}
-                @setupStackItem={{this.setupStackItem}}
+        {{#if this.isCodeMode}}
+          <CodeMode @card={{this.cardForCodeMode}} />
+        {{else}}
+          <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
+            {{#if (eq this.allStackItems.length 0)}}
+              <div class='no-cards'>
+                <p class='add-card-title'>
+                  Add a card to get started
+                </p>
+
+                <button
+                  class='add-card-button'
+                  {{on 'click' (fn (perform this.addCard))}}
+                  data-test-add-card-button
+                >
+                  {{svgJar 'icon-plus' width='50px' height='50px'}}
+                </button>
+              </div>
+            {{else}}
+              {{#each this.stacks as |stack stackIndex|}}
+                <OperatorModeStack
+                  data-test-operator-mode-stack={{stackIndex}}
+                  class='operator-mode-stack'
+                  @stackItems={{stack}}
+                  @backgroundImageURL={{get
+                    this.differingBackgroundImageURLs
+                    stackIndex
+                  }}
+                  @stackIndex={{stackIndex}}
+                  @publicAPI={{this.publicAPI this stackIndex}}
+                  @close={{perform this.close}}
+                  @edit={{this.edit}}
+                  @onSelectedCards={{this.onSelectedCards}}
+                  @save={{perform this.save}}
+                  @delete={{perform this.delete}}
+                  @setupStackItem={{this.setupStackItem}}
+                />
+              {{/each}}
+
+              <CopyButton
+                @selectedCards={{this.selectedCards}}
+                @copy={{fn (perform this.copy)}}
+                @isCopying={{this.copy.isRunning}}
               />
-            {{/each}}
+              <DeleteModal @onCreate={{this.setupDeleteModal}} />
+            {{/if}}
 
-            <CopyButton
-              @selectedCards={{this.selectedCards}}
-              @copy={{fn (perform this.copy)}}
-              @isCopying={{this.copy.isRunning}}
-            />
-            <DeleteModal @onCreate={{this.setupDeleteModal}} />
-          {{/if}}
-
-          {{#if this.canCreateNeighborStack}}
-            <button
-              data-test-add-card-left-stack
-              class='add-card-to-neighbor-stack add-card-to-neighbor-stack--left
-                {{if
-                  (eq
-                    this.searchSheetTrigger
+            {{#if this.canCreateNeighborStack}}
+              <button
+                data-test-add-card-left-stack
+                class='add-card-to-neighbor-stack add-card-to-neighbor-stack--left
+                  {{if
+                    (eq
+                      this.searchSheetTrigger
+                      SearchSheetTrigger.DropCardToLeftNeighborStackButton
+                    )
+                    "add-card-to-neighbor-stack--active"
+                  }}'
+                {{on
+                  'click'
+                  (fn
+                    this.onFocusSearchInput
                     SearchSheetTrigger.DropCardToLeftNeighborStackButton
                   )
-                  "add-card-to-neighbor-stack--active"
-                }}'
-              {{on
-                'click'
-                (fn
-                  this.onFocusSearchInput
-                  SearchSheetTrigger.DropCardToLeftNeighborStackButton
-                )
-              }}
-            >
-              {{svgJar 'download' width='30px' height='30px'}}
-            </button>
-            <button
-              data-test-add-card-right-stack
-              class='add-card-to-neighbor-stack add-card-to-neighbor-stack--right
-                {{if
-                  (eq
-                    this.searchSheetTrigger
+                }}
+              >
+                {{svgJar 'download' width='30px' height='30px'}}
+              </button>
+              <button
+                data-test-add-card-right-stack
+                class='add-card-to-neighbor-stack add-card-to-neighbor-stack--right
+                  {{if
+                    (eq
+                      this.searchSheetTrigger
+                      SearchSheetTrigger.DropCardToRightNeighborStackButton
+                    )
+                    "add-card-to-neighbor-stack--active"
+                  }}'
+                {{on
+                  'click'
+                  (fn
+                    this.onFocusSearchInput
                     SearchSheetTrigger.DropCardToRightNeighborStackButton
                   )
-                  "add-card-to-neighbor-stack--active"
-                }}'
-              {{on
-                'click'
-                (fn
-                  this.onFocusSearchInput
-                  SearchSheetTrigger.DropCardToRightNeighborStackButton
-                )
-              }}
-            >
-              {{svgJar 'download' width='30px' height='30px'}}
-            </button>
-          {{/if}}
-          <SubmodeSwitcher
-            @submode={{this.submode}}
-            @onSubmodeSelect={{fn (mut this.submode)}}
-            class='submode-switcher'
-          />
-        </div>
+                }}
+              >
+                {{svgJar 'download' width='30px' height='30px'}}
+              </button>
+            {{/if}}
+          </div>
+        {{/if}}
 
         {{#if this.isChatVisible}}
           <ChatSidebar @onClose={{this.toggleChat}} />
@@ -936,7 +959,8 @@ export default class OperatorModeContainer extends Component<Signature> {
         position: absolute;
         top: 0;
         left: 0;
-        margin: var(--boxel-sp);
+        z-index: 2;
+        padding: var(--boxel-sp);
       }
     </style>
   </template>
