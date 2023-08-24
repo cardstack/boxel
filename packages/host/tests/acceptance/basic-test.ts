@@ -21,6 +21,8 @@ import {
 import { Realm } from '@cardstack/runtime-common/realm';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import percySnapshot from '@percy/ember';
+import { setupWindowMock } from 'ember-window-mock/test-support';
+import window from 'ember-window-mock';
 
 function getMonacoContent(): string {
   return (window as any).monaco.editor.getModels()[0].getValue();
@@ -77,13 +79,14 @@ module('Acceptance | basic tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupMockMessageService(hooks);
+  setupWindowMock(hooks);
 
   hooks.afterEach(async function () {
-    localStorage.removeItem('recent-files');
+    window.localStorage.removeItem('recent-files');
   });
 
   hooks.beforeEach(async function () {
-    localStorage.removeItem('recent-files');
+    window.localStorage.removeItem('recent-files');
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
@@ -191,7 +194,7 @@ module('Acceptance | basic tests', function (hooks) {
   });
 
   test('recent file links are shown', async function (assert) {
-    localStorage.setItem('recent-files', JSON.stringify(['index.json']));
+    window.localStorage.setItem('recent-files', JSON.stringify(['index.json']));
 
     console.log('visiting code');
     await visit('/code');
@@ -235,11 +238,10 @@ module('Acceptance | basic tests', function (hooks) {
       .dom('[data-test-recent-file]:nth-child(2)')
       .containsText('Person/1.json');
 
-    assert.deepEqual(JSON.parse(localStorage.getItem('recent-files') || '[]'), [
-      'index.json',
-      'person.gts',
-      'Person/1.json',
-    ]);
+    assert.deepEqual(
+      JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
+      ['index.json', 'person.gts', 'Person/1.json'],
+    );
   });
 
   test('Can view a card instance', async function (assert) {
