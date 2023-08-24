@@ -45,7 +45,7 @@ import DeleteModal from './delete-modal';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import SubmodeSwitcher, { Submode } from '../submode-switcher';
-import OperatorModeCodeMode from '@cardstack/host/components/operator-mode/code-mode';
+import CodeMode from '@cardstack/host/components/operator-mode/code-mode';
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
 
@@ -736,7 +736,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         />
 
         {{#if this.isCodeMode}}
-          <OperatorModeCodeMode @card={{this.cardForCodeMode}} />
+          <CodeMode @card={{this.cardForCodeMode}} />
         {{else}}
           <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
             {{#if (eq this.allStackItems.length 0)}}

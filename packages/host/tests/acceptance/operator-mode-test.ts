@@ -943,7 +943,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       await click('[data-test-boxel-menu-item-text="Code"]');
 
       assert.dom('[data-test-submode-switcher] button').hasText('Code');
-      assert.dom('[data-test-operator-mode-code-mode]').exists();
+      assert.dom('[data-test-code-mode]').exists();
 
       // Submode is reflected in the URL
       assert.strictEqual(

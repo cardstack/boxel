@@ -13,7 +13,7 @@ interface Signature {
   };
 }
 
-export default class OperatorModeCodeMode extends Component<Signature> {
+export default class CodeMode extends Component<Signature> {
   @service declare monacoService: MonacoService;
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
@@ -32,12 +32,9 @@ export default class OperatorModeCodeMode extends Component<Signature> {
   }
 
   <template>
-    <div
-      class='operator-mode-code-mode-background'
-      style={{this.backgroundURLStyle}}
-    ></div>
+    <div class='code-mode-background' style={{this.backgroundURLStyle}}></div>
 
-    <div class='operator-mode-code-mode' data-test-operator-mode-code-mode>
+    <div class='code-mode' data-test-code-mode>
       <div class='columns'>
         <div class='column'>File tree</div>
         <div class='column'>Code</div>
@@ -46,7 +43,7 @@ export default class OperatorModeCodeMode extends Component<Signature> {
     </div>
 
     <style>
-      .operator-mode-code-mode {
+      .code-mode {
         position: fixed;
         height: 100%;
         left: 0;
@@ -54,7 +51,7 @@ export default class OperatorModeCodeMode extends Component<Signature> {
         z-index: 1;
       }
 
-      .operator-mode-code-mode-background {
+      .code-mode-background {
         position: fixed;
         left: 0;
         right: 0;
