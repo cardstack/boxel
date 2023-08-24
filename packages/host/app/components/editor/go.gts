@@ -199,6 +199,7 @@ export default class Go extends Component<Signature> {
 
   openFile = maybe(this, (context) => {
     const relativePath = this.args.openFiles.path;
+    console.log(`go openFile relative path ${relativePath}`);
     if (relativePath) {
       return file(context, () => ({
         relativePath,
@@ -262,6 +263,7 @@ export default class Go extends Component<Signature> {
   }
 
   private loadCard = restartableTask(async (url: URL) => {
+    console.log('loadcard url', url.toString());
     this.card = await this.cardService.loadModel(url);
   });
 
