@@ -347,7 +347,7 @@ export default class SearchSheet extends Component<Signature> {
       :global(:root) {
         --search-sheet-closed-height: 40px;
         --search-sheet-closed-width: 172px;
-        --search-sheet-prompt-height: 130px;
+        --search-sheet-prompt-height: 131px;
       }
 
       .search-sheet {
@@ -405,6 +405,7 @@ export default class SearchSheet extends Component<Signature> {
         flex-shrink: 0;
         justify-content: space-between;
         opacity: 1;
+        overflow: hidden;
         height: 40px;
         padding: var(--boxel-sp-xl) var(--boxel-sp) var(--boxel-sp-lg)
           var(--boxel-sp);
@@ -413,6 +414,7 @@ export default class SearchSheet extends Component<Signature> {
           opacity calc(var(--boxel-transition) / 4);
       }
 
+      .closed .footer,
       .prompt .footer {
         height: 0;
         padding: 0;
@@ -429,7 +431,7 @@ export default class SearchSheet extends Component<Signature> {
         display: flex;
         flex-direction: column;
         flex: 1;
-        overflow-y: scroll;
+        overflow-y: auto;
         padding: 0 var(--boxel-sp-lg);
         transition: opacity calc(var(--boxel-transition) / 4);
       }
