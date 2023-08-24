@@ -124,100 +124,104 @@ export default class Menu extends Component<Signature> {
       {{/if}}
     </ul>
     <style>
-      .boxel-menu {
-        --boxel-menu-color: var(--boxel-light);
-        --boxel-menu-current-color: var(--boxel-light-100);
-        --boxel-menu-selected-color: var(--boxel-highlight);
-        --boxel-menu-disabled-color: var(--boxel-highlight);
-        --boxel-menu-font: 500 var(--boxel-font-sm);
-        --boxel-menu-item-gap: var(--boxel-sp-xxs);
-        --boxel-menu-item-content-padding: var(--boxel-sp-xs) var(--boxel-sp);
+      @layer {
+        .boxel-menu {
+          --boxel-menu-color: var(--boxel-light);
+          --boxel-menu-current-color: var(--boxel-light-100);
+          --boxel-menu-selected-color: var(--boxel-highlight);
+          --boxel-menu-disabled-color: var(--boxel-highlight);
+          --boxel-menu-font: 500 var(--boxel-font-sm);
+          --boxel-menu-item-gap: var(--boxel-sp-xxs);
+          --boxel-menu-item-content-padding: var(--boxel-sp-xs) var(--boxel-sp);
 
-        list-style-type: none;
-        margin: 0;
-        padding: 0;
-      }
+          list-style-type: none;
+          margin: 0;
+          padding: 0;
+        }
 
-      .boxel-menu__item {
-        background-color: var(--boxel-menu-color);
-        font: var(--boxel-menu-font);
-        letter-spacing: var(--boxel-lsp-sm);
-      }
+        .boxel-menu__item {
+          background-color: var(--boxel-menu-color);
+          font: var(--boxel-menu-font);
+          letter-spacing: var(--boxel-lsp-sm);
+        }
 
-      .boxel-menu__item:hover {
-        background-color: var(--boxel-menu-current-color);
-        cursor: pointer;
-      }
+        .boxel-menu__item:hover {
+          background-color: var(--boxel-menu-current-color);
+          cursor: pointer;
+        }
 
-      .boxel-menu__item:first-child {
-        border-radius: var(--boxel-border-radius) var(--boxel-border-radius) 0 0;
-      }
+        .boxel-menu__item:first-child {
+          border-radius: var(--boxel-border-radius) var(--boxel-border-radius) 0
+            0;
+        }
 
-      .boxel-menu__item:last-child {
-        border-radius: 0 0 var(--boxel-border-radius) var(--boxel-border-radius);
-      }
+        .boxel-menu__item:last-child {
+          border-radius: 0 0 var(--boxel-border-radius)
+            var(--boxel-border-radius);
+        }
 
-      .boxel-menu__item:only-child {
-        border-radius: var(--boxel-border-radius);
-      }
+        .boxel-menu__item:only-child {
+          border-radius: var(--boxel-border-radius);
+        }
 
-      .boxel-menu__item > .boxel-menu__item__content {
-        width: 100%;
-        padding: var(--boxel-menu-item-content-padding);
+        .boxel-menu__item > .boxel-menu__item__content {
+          width: 100%;
+          padding: var(--boxel-menu-item-content-padding);
 
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 10px;
-      }
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 10px;
+        }
 
-      .boxel-menu__item--disabled .boxel-menu__item__content {
-        pointer-events: none;
-      }
+        .boxel-menu__item--disabled .boxel-menu__item__content {
+          pointer-events: none;
+        }
 
-      .boxel-menu__item > .boxel-menu__item__content:hover {
-        color: inherit;
-      }
+        .boxel-menu__item > .boxel-menu__item__content:hover {
+          color: inherit;
+        }
 
-      .boxel-menu__item--dangerous {
-        color: var(--boxel-danger);
-        fill: var(--boxel-danger);
-      }
+        .boxel-menu__item--dangerous {
+          color: var(--boxel-danger);
+          fill: var(--boxel-danger);
+        }
 
-      .boxel-menu__item--disabled,
-      .boxel-menu__item--disabled.boxel-menu__item:hover {
-        background-color: initial;
-        opacity: 0.4;
-      }
+        .boxel-menu__item--disabled,
+        .boxel-menu__item--disabled.boxel-menu__item:hover {
+          background-color: initial;
+          opacity: 0.4;
+        }
 
-      .boxel-menu__separator {
-        margin: 0;
-        border: 0;
-        height: 0;
-        border-bottom: 1px solid var(--boxel-purple-300);
-      }
+        .boxel-menu__separator {
+          margin: 0;
+          border: 0;
+          height: 0;
+          border-bottom: 1px solid var(--boxel-purple-300);
+        }
 
-      .menu-item {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-menu-item-gap);
-      }
-      .menu-item__icon-url {
-        display: inline-block;
-        width: 16px;
-        height: 16px;
-        background-position: center;
-        background-repeat: no-repeat;
-        background-size: contain;
-      }
+        .menu-item {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-menu-item-gap);
+        }
+        .menu-item__icon-url {
+          display: inline-block;
+          width: 16px;
+          height: 16px;
+          background-position: center;
+          background-repeat: no-repeat;
+          background-size: contain;
+        }
 
-      .check-icon {
-        --icon-color: var(--boxel-highlight);
-        visibility: collapse;
-        display: contents;
-      }
-      .check-icon--selected {
-        visibility: visible;
+        .check-icon {
+          --icon-color: var(--boxel-highlight);
+          visibility: collapse;
+          display: contents;
+        }
+        .check-icon--selected {
+          visibility: visible;
+        }
       }
     </style>
   </template>
