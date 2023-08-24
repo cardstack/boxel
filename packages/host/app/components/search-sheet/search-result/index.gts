@@ -37,6 +37,7 @@ export default class SearchResult extends Component<Signature> {
         width: 199px;
         height: 50px;
         padding: var(--boxel-sp-xxs);
+        overflow: hidden;
       }
       .search-result__title {
         margin-bottom: var(--boxel-sp-xs);
