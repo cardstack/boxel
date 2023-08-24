@@ -60,6 +60,9 @@ const SearchInput: TemplateOnlyComponent<Signature> = <template>
       width: 100%;
       font: var(--boxel-font);
     }
+    :global(.search-input .boxel-input:focus-visible) {
+      outline-style: solid;
+    }
     label {
       height: var(--search-input-height);
       position: relative;

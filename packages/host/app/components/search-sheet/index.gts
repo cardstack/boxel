@@ -315,7 +315,7 @@ export default class SearchSheet extends Component<Signature> {
       </div>
       <div class='footer'>
         <div class='url-entry'>
-          <div class='url-entry-field-container'>
+          <label class='url-entry-field-container'>
             <Label class='label'>Enter Card URL:</Label>
             <BoxelInputValidationState
               data-test-url-field
@@ -327,7 +327,7 @@ export default class SearchSheet extends Component<Signature> {
               @errorMessage={{this.cardURLErrorMessage}}
               class='input-group'
             />
-          </div>
+          </label>
         </div>
         <div class='buttons'>
           <Button
@@ -428,15 +428,18 @@ export default class SearchSheet extends Component<Signature> {
       .search-sheet-content {
         background-color: var(--boxel-light);
         border-bottom: 1px solid var(--boxel-200);
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        overflow-y: auto;
         padding: 0 var(--boxel-sp-lg);
         transition: opacity calc(var(--boxel-transition) / 4);
       }
       .results .search-sheet-content {
         padding-top: var(--boxel-sp);
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        overflow-y: auto;
+      }
+      .prompt .search-sheet-content {
+        overflow-x: auto;
       }
       .search-result-section {
         display: flex;
@@ -463,6 +466,8 @@ export default class SearchSheet extends Component<Signature> {
         gap: var(--boxel-sp);
       }
       .prompt .search-result-section__cards {
+        display: flex;
+        flex-wrap: nowrap;
         padding: var(--boxel-sp-xxs);
         gap: var(--boxel-sp-xs);
       }
