@@ -461,7 +461,8 @@ export class RoomCard extends CardDef {
           message: event.content.body,
           formattedMessage,
           index,
-          transactionId: event.unsigned.transaction_id,
+          // These are not guaranteed to exist in the event
+          transactionId: event.unsigned?.transaction_id || null,
           attachedCard: null,
           command: event.content.msgtype === 'org.boxel.command' ? JSON.stringify(event.content.command) : null,
         };
