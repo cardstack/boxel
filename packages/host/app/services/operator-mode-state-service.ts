@@ -9,6 +9,7 @@ import type CardService from '../services/card-service';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
+import { task } from 'ember-concurrency';
 import { getOwner } from '@ember/application';
 import { scheduleOnce } from '@ember/runloop';
 import stringify from 'safe-stable-stringify';
@@ -57,6 +58,35 @@ export default class OperatorModeStateService extends Service {
     }
     this.schedulePersist();
   }
+
+  patchCard = task({ enqueue: true }, async (id: string, attributes: any) => {
+    let stackItems = this.state?.stacks.flat() ?? [];
+    for (let item of stackItems) {
+      if ('card' in item && item.card.id == id) {
+        await this.setFieldValues.perform(item.card, attributes);
+      }
+    }
+  });
+
+  private setFieldValues = task(async (card: Card, values: any) => {
+    let fields = await this.cardService.getFields(card);
+    for (let fieldName of Object.keys(values)) {
+      let field = fields[fieldName];
+      if (fieldName === 'id') continue;
+      if (
+        (field.fieldType === 'contains' ||
+          field.fieldType === 'containsMany') &&
+        !(await this.cardService.isPrimitive(field.card))
+      ) {
+        await this.setFieldValues.perform(
+          (card as any)[fieldName],
+          values[fieldName],
+        );
+      } else {
+        (card as any)[fieldName] = values[fieldName];
+      }
+    }
+  });
 
   trimItemsFromStack(item: StackItem) {
     let stackIndex = item.stackIndex;

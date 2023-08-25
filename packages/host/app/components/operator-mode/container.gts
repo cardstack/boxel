@@ -39,7 +39,6 @@ import perform from 'ember-concurrency/helpers/perform';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import OperatorModeStack from './stack';
 import type MatrixService from '../../services/matrix-service';
-import type CommandService from '../../services/command-service';
 import type MessageService from '../../services/message-service';
 import ChatSidebar from '../matrix/chat-sidebar';
 import CopyButton from './copy-button';
@@ -115,11 +114,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     registerDestructor(this, () => {
       delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
       this.operatorModeStateService.clearStacks();
-      this.commandService.unregisterCommandHandler(this);
     });
-    this.commandService.registerCommandHandler(this, 'patch', (args) =>
-      this.patchCard(args),
-    );
   }
 
   get stacks() {
@@ -162,40 +157,6 @@ export default class OperatorModeContainer extends Component<Signature> {
   constructRecentCards = restartableTask(async () => {
     return await this.operatorModeStateService.constructRecentCards();
   });
-
-  async patchCard(command: any) {
-    if (command.type == 'patch') {
-      for (let item of this.allStackItems) {
-        if ('card' in item && item.card.id == command.id) {
-          await this.setFieldValues(item.card, command.patch.attributes);
-        }
-      }
-    }
-  }
-
-  private async setFieldValues(card: Card, values: any) {
-    let fields = await this.cardService.getFields(card);
-    for (let fieldName of Object.keys(values)) {
-      let field = fields[fieldName];
-      if (fieldName === 'id') continue;
-      try {
-        if (
-          (field.fieldType === 'contains' ||
-            field.fieldType === 'containsMany') &&
-          !(await this.cardService.isPrimitive(field.card))
-        ) {
-          await this.setFieldValues(
-            (card as any)[fieldName],
-            values[fieldName],
-          );
-        } else {
-          (card as any)[fieldName] = values[fieldName];
-        }
-      } catch (e) {
-        console.log(e);
-      }
-    }
-  }
 
   private getAddressableCard(item: StackItem): Card {
     return getCardStackItem(item, this.stacks[item.stackIndex]).card;

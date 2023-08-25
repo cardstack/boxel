@@ -4,8 +4,9 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 //@ts-expect-error the types don't recognize the cached export
 import { tracked, cached } from '@glimmer/tracking';
-import { not, and } from '@cardstack/host/helpers/truth-helpers';
-import { restartableTask } from 'ember-concurrency';
+import { not, and, eq } from '@cardstack/host/helpers/truth-helpers';
+import { restartableTask, task } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
 import {
   BoxelInput,
   LoadingIndicator,
@@ -20,7 +21,6 @@ import {
   catalogEntryRef,
 } from '@cardstack/runtime-common';
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import type CommandService from '../../services/command-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import { type Card, type Format } from 'https://cardstack.com/base/card-api';
 import { type MessageCard } from 'https://cardstack.com/base/room';
@@ -35,25 +35,31 @@ interface RoomArgs {
   };
 }
 
-interface CommandArgs {
+interface Patch {
   Args: {
-    command: any;
+    id: string;
+    patch: {
+      attributes: { [key: string]: any };
+    };
   };
 }
 
-class CommandMessage extends Component<CommandArgs> {
-  @service private declare commandService: CommandService;
+class PatchMessage extends Component<Patch> {
+  @service private declare operatorModeStateService: OperatorModeStateService;
   <template>
-    <Button data-test-command-apply {{on 'click' this.clicked}}>Apply</Button>
+    <Button
+      data-test-command-apply
+      {{on 'click' (perform this.patchCard)}}
+      @disabled={{this.patchCard.isRunning?}}
+    >Apply</Button>
   </template>
 
-  @action
-  async clicked() {
-    await this.commandService.runCommand(
-      this.args.command.type,
-      this.args.command,
+  private patchCard = task({ drop: true }, async () => {
+    await this.operatorModeStateService.patchCard.perform(
+      this.args.id,
+      this.args.patch.attributes,
     );
-  }
+  });
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -116,8 +122,11 @@ export default class Room extends Component<RoomArgs> {
           </div>
         </div>
         {{#each this.messageCardComponents as |Message|}}
-          {{#if Message.command}}
-            <CommandMessage @command={{Message.command}} />
+          {{#if (and Message.command (eq Message.command.type 'patch'))}}
+            <PatchMessage
+              @id={{Message.command.id}}
+              @patch={{Message.command.patch}}
+            />
           {{else}}
             <Message.component />
           {{/if}}
