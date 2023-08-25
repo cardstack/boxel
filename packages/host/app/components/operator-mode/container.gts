@@ -9,7 +9,6 @@ import type CardService from '../../services/card-service';
 import get from 'lodash/get';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { Modal, IconButton } from '@cardstack/boxel-ui';
-import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import SearchSheet, { SearchSheetMode } from '../search-sheet';
 import { restartableTask, task, dropTask } from 'ember-concurrency';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';

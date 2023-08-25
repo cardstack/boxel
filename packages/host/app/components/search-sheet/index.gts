@@ -27,7 +27,6 @@ import debounce from 'lodash/debounce';
 import flatMap from 'lodash/flatMap';
 import { TrackedArray } from 'tracked-built-ins';
 import ENV from '@cardstack/host/config/environment';
-import { htmlSafe } from '@ember/template';
 import UrlSearch from '../url-search';
 
 const { otherRealmURLs } = ENV;
@@ -218,16 +217,6 @@ export default class SearchSheet extends Component<Signature> {
   get isSearchKeyNotEmpty() {
     return !!this.searchKey && this.searchKey !== '';
   }
-
-  // get searchInputStyle() {
-  //   let mode = this.args.mode;
-  //   if (mode == SearchSheetMode.Closed) {
-  //     return htmlSafe(
-  //       `--search-input-height: var(--stack-card-footer-height);`,
-  //     );
-  //   }
-  //   return htmlSafe('');
-  // }
 
   @action onSearchInputKeyDown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
