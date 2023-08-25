@@ -3,7 +3,7 @@ import {
   CardDef,
   contains,
   field,
-  StringCard,
+  StringField,
   Component,
   linksTo,
   realmURL,
@@ -334,11 +334,11 @@ export class Claim extends CardDef {
   static displayName = 'Claim';
   @field moduleAddress = contains(EthereumAddressCard);
   @field safeAddress = contains(EthereumAddressCard);
-  @field explanation = contains(StringCard);
-  @field signature = contains(StringCard);
-  @field encoding = contains(StringCard);
+  @field explanation = contains(StringField);
+  @field signature = contains(StringField);
+  @field encoding = contains(StringField);
   @field chain = linksTo(Chain);
-  @field title = contains(StringCard, {
+  @field title = contains(StringField, {
     computeVia: function (this: Claim) {
       return `Claim for ${this.safeAddress}`;
     },
