@@ -106,7 +106,7 @@ async function sendMessage(
   client: MatrixClient,
   room: Room,
   content: string,
-  previous: string | undefined
+  previous: string | undefined,
 ) {
   if (content.startsWith('option>')) {
     content = content.replace('option>', '');
@@ -163,7 +163,7 @@ async function sendStream(
   stream: AsyncIterable<ChatCompletionChunk>,
   client: MatrixClient,
   room: Room,
-  append_to?: string
+  append_to?: string,
 ) {
   let content = '';
   let unsent = 0;
@@ -305,7 +305,7 @@ async function getResponse(history: IRoomEvent[]) {
   });
   let auth = await client.loginWithPassword(
     'aibot',
-    process.env.BOXEL_AIBOT_PASSWORD || 'pass'
+    process.env.BOXEL_AIBOT_PASSWORD || 'pass',
   );
   let { user_id } = auth;
   client.on(RoomMemberEvent.Membership, function (_event, member) {
@@ -327,7 +327,7 @@ async function getResponse(history: IRoomEvent[]) {
         '(%s) %s :: %s',
         room?.name,
         event.getSender(),
-        event.getContent().body
+        event.getContent().body,
       );
 
       if (event.event.origin_server_ts! < startTime) {
@@ -345,7 +345,7 @@ async function getResponse(history: IRoomEvent[]) {
       let initialMessage: ISendEventResponse = await client.sendHtmlMessage(
         room!.roomId,
         'Thinking...',
-        'Thinking...'
+        'Thinking...',
       );
 
       let initial = await client.roomInitialSync(room!.roomId, 1000);
@@ -370,7 +370,7 @@ async function getResponse(history: IRoomEvent[]) {
             client,
             room,
             'Error parsing your debug patch as JSON: ' + patchMessage,
-            initialMessage.event_id
+            initialMessage.event_id,
           );
         }
         let messageObject = {
@@ -389,13 +389,13 @@ async function getResponse(history: IRoomEvent[]) {
         return await client.sendEvent(
           room.roomId,
           'm.room.message',
-          messageObject
+          messageObject,
         );
       }
 
       const stream = await getResponse(history);
       return await sendStream(stream, client, room, initialMessage.event_id);
-    }
+    },
   );
 
   await client.startClient();

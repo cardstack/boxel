@@ -16,7 +16,7 @@ It will default to connecting on `http://localhost:8008/`, which can be overridd
 
 ### Boxel Development
 
-If you are working on boxel development, you do not need to connect this up to OpenAI. 
+If you are working on boxel development, you do not need to connect this up to OpenAI.
 
 ### Access to GPT4
 
@@ -37,7 +37,7 @@ Once logged in, create a room and invite the aibot - it should join automaticall
 
 It will be able to see any cards shared in the chat and can respond using GPT4 if you ask for content modifications (as a start, try 'can you create some sample data for this?'). The response should stream back and give you several options, these get applied as patches to the shared card if it is in your stack.
 
-You can deliberately trigger a specific patch by sending a message that starts `debugpatch:` and has the JSON patch you want returned. For example: 
+You can deliberately trigger a specific patch by sending a message that starts `debugpatch:` and has the JSON patch you want returned. For example:
 
 ```
 debugpatch:{"firstName": "David"}
