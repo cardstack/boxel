@@ -4,8 +4,8 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 //@ts-expect-error the types don't recognize the cached export
 import { tracked, cached } from '@glimmer/tracking';
-import { not, and, eq } from '@cardstack/host/helpers/truth-helpers';
-import { restartableTask, task } from 'ember-concurrency';
+import { not, and } from '@cardstack/host/helpers/truth-helpers';
+import { restartableTask, task, timeout, all } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import {
   BoxelInput,
@@ -13,21 +13,23 @@ import {
   FieldContainer,
   Button,
 } from '@cardstack/boxel-ui';
-import { getRoomCard } from '@cardstack/host/resources/room-card';
+import { getRoomCard } from '../../resources/room-card';
 import { TrackedMap } from 'tracked-built-ins';
 import {
   chooseCard,
   baseCardRef,
   catalogEntryRef,
 } from '@cardstack/runtime-common';
+import { registerDestructor } from '@ember/destroyable';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import { type Card, type Format } from 'https://cardstack.com/base/card-api';
+import { type CardDef, type Format } from 'https://cardstack.com/base/card-api';
 import { type MessageCard } from 'https://cardstack.com/base/room';
 import type CardService from '@cardstack/host/services/card-service';
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+import config from '@cardstack/host/config/environment';
 
-const TRUE = true;
+const { environment } = config;
 
 interface RoomArgs {
   Args: {
@@ -37,10 +39,7 @@ interface RoomArgs {
 
 interface Patch {
   Args: {
-    id: string;
-    patch: {
-      attributes: { [key: string]: any };
-    };
+    command: string;
   };
 }
 
@@ -50,20 +49,20 @@ class PatchMessage extends Component<Patch> {
     <Button
       data-test-command-apply
       {{on 'click' (perform this.patchCard)}}
-      @disabled={{this.patchCard.isRunning?}}
+      @loading={{this.patchCard.isRunning}}
+      @disabled={{this.patchCard.isRunning}}
     >Apply</Button>
   </template>
 
   private patchCard = task({ drop: true }, async () => {
+    let commandParsed = JSON.parse(this.args.command);
+    let id = commandParsed.id;
+    let attributes = commandParsed.patch.attributes;
     await this.operatorModeStateService.patchCard.perform(
-      this.args.id,
-      this.args.patch.attributes,
+      id,
+      attributes,
     );
   });
-
-  constructor(owner: unknown, args: any) {
-    super(owner, args);
-  }
 }
 
 export default class Room extends Component<RoomArgs> {
@@ -114,7 +113,10 @@ export default class Room extends Component<RoomArgs> {
       <div class='room__objective'> <this.objectiveComponent /> </div>
     {{/if}}
 
-    <div class='messages-wrapper'>
+    <div
+      class='messages-wrapper'
+      data-test-room-settled={{this.doWhenCardChanges.isIdle}}
+    >
       <div class='messages'>
         <div class='notices'>
           <div data-test-timeline-start class='timeline-start'>
@@ -122,10 +124,9 @@ export default class Room extends Component<RoomArgs> {
           </div>
         </div>
         {{#each this.messageCardComponents as |Message|}}
-          {{#if (and Message.command (eq Message.command.type 'patch'))}}
+          {{#if Message.command}}
             <PatchMessage
-              @id={{Message.command.id}}
-              @patch={{Message.command.patch}}
+              @command={{Message.command}}
             />
           {{else}}
             <Message.component />
@@ -142,7 +143,7 @@ export default class Room extends Component<RoomArgs> {
       <BoxelInput
         data-test-message-field
         type='text'
-        @multiline={{TRUE}}
+        @multiline={{true}}
         @value={{this.messageToSend}}
         @onInput={{this.setMessage}}
         rows='4'
@@ -167,6 +168,7 @@ export default class Room extends Component<RoomArgs> {
         <Button
           data-test-send-open-cards-btn
           @loading={{this.doSendMessage.isRunning}}
+          @disabled={{this.doSendMessage.isRunning}}
           {{on 'click' this.sendOpenCards}}
         >Send open cards</Button>
       {{/if}}
@@ -283,14 +285,25 @@ export default class Room extends Component<RoomArgs> {
   @tracked private isInviteMode = false;
   @tracked private membersToInvite: string[] = [];
   @tracked private allowedToSetObjective: boolean | undefined;
+  @tracked private subscribedCard: CardDef | undefined;
+
   private messagesToSend: TrackedMap<string, string | undefined> =
     new TrackedMap();
-  private cardsToSend: TrackedMap<string, Card | undefined> = new TrackedMap();
+  private cardsToSend: TrackedMap<string, CardDef | undefined> =
+    new TrackedMap();
   private roomCardResource = getRoomCard(this, () => this.args.roomId);
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
+
+    // We use a signal in DOM for playwright to be able to tell if the interior
+    // card async has settled. This is akin to test-waiters in ember-test. (playwright
+    // runs against the development environment of ember serve)
+    if (environment === 'development') {
+      registerDestructor(this, this.cleanup);
+      this.subscribeToRoomChanges.perform();
+    }
   }
 
   private get roomCard() {
@@ -301,14 +314,51 @@ export default class Room extends Component<RoomArgs> {
     return this.matrixService.roomObjectives.get(this.args.roomId);
   }
 
+  private subscribeToRoomChanges = task(async () => {
+    await this.cardService.ready;
+    while (true) {
+      if (this.roomCard && this.subscribedCard !== this.roomCard) {
+        if (this.subscribedCard) {
+          this.cardService.unsubscribeFromCard(
+            this.subscribedCard,
+            this.onCardChange,
+          );
+        }
+        this.subscribedCard = this.roomCard;
+        this.cardService.subscribeToCard(
+          this.subscribedCard,
+          this.onCardChange,
+        );
+      }
+      await timeout(50);
+    }
+  });
+
+  private onCardChange = () => {
+    this.doWhenCardChanges.perform();
+  };
+
+  private doWhenCardChanges = restartableTask(async () => {
+    await all([this.cardService.cardsSettled(), timeout(500)]);
+  });
+
+  private cleanup = () => {
+    if (this.subscribedCard) {
+      this.cardService.unsubscribeFromCard(
+        this.subscribedCard,
+        this.onCardChange,
+      );
+    }
+  };
+
   @cached
-  private get cards() {
+  private get attachedCardIds() {
     if (!this.roomCard) {
       return [];
     }
     return this.roomCard.messages
-      .filter((m) => m.attachedCard)
-      .map((m) => m.attachedCard);
+      .filter((m) => m.attachedCardId)
+      .map((m) => m.attachedCardId);
   }
 
   @cached
@@ -316,7 +366,7 @@ export default class Room extends Component<RoomArgs> {
     if (!this.roomCard) {
       return 0;
     }
-    return new Set(this.cards.map((card) => card.id)).size;
+    return this.attachedCardIds.length;
   }
 
   private get objectiveComponent() {
@@ -399,9 +449,7 @@ export default class Room extends Component<RoomArgs> {
   @action
   private sendOpenCards() {
     for (let stackItem of this.operatorModeStateService.topMostStackItems()) {
-      if (stackItem.type == 'card') {
-        this.doSendMessage.perform('', stackItem.card);
-      }
+      this.doSendMessage.perform(undefined, stackItem.card);
     }
   }
 
@@ -441,7 +489,7 @@ export default class Room extends Component<RoomArgs> {
   }
 
   private doSendMessage = restartableTask(
-    async (message: string | undefined, card?: Card) => {
+    async (message: string | undefined, card?: CardDef) => {
       this.messagesToSend.set(this.args.roomId, undefined);
       this.cardsToSend.set(this.args.roomId, undefined);
       await this.matrixService.sendMessage(this.args.roomId, message, card);
@@ -463,7 +511,7 @@ export default class Room extends Component<RoomArgs> {
   });
 
   private doChooseCard = restartableTask(async () => {
-    let chosenCard: Card | undefined = await chooseCard({
+    let chosenCard: CardDef | undefined = await chooseCard({
       filter: { type: baseCardRef },
     });
     if (chosenCard) {

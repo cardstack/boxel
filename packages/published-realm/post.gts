@@ -1,9 +1,9 @@
 import {
   contains,
   field,
-  linksTo,
   Component,
-  Card,
+  CardDef,
+  FieldDef,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
@@ -11,7 +11,7 @@ import { Person } from './person';
 
 let imageURL = new URL('./logo.png', import.meta.url).href;
 
-class BasicCard extends Card {
+class BasicCard extends FieldDef {
   @field title = contains(StringCard);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
@@ -32,13 +32,12 @@ class VeryBasicCard extends BasicCard {
   };
 }
 
-export class Post extends Card {
+export class Post extends CardDef {
   static displayName = 'Post';
   @field author = contains(Person);
   @field title = contains(StringCard);
   @field body = contains(TextAreaCard);
   @field titleRef = contains(VeryBasicCard);
-  @field titleLink = linksTo(VeryBasicCard);
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <h1><@fields.title /><img src='{{imageURL}}' /></h1>

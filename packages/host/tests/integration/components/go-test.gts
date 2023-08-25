@@ -31,10 +31,10 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { formatRFC7231 } from 'date-fns';
 const sourceContent = `
-import { contains, field, Card } from "https://cardstack.com/base/card-api";
+import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
 import StringCard from "https://cardstack.com/base/string";
 
-export class Person extends Card {
+export class Person extends CardDef {
   @field name = contains(StringCard);
 }
 `;

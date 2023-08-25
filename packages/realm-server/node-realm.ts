@@ -28,7 +28,7 @@ export class NodeAdapter implements RealmAdapter {
 
   async *readdir(
     path: string,
-    opts?: { create?: true }
+    opts?: { create?: true },
   ): AsyncGenerator<{ name: string; path: string; kind: Kind }, void> {
     if (opts?.create) {
       ensureDirSync(path);
@@ -106,7 +106,7 @@ export class NodeAdapter implements RealmAdapter {
 
   async write(
     path: string,
-    contents: string
+    contents: string,
   ): Promise<{ lastModified: number }> {
     let absolutePath = join(this.realmDir, path);
     ensureFileSync(absolutePath);
@@ -123,7 +123,7 @@ export class NodeAdapter implements RealmAdapter {
   createStreamingResponse(
     request: Request,
     responseInit: ResponseInit,
-    cleanup: () => void
+    cleanup: () => void,
   ) {
     let s = new MessageStream();
     let response = createResponse(null, responseInit) as ResponseWithNodeStream;
@@ -152,7 +152,7 @@ class MessageStream extends Duplex {
   _read() {
     if (this.pendingRead) {
       throw new Error(
-        'bug: did not expect node to call read until after we push data from the prior read'
+        'bug: did not expect node to call read until after we push data from the prior read',
       );
     }
     if (this.pendingWrite) {
@@ -168,11 +168,11 @@ class MessageStream extends Duplex {
   _write(
     chunk: string,
     _encoding: string,
-    callback: (err: null | Error) => void
+    callback: (err: null | Error) => void,
   ) {
     if (this.pendingWrite) {
       throw new Error(
-        'bug: did not expect node to call write until after we call the callback'
+        'bug: did not expect node to call write until after we call the callback',
       );
     }
     if (this.pendingRead) {

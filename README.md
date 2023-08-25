@@ -27,9 +27,10 @@
 
 ## Running the Host App
 
-There exists a "dev" mode in which we can use ember-cli to host the card runtime host application which includes live reloads. Additionally, you can also use the realm server to host the app, which is how it will be served in production. 
+There exists a "dev" mode in which we can use ember-cli to host the card runtime host application which includes live reloads. Additionally, you can also use the realm server to host the app, which is how it will be served in production.
 
 ### ember-cli Hosted App
+
 In order to run the ember-cli hosted app:
 
 1. `pnpm start` in the host/ workspace to serve the ember app. Note that this script includes the environment variable `OWN_REALM_URL=http://localhost:4201/draft/` which configures the host to point to the draft realm's cards realm by default.
@@ -38,11 +39,13 @@ In order to run the ember-cli hosted app:
 The app is available at http://localhost:4200. It will serve the draft realm (configurable with OWN_REALM_URL, as mentioned above). You can open the base and draft cards workspace directly by entering http://localhost:4201/base or http://localhost:4201/draft in the browser (and additionally the published realm by entering http://localhost:4201/published).
 
 When you are done running the app you can stop the synapse server by running the following from the `packages/matrix` workspace:
+
 ```
 pnpm stop:synapse
 ```
 
 ### Realm server Hosted App
+
 In order to run the realm server hosted app:
 
 1. `pnpm start:build` in the host/ workspace to re-build the host app (this step can be omitted if you do not want host app re-builds)
@@ -69,7 +72,7 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 
 #### Using `start:development`
 
-You can also use `start:development` if you want the functionality of `start:all`, but without running the test realms. `start:development` will enable you to open http://localhost:4201 and allow to select between the cards in the /base and /demo realm.
+You can also use `start:development` if you want the functionality of `start:all`, but without running the test realms. `start:development` will enable you to open http://localhost:4201 and allow to select between the cards in the /base and /drafts realm.
 
 ### Card Pre-rendering
 
@@ -79,15 +82,19 @@ In order to support server-side rendered cards, this project incorporates FastBo
 The realm server also uses FastBoot to pre-render card html. The realm server boots up the host app in a FastBoot container. The realm server will automatically look for the host app's `dist/` output to use when booting up the infrastructure for pre-rendering cards. Make sure to start to the host app first before starting the realm server so that the host app's `dist/` output will be generated. If you are making changes that effect the `/render` route in the host app, you'll want to restart the host app (or run `pnpm build`) in order for the realm server to pick up your changes.
 
 ### Matrix Server
-The boxel platform leverages a Matrix server called Synapse in order to support identity, workflow, and chat behaviors. This project uses a dockerized Matrix server. We have multiple matrix server configurations (currently one for development that uses a persistent DB, and one for testing that uses an in-memory DB). You can find and configure these matrix servers at `packages/matrix/docker/synapse/*`. 
+
+The boxel platform leverages a Matrix server called Synapse in order to support identity, workflow, and chat behaviors. This project uses a dockerized Matrix server. We have multiple matrix server configurations (currently one for development that uses a persistent DB, and one for testing that uses an in-memory DB). You can find and configure these matrix servers at `packages/matrix/docker/synapse/*`.
 
 This server is automatically started as part of the `pnpm start:all` script, but if you wish to control it separately, from `packages/matrix`, execute:
+
 ```
 pnpm start:synapse
 ```
-The local Matrix server will be running at `http://localhost:8008`. 
+
+The local Matrix server will be running at `http://localhost:8008`.
 
 To stop the matrix server, from `packages/matrix`, execute:
+
 ```
 pnpm stop:synapse
 ```
@@ -97,6 +104,7 @@ pnpm stop:synapse
 Matrix administration requires an administrative user and a special client in order to use. Matrix administration is used for creating users, creating rooms, creating registration tokens, managing media, viewing events, etc. Note that you will need to use the matrix administration UI to create tokens to register new matrix users.
 
 First you must create an administrative user:
+
 1. start the matrix server `pnpm start:synapse`
 2. run a script to create an administrative user:
    ```
@@ -108,6 +116,7 @@ First you must create an administrative user:
    ```
 
 After you have created an administrative user and have created the docker container you can start the admin console by executing the following in the packages/matrix workspace:
+
 ```
 pnpm start:admin
 ```
@@ -117,6 +126,7 @@ Then visit `http://localhost:8080`, and enter the admin user's username (`admin`
 Note you can use this same administrative interface to login to the staging and production matrix server. The credentials are available in AWS secrets manager.
 
 To stop the admin console run the following in the packages/matrix workspace:
+
 ```
 pnpm stop:admin
 ```
@@ -150,7 +160,6 @@ To run the `packages/host/` workspace tests start the following servers:
 
 The tests are available at `http://localhost:4200/tests`
 
-
 ### Realm Server Node tests
 
 First make sure to generate the host app's `dist/` output in order to support card pre-rendering by first starting the host app (instructions above). If you want to make the host app's `dist/` output without starting the host app, you can run `pnpm build` in the host app's workspace.
@@ -161,6 +170,7 @@ To run the `packages/realm-server/` workspace tests start:
 2. Run `pnpm test` in the `packages/realm-server/` workspace to run the realm node tests
 
 ### Realm Server DOM tests
+
 This test suite contains acceptance tests for asserting that the Realm server is capable of hosting its own app. To run these tests in the browser execute the following in the `packages/realm-server` workspace:
 
 1. `pnpm start:all`
@@ -173,30 +183,36 @@ Visit `http://localhost:4205` after the realms have finished starting up
 2. `pnpm test` (or `pnpm start` and visit http://localhost:4200/tests to run tests in the browser)
 
 ### Matrix tests
+
 This test suite contains tests that exercise matrix functionality. These tests are located at `packages/matrix/tests`, and are executed using the [Playwright](https://playwright.dev/) test runner. To run the tests from the command line, first make sure that the matrix server is not already running. You can stop the matrix server by executing the following from `packages/matrix`
+
 ```
 pnpm stop:synapse
 ```
 
 The matrix client relies upon the host app and the realm servers. Start the host app from the `packages/host` folder:
+
 ```
 pnpm start
 ```
+
 Then start the realm server (minus the matrix server). From the `packages/realm-server` folder:
+
 ```
 pnpm start:without-matrix
 ```
 
 Then to run the tests from the CLI execute the following from `packages/matrix`:
+
 ```
 pnpm start:test
-``` 
+```
 
-Alternatively you can also run these tests from VS Code using the VS Code Playwright plugin (which is very strongly recommended). From the "test tube" icon, you can click on the play button to run a single test or all the tests. 
+Alternatively you can also run these tests from VS Code using the VS Code Playwright plugin (which is very strongly recommended). From the "test tube" icon, you can click on the play button to run a single test or all the tests.
 
 ![Screenshot_20230427_161250](https://user-images.githubusercontent.com/61075/234980198-fe049b61-917d-4dc8-a9eb-ddc54b36b160.png)
 
 or click on the play button in the left margin next to the test itself to run a test:
 ![Screenshot_20230428_150147](https://user-images.githubusercontent.com/61075/235231663-6fabfc41-8294-4674-adf1-f3793b83e516.png)
 
-you can additionally set a breakpoint in code, and playwright will break at the breakpoint. 
+you can additionally set a breakpoint in code, and playwright will break at the breakpoint.

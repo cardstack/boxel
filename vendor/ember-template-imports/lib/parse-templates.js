@@ -7,7 +7,7 @@ var __importDefault =
 Object.defineProperty(exports, '__esModule', { value: true });
 exports.parseTemplates = void 0;
 const string_prototype_matchall_1 = __importDefault(
-  require('string.prototype.matchall')
+  require('string.prototype.matchall'),
 );
 const debug_1 = require('./debug');
 const escapeChar = '\\';
@@ -24,7 +24,7 @@ const dynamicSegmentEnd = /}/;
 function isEscaped(template, _offset) {
   let offset = (0, debug_1.expect)(
     _offset,
-    'Expected an index to check escaping'
+    'Expected an index to check escaping',
   );
   let count = 0;
   while (template[offset - 1] === escapeChar) {
@@ -72,10 +72,10 @@ function parseTemplates(template, relativePath, templateTag) {
       templateTagStart.source,
       templateTagEnd.source,
     ].join('|'),
-    'g'
+    'g',
   );
   const tokens = Array.from(
-    (0, string_prototype_matchall_1.default)(template, allTokens)
+    (0, string_prototype_matchall_1.default)(template, allTokens),
   );
   while (tokens.length > 0) {
     const currentToken = tokens.shift(); // eslint-disable-line @typescript-eslint/no-non-null-assertion
@@ -111,7 +111,7 @@ function parseTemplates(template, relativePath, templateTag) {
     while (tokens.length > 0) {
       const currentToken = (0, debug_1.expect)(
         tokens.shift(),
-        'expected token'
+        'expected token',
       );
       if (
         currentToken[0] === startToken[0] &&
@@ -129,7 +129,7 @@ function parseTemplates(template, relativePath, templateTag) {
     while (tokens.length > 0) {
       const currentToken = (0, debug_1.expect)(
         tokens.shift(),
-        'expected token'
+        'expected token',
       );
       if (currentToken[0] === '\n') {
         return;
@@ -144,7 +144,7 @@ function parseTemplates(template, relativePath, templateTag) {
     while (tokens.length > 0) {
       const currentToken = (0, debug_1.expect)(
         tokens.shift(),
-        'expected token'
+        'expected token',
       );
       if (currentToken[0] === '*/') {
         return;
@@ -162,7 +162,7 @@ function parseTemplates(template, relativePath, templateTag) {
     template,
     startToken,
     tokens,
-    isTopLevel = false
+    isTopLevel = false,
   ) {
     var _a;
     let hasDynamicSegment = false;
@@ -185,7 +185,7 @@ function parseTemplates(template, relativePath, templateTag) {
             const tokenStr = currentToken[0];
             const index = (0, debug_1.expect)(
               currentToken.index,
-              'expected index'
+              'expected index',
             );
             currentToken = ['`'];
             currentToken.index = index + tokenStr.length - 1;
@@ -211,7 +211,7 @@ function parseTemplates(template, relativePath, templateTag) {
     while (tokens.length > 0) {
       const currentToken = (0, debug_1.expect)(
         tokens.shift(),
-        'expected token'
+        'expected token',
       );
       if (currentToken[0].match(blockStart)) {
         stack++;
@@ -233,13 +233,13 @@ function parseTemplates(template, relativePath, templateTag) {
     let stack = 1;
     if (argumentsMatchRegex && startToken[0].match(argumentsMatchRegex)) {
       throw new Error(
-        `embedded template preprocessing currently does not support passing arguments, found args in: ${relativePath}`
+        `embedded template preprocessing currently does not support passing arguments, found args in: ${relativePath}`,
       );
     }
     while (tokens.length > 0) {
       const currentToken = (0, debug_1.expect)(
         tokens.shift(),
-        'expected token'
+        'expected token',
       );
       if (currentToken[0].match(templateTagStart)) {
         stack++;

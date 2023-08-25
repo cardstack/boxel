@@ -1,21 +1,16 @@
 {
-    "name": "@cardstack/ai-bot",
-    "devDependencies": {
-        "@cardstack/runtime-common": "workspace:^",
-        "matrix-js-sdk": "^25.0.0",
-        "openai": "4.0.0-beta.4",
-        "ts-node": "^10.9.1",
-        "typescript": "^5.1.6"
-    },
-    "scripts": {
-        "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
-        "start-dev": "NODE_NO_WARNINGS=1 tsx watch main.ts",
-        "test": "NODE_NO_WARNINGS=1 qunit --require ts-node/register/transpile-only tests/index.ts"
-    },
-    "volta": {
-        "extends": "../../package.json"
-    },
-    "dependencies": {
-        "tsx": "^3.12.7"
-    }
+  "name": "@cardstack/ai-bot",
+  "devDependencies": {
+    "@cardstack/runtime-common": "workspace:^",
+    "matrix-js-sdk": "^25.0.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.1.6",
+    "openai": "4.0.0-beta.4"
+  },
+  "scripts": {
+    "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main"
+  },
+  "volta": {
+    "extends": "../../package.json"
+  }
 }

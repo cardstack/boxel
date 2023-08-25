@@ -2,13 +2,13 @@ import { isAddress, getAddress } from 'ethers';
 import {
   primitive,
   Component,
-  CardBase,
   useIndexBasedKey,
-  CardInstanceType,
+  BaseInstanceType,
   serialize,
   deserialize,
-  CardBaseConstructor,
+  BaseDefConstructor,
   queryableValue,
+  FieldDef,
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui';
 import { TextInputFilter, DeserializedResult } from './text-input-filter';
@@ -43,7 +43,7 @@ function _deserialize(
   return { value: address };
 }
 
-class Edit extends Component<typeof EthereumAddressCard> {
+class Edit extends Component<typeof EthereumAddressField> {
   <template>
     <BoxelInput
       @value={{this.textInputFilter.asString}}
@@ -64,23 +64,23 @@ function _serialize(val: string): string {
   return val;
 }
 
-export default class EthereumAddressCard extends CardBase {
+export default class EthereumAddressField extends FieldDef {
   static [primitive]: string;
   static [useIndexBasedKey]: never;
   static [serialize](val: string) {
     return _serialize(val);
   }
 
-  static async [deserialize]<T extends CardBaseConstructor>(
+  static async [deserialize]<T extends BaseDefConstructor>(
     this: T,
     address: any,
-  ): Promise<CardInstanceType<T>> {
-    return _deserialize(address).value as CardInstanceType<T>;
+  ): Promise<BaseInstanceType<T>> {
+    return _deserialize(address).value as BaseInstanceType<T>;
   }
 
   static [queryableValue](val: string | undefined): string | undefined {
     if (val) {
-      return EthereumAddressCard[serialize](val);
+      return EthereumAddressField[serialize](val);
     } else {
       return undefined;
     }

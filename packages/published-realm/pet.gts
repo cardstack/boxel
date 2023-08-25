@@ -1,7 +1,7 @@
 import {
   contains,
   field,
-  Card,
+  CardDef,
   Component,
 } from 'https://cardstack.com/base/card-api';
 import BooleanCard from 'https://cardstack.com/base/boolean';
@@ -9,7 +9,7 @@ import NumberCard from 'https://cardstack.com/base/number';
 import StringCard from 'https://cardstack.com/base/string';
 import { GridContainer } from '@cardstack/boxel-ui';
 
-export class Pet extends Card {
+export class Pet extends CardDef {
   static displayName = 'Pet';
   @field firstName = contains(StringCard);
   @field favoriteToy = contains(StringCard);

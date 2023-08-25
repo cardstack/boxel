@@ -4,26 +4,26 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { TrackedArray } from 'tracked-built-ins';
-import type { Card, CardContext } from 'https://cardstack.com/base/card-api';
+import type { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
 import { Button, IconButton } from '@cardstack/boxel-ui';
 import { eq, gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import type CardService from '../../services/card-service';
 import CardCatalogItem from './item';
 import CardCatalogResultsHeader from './results-header';
-import type { RealmCards } from '../card-catalog-modal';
+import type { RealmCards } from '../card-catalog/modal';
 
 interface Signature {
   Args: {
     results: RealmCards[];
-    toggleSelect: (card?: Card) => void;
-    selectedCard: Card | undefined;
+    toggleSelect: (card?: CardDef) => void;
+    selectedCard: CardDef | undefined;
     context?: CardContext;
   };
 }
 
 interface RealmsWithDisplayedCards extends RealmCards {
-  displayedCards: Card[];
+  displayedCards: CardDef[];
 }
 
 export default class CardCatalog extends Component<Signature> {
@@ -41,12 +41,14 @@ export default class CardCatalog extends Component<Signature> {
 
           <ul class='card-catalog__group'>
             {{#each realm.displayedCards as |card|}}
+              {{#let (eq @selectedCard.id card.id) as |isSelected|}}
               <li
-                class={{cn 'item' selected=(eq @selectedCard.id card.id)}}
+                class={{cn 'item' selected=isSelected}}
                 data-test-card-catalog-item={{card.id}}
+                data-test-card-catalog-item-selected={{isSelected}}
               >
                 <CardCatalogItem
-                  @isSelected={{eq @selectedCard.id card.id}}
+                  @isSelected={{isSelected}}
                   @title={{card.title}}
                   @description={{card.description}}
                   @thumbnailURL={{card.thumbnailURL}}
@@ -64,6 +66,7 @@ export default class CardCatalog extends Component<Signature> {
                   aria-label='preview'
                 />
               </li>
+              {{/let}}
             {{/each}}
           </ul>
           {{#if (gt realm.cards.length realm.displayedCards.length)}}
@@ -149,7 +152,7 @@ export default class CardCatalog extends Component<Signature> {
     return this.args.results.map((r) => {
       return {
         ...r,
-        displayedCards: new TrackedArray<Card>(
+        displayedCards: new TrackedArray<CardDef>(
           r.cards.slice(0, this.displayCardCount),
         ),
       };

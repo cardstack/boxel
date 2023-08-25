@@ -8,7 +8,7 @@ const dist = resolve(join(__dirname, '..', '..', 'host', 'dist'));
 
 if (!existsSync(dist)) {
   console.error(
-    `${dist} folder is missing. Please perform an ember build first in order to create dist assets that the realm server requires`
+    `${dist} folder is missing. Please perform an ember build first in order to create dist assets that the realm server requires`,
   );
   process.exit(-1);
 }

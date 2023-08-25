@@ -70,10 +70,10 @@ export type {
 
 import type { Saved } from './card-document';
 
-import type { CardRef } from './card-ref';
-export type { CardRef };
+import type { CodeRef } from './code-ref';
+export type { CodeRef };
 
-export * from './card-ref';
+export * from './code-ref';
 
 export type {
   CardResource,
@@ -95,8 +95,8 @@ export { sanitizeHtml } from './dompurify';
 export { getPlural } from './pluralize';
 
 import type {
-  Card,
-  CardBase,
+  CardDef,
+  BaseDef,
   Format,
 } from 'https://cardstack.com/base/card-api';
 
@@ -105,26 +105,26 @@ export const assetsDir = '__boxel/';
 export const boxelUIAssetsDir = '@cardstack/boxel-ui/';
 
 export type CreateNewCard = (
-  ref: CardRef,
+  ref: CodeRef,
   relativeTo: URL | undefined,
   opts?: { isLinkedCard?: boolean; doc?: LooseSingleCardDocument },
-) => Promise<Card | undefined>;
+) => Promise<CardDef | undefined>;
 
 export interface CardChooser {
-  chooseCard<T extends CardBase>(
+  chooseCard<T extends BaseDef>(
     query: Query,
     opts?: {
-      offerToCreate?: CardRef;
+      offerToCreate?: CodeRef;
       multiSelect?: boolean;
       createNewCard?: CreateNewCard;
     },
   ): Promise<undefined | T>;
 }
 
-export async function chooseCard<T extends Card>(
+export async function chooseCard<T extends BaseDef>(
   query: Query,
   opts?: {
-    offerToCreate?: CardRef;
+    offerToCreate?: CodeRef;
     multiSelect?: boolean;
     createNewCard?: CreateNewCard;
   },
@@ -145,7 +145,7 @@ export interface CardSearch {
     query: Query,
     realms?: string[],
   ): {
-    instances: Card[];
+    instances: CardDef[];
     ready: Promise<void>;
     isLoading: boolean;
   };
@@ -158,15 +158,15 @@ export function getCards(query: Query, realms?: string[]) {
 }
 
 export interface CardCreator {
-  create<T extends Card>(
-    ref: CardRef,
+  create<T extends CardDef>(
+    ref: CodeRef,
     relativeTo: URL | undefined,
     opts?: { doc?: LooseSingleCardDocument },
   ): Promise<undefined | T>;
 }
 
-export async function createNewCard<T extends Card>(
-  ref: CardRef,
+export async function createNewCard<T extends CardDef>(
+  ref: CodeRef,
   relativeTo: URL | undefined,
   opts?: { doc?: LooseSingleCardDocument },
 ): Promise<undefined | T> {
@@ -204,12 +204,12 @@ export function subscribeToRealm(
 
 export interface Actions {
   createCard: (
-    ref: CardRef,
+    ref: CodeRef,
     relativeTo: URL | undefined,
-    opts?: { isLinkedCard?: boolean; doc?: LooseSingleCardDocument },
-  ) => Promise<Card | undefined>;
+    opts?: { isLinkedCard?: boolean; doc?: LooseSingleCardDocument }, //TODO: consider renaming isLinkedCard to be more semantic
+  ) => Promise<CardDef | undefined>;
   viewCard: (
-    card: Card,
+    card: CardDef,
     format?: Format,
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
     fieldName?: string,
@@ -219,7 +219,7 @@ export interface Actions {
     relativeTo: URL | undefined,
   ) => Promise<void>;
   doWithStableScroll: (
-    card: Card,
+    card: CardDef,
     changeSizeCallback: () => Promise<void>,
   ) => Promise<void>;
   // more CRUD ops to come...
@@ -244,7 +244,7 @@ export function trimExecutableExtension(url: URL): URL {
 }
 
 export function internalKeyFor(
-  ref: CardRef,
+  ref: CodeRef,
   relativeTo: URL | undefined,
 ): string {
   if (!('type' in ref)) {

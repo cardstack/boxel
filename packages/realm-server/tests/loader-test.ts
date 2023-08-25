@@ -25,7 +25,7 @@ module('loader', function (hooks) {
   let loader = new Loader();
   loader.addURLMapping(
     new URL(baseRealm.url),
-    new URL('http://localhost:4201/base/')
+    new URL('http://localhost:4201/base/'),
   );
   shimExternals(loader);
 
@@ -39,7 +39,7 @@ module('loader', function (hooks) {
       loader,
       dir.name,
       undefined,
-      testRealmURL
+      testRealmURL,
     );
   });
 
@@ -51,7 +51,7 @@ module('loader', function (hooks) {
     let loader = new Loader();
     loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
     let module = await loader.import<{ three(): number }>(
-      `${testRealmHref}cycle-two`
+      `${testRealmHref}cycle-two`,
     );
     assert.strictEqual(module.three(), 3);
   });
@@ -89,7 +89,7 @@ module('loader', function (hooks) {
           export function myLoader() { return import.meta.loader; }
         `,
       },
-      'http://example.com/'
+      'http://example.com/',
     );
     loader.registerURLHandler(realm.maybeHandle.bind(realm));
     loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
@@ -147,7 +147,7 @@ module('loader', function (hooks) {
     shimExternals(loader);
     loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
     let { Person } = await loader.import<{ Person: unknown }>(
-      `${testRealmHref}person`
+      `${testRealmHref}person`,
     );
     assert.deepEqual(loader.identify(Person), {
       module: `${testRealmHref}person`,
@@ -165,7 +165,7 @@ module('loader', function (hooks) {
     shimExternals(loader);
     loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
     let module = await loader.import<{ Person: unknown }>(
-      `${testRealmHref}person`
+      `${testRealmHref}person`,
     );
     assert.throws(() => {
       module.Person = 1;

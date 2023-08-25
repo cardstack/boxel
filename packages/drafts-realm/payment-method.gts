@@ -1,7 +1,7 @@
 import {
   contains,
   field,
-  Card,
+  FieldDef,
   Component,
   linksTo,
 } from 'https://cardstack.com/base/card-api';
@@ -11,7 +11,7 @@ import { Token, Currency } from './asset';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { FieldContainer } from '@cardstack/boxel-ui';
 
-class CryptoPayment extends Card {
+class CryptoPayment extends FieldDef {
   static displayName = 'Payment Method';
   @field chain = linksTo(Chain); // dropdown
   @field token = linksTo(Token); // filtered dropdown
@@ -44,7 +44,7 @@ class CryptoPayment extends Card {
   static embedded = this.edit;
 }
 
-class WireTransfer extends Card {
+class WireTransfer extends FieldDef {
   @field currency = linksTo(Currency); // dropdown
   @field iban = contains(StringCard); // IBAN format
   @field bic = contains(StringCard); // BIC format
@@ -75,9 +75,6 @@ class WireTransfer extends Card {
 class EditPaymentMethod extends Component<typeof PaymentMethod> {
   <template>
     <div class='payment-method-card'>
-      <FieldContainer @label='Title'>
-        <@fields.title />
-      </FieldContainer>
       <FieldContainer @label='Payment Method'>
         <@fields.type />
       </FieldContainer>
@@ -90,7 +87,7 @@ class EditPaymentMethod extends Component<typeof PaymentMethod> {
     </div>
   </template>
 }
-export class PaymentMethod extends Card {
+export class PaymentMethod extends FieldDef {
   @field type = contains(StringCard); // dropdown
   @field cryptoPayment = contains(CryptoPayment);
   @field wireTransfer = contains(WireTransfer);

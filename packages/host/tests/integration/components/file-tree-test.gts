@@ -12,7 +12,7 @@ import {
   setupLocalIndexing,
 } from '../../helpers';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
-import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
+import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import FileTree from '@cardstack/host/components/editor/file-tree';
 import { waitUntil, waitFor, fillIn, click } from '@ember/test-helpers';
@@ -38,15 +38,15 @@ module('Integration | file-tree', function (hooks) {
       .loader;
     loader.addURLMapping(
       new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
+      new URL('http://localhost:4201/base/'),
     );
     shimExternals(loader);
     adapter = new TestRealmAdapter({
       'person.gts': `
-        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
-        export class Person extends Card {
+        export class Person extends CardDef {
           @field firstName = contains(StringCard);
           @field nickName = contains(StringCard, { computeVia: function() { return this.firstName + '-poo'; }});
           @field title =  contains(StringCard, {
@@ -65,10 +65,10 @@ module('Integration | file-tree', function (hooks) {
         }
       `,
       'post.gts': `
-        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
-        export class Post extends Card {
+        export class Post extends CardDef {
           @field title = contains(StringCard);
           static isolated = class Isolated extends Component<typeof this> {
             <template><h1><@fields.title/></h1></template>
@@ -130,7 +130,7 @@ module('Integration | file-tree', function (hooks) {
           <CardCatalogModal />
           <CardPrerender />
         </template>
-      }
+      },
     );
     await click('[data-test-create-new-card-button]');
 
@@ -144,17 +144,17 @@ module('Integration | file-tree', function (hooks) {
       .exists({ count: 3 }, 'number of catalog items is correct');
     assert
       .dom(
-        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"]`
+        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}person-entry"]`,
       )
       .exists('first item is correct');
     assert
       .dom(
-        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}post-entry"]`
+        `[data-test-card-catalog] [data-test-card-catalog-item="${testRealmURL}post-entry"]`,
       )
       .exists('second item is correct');
     assert
       .dom(
-        `[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/string-field`
+        `[data-test-card-catalog] [data-test-card-catalog-item="${baseRealm.url}fields/string-field`,
       )
       .doesNotExist('primitive field cards are not displayed');
 
@@ -170,7 +170,7 @@ module('Integration | file-tree', function (hooks) {
     assert.strictEqual(mockController.openDirs, undefined);
 
     let entry = await realm.searchIndex.card(
-      new URL(`${testRealmURL}Person/1`)
+      new URL(`${testRealmURL}Person/1`),
     );
     assert.ok(entry, 'the new person card was created');
 
@@ -194,7 +194,7 @@ module('Integration | file-tree', function (hooks) {
           },
         },
       },
-      'file contents are correct'
+      'file contents are correct',
     );
   });
 });

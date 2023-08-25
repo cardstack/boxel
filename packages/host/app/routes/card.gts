@@ -4,13 +4,13 @@ import ENV from '@cardstack/host/config/environment';
 import { parse } from 'qs';
 import type CardService from '../services/card-service';
 import type RouterService from '@ember/routing/router-service';
-import { Card } from 'https://cardstack.com/base/card-api';
+import { CardDef } from 'https://cardstack.com/base/card-api';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 const { ownRealmURL } = ENV;
 const rootPath = new URL(ownRealmURL).pathname.replace(/^\//, '');
 
-export type Model = Card | null;
+export type Model = CardDef | null;
 
 export default class RenderCard extends Route<Model | null> {
   queryParams = {

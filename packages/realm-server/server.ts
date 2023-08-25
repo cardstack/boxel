@@ -15,6 +15,7 @@ import {
   livenessCheck,
   healthCheck,
   httpLogging,
+  httpBasicAuth,
   ecsMetadata,
   assetRedirect,
   rootRealmRedirect,
@@ -35,7 +36,10 @@ export class RealmServer {
   private assetsURL: URL;
   private log = logger('realm:requests');
 
-  constructor(private realms: Realm[], opts?: Options) {
+  constructor(
+    private realms: Realm[],
+    opts?: Options,
+  ) {
     detectRealmCollision(realms);
     this.realms = realms;
     // defaults to using the base realm to host assets (this is the dev env default)
@@ -54,7 +58,7 @@ export class RealmServer {
       healthCheck,
       this.serveIndex(),
       rootRealmRedirect(this.realms),
-      this.serveFromRealm
+      this.serveFromRealm,
     );
 
     let app = new Koa<Koa.DefaultState, Koa.Context>()
@@ -65,7 +69,7 @@ export class RealmServer {
           origin: '*',
           allowHeaders:
             'Authorization, Content-Type, If-Match, X-Requested-With',
-        })
+        }),
       )
       .use(async (ctx, next) => {
         // Disable browser cache for all data requests to the realm server. The condition captures our supported mime types but not others,
@@ -87,6 +91,7 @@ export class RealmServer {
       .use(monacoMiddleware(this.assetsURL))
       .use(assetRedirect(this.assetsURL))
       .use(convertAcceptHeaderQueryParam)
+      .use(httpBasicAuth)
       .use(rootRealmRedirect(this.realms))
       .use(router.routes())
       .use(this.serveFromRealm);
@@ -116,12 +121,12 @@ export class RealmServer {
   private serveFromRealm = async (ctxt: Koa.Context, _next: Koa.Next) => {
     let realm = this.realms.find((r) => {
       let reversedResolution = r.loader.reverseResolution(
-        fullRequestURL(ctxt).href
+        fullRequestURL(ctxt).href,
       );
       this.log.debug(
         `Looking for realm to handle request with full URL: ${
           fullRequestURL(ctxt).href
-        } (reversed: ${reversedResolution.href})`
+        } (reversed: ${reversedResolution.href})`,
       );
 
       let inRealm = r.paths.inRealm(reversedResolution);
@@ -129,7 +134,7 @@ export class RealmServer {
         `${reversedResolution} in realm ${JSON.stringify({
           url: r.url,
           paths: r.paths,
-        })}: ${inRealm}`
+        })}: ${inRealm}`,
       );
       return inRealm;
     });
@@ -145,7 +150,7 @@ export class RealmServer {
     }
 
     let reversedResolution = realm.loader.reverseResolution(
-      fullRequestURL(ctxt).href
+      fullRequestURL(ctxt).href,
     );
 
     let request = new Request(reversedResolution.href, {
@@ -203,8 +208,8 @@ function detectRealmCollision(realms: Realm[]): void {
   if (collisions.length > 0) {
     throw new Error(
       `Cannot start realm server--realm route collisions detected: ${JSON.stringify(
-        collisions
-      )}`
+        collisions,
+      )}`,
     );
   }
 }

@@ -3,7 +3,7 @@ import type { FileRef } from './realm';
 import type { LocalPath } from './paths';
 
 export async function webStreamToText(
-  stream: ReadableStream<Uint8Array>
+  stream: ReadableStream<Uint8Array>,
 ): Promise<string> {
   let decoder = new TextDecoder();
   let pieces: string[] = [];
@@ -54,7 +54,7 @@ export async function fileContentToText({ content }: FileRef): Promise<string> {
 export async function readFileAsText(
   path: LocalPath,
   openFile: (path: string) => Promise<FileRef | undefined>,
-  opts: { withFallbacks?: true } = {}
+  opts: { withFallbacks?: true } = {},
 ): Promise<{ content: string; lastModified: number } | undefined> {
   let ref: FileRef | undefined;
   if (opts.withFallbacks) {
@@ -74,7 +74,7 @@ export async function readFileAsText(
 // explicit file extensions in your source code
 export async function getFileWithFallbacks(
   path: LocalPath,
-  openFile: (path: string) => Promise<FileRef | undefined>
+  openFile: (path: string) => Promise<FileRef | undefined>,
 ): Promise<FileRef | undefined> {
   let result = await openFile(path);
   if (result) {
@@ -94,7 +94,7 @@ let writers = new WeakMap<WritableStream, WritableStreamDefaultWriter>();
 
 export async function writeToStream(
   stream: WritableStream,
-  chunk: string
+  chunk: string,
 ): Promise<void> {
   if (typeof stream.getWriter === 'function') {
     let writer = writers.get(stream);

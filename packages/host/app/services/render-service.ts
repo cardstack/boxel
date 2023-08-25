@@ -18,7 +18,7 @@ import type { SimpleDocument, SimpleElement } from '@simple-dom/interface';
 import type Owner from '@ember/owner';
 import {
   type IdentityContext as IdentityContextType,
-  type Card,
+  type CardDef,
   type Format,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -27,7 +27,7 @@ const ELEMENT_NODE_TYPE = 1;
 const { environment } = config;
 
 interface RenderCardParams {
-  card: Card;
+  card: CardDef;
   visit: (
     url: URL,
     identityContext: IdentityContextType | undefined,
@@ -123,7 +123,7 @@ export default class RenderService extends Service {
       `${baseRealm.url}card-api`,
     );
     try {
-      await api.getIfReady(card, fieldName as keyof Card, undefined, {
+      await api.getIfReady(card, fieldName as keyof CardDef, undefined, {
         loadFields: true,
       });
     } catch (error: any) {

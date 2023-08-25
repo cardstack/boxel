@@ -38,11 +38,29 @@ let setCardInOperatorModeState: (
 type TestContextForCopy = TestContextWithSave & TestContextWithSSE;
 
 module('Integration | card-copy', function (hooks) {
+  let onFetch: ((req: Request, body: string) => void) | undefined;
   let adapter1: TestRealmAdapter;
   let adapter2: TestRealmAdapter;
   let realm1: Realm;
   let realm2: Realm;
   let noop = () => {};
+  function wrappedOnFetch() {
+    return async (req: Request) => {
+      if (!onFetch) {
+        return Promise.resolve(req);
+      }
+      let { headers, method } = req;
+      let body = await req.text();
+      onFetch(req, body);
+      // need to return a new request since we just read the body
+      return new Request(req.url, {
+        method,
+        headers,
+        ...(body ? { body } : {}),
+      });
+    };
+  }
+
   setupRenderingTest(hooks);
   hooks.beforeEach(function () {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
@@ -86,11 +104,11 @@ module('Integration | card-copy', function (hooks) {
     };
     adapter1 = new TestRealmAdapter({
       'person.gts': `
-        import { contains, linksTo, field, Component, Card, linksToMany } from "https://cardstack.com/base/card-api";
+        import { contains, linksTo, field, Component, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { Pet } from "./pet";
 
-        export class Person extends Card {
+        export class Person extends CardDef {
           static displayName = 'Person';
           @field firstName = contains(StringCard);
           @field pet = linksTo(Pet);
@@ -106,10 +124,10 @@ module('Integration | card-copy', function (hooks) {
         }
       `,
       'pet.gts': `
-        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
-        export class Pet extends Card {
+        export class Pet extends CardDef {
           static displayName = 'Pet';
           @field firstName = contains(StringCard);
           @field title = contains(StringCard, {
@@ -234,6 +252,7 @@ module('Integration | card-copy', function (hooks) {
 
     realm1 = await TestRealm.createWithAdapter(adapter1, loader, this.owner, {
       realmURL: testRealmURL,
+      onFetch: wrappedOnFetch(),
     });
     await realm1.ready;
 
@@ -735,7 +754,7 @@ module('Integration | card-copy', function (hooks) {
   });
 
   test<TestContextForCopy>('can copy a card that has a relative link to card in source realm', async function (assert) {
-    assert.expect(13);
+    assert.expect(15);
     let expectedEvents = ['added: Person/1.json', 'index: incremental'];
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
@@ -749,6 +768,18 @@ module('Integration | card-copy', function (hooks) {
         </template>
       },
     );
+    onFetch = (req, body) => {
+      if (req.method !== 'GET') {
+        let json = JSON.parse(body);
+        assert.strictEqual(json.data.attributes.firstName, 'Hassan');
+        assert.strictEqual(
+          json.included,
+          undefined,
+          'included not being sent over the wire',
+        );
+      }
+    };
+
     this.onSave((json) => {
       assert.strictEqual(json.data.id, `${testRealm2URL}Person/1`);
       assert.strictEqual(json.data.attributes?.firstName, 'Hassan');
@@ -821,7 +852,7 @@ module('Integration | card-copy', function (hooks) {
   });
 
   test<TestContextForCopy>('can copy a card that has a link to card in destination realm', async function (assert) {
-    assert.expect(13);
+    assert.expect(15);
     let expectedEvents = ['added: Person/1.json', 'index: incremental'];
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
@@ -835,6 +866,17 @@ module('Integration | card-copy', function (hooks) {
         </template>
       },
     );
+    onFetch = (req, body) => {
+      if (req.method !== 'GET') {
+        let json = JSON.parse(body);
+        assert.strictEqual(json.data.attributes.firstName, 'Sakura');
+        assert.strictEqual(
+          json.included,
+          undefined,
+          'included not being sent over the wire',
+        );
+      }
+    };
     this.onSave((json) => {
       assert.strictEqual(json.data.id, `${testRealm2URL}Person/1`);
       assert.strictEqual(json.data.attributes?.firstName, 'Sakura');

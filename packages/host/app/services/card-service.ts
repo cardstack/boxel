@@ -14,8 +14,9 @@ import {
 import type { Query } from '@cardstack/runtime-common/query';
 import { importResource } from '../resources/import';
 import type {
-  Card,
-  CardBase,
+  BaseDef,
+  CardDef,
+  FieldDef,
   Field,
   SerializeOpts,
 } from 'https://cardstack.com/base/card-api';
@@ -28,6 +29,7 @@ const { ownRealmURL } = ENV;
 export default class CardService extends Service {
   @service declare loaderService: LoaderService;
   private subscriber: CardSaveSubscriber | undefined;
+  private indexCards: Map<string, CardDef> = new Map();
 
   private apiModule = importResource(
     this,
@@ -89,7 +91,7 @@ export default class CardService extends Service {
     resource: LooseCardResource,
     doc: LooseSingleCardDocument | CardDocument,
     relativeTo: URL | undefined,
-  ): Promise<Card> {
+  ): Promise<CardDef> {
     await this.apiModule.loaded;
     let card = await this.api.createFromSerialized(
       resource,
@@ -106,10 +108,15 @@ export default class CardService extends Service {
       recomputeAllFields: true,
       loadFields: true,
     });
-    return card as Card;
+    return card as CardDef;
   }
 
-  async loadModel(url: URL): Promise<Card> {
+  async loadModel(url: URL): Promise<CardDef> {
+    let index = this.indexCards.get(url.href);
+    if (index) {
+      return index;
+    }
+
     await this.apiModule.loaded;
     let json = await this.fetchJSON(url);
     if (!isSingleCardDocument(json)) {
@@ -118,22 +125,28 @@ export default class CardService extends Service {
         ${JSON.stringify(json, null, 2)}`,
       );
     }
-    return await this.createFromSerialized(
+    let card = await this.createFromSerialized(
       json.data,
       json,
       typeof url === 'string' ? new URL(url) : url,
     );
+    if (this.isIndexCard(card)) {
+      this.indexCards.set(url.href, card);
+    }
+    return card;
   }
 
   async serializeCard(
-    card: Card,
+    card: CardDef,
     opts?: SerializeOpts,
   ): Promise<LooseSingleCardDocument> {
     await this.apiModule.loaded;
-    return this.api.serializeCard(card, opts);
+    let serialized = this.api.serializeCard(card, opts);
+    delete serialized.included;
+    return serialized;
   }
 
-  async saveModel(card: Card): Promise<Card> {
+  async saveModel(card: CardDef): Promise<CardDef> {
     await this.apiModule.loaded;
     let doc = await this.serializeCard(card, {
       // for a brand new card that has no id yet, we don't know what we are
@@ -152,7 +165,7 @@ export default class CardService extends Service {
     // should always use updateFromSerialized()--this way a newly created
     // instance that does not yet have an id is still the same instance after an
     // ID has been assigned by the server.
-    let result = (await this.api.updateFromSerialized(card, json)) as Card;
+    let result = (await this.api.updateFromSerialized(card, json)) as CardDef;
     if (this.subscriber) {
       this.subscriber(json);
     }
@@ -178,7 +191,7 @@ export default class CardService extends Service {
     return json;
   }
 
-  async copyCard(source: Card, destinationRealm: URL): Promise<Card> {
+  async copyCard(source: CardDef, destinationRealm: URL): Promise<CardDef> {
     let serialized = await this.serializeCard(source, {
       maybeRelativeURL: null, // forces URL's to be absolute.
     });
@@ -189,14 +202,14 @@ export default class CardService extends Service {
       json,
       new URL(json.data.id),
       this.loaderService.loader,
-    )) as Card;
+    )) as CardDef;
     if (this.subscriber) {
       this.subscriber(json);
     }
     return result;
   }
 
-  async deleteCard(card: Card): Promise<void> {
+  async deleteCard(card: CardDef): Promise<void> {
     if (!card.id) {
       // the card isn't actually saved yet, so do nothing
       return;
@@ -204,7 +217,7 @@ export default class CardService extends Service {
     await this.fetchJSON(card.id, { method: 'DELETE' });
   }
 
-  async search(query: Query, realmURL: URL): Promise<Card[]> {
+  async search(query: Query, realmURL: URL): Promise<CardDef[]> {
     let json = await this.fetchJSON(`${realmURL}_search?${stringify(query)}`);
     if (!isCardCollectionDocument(json)) {
       throw new Error(
@@ -212,7 +225,7 @@ export default class CardService extends Service {
         ${JSON.stringify(json, null, 2)}`,
       );
     }
-    let results: Card[] = [];
+    let results: CardDef[] = [];
 
     // TODO let's deserialize the search results concurrently for better performance
     for (let doc of json.data) {
@@ -246,23 +259,23 @@ export default class CardService extends Service {
   }
 
   async getFields(
-    card: CardBase,
-  ): Promise<{ [fieldName: string]: Field<typeof CardBase> }> {
+    cardOrField: BaseDef,
+  ): Promise<{ [fieldName: string]: Field<typeof BaseDef> }> {
     await this.apiModule.loaded;
-    return this.api.getFields(card, { includeComputeds: true });
+    return this.api.getFields(cardOrField, { includeComputeds: true });
   }
 
-  async isPrimitive(card: typeof CardBase): Promise<boolean> {
+  async isPrimitive(card: typeof FieldDef): Promise<boolean> {
     await this.apiModule.loaded;
     return this.api.primitive in card;
   }
 
-  isCard(maybeCard: any): maybeCard is Card {
+  isCard(maybeCard: any): maybeCard is CardDef {
     return this.api.isCard(maybeCard);
   }
 
-  isIndexCard(maybeIndexCard: any): maybeIndexCard is Card {
-    if (!(maybeIndexCard instanceof this.api.Card)) {
+  isIndexCard(maybeIndexCard: any): maybeIndexCard is CardDef {
+    if (!(maybeIndexCard instanceof this.api.CardDef)) {
       return false;
     }
     let realmURL = maybeIndexCard[this.api.realmURL]?.href;
@@ -274,12 +287,12 @@ export default class CardService extends Service {
     return maybeIndexCard.id === `${realmURL}index`;
   }
 
-  async getRealmInfo(card: Card): Promise<RealmInfo | undefined> {
+  async getRealmInfo(card: CardDef): Promise<RealmInfo | undefined> {
     await this.apiModule.loaded;
     return card[this.api.realmInfo];
   }
 
-  async getRealmURL(card: Card): Promise<URL | undefined> {
+  async getRealmURL(card: CardDef): Promise<URL | undefined> {
     await this.apiModule.loaded;
     return card[this.api.realmURL];
   }
@@ -292,7 +305,7 @@ export default class CardService extends Service {
   // intentionally not async so that this can run in a destructor--this means
   // that callers need to await this.ready
   unsubscribeFromCard(
-    card: Card,
+    card: CardDef,
     subscriber: (fieldName: string, value: any) => void,
   ) {
     this.api.unsubscribeFromChanges(card, subscriber);
@@ -301,7 +314,7 @@ export default class CardService extends Service {
   // also not async to reflect the fact the unsubscribe is not async. Callers
   // needs to await this.ready
   subscribeToCard(
-    card: Card,
+    card: CardDef,
     subscriber: (fieldName: string, value: any) => void,
   ) {
     this.api.subscribeToChanges(card, subscriber);

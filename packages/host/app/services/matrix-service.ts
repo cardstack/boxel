@@ -18,11 +18,11 @@ import type CardService from '../services/card-service';
 import ENV from '@cardstack/host/config/environment';
 import {
   type LooseSingleCardDocument,
-  type CardRef,
+  type CodeRef,
   sanitizeHtml,
 } from '@cardstack/runtime-common';
 import type LoaderService from './loader-service';
-import { type Card } from 'https://cardstack.com/base/card-api';
+import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type {
   RoomCard,
   MatrixEvent as DiscreteMatrixEvent,
@@ -232,7 +232,7 @@ export default class MatrixService extends Service {
   async sendMessage(
     roomId: string,
     body: string | undefined,
-    card?: Card,
+    card?: CardDef,
   ): Promise<void> {
     let html = body != null ? sanitizeHtml(marked(body)) : '';
     let serializedCard: LooseSingleCardDocument | undefined;
@@ -264,7 +264,7 @@ export default class MatrixService extends Service {
     return (powerLevels[myUserId] ?? 0) >= SET_OBJECTIVE_POWER_LEVEL;
   }
 
-  async setObjective(roomId: string, ref: CardRef): Promise<void> {
+  async setObjective(roomId: string, ref: CodeRef): Promise<void> {
     if (!this.allowedToSetObjective(roomId)) {
       throw new Error(
         `The user '${this.client.getUserId()}' is not permitted to set an objective in room '${roomId}'`,

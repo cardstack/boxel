@@ -2,12 +2,12 @@ import {
   contains,
   field,
   Component,
-  Card,
+  CardDef,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import NumberCard from 'https://cardstack.com/base/number';
 
-export class Person extends Card {
+export class Person extends CardDef {
   @field firstName = contains(StringCard);
   @field lastName = contains(StringCard);
   @field email = contains(StringCard);

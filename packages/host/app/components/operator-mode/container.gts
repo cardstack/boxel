@@ -1,10 +1,10 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
-import { Card, Format } from 'https://cardstack.com/base/card-api';
+import { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { trackedFunction } from 'ember-resources/util/function';
-import CardCatalogModal from '../card-catalog-modal';
+import CardCatalogModal from '../card-catalog/modal';
 import type CardService from '../../services/card-service';
 import get from 'lodash/get';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
@@ -19,7 +19,7 @@ import {
   baseCardRef,
   chooseCard,
   type Actions,
-  type CardRef,
+  type CodeRef,
   LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
@@ -45,6 +45,8 @@ import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
+import SubmodeSwitcher, { Submode } from '../submode-switcher';
+import CodeMode from '@cardstack/host/components/operator-mode/code-mode';
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
 
@@ -58,36 +60,28 @@ interface Signature {
 
 export interface OperatorModeState {
   stacks: Stack[];
+  submode: Submode;
 }
 
 export type Stack = StackItem[];
 
 interface BaseItem {
   format: Format;
-  request?: Deferred<Card | undefined>;
+  request?: Deferred<CardDef | undefined>;
   stackIndex: number;
 }
 
-export interface CardStackItem extends BaseItem {
-  type: 'card';
-  card: Card;
-  isLinkedCard?: boolean; // TODO: cnsider renaming this so its clearer that we use this for being able to tell whether the card needs to be closed after saving
+export interface StackItem extends BaseItem {
+  card: CardDef;
+  isLinkedCard?: boolean; // TODO: consider renaming this so its clearer that we use this for being able to tell whether the card needs to be closed after saving
 }
-
-export interface ContainedCardStackItem extends BaseItem {
-  type: 'contained';
-  fieldOfIndex: number; // index of the item in the stack that this is a field of
-  fieldName: string;
-}
-
-export type StackItem = CardStackItem | ContainedCardStackItem;
 
 enum SearchSheetTrigger {
   DropCardToLeftNeighborStackButton = 'drop-card-to-left-neighbor-stack-button',
   DropCardToRightNeighborStackButton = 'drop-card-to-right-neighbor-stack-button',
 }
 
-const cardSelections = new TrackedWeakMap<StackItem, TrackedSet<Card>>();
+const cardSelections = new TrackedWeakMap<StackItem, TrackedSet<CardDef>>();
 const clearSelections = new WeakMap<StackItem, () => void>();
 const stackItemStableScrolls = new WeakMap<
   StackItem,
@@ -100,10 +94,10 @@ export default class OperatorModeContainer extends Component<Signature> {
   @service declare messageService: MessageService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
-  @service declare commandService: CommandService;
   @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
   @tracked searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked isChatVisible = false;
+
   private deleteModal: DeleteModal | undefined;
 
   constructor(owner: unknown, args: any) {
@@ -154,25 +148,16 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   }
 
+  @action onSearch(_term: string) {
+    this.searchSheetMode = SearchSheetMode.SearchResults;
+  }
+
   constructRecentCards = restartableTask(async () => {
     return await this.operatorModeStateService.constructRecentCards();
   });
 
-  private getAddressableCard(item: StackItem): Card {
-    return getCardStackItem(item, this.stacks[item.stackIndex]).card;
-  }
-
-  private getCard(item: StackItem): Card {
-    let card = this.getAddressableCard(item);
-    let path = getPathToStackItem(item, this.stacks[item.stackIndex]);
-    if (path.length === 0) {
-      return card;
-    }
-    return get(card, path.join('.'));
-  }
-
   @action
-  onSelectedCards(selectedCards: Card[], stackItem: StackItem) {
+  onSelectedCards(selectedCards: CardDef[], stackItem: StackItem) {
     let selected = cardSelections.get(stackItem);
     if (!selected) {
       selected = new TrackedSet([]);
@@ -206,42 +191,17 @@ export default class OperatorModeContainer extends Component<Signature> {
   @action updateItem(
     item: StackItem,
     format: Format,
-    request?: Deferred<Card | undefined>,
+    request?: Deferred<CardDef | undefined>,
   ) {
-    if (item.type === 'card') {
-      this.operatorModeStateService.replaceItemInStack(item, {
-        ...item,
-        request,
-        format,
-      });
-    }
-
-    if (item.type === 'contained') {
-      let addressableItem = getCardStackItem(
-        item,
-        this.stacks[item.stackIndex],
-      );
-
-      let pathSegments = getPathToStackItem(item, this.stacks[item.stackIndex]);
-      this.operatorModeStateService.replaceItemInStack(addressableItem, {
-        ...addressableItem,
-        request,
-        format,
-      });
-      pathSegments.forEach((_, index) => {
-        let stack = this.stacks[item.stackIndex];
-        let currentItem = stack[stack.length - index - 1];
-        this.operatorModeStateService.replaceItemInStack(currentItem, {
-          ...currentItem,
-          format,
-        });
-      });
-    }
+    this.operatorModeStateService.replaceItemInStack(item, {
+      ...item,
+      request,
+      format,
+    });
   }
 
   close = task(async (item: StackItem) => {
-    let card = this.getAddressableCard(item);
-    let { request } = item;
+    let { card, request } = item;
     // close the item first so user doesn't have to wait for the save to complete
     this.operatorModeStateService.trimItemsFromStack(item);
 
@@ -256,47 +216,41 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   save = task(async (item: StackItem, dismissStackItem: boolean) => {
     let { request } = item;
-    let stack = this.stacks[item.stackIndex];
-    let addressableItem = getCardStackItem(item, stack);
-    let updatedCard = await this.write.perform(addressableItem.card);
+    let updatedCard = await this.write.perform(item.card);
 
     if (updatedCard) {
       request?.fulfill(updatedCard);
       if (!dismissStackItem) {
         // if this is a newly created card from auto-save then we
         // need to replace the stack item to account for the new card's ID
-        if (!addressableItem.card.id && updatedCard.id) {
-          this.operatorModeStateService.replaceItemInStack(addressableItem, {
-            ...addressableItem,
+        if (!item.card.id && updatedCard.id) {
+          this.operatorModeStateService.replaceItemInStack(item, {
+            ...item,
             card: updatedCard,
           });
         }
         return;
       }
 
-      if (item.type === 'card' && item.isLinkedCard) {
+      if (item.isLinkedCard) {
         this.operatorModeStateService.trimItemsFromStack(item); // closes the 'create new card' editor for linked card fields
       } else {
-        if (!addressableItem.card.id && updatedCard.id) {
-          this.operatorModeStateService.trimItemsFromStack(addressableItem);
+        if (!item.card.id && updatedCard.id) {
+          this.operatorModeStateService.trimItemsFromStack(item);
         } else {
-          this.operatorModeStateService.replaceItemInStack(addressableItem, {
-            ...addressableItem,
+          this.operatorModeStateService.replaceItemInStack(item, {
+            ...item,
             card: updatedCard,
             request,
             format: 'isolated',
           });
-
-          getPathToStackItem(item, this.stacks[item.stackIndex]).forEach(() =>
-            this.operatorModeStateService.popItemFromStack(item.stackIndex),
-          );
         }
       }
     }
   });
 
   // dropTask will ignore any subsequent delete requests until the one in progress is done
-  delete = dropTask(async (card: Card) => {
+  delete = dropTask(async (card: CardDef) => {
     if (!card.id) {
       // the card isn't actually saved yet, so do nothing
       return;
@@ -314,12 +268,10 @@ export default class OperatorModeContainer extends Component<Signature> {
       return;
     }
 
-    let items: CardStackItem[] = [];
+    let items: StackItem[] = [];
     for (let stack of this.stacks) {
       items.push(
-        ...(stack.filter(
-          (i) => i.type === 'card' && i.card.id === card.id,
-        ) as CardStackItem[]),
+        ...(stack.filter((i) => i.card.id === card.id) as StackItem[]),
       );
       // remove all selections for the deleted card
       for (let item of stack) {
@@ -349,7 +301,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   // this level we need to handle every request (so not restartable). otherwise
   // we might drop writes from different stack items that want to save
   // at the same time
-  private write = task(async (card: Card) => {
+  private write = task(async (card: CardDef) => {
     return await this.withTestWaiters(async () => {
       return await this.cardService.saveModel(card);
     });
@@ -358,9 +310,9 @@ export default class OperatorModeContainer extends Component<Signature> {
   // dropTask will ignore any subsequent copy requests until the one in progress is done
   private copy = dropTask(
     async (
-      sources: Card[],
-      sourceItem: CardStackItem,
-      destinationItem: CardStackItem,
+      sources: CardDef[],
+      sourceItem: StackItem,
+      destinationItem: StackItem,
     ) => {
       await this.withTestWaiters(async () => {
         let destinationRealmURL = await this.cardService.getRealmURL(
@@ -405,13 +357,13 @@ export default class OperatorModeContainer extends Component<Signature> {
   private publicAPI(here: OperatorModeContainer, stackIndex: number): Actions {
     return {
       createCard: async (
-        ref: CardRef,
+        ref: CodeRef,
         relativeTo: URL | undefined,
         opts?: {
           isLinkedCard?: boolean;
           doc?: LooseSingleCardDocument; // fill in card data with values
         },
-      ): Promise<Card | undefined> => {
+      ): Promise<CardDef | undefined> => {
         // prefers optional doc to be passed in
         // use case: to populate default values in a create modal
         let doc: LooseSingleCardDocument = opts?.doc ?? {
@@ -427,7 +379,6 @@ export default class OperatorModeContainer extends Component<Signature> {
           new URL(realmPath.url),
         );
         let newItem: StackItem = {
-          type: 'card',
           card: newCard,
           format: 'edit',
           request: new Deferred(),
@@ -437,64 +388,12 @@ export default class OperatorModeContainer extends Component<Signature> {
         here.addToStack(newItem);
         return await newItem.request?.promise;
       },
-      viewCard: async (
-        card: Card,
-        format: Format = 'isolated',
-        fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
-        fieldName?: string,
-      ) => {
-        let stack = here.stacks[stackIndex];
-        let itemsCount = stack.length;
-
-        let currentCardOnStack = here.getCard(stack[itemsCount - 1]!); // Last item on the stack
-
-        // TODO this is a hack until contained cards go away
-        // this lets us handle a contained card that is part of a card that has been auto-saved.
-        // the deserialization from the auto save actually breaks object equality for contained cards.
-        if (
-          fieldType === 'contains' &&
-          fieldName &&
-          [
-            ...Object.keys(
-              await here.cardService.getFields(currentCardOnStack),
-            ),
-          ].includes(fieldName)
-        ) {
-          here.addToStack({
-            type: 'contained',
-            fieldOfIndex: itemsCount - 1,
-            fieldName,
-            format,
-            stackIndex,
-          });
-          return;
-        }
-
-        let containedPath = await findContainedCardPath(
-          currentCardOnStack,
+      viewCard: async (card: CardDef, format: Format = 'isolated') => {
+        here.addToStack({
           card,
-          here.cardService,
-        );
-        if (containedPath.length > 0) {
-          let currentIndex = itemsCount - 1;
-          // add the nested contained cards in teh correct order
-          for (let fieldName of containedPath) {
-            here.addToStack({
-              type: 'contained',
-              fieldOfIndex: currentIndex++,
-              fieldName,
-              format,
-              stackIndex,
-            });
-          }
-        } else {
-          here.addToStack({
-            type: 'card',
-            card,
-            format,
-            stackIndex,
-          });
-        }
+          format,
+          stackIndex,
+        });
       },
       createCardDirectly: async (
         doc: LooseSingleCardDocument,
@@ -507,7 +406,6 @@ export default class OperatorModeContainer extends Component<Signature> {
         );
         await here.cardService.saveModel(newCard);
         let newItem: StackItem = {
-          type: 'card',
           card: newCard,
           format: 'isolated',
           stackIndex,
@@ -516,14 +414,12 @@ export default class OperatorModeContainer extends Component<Signature> {
         return;
       },
       doWithStableScroll: async (
-        card: Card,
+        card: CardDef,
         changeSizeCallback: () => Promise<void>,
       ): Promise<void> => {
         let stackItem: StackItem | undefined;
         for (let stack of here.stacks) {
-          stackItem = stack.find(
-            (item) => item.type === 'card' && item.card === card,
-          );
+          stackItem = stack.find((item) => item.card === card);
           if (stackItem) {
             let doWithStableScroll = stackItemStableScrolls.get(stackItem);
             if (doWithStableScroll) {
@@ -539,13 +435,12 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   addCard = restartableTask(async () => {
     let type = baseCardRef;
-    let chosenCard: Card | undefined = await chooseCard({
+    let chosenCard: CardDef | undefined = await chooseCard({
       filter: { type },
     });
 
     if (chosenCard) {
       let newItem: StackItem = {
-        type: 'card',
         card: chosenCard,
         format: 'isolated',
         stackIndex: 0, // This is called when there are no cards in the stack left, so we can assume the stackIndex is 0
@@ -561,11 +456,6 @@ export default class OperatorModeContainer extends Component<Signature> {
           return;
         }
         let bottomMostCard = stack[0];
-        if (bottomMostCard.type !== 'card') {
-          throw new Error(
-            `bug: the bottom most card for a stack cannot be a contained card`,
-          );
-        }
         return (await this.cardService.getRealmInfo(bottomMostCard.card))
           ?.backgroundURL;
       }),
@@ -590,7 +480,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     ) {
       return htmlSafe(`background-image: url(${this.backgroundImageURLs[0]});`);
     }
-    return '';
+    return false;
   }
 
   get differingBackgroundImageURLs() {
@@ -606,7 +496,16 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.operatorModeStateService.state?.stacks.flat() ?? [];
   }
 
-  @action onCardSelectFromSearch(card: Card) {
+  get cardForCodeMode() {
+    // Last card in rightmost stack
+    return this.allStackItems.reverse()[0].card;
+  }
+
+  get isCodeMode() {
+    return this.operatorModeStateService.state?.submode === Submode.Code;
+  }
+
+  @action onCardSelectFromSearch(card: CardDef) {
     let searchSheetTrigger = this.searchSheetTrigger; // Will be set by onFocusSearchInput
 
     // This logic assumes there is currently one stack when this method is called (i.e. the stack with index 0)
@@ -628,8 +527,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         );
       }
 
-      let stackItem: CardStackItem = {
-        type: 'card',
+      let stackItem: StackItem = {
         card,
         format: 'isolated',
         stackIndex: 0,
@@ -642,7 +540,6 @@ export default class OperatorModeContainer extends Component<Signature> {
       SearchSheetTrigger.DropCardToRightNeighborStackButton
     ) {
       this.operatorModeStateService.addItemToStack({
-        type: 'card',
         card,
         format: 'isolated',
         stackIndex: this.stacks.length,
@@ -659,7 +556,6 @@ export default class OperatorModeContainer extends Component<Signature> {
           let bottomMostItem = stack[0];
           if (bottomMostItem) {
             this.operatorModeStateService.clearStackAndAdd(stackIndex, {
-              type: 'card',
               card,
               format: 'isolated',
               stackIndex,
@@ -696,6 +592,10 @@ export default class OperatorModeContainer extends Component<Signature> {
     this.deleteModal = deleteModal;
   };
 
+  @action updateSubmode(submode: Submode) {
+    this.operatorModeStateService.updateSubmode(submode);
+  }
+
   <template>
     <Modal
       class='operator-mode'
@@ -705,124 +605,133 @@ export default class OperatorModeContainer extends Component<Signature> {
       @isOverlayDismissalDisabled={{true}}
       @boxelModalOverlayColor='var(--operator-mode-bg-color)'
     >
-
       <CardCatalogModal />
 
       <div class='operator-mode__with-chat {{this.chatVisibilityClass}}'>
-        <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
-          {{#if (eq this.allStackItems.length 0)}}
-            <div class='no-cards'>
-              <p class='add-card-title'>
-                Add a card to get started
-              </p>
+        <SubmodeSwitcher
+          @submode={{this.operatorModeStateService.state.submode}}
+          @onSubmodeSelect={{this.updateSubmode}}
+          class='submode-switcher'
+        />
 
-              <button
-                class='add-card-button'
-                {{on 'click' (fn (perform this.addCard))}}
-                data-test-add-card-button
-              >
-                {{svgJar 'icon-plus' width='50px' height='50px'}}
-              </button>
-            </div>
-          {{else}}
-            {{#each this.stacks as |stack stackIndex|}}
-              <OperatorModeStack
-                data-test-operator-mode-stack={{stackIndex}}
-                class='operator-mode-stack'
-                @stackItems={{stack}}
-                @backgroundImageURL={{get
-                  this.differingBackgroundImageURLs
-                  stackIndex
-                }}
-                @stackIndex={{stackIndex}}
-                @publicAPI={{this.publicAPI this stackIndex}}
-                @close={{perform this.close}}
-                @edit={{this.edit}}
-                @onSelectedCards={{this.onSelectedCards}}
-                @save={{perform this.save}}
-                @delete={{perform this.delete}}
-                @setupStackItem={{this.setupStackItem}}
+        {{#if this.isCodeMode}}
+          <CodeMode @card={{this.cardForCodeMode}} />
+        {{else}}
+          <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
+            {{#if (eq this.allStackItems.length 0)}}
+              <div class='no-cards'>
+                <p class='add-card-title'>
+                  Add a card to get started
+                </p>
+
+                <button
+                  class='add-card-button'
+                  {{on 'click' (fn (perform this.addCard))}}
+                  data-test-add-card-button
+                >
+                  {{svgJar 'icon-plus' width='50px' height='50px'}}
+                </button>
+              </div>
+            {{else}}
+              {{#each this.stacks as |stack stackIndex|}}
+                <OperatorModeStack
+                  data-test-operator-mode-stack={{stackIndex}}
+                  class='operator-mode-stack'
+                  @stackItems={{stack}}
+                  @backgroundImageURL={{get
+                    this.differingBackgroundImageURLs
+                    stackIndex
+                  }}
+                  @stackIndex={{stackIndex}}
+                  @publicAPI={{this.publicAPI this stackIndex}}
+                  @close={{perform this.close}}
+                  @edit={{this.edit}}
+                  @onSelectedCards={{this.onSelectedCards}}
+                  @save={{perform this.save}}
+                  @delete={{perform this.delete}}
+                  @setupStackItem={{this.setupStackItem}}
+                />
+              {{/each}}
+
+              <CopyButton
+                @selectedCards={{this.selectedCards}}
+                @copy={{fn (perform this.copy)}}
+                @isCopying={{this.copy.isRunning}}
               />
-            {{/each}}
+              <DeleteModal @onCreate={{this.setupDeleteModal}} />
+            {{/if}}
 
-            <CopyButton
-              @selectedCards={{this.selectedCards}}
-              @copy={{fn (perform this.copy)}}
-              @isCopying={{this.copy.isRunning}}
-            />
-            <DeleteModal @onCreate={{this.setupDeleteModal}} />
-          {{/if}}
-
-          {{#if this.canCreateNeighborStack}}
-            <button
-              data-test-add-card-left-stack
-              class='add-card-to-neighbor-stack add-card-to-neighbor-stack--left
-                {{if
-                  (eq
-                    this.searchSheetTrigger
+            {{#if this.canCreateNeighborStack}}
+              <button
+                data-test-add-card-left-stack
+                class='add-card-to-neighbor-stack add-card-to-neighbor-stack--left
+                  {{if
+                    (eq
+                      this.searchSheetTrigger
+                      SearchSheetTrigger.DropCardToLeftNeighborStackButton
+                    )
+                    "add-card-to-neighbor-stack--active"
+                  }}'
+                {{on
+                  'click'
+                  (fn
+                    this.onFocusSearchInput
                     SearchSheetTrigger.DropCardToLeftNeighborStackButton
                   )
-                  "add-card-to-neighbor-stack--active"
-                }}'
-              {{on
-                'click'
-                (fn
-                  this.onFocusSearchInput
-                  SearchSheetTrigger.DropCardToLeftNeighborStackButton
-                )
-              }}
-            >
-              {{svgJar 'download' width='30px' height='30px'}}
-            </button>
-            <button
-              data-test-add-card-right-stack
-              class='add-card-to-neighbor-stack add-card-to-neighbor-stack--right
-                {{if
-                  (eq
-                    this.searchSheetTrigger
+                }}
+              >
+                {{svgJar 'download' width='30px' height='30px'}}
+              </button>
+              <button
+                data-test-add-card-right-stack
+                class='add-card-to-neighbor-stack add-card-to-neighbor-stack--right
+                  {{if
+                    (eq
+                      this.searchSheetTrigger
+                      SearchSheetTrigger.DropCardToRightNeighborStackButton
+                    )
+                    "add-card-to-neighbor-stack--active"
+                  }}'
+                {{on
+                  'click'
+                  (fn
+                    this.onFocusSearchInput
                     SearchSheetTrigger.DropCardToRightNeighborStackButton
                   )
-                  "add-card-to-neighbor-stack--active"
-                }}'
-              {{on
-                'click'
-                (fn
-                  this.onFocusSearchInput
-                  SearchSheetTrigger.DropCardToRightNeighborStackButton
-                )
-              }}
-            >
-              {{svgJar 'download' width='30px' height='30px'}}
-            </button>
-          {{/if}}
-        </div>
-        {{#if APP.experimentalAIEnabled}}
-          {{#if this.isChatVisible}}
-            <ChatSidebar @onClose={{this.toggleChat}} />
-          {{else}}
-            <IconButton
-              data-test-open-chat
-              class='chat-btn'
-              @icon='sparkle'
-              @width='30px'
-              @height='30px'
-              {{on 'click' this.toggleChat}}
-              style={{cssVar
-                boxel-icon-button-width='50px'
-                boxel-icon-button-height='50px'
-              }}
-            />
-          {{/if}}
+                }}
+              >
+                {{svgJar 'download' width='30px' height='30px'}}
+              </button>
+            {{/if}}
+          </div>
+        {{/if}}
+      {{#if APP.experimentalAIEnabled}}
+        {{#if this.isChatVisible}}
+          <ChatSidebar @onClose={{this.toggleChat}} />
+        {{else}}
+          <IconButton
+            data-test-open-chat
+            class='chat-btn'
+            @icon='sparkle'
+            @width='30px'
+            @height='30px'
+            style={{cssVar
+              boxel-icon-button-width='50px'
+              boxel-icon-button-height='50px'
+            }}
+            {{on 'click' this.toggleChat}}
+          />
+        {{/if}}
         {{/if}}
       </div>
-      {{#unless this.isChatVisible}}
-        <SearchSheet
-          @mode={{this.searchSheetMode}}
-          @onCancel={{this.onCancelSearchSheet}}
-          @onFocus={{this.onFocusSearchInput}}
-          @onCardSelect={{this.onCardSelectFromSearch}}
-        />
-      {{/unless}}
+
+      <SearchSheet
+        @mode={{this.searchSheetMode}}
+        @onCancel={{this.onCancelSearchSheet}}
+        @onFocus={{this.onFocusSearchInput}}
+        @onSearch={{this.onSearch}}
+        @onCardSelect={{this.onCardSelectFromSearch}}
+      />
     </Modal>
 
     <style>
@@ -869,6 +778,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         border-radius: 50%;
         background-color: var(--boxel-light-100);
         border-color: transparent;
+        box-shadow: var(--boxel-deep-box-shadow);
       }
       .add-card-to-neighbor-stack:hover,
       .add-card-to-neighbor-stack--active {
@@ -918,73 +828,22 @@ export default class OperatorModeContainer extends Component<Signature> {
         border-radius: var(--boxel-border-radius);
         background-color: var(--boxel-light-100);
         border: solid 1px var(--boxel-border-color);
-        box-shadow: var(--boxel-box-shadow);
+        box-shadow: var(--boxel-deep-box-shadow);
       }
       .chat-btn:hover {
         --icon-color: var(--boxel-highlight);
         background-color: var(--boxel-light);
       }
+
+      .submode-switcher {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 2;
+        padding: var(--boxel-sp);
+      }
     </style>
   </template>
-}
-
-export function getCardStackItem(
-  stackItem: StackItem,
-  stack: StackItem[],
-): CardStackItem {
-  if (stackItem.type === 'card') {
-    return stackItem;
-  }
-  if (stackItem.fieldOfIndex >= stack.length) {
-    throw new Error(
-      `bug: the stack item (index ${stackItem.fieldOfIndex}) that is the parent of the contained field '${stackItem.fieldName}' no longer exists in the stack`,
-    );
-  }
-  return getCardStackItem(stack[stackItem.fieldOfIndex], stack);
-}
-
-export function getPathToStackItem(
-  stackItem: StackItem,
-  stack: StackItem[],
-  segments: string[] = [],
-): string[] {
-  if (stackItem.type === 'card') {
-    return segments;
-  }
-  return getPathToStackItem(stack[stackItem.fieldOfIndex], stack, [
-    stackItem.fieldName,
-    ...segments,
-  ]);
-}
-
-async function findContainedCardPath(
-  possibleParent: Card,
-  maybeContained: Card,
-  cardService: CardService,
-  path: string[] = [],
-): Promise<string[]> {
-  let fields = await cardService.getFields(possibleParent);
-
-  for (let [fieldName, field] of Object.entries(fields)) {
-    let value = (possibleParent as any)[fieldName];
-    if (value === maybeContained && field.fieldType === 'contains') {
-      return [...path, fieldName];
-    }
-    if (
-      cardService.isCard(value) &&
-      value !== maybeContained &&
-      field.fieldType === 'contains'
-    ) {
-      path = await findContainedCardPath(value, maybeContained, cardService, [
-        ...path,
-        fieldName,
-      ]);
-      if (path.length > 0) {
-        return path;
-      }
-    }
-  }
-  return [];
 }
 
 declare module '@glint/environment-ember-loose/registry' {

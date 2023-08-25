@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type {
-  Card,
+  CardDef,
   Format,
   FieldType,
 } from 'https://cardstack.com/base/card-api';
@@ -11,7 +11,7 @@ import { trackedFunction } from 'ember-resources/util/function';
 import { fn, array } from '@ember/helper';
 import type CardService from '../../services/card-service';
 
-import { eq, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import optional from '@cardstack/boxel-ui/helpers/optional';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import {
@@ -20,7 +20,6 @@ import {
   CardContainer,
   Tooltip,
 } from '@cardstack/boxel-ui';
-import get from 'lodash/get';
 import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 import { task, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -33,11 +32,7 @@ import { TrackedArray } from 'tracked-built-ins';
 import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
 import BoxelMenu from '@cardstack/boxel-ui/components/menu';
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
-import {
-  type StackItem,
-  getCardStackItem,
-  getPathToStackItem,
-} from './container';
+import { type StackItem } from './container';
 import { registerDestructor } from '@ember/destroyable';
 
 import { htmlSafe, SafeString } from '@ember/template';
@@ -45,7 +40,6 @@ import OperatorModeOverlays from './overlays';
 import ElementTracker from '../../resources/element-tracker';
 import config from '@cardstack/host/config/environment';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { formatDistanceToNow } from 'date-fns';
 import Modifier from 'ember-modifier';
 import { schedule } from '@ember/runloop';
@@ -60,8 +54,8 @@ interface Signature {
     dismissStackedCardsAbove: (stackIndex: number) => void;
     edit: (item: StackItem) => void;
     save: (item: StackItem, dismiss: boolean) => void;
-    delete: (card: Card) => void;
-    onSelectedCards: (selectedCards: Card[], stackItem: StackItem) => void;
+    delete: (card: CardDef) => void;
+    onSelectedCards: (selectedCards: CardDef[], stackItem: StackItem) => void;
     setupStackItem: (
       stackItem: StackItem,
       clearSelections: () => void,
@@ -74,25 +68,25 @@ let { autoSaveDelayMs } = config;
 
 export interface RenderedCardForOverlayActions {
   element: HTMLElement;
-  card: Card;
+  card: CardDef;
   fieldType: FieldType | undefined;
   fieldName: string | undefined;
   stackItem: StackItem;
 }
 
 export default class OperatorModeStackItem extends Component<Signature> {
-  @tracked selectedCards = new TrackedArray<Card>([]);
+  @tracked selectedCards = new TrackedArray<CardDef>([]);
   @service declare cardService: CardService;
   @tracked isHoverOnRealmIcon = false;
   @tracked isSaving = false;
   @tracked lastSaved: number | undefined;
   @tracked lastSavedMsg: string | undefined;
   private refreshSaveMsg: number | undefined;
-  private subscribedCard: Card;
+  private subscribedCard: CardDef;
   private contentEl: HTMLElement | undefined;
 
   cardTracker = new ElementTracker<{
-    card: Card;
+    card: CardDef;
     format: Format | 'data';
     fieldType: FieldType | undefined;
     fieldName: string | undefined;
@@ -156,7 +150,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     };
   }
 
-  @action toggleSelect(card: Card) {
+  @action toggleSelect(card: CardDef) {
     let index = this.selectedCards.findIndex((c) => c === card);
 
     if (index === -1) {
@@ -199,10 +193,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   get cardIdentifier() {
-    let path = getPathToStackItem(this.args.item, this.args.stackItems);
-    return `${this.addressableCard.id}${
-      path.length > 0 ? '/' + path.join('/') : ''
-    }`;
+    return this.args.item.card.id;
   }
 
   @action
@@ -225,23 +216,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   @cached
-  get isContainedItem() {
-    return this.args.item.type === 'contained';
-  }
-
-  @cached
-  get addressableCard() {
-    let card = getCardStackItem(this.args.item, this.args.stackItems).card;
-    return card;
-  }
-
-  @cached
-  get card(): Card {
-    let path = getPathToStackItem(this.args.item, this.args.stackItems);
-    if (path.length === 0) {
-      return this.addressableCard;
-    }
-    return get(this.addressableCard, path.join('.'));
+  get card(): CardDef {
+    return this.args.item.card;
   }
 
   private subscribeToCard = task(async () => {
@@ -331,9 +307,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
           data-test-stack-card-header
         >
           <:icon>
-            {{#if this.isContainedItem}}
-              {{svgJar 'icon-turn-down-right' width='22px' height='18px'}}
-            {{else if this.headerIcon}}
+            {{#if this.headerIcon}}
               <img
                 class='header-icon'
                 src={{this.headerIcon.URL}}
@@ -404,20 +378,18 @@ export default class OperatorModeStackItem extends Component<Signature> {
                   <BoxelMenu
                     @closeMenu={{dd.close}}
                     @items={{if
-                      (and (eq @item.format 'edit') (eq @item.type 'card'))
+                      (eq @item.format 'edit')
                       (array
                         (menuItem
                           'Copy Card URL'
                           (perform this.copyToClipboard)
                           icon='icon-link'
-                          disabled=(eq @item.type 'contained')
                         )
                         (menuItem
                           'Delete'
-                          (fn @delete this.addressableCard)
+                          (fn @delete this.card)
                           icon='icon-trash'
                           dangerous=true
-                          disabled=(eq @item.type 'contained')
                         )
                       )
                       (array
@@ -425,14 +397,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
                           'Copy Card URL'
                           (perform this.copyToClipboard)
                           icon='icon-link'
-                          disabled=(eq @item.type 'contained')
                         )
                         (menuItem
                           'Delete'
-                          (fn @delete this.addressableCard)
+                          (fn @delete this.card)
                           icon='icon-trash'
                           dangerous=true
-                          disabled=(eq @item.type 'contained')
                         )
                       )
                     }}
@@ -485,7 +455,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     </div>
     <style>
       :global(:root) {
-        --stack-card-footer-height: 5rem;
+        --stack-card-footer-height: 6rem;
         --buried-operator-mode-header-height: 2.5rem;
       }
 
@@ -515,7 +485,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         height: 100%;
         display: grid;
         grid-template-rows: 3.5rem auto;
-        box-shadow: 0 15px 30px 0 rgb(0 0 0 / 35%);
+        box-shadow: var(--boxel-deep-box-shadow);
         pointer-events: auto;
       }
 
@@ -533,6 +503,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
       .edit .content {
         margin-bottom: var(--stack-card-footer-height);
+      }
+
+      .card {
+        overflow: hidden;
       }
 
       .buried .card {

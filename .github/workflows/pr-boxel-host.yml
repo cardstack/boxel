@@ -3,10 +3,10 @@ name: CI [boxel-host]
 on:
   pull_request:
     paths:
-      - "packages/host/**"
-      - ".github/workflows/pr-boxel-host.yml"
-      - "package.json"
-      - "pnpm-lock.yaml"
+      - 'packages/host/**'
+      - '.github/workflows/pr-boxel-host.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
 
 permissions:
   contents: read
@@ -48,7 +48,7 @@ jobs:
       - name: Deploy boxel-host preview
         uses: ./.github/actions/deploy-ember-preview
         env:
-          OWN_REALM_URL: https://realms-staging.stack.cards/demo/
+          OWN_REALM_URL: https://realms-staging.stack.cards/drafts/
           OTHER_REALM_URLS: https://realms-staging.stack.cards/published/
           RESOLVED_BASE_REALM_URL: https://realms-staging.stack.cards/base/
           S3_PREVIEW_BUCKET_NAME: boxel-host-preview.stack.cards
@@ -76,7 +76,7 @@ jobs:
       - name: Deploy boxel-host preview
         uses: ./.github/actions/deploy-ember-preview
         env:
-          OWN_REALM_URL: https://realms.cardstack.com/demo/
+          OWN_REALM_URL: https://realms.cardstack.com/drafts/
           OTHER_REALM_URLS: https://realms.cardstack.com/published/
           RESOLVED_BASE_REALM_URL: https://realms.cardstack.com/base/
           S3_PREVIEW_BUCKET_NAME: boxel-host-preview.cardstack.com

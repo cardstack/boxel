@@ -53,6 +53,7 @@ export default class ModalContainer extends Component<Signature> {
         height: 100%;
         display: grid;
         grid-template-rows: auto 1fr auto;
+        box-shadow: var(--boxel-deep-box-shadow);
       }
 
       .dialog-box__header {

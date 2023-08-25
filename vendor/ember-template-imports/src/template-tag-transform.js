@@ -37,11 +37,11 @@ module.exports.transformTemplateTag = function (t, templatePath, state) {
             templatePath,
             '@ember/component/template-only',
             'default',
-            'templateOnly'
+            'templateOnly',
           ),
-          [t.stringLiteral(filename), t.stringLiteral(varId.name)]
+          [t.stringLiteral(filename), t.stringLiteral(varId.name)],
         ),
-      ]
+      ],
     );
 
     if (
@@ -50,13 +50,13 @@ module.exports.transformTemplateTag = function (t, templatePath, state) {
     ) {
       registerRefs(
         arrayParentPath.replaceWith(
-          t.exportDefaultDeclaration(templateOnlyComponentExpression)
+          t.exportDefaultDeclaration(templateOnlyComponentExpression),
         ),
         (newPath) => [
           newPath.get('declaration.callee'),
           newPath.get('declaration.arguments.0.callee'),
           newPath.get('declaration.arguments.1.callee'),
-        ]
+        ],
       );
     } else {
       registerRefs(
@@ -65,7 +65,7 @@ module.exports.transformTemplateTag = function (t, templatePath, state) {
           newPath.get('callee'),
           newPath.get('arguments.0.callee'),
           newPath.get('arguments.1.callee'),
-        ]
+        ],
       );
     }
   } else if (path.type === 'ClassProperty') {
@@ -78,13 +78,13 @@ module.exports.transformTemplateTag = function (t, templatePath, state) {
             t.callExpression(buildSetComponentTemplate(path, state), [
               compiled,
               classPath.node.id,
-            ])
-          )
+            ]),
+          ),
         ),
         (newPath) => [
           newPath.get('expression.callee'),
           newPath.get('expression.arguments.0.callee'),
-        ]
+        ],
       );
     } else {
       registerRefs(
@@ -93,13 +93,13 @@ module.exports.transformTemplateTag = function (t, templatePath, state) {
             t.callExpression(buildSetComponentTemplate(path, state), [
               compiled,
               classPath.node,
-            ])
-          )
+            ]),
+          ),
         ),
         (newPath) => [
           newPath.parentPath.get('callee'),
           newPath.parentPath.get('arguments.0.callee'),
-        ]
+        ],
       );
     }
 
@@ -108,7 +108,7 @@ module.exports.transformTemplateTag = function (t, templatePath, state) {
     return;
   } else {
     throw path.buildCodeFrameError(
-      `Attempted to use \`<${TEMPLATE_TAG_NAME}>\` to define a template in an unsupported way. Templates defined using this syntax must be:\n\n1. Assigned to a variable declaration OR\n2. The default export of a file OR\n2. In the top level of the file on their own (sugar for \`export default\`) OR\n4. Used directly within a named class body`
+      `Attempted to use \`<${TEMPLATE_TAG_NAME}>\` to define a template in an unsupported way. Templates defined using this syntax must be:\n\n1. Assigned to a variable declaration OR\n2. The default export of a file OR\n2. In the top level of the file on their own (sugar for \`export default\`) OR\n4. Used directly within a named class body`,
     );
   }
 };
@@ -117,6 +117,6 @@ function buildSetComponentTemplate(path, state) {
   return state.importUtil.import(
     path,
     '@ember/component',
-    'setComponentTemplate'
+    'setComponentTemplate',
   );
 }

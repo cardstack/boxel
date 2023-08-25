@@ -1,10 +1,10 @@
-import { type CardRef, isCardRef } from './card-ref';
+import { type CodeRef, isCodeRef } from './code-ref';
 import { RealmInfo } from './realm';
 
 export type Saved = string;
 export type Unsaved = string | undefined;
 export interface Meta {
-  adoptsFrom: CardRef;
+  adoptsFrom: CodeRef;
   fields?: CardFields;
 }
 export interface CardFields {
@@ -96,7 +96,7 @@ export function isCardResource(resource: any): resource is CardResource {
     return false;
   }
   let { adoptsFrom } = meta;
-  return isCardRef(adoptsFrom);
+  return isCodeRef(adoptsFrom);
 }
 
 export function isCardFields(fields: any): fields is CardFields {
@@ -104,7 +104,7 @@ export function isCardFields(fields: any): fields is CardFields {
     return false;
   }
   for (let [fieldName, fieldItem] of Object.entries(
-    fields as { [fieldName: string | symbol]: any }
+    fields as { [fieldName: string | symbol]: any },
   )) {
     if (typeof fieldName !== 'string') {
       return false;
@@ -128,7 +128,7 @@ export function isMeta(meta: any, allowPartial = false) {
   }
   if ('adoptsFrom' in meta) {
     let { adoptsFrom } = meta;
-    if (!isCardRef(adoptsFrom)) {
+    if (!isCodeRef(adoptsFrom)) {
       return false;
     }
   } else {
@@ -145,7 +145,7 @@ export function isMeta(meta: any, allowPartial = false) {
 }
 
 export function isRelationship(
-  relationship: any
+  relationship: any,
 ): relationship is Relationship {
   if (typeof relationship !== 'object' || relationship == null) {
     return false;
@@ -212,7 +212,7 @@ export function isSingleCardDocument(doc: any): doc is SingleCardDocument {
 }
 
 export function isCardCollectionDocument(
-  doc: any
+  doc: any,
 ): doc is CardCollectionDocument {
   if (typeof doc !== 'object' || doc == null) {
     return false;
