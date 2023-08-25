@@ -677,7 +677,7 @@ export default class OperatorModeContainer extends Component<Signature> {
                   )
                 }}
               >
-                {{svgJar 'download' width='30px' height='30px'}}
+                {{svgJar 'download' width='100%' height='100%'}}
               </button>
               <button
                 data-test-add-card-right-stack
@@ -697,7 +697,7 @@ export default class OperatorModeContainer extends Component<Signature> {
                   )
                 }}
               >
-                {{svgJar 'download' width='30px' height='30px'}}
+                {{svgJar 'download' width='100%' height='100%'}}
               </button>
             {{/if}}
           </div>
@@ -710,11 +710,11 @@ export default class OperatorModeContainer extends Component<Signature> {
             data-test-open-chat
             class='chat-btn'
             @icon='sparkle'
-            @width='30px'
-            @height='30px'
+            @width='100%'
+            @height='100%'
             style={{cssVar
-              boxel-icon-button-width='50px'
-              boxel-icon-button-height='50px'
+              boxel-icon-button-width='var(--chat-button-size)'
+              boxel-icon-button-height='var(--chat-button-size)'
             }}
             {{on 'click' this.toggleChat}}
           />
@@ -734,6 +734,14 @@ export default class OperatorModeContainer extends Component<Signature> {
       :global(:root) {
         --operator-mode-bg-color: #686283;
         --boxel-modal-max-width: 100%;
+        --chat-button-size: var(--boxel-icon-lg);
+        --add-to-neighbor-stack-button-size: var(--boxel-icon-lg);
+        --container-padding-right: calc(
+          var(--chat-button-size) + (2 * var(--boxel-sp))
+        );
+        --container-padding-left: calc(
+          var(--chat-button-size) + (2 * var(--boxel-sp))
+        );
       }
       :global(.operator-mode .boxel-modal__inner) {
         display: block;
@@ -769,8 +777,9 @@ export default class OperatorModeContainer extends Component<Signature> {
       .add-card-to-neighbor-stack {
         --icon-color: var(--boxel-highlight-hover);
         position: absolute;
-        width: 60px;
-        height: 60px;
+        width: var(--add-to-neighbor-stack-button-size);
+        height: var(--add-to-neighbor-stack-button-size);
+        padding: var(--boxel-sp-xxxs);
         border-radius: 50%;
         background-color: var(--boxel-light-100);
         border-color: transparent;
@@ -782,12 +791,10 @@ export default class OperatorModeContainer extends Component<Signature> {
         background-color: var(--boxel-light);
       }
       .add-card-to-neighbor-stack--left {
-        left: 0;
-        margin-left: var(--boxel-sp-lg);
+        left: var(--boxel-sp);
       }
       .add-card-to-neighbor-stack--right {
-        right: 0;
-        margin-right: var(--boxel-sp-lg);
+        right: var(--boxel-sp);
       }
 
       .operator-mode__with-chat {
@@ -813,22 +820,26 @@ export default class OperatorModeContainer extends Component<Signature> {
         position: relative;
         background-position: center;
         background-size: cover;
+        padding-right: var(--container-padding-right);
+        padding-left: var(--container-padding-left);
       }
 
       .chat-btn {
         --icon-color: var(--boxel-highlight-hover);
         position: absolute;
-        bottom: 6px;
-        right: 6px;
+        bottom: var(--boxel-sp);
+        right: var(--boxel-sp);
         margin-right: 0;
+        padding: var(--boxel-sp-xxxs);
         border-radius: var(--boxel-border-radius);
-        background-color: var(--boxel-light-100);
-        border: solid 1px var(--boxel-border-color);
+        background-color: var(--boxel-dark);
+        border: none;
         box-shadow: var(--boxel-deep-box-shadow);
+        transition: background-color var(--boxel-transition);
       }
       .chat-btn:hover {
-        --icon-color: var(--boxel-highlight);
-        background-color: var(--boxel-light);
+        --icon-color: var(--boxel-dark);
+        background-color: var(--boxel-highlight-hover);
       }
 
       .submode-switcher {

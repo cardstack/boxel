@@ -57,11 +57,15 @@ export default class SubmodeSwitcher extends Component<Signature> {
       </BoxelDropdown>
     </div>
     <style>
+      :global(:root) {
+        --submode-switcher-trigger-height: 2.5rem;
+      }
       .trigger {
+        height: var(--submode-switcher-trigger-height);
         border: none;
-        padding: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xxs);
         border-radius: var(--boxel-border-radius);
-        background: var(--boxel-purple-700);
+        background: var(--boxel-700);
         color: var(--boxel-light);
         font: 500 var(--boxel-font-sm);
 

@@ -86,93 +86,94 @@ export default class BoxelInput extends Component<Signature> {
       {{/let}}
     {{/let}}
     <style>
-      .boxel-input {
-        --boxel-input-height: var(--boxel-form-control-height);
+      @layer {
+        .boxel-input {
+          --boxel-input-height: var(--boxel-form-control-height);
 
-        box-sizing: border-box;
-        width: 100%;
-        min-height: var(--boxel-input-height);
-        padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
-        border: 1px solid var(--boxel-form-control-border-color);
-        border-radius: var(--boxel-form-control-border-radius);
-        font: var(--boxel-font-sm);
-        font-weight: 400;
-        letter-spacing: var(--boxel-lsp-xs);
-        transition: border-color var(--boxel-transition);
+          box-sizing: border-box;
+          width: 100%;
+          min-height: var(--boxel-input-height);
+          padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
+          border: 1px solid var(--boxel-form-control-border-color);
+          border-radius: var(--boxel-form-control-border-radius);
+          font: var(--boxel-font-sm);
+          font-weight: 400;
+          letter-spacing: var(--boxel-lsp-xs);
+          transition: border-color var(--boxel-transition);
+        }
+
+        .boxel-text-area {
+          --boxel-input-height: 10rem;
+        }
+
+        .boxel-input:disabled {
+          background-color: var(--boxel-light);
+          border-color: var(--boxel-purple-300);
+          color: rgb(0 0 0 / 50%);
+          opacity: 0.5;
+        }
+
+        .boxel-input:hover:not(:disabled) {
+          border-color: var(--boxel-dark);
+        }
+
+        .invalid {
+          border-color: var(--boxel-error-100);
+          box-shadow: 0 0 0 1px var(--boxel-error-100);
+        }
+
+        .invalid:focus {
+          outline: 1px solid transparent; /* Make sure that we make the invalid state visible */
+          box-shadow: 0 0 0 1.5px var(--boxel-error-100);
+        }
+
+        .invalid:hover:not(:disabled) {
+          border-color: var(--boxel-error-100);
+        }
+
+        .optional {
+          grid-row: 1;
+          grid-column: 1 / -1;
+          margin-bottom: var(--boxel-sp-xxxs);
+          color: rgb(0 0 0 / 75%);
+          font: var(--boxel-font-sm);
+          font-style: oblique;
+          letter-spacing: var(--boxel-lsp);
+          text-align: right;
+        }
+
+        .error-message {
+          grid-column: 2;
+          margin-top: var(--boxel-sp-xxxs);
+          margin-left: var(--boxel-sp-xxxs);
+          color: var(--boxel-error-200);
+          font: 500 var(--boxel-font-sm);
+          letter-spacing: var(--boxel-lsp);
+        }
+
+        .helper-text {
+          grid-column: 2;
+          margin-top: var(--boxel-sp-xs);
+          margin-left: var(--boxel-sp-xs);
+          color: rgb(0 0 0 / 75%);
+          font: var(--boxel-font-sm);
+          letter-spacing: var(--boxel-lsp);
+        }
+
+        /* Combine these when this is fixed: https://github.com/cardstack/glimmer-scoped-css/pull/11 */
+        .boxel-input:disabled ~ .error-message {
+          display: none;
+        }
+
+        .boxel-input:disabled ~ .helper-text {
+          display: none;
+        }
+
+        .boxel-input::placeholder {
+          color: var(--boxel-light);
+          opacity: 0.6;
+        }
       }
-
-      .boxel-text-area {
-        --boxel-input-height: 10rem;
-      }
-
-      .boxel-input:disabled {
-        background-color: var(--boxel-light);
-        border-color: var(--boxel-purple-300);
-        color: rgb(0 0 0 / 50%);
-        opacity: 0.5;
-      }
-
-      .boxel-input:hover:not(:disabled) {
-        border-color: var(--boxel-dark);
-      }
-
-      .invalid {
-        border-color: var(--boxel-error-100);
-        box-shadow: 0 0 0 1px var(--boxel-error-100);
-      }
-
-      .invalid:focus {
-        outline: 1px solid transparent; /* Make sure that we make the invalid state visible */
-        box-shadow: 0 0 0 1.5px var(--boxel-error-100);
-      }
-
-      .invalid:hover:not(:disabled) {
-        border-color: var(--boxel-error-100);
-      }
-
-      .optional {
-        grid-row: 1;
-        grid-column: 1 / -1;
-        margin-bottom: var(--boxel-sp-xxxs);
-        color: rgb(0 0 0 / 75%);
-        font: var(--boxel-font-sm);
-        font-style: oblique;
-        letter-spacing: var(--boxel-lsp);
-        text-align: right;
-      }
-
-      .error-message {
-        grid-column: 2;
-        margin-top: var(--boxel-sp-xs);
-        margin-left: var(--boxel-sp-xs);
-        color: var(--boxel-error-200);
-        font: var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp);
-      }
-
-      .helper-text {
-        grid-column: 2;
-        margin-top: var(--boxel-sp-xs);
-        margin-left: var(--boxel-sp-xs);
-        color: rgb(0 0 0 / 75%);
-        font: var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp);
-      }
-
-      /* Combine these when this is fixed: https://github.com/cardstack/glimmer-scoped-css/pull/11 */
-      .boxel-input:disabled ~ .error-message {
-        display: none;
-      }
-
-      .boxel-input:disabled ~ .helper-text {
-        display: none;
-      }
-
-      .boxel-input::placeholder {
-        color: var(--boxel-light);
-        opacity: 0.6;
-      }
-
     </style>
   </template>
 }

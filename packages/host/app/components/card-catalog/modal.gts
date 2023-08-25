@@ -5,22 +5,17 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { registerDestructor } from '@ember/destroyable';
-import { enqueueTask, restartableTask } from 'ember-concurrency';
+import { enqueueTask } from 'ember-concurrency';
 import debounce from 'lodash/debounce';
 import type { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
 import {
   createNewCard,
-  isSingleCardDocument,
   type CodeRef,
   type CreateNewCard,
   Deferred,
 } from '@cardstack/runtime-common';
 import type { Query, Filter } from '@cardstack/runtime-common/query';
-import {
-  Button,
-  SearchInput,
-  BoxelInputValidationState,
-} from '@cardstack/boxel-ui';
+import { Button, SearchInput } from '@cardstack/boxel-ui';
 import { and, eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import type CardService from '../../services/card-service';
@@ -33,6 +28,7 @@ import {
 import ModalContainer from '../modal-container';
 import CardCatalog from './index';
 import CardCatalogFilters from './filters';
+import UrlSearch from '../url-search';
 import { type RealmInfo } from '@cardstack/runtime-common';
 import { TrackedArray } from 'tracked-built-ins';
 
@@ -63,6 +59,7 @@ export default class CardCatalogModal extends Component<Signature> {
       >
         <:header>
           <SearchInput
+            @variant='large'
             @value={{this.searchKey}}
             @onInput={{this.setSearchKey}}
             @onKeyPress={{this.onSearchFieldKeypress}}
@@ -118,19 +115,11 @@ export default class CardCatalogModal extends Component<Signature> {
                   {{this.cardRefName}}
                 </Button>
               {{/if}}
-              <label class='url-search'>
-                <span>Enter Card URL:</span>
-                <BoxelInputValidationState
-                  data-test-url-field
-                  placeholder='https://'
-                  @value={{this.cardURL}}
-                  @onInput={{this.setCardURL}}
-                  @onKeyPress={{this.onURLFieldKeypress}}
-                  @state={{this.cardURLFieldState}}
-                  @errorMessage={{this.cardURLErrorMessage}}
-                  data-test-url-search
-                />
-              </label>
+              <UrlSearch
+                @cardURL={{this.cardURL}}
+                @setCardURL={{this.setCardURL}}
+                @setSelectedCard={{this.setSelectedCard}}
+              />
             </div>
             <div>
               <Button
@@ -167,17 +156,6 @@ export default class CardCatalogModal extends Component<Signature> {
         display: flex;
         gap: var(--boxel-sp);
         flex-grow: 1;
-      }
-      .url-search {
-        flex-grow: 0.5;
-        display: grid;
-        grid-template-columns: auto 1fr;
-        justify-items: flex-start;
-        gap: var(--boxel-sp-xs);
-      }
-      .url-search > span {
-        padding-top: var(--boxel-sp-xxs);
-        font: 700 var(--boxel-font-sm);
       }
       .footer-button + .footer-button {
         margin-left: var(--boxel-sp-xs);
@@ -219,14 +197,6 @@ export default class CardCatalogModal extends Component<Signature> {
     registerDestructor(this, () => {
       delete (globalThis as any)._CARDSTACK_CARD_CHOOSER;
     });
-  }
-
-  get cardURLFieldState() {
-    return this.hasCardURLError ? 'invalid' : 'initial';
-  }
-
-  get cardURLErrorMessage() {
-    return this.hasCardURLError ? 'Not a valid Card URL' : undefined;
   }
 
   get cardRefName() {
@@ -318,44 +288,6 @@ export default class CardCatalogModal extends Component<Signature> {
     },
   );
 
-  private getCard = restartableTask(async (searchKey: string) => {
-    let response = await this.loaderService.loader.fetch(searchKey, {
-      headers: {
-        Accept: 'application/vnd.card+json',
-      },
-    });
-    if (response.ok) {
-      let maybeCardDoc = await response.json();
-      if (isSingleCardDocument(maybeCardDoc)) {
-        this.selectedCard = await this.cardService.createFromSerialized(
-          maybeCardDoc.data,
-          maybeCardDoc,
-          new URL(maybeCardDoc.data.id),
-        );
-        return;
-      }
-    }
-    this.selectedCard = undefined;
-    this.hasCardURLError = true;
-  });
-
-  debouncedURLFieldUpdate = debounce(() => {
-    if (!this.cardURL) {
-      this.selectedCard = undefined;
-      return;
-    }
-    try {
-      new URL(this.cardURL);
-    } catch (e: any) {
-      if (e instanceof TypeError && e.message.includes('Invalid URL')) {
-        this.hasCardURLError = true;
-        return;
-      }
-      throw e;
-    }
-    this.onURLFieldUpdated();
-  }, 500);
-
   @action
   setSearchKey(searchKey: string) {
     this.searchKey = searchKey;
@@ -368,19 +300,12 @@ export default class CardCatalogModal extends Component<Signature> {
 
   debouncedSearchFieldUpdate = debounce(() => this.onSearchFieldUpdated(), 500);
 
-  @action
-  setCardURL(cardURL: string) {
-    this.hasCardURLError = false;
-    this.selectedCard = undefined;
+  @action setCardURL(cardURL: string) {
     this.cardURL = cardURL;
-    this.debouncedURLFieldUpdate();
   }
 
-  @action
-  onURLFieldKeypress(e: KeyboardEvent) {
-    if (e.key === 'Enter' && this.cardURL) {
-      this.getCard.perform(this.cardURL);
-    }
+  @action setSelectedCard(card: CardDef | undefined) {
+    this.selectedCard = card;
   }
 
   @action
@@ -412,14 +337,6 @@ export default class CardCatalogModal extends Component<Signature> {
       }
     }
     this.searchResults = results;
-  }
-
-  @action
-  onURLFieldUpdated() {
-    if (this.cardURL) {
-      this.selectedCard = undefined;
-      this.getCard.perform(this.cardURL);
-    }
   }
 
   @action toggleSelect(card?: CardDef): void {

@@ -5,7 +5,7 @@ import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import BoxelInputValidationState, {
   InputValidationState,
 } from '@cardstack/boxel-ui/components/input/validation-state';
-import cssVar from '@cardstack/boxel-ui/helpers/css-var';
+import BoxelInput from '@cardstack/boxel-ui/components/input';
 
 export enum SearchInputBottomTreatment {
   Flat = 'flat',
@@ -15,6 +15,8 @@ export enum SearchInputBottomTreatment {
 interface Signature {
   Element: HTMLElement;
   Args: {
+    hasValidation?: boolean;
+    variant?: 'large' | 'default';
     value: string;
     bottomTreatment?: SearchInputBottomTreatment;
     state?: InputValidationState;
@@ -27,17 +29,15 @@ interface Signature {
 }
 
 const SearchInput: TemplateOnlyComponent<Signature> = <template>
-  <div
-    class={{cn
-      'search-input'
-      search-input--bottom-flat=(eq @bottomTreatment 'flat')
-    }}
-    data-test-search-input
-    ...attributes
-  >
-    <label>
-      <span class='boxel-sr-only'>Search</span>
+  <label class='search-input-container' data-test-search-input ...attributes>
+    <span class='boxel-sr-only'>Search</span>
+    {{#if @hasValidation}}
       <BoxelInputValidationState
+        class={{cn
+          'search-input'
+          search-input--bottom-flat=(eq @bottomTreatment 'flat')
+          search-input--large=(eq @variant 'large')
+        }}
         @value={{@value}}
         @onInput={{@onInput}}
         @onKeyPress={{@onKeyPress}}
@@ -45,54 +45,68 @@ const SearchInput: TemplateOnlyComponent<Signature> = <template>
         @state={{if @state @state 'initial'}}
         @errorMessage={{@errorMessage}}
         @placeholder={{if @placeholder @placeholder 'Search'}}
-        style={{cssVar input-font-size='var(--search-font-size)'}}
       />
-      <span class='search-input-icon'>
-        {{svgJar 'icon-search' width='20' height='20'}}
-      </span>
-    </label>
-  </div>
+    {{else}}
+      <BoxelInput
+        class={{cn
+          'search-input'
+          search-input--large=(eq @variant 'large')
+          search-input--bottom-flat=(eq @bottomTreatment 'flat')
+        }}
+        @value={{@value}}
+        @onInput={{@onInput}}
+        @onKeyPress={{@onKeyPress}}
+        @onFocus={{@onFocus}}
+        @placeholder={{if @placeholder @placeholder 'Search'}}
+      />
+    {{/if}}
+    <span class='search-icon-container'>
+      {{svgJar 'icon-search' width='20' height='20'}}
+    </span>
+  </label>
+
   <style>
-    .search-input {
-      --search-icon-width: var(--boxel-sp-xxl);
-      --search-input-height: var(--boxel-sp-xxxl);
+    .search-input-container {
+      --search-icon-container-size: var(--boxel-icon-lg);
       position: relative;
+      display: block;
       width: 100%;
       font: var(--boxel-font);
     }
-    :global(.search-input .boxel-input:focus-visible) {
+    .search-input {
+      --boxel-form-control-border-color: var(--boxel-dark);
+      --boxel-form-control-border-radius: var(--boxel-border-radius-xl);
+
+      padding-right: var(--search-icon-container-size);
+      padding-top: var(--boxel-sp-xxs);
+      padding-bottom: var(--boxel-sp-xxs);
+      background-color: var(--boxel-700);
+      color: var(--boxel-light);
+    }
+    .search-input--large {
+      --boxel-form-control-height: 4.375rem;
+
+      font: var(--boxel-font);
+      letter-spacing: var(--boxel-lsp-xs);
+    }
+    .search-input--bottom-flat {
+      --boxel-form-control-border-radius: var(--boxel-border-radius-xl)
+        var(--boxel-border-radius-xl) 0 0;
+    }
+    .search-input:focus-visible {
       outline-style: solid;
     }
-    label {
-      height: var(--search-input-height);
-      position: relative;
-      display: block;
-    }
-    .search-input-icon {
+    .search-icon-container {
       --icon-color: var(--boxel-highlight);
       position: absolute;
       top: 0;
       bottom: 0;
       right: 0;
-      width: var(--search-icon-width);
+      width: var(--search-icon-container-size);
+      height: 100%;
       display: flex;
       justify-content: center;
       align-items: center;
-    }
-    :global(.search-input .boxel-input) {
-      --input-height: var(--search-input-height);
-      --boxel-form-control-border-color: var(--boxel-dark);
-      --boxel-form-control-border-radius: var(--boxel-border-radius-xl);
-
-      padding-left: var(--boxel-sp);
-      background-color: var(--boxel-dark);
-      color: var(--boxel-light);
-      font: var(--boxel-font);
-      letter-spacing: var(--boxel-lsp-xs);
-    }
-    :global(.search-input--bottom-flat .boxel-input) {
-      --boxel-form-control-border-radius: var(--boxel-border-radius-xl)
-        var(--boxel-border-radius-xl) 0 0;
     }
   </style>
 </template>;
