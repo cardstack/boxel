@@ -2,14 +2,14 @@ import {
   contains,
   linksToMany,
   field,
-  Card,
+  CardDef,
   Component,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import { Friend } from './friend';
 import { GridContainer } from '@cardstack/boxel-ui';
 
-export class Friends extends Card {
+export class Friends extends CardDef {
   static displayName = 'Friends';
   @field firstName = contains(StringCard);
   @field friends = linksToMany(Friend);

@@ -1,6 +1,6 @@
 import Component from '@glimmer/component';
 import type {
-  CardRef,
+  CodeRef,
   LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { fn } from '@ember/helper';
@@ -11,7 +11,7 @@ import { Deferred } from '@cardstack/runtime-common/deferred';
 import { enqueueTask } from 'ember-concurrency';
 import { service } from '@ember/service';
 import type CardService from '../services/card-service';
-import type { Card } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 import CardEditor from './card-editor';
 import ModalContainer from './modal-container';
 
@@ -36,8 +36,8 @@ export default class CreateCardModal extends Component {
   @service declare cardService: CardService;
   @tracked currentRequest:
     | {
-        card: Card;
-        deferred: Deferred<Card | undefined>;
+        card: CardDef;
+        deferred: Deferred<CardDef | undefined>;
       }
     | undefined = undefined;
   @tracked zIndex = 20;
@@ -50,8 +50,8 @@ export default class CreateCardModal extends Component {
     });
   }
 
-  async create<T extends Card>(
-    ref: CardRef,
+  async create<T extends CardDef>(
+    ref: CodeRef,
     relativeTo: URL | undefined,
     opts?: { doc?: LooseSingleCardDocument },
   ): Promise<undefined | T> {
@@ -60,8 +60,8 @@ export default class CreateCardModal extends Component {
   }
 
   private _create = enqueueTask(
-    async <T extends Card>(
-      ref: CardRef,
+    async <T extends CardDef>(
+      ref: CodeRef,
       relativeTo: URL | undefined,
       opts?: { doc?: LooseSingleCardDocument },
     ) => {
@@ -85,7 +85,7 @@ export default class CreateCardModal extends Component {
     },
   );
 
-  @action save(card?: Card): void {
+  @action save(card?: CardDef): void {
     if (this.currentRequest) {
       this.currentRequest.deferred.fulfill(card);
       this.currentRequest = undefined;

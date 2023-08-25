@@ -104,11 +104,11 @@ module('Integration | card-copy', function (hooks) {
     };
     adapter1 = new TestRealmAdapter({
       'person.gts': `
-        import { contains, linksTo, field, Component, Card, linksToMany } from "https://cardstack.com/base/card-api";
+        import { contains, linksTo, field, Component, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { Pet } from "./pet";
 
-        export class Person extends Card {
+        export class Person extends CardDef {
           static displayName = 'Person';
           @field firstName = contains(StringCard);
           @field pet = linksTo(Pet);
@@ -124,10 +124,10 @@ module('Integration | card-copy', function (hooks) {
         }
       `,
       'pet.gts': `
-        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
-        export class Pet extends Card {
+        export class Pet extends CardDef {
           static displayName = 'Pet';
           @field firstName = contains(StringCard);
           @field title = contains(StringCard, {

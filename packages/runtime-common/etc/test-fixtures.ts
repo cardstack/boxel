@@ -3,11 +3,11 @@ import {
   contains,
   field,
   Component,
-  Card,
+  CardDef,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 
-export class Person extends Card {
+export class Person extends CardDef {
   @field firstName = contains(StringCard);
   @field title = contains(StringCard, {
     computeVia: function (this: Person) {
@@ -36,9 +36,9 @@ function _applyDecoratedDescriptor(target, property, decorators, descriptor, con
 
 function _initializerWarningHelper(descriptor, context) { throw new Error('Decorating class property failed. Please ensure that ' + 'proposal-class-properties is enabled and runs after the decorators transform.'); }
 
-import { contains, field, Component, Card } from 'https://cardstack.com/base/card-api';
+import { contains, field, Component, CardDef } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
-export let Person = (_class = (_class2 = class Person extends Card {
+export let Person = (_class = (_class2 = class Person extends CardDef {
   constructor(...args) {
     super(...args);
 

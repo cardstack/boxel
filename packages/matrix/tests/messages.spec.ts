@@ -109,7 +109,6 @@ test.describe('Room messages', () => {
 
     for (let i = 1; i <= totalMessageCount; i++) {
       await sendMessage(page, `message ${i}`);
-      await page.waitForTimeout(100);
     }
     await logout(page);
 

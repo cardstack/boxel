@@ -2,13 +2,13 @@ import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import {
   Component,
-  Card,
+  CardDef,
   field,
   contains,
 } from 'https://cardstack.com/base/card-api';
 import { GridContainer } from '@cardstack/boxel-ui';
 
-export class Author extends Card {
+export class Author extends CardDef {
   static displayName = 'Author Bio';
   @field firstName = contains(StringCard);
   @field lastName = contains(StringCard);

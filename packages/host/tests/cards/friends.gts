@@ -2,11 +2,11 @@ import {
   contains,
   linksToMany,
   field,
-  Card,
+  CardDef,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 
-export class Friends extends Card {
+export class Friends extends CardDef {
   @field firstName = contains(StringCard);
   @field friends = linksToMany(() => Friends);
   @field title = contains(StringCard, {

@@ -37,9 +37,9 @@ module('Integration | card-catalog filters', function (hooks) {
     'blog-post.gts': `
       import StringCard from 'https://cardstack.com/base/string';
       import TextAreaCard from 'https://cardstack.com/base/text-area';
-      import { Card, field, contains, linksTo } from 'https://cardstack.com/base/card-api';
+      import { CardDef, field, contains, linksTo } from 'https://cardstack.com/base/card-api';
       import { Author } from './author';
-      export class BlogPost extends Card {
+      export class BlogPost extends CardDef {
         @field title = contains(StringCard);
         @field body = contains(TextAreaCard);
         @field authorBio = linksTo(Author);
@@ -47,16 +47,16 @@ module('Integration | card-catalog filters', function (hooks) {
     `,
     'author.gts': `
       import StringCard from 'https://cardstack.com/base/string';
-      import { Card, field, contains } from 'https://cardstack.com/base/card-api';
-      export class Author extends Card {
+      import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+      export class Author extends CardDef {
         @field firstName = contains(StringCard);
         @field lastName = contains(StringCard);
       }
     `,
     'publishing-packet.gts': `
-      import { Card, field, linksTo } from 'https://cardstack.com/base/card-api';
+      import { CardDef, field, linksTo } from 'https://cardstack.com/base/card-api';
       import { BlogPost } from './blog-post';
-      export class PublishingPacket extends Card {
+      export class PublishingPacket extends CardDef {
         @field blogPost = linksTo(BlogPost);
       }
     `,
@@ -135,7 +135,6 @@ module('Integration | card-catalog filters', function (hooks) {
       stacks: [
         [
           {
-            type: 'card',
             id: `${testRealmURL}index`,
             format: 'isolated',
           },

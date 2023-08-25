@@ -3,14 +3,14 @@ import {
   containsMany,
   field,
   Component,
-  Card,
+  CardDef,
 } from 'https://cardstack.com/base/card-api';
 import DateTimeCard from 'https://cardstack.com/base/datetime';
 import StringCard from 'https://cardstack.com/base/string';
 import { Person } from './person';
 import { Post } from './post';
 
-export class Booking extends Card {
+export class Booking extends CardDef {
   @field title = contains(StringCard);
   @field venue = contains(StringCard);
   @field startTime = contains(DateTimeCard);

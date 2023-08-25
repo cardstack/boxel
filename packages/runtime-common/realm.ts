@@ -25,7 +25,7 @@ import {
   baseRealm,
   assetsDir,
   logger,
-  type CardRef,
+  type CodeRef,
   type LooseSingleCardDocument,
   type ResourceObjectWithId,
   type DirectoryEntryRelationship,
@@ -65,7 +65,7 @@ import { Router, SupportedMimeType } from './router';
 import { parseQueryString } from './query';
 //@ts-ignore service worker can't handle this
 import type { Readable } from 'stream';
-import { type Card } from 'https://cardstack.com/base/card-api';
+import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { createResponse } from './create-response';
 import { mergeRelationships } from './merge-relationships';
@@ -884,7 +884,7 @@ export class Realm {
       doc,
       relativeTo,
       this.searchIndex.loader as unknown as LoaderType,
-    )) as Card;
+    )) as CardDef;
     let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds
     delete data.data.id; // the ID is derived from the filename, so we don't serialize it on disk
     delete data.included;
@@ -984,7 +984,7 @@ export interface CardDefinitionResource {
   id: string;
   type: 'card-definition';
   attributes: {
-    cardRef: CardRef;
+    cardRef: CodeRef;
   };
   relationships: {
     [fieldName: string]: {
@@ -993,7 +993,7 @@ export interface CardDefinitionResource {
       };
       meta: {
         type: 'super' | 'contains' | 'containsMany';
-        ref: CardRef;
+        ref: CodeRef;
       };
     };
   };

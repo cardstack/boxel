@@ -15,11 +15,9 @@ import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type IAuthData } from 'matrix-js-sdk';
 
-const TRUE = true;
-
 export default class Login extends Component {
   <template>
-    <BoxelHeader @title='Login' @hasBackground={{TRUE}} />
+    <BoxelHeader @title='Login' @hasBackground={{true}} />
     {{#if this.error}}
       <div class='error' data-test-login-error>{{this.error}}</div>
     {{/if}}

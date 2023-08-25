@@ -1,12 +1,12 @@
 import {
   primitive,
   Component,
-  CardBase,
   serialize,
-  CardInstanceType,
-  CardBaseConstructor,
+  BaseInstanceType,
+  BaseDefConstructor,
   deserialize,
   queryableValue,
+  FieldDef,
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui';
 import { TextInputFilter, DeserializedResult } from './text-input-filter';
@@ -40,7 +40,7 @@ function _serialize(val: bigint): string {
   return val.toString();
 }
 
-class Edit extends Component<typeof BigIntegerCard> {
+class Edit extends Component<typeof BigIntegerField> {
   <template>
     <BoxelInput
       @value={{this.textInputFilter.asString}}
@@ -58,20 +58,20 @@ class Edit extends Component<typeof BigIntegerCard> {
   );
 }
 
-export default class BigIntegerCard extends CardBase {
+export default class BigIntegerField extends FieldDef {
   static [primitive]: bigint;
   static [serialize](val: bigint) {
     return _serialize(val);
   }
-  static async [deserialize]<T extends CardBaseConstructor>(
+  static async [deserialize]<T extends BaseDefConstructor>(
     this: T,
     bigintString: any,
-  ): Promise<CardInstanceType<T>> {
-    return _deserialize(bigintString).value as CardInstanceType<T>;
+  ): Promise<BaseInstanceType<T>> {
+    return _deserialize(bigintString).value as BaseInstanceType<T>;
   }
   static [queryableValue](val: bigint | undefined): string | undefined {
     if (val) {
-      return BigIntegerCard[serialize](val);
+      return BigIntegerField[serialize](val);
     } else {
       return undefined;
     }

@@ -1,10 +1,10 @@
 import {
   contains,
   field,
-  Card,
+  CardDef,
+  FieldDef,
   Component,
   containsMany,
-  relativeTo,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
@@ -15,7 +15,7 @@ import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { PaymentMethod } from './payment-method';
 import GlimmerComponent from '@glimmer/component';
 
-class VendorDetails extends Card {
+class VendorDetails extends FieldDef {
   static displayName = 'Vendor';
   @field name = contains(StringCard); // required
   @field description = contains(TextAreaCard);
@@ -27,7 +27,7 @@ class VendorDetails extends Card {
       if (!this.logoURL) {
         return null;
       }
-      return new URL(this.logoURL, this[relativeTo] || this.id).href;
+      return new URL(this.logoURL).href;
     },
   });
   @field title = contains(StringCard, {
@@ -55,7 +55,7 @@ class VendorDetails extends Card {
   };
 }
 
-class Contact extends Card {
+class Contact extends FieldDef {
   @field fullName = contains(StringCard);
   @field preferredName = contains(StringCard);
   @field jobTitle = contains(StringCard);
@@ -84,7 +84,7 @@ class Contact extends Card {
   };
 }
 
-class ContactMethod extends Card {
+class ContactMethod extends FieldDef {
   @field platform = contains(StringCard); // Dropdown (Telegram, Discord, Facebook, LinkedIn, Twitter)
   @field username = contains(StringCard);
   static embedded = class Embedded extends Component<typeof this> {
@@ -94,7 +94,7 @@ class ContactMethod extends Card {
   };
 }
 
-export class Vendor extends Card {
+export class Vendor extends CardDef {
   @field vendor = contains(VendorDetails); // required
   @field contact = contains(Contact); // required
   @field contactMethod = containsMany(ContactMethod);

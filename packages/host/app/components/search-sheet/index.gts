@@ -23,7 +23,7 @@ import {
   baseRealm,
   catalogEntryRef,
 } from '@cardstack/runtime-common';
-import { Card } from 'https://cardstack.com/base/card-api';
+import { CardDef } from 'https://cardstack.com/base/card-api';
 import debounce from 'lodash/debounce';
 import flatMap from 'lodash/flatMap';
 import { TrackedArray } from 'tracked-built-ins';
@@ -47,7 +47,7 @@ interface Signature {
     onCancel: () => void;
     onFocus: () => void;
     onSearch: (term: string) => void;
-    onCardSelect: (card: Card) => void;
+    onCardSelect: (card: CardDef) => void;
   };
   Blocks: {};
 }
@@ -55,7 +55,7 @@ interface Signature {
 export default class SearchSheet extends Component<Signature> {
   @tracked searchKey = '';
   @tracked isSearching = false;
-  searchCardResults: Card[] = new TrackedArray<Card>();
+  searchCardResults: CardDef[] = new TrackedArray<CardDef>();
   @tracked cardURL = '';
   @tracked hasCardURLError = false;
   @service declare operatorModeStateService: OperatorModeStateService;
@@ -347,7 +347,7 @@ export default class SearchSheet extends Component<Signature> {
       :global(:root) {
         --search-sheet-closed-height: 40px;
         --search-sheet-closed-width: 172px;
-        --search-sheet-prompt-height: 130px;
+        --search-sheet-prompt-height: 131px;
       }
 
       .search-sheet {
@@ -405,6 +405,7 @@ export default class SearchSheet extends Component<Signature> {
         flex-shrink: 0;
         justify-content: space-between;
         opacity: 1;
+        overflow: hidden;
         height: 40px;
         padding: var(--boxel-sp-xl) var(--boxel-sp) var(--boxel-sp-lg)
           var(--boxel-sp);
@@ -413,6 +414,7 @@ export default class SearchSheet extends Component<Signature> {
           opacity calc(var(--boxel-transition) / 4);
       }
 
+      .closed .footer,
       .prompt .footer {
         height: 0;
         padding: 0;
@@ -429,7 +431,7 @@ export default class SearchSheet extends Component<Signature> {
         display: flex;
         flex-direction: column;
         flex: 1;
-        overflow-y: scroll;
+        overflow-y: auto;
         padding: 0 var(--boxel-sp-lg);
         transition: opacity calc(var(--boxel-transition) / 4);
       }

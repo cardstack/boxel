@@ -9,16 +9,16 @@ import { BoxelButton } from '@cardstack/boxel-ui';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
-import type { CardStackItem } from './container';
-import type { Card } from 'https://cardstack.com/base/card-api';
+import type { StackItem } from './container';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
-    selectedCards: Card[][]; // the selected cards for each stack
+    selectedCards: CardDef[][]; // the selected cards for each stack
     copy: (
-      sources: Card[],
-      sourceItem: CardStackItem,
-      destinationItem: CardStackItem,
+      sources: CardDef[],
+      sourceItem: StackItem,
+      destinationItem: StackItem,
     ) => void;
     isCopying: boolean;
   };
@@ -117,7 +117,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     let topMostStackItems = this.operatorModeStateService.topMostStackItems();
     let indexCardIndicies = topMostStackItems.reduce(
       (indexCards, item, index) => {
-        if (item.type === 'card' && this.cardService.isIndexCard(item.card)) {
+        if (this.cardService.isIndexCard(item.card)) {
           return [...indexCards, index];
         }
         return indexCards;
@@ -141,12 +141,9 @@ export default class OperatorModeContainer extends Component<Signature> {
         }
         let destinationItem = topMostStackItems[
           indexCardIndicies[0]
-        ] as CardStackItem; // the index card is never a contained card
+        ] as StackItem; // the index card is never a contained card
         let sourceItem =
           topMostStackItems[indexCardIndicies[0] === LEFT ? RIGHT : LEFT];
-        if (sourceItem.type === 'contained') {
-          return;
-        }
         return {
           direction: indexCardIndicies[0] === LEFT ? 'left' : 'right',
           sources: [sourceItem.card],
@@ -176,12 +173,12 @@ export default class OperatorModeContainer extends Component<Signature> {
         }
         let sourceItem =
           sourceStack === LEFT
-            ? (topMostStackItems[LEFT] as CardStackItem)
-            : (topMostStackItems[RIGHT] as CardStackItem); // the index card is never a contained card
+            ? (topMostStackItems[LEFT] as StackItem)
+            : (topMostStackItems[RIGHT] as StackItem); // the index card is never a contained card
         let destinationItem =
           sourceStack === LEFT
-            ? (topMostStackItems[RIGHT] as CardStackItem)
-            : (topMostStackItems[LEFT] as CardStackItem); // the index card is never a contained card
+            ? (topMostStackItems[RIGHT] as StackItem)
+            : (topMostStackItems[LEFT] as StackItem); // the index card is never a contained card
 
         // if the source and destination are the same, don't show a copy button
         if (sourceItem.card.id === destinationItem.card.id) {

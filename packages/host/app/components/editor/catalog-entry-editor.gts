@@ -1,7 +1,7 @@
 import Component from '@glimmer/component';
 import {
   catalogEntryRef,
-  type CardRef,
+  type CodeRef,
   humanReadable,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
@@ -15,12 +15,13 @@ import { hash } from '@ember/helper';
 import { getSearchResults } from '@cardstack/host/resources/search';
 import type CardService from '@cardstack/host/services/card-service';
 import CardEditor from '@cardstack/host/components/card-editor';
-import { type Card } from 'https://cardstack.com/base/card-api';
 import { Button, CardContainer } from '@cardstack/boxel-ui';
+import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+import { CardDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
-    ref: CardRef;
+    ref: CodeRef;
   };
 }
 
@@ -87,8 +88,8 @@ export default class CatalogEntryEditor extends Component<Signature> {
       eq: { ref: this.args.ref },
     },
   }));
-  @tracked entry: Card | undefined;
-  @tracked newEntry: Card | undefined;
+  @tracked entry: CatalogEntry | undefined;
+  @tracked newEntry: CatalogEntry | undefined;
 
   get card() {
     return this.entry ?? this.catalogEntry.instances[0];
@@ -120,11 +121,11 @@ export default class CatalogEntryEditor extends Component<Signature> {
         },
       },
     };
-    this.newEntry = await this.cardService.createFromSerialized(
+    this.newEntry = (await this.cardService.createFromSerialized(
       resource,
       { data: resource },
       this.cardService.defaultURL,
-    );
+    )) as CatalogEntry;
   }
 
   @action
@@ -133,8 +134,8 @@ export default class CatalogEntryEditor extends Component<Signature> {
   }
 
   @action
-  onSave(card: Card) {
-    this.entry = card;
+  onSave(card: CardDef) {
+    this.entry = card as CatalogEntry;
   }
 }
 

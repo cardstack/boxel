@@ -25,7 +25,7 @@ app "realm-demo" {
     use "aws-ecs" {
       region              = "us-east-1"
       memory              = 4096
-      cpu                 = 2048                                                     # 2 vCPU's
+      cpu                 = 2048 # 2 vCPU's
       cluster             = "realm-demo-staging"
       count               = 1
       subnets             = ["subnet-099d721ad678d073a", "subnet-0d1196fa815f3d057"]
@@ -37,6 +37,11 @@ app "realm-demo" {
         subnets           = ["subnet-099d721ad678d073a", "subnet-0d1196fa815f3d057"]
         load_balancer_arn = "arn:aws:elasticloadbalancing:us-east-1:680542703984:loadbalancer/app/waypoint-ecs-realm-demo/7e699a3b9ff13ebc"
         certificate       = "arn:aws:acm:us-east-1:680542703984:certificate/739f0700-d97e-495d-9947-6b497eb578c6"
+      }
+
+      secrets = {
+        # parameter store
+        BOXEL_HTTP_BASIC_PW = "arn:aws:ssm:us-east-1:680542703984:parameter/staging/boxel/BOXEL_HTTP_BASIC_PW"
       }
     }
 
