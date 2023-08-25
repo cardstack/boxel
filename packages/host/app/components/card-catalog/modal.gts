@@ -185,7 +185,6 @@ export default class CardCatalogModal extends Component<Signature> {
   @tracked searchKey = '';
   @tracked searchResults: RealmCards[] = [];
   @tracked cardURL = '';
-  @tracked hasCardURLError = false;
   @tracked chooseCardTitle = DEFAULT_CHOOOSE_CARD_TITLE;
   @tracked dismissModal = false;
   @service declare cardService: CardService;
@@ -250,7 +249,6 @@ export default class CardCatalogModal extends Component<Signature> {
     this.searchKey = '';
     this.searchResults = this.availableRealms;
     this.cardURL = '';
-    this.hasCardURLError = false;
     this.selectedCard = undefined;
     this.dismissModal = false;
   }
@@ -301,6 +299,7 @@ export default class CardCatalogModal extends Component<Signature> {
   debouncedSearchFieldUpdate = debounce(() => this.onSearchFieldUpdated(), 500);
 
   @action setCardURL(cardURL: string) {
+    this.selectedCard = undefined;
     this.cardURL = cardURL;
   }
 

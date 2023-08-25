@@ -34,8 +34,8 @@ class LinksToEditor extends GlimmerComponent<Signature> {
       {{#if this.isEmpty}}
         <AddButton
           @variant='full-width'
-          {{on 'click' this.choose}}
-          data-test-create-new
+          {{on 'click' this.add}}
+          data-test-add-new
         >
           Add
           {{@field.card.displayName}}
@@ -79,7 +79,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
     </style>
   </template>
 
-  choose = () => {
+  add = () => {
     (this.chooseCard as unknown as Descriptor<any, any[]>).perform();
   };
 
@@ -110,9 +110,13 @@ class LinksToEditor extends GlimmerComponent<Signature> {
 
   private chooseCard = restartableTask(async () => {
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let chosenCard: CardDef | undefined = this.args.context?.actions?.createCard
-      ? await chooseCard({ filter: { type } })
-      : await chooseCard({ filter: { type } }, { offerToCreate: type });
+    let chosenCard: CardDef | undefined = await chooseCard(
+      { filter: { type } },
+      {
+        createNewCard: this.args.context?.actions?.createCard,
+        offerToCreate: type,
+      },
+    );
     if (chosenCard) {
       this.args.model.value = chosenCard;
     }
