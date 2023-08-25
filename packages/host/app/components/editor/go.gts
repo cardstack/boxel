@@ -226,7 +226,13 @@ export default class Go extends Component<Signature> {
     );
 
     try {
-      await this.cardService.saveCardDocument(json, url);
+      let doc = this.cardService.reverseFileSerialization(json, url.href);
+      let card = await this.cardService.createFromSerialized(
+        doc.data,
+        doc,
+        url,
+      );
+      await this.cardService.saveModel(card);
       await this.loadCard.perform(url);
     } catch (e) {
       console.log('Failed to save single card document', e);

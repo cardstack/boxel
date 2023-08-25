@@ -319,4 +319,14 @@ export default class CardService extends Service {
   ) {
     this.api.subscribeToChanges(card, subscriber);
   }
+
+  reverseFileSerialization(
+    json: LooseSingleCardDocument,
+    id: string,
+  ): SingleCardDocument {
+    return {
+      ...json,
+      data: { ...json.data, id, type: json.data.type || 'card' },
+    };
+  }
 }
