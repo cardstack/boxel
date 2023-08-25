@@ -156,10 +156,8 @@ export default class CardService extends Service {
     });
     // send doc over the wire with absolute URL's. The realm server will convert
     // to relative URL's as it serializes the cards
-    let json = await this.saveCardDocument(
-      doc,
-      card.id ? new URL(card.id) : undefined,
-    );
+    let realmUrl = await this.getRealmURL(card);
+    let json = await this.saveCardDocument(doc, realmUrl);
 
     // in order to preserve object equality with the unsaved card instance we
     // should always use updateFromSerialized()--this way a newly created
@@ -172,13 +170,12 @@ export default class CardService extends Service {
     return result;
   }
 
-  async saveCardDocument(
+  private async saveCardDocument(
     doc: LooseSingleCardDocument,
-    url?: URL,
+    realmUrl?: URL,
   ): Promise<SingleCardDocument> {
     let isSaved = !!doc.data.id;
-    url = url ?? this.defaultURL;
-    let json = await this.fetchJSON(url, {
+    let json = await this.fetchJSON(realmUrl ?? this.defaultURL, {
       method: isSaved ? 'PATCH' : 'POST',
       body: JSON.stringify(doc, null, 2),
     });
