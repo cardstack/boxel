@@ -1,6 +1,6 @@
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import {
-  Card,
+  CardDef,
   field,
   contains,
   linksTo,
@@ -8,7 +8,7 @@ import {
 import StringCard from 'https://cardstack.com/base/string';
 import { BlogPost } from './blog-post';
 
-export class PublishingPacket extends Card {
+export class PublishingPacket extends CardDef {
   static displayName = 'Publishing Packet';
   @field blogPost = linksTo(BlogPost);
   @field socialBlurb = contains(TextAreaCard);

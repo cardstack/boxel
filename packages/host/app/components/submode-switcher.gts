@@ -9,8 +9,8 @@ import { capitalize } from '@ember/string';
 import get from 'lodash/get';
 
 export enum Submode {
-  INTERACT = 'interact',
-  CODE = 'code',
+  Interact = 'interact',
+  Code = 'code',
 }
 
 interface Signature {
@@ -23,11 +23,8 @@ interface Signature {
 
 export default class SubmodeSwitcher extends Component<Signature> {
   <template>
-    <div
-      data-test-submode-switcher
-      ...attributes>
-      <BoxelDropdown
-        @contentClass='submode-switcher-dropdown'>
+    <div data-test-submode-switcher ...attributes>
+      <BoxelDropdown @contentClass='submode-switcher-dropdown'>
         <:trigger as |bindings|>
           <Button
             class='trigger'
@@ -35,10 +32,18 @@ export default class SubmodeSwitcher extends Component<Signature> {
             {{on 'click' this.toggleDropdown}}
             {{bindings}}
           >
-            {{svgJar (get this.submodeIcons @submode) width='18px' height='18px'}}
+            {{svgJar
+              (get this.submodeIcons @submode)
+              width='18px'
+              height='18px'
+            }}
             {{capitalize @submode}}
             <div class='arrow-icon'>
-              {{svgJar (if this.isExpanded 'dropdown-arrow-up' 'dropdown-arrow-down') width='22px' height='22px'}}
+              {{svgJar
+                (if this.isExpanded 'dropdown-arrow-up' 'dropdown-arrow-down')
+                width='22px'
+                height='22px'
+              }}
             </div>
           </Button>
         </:trigger>
@@ -71,7 +76,7 @@ export default class SubmodeSwitcher extends Component<Signature> {
       }
       .arrow-icon {
         margin-left: auto;
-        
+
         display: flex;
       }
       :global(.submode-switcher-dropdown) {
@@ -93,8 +98,8 @@ export default class SubmodeSwitcher extends Component<Signature> {
   </template>
 
   submodeIcons = {
-    [Submode.INTERACT]: 'eye',
-    [Submode.CODE]: 'icon-code',
+    [Submode.Interact]: 'eye',
+    [Submode.Code]: 'icon-code',
   };
   @tracked isExpanded = false;
 
@@ -104,10 +109,15 @@ export default class SubmodeSwitcher extends Component<Signature> {
   }
 
   get buildMenuItems(): MenuItem[] {
-    return Object.values(Submode).map((submode) =>
-      menuItemFunc([capitalize(submode), () => this.args.onSubmodeSelect(submode)], {
-        icon: this.submodeIcons[submode],
-      }),
-    );
+    return Object.values(Submode)
+      .filter((submode) => submode !== this.args.submode)
+      .map((submode) =>
+        menuItemFunc(
+          [capitalize(submode), () => this.args.onSubmodeSelect(submode)],
+          {
+            icon: this.submodeIcons[submode],
+          },
+        ),
+      );
   }
 }

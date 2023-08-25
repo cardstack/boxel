@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import GlimmerComponent from '@glimmer/component';
-import { baseRealm, CardRef } from '@cardstack/runtime-common';
+import { baseRealm, CodeRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
 import { setupRenderingTest } from 'ember-qunit';
@@ -15,7 +15,7 @@ import {
 import { waitUntil, waitFor, fillIn, click } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
-import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
+import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 
 let loader: Loader;
@@ -32,9 +32,9 @@ module('Integration | catalog-entry-editor', function (hooks) {
 
     adapter = new TestRealmAdapter({
       'person.gts': `
-        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
-        export class Person extends Card {
+        export class Person extends FieldDef {
           @field firstName = contains(StringCard);
           @field title =  contains(StringCard, {
             computeVia: function (this: Person) {
@@ -49,12 +49,12 @@ module('Integration | catalog-entry-editor', function (hooks) {
         }
       `,
       'pet.gts': `
-        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import BooleanCard from "https://cardstack.com/base/boolean";
         import DateCard from "https://cardstack.com/base/date";
         import { Person } from "./person";
-        export class Pet extends Card {
+        export class Pet extends CardDef {
           @field name = contains(StringCard);
           @field lovesWalks = contains(BooleanCard);
           @field birthday = contains(DateCard);
@@ -79,7 +79,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
   });
 
   test('can publish new catalog entry', async function (assert) {
-    const args: CardRef = { module: `${testRealmURL}pet`, name: 'Pet' };
+    const args: CodeRef = { module: `${testRealmURL}pet`, name: 'Pet' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -235,7 +235,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
       }),
     );
 
-    const args: CardRef = { module: `${testRealmURL}pet`, name: 'Pet' };
+    const args: CodeRef = { module: `${testRealmURL}pet`, name: 'Pet' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -364,7 +364,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
       }),
     );
 
-    const args: CardRef = { module: `${testRealmURL}pet`, name: 'Pet' };
+    const args: CodeRef = { module: `${testRealmURL}pet`, name: 'Pet' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -448,7 +448,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
   });
 
   test('can create new card with missing composite field value', async function (assert) {
-    const args: CardRef = { module: `${testRealmURL}pet`, name: 'Pet' };
+    const args: CodeRef = { module: `${testRealmURL}pet`, name: 'Pet' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -532,7 +532,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
   });
 
   test('can create new catalog entry with all demo card field values missing', async function (assert) {
-    const args: CardRef = { module: `${testRealmURL}person`, name: 'Person' };
+    const args: CodeRef = { module: `${testRealmURL}person`, name: 'Person' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -611,9 +611,9 @@ module('Integration | catalog-entry-editor', function (hooks) {
     await realm.write(
       'pet.gts',
       `
-      import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
-      export class Pet extends Card {
+      export class Pet extends CardDef {
         @field name = contains(StringCard);
         static embedded = class Embedded extends Component<typeof this> {
           <template><h4 data-test-pet-name><@fields.name/></h4></template>
@@ -625,10 +625,10 @@ module('Integration | catalog-entry-editor', function (hooks) {
     await realm.write(
       'nice-person.gts',
       `
-      import { contains, field, linksTo, Card, Component } from "https://cardstack.com/base/card-api";
+      import { contains, field, linksTo, CardDef, Component } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       import { Pet } from "./pet";
-      export class NicePerson extends Card {
+      export class NicePerson extends CardDef {
         @field firstName = contains(StringCard);
         @field lastName = contains(StringCard);
         @field pet = linksTo(Pet);
@@ -700,7 +700,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
       }),
     );
 
-    const args: CardRef = {
+    const args: CodeRef = {
       module: `${testRealmURL}nice-person`,
       name: 'NicePerson',
     };
@@ -730,10 +730,10 @@ module('Integration | catalog-entry-editor', function (hooks) {
     await realm.write(
       'invoice.gts',
       `
-      import { contains, containsMany, field, linksTo, Card, Component } from "https://cardstack.com/base/card-api";
+      import { contains, containsMany, field, linksTo, CardDef, FieldDef, Component } from "https://cardstack.com/base/card-api";
       import NumberCard from "https://cardstack.com/base/number";
       import StringCard from "https://cardstack.com/base/string";
-      class Vendor extends Card {
+      class Vendor extends CardDef {
         @field company = contains(StringCard);
         @field title = contains(StringCard, {
           computeVia: function (this: Vendor) {
@@ -746,7 +746,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
           <template><div data-test-company><@fields.company/></div></template>
         };
       }
-      class Item extends Card {
+      class Item extends FieldDef {
         @field name = contains(StringCard);
         @field price = contains(NumberCard);
         @field title =  contains(StringCard, {
@@ -763,7 +763,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
           <template><div data-test-line-item="{{@model.name}}"><@fields.name/> - <@fields.quantity/> @ $<@fields.price/> USD</div></template>
         };
       }
-      export class Invoice extends Card {
+      export class Invoice extends CardDef {
         @field vendor = linksTo(Vendor);
         @field lineItems = containsMany(LineItem);
         @field balanceDue = contains(NumberCard, { computeVia: function(this: Invoice) {
@@ -788,7 +788,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
     `,
     );
 
-    const args: CardRef = { module: `${testRealmURL}invoice`, name: 'Invoice' };
+    const args: CodeRef = { module: `${testRealmURL}invoice`, name: 'Invoice' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>

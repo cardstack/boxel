@@ -2,8 +2,8 @@ import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import {
-  type Card,
-  CardBase,
+  type CardDef,
+  BaseDef,
   type Box,
   type Format,
   type Field,
@@ -26,23 +26,21 @@ import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
 interface Signature {
   Args: {
-    model: Box<Card>;
-    arrayField: Box<Card[]>;
+    model: Box<CardDef>;
+    arrayField: Box<CardDef[]>;
     format: Format;
-    field: Field<typeof Card>;
+    field: Field<typeof CardDef>;
     cardTypeFor(
-      field: Field<typeof CardBase>,
-      boxedElement: Box<CardBase>,
-    ): typeof CardBase;
+      field: Field<typeof BaseDef>,
+      boxedElement: Box<BaseDef>,
+    ): typeof BaseDef;
     context?: CardContext;
   };
 }
 
 class LinksToManyEditor extends GlimmerComponent<Signature> {
   <template>
-    <div
-      data-test-links-to-many={{this.args.field.name}}
-    >
+    <div data-test-links-to-many={{this.args.field.name}}>
       {{#if @arrayField.children.length}}
         <ul>
           {{#each @arrayField.children as |boxedElement i|}}
@@ -135,7 +133,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       [];
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
     let filter = { every: [{ type }, ...selectedCardsQuery] };
-    let chosenCard: Card | undefined = await chooseCard(
+    let chosenCard: CardDef | undefined = await chooseCard(
       { filter },
       {
         offerToCreate: type,
@@ -151,7 +149,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
 
   remove = (index: number) => {
     let cards = (this.args.model.value as any)[this.args.field.name];
-    cards = cards.filter((_c: Card, i: number) => i !== index);
+    cards = cards.filter((_c: CardDef, i: number) => i !== index);
     (this.args.model.value as any)[this.args.field.name] = cards;
   };
 }
@@ -164,14 +162,14 @@ export function getLinksToManyComponent({
   cardTypeFor,
   context,
 }: {
-  model: Box<Card>;
-  arrayField: Box<Card[]>;
+  model: Box<CardDef>;
+  arrayField: Box<CardDef[]>;
   format: Format;
-  field: Field<typeof Card>;
+  field: Field<typeof CardDef>;
   cardTypeFor(
-    field: Field<typeof CardBase>,
-    boxedElement: Box<CardBase>,
-  ): typeof CardBase;
+    field: Field<typeof BaseDef>,
+    boxedElement: Box<BaseDef>,
+  ): typeof BaseDef;
   context?: CardContext;
 }): ComponentLike<{ Args: {}; Blocks: {} }> {
   if (format === 'edit') {

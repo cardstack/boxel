@@ -1,7 +1,7 @@
 import StringCard from 'https://cardstack.com/base/string';
 import MarkdownCard from 'https://cardstack.com/base/markdown';
 import {
-  Card,
+  CardDef,
   field,
   contains,
   linksTo,
@@ -9,7 +9,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { Author } from './author';
 
-export class BlogPost extends Card {
+export class BlogPost extends CardDef {
   static displayName = 'Blog Post';
   @field title = contains(StringCard);
   @field slug = contains(StringCard);

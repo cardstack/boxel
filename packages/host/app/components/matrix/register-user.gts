@@ -18,7 +18,6 @@ import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import difference from 'lodash/difference';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-const TRUE = true;
 const MATRIX_REGISTRATION_TYPES = {
   sendToken: 'm.login.registration_token',
   login: 'm.login.dummy',
@@ -33,7 +32,7 @@ interface Args {
 
 export default class RegisterUser extends Component<Args> {
   <template>
-    <BoxelHeader @title='Register User' @hasBackground={{TRUE}} />
+    <BoxelHeader @title='Register User' @hasBackground={{true}} />
     <div class='registration-form'>
       {{#if this.doRegistrationFlow.isRunning}}
         <LoadingIndicator />

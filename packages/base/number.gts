@@ -1,11 +1,11 @@
 import {
   primitive,
   Component,
-  CardBase,
   useIndexBasedKey,
   deserialize,
-  CardBaseConstructor,
-  CardInstanceType,
+  BaseDefConstructor,
+  BaseInstanceType,
+  FieldDef,
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui';
 import { TextInputFilter, DeserializedResult } from './text-input-filter';
@@ -48,14 +48,14 @@ function _serialize(val: number): string {
   return val.toString();
 }
 
-export default class NumberCard extends CardBase {
+export default class NumberField extends FieldDef {
   static [primitive]: number;
   static [useIndexBasedKey]: never;
-  static async [deserialize]<T extends CardBaseConstructor>(
+  static async [deserialize]<T extends BaseDefConstructor>(
     this: T,
     number: any,
-  ): Promise<CardInstanceType<T>> {
-    return _deserialize(number).value as CardInstanceType<T>;
+  ): Promise<BaseInstanceType<T>> {
+    return _deserialize(number).value as BaseInstanceType<T>;
   }
 
   static embedded = class Embedded extends Component<typeof this> {

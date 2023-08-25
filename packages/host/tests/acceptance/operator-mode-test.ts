@@ -20,7 +20,6 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import percySnapshot from '@percy/ember';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import { type CardStackItem } from '@cardstack/host/components/operator-mode/container';
 
 module('Acceptance | operator mode tests', function (hooks) {
   let realm: Realm;
@@ -39,10 +38,10 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     adapter = new TestRealmAdapter({
       'pet.gts': `
-        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
-        export class Pet extends Card {
+        export class Pet extends CardDef {
           static displayName = 'Pet';
           @field name = contains(StringCard);
           @field title = contains(StringCard, {
@@ -60,9 +59,9 @@ module('Acceptance | operator mode tests', function (hooks) {
         }
       `,
       'shipping-info.gts': `
-        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
-        export class ShippingInfo extends Card {
+        export class ShippingInfo extends FieldDef {
           static displayName = 'Shipping Info';
           @field preferredCarrier = contains(StringCard);
           @field remarks = contains(StringCard);
@@ -80,12 +79,12 @@ module('Acceptance | operator mode tests', function (hooks) {
         }
       `,
       'address.gts': `
-        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { ShippingInfo } from "./shipping-info";
         import { FieldContainer } from '@cardstack/boxel-ui';
 
-        export class Address extends Card {
+        export class Address extends FieldDef {
           static displayName = 'Address';
           @field city = contains(StringCard);
           @field country = contains(StringCard);
@@ -116,12 +115,12 @@ module('Acceptance | operator mode tests', function (hooks) {
         }
       `,
       'person.gts': `
-        import { contains, linksTo, field, Component, Card, linksToMany } from "https://cardstack.com/base/card-api";
+        import { contains, linksTo, field, Component, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { Pet } from "./pet";
         import { Address } from "./address";
 
-        export class Person extends Card {
+        export class Person extends CardDef {
           static displayName = 'Person';
           @field firstName = contains(StringCard);
           @field pet = linksTo(Pet);
@@ -268,12 +267,12 @@ module('Acceptance | operator mode tests', function (hooks) {
             stacks: [
               [
                 {
-                  type: 'card',
                   id: 'http://test-realm/test/index',
                   format: 'isolated',
                 },
               ],
             ],
+            submode: 'interact',
           })!,
         )}`,
       );
@@ -284,12 +283,10 @@ module('Acceptance | operator mode tests', function (hooks) {
         stacks: [
           [
             {
-              type: 'card',
               id: 'http://test-realm/test/Person/fadhlan',
               format: 'isolated',
             },
             {
-              type: 'card',
               id: 'http://test-realm/test/Pet/mango',
               format: 'isolated',
             },
@@ -324,12 +321,12 @@ module('Acceptance | operator mode tests', function (hooks) {
             stacks: [
               [
                 {
-                  type: 'card',
                   id: 'http://test-realm/test/Person/fadhlan',
                   format: 'isolated',
                 },
               ],
             ],
+            submode: 'interact',
           })!,
         )}`,
       );
@@ -345,17 +342,16 @@ module('Acceptance | operator mode tests', function (hooks) {
             stacks: [
               [
                 {
-                  type: 'card',
                   id: 'http://test-realm/test/Person/fadhlan',
                   format: 'isolated',
                 },
                 {
-                  type: 'card',
                   id: 'http://test-realm/test/Pet/mango',
                   format: 'isolated',
                 },
               ],
             ],
+            submode: 'interact',
           })!,
         )}`,
       );
@@ -371,157 +367,16 @@ module('Acceptance | operator mode tests', function (hooks) {
             stacks: [
               [
                 {
-                  type: 'card',
                   id: 'http://test-realm/test/Person/fadhlan',
                   format: 'isolated',
                 },
                 {
-                  type: 'card',
                   id: 'http://test-realm/test/Pet/mango',
                   format: 'edit',
                 },
               ],
             ],
-          })!,
-        )}`,
-      );
-    });
-
-    test('restoring the stack from query param with nested contained cards', async function (assert) {
-      let operatorModeStateParam = stringify({
-        stacks: [
-          [
-            {
-              type: 'card',
-              id: 'http://test-realm/test/Person/fadhlan',
-              format: 'isolated',
-            },
-            {
-              type: 'contained',
-              fieldOfIndex: 0,
-              fieldName: 'address',
-              format: 'isolated',
-            },
-            {
-              type: 'contained',
-              fieldOfIndex: 1,
-              fieldName: 'shippingInfo',
-              format: 'isolated',
-            },
-          ],
-        ],
-      })!;
-
-      await visit(
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam,
-        )}`,
-      );
-
-      await percySnapshot(assert);
-
-      assert
-        .dom('[data-test-stack-card-index="0"] [data-test-boxel-header-title]')
-        .includesText('Person');
-      assert
-        .dom('[data-test-stack-card-index="1"] [data-test-boxel-header-title]')
-        .includesText('Address');
-      assert
-        .dom('[data-test-stack-card-index="2"] [data-test-boxel-header-title]')
-        .includesText('Shipping Info');
-
-      await click('[data-test-stack-card-index="2"] [data-test-close-button]');
-
-      // The stack should be updated in the URL
-      assert.strictEqual(
-        currentURL(),
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          stringify({
-            stacks: [
-              [
-                {
-                  type: 'card',
-                  id: 'http://test-realm/test/Person/fadhlan',
-                  format: 'isolated',
-                },
-                {
-                  type: 'contained',
-                  fieldName: 'address',
-                  fieldOfIndex: 0,
-                  format: 'isolated',
-                },
-              ],
-            ],
-          })!,
-        )}`,
-      );
-
-      await waitFor(
-        '[data-test-shippinginfo-field] [data-test-field-component-card]',
-      );
-      await click(
-        '[data-test-shippinginfo-field] [data-test-field-component-card]',
-      );
-
-      // The stack should be reflected in the URL
-      assert.strictEqual(
-        currentURL(),
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          stringify({
-            stacks: [
-              [
-                {
-                  type: 'card',
-                  id: 'http://test-realm/test/Person/fadhlan',
-                  format: 'isolated',
-                },
-                {
-                  type: 'contained',
-                  fieldOfIndex: 0,
-                  fieldName: 'address',
-                  format: 'isolated',
-                },
-                {
-                  type: 'contained',
-                  fieldOfIndex: 1,
-                  fieldName: 'shippingInfo',
-                  format: 'isolated',
-                },
-              ],
-            ],
-          })!,
-        )}`,
-      );
-
-      // Click Edit on the top card
-      await click('[data-test-stack-card-index="2"] [data-test-edit-button]');
-
-      // The edit format should be reflected in the URL
-      assert.strictEqual(
-        currentURL(),
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          stringify({
-            stacks: [
-              [
-                {
-                  type: 'card',
-                  id: 'http://test-realm/test/Person/fadhlan',
-                  format: 'edit',
-                },
-                {
-                  type: 'contained',
-                  fieldOfIndex: 0,
-                  fieldName: 'address',
-                  format: 'edit',
-                },
-                {
-                  type: 'contained',
-                  fieldOfIndex: 1,
-                  fieldName: 'shippingInfo',
-                  format: 'edit',
-                },
-              ],
-            ],
+            submode: 'interact',
           })!,
         )}`,
       );
@@ -532,7 +387,6 @@ module('Acceptance | operator mode tests', function (hooks) {
         stacks: [
           [
             {
-              type: 'card',
               id: 'http://test-realm/test/Person/fadhlan',
               format: 'edit',
             },
@@ -556,12 +410,10 @@ module('Acceptance | operator mode tests', function (hooks) {
         stacks: [
           [
             {
-              type: 'card',
               id: 'http://test-realm/test/Person/fadhlan',
               format: 'isolated',
             },
             {
-              type: 'card',
               id: 'http://test-realm/test/Pet/mango',
               format: 'edit',
             },
@@ -579,12 +431,11 @@ module('Acceptance | operator mode tests', function (hooks) {
         'service:operator-mode-state-service',
       ) as OperatorModeStateService;
 
+      let firstStack = operatorModeStateService.state.stacks[0];
       // @ts-ignore Property '#private' is missing in type 'Card[]' but required in type 'TrackedArray<Card>'.glint(2741) - don't care about this error here, just stubbing
-      operatorModeStateService.recentCards = (
-        operatorModeStateService.state.stacks[0].filter(
-          (item) => item.type === 'card',
-        ) as CardStackItem[]
-      ).map((item) => item.card);
+      operatorModeStateService.recentCards = firstStack.map(
+        (item) => item.card,
+      );
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
       assert.dom('[data-test-add-card-left-stack]').exists();
@@ -646,12 +497,10 @@ module('Acceptance | operator mode tests', function (hooks) {
         stacks: [
           [
             {
-              type: 'card',
               id: 'http://test-realm/test/Person/fadhlan',
               format: 'isolated',
             },
             {
-              type: 'card',
               id: 'http://test-realm/test/Pet/mango',
               format: 'isolated',
             },
@@ -670,11 +519,8 @@ module('Acceptance | operator mode tests', function (hooks) {
       ) as OperatorModeStateService;
 
       // @ts-ignore Property '#private' is missing in type 'Card[]' but required in type 'TrackedArray<Card>'.glint(2741) - don't care about this error here, just stubbing
-      operatorModeStateService.recentCards = (
-        operatorModeStateService.state.stacks[0].filter(
-          (item) => item.type === 'card',
-        ) as CardStackItem[]
-      ).map((item) => item.card);
+      operatorModeStateService.recentCards =
+        operatorModeStateService.state.stacks[0].map((item) => item.card);
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
       assert.dom('[data-test-add-card-left-stack]').exists();
@@ -737,14 +583,12 @@ module('Acceptance | operator mode tests', function (hooks) {
         stacks: [
           [
             {
-              type: 'card',
               id: 'http://test-realm/test/Person/fadhlan',
               format: 'isolated',
             },
           ],
           [
             {
-              type: 'card',
               id: 'http://test-realm/test/Pet/mango',
               format: 'isolated',
             },
@@ -782,12 +626,12 @@ module('Acceptance | operator mode tests', function (hooks) {
             stacks: [
               [
                 {
-                  type: 'card',
                   id: 'http://test-realm/test/Person/fadhlan',
                   format: 'isolated',
                 },
               ],
             ],
+            submode: 'interact',
           })!,
         )}`,
       );
@@ -805,14 +649,12 @@ module('Acceptance | operator mode tests', function (hooks) {
         stacks: [
           [
             {
-              type: 'card',
               id: 'http://test-realm/test/Person/fadhlan',
               format: 'isolated',
             },
           ],
           [
             {
-              type: 'card',
               id: 'http://localhost:4202/test/hassan',
               format: 'isolated',
             },
@@ -842,19 +684,16 @@ module('Acceptance | operator mode tests', function (hooks) {
         stacks: [
           [
             {
-              type: 'card',
               id: 'http://test-realm/test/Person/fadhlan',
               format: 'isolated',
             },
           ],
           [
             {
-              type: 'card',
               id: 'http://test-realm/test/index',
               format: 'isolated',
             },
             {
-              type: 'card',
               id: 'http://test-realm/test/Pet/mango',
               format: 'isolated',
             },
@@ -902,6 +741,93 @@ module('Acceptance | operator mode tests', function (hooks) {
           '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="1"]',
         )
         .doesNotExist();
+    });
+
+    test('Toggling submode will open code mode and toggling back will restore the stack', async function (assert) {
+      let operatorModeStateParam = stringify({
+        stacks: [
+          [
+            {
+              id: 'http://test-realm/test/Person/fadhlan',
+              format: 'isolated',
+            },
+          ],
+          [
+            {
+              id: 'http://test-realm/test/Pet/mango',
+              format: 'isolated',
+            },
+          ],
+        ],
+      })!;
+
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam,
+        )}`,
+      );
+
+      // Toggle from interactive (default) to code mode
+      await click('[data-test-submode-switcher] button');
+      await click('[data-test-boxel-menu-item-text="Code"]');
+
+      assert.dom('[data-test-submode-switcher] button').hasText('Code');
+      assert.dom('[data-test-code-mode]').exists();
+
+      // Submode is reflected in the URL
+      assert.strictEqual(
+        currentURL(),
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          stringify({
+            stacks: [
+              [
+                {
+                  id: 'http://test-realm/test/Person/fadhlan',
+                  format: 'isolated',
+                },
+              ],
+              [
+                {
+                  id: 'http://test-realm/test/Pet/mango',
+                  format: 'isolated',
+                },
+              ],
+            ],
+            submode: 'code',
+          })!,
+        )}`,
+      );
+
+      // Toggle back to interactive mode
+      await click('[data-test-submode-switcher] button');
+      await click('[data-test-boxel-menu-item-text="Interact"]');
+
+      // Stacks are restored
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
+
+      // Submode is reflected in the URL
+      assert.strictEqual(
+        currentURL(),
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          stringify({
+            stacks: [
+              [
+                {
+                  id: 'http://test-realm/test/Person/fadhlan',
+                  format: 'isolated',
+                },
+              ],
+              [
+                {
+                  id: 'http://test-realm/test/Pet/mango',
+                  format: 'isolated',
+                },
+              ],
+            ],
+            submode: 'interact',
+          })!,
+        )}`,
+      );
     });
   });
 });

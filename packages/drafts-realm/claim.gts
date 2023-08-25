@@ -1,6 +1,6 @@
 import { Chain } from './chain';
 import {
-  Card,
+  CardDef,
   contains,
   field,
   StringCard,
@@ -183,7 +183,7 @@ class Isolated extends Component<typeof Claim> {
         {
           signature: this.args.model.signature,
           encoded: this.args.model.encoding,
-        }
+        },
       );
 
       if (r) {
@@ -257,7 +257,7 @@ class Isolated extends Component<typeof Claim> {
         // create using operator mode action
         await this.args.context.actions.createCardDirectly(
           transactionDoc,
-          undefined
+          undefined,
         );
       } else {
         // create using create card modal
@@ -290,7 +290,7 @@ class Isolated extends Component<typeof Claim> {
       let ethersProvider = this.web3Provider;
       this.claimSettlementModule = await this.getSDK(
         'ClaimSettlementModule',
-        ethersProvider
+        ethersProvider,
       );
     }
     return this.claimSettlementModule;
@@ -303,7 +303,7 @@ class Embedded extends Component<typeof Claim> {
   }
   @action openCard(card: Partial<Claim> | undefined) {
     if (card) {
-      this.args.context?.actions?.viewCard(card as Card);
+      this.args.context?.actions?.viewCard(card as CardDef);
     }
   }
 
@@ -330,7 +330,7 @@ class Embedded extends Component<typeof Claim> {
   </template>
 }
 
-export class Claim extends Card {
+export class Claim extends CardDef {
   static displayName = 'Claim';
   @field moduleAddress = contains(EthereumAddressCard);
   @field safeAddress = contains(EthereumAddressCard);

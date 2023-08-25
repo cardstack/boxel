@@ -2,11 +2,11 @@ import {
   contains,
   field,
   Component,
-  Card,
+  CardDef,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 
-export class UnusedCard extends Card {
+export class UnusedCard extends CardDef {
   @field firstName = contains(StringCard);
   @field title = contains(StringCard, {
     computeVia: function (this: UnusedCard) {

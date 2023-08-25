@@ -28,15 +28,13 @@ import Room from './room';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type { RoomCard, RoomMemberCard } from 'https://cardstack.com/base/room';
 
-const TRUE = true;
-
 export default class RoomsManager extends Component {
   <template>
     <div class='header-wrapper'>
       <BoxelHeader
         class='matrix'
         @title={{this.headerTitle}}
-        @hasBackground={{TRUE}}
+        @hasBackground={{true}}
       />
       <IconButton
         class='toggle-btn'

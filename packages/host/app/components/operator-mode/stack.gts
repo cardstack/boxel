@@ -5,7 +5,7 @@ import { htmlSafe } from '@ember/template';
 import OperatorModeStackItem from './stack-item';
 import type { Actions } from '@cardstack/runtime-common';
 import type { StackItem } from './container';
-import type { Card } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Element: HTMLElement;
@@ -18,8 +18,8 @@ interface Signature {
     close: (stackItem: StackItem) => void;
     edit: (stackItem: StackItem) => void;
     save: (stackItem: StackItem, dismiss: boolean) => void;
-    delete: (card: Card) => void;
-    onSelectedCards: (selectedCards: Card[], stackItem: StackItem) => void;
+    delete: (card: CardDef) => void;
+    onSelectedCards: (selectedCards: CardDef[], stackItem: StackItem) => void;
     setupStackItem: (
       stackItem: StackItem,
       clearSelections: () => void,
@@ -96,14 +96,13 @@ export default class OperatorModeStack extends Component<Signature> {
 
       .inner {
         height: calc(
-          100% - var(--search-sheet-closed-height) + var(--boxel-sp)
+          100% - var(--search-sheet-closed-height) - var(--boxel-sp)
         );
         position: relative;
         display: flex;
         justify-content: center;
         max-width: 50rem;
-        padding-top: var(--boxel-sp-xxl);
-        margin: 0 auto;
+        margin: var(--boxel-sp-xxl) auto 0;
         border-bottom-left-radius: var(--boxel-border-radius);
         border-bottom-right-radius: var(--boxel-border-radius);
       }

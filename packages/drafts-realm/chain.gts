@@ -1,7 +1,7 @@
 import {
   contains,
   field,
-  Card,
+  CardDef,
   Component,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
@@ -19,7 +19,7 @@ let BLOCK_EXPLORER_URLS: Record<number, string> = {
   100: 'https://gnosisscan.io',
 };
 
-export class Chain extends Card {
+export class Chain extends CardDef {
   static displayName = 'Chain';
   @field name = contains(StringCard); // dropdown
   @field chainId = contains(NumberCard, {

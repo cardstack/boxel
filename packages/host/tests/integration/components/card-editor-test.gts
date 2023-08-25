@@ -6,7 +6,7 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import { Loader } from '@cardstack/runtime-common/loader';
 import CardEditor from '@cardstack/host/components/card-editor';
 import { renderComponent } from '../../helpers/render-component';
-import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
+import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 import {
   testRealmURL,
   shimModule,
@@ -18,7 +18,7 @@ import {
 } from '../../helpers';
 import { waitFor, fillIn, click } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
-import { Card } from 'https://cardstack.com/base/card-api';
+import { CardDef } from 'https://cardstack.com/base/card-api';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import { RenderingTestContext } from '@ember/test-helpers';
@@ -44,7 +44,7 @@ module('Integration | card-editor', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  async function loadCard(url: string): Promise<Card> {
+  async function loadCard(url: string): Promise<CardDef> {
     let { createFromSerialized, recompute } = cardApi;
     let result = await realm.searchIndex.card(new URL(url));
     if (!result || result.type === 'error') {
@@ -54,7 +54,7 @@ module('Integration | card-editor', function (hooks) {
         }`,
       );
     }
-    let card = await createFromSerialized<typeof Card>(
+    let card = await createFromSerialized<typeof CardDef>(
       result.doc.data,
       result.doc,
       new URL(result.doc.data.id),
@@ -70,10 +70,10 @@ module('Integration | card-editor', function (hooks) {
 
     adapter = new TestRealmAdapter({
       'pet.gts': `
-        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
-        export class Pet extends Card {
+        export class Pet extends CardDef {
           @field name = contains(StringCard);
           static embedded = class Embedded extends Component<typeof this> {
             <template>
@@ -85,7 +85,7 @@ module('Integration | card-editor', function (hooks) {
         }
       `,
       'fancy-pet.gts': `
-        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { Pet } from "./pet";
 
@@ -102,11 +102,11 @@ module('Integration | card-editor', function (hooks) {
         }
       `,
       'person.gts': `
-        import { contains, linksTo, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import { contains, linksTo, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { Pet } from "./pet";
 
-        export class Person extends Card {
+        export class Person extends CardDef {
           @field firstName = contains(StringCard);
           @field pet = linksTo(Pet);
           static isolated = class Embedded extends Component<typeof this> {
@@ -215,9 +215,9 @@ module('Integration | card-editor', function (hooks) {
   });
 
   test('renders card in edit (default) format', async function (assert) {
-    let { field, contains, Card, Component } = cardApi;
+    let { field, contains, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class TestCard extends Card {
+    class TestCard extends CardDef {
       @field firstName = contains(StringCard);
       @field nickName = contains(StringCard, {
         computeVia: function (this: TestCard) {
@@ -256,9 +256,9 @@ module('Integration | card-editor', function (hooks) {
   });
 
   test('can change card format', async function (assert) {
-    let { field, contains, Card, Component } = cardApi;
+    let { field, contains, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class TestCard extends Card {
+    class TestCard extends CardDef {
       @field firstName = contains(StringCard);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
@@ -306,9 +306,9 @@ module('Integration | card-editor', function (hooks) {
   });
 
   test('edited card data is visible in different formats', async function (assert) {
-    let { field, contains, Card, Component } = cardApi;
+    let { field, contains, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class TestCard extends Card {
+    class TestCard extends CardDef {
       @field firstName = contains(StringCard);
       static isolated = class Isolated extends Component<typeof this> {
         <template>

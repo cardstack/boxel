@@ -9,7 +9,7 @@ import {
   trimExecutableExtension,
   hasExecutableExtension,
   SupportedMimeType,
-  type CardRef,
+  type CodeRef,
   type RealmInfo,
 } from '@cardstack/runtime-common';
 import {
@@ -17,7 +17,7 @@ import {
   identifyCard,
   isCard,
   moduleFrom,
-} from '@cardstack/runtime-common/card-ref';
+} from '@cardstack/runtime-common/code-ref';
 import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
 // TODO make sure to remove this from @cardstack/runtime-common deps
 import ignore, { Ignore } from 'ignore';
@@ -46,7 +46,7 @@ import {
 } from '@cardstack/runtime-common/search-index';
 import { URLMap } from '@cardstack/runtime-common/url-map';
 import {
-  Card,
+  CardDef,
   type IdentityContext as IdentityContextType,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -63,7 +63,7 @@ export class CurrentRun {
   #instances: URLMap<SearchEntryWithErrors>;
   #modules = new Map<string, ModuleWithErrors>();
   #moduleWorkingCache = new Map<string, Promise<Module>>();
-  #typesCache = new WeakMap<typeof Card, Promise<TypesWithErrors>>();
+  #typesCache = new WeakMap<typeof CardDef, Promise<TypesWithErrors>>();
   #indexingInstances = new Map<string, Promise<void>>();
   #reader: Reader;
   #realmPaths: RealmPaths;
@@ -307,7 +307,7 @@ export class CurrentRun {
     let refs = Object.values(module)
       .filter((maybeCard) => isCard(maybeCard))
       .map((card) => identifyCard(card))
-      .filter(Boolean) as CardRef[];
+      .filter(Boolean) as CodeRef[];
     for (let ref of refs) {
       if (!('type' in ref)) {
         await this.buildModule(ref.module, url);
@@ -339,7 +339,7 @@ export class CurrentRun {
     let uncaughtError: Error | undefined;
     let doc: SingleCardDocument | undefined;
     let searchData: Record<string, any> | undefined;
-    let cardType: typeof Card | undefined;
+    let cardType: typeof CardDef | undefined;
     let html: string | undefined;
     try {
       let api = await this.#loader.import<typeof CardAPI>(
@@ -363,7 +363,7 @@ export class CurrentRun {
           realmURL: this.realmURL,
         },
       });
-      let card = await api.createFromSerialized<typeof Card>(
+      let card = await api.createFromSerialized<typeof CardDef>(
         res,
         { data: res },
         new URL(fileURL),
@@ -379,7 +379,7 @@ export class CurrentRun {
         identityContext,
         realmPath: this.#realmPaths,
       });
-      cardType = Reflect.getPrototypeOf(card)?.constructor as typeof Card;
+      cardType = Reflect.getPrototypeOf(card)?.constructor as typeof CardDef;
       let data = api.serializeCard(card, { includeComputeds: true });
       // prepare the document for index serialization
       Object.values(data.data.relationships ?? {}).forEach(
@@ -505,7 +505,7 @@ export class CurrentRun {
     deferred.fulfill(module);
   }
 
-  private async getTypes(card: typeof Card): Promise<TypesWithErrors> {
+  private async getTypes(card: typeof CardDef): Promise<TypesWithErrors> {
     let cached = this.#typesCache.get(card);
     if (cached) {
       return await cached;
@@ -517,7 +517,7 @@ export class CurrentRun {
     let deferred = new Deferred<TypesWithErrors>();
     this.#typesCache.set(card, deferred.promise);
     let types: string[] = [];
-    let fullRef: CardRef = ref;
+    let fullRef: CodeRef = ref;
     while (fullRef) {
       let loadedCard = await loadCard(fullRef, { loader: this.loader });
       let loadedCardRef = identifyCard(loadedCard);

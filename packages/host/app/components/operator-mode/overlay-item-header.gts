@@ -5,7 +5,7 @@ import { trackedFunction } from 'ember-resources/util/function';
 import { service } from '@ember/service';
 import CardService from '@cardstack/host/services/card-service';
 import type {
-  Card,
+  CardDef,
   Format,
   FieldType,
 } from 'https://cardstack.com/base/card-api';
@@ -19,7 +19,7 @@ import { type RenderedCardForOverlayActions } from './stack-item';
 interface Signature {
   item: RenderedCardForOverlayActions;
   openOrSelectCard: (
-    card: Card,
+    card: CardDef,
     format?: Format,
     fieldType?: FieldType,
     fieldName?: string,

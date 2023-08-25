@@ -2,10 +2,10 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "Card Reference Field",
-      "description": "A field that captures a reference to a card type",
+      "title": "Code Reference Field",
+      "description": "A field that captures a reference to a card or field type",
       "ref": {
-        "module": "https://cardstack.com/base/card-ref",
+        "module": "https://cardstack.com/base/code-ref",
         "name": "default"
       }
     },

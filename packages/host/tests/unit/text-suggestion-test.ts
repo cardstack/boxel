@@ -131,7 +131,7 @@ module('Unit | text-suggestion | card-chooser-title', function () {
   });
   test('filter by card instance', function (assert) {
     let filter = {
-      type: { module: `https://my.realm/cards-api`, name: 'Card' },
+      type: { module: `https://my.realm/cards-api`, name: 'CardDef' },
     };
     let suggestions = suggestCardChooserTitle(filter);
     assert.deepEqual(suggestions, [
@@ -153,7 +153,7 @@ module('Unit | text-suggestion | card-chooser-title', function () {
         { eq: { title: 'Card 1' } },
         { not: { eq: { 'author.firstName': 'Cardy' } } },
       ],
-      type: { module: `https://my.realm/cards-api`, name: 'Card' },
+      type: { module: `https://my.realm/cards-api`, name: 'CardDef' },
     };
     let suggestions = suggestCardChooserTitle(filter);
     assert.deepEqual(suggestions, [
@@ -175,7 +175,7 @@ module('Unit | text-suggestion | card-chooser-title', function () {
     let filter = {
       every: [
         {
-          type: { module: `https://my.realm/cards-api`, name: 'Card' },
+          type: { module: `https://my.realm/cards-api`, name: 'CardDef' },
         },
         {
           on: {

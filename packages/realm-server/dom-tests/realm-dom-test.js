@@ -85,7 +85,7 @@ QUnit.module(
       assert.ok(dirContents.includes('a.js'));
       assert.ok(dirContents.includes('b.js'));
       assert.ok(dirContents.includes('c.js'));
-      assert.ok(dirContents.includes('card-ref-test.gts'));
+      assert.ok(dirContents.includes('code-ref-test.gts'));
       assert.ok(dirContents.includes('cycle-one.js'));
       assert.ok(dirContents.includes('cycle-two.js'));
       assert.ok(dirContents.includes('d.js'));

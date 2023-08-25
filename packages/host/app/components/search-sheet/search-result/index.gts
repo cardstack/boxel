@@ -1,5 +1,5 @@
 import Component from '@glimmer/component';
-import type { Card } from 'https://cardstack.com/base/card-api';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
 import { CardContainer } from '@cardstack/boxel-ui';
 import { trackedFunction } from 'ember-resources/util/function';
@@ -10,7 +10,7 @@ import cn from '@cardstack/boxel-ui/helpers/cn';
 interface Signature {
   Element: HTMLElement;
   Args: {
-    card: Card;
+    card: CardDef;
     compact?: boolean;
   };
 }
@@ -37,6 +37,7 @@ export default class SearchResult extends Component<Signature> {
         width: 199px;
         height: 50px;
         padding: var(--boxel-sp-xxs);
+        overflow: hidden;
       }
       .search-result__title {
         margin-bottom: var(--boxel-sp-xs);
