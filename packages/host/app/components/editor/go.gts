@@ -237,8 +237,13 @@ export default class Go extends Component<Signature> {
       );
       return;
     }
-    await this.cardService.saveModel(card);
-    await this.loadCard.perform(url);
+
+    try {
+      await this.cardService.saveModel(card);
+      await this.loadCard.perform(url);
+    } catch (e) {
+      console.error('Failed to save single card document', e);
+    }
   }
 
   @cached
