@@ -7,17 +7,17 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import DateTimeCard from 'https://cardstack.com/base/datetime';
 import StringCard from 'https://cardstack.com/base/string';
-import { Person } from './person';
-import { Post } from './post';
+import { PersonField } from './person';
+import { PostField } from './post';
 
 export class Booking extends CardDef {
   @field title = contains(StringCard);
   @field venue = contains(StringCard);
   @field startTime = contains(DateTimeCard);
   @field endTime = contains(DateTimeCard);
-  @field hosts = containsMany(Person);
+  @field hosts = containsMany(PersonField);
   @field sponsors = containsMany(StringCard);
-  @field posts = containsMany(Post);
+  @field posts = containsMany(PostField);
   @field description = contains(StringCard, {
     computeVia: function (this: Booking) {
       return this.venue;

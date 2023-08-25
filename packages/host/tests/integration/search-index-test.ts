@@ -3355,7 +3355,7 @@ posts/ignore-me.json
       } catch (err: any) {
         assert.strictEqual(
           err.message,
-          `Your filter refers to nonexistent field "nonExistentField" on type {"module":"${testModuleRealm}person","name":"Person"}`,
+          `Your filter refers to nonexistent field "nonExistentField" on type {"module":"${testModuleRealm}person","name":"PersonField"}`,
         );
       }
     });

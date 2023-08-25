@@ -2,12 +2,15 @@
   "data": {
     "type": "card",
     "attributes": {
-      "author": {
-        "firstName": "Mango",
-        "lastName": "Abdel-Rahman"
-      },
       "title": "Things That I Like to Chew On",
       "body": "I like to chew on my toys, my bones, and my daddy's nose."
+    },
+    "relationships": {
+      "author": {
+        "links": {
+          "self": "../Person/1"
+        }
+      }
     },
     "meta": {
       "adoptsFrom": {

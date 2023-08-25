@@ -223,7 +223,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private subscribeToCard = task(async () => {
     await this.cardService.ready;
     registerDestructor(this, this.cleanup);
-    this.cardService.subscribeToCard(this.subscribedCard, this.onCardChange);
+    this.cardService.subscribe(this.subscribedCard, this.onCardChange);
     this.refreshSaveMsg = setInterval(
       () => this.calculateLastSavedMsg(),
       10 * 1000,
@@ -231,10 +231,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   });
 
   private cleanup = () => {
-    this.cardService.unsubscribeFromCard(
-      this.subscribedCard,
-      this.onCardChange,
-    );
+    this.cardService.unsubscribe(this.subscribedCard, this.onCardChange);
     clearInterval(this.refreshSaveMsg);
   };
 

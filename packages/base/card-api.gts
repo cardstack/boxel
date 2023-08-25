@@ -84,7 +84,7 @@ type Setter = { setters: { [fieldName: string]: Setter } } & ((
 interface Options {
   computeVia?: string | (() => unknown);
   // there exists cards that we only ever run in the host without
-  // the isolated renderer (RoomCard), which means that we cannot
+  // the isolated renderer (RoomField), which means that we cannot
   // use the rendering mechanism to tell if a card is used or not,
   // in which case we need to tell the runtime that a card is
   // explictly being used.
@@ -234,7 +234,7 @@ export interface Field<
   fieldType: FieldType;
   computeVia: undefined | string | (() => unknown);
   // there exists cards that we only ever run in the host without
-  // the isolated renderer (RoomCard), which means that we cannot
+  // the isolated renderer (RoomField), which means that we cannot
   // use the rendering mechanism to tell if a card is used or not,
   // in which case we need to tell the runtime that a card is
   // explictly being used.
@@ -1596,6 +1596,9 @@ export class Component<
 > extends GlimmerComponent<SignatureFor<CardT>> {}
 
 export class FieldDef extends BaseDef {
+  // this changes the shape of the class type FieldDef so that a CardDef
+  // class type cannot masquarade as a FieldDef class type
+  static isFieldDef = true;
   static displayName = 'Field';
 }
 
@@ -1671,22 +1674,22 @@ export type CardDefConstructor = typeof CardDef;
 export type FieldDefConstructor = typeof FieldDef;
 
 export function subscribeToChanges(
-  card: CardDef,
+  fieldOrCard: BaseDef,
   subscriber: CardChangeSubscriber,
 ) {
-  let changeSubscribers = subscribers.get(card);
+  let changeSubscribers = subscribers.get(fieldOrCard);
   if (!changeSubscribers) {
     changeSubscribers = new Set();
-    subscribers.set(card, changeSubscribers);
+    subscribers.set(fieldOrCard, changeSubscribers);
   }
   changeSubscribers.add(subscriber);
 }
 
 export function unsubscribeFromChanges(
-  card: CardDef,
+  fieldOrCard: BaseDef,
   subscriber: CardChangeSubscriber,
 ) {
-  let changeSubscribers = subscribers.get(card);
+  let changeSubscribers = subscribers.get(fieldOrCard);
   if (!changeSubscribers) {
     return;
   }

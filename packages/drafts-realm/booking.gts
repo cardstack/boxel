@@ -1,6 +1,7 @@
 import {
   contains,
   containsMany,
+  linksToMany,
   field,
   Component,
   CardDef,
@@ -15,7 +16,7 @@ export class Booking extends CardDef {
   @field venue = contains(StringCard);
   @field startTime = contains(DateTimeCard);
   @field endTime = contains(DateTimeCard);
-  @field hosts = containsMany(Person);
+  @field hosts = linksToMany(Person);
   @field sponsors = containsMany(StringCard);
 
   static embedded = class Embedded extends Component<typeof this> {
