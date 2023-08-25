@@ -37,7 +37,6 @@ export default class RecentFiles extends Component<Args> {
             role='button'
             {{on 'click' (fn this.openFile file)}}
           >
-            {{file}}
             <FileLink @file={{file}} />
           </li>
         {{/unless}}
@@ -55,13 +54,7 @@ interface FileArgs {
 class FileLink extends Component<FileArgs> {
   <template>
     <span>
-      {{#if this.file.current}}
-        {{#if this.card.current}}
-          {{#if (eq this.card.current.state 'ready')}}
-            {{this.card.current.card.title}}
-          {{/if}}
-        {{/if}}
-      {{/if}}
+      {{this.title}}
     </span>
   </template>
 
@@ -84,21 +77,52 @@ class FileLink extends Component<FileArgs> {
     }
   });
 
-  card = maybe(this, (context) => {
-    if (this.file.current?.state === 'ready') {
-      let fileContent = this.file.current.content;
+  get fileReady() {
+    return this.file.current?.state === 'ready';
+  }
 
+  get json() {
+    if (this.file.current?.state === 'ready') {
       try {
-        let json = JSON.parse(fileContent);
-        if (isCardResource(json.data)) {
-          let cardId = this.args.file.replace(/\.json$/, '');
-          return card(context, () => ({
-            url: new URL(`${this.cardService.defaultURL}${cardId}`),
-          }));
-        }
+        return JSON.parse(this.file.current?.content);
       } catch (e) {
-        console.log(`error parsing ${this.args.file}`, e);
+        return undefined;
       }
+    }
+
+    return undefined;
+  }
+
+  get isCard() {
+    if (this.json) {
+      return isCardResource(this.json.data);
+    }
+
+    return false;
+  }
+
+  get title() {
+    if (
+      this.isCard &&
+      this.card.current &&
+      this.card.current.state === 'ready'
+    ) {
+      let cardTitle = this.card.current.card.title;
+
+      if (cardTitle) {
+        return cardTitle;
+      }
+    }
+
+    return this.args.file;
+  }
+
+  card = maybe(this, (context) => {
+    if (this.isCard) {
+      let cardId = this.args.file.replace(/\.json$/, '');
+      return card(context, () => ({
+        url: new URL(`${this.cardService.defaultURL}${cardId}`),
+      }));
     }
 
     return null;
