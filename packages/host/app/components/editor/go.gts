@@ -8,11 +8,13 @@ import { cached } from '@glimmer/tracking';
 import { tracked } from '@glimmer/tracking';
 import {
   SupportedMimeType,
+  SingleCardDocument,
   isCardDocument,
   isSingleCardDocument,
   logger,
 } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
+import merge from 'lodash/merge';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type CardService from '@cardstack/host/services/card-service';
 import { file, FileResource, isReady } from '@cardstack/host/resources/file';
@@ -164,7 +166,7 @@ export default class Go extends Component<Signature> {
     if (json && isSingleCardDocument(json)) {
       // writes json instance but doesn't update state of the file resource
       // relies on message service subscription to update state
-      await this.saveSingleCardDocument(json);
+      await this.saveFileSerializedCard(json);
       return;
     } else {
       //writes source code and updates the state of the file resource
@@ -219,24 +221,24 @@ export default class Go extends Component<Signature> {
     return file.write(content);
   }
 
-  async saveSingleCardDocument(json: any) {
+  async saveFileSerializedCard(json: SingleCardDocument) {
     let realmPath = new RealmPaths(this.cardService.defaultURL);
     let url = realmPath.fileURL(
       this.args.openFiles.path!.replace(/\.json$/, ''),
     );
 
+    let doc = this.reverseFileSerialization(json, url.href);
+    let card: CardDef | undefined;
     try {
-      let doc = this.cardService.reverseFileSerialization(json, url.href);
-      let card = await this.cardService.createFromSerialized(
-        doc.data,
-        doc,
-        url,
-      );
-      await this.cardService.saveModel(card);
-      await this.loadCard.perform(url);
+      card = await this.cardService.createFromSerialized(doc.data, doc, url);
     } catch (e) {
-      console.log('Failed to save single card document', e);
+      console.error(
+        'JSON is not a valid card--TODO this should be an error message in the code editor',
+      );
+      return;
     }
+    await this.cardService.saveModel(card);
+    await this.loadCard.perform(url);
   }
 
   @cached
@@ -310,6 +312,39 @@ export default class Go extends Component<Signature> {
       );
     }
   });
+
+  // File serialization is a special type of card serialization that the host would
+  // otherwise not encounter, but it does here since it's using the accept header
+  // application/vnd.card+source to load the file that we see in monaco. This is
+  // the only place that we use this accept header for loading card instances--everywhere
+  // else we use application/vnd.card+json. Because of this the resulting JSON has
+  // different semantics than the host would normally encounter--for instance, this
+  // file serialization format is always missing an ID (because the ID is the filename).
+  // Whereas for card isntances obtained via application/vnd.card+json, a missing ID
+  // means that the card is not saved.
+  //
+  // In order to prevent confusion around which type of serialization you are dealing
+  // with, we convert the file serialization back to the form the host is accustomed
+  // to (application/vnd.card+json) as soon as possible so that the semantics around
+  // file serialization don't leak outside of where they are immediately used.
+  private reverseFileSerialization(
+    fileSerializationJSON: SingleCardDocument,
+    id: string,
+  ): SingleCardDocument {
+    let realmURL = this.cardService.getRealmURLFor(new URL(id))?.href;
+    if (!realmURL) {
+      throw new Error(`Could not determine realm for url ${id}`);
+    }
+    return merge({}, fileSerializationJSON, {
+      data: {
+        id,
+        type: 'card',
+        meta: {
+          realmURL,
+        },
+      },
+    });
+  }
 }
 
 declare module '@glint/environment-ember-loose/registry' {

@@ -6,6 +6,7 @@ import {
   type LooseCardResource,
   isSingleCardDocument,
   isCardCollectionDocument,
+  RealmPaths,
   type CardDocument,
   type SingleCardDocument,
   type LooseSingleCardDocument,
@@ -24,7 +25,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
 
 export type CardSaveSubscriber = (json: SingleCardDocument) => void;
-const { ownRealmURL } = ENV;
+const { ownRealmURL, otherRealmURLs } = ENV;
 
 export default class CardService extends Service {
   @service declare loaderService: LoaderService;
@@ -175,10 +176,13 @@ export default class CardService extends Service {
     realmUrl?: URL,
   ): Promise<SingleCardDocument> {
     let isSaved = !!doc.data.id;
-    let json = await this.fetchJSON(realmUrl ?? this.defaultURL, {
-      method: isSaved ? 'PATCH' : 'POST',
-      body: JSON.stringify(doc, null, 2),
-    });
+    let json = await this.fetchJSON(
+      doc.data.id ?? realmUrl ?? this.defaultURL,
+      {
+        method: isSaved ? 'PATCH' : 'POST',
+        body: JSON.stringify(doc, null, 2),
+      },
+    );
     if (!isSingleCardDocument(json)) {
       throw new Error(
         `bug: arg is not a card document:
@@ -317,13 +321,14 @@ export default class CardService extends Service {
     this.api.subscribeToChanges(card, subscriber);
   }
 
-  reverseFileSerialization(
-    json: LooseSingleCardDocument,
-    id: string,
-  ): SingleCardDocument {
-    return {
-      ...json,
-      data: { ...json.data, id, type: json.data.type || 'card' },
-    };
+  getRealmURLFor(url: URL) {
+    let realmURLS = new Set([ownRealmURL, ...otherRealmURLs]);
+    for (let realmURL of realmURLS) {
+      let path = new RealmPaths(realmURL);
+      if (path.inRealm(url)) {
+        return new URL(realmURL);
+      }
+    }
+    return undefined;
   }
 }
