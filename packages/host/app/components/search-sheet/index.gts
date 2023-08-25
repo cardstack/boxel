@@ -319,9 +319,6 @@ export default class SearchSheet extends Component<Signature> {
         --search-sheet-closed-height: 3.5rem;
         --search-sheet-closed-width: 10.75rem;
         --search-sheet-prompt-height: 9.375rem;
-        --operator-mode-padding-right: calc(
-          var(--chat-button-size) + var(--boxel-sp-xs)
-        );
       }
 
       .search-sheet {
@@ -333,6 +330,7 @@ export default class SearchSheet extends Component<Signature> {
         left: var(--boxel-sp);
         width: calc(100% - (2 * var(--boxel-sp)));
         position: absolute;
+        z-index: 1;
         transition:
           height var(--boxel-transition),
           width var(--boxel-transition);
@@ -354,7 +352,7 @@ export default class SearchSheet extends Component<Signature> {
       }
 
       .results {
-        height: calc(100% - var(--operator-mode-stack-padding-top));
+        height: calc(100% - var(--stack-padding-top));
       }
 
       .footer {
@@ -385,6 +383,9 @@ export default class SearchSheet extends Component<Signature> {
         opacity: 0;
       }
 
+      .buttons {
+        margin-top: var(--boxel-sp-xs);
+      }
       .buttons > * + * {
         margin-left: var(--boxel-sp-xs);
       }

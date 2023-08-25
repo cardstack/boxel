@@ -72,7 +72,7 @@ export default class OperatorModeStack extends Component<Signature> {
 
     <style>
       :global(:root) {
-        --operator-mode-stack-padding-top: calc(
+        --stack-padding-top: calc(
           var(--submode-switcher-trigger-height) + (2 * (var(--boxel-sp)))
         );
       }
@@ -82,7 +82,7 @@ export default class OperatorModeStack extends Component<Signature> {
         width: 100%;
         background-position: center;
         background-size: cover;
-        padding: var(--operator-mode-stack-padding-top) var(--boxel-sp) 0;
+        padding: var(--stack-padding-top) var(--boxel-sp) 0;
         position: relative;
       }
       .operator-mode-stack.with-bg-image:before {
