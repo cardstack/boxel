@@ -46,6 +46,7 @@
 
   /* common icon sizes */
   --boxel-icon-sm: 1.25rem; /* 20px */
+  --boxel-icon-med: 1.875rem; /* 30px */
   --boxel-icon-lg: 2.5rem; /* 40px */
   --boxel-icon-xl: 3.75rem; /* 60px */
   --boxel-icon-xxl: 5rem; /* 80px */

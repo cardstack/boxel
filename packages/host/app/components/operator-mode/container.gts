@@ -815,7 +815,7 @@ export default class OperatorModeContainer extends Component<Signature> {
 
       .operator-mode__main {
         display: flex;
-        justify-content: stretch;
+        justify-content: center;
         align-items: center;
         position: relative;
         background-position: center;
