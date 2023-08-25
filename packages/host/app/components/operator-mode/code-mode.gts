@@ -9,7 +9,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
-    card: CardDef;
+    card: CardDef | null;
   };
 }
 
@@ -19,6 +19,7 @@ export default class CodeMode extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
 
   fetchRealmInfo = trackedFunction(this, async () => {
+    if (!this.args.card) return;
     let realmInfo = await this.cardService.getRealmInfo(this.args.card);
     return realmInfo;
   });

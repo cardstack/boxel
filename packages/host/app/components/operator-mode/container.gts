@@ -20,6 +20,7 @@ import {
   type Actions,
   type CodeRef,
   LooseSingleCardDocument,
+  baseRealm,
 } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type LoaderService from '../../services/loader-service';
@@ -46,6 +47,9 @@ import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import SubmodeSwitcher, { Submode } from '../submode-switcher';
 import CodeMode from '@cardstack/host/components/operator-mode/code-mode';
+import CardURLBar from '@cardstack/host/components/operator-mode/card-url-bar';
+import { scheduleOnce } from '@ember/runloop';
+import ENV from '@cardstack/host/config/environment';
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
 
@@ -58,6 +62,7 @@ interface Signature {
 export interface OperatorModeState {
   stacks: Stack[];
   submode: Submode;
+  codePath: URL | null;
 }
 
 export type Stack = StackItem[];
@@ -85,6 +90,8 @@ const stackItemStableScrolls = new WeakMap<
   (changeSizeCallback: () => Promise<void>) => void
 >();
 
+const { otherRealmURLs } = ENV;
+
 export default class OperatorModeContainer extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
@@ -95,12 +102,19 @@ export default class OperatorModeContainer extends Component<Signature> {
   @tracked searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked isChatVisible = false;
 
+  @tracked cardForCardMode: CardDef | null = null;
+  @tracked isCodePathInvalid: boolean = false;
+  @tracked codePathErrorMessage: string | null = null;
+
   private deleteModal: DeleteModal | undefined;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
 
     this.messageService.register();
+    scheduleOnce('afterRender', this, () =>
+      this.loadCardForCodeMode.perform(this.codePath),
+    );
     (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
     registerDestructor(this, () => {
       delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
@@ -493,9 +507,12 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.operatorModeStateService.state?.stacks.flat() ?? [];
   }
 
-  get cardForCodeMode() {
-    // Last card in rightmost stack
-    return this.allStackItems.reverse()[0].card;
+  get lastCardInRightMostStack(): CardDef {
+    return (
+      this.allStackItems
+        // @ts-ignore Property 'card' does not exist on type 'StackItem'. - it actually does exist because we filtered for it in the line above
+        .reverse()[0].card
+    );
   }
 
   get isCodeMode() {
@@ -590,7 +607,58 @@ export default class OperatorModeContainer extends Component<Signature> {
   };
 
   @action updateSubmode(submode: Submode) {
+    switch (submode) {
+      case Submode.Interact:
+        this.onCodePathChange(null);
+        break;
+      case Submode.Code:
+        this.onCodePathChange(new URL(this.lastCardInRightMostStack.id));
+        break;
+    }
+
     this.operatorModeStateService.updateSubmode(submode);
+  }
+
+  @action onCodePathChange(codePath: URL | null) {
+    this.operatorModeStateService.updateCodePath(codePath);
+    this.loadCardForCodeMode.perform(codePath);
+  }
+
+  loadCardForCodeMode = restartableTask(async (codePath: URL | null) => {
+    try {
+      if (!codePath) return;
+
+      const realmsToCheck = [
+        this.cardService.defaultURL.href,
+        baseRealm.url,
+        ...otherRealmURLs,
+      ];
+      const isInAnyRealms = await Promise.all(
+        realmsToCheck.map(async (realmURL) => {
+          const realmPath = new RealmPaths(realmURL);
+          return realmPath.inRealm(codePath);
+        }),
+      );
+      if (!isInAnyRealms.includes(true))
+        throw new Error('URL is not in any realms');
+
+      this.cardForCardMode = await this.cardService.loadModel(codePath);
+      this.isCodePathInvalid = false;
+      this.codePathErrorMessage = null;
+    } catch (e: any) {
+      this.isCodePathInvalid = true;
+      this.codePathErrorMessage =
+        e.message === 'URL is not in any realms'
+          ? e.message
+          : 'File is not found';
+    }
+  });
+
+  get codePath() {
+    return (
+      this.operatorModeStateService.state.codePath ??
+      new URL(this.lastCardInRightMostStack.id)
+    );
   }
 
   <template>
@@ -605,14 +673,24 @@ export default class OperatorModeContainer extends Component<Signature> {
       <CardCatalogModal />
 
       <div class='operator-mode__with-chat {{this.chatVisibilityClass}}'>
-        <SubmodeSwitcher
-          @submode={{this.operatorModeStateService.state.submode}}
-          @onSubmodeSelect={{this.updateSubmode}}
-          class='submode-switcher'
-        />
+        <div class='operator-mode__top-menu'>
+          <SubmodeSwitcher
+            @submode={{this.operatorModeStateService.state.submode}}
+            @onSubmodeSelect={{this.updateSubmode}}
+          />
+          {{#if this.isCodeMode}}
+            <CardURLBar
+              @url={{this.codePath}}
+              @onURLChange={{this.onCodePathChange}}
+              @card={{this.cardForCardMode}}
+              @isInvalid={{this.isCodePathInvalid}}
+              @errorMessage={{this.codePathErrorMessage}}
+            />
+          {{/if}}
+        </div>
 
         {{#if this.isCodeMode}}
-          <CodeMode @card={{this.cardForCodeMode}} />
+          <CodeMode @card={{this.cardForCardMode}} />
         {{else}}
           <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
             {{#if (eq this.allStackItems.length 0)}}
@@ -830,13 +908,16 @@ export default class OperatorModeContainer extends Component<Signature> {
         --icon-color: var(--boxel-highlight);
         background-color: var(--boxel-light);
       }
-
-      .submode-switcher {
+      .operator-mode__top-menu {
         position: absolute;
         top: 0;
         left: 0;
         z-index: 2;
         padding: var(--boxel-sp);
+        width: 100%;
+
+        display: flex;
+        gap: var(--boxel-sp);
       }
     </style>
   </template>

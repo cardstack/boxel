@@ -29,12 +29,14 @@ type SerializedStack = SerializedItem[];
 export type SerializedState = {
   stacks: SerializedStack[];
   submode?: Submode;
+  codePath?: string;
 };
 
 export default class OperatorModeStateService extends Service {
   @tracked state: OperatorModeState = new TrackedObject({
     stacks: new TrackedArray([]),
     submode: Submode.Interact,
+    codePath: null,
   });
   @tracked recentCards = new TrackedArray<CardDef>([]);
 
@@ -153,6 +155,11 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
+  updateCodePath(codePath: URL | null) {
+    this.state.codePath = codePath;
+    this.schedulePersist();
+  }
+
   clearStacks() {
     this.state.stacks.splice(0);
     this.schedulePersist();
@@ -183,7 +190,11 @@ export default class OperatorModeStateService extends Service {
   // clicking on "Crate New" in linked card editor. Here we want to draw a boundary
   // between navigatable states in the query parameter
   rawStateWithSavedCardsOnly() {
-    let state: SerializedState = { stacks: [], submode: this.state.submode };
+    let state: SerializedState = {
+      stacks: [],
+      submode: this.state.submode,
+      codePath: this.state.codePath?.toString(),
+    };
 
     for (let stack of this.state.stacks) {
       let serializedStack: SerializedStack = [];
@@ -215,6 +226,7 @@ export default class OperatorModeStateService extends Service {
     let newState: OperatorModeState = new TrackedObject({
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submode.Interact,
+      codePath: rawState.codePath ? new URL(rawState.codePath) : null,
     });
 
     let stackIndex = 0;
