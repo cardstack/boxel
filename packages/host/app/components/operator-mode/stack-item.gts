@@ -296,10 +296,14 @@ export default class OperatorModeStackItem extends Component<Signature> {
             boxel-header-icon-width='30px'
             boxel-header-icon-height='30px'
             boxel-header-text-size=(if
-              this.isHoverOnRealmIcon 'var(--boxel-font)' 'var(--boxel-font-lg)'
+              this.isHoverOnRealmIcon
+              'var(--boxel-font)'
+              'var(--boxel-font-med)'
             )
             boxel-header-text-color=(if
-              this.isHoverOnRealmIcon 'var(--boxel-teal)' 'var(--boxel-dark)'
+              this.isHoverOnRealmIcon
+              'var(--boxel-highlight)'
+              'var(--boxel-dark)'
             )
             boxel-header-padding='var(--boxel-sp-xs) var(--boxel-sp)'
             boxel-header-action-padding='var(--boxel-sp-xs) var(--boxel-sp)'
