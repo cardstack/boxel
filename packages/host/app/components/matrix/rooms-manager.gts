@@ -17,6 +17,7 @@ import {
 } from '@cardstack/boxel-ui';
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import { eventDebounceMs } from '@cardstack/host/lib/matrix-utils';
+import { aiBotUsername } from '@cardstack/runtime-common';
 import format from 'date-fns/format';
 import {
   getRoomCard,
@@ -365,7 +366,7 @@ export default class RoomsManager extends Component {
       new Date(),
       "yyyy-MM-dd'T'HH:mm:ss.SSSxxx",
     )} - ${this.matrixService.userId}`;
-    this.newRoomInvite = ['aibot'];
+    this.newRoomInvite = [aiBotUsername];
     this.doCreateRoom.perform();
   }
 

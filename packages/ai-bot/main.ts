@@ -11,7 +11,7 @@ import {
 } from 'matrix-js-sdk';
 import OpenAI from 'openai';
 import { ChatCompletionChunk } from 'openai/resources/chat';
-import { logger } from '@cardstack/runtime-common';
+import { logger, aiBotUsername } from '@cardstack/runtime-common';
 
 let log = logger('ai-bot');
 
@@ -159,6 +159,7 @@ async function sendOption(client: MatrixClient, room: Room, content: string) {
   return await client.sendEvent(room.roomId, 'm.room.message', messageObject);
 }
 
+
 async function sendStream(
   stream: AsyncIterable<ChatCompletionChunk>,
   client: MatrixClient,
@@ -169,17 +170,18 @@ async function sendStream(
   let unsent = 0;
   let currentParsingMode: ParsingMode = ParsingMode.Text;
   for await (const part of stream) {
-    log.info('Token: ', part.choices[0].delta?.content);
+    let token = part.choices[0].delta?.content;
+    log.info('Token: ', token);
+    // The final token is undefined, so we need to break out of the loop
+    if (token == undefined) {
+      break;
+    }
+    
     // If we've not got a current message to edit and we're processing text
     // rather than structured data, start a new message to update.
     if (!append_to && currentParsingMode == ParsingMode.Text) {
       let placeholder = await sendMessage(client, room, '...', undefined);
       append_to = placeholder.event_id;
-    }
-    let token = part.choices[0].delta?.content;
-    // The final token is undefined, so we need to break out of the loop
-    if (token == undefined) {
-      break;
     }
 
     // The parsing here has to deal with a streaming response that
@@ -252,6 +254,26 @@ function constructHistory(history: IRoomEvent[]) {
   return latest_events;
 }
 
+function constructHistorySimpler(history: IRoomEvent[]) {
+  const latestEventsMap = new Map<string, IRoomEvent>();
+  for (let event of history) {
+    let content = event.content;
+    if (event.type == 'm.room.message') {
+      let eventId = event.event_id!;
+      if (content['m.relates_to']?.rel_type === 'm.replace') {
+        eventId = content['m.relates_to']!.event_id!;
+      }
+      const existingEvent = latestEventsMap.get(eventId);
+      if (!existingEvent || existingEvent.origin_server_ts < event.origin_server_ts) {
+        latestEventsMap.set(eventId, event);
+      }
+    }
+  }
+  let latestEvents = Array.from(latestEventsMap.values());
+  latestEvents.sort((a, b) => a.origin_server_ts - b.origin_server_ts);
+  return latestEvents;
+}
+
 function getLastUploadedCardID(history: IRoomEvent[]): String | undefined {
   for (let event of history.slice().reverse()) {
     const content = event.content;
@@ -270,7 +292,7 @@ async function getResponse(history: IRoomEvent[]) {
     let body = event.content.body;
     log.info(event.sender, body);
     if (body) {
-      if (event.sender === 'aibot') {
+      if (event.sender === aiBotUsername) {
         historical_messages.push({
           role: 'assistant',
           content: body,
@@ -304,7 +326,7 @@ async function getResponse(history: IRoomEvent[]) {
     baseUrl: process.env.MATRIX_URL || 'http://localhost:8008',
   });
   let auth = await client.loginWithPassword(
-    'aibot',
+    aiBotUsername,
     process.env.BOXEL_AIBOT_PASSWORD || 'pass',
   );
   let { user_id } = auth;
