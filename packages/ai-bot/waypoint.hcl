@@ -1,13 +1,13 @@
 project = "cardstack"
 
-app "aibot" {
+app "boxel-ai-bot" {
   build {
     use "docker" {}
 
     registry {
       use "aws-ecr" {
         region     = "us-east-1"
-        repository = "boxel-aibot-staging"
+        repository = "boxel-ai-bot-staging"
         tag        = "latest"
       }
     }
@@ -20,9 +20,9 @@ app "aibot" {
       memory              = 512
       cluster             = "staging"
       subnets             = ["subnet-03791d3b2b429e0cf", "subnet-068197c72e4e1fad2"]
-      task_role_name      = "boxel-aibot-staging-ecs-task"
-      execution_role_name = "boxel-aibot-staging-ecs-task-execution"
-      security_group_ids  = ["sg-0670bec75245df4ec"]
+      task_role_name      = "boxel-ai-bot-staging-ecs-task"
+      execution_role_name = "boxel-ai-bot-staging-ecs-task-execution"
+      security_group_ids  = ["sg-026f518a4e82d8a44"]
       region              = "us-east-1"
 
       secrets = {
