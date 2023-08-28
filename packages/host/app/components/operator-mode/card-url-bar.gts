@@ -7,7 +7,6 @@ import { service } from '@ember/service';
 import { trackedFunction } from 'ember-resources/util/function';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type CardService from '../../services/card-service';
-import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
 interface Signature {
   Element: HTMLElement;
@@ -127,11 +126,6 @@ export default class CardURLBar extends Component<Signature> {
     return this.fetchRealmInfo.value?.name;
   }
 
-  get cardDisplayName() {
-    if (!this.args.card) return;
-    return cardTypeDisplayName(this.args.card);
-  }
-
   get showErrorMessage() {
     return this.isInvalidURL || this.args.notFoundError;
   }
@@ -150,11 +144,6 @@ export default class CardURLBar extends Component<Signature> {
       return 'card-url-bar';
     }
   }
-
-  fetchCard = trackedFunction(
-    this,
-    async () => await this.cardService.loadModel(this.args.url),
-  );
 
   fetchRealmInfo = trackedFunction(this, async () => {
     if (!this.args.card) return;

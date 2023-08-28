@@ -96,7 +96,6 @@ export default class OperatorModeContainer extends Component<Signature> {
   @tracked isChatVisible = false;
 
   @tracked cardForCardMode: CardDef | null = null;
-  @tracked isCardNotFound = false;
   @tracked cardNotFoundError: string | null = null;
 
   private deleteModal: DeleteModal | undefined;
