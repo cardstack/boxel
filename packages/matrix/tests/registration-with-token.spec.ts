@@ -6,18 +6,21 @@ import {
   logout,
   test,
 } from '../helpers';
-import {
-  registerUser,
-  createRegistrationToken,
-} from '../docker/synapse';
+import { registerUser, createRegistrationToken } from '../docker/synapse';
 
 const REGISTRATION_TOKEN = 'abc123';
 
 test.describe('User Registration w/ Token', () => {
-
-  test('it can register a user with a registration token', async ({ page, synapse }) => {
+  test('it can register a user with a registration token', async ({
+    page,
+    synapse,
+  }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await createRegistrationToken(synapse, admin.accessToken, REGISTRATION_TOKEN);
+    await createRegistrationToken(
+      synapse,
+      admin.accessToken,
+      REGISTRATION_TOKEN,
+    );
     await gotoRegistration(page);
     await expect(
       page.locator('[data-test-token-field]'),
@@ -47,10 +50,15 @@ test.describe('User Registration w/ Token', () => {
   });
 
   test('it shows an error when the username is already taken', async ({
-    page, synapse
+    page,
+    synapse,
   }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await createRegistrationToken(synapse, admin.accessToken, REGISTRATION_TOKEN);
+    await createRegistrationToken(
+      synapse,
+      admin.accessToken,
+      REGISTRATION_TOKEN,
+    );
     await registerUser(synapse, 'user1', 'pass');
 
     await gotoRegistration(page);
@@ -101,10 +109,15 @@ test.describe('User Registration w/ Token', () => {
   });
 
   test(`it show an error when a invalid registration token is used`, async ({
-    page, synapse
+    page,
+    synapse,
   }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
-    await createRegistrationToken(synapse, admin.accessToken, REGISTRATION_TOKEN);
+    await createRegistrationToken(
+      synapse,
+      admin.accessToken,
+      REGISTRATION_TOKEN,
+    );
     await gotoRegistration(page);
     await page.locator('[data-test-username-field]').fill('user1');
     await page.locator('[data-test-password-field]').fill('mypassword');

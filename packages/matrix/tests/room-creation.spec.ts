@@ -1,14 +1,12 @@
 import { expect } from '@playwright/test';
-import {
-  registerUser,
-} from '../docker/synapse';
+import { registerUser } from '../docker/synapse';
 import {
   login,
   logout,
   assertRooms,
   createRoom,
   reloadAndOpenChat,
-  test
+  test,
 } from '../helpers';
 
 test.describe('Room creation', () => {
