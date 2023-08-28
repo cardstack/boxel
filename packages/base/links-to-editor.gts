@@ -18,7 +18,7 @@ import {
   identifyCard,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
-import { AddButton, IconButton } from '@cardstack/boxel-ui';
+import { Button, IconButton } from '@cardstack/boxel-ui';
 
 interface Signature {
   Args: {
@@ -32,14 +32,14 @@ class LinksToEditor extends GlimmerComponent<Signature> {
   <template>
     <div class='links-to-editor'>
       {{#if this.isEmpty}}
-        <AddButton
-          @variant='full-width'
-          {{on 'click' this.add}}
-          data-test-add-new
-        >
-          Add
-          {{@field.card.displayName}}
-        </AddButton>
+        <Button @size='small' {{on 'click' this.choose}} data-test-choose-card>
+          Choose
+        </Button>
+        {{#if @context.actions.createCard}}
+          <Button @size='small' {{on 'click' this.create}} data-test-create-new>
+            Create New
+          </Button>
+        {{/if}}
       {{else}}
         <this.linkedCard />
         <div class='remove-button-container'>
@@ -79,8 +79,12 @@ class LinksToEditor extends GlimmerComponent<Signature> {
     </style>
   </template>
 
-  add = () => {
+  choose = () => {
     (this.chooseCard as unknown as Descriptor<any, any[]>).perform();
+  };
+
+  create = () => {
+    (this.createCard as unknown as Descriptor<any, any[]>).perform();
   };
 
   remove = () => {
@@ -110,15 +114,22 @@ class LinksToEditor extends GlimmerComponent<Signature> {
 
   private chooseCard = restartableTask(async () => {
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let chosenCard: CardDef | undefined = await chooseCard(
-      { filter: { type } },
-      {
-        createNewCard: this.args.context?.actions?.createCard,
-        offerToCreate: type,
-      },
-    );
+    let chosenCard: CardDef | undefined = this.args.context?.actions?.createCard
+      ? await chooseCard({ filter: { type } })
+      : await chooseCard({ filter: { type } }, { offerToCreate: type });
     if (chosenCard) {
       this.args.model.value = chosenCard;
+    }
+  });
+
+  private createCard = restartableTask(async () => {
+    let type = identifyCard(this.args.field.card) ?? baseCardRef;
+    let newCard: CardDef | undefined =
+      await this.args.context?.actions?.createCard(type, undefined, {
+        isLinkedCard: true,
+      });
+    if (newCard) {
+      this.args.model.value = newCard;
     }
   });
 }

@@ -860,9 +860,7 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
       .exists();
 
-    await click('[data-test-add-new]');
-    await waitFor('[data-test-card-catalog-create-new-button]');
-    await click('[data-test-card-catalog-create-new-button]');
+    await click('[data-test-create-new]');
 
     await waitFor(`[data-test-stack-card-index="2"]`);
     assert.dom('[data-test-stack-card-index]').exists({ count: 3 });
@@ -870,14 +868,9 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-stack-card-index="2"] [data-test-field="authorBio"]')
       .exists();
 
-    await waitFor(
-      '[data-test-stack-card-index="2"] [data-test-field="authorBio"] [data-test-add-new]',
-    );
     await click(
-      '[data-test-stack-card-index="2"] [data-test-field="authorBio"] [data-test-add-new]',
+      '[data-test-stack-card-index="2"] [data-test-field="authorBio"] [data-test-create-new]',
     );
-    await waitFor('[data-test-card-catalog-create-new-button]');
-    await click('[data-test-card-catalog-create-new-button]');
     await waitFor(`[data-test-stack-card-index="3"]`);
 
     assert
@@ -948,12 +941,14 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/1"]`);
     await click('[data-test-edit-button]');
     assert.dom('[data-test-field="authorBio"]').containsText('Alien Bob');
-    assert.dom('[data-test-add-new]').doesNotExist();
+    assert.dom('[data-test-choose-card]').doesNotExist();
+    assert.dom('[data-test-create-new]').doesNotExist();
 
     await click('[data-test-remove-card]');
-    assert.dom('[data-test-add-new]').exists();
+    assert.dom('[data-test-choose-card]').exists();
+    assert.dom('[data-test-create-new]').exists();
 
-    await click('[data-test-add-new]');
+    await click('[data-test-choose-card]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
     await click(`[data-test-select="${testRealmURL}Author/2"]`);
     assert
@@ -989,9 +984,10 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
     await click('[data-test-edit-button]');
-    assert.dom('[data-test-add-new]').exists();
+    assert.dom('[data-test-choose-card]').exists();
+    assert.dom('[data-test-create-new]').exists();
 
-    await click('[data-test-add-new]');
+    await click('[data-test-choose-card]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
     await click(`[data-test-select="${testRealmURL}Author/2"]`);
     await click('[data-test-card-catalog-go-button]');
@@ -1020,11 +1016,10 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
     await click('[data-test-edit-button]');
-    assert.dom('[data-test-add-new]').exists();
+    assert.dom('[data-test-choose-card]').exists();
+    assert.dom('[data-test-create-new]').exists();
 
-    await click('[data-test-add-new]');
-    await waitFor('[data-test-card-catalog-create-new-button]');
-    await click('[data-test-card-catalog-create-new-button]');
+    await click('[data-test-create-new]');
     await waitFor('[data-test-stack-card-index="1"]');
 
     assert
@@ -1040,10 +1035,9 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await click('[data-test-stack-card-index="1"] [data-test-close-button]');
-    await waitUntil(
-      () => !document.querySelector('[data-test-stack-card-index="1"]'),
-    );
-    assert.dom('[data-test-add-new]').doesNotExist();
+    await waitFor('[data-test-stack-card-index="1"]', { count: 0 });
+    assert.dom('[data-test-choose-card]').doesNotExist();
+    assert.dom('[data-test-create-new]').doesNotExist();
     assert.dom('[data-test-field="authorBio"]').containsText('Alice');
 
     await click('[data-test-stack-card-index="0"] [data-test-edit-button]');
@@ -1633,7 +1627,7 @@ module('Integration | operator-mode', function (hooks) {
       `[data-test-stack-card="${testRealmURL}BlogPost/2"] [data-test-edit-button]`,
     );
     await waitFor(`[data-test-field="authorBio"]`);
-    await click('[data-test-add-new]');
+    await click('[data-test-choose-card]');
 
     await waitFor('[data-test-card-catalog-item]');
     assert

@@ -363,7 +363,7 @@ module('Integration | card-editor', function (hooks) {
     assert.dom('[data-test-pet="Mango"]').containsText('Mango');
 
     await click('[data-test-remove-card]');
-    await click('[data-test-add-new]');
+    await click('[data-test-choose-card]');
     await waitFor(
       '[data-test-card-catalog-modal] [data-test-card-catalog-item]',
     );
@@ -400,10 +400,10 @@ module('Integration | card-editor', function (hooks) {
       },
     );
 
-    assert.dom('[data-test-add-new]').exists();
+    assert.dom('[data-test-choose-card]').exists();
     assert.dom('button[data-test-remove-card]').doesNotExist();
 
-    await click('[data-test-add-new]');
+    await click('[data-test-choose-card]');
     assert
       .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
       .containsText('Choose a Pet card');
@@ -435,13 +435,13 @@ module('Integration | card-editor', function (hooks) {
     );
 
     assert.dom('[data-test-pet="Mango"]').containsText('Mango');
-    assert.dom('[data-test-add-new]').doesNotExist();
+    assert.dom('[data-test-choose-card]').doesNotExist();
 
     await click('[data-test-remove-card]');
 
     assert.dom('[data-test-pet="Mango"]').doesNotExist();
     assert.dom('button[data-test-remove-card]').doesNotExist();
-    assert.dom('[data-test-add-new]').exists();
+    assert.dom('[data-test-choose-card]').exists();
   });
 
   test('can create a new card to populate a linksTo field', async function (assert) {
@@ -457,7 +457,7 @@ module('Integration | card-editor', function (hooks) {
       },
     );
 
-    await click('[data-test-add-new]');
+    await click('[data-test-choose-card]');
     await waitFor('[data-test-card-catalog-create-new-button]');
     await click('[data-test-card-catalog-create-new-button]');
     await waitFor('[data-test-create-new-card="Pet"]');
