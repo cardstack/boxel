@@ -126,6 +126,7 @@ export default class Menu extends Component<Signature> {
     <style>
       @layer {
         .boxel-menu {
+          --boxel-menu-border-radius: var(--boxel-border-radius);
           --boxel-menu-color: var(--boxel-light);
           --boxel-menu-current-color: var(--boxel-light-100);
           --boxel-menu-selected-color: var(--boxel-highlight);
@@ -137,10 +138,11 @@ export default class Menu extends Component<Signature> {
           list-style-type: none;
           margin: 0;
           padding: 0;
+          background-color: var(--boxel-menu-color);
+          border-radius: var(--boxel-menu-border-radius);
         }
 
         .boxel-menu__item {
-          background-color: var(--boxel-menu-color);
           font: var(--boxel-menu-font);
           letter-spacing: var(--boxel-lsp-sm);
         }
@@ -150,18 +152,18 @@ export default class Menu extends Component<Signature> {
           cursor: pointer;
         }
 
-        .boxel-menu__item:first-child {
-          border-radius: var(--boxel-border-radius) var(--boxel-border-radius) 0
-            0;
+        .boxel-menu__item:first-child:hover {
+          border-top-left-radius: inherit;
+          border-top-right-radius: inherit;
         }
 
-        .boxel-menu__item:last-child {
-          border-radius: 0 0 var(--boxel-border-radius)
-            var(--boxel-border-radius);
+        .boxel-menu__item:last-child:hover {
+          border-bottom-left-radius: inherit;
+          border-bottom-right-radius: inherit;
         }
 
-        .boxel-menu__item:only-child {
-          border-radius: var(--boxel-border-radius);
+        .boxel-menu__item:only-child:hover {
+          border-radius: inherit;
         }
 
         .boxel-menu__item > .boxel-menu__item__content {
@@ -221,6 +223,10 @@ export default class Menu extends Component<Signature> {
         }
         .check-icon--selected {
           visibility: visible;
+        }
+
+        [role='menuitem']:focus-visible {
+          outline: var(--boxel-outline);
         }
       }
     </style>

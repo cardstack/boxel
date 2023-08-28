@@ -1954,6 +1954,8 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
 
     await click('[data-test-submode-switcher] .trigger');
+    await percySnapshot(assert);
+
     await click('[data-test-boxel-menu-item-text="Code"]');
     assert.dom('[data-test-submode-switcher]').hasText('Code');
 

@@ -94,7 +94,7 @@ const SearchInput: TemplateOnlyComponent<Signature> = <template>
         var(--boxel-border-radius-xl) 0 0;
     }
     .search-input:focus-visible {
-      outline-style: solid;
+      outline: 2px solid var(--boxel-highlight);
     }
     .search-icon-container {
       --icon-color: var(--boxel-highlight);

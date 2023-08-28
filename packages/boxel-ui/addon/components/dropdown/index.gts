@@ -96,6 +96,7 @@ class BoxelDropdown extends Component<Signature> {
             allowOutsideClick=true
           )
         }}
+        role='menuitem'
       >
         {{yield (hash close=dd.actions.close) to='content'}}
       </dd.Content>
@@ -103,7 +104,8 @@ class BoxelDropdown extends Component<Signature> {
     <style>
       @layer {
         .boxel-dropdown__content {
-          border-radius: var(--boxel-border-radius);
+          --boxel-dropdown-content-border-radius: var(--boxel-border-radius);
+          border-radius: var(--boxel-dropdown-content-border-radius);
           box-shadow: 0 5px 15px 0 rgb(0 0 0 / 25%);
         }
 
