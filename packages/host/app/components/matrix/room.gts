@@ -39,7 +39,7 @@ interface RoomArgs {
 
 interface Patch {
   Args: {
-    command: string;
+    command: any;
   };
 }
 
@@ -55,13 +55,10 @@ class PatchMessage extends Component<Patch> {
   </template>
 
   private patchCard = task({ drop: true }, async () => {
-    let commandParsed = JSON.parse(this.args.command);
+    let commandParsed = this.args.command;
     let id = commandParsed.id;
     let attributes = commandParsed.patch.attributes;
-    await this.operatorModeStateService.patchCard.perform(
-      id,
-      attributes,
-    );
+    await this.operatorModeStateService.patchCard.perform(id, attributes);
   });
 }
 
@@ -125,9 +122,7 @@ export default class Room extends Component<RoomArgs> {
         </div>
         {{#each this.messageCardComponents as |Message|}}
           {{#if Message.command}}
-            <PatchMessage
-              @command={{Message.command}}
-            />
+            <PatchMessage @command={{Message.command}} />
           {{else}}
             <Message.component />
           {{/if}}

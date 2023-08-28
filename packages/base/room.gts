@@ -260,12 +260,24 @@ export class MessageCard extends FieldDef {
   @field attachedCardId = contains(StringField);
   @field index = contains(NumberField);
   @field transactionId = contains(StringField);
-  @field command = contains(StringField);
 
   static embedded = EmbeddedMessageCard;
   // The edit template is meant to be read-only, this field card is not mutable
   static edit = class Edit extends JSONView {};
 }
+
+class AnyField extends FieldDef {
+  static [primitive]: any;
+  static embedded = class Embedded extends JSONView {};
+  static isolated = class Isolated extends JSONView {};
+  // The edit template is meant to be read-only, this field card is not mutable
+  static edit = class Edit extends JSONView {};
+}
+
+export class CommandField extends MessageCard {
+  @field command = contains(AnyField);
+}
+
 
 interface RoomState {
   name?: string;
@@ -463,22 +475,23 @@ export class RoomCard extends CardDef {
           index,
           // These are not guaranteed to exist in the event
           transactionId: event.unsigned?.transaction_id || null,
-          attachedCard: null,
-          command: event.content.msgtype === 'org.boxel.command' ? JSON.stringify(event.content.command) : null,
+          attachedCard: null
         };
+        let messageCard = undefined;
         if (event.content.msgtype === 'org.boxel.card') {
           let cardDoc = event.content.instance;
           let attachedCardId = cardDoc.data.id;
           if (attachedCardId == null) {
             throw new Error(`cannot handle cards in room without an ID`);
           }
-          newMessages.set(
-            event_id,
-            new MessageCard({ ...cardArgs, attachedCardId }),
-          );
-        } else {
-          newMessages.set(event_id, new MessageCard(cardArgs));
+          messageCard = new MessageCard({ ...cardArgs, attachedCardId });
+        } else if (event.content.msgtype === 'org.boxel.command' ) {
+          messageCard = new CommandField({...cardArgs, command: event.content.command});
         }
+        else {
+          messageCard = new MessageCard(cardArgs);
+        }
+        newMessages.set(event_id, messageCard);
         index++;
       }
 
