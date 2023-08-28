@@ -1409,15 +1409,15 @@ export const field = function (
 } as unknown as PropertyDecorator;
 (field as any)[fieldDecorator] = undefined;
 
-export function containsMany<CardT extends FieldDefConstructor>(
-  card: CardT,
+export function containsMany<FieldT extends FieldDefConstructor>(
+  field: FieldT,
   options?: Options,
-): BaseInstanceType<CardT>[] {
+): BaseInstanceType<FieldT>[] {
   return {
     setupField(fieldName: string) {
       return makeDescriptor(
         new ContainsMany(
-          cardThunk(card),
+          cardThunk(field),
           options?.computeVia,
           fieldName,
           options?.isUsed,
@@ -1428,15 +1428,15 @@ export function containsMany<CardT extends FieldDefConstructor>(
 }
 containsMany[fieldType] = 'contains-many' as FieldType;
 
-export function contains<CardT extends FieldDefConstructor>(
-  card: CardT,
+export function contains<FieldT extends FieldDefConstructor>(
+  field: FieldT,
   options?: Options,
-): BaseInstanceType<CardT> {
+): BaseInstanceType<FieldT> {
   return {
     setupField(fieldName: string) {
       return makeDescriptor(
         new Contains(
-          cardThunk(card),
+          cardThunk(field),
           options?.computeVia,
           fieldName,
           options?.isUsed,
@@ -1599,7 +1599,7 @@ export class FieldDef extends BaseDef {
   static displayName = 'Field';
 }
 
-class IDCard extends FieldDef {
+class IDField extends FieldDef {
   static [primitive]: string;
   static [useIndexBasedKey]: never;
   static embedded = class Embedded extends Component<typeof this> {
@@ -1619,7 +1619,7 @@ class IDCard extends FieldDef {
   };
 }
 
-export class StringCard extends FieldDef {
+export class StringField extends FieldDef {
   static [primitive]: string;
   static [useIndexBasedKey]: never;
   static embedded = class Embedded extends Component<typeof this> {
@@ -1639,10 +1639,10 @@ export class CardDef extends BaseDef {
   [relativeTo]: URL | undefined = undefined; // perhaps can be refactored away all together
   [realmInfo]: RealmInfo | undefined = undefined;
   [realmURL]: URL | undefined = undefined;
-  @field id = contains(IDCard);
-  @field title = contains(StringCard);
-  @field description = contains(StringCard);
-  @field thumbnailURL = contains(StringCard); // TODO: this will probably be an image or image url field card when we have it
+  @field id = contains(IDField);
+  @field title = contains(StringField);
+  @field description = contains(StringField);
+  @field thumbnailURL = contains(StringField); // TODO: this will probably be an image or image url field card when we have it
   static displayName = 'Card';
 
   static assignInitialFieldValue(
@@ -2259,7 +2259,7 @@ function makeDescriptor<
   } else {
     descriptor.set = function (this: BaseInstanceType<CardT>, value: any) {
       if (
-        (field.card as typeof BaseDef) === IDCard &&
+        (field.card as typeof BaseDef) === IDField &&
         this instanceof CardDef &&
         this[isSavedInstance]
       ) {

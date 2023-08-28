@@ -1,2 +1,2 @@
-import { StringCard } from './card-api';
-export default StringCard;
+import { StringField } from './card-api';
+export default StringField;

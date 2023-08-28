@@ -6,6 +6,7 @@ import {
   type LooseCardResource,
   isSingleCardDocument,
   isCardCollectionDocument,
+  RealmPaths,
   type CardDocument,
   type SingleCardDocument,
   type LooseSingleCardDocument,
@@ -24,7 +25,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
 
 export type CardSaveSubscriber = (json: SingleCardDocument) => void;
-const { ownRealmURL } = ENV;
+const { ownRealmURL, otherRealmURLs } = ENV;
 
 export default class CardService extends Service {
   @service declare loaderService: LoaderService;
@@ -156,10 +157,8 @@ export default class CardService extends Service {
     });
     // send doc over the wire with absolute URL's. The realm server will convert
     // to relative URL's as it serializes the cards
-    let json = await this.saveCardDocument(
-      doc,
-      card.id ? new URL(card.id) : undefined,
-    );
+    let realmUrl = await this.getRealmURL(card);
+    let json = await this.saveCardDocument(doc, realmUrl);
 
     // in order to preserve object equality with the unsaved card instance we
     // should always use updateFromSerialized()--this way a newly created
@@ -172,16 +171,18 @@ export default class CardService extends Service {
     return result;
   }
 
-  async saveCardDocument(
+  private async saveCardDocument(
     doc: LooseSingleCardDocument,
-    url?: URL,
+    realmUrl?: URL,
   ): Promise<SingleCardDocument> {
     let isSaved = !!doc.data.id;
-    url = url ?? this.defaultURL;
-    let json = await this.fetchJSON(url, {
-      method: isSaved ? 'PATCH' : 'POST',
-      body: JSON.stringify(doc, null, 2),
-    });
+    let json = await this.fetchJSON(
+      doc.data.id ?? realmUrl ?? this.defaultURL,
+      {
+        method: isSaved ? 'PATCH' : 'POST',
+        body: JSON.stringify(doc, null, 2),
+      },
+    );
     if (!isSingleCardDocument(json)) {
       throw new Error(
         `bug: arg is not a card document:
@@ -318,5 +319,16 @@ export default class CardService extends Service {
     subscriber: (fieldName: string, value: any) => void,
   ) {
     this.api.subscribeToChanges(card, subscriber);
+  }
+
+  getRealmURLFor(url: URL) {
+    let realmURLS = new Set([ownRealmURL, ...otherRealmURLs]);
+    for (let realmURL of realmURLS) {
+      let path = new RealmPaths(realmURL);
+      if (path.inRealm(url)) {
+        return new URL(realmURL);
+      }
+    }
+    return undefined;
   }
 }
