@@ -46,8 +46,8 @@ export default class Go extends Component<Signature> {
   <template>
     <div class='main'>
       <div class='main-column'>
-        <RecentFiles />
         <FileTree @url={{ownRealmURL}} @openFiles={{@openFiles}} />
+        <RecentFiles />
       </div>
       {{#if (isReady this.openFile.current)}}
         <div class='editor-column'>
