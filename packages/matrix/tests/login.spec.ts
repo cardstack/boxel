@@ -1,34 +1,27 @@
-import { test, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
 import {
-  synapseStart,
-  synapseStop,
   registerUser,
-  type SynapseInstance,
 } from '../docker/synapse';
 import {
   assertLoggedIn,
   assertLoggedOut,
   login,
   logout,
-  rootPath,
+  openRoot,
   openChat,
   reloadAndOpenChat,
   toggleOperatorMode,
+  test
 } from '../helpers';
 
 test.describe('Login', () => {
-  let synapse: SynapseInstance;
-  test.beforeEach(async () => {
-    synapse = await synapseStart();
+
+  test.beforeEach(async ({ synapse }) => {
     await registerUser(synapse, 'user1', 'pass');
   });
 
-  test.afterEach(async () => {
-    await synapseStop(synapse.synapseId);
-  });
-
   test('it can login', async ({ page }) => {
-    await page.goto(rootPath);
+    await openRoot(page);
     await toggleOperatorMode(page);
     await openChat(page);
 
@@ -70,7 +63,7 @@ test.describe('Login', () => {
   test('it shows an error when invalid credentials are provided', async ({
     page,
   }) => {
-    await page.goto(rootPath);
+    await openRoot(page);
     await toggleOperatorMode(page);
     await openChat(page);
     await page.locator('[data-test-username-field]').fill('user1');

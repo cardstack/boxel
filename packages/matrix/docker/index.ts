@@ -62,6 +62,34 @@ export function dockerExec(args: {
 }
 
 /**
+ * Get the host port a container port is mapped to
+ */
+export function getHostPort(
+  containerId: string,
+  internalPort: number,
+): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
+    childProcess.execFile(
+      'docker',
+      [
+        'inspect',
+        `--format='{{(index (index .NetworkSettings.Ports "${internalPort}/tcp") 0).HostPort}}'`,
+        containerId,
+      ],
+      { encoding: 'utf8' },
+      (err, stdout, _stderr) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        // It's returned in the fomat 'port' (e.g. '8008')
+        resolve(parseInt(stdout.trim().replace(/'/g, '')));
+      },
+    );
+  });
+}
+
+/**
  * Create a docker network; does not fail if network already exists
  */
 export function dockerCreateNetwork(args: {
