@@ -228,7 +228,7 @@ export default class SearchSheet extends Component<Signature> {
   <template>
     <div class='search-sheet {{this.sheetSize}}' data-test-search-sheet>
       <SearchInput
-        @variant={{if (eq this.args.mode 'closed') 'default' 'large'}}
+        @variant={{if (eq @mode 'closed') 'default' 'large'}}
         @bottomTreatment={{this.inputBottomTreatment}}
         @value={{this.searchKey}}
         @placeholder={{this.placeholderText}}
