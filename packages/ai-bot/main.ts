@@ -226,35 +226,6 @@ async function sendStream(
 }
 
 function constructHistory(history: IRoomEvent[]) {
-  const events = new Map<string, IRoomEvent[]>();
-  for (let event of history) {
-    let content = event.content;
-    if (event.type == 'm.room.message') {
-      let event_id = event.event_id!;
-      if (content['m.relates_to']?.rel_type === 'm.replace') {
-        event_id = content['m.relates_to']!.event_id!;
-      }
-      if (!events.get(event_id)) {
-        events.set(event_id, [event]);
-      } else {
-        events.get(event_id)!.push(event);
-      }
-    }
-  }
-  let latest_events: IRoomEvent[] = [];
-  events.forEach((event_list, _event_id) => {
-    event_list = event_list.sort((a, b) => {
-      return a.origin_server_ts - b.origin_server_ts;
-    });
-    latest_events.push(event_list[event_list.length - 1]);
-  });
-  latest_events = latest_events.sort((a, b) => {
-    return a.origin_server_ts - b.origin_server_ts;
-  });
-  return latest_events;
-}
-
-function constructHistorySimpler(history: IRoomEvent[]) {
   const latestEventsMap = new Map<string, IRoomEvent>();
   for (let event of history) {
     let content = event.content;
@@ -334,7 +305,10 @@ async function getResponse(history: IRoomEvent[]) {
     if (member.membership === 'invite' && member.userId === user_id) {
       client.joinRoom(member.roomId).then(function () {
         log.info('Auto-joined %s', member.roomId);
-      });
+      }).catch(function (err) {
+        console.log("Error joining this room, typically happens when a user invites then leaves before this is joined", err)
+      }
+      );
     }
   });
 
