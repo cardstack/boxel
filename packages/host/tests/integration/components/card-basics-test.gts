@@ -170,8 +170,8 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('render primitive field', async function (assert) {
-    let { field, contains, CardDef, Component } = cardApi;
-    class EmphasizedString extends CardDef {
+    let { field, contains, CardDef, FieldDef, Component } = cardApi;
+    class EmphasizedString extends FieldDef {
       static [primitive]: string;
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -180,7 +180,7 @@ module('Integration | card-basics', function (hooks) {
       };
     }
 
-    class StrongNumber extends CardDef {
+    class StrongNumber extends FieldDef {
       static [primitive]: number;
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -823,8 +823,8 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('render nested composite field', async function (assert) {
-    let { field, contains, CardDef, Component } = cardApi;
-    class TestString extends CardDef {
+    let { field, contains, CardDef, FieldDef, Component } = cardApi;
+    class TestString extends FieldDef {
       static [primitive]: string;
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -833,7 +833,7 @@ module('Integration | card-basics', function (hooks) {
       };
     }
 
-    class TestNumber extends CardDef {
+    class TestNumber extends FieldDef {
       static [primitive]: number;
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -842,7 +842,7 @@ module('Integration | card-basics', function (hooks) {
       };
     }
 
-    class Person extends CardDef {
+    class Person extends FieldDef {
       @field firstName = contains(TestString);
       @field number = contains(TestNumber);
     }
@@ -1759,9 +1759,9 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('can get a queryable value for a field', async function (assert) {
-    let { CardDef, getQueryableValue } = cardApi;
+    let { FieldDef, getQueryableValue } = cardApi;
 
-    class TestField extends CardDef {
+    class TestField extends FieldDef {
       static [primitive]: TestShape;
       static [queryableValue](value: TestShape) {
         return value.firstName;
@@ -1821,22 +1821,22 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('queryable value for a field defaults to current field value when not specified', async function (assert) {
-    let { CardDef, getQueryableValue } = cardApi;
-    class StringCard extends CardDef {
+    let { FieldDef, getQueryableValue } = cardApi;
+    class StringField extends FieldDef {
       static [primitive]: string;
     }
 
     assert.strictEqual(
-      getQueryableValue(StringCard, 'Van Gogh'),
+      getQueryableValue(StringField, 'Van Gogh'),
       'Van Gogh',
       'The queryable value from user supplied data is correct',
     );
   });
 
   test('throws when card returns non-scalar queryable value from "queryableValue" function', async function (assert) {
-    let { CardDef, getQueryableValue } = cardApi;
+    let { FieldDef, getQueryableValue } = cardApi;
 
-    class TestField1 extends CardDef {
+    class TestField1 extends FieldDef {
       static [primitive]: TestShape;
       static [queryableValue](_value: TestShape) {
         return { notAScalar: true };
@@ -1851,7 +1851,7 @@ module('Integration | card-basics', function (hooks) {
       /expected queryableValue for field type TestField1 to be scalar/,
     );
 
-    class TestField2 extends CardDef {
+    class TestField2 extends FieldDef {
       static [primitive]: TestShape;
       static [queryableValue](_value: TestShape) {
         return [{ notAScalar: true }];
@@ -1868,9 +1868,9 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('throws when card returns non-scalar queryable value when there is no "queryableValue" function', async function (assert) {
-    let { CardDef, getQueryableValue } = cardApi;
+    let { FieldDef, getQueryableValue } = cardApi;
 
-    class TestField extends CardDef {
+    class TestField extends FieldDef {
       static [primitive]: TestShape;
     }
     assert.throws(
@@ -1886,8 +1886,8 @@ module('Integration | card-basics', function (hooks) {
 
 async function testString(label: string) {
   cardApi = await loader.import(`${baseRealm.url}card-api`);
-  let { CardDef, Component } = cardApi;
-  return class TestString extends CardDef {
+  let { FieldDef, Component } = cardApi;
+  return class TestString extends FieldDef {
     static [primitive]: string;
     static embedded = class Embedded extends Component<typeof this> {
       <template>

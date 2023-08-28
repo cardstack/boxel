@@ -61,13 +61,10 @@ export interface OperatorModeState {
 
 export type Stack = StackItem[];
 
-interface BaseItem {
+export interface StackItem {
   format: Format;
   request?: Deferred<CardDef | undefined>;
   stackIndex: number;
-}
-
-export interface StackItem extends BaseItem {
   card: CardDef;
   isLinkedCard?: boolean; // TODO: consider renaming this so its clearer that we use this for being able to tell whether the card needs to be closed after saving
 }
