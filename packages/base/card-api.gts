@@ -1490,6 +1490,11 @@ export class BaseDef {
   // this is here because CardBase has no public instance methods, so without it
   // typescript considers everything a valid card.
   [isBaseInstance] = true;
+  // [relativeTo] actually becomes really important for Card/Field separation. FieldDefs
+  // may contain interior fields that have relative links. FieldDef's though have no ID.
+  // So we need a [relativeTo] property that derives from the root document ID in order to
+  // resolve relative links at the FieldDef level.
+  [relativeTo]: URL | undefined = undefined;
   declare ['constructor']: BaseDefConstructor;
   static baseDef: undefined;
   static data?: Record<string, any>; // TODO probably refactor this away all together
@@ -1639,7 +1644,6 @@ export class StringField extends FieldDef {
 
 export class CardDef extends BaseDef {
   [isSavedInstance] = false;
-  [relativeTo]: URL | undefined = undefined; // perhaps can be refactored away all together
   [realmInfo]: RealmInfo | undefined = undefined;
   [realmURL]: URL | undefined = undefined;
   @field id = contains(IDField);
@@ -2026,10 +2030,10 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
     identityContext = new IdentityContext();
     identityContexts.set(instance, identityContext);
   }
+  if (!instance[relativeTo] && doc.data.id) {
+    instance[relativeTo] = new URL(doc.data.id);
+  }
   if (instance instanceof CardDef) {
-    if (!instance[relativeTo] && doc.data.id) {
-      instance[relativeTo] = new URL(doc.data.id);
-    }
     if (!instance[realmInfo] && doc.data.meta.realmInfo) {
       instance[realmInfo] = doc.data.meta.realmInfo;
     }
@@ -2075,8 +2079,8 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   }
   if (!instance) {
     instance = new card({ id: resource.id }) as BaseInstanceType<T>;
+    instance[relativeTo] = _relativeTo;
     if (instance instanceof CardDef) {
-      instance[relativeTo] = _relativeTo;
       instance[realmInfo] = data?.meta?.realmInfo;
       instance[realmURL] = data?.meta?.realmURL
         ? new URL(data.meta.realmURL)
@@ -2134,10 +2138,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
           `could not find field '${fieldName}' in card '${card.name}'`,
         );
       }
-      let relativeToVal: URL | undefined;
-      if (instance instanceof CardDef) {
-        relativeToVal = instance[relativeTo];
-      }
+      let relativeToVal = instance[relativeTo];
       return [
         fieldName,
         await getDeserializedValue({
