@@ -159,7 +159,6 @@ async function sendOption(client: MatrixClient, room: Room, content: string) {
   return await client.sendEvent(room.roomId, 'm.room.message', messageObject);
 }
 
-
 async function sendStream(
   stream: AsyncIterable<ChatCompletionChunk>,
   client: MatrixClient,
@@ -176,7 +175,7 @@ async function sendStream(
     if (token == undefined) {
       break;
     }
-    
+
     // If we've not got a current message to edit and we're processing text
     // rather than structured data, start a new message to update.
     if (!append_to && currentParsingMode == ParsingMode.Text) {
@@ -235,7 +234,10 @@ function constructHistory(history: IRoomEvent[]) {
         eventId = content['m.relates_to']!.event_id!;
       }
       const existingEvent = latestEventsMap.get(eventId);
-      if (!existingEvent || existingEvent.origin_server_ts < event.origin_server_ts) {
+      if (
+        !existingEvent ||
+        existingEvent.origin_server_ts < event.origin_server_ts
+      ) {
         latestEventsMap.set(eventId, event);
       }
     }
@@ -303,12 +305,17 @@ async function getResponse(history: IRoomEvent[]) {
   let { user_id } = auth;
   client.on(RoomMemberEvent.Membership, function (_event, member) {
     if (member.membership === 'invite' && member.userId === user_id) {
-      client.joinRoom(member.roomId).then(function () {
-        log.info('Auto-joined %s', member.roomId);
-      }).catch(function (err) {
-        console.log("Error joining this room, typically happens when a user invites then leaves before this is joined", err)
-      }
-      );
+      client
+        .joinRoom(member.roomId)
+        .then(function () {
+          log.info('Auto-joined %s', member.roomId);
+        })
+        .catch(function (err) {
+          console.log(
+            'Error joining this room, typically happens when a user invites then leaves before this is joined',
+            err,
+          );
+        });
     }
   });
 
