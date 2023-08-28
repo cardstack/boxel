@@ -21,6 +21,9 @@ export default class CodeService extends Service {
   }
 
   persistRecentFiles() {
-    window.localStorage.setItem('recent-files', JSON.stringify(this.recentFiles));
+    window.localStorage.setItem(
+      'recent-files',
+      JSON.stringify(this.recentFiles),
+    );
   }
 }
