@@ -64,7 +64,6 @@ export default class Menu extends Component<Signature> {
   }
 
   <template>
-    {{! template-lint-disable no-invalid-role }}
     <ul role='menu' class={{cn 'boxel-menu' @class}} ...attributes>
       {{#if @items}}
         {{#each (compact @items) as |menuItem|}}
@@ -89,7 +88,7 @@ export default class Menu extends Component<Signature> {
                 data-test-boxel-menu-item
                 data-test-boxel-menu-item-selected={{menuItem.selected}}
               >
-                {{! template-lint-disable require-context-role }}
+                {{!-- template-lint-disable require-context-role --}}
                 <div
                   class='boxel-menu__item__content'
                   role='menuitem'

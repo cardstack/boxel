@@ -79,7 +79,7 @@ class BoxelDropdown extends Component<Signature> {
         )
         as |ddModifier|
       }}
-        {{! @glint-ignore }}
+        {{!-- @glint-ignore --}}
         {{yield ddModifier to='trigger'}}
       {{/let}}
 
@@ -96,7 +96,6 @@ class BoxelDropdown extends Component<Signature> {
             allowOutsideClick=true
           )
         }}
-        role='menuitem'
       >
         {{yield (hash close=dd.actions.close) to='content'}}
       </dd.Content>
