@@ -17,7 +17,7 @@ import {
 } from '@cardstack/boxel-ui';
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import { eventDebounceMs } from '@cardstack/host/lib/matrix-utils';
-import moment from 'moment';
+import format from 'date-fns/format';
 import {
   getRoomCard,
   RoomCardResource,
@@ -361,7 +361,10 @@ export default class RoomsManager extends Component {
 
   @action
   private createAIChat() {
-    this.newRoomName = `${moment().format()} - ${this.matrixService.userId}`;
+    this.newRoomName = `${format(
+      new Date(),
+      "yyyy-MM-dd'T'HH:mm:ss.SSSxxx",
+    )} - ${this.matrixService.userId}`;
     this.newRoomInvite = ['aibot'];
     this.doCreateRoom.perform();
   }
