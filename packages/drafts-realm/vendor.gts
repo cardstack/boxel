@@ -3,6 +3,7 @@ import {
   field,
   CardDef,
   FieldDef,
+  relativeTo,
   Component,
   containsMany,
 } from 'https://cardstack.com/base/card-api';
@@ -27,7 +28,7 @@ class VendorDetails extends FieldDef {
       if (!this.logoURL) {
         return null;
       }
-      return new URL(this.logoURL).href;
+      return new URL(this.logoURL, this[relativeTo]).href;
     },
   });
   @field title = contains(StringCard, {
