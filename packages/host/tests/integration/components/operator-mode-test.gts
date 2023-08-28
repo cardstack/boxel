@@ -1959,7 +1959,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
   });
 
-  test(`card url bar shows realm info and card type display name of valid URL`, async function (assert) {
+  test(`card url bar shows realm info of valid URL`, async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1980,10 +1980,6 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom('[data-test-card-url-bar-realm-info]')
       .hasText('in Operator Mode Workspace');
-    assert.dom('[data-test-card-url-bar-input]').hasValue('Blog Post');
-
-    await focus('[data-test-card-url-bar-input]');
-    assert.dom('[data-test-card-bar]').doesNotExist();
     assert
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}BlogPost/1`);
@@ -1998,7 +1994,10 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom('[data-test-card-url-bar-realm-info]')
       .hasText('in Operator Mode Workspace');
-    assert.dom('[data-test-card-url-bar-input]').hasValue('Pet');
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}Pet/mango`);
+    assert.dom('[data-test-card-url-bar-error]').doesNotExist();
   });
 
   test(`card url bar shows error message when URL is invalid`, async function (assert) {
@@ -2022,7 +2021,9 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom('[data-test-card-url-bar-realm-info]')
       .hasText('in Operator Mode Workspace');
-    assert.dom('[data-test-card-url-bar-input]').hasValue('Blog Post');
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}BlogPost/1`);
 
     await fillIn(
       '[data-test-card-url-bar-input]',
@@ -2041,9 +2042,7 @@ module('Integration | operator-mode', function (hooks) {
       'keypress',
       'Enter',
     );
-    assert
-      .dom('[data-test-card-url-bar-error]')
-      .hasText('Not a valid Card URL');
+    assert.dom('[data-test-card-url-bar-error]').hasText('Not a valid URL');
 
     await fillIn(
       '[data-test-card-url-bar-input]',

@@ -8,16 +8,15 @@ import { trackedFunction } from 'ember-resources/util/function';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type CardService from '../../services/card-service';
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
-import { or, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 interface Signature {
   Element: HTMLElement;
   Args: {
     url: URL;
-    onURLChange: (url: URL) => void;
+    onEnterPressed: (url: URL) => void;
     card: CardDef | null;
-    isInvalid: boolean;
-    errorMessage: string | null;
+    notFoundError: string | null;
+    resetNotFoundError: () => void;
   };
 }
 
@@ -25,26 +24,20 @@ export default class CardURLBar extends Component<Signature> {
   <template>
     <div
       id='card-url-bar'
-      class={{this.cssStyle}}
+      class={{this.cssClasses}}
       data-test-card-url-bar
       ...attributes
     >
-      {{#if (not this.isFocused)}}
-        <div class='realm-info' data-test-card-url-bar-realm-info>
-          <img src={{this.realmIcon}} />
-          <span>in
-            {{if this.realmName this.realmName 'Unknown Workspace'}}</span>
-        </div>
-      {{/if}}
+      <div class='realm-info' data-test-card-url-bar-realm-info>
+        <img src={{this.realmIcon}} />
+        <span>in
+          {{if this.realmName this.realmName 'Unknown Workspace'}}</span>
+      </div>
       <div class='input'>
         {{svgJar 'icon-globe' width='22px' height='22px'}}
         <BoxelInput
           class='url-input'
-          @value={{if
-            (or this.isFocused (not this.cardDisplayName))
-            this.url
-            this.cardDisplayName
-          }}
+          @value={{this.url}}
           @onInput={{this.onInput}}
           @onKeyPress={{this.onKeyPress}}
           @onFocus={{this.toggleFocus}}
@@ -54,7 +47,7 @@ export default class CardURLBar extends Component<Signature> {
       </div>
       {{#if this.showErrorMessage}}
         <div class='error-message' data-test-card-url-bar-error>
-          <span>{{if this.isInvalid this.errorMessage @errorMessage}}</span>
+          <span>{{this.errorMessage}}</span>
         </div>
       {{/if}}
     </div>
@@ -73,7 +66,7 @@ export default class CardURLBar extends Component<Signature> {
       .focused {
         outline: 2px solid var(--boxel-teal);
       }
-      .invalid {
+      .error {
         outline: 2px solid red;
       }
       .realm-info {
@@ -100,6 +93,9 @@ export default class CardURLBar extends Component<Signature> {
 
         --icon-color: var(--boxel-cyan);
       }
+      .error .input {
+        --icon-color: red;
+      }
       .url-input {
         background: none;
         border: none;
@@ -119,10 +115,9 @@ export default class CardURLBar extends Component<Signature> {
   </template>
 
   @service declare cardService: CardService;
-  @tracked isFocused: boolean = false;
   @tracked url: string = this.args.url.toString();
-  @tracked isInvalid: boolean = false;
-  @tracked errorMessage: string | null = null;
+  @tracked isFocused = false;
+  @tracked isInvalidURL = false;
 
   get realmIcon() {
     return this.fetchRealmInfo.value?.iconURL;
@@ -138,15 +133,17 @@ export default class CardURLBar extends Component<Signature> {
   }
 
   get showErrorMessage() {
-    return (
-      (this.args.isInvalid && this.args.errorMessage) ||
-      (this.isInvalid && this.errorMessage)
-    );
+    return this.isInvalidURL || this.args.notFoundError;
   }
 
-  get cssStyle() {
-    if (this.args.isInvalid) {
-      return 'card-url-bar invalid';
+  get errorMessage() {
+    if (this.isInvalidURL) return 'Not a valid URL';
+    else return this.args.notFoundError;
+  }
+
+  get cssClasses() {
+    if (this.showErrorMessage) {
+      return 'card-url-bar error';
     } else if (this.isFocused) {
       return 'card-url-bar focused';
     } else {
@@ -167,20 +164,22 @@ export default class CardURLBar extends Component<Signature> {
   @action
   onInput(url: string) {
     this.url = url;
+    this.isInvalidURL = false;
+    this.args.resetNotFoundError();
   }
 
   @action
   onKeyPress(event: KeyboardEvent) {
+    if (event.key !== 'Enter') return;
+
+    let url;
     try {
-      if (event.key === 'Enter' || event.keyCode === 13) {
-        this.args.onURLChange(new URL(this.url));
-        this.isInvalid = false;
-        this.errorMessage = null;
-      }
+      url = new URL(this.url);
     } catch (e) {
-      this.isInvalid = true;
-      this.errorMessage = 'Not a valid Card URL';
+      this.isInvalidURL = true;
     }
+
+    if (url) this.args.onEnterPressed(url);
   }
 
   @action

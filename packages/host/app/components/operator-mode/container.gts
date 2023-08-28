@@ -20,7 +20,6 @@ import {
   type Actions,
   type CodeRef,
   LooseSingleCardDocument,
-  baseRealm,
 } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type LoaderService from '../../services/loader-service';
@@ -48,8 +47,6 @@ import { isTesting } from '@embroider/macros';
 import SubmodeSwitcher, { Submode } from '../submode-switcher';
 import CodeMode from '@cardstack/host/components/operator-mode/code-mode';
 import CardURLBar from '@cardstack/host/components/operator-mode/card-url-bar';
-import { scheduleOnce } from '@ember/runloop';
-import ENV from '@cardstack/host/config/environment';
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
@@ -88,8 +85,6 @@ const stackItemStableScrolls = new WeakMap<
   (changeSizeCallback: () => Promise<void>) => void
 >();
 
-const { otherRealmURLs } = ENV;
-
 export default class OperatorModeContainer extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
@@ -101,8 +96,8 @@ export default class OperatorModeContainer extends Component<Signature> {
   @tracked isChatVisible = false;
 
   @tracked cardForCardMode: CardDef | null = null;
-  @tracked isCodePathInvalid: boolean = false;
-  @tracked codePathErrorMessage: string | null = null;
+  @tracked isCardNotFound = false;
+  @tracked cardNotFoundError: string | null = null;
 
   private deleteModal: DeleteModal | undefined;
 
@@ -110,14 +105,14 @@ export default class OperatorModeContainer extends Component<Signature> {
     super(owner, args);
 
     this.messageService.register();
-    scheduleOnce('afterRender', this, () =>
-      this.loadCardForCodeMode.perform(this.codePath),
-    );
     (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
     registerDestructor(this, () => {
       delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
       this.operatorModeStateService.clearStacks();
     });
+    if (this.operatorModeStateService.state.submode === Submode.Code) {
+      this.loadCardForCodeMode(this.codePath);
+    }
   }
 
   get stacks() {
@@ -603,10 +598,12 @@ export default class OperatorModeContainer extends Component<Signature> {
   @action updateSubmode(submode: Submode) {
     switch (submode) {
       case Submode.Interact:
-        this.onCodePathChange(null);
+        this.operatorModeStateService.updateCodePath(null);
         break;
       case Submode.Code:
-        this.onCodePathChange(new URL(this.lastCardInRightMostStack.id));
+        let codePath = new URL(this.lastCardInRightMostStack.id);
+        this.operatorModeStateService.updateCodePath(codePath);
+        this.loadCardForCodeMode(codePath);
         break;
       default:
         throw assertNever(submode);
@@ -615,35 +612,23 @@ export default class OperatorModeContainer extends Component<Signature> {
     this.operatorModeStateService.updateSubmode(submode);
   }
 
-  @action onCodePathChange(codePath: URL | null) {
-    this.operatorModeStateService.updateCodePath(codePath);
-    this.loadCardForCodeMode.perform(codePath);
+  @action resetCardNotFoundError() {
+    this.cardNotFoundError = null;
   }
 
-  loadCardForCodeMode = restartableTask(async (codePath: URL | null) => {
-    try {
-      if (!codePath) return;
+  @action loadCardForCodeMode(codePath: URL) {
+    this.loadCardForCodeModeTask.perform(codePath);
+  }
 
-      const realmsToCheck = [
-        this.cardService.defaultURL.href,
-        baseRealm.url,
-        ...otherRealmURLs,
-      ];
-      const isInAnyRealms = await Promise.all(
-        realmsToCheck.map(async (realmURL) => {
-          const realmPath = new RealmPaths(realmURL);
-          return realmPath.inRealm(codePath);
-        }),
-      );
-      if (!isInAnyRealms.includes(true))
-        throw new Error('URL is not in any realms');
+  loadCardForCodeModeTask = restartableTask(async (codePath: URL) => {
+    try {
+      let realmURL = this.cardService.getRealmURLFor(codePath);
+      if (!realmURL) throw new Error('URL is not in any realms');
 
       this.cardForCardMode = await this.cardService.loadModel(codePath);
-      this.isCodePathInvalid = false;
-      this.codePathErrorMessage = null;
+      this.operatorModeStateService.updateCodePath(codePath);
     } catch (e: any) {
-      this.isCodePathInvalid = true;
-      this.codePathErrorMessage =
+      this.cardNotFoundError =
         e.message === 'URL is not in any realms'
           ? e.message
           : 'File is not found';
@@ -677,10 +662,10 @@ export default class OperatorModeContainer extends Component<Signature> {
           {{#if this.isCodeMode}}
             <CardURLBar
               @url={{this.codePath}}
-              @onURLChange={{this.onCodePathChange}}
+              @onEnterPressed={{this.loadCardForCodeMode}}
               @card={{this.cardForCardMode}}
-              @isInvalid={{this.isCodePathInvalid}}
-              @errorMessage={{this.codePathErrorMessage}}
+              @notFoundError={{this.cardNotFoundError}}
+              @resetNotFoundError={{this.resetCardNotFoundError}}
             />
           {{/if}}
         </div>
