@@ -508,11 +508,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   get lastCardInRightMostStack(): CardDef {
-    return (
-      this.allStackItems
-        // @ts-ignore Property 'card' does not exist on type 'StackItem'. - it actually does exist because we filtered for it in the line above
-        .reverse()[0].card
-    );
+    return this.allStackItems[this.allStackItems.length - 1].card;
   }
 
   get isCodeMode() {
