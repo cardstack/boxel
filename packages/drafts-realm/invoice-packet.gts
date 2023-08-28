@@ -15,10 +15,10 @@ import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Vendor } from './vendor';
 import { formatUSD, balanceInCurrency } from './currency-format';
 import { FieldContainer, Label, Message } from '@cardstack/boxel-ui';
-import { Token, Currency } from './asset';
+import { TokenField, CurrencyField } from './asset';
 import GlimmerComponent from '@glimmer/component';
 
-class Details extends CardDef {
+class Details extends FieldDef {
   @field invoiceNo = contains(StringCard);
   @field invoiceDate = contains(DateCard);
   @field dueDate = contains(DateCard);
@@ -491,7 +491,7 @@ export class InvoicePacket extends CardDef {
   @field vendor = linksTo(Vendor);
   @field details = contains(Details);
   @field lineItems = containsMany(LineItem);
-  @field primaryPayment = contains(Token || Currency, {
+  @field primaryPayment = contains(TokenField || CurrencyField, {
     computeVia: function (this: InvoicePacket) {
       return (
         this.vendor?.preferredPaymentMethod?.cryptoPayment?.token ??
@@ -499,7 +499,7 @@ export class InvoicePacket extends CardDef {
       );
     },
   });
-  @field alternatePayment = containsMany(Token || Currency, {
+  @field alternatePayment = containsMany(TokenField || CurrencyField, {
     computeVia: function (this: InvoicePacket) {
       return [];
       // TODO: implementation below is not working

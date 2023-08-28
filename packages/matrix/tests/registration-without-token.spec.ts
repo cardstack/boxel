@@ -4,12 +4,16 @@ import {
   synapseStop,
   type SynapseInstance,
 } from '../docker/synapse';
-import { gotoRegistration, assertLoggedIn, setupMatrixOverride } from '../helpers';
+import {
+  gotoRegistration,
+  assertLoggedIn,
+  setupMatrixOverride,
+} from '../helpers';
 
 test.describe('User Registration w/o Token', () => {
   let synapse: SynapseInstance;
 
-  test.beforeEach(async ({page}) => {
+  test.beforeEach(async ({ page }) => {
     synapse = await synapseStart({
       template: 'test-without-registration-token',
     });

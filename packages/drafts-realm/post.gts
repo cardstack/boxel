@@ -1,5 +1,6 @@
 import {
   contains,
+  linksTo,
   field,
   Component,
   CardDef,
@@ -34,7 +35,7 @@ class VeryBasicCard extends BasicCard {
 
 export class Post extends CardDef {
   static displayName = 'Post';
-  @field author = contains(Person);
+  @field author = linksTo(Person);
   @field title = contains(StringCard);
   @field body = contains(TextAreaCard);
   @field titleRef = contains(VeryBasicCard);
