@@ -50,6 +50,7 @@ import CodeMode from '@cardstack/host/components/operator-mode/code-mode';
 import CardURLBar from '@cardstack/host/components/operator-mode/card-url-bar';
 import { scheduleOnce } from '@ember/runloop';
 import ENV from '@cardstack/host/config/environment';
+import { assertNever } from '@cardstack/host/utils/assert-never';
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
 
@@ -610,6 +611,8 @@ export default class OperatorModeContainer extends Component<Signature> {
       case Submode.Code:
         this.onCodePathChange(new URL(this.lastCardInRightMostStack.id));
         break;
+      default:
+        throw assertNever(submode);
     }
 
     this.operatorModeStateService.updateSubmode(submode);
