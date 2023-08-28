@@ -166,7 +166,7 @@ class ScrollIntoView extends Modifier {
   }
 }
 
-class EmbeddedMessageField extends Component<typeof MesageField> {
+class EmbeddedMessageField extends Component<typeof MessageField> {
   // TODO need to add the message specific CSS here
   <template>
     <BoxelMessage
@@ -251,7 +251,7 @@ class EmbeddedMessageField extends Component<typeof MesageField> {
   });
 }
 
-class MesageField extends FieldDef {
+class MessageField extends FieldDef {
   @field author = contains(RoomMemberField);
   @field message = contains(MarkdownField);
   @field formattedMessage = contains(StringField);
@@ -274,7 +274,7 @@ interface RoomState {
 // in addition to acting as a cache, this also ensures we have
 // triple equal equivalence for the interior cards of RoomField
 const eventCache = new WeakMap<RoomField, Map<string, MatrixEvent>>();
-const messageCache = new WeakMap<RoomField, Map<string, MesageField>>();
+const messageCache = new WeakMap<RoomField, Map<string, MessageField>>();
 const roomMemberCache = new WeakMap<RoomField, Map<string, RoomMemberField>>();
 const roomStateCache = new WeakMap<RoomField, RoomState>();
 
@@ -413,7 +413,7 @@ export class RoomField extends FieldDef {
     },
   });
 
-  @field messages = containsMany(MesageField, {
+  @field messages = containsMany(MessageField, {
     // since we are rendering this card without the isolated renderer, we cannot use
     // the rendering mechanism to test if a field is used or not, so we explicitely
     // tell the card runtime that this field is being used
@@ -433,7 +433,7 @@ export class RoomField extends FieldDef {
         messageCache.set(this, cache);
       }
       let index = cache.size;
-      let newMessages = new Map<string, MesageField>();
+      let newMessages = new Map<string, MessageField>();
       for (let event of this.events) {
         if (event.type !== 'm.room.message') {
           continue;
@@ -471,11 +471,11 @@ export class RoomField extends FieldDef {
           }
           newMessages.set(
             event_id,
-            new MesageField({ ...cardArgs, attachedCardId }),
+            new MessageField({ ...cardArgs, attachedCardId }),
           );
         } else {
           console.log('Setting new messages with ', event_id, cardArgs);
-          newMessages.set(event_id, new MesageField(cardArgs));
+          newMessages.set(event_id, new MessageField(cardArgs));
         }
         index++;
       }

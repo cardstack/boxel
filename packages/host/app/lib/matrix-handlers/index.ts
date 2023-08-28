@@ -98,8 +98,8 @@ export async function addRoomEvent(context: Context, event: Event) {
 // changes, the consuming card's computeds will not automatically recompute. To
 // work around that, we are performing the assignment of the interior card to
 // the consuming card again which will trigger the consuming card's computeds to
-// pick up the interior card's updated fields. In this case the consuming card is
-// the RoomObjectiveCard and the interior card is the RoomField.
+// pick up the interior card's updated fields. In this case the consuming
+// card/field is the RoomObjectiveField and the interior field is the RoomField.
 export async function recomputeRoomObjective(context: Context, roomId: string) {
   let room = await context.rooms.get(roomId);
   let objective = context.roomObjectives.get(roomId);
