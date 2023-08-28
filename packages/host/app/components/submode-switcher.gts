@@ -65,7 +65,7 @@ export default class SubmodeSwitcher extends Component<Signature> {
         border: none;
         padding: var(--boxel-sp-xxs);
         border-radius: var(--boxel-border-radius);
-        background: var(--boxel-700);
+        background: var(--boxel-dark);
         color: var(--boxel-light);
         font: 500 var(--boxel-font-sm);
 

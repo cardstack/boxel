@@ -80,7 +80,7 @@ const SearchInput: TemplateOnlyComponent<Signature> = <template>
       padding-right: var(--search-icon-container-size);
       padding-top: var(--boxel-sp-xxs);
       padding-bottom: var(--boxel-sp-xxs);
-      background-color: var(--boxel-700);
+      background-color: var(--boxel-dark);
       color: var(--boxel-light);
     }
     .search-input--large {
