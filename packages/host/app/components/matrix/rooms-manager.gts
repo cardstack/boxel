@@ -18,15 +18,15 @@ import {
 } from '@cardstack/boxel-ui';
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import { eventDebounceMs } from '@cardstack/host/lib/matrix-utils';
-import {
-  getRoomCard,
-  RoomCardResource,
-} from '@cardstack/host/resources/room-card';
+import { getRoom, RoomResource } from '@cardstack/host/resources/room';
 import { TrackedMap } from 'tracked-built-ins';
 import RouterService from '@ember/routing/router-service';
 import Room from './room';
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import type { RoomCard, RoomMemberCard } from 'https://cardstack.com/base/room';
+import type {
+  RoomField,
+  RoomMemberField,
+} from 'https://cardstack.com/base/room';
 
 export default class RoomsManager extends Component {
   <template>
@@ -234,7 +234,7 @@ export default class RoomsManager extends Component {
   @tracked private roomIdForCurrentAction: string | undefined;
   @tracked private currentRoomId: string | undefined;
   @tracked private isCollapsed = false;
-  private currentRoomCardResource = getRoomCard(this, () => this.currentRoomId);
+  private currentRoomResource = getRoom(this, () => this.currentRoomId);
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -243,11 +243,11 @@ export default class RoomsManager extends Component {
 
   @cached
   private get roomResources() {
-    let resources = new TrackedMap<string, RoomCardResource>();
-    for (let roomId of this.matrixService.roomCards.keys()) {
+    let resources = new TrackedMap<string, RoomResource>();
+    for (let roomId of this.matrixService.rooms.keys()) {
       resources.set(
         roomId,
-        getRoomCard(this, () => roomId),
+        getRoom(this, () => roomId),
       );
     }
     return resources;
@@ -256,28 +256,28 @@ export default class RoomsManager extends Component {
   @cached
   private get myRooms() {
     let rooms: {
-      invited: { room: RoomCard; member: RoomMemberCard }[];
-      joined: { room: RoomCard; member: RoomMemberCard }[];
+      invited: { room: RoomField; member: RoomMemberField }[];
+      joined: { room: RoomField; member: RoomMemberField }[];
     } = {
       invited: [],
       joined: [],
     };
     for (let resource of this.roomResources.values()) {
-      if (!resource.roomCard) {
+      if (!resource.room) {
         continue;
       }
-      let joinedMember = resource.roomCard.joinedMembers.find(
+      let joinedMember = resource.room.joinedMembers.find(
         (m) => this.matrixService.client.getUserId() === m.userId,
       );
       if (joinedMember) {
-        rooms.joined.push({ room: resource.roomCard, member: joinedMember });
+        rooms.joined.push({ room: resource.room, member: joinedMember });
         continue;
       }
-      let invitedMember = resource.roomCard.invitedMembers.find(
+      let invitedMember = resource.room.invitedMembers.find(
         (m) => this.matrixService.client.getUserId() === m.userId,
       );
       if (invitedMember) {
-        rooms.invited.push({ room: resource.roomCard, member: invitedMember });
+        rooms.invited.push({ room: resource.room, member: invitedMember });
       }
     }
     return rooms;
@@ -306,11 +306,11 @@ export default class RoomsManager extends Component {
   }
 
   private get headerTitle() {
-    return `${this.currentRoomCard ? this.currentRoomCard.name : 'Rooms'}`;
+    return `${this.currentRoom ? this.currentRoom.name : 'Rooms'}`;
   }
 
-  private get currentRoomCard() {
-    return this.currentRoomCardResource.roomCard;
+  private get currentRoom() {
+    return this.currentRoomResource.room;
   }
 
   private get cleanNewRoomName() {

@@ -1,8 +1,8 @@
-import { contains, containsMany, field, Component, CardDef } from './card-api';
+import { contains, containsMany, field, Component, FieldDef } from './card-api';
 import BooleanField from './boolean';
-import { RoomCard, RoomMemberCard } from './room';
+import { RoomField, RoomMemberField } from './room';
 
-class View extends Component<typeof RoomObjectiveCard> {
+class View extends Component<typeof RoomObjectiveField> {
   <template>
     <div data-test-objective>
       <h3>Objective: Make sure that all room members greet each other by saying
@@ -50,25 +50,25 @@ class View extends Component<typeof RoomObjectiveCard> {
   }
 }
 
-export class RoomObjectiveCard extends CardDef {
-  @field room = contains(RoomCard);
-  @field usersThatFinishedTask = containsMany(RoomMemberCard, {
-    computeVia: function (this: RoomObjectiveCard) {
+export class RoomObjectiveField extends FieldDef {
+  @field room = contains(RoomField);
+  @field usersThatFinishedTask = containsMany(RoomMemberField, {
+    computeVia: function (this: RoomObjectiveField) {
       let desiredMessages = this.room.messages.filter((m) =>
         m.message.match(/^[\W_b]*[Hh][Ee][Ll][Ll][Oo][\W_\b]*$/),
       );
       return [...new Set(desiredMessages.map((m) => m.author))];
     },
   });
-  @field usersThatNeedToCompleteTask = containsMany(RoomMemberCard, {
-    computeVia: function (this: RoomObjectiveCard) {
+  @field usersThatNeedToCompleteTask = containsMany(RoomMemberField, {
+    computeVia: function (this: RoomObjectiveField) {
       let allUsers = this.room.joinedMembers;
       let completedUserIds = this.usersThatFinishedTask.map((u) => u.userId);
       return allUsers.filter((u) => !completedUserIds.includes(u.userId));
     },
   });
   @field isComplete = contains(BooleanField, {
-    computeVia: function (this: RoomObjectiveCard) {
+    computeVia: function (this: RoomObjectiveField) {
       return this.usersThatNeedToCompleteTask.length === 0;
     },
   });

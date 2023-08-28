@@ -72,17 +72,17 @@ module('Integration | card-basics', function (hooks) {
 
   test('primitive field type checking', async function (assert) {
     let { field, contains, containsMany, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
-    let { default: NumberCard } = number;
-    let { default: BooleanCard } = boolean;
-    let { default: CodeRefCard } = codeRef;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
+    let { default: BooleanField } = boolean;
+    let { default: CodeRefField } = codeRef;
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
-      @field title = contains(StringCard);
-      @field number = contains(NumberCard);
-      @field languagesSpoken = containsMany(StringCard);
-      @field ref = contains(CodeRefCard);
-      @field boolean = contains(BooleanCard);
+      @field firstName = contains(StringField);
+      @field title = contains(StringField);
+      @field number = contains(NumberField);
+      @field languagesSpoken = containsMany(StringField);
+      @field ref = contains(CodeRefField);
+      @field boolean = contains(BooleanField);
 
       static isolated = class Isolated extends Component<typeof this> {
         <template>
@@ -120,21 +120,22 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('access @model for primitive and composite fields', async function (assert) {
-    let { field, contains, containsMany, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
-    let { default: NumberCard } = number;
-    let { default: BooleanCard } = boolean;
-    class Person extends CardDef {
-      @field firstName = contains(StringCard);
-      @field subscribers = contains(NumberCard);
-      @field languagesSpoken = containsMany(StringCard);
-      @field isCool = contains(BooleanCard);
+    let { field, contains, containsMany, CardDef, FieldDef, Component } =
+      cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
+    let { default: BooleanField } = boolean;
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field subscribers = contains(NumberField);
+      @field languagesSpoken = containsMany(StringField);
+      @field isCool = contains(BooleanField);
     }
 
     class Post extends CardDef {
-      @field title = contains(StringCard);
+      @field title = contains(StringField);
       @field author = contains(Person);
-      @field languagesSpoken = containsMany(StringCard);
+      @field languagesSpoken = containsMany(StringField);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           {{@model.title}}
@@ -170,8 +171,8 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('render primitive field', async function (assert) {
-    let { field, contains, CardDef, Component } = cardApi;
-    class EmphasizedString extends CardDef {
+    let { field, contains, CardDef, FieldDef, Component } = cardApi;
+    class EmphasizedString extends FieldDef {
       static [primitive]: string;
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -180,7 +181,7 @@ module('Integration | card-basics', function (hooks) {
       };
     }
 
-    class StrongNumber extends CardDef {
+    class StrongNumber extends FieldDef {
       static [primitive]: number;
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -209,10 +210,10 @@ module('Integration | card-basics', function (hooks) {
 
   test('can set the ID for an unsaved card', async function (assert) {
     let { field, contains, CardDef } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
     }
 
     let mango = new Person();
@@ -225,10 +226,10 @@ module('Integration | card-basics', function (hooks) {
 
   test('throws when setting the ID for a saved card', async function (assert) {
     let { field, contains, CardDef } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
     }
     await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
 
@@ -251,9 +252,9 @@ module('Integration | card-basics', function (hooks) {
 
   test('render codeRef field', async function (assert) {
     let { field, contains, CardDef, Component } = cardApi;
-    let { default: CodeRefCard } = codeRef;
+    let { default: CodeRefField } = codeRef;
     class DriverCard extends CardDef {
-      @field ref = contains(CodeRefCard);
+      @field ref = contains(CodeRefField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <div data-test-ref><@fields.ref /></div>
@@ -279,9 +280,9 @@ module('Integration | card-basics', function (hooks) {
 
   test('render codeRef fields are not editable', async function (assert) {
     let { field, contains, CardDef, Component } = cardApi;
-    let { default: CodeRefCard } = codeRef;
+    let { default: CodeRefField } = codeRef;
     class DriverCard extends CardDef {
-      @field ref = contains(CodeRefCard);
+      @field ref = contains(CodeRefField);
       static edit = class Edit extends Component<typeof this> {
         <template>
           <div data-test-ref><@fields.ref /></div>
@@ -320,11 +321,11 @@ module('Integration | card-basics', function (hooks) {
       subscribeToChanges,
       unsubscribeFromChanges,
     } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
-      @field favoriteColor = contains(StringCard);
+      @field firstName = contains(StringField);
+      @field favoriteColor = contains(StringField);
     }
 
     let mango = new Person({
@@ -392,11 +393,11 @@ module('Integration | card-basics', function (hooks) {
       unsubscribeFromChanges,
       flushLogs,
     } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
-      @field favoriteColors = containsMany(StringCard);
+      @field firstName = contains(StringField);
+      @field favoriteColors = containsMany(StringField);
     }
 
     let mango = new Person({
@@ -465,14 +466,14 @@ module('Integration | card-basics', function (hooks) {
       subscribeToChanges,
       unsubscribeFromChanges,
     } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
     class Pet extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
     }
 
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
     }
     await shimModule(`${testRealmURL}test-cards`, { Person, Pet }, loader);
@@ -554,14 +555,14 @@ module('Integration | card-basics', function (hooks) {
       unsubscribeFromChanges,
       flushLogs,
     } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
     class Pet extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
     }
 
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       @field pets = linksToMany(Pet);
     }
     await shimModule(`${testRealmURL}test-cards`, { Person, Pet }, loader);
@@ -637,12 +638,12 @@ module('Integration | card-basics', function (hooks) {
 
   test('throws when assigning a value to a linksTo field with a primitive card', async function (assert) {
     let { field, contains, linksTo, CardDef } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       // @ts-expect-error Have to purposefully bypass type-checking in order to get into this runtime error state
-      @field pet = linksTo(StringCard);
+      @field pet = linksTo(StringField);
     }
     await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
 
@@ -671,16 +672,16 @@ module('Integration | card-basics', function (hooks) {
 
   test('throws assigning linksTo field to a card that is not an instance of the field card', async function (assert) {
     let { field, contains, linksTo, CardDef } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
     class Pet extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
     }
     class NotAPet extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
     }
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
     }
     await shimModule(
@@ -714,10 +715,10 @@ module('Integration | card-basics', function (hooks) {
 
   test('can render a linksTo field', async function (assert) {
     let { field, contains, linksTo, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
     class Pet extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       @field friend = linksTo(() => Pet);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -729,7 +730,7 @@ module('Integration | card-basics', function (hooks) {
       };
     }
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -785,13 +786,13 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('render whole composite field', async function (assert) {
-    let { field, contains, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
-    let { default: NumberCard } = number;
-    class Person extends CardDef {
-      @field firstName = contains(StringCard);
-      @field title = contains(StringCard);
-      @field number = contains(NumberCard);
+    let { field, contains, FieldDef, CardDef, Component } = cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField);
+      @field number = contains(NumberField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <div data-test-embedded-person><@fields.title />
@@ -823,8 +824,8 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('render nested composite field', async function (assert) {
-    let { field, contains, CardDef, Component } = cardApi;
-    class TestString extends CardDef {
+    let { field, contains, CardDef, FieldDef, Component } = cardApi;
+    class TestString extends FieldDef {
       static [primitive]: string;
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -833,7 +834,7 @@ module('Integration | card-basics', function (hooks) {
       };
     }
 
-    class TestNumber extends CardDef {
+    class TestNumber extends FieldDef {
       static [primitive]: number;
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -842,7 +843,7 @@ module('Integration | card-basics', function (hooks) {
       };
     }
 
-    class Person extends CardDef {
+    class Person extends FieldDef {
       @field firstName = contains(TestString);
       @field number = contains(TestNumber);
     }
@@ -877,9 +878,9 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('render default isolated template', async function (assert) {
-    let { field, contains, CardDef, Component } = cardApi;
+    let { field, contains, CardDef, FieldDef, Component } = cardApi;
     let firstName = await testString('first-name');
-    class Person extends CardDef {
+    class Person extends FieldDef {
       @field firstName = contains(firstName);
 
       static embedded = class Embedded extends Component<typeof this> {
@@ -908,10 +909,10 @@ module('Integration | card-basics', function (hooks) {
 
   test('render a containsMany primitive field', async function (assert) {
     let { field, contains, containsMany, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
-      @field languagesSpoken = containsMany(StringCard);
+      @field firstName = contains(StringField);
+      @field languagesSpoken = containsMany(StringField);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <@fields.firstName /> speaks <@fields.languagesSpoken />
@@ -933,10 +934,10 @@ module('Integration | card-basics', function (hooks) {
 
   test('supports an empty containsMany primitive field', async function (assert) {
     let { field, contains, containsMany, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
-      @field languagesSpoken = containsMany(StringCard);
+      @field firstName = contains(StringField);
+      @field languagesSpoken = containsMany(StringField);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <@fields.firstName /> speaks <@fields.languagesSpoken />
@@ -952,10 +953,11 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('render a containsMany composite field', async function (this: RenderingTestContext, assert) {
-    let { field, contains, containsMany, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
-    class Person extends CardDef {
-      @field firstName = contains(StringCard);
+    let { field, contains, containsMany, CardDef, FieldDef, Component } =
+      cardApi;
+    let { default: StringField } = string;
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <div data-test-person-firstName><@fields.firstName /></div>
@@ -995,10 +997,10 @@ module('Integration | card-basics', function (hooks) {
 
   test('can #each over a containsMany primitive @fields', async function (assert) {
     let { field, contains, containsMany, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
-      @field languagesSpoken = containsMany(StringCard);
+      @field firstName = contains(StringField);
+      @field languagesSpoken = containsMany(StringField);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <@fields.firstName />
@@ -1023,10 +1025,11 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('can #each over a containsMany composite @fields', async function (this: RenderingTestContext, assert) {
-    let { field, contains, containsMany, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
-    class Person extends CardDef {
-      @field firstName = contains(StringCard);
+    let { field, contains, containsMany, CardDef, FieldDef, Component } =
+      cardApi;
+    let { default: StringField } = string;
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <div data-test-person-firstName><@fields.firstName /></div>
@@ -1070,9 +1073,9 @@ module('Integration | card-basics', function (hooks) {
 
   test('can #each over a linksToMany @fields', async function (this: RenderingTestContext, assert) {
     let { field, contains, linksToMany, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <div data-test-person-firstName><@fields.firstName /></div>
@@ -1115,16 +1118,17 @@ module('Integration | card-basics', function (hooks) {
 
   // note that polymorphic "contains" field rendering is inherently tested via the catalog entry tests
   test('renders a card with a polymorphic "containsMany" field', async function (assert) {
-    let { field, contains, containsMany, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
-    let { default: NumberCard } = number;
+    let { field, contains, containsMany, CardDef, FieldDef, Component } =
+      cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
 
-    class Person extends CardDef {
-      @field firstName = contains(StringCard);
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
     }
 
     class Employee extends Person {
-      @field department = contains(StringCard);
+      @field department = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <div data-test-employee-firstName><@fields.firstName /></div>
@@ -1134,7 +1138,7 @@ module('Integration | card-basics', function (hooks) {
     }
 
     class Customer extends Person {
-      @field billAmount = contains(NumberCard);
+      @field billAmount = contains(NumberField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <div data-test-customer-firstName><@fields.firstName /></div>
@@ -1184,9 +1188,9 @@ module('Integration | card-basics', function (hooks) {
 
   test('rerender when a primitive field changes', async function (assert) {
     let { field, contains, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <div data-test='firstName'><@fields.firstName /></div>
@@ -1202,9 +1206,9 @@ module('Integration | card-basics', function (hooks) {
 
   test('rerender when a containsMany field is fully replaced', async function (assert) {
     let { field, containsMany, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
     class Person extends CardDef {
-      @field pets = containsMany(StringCard);
+      @field pets = containsMany(StringField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <@fields.pets />
@@ -1222,9 +1226,9 @@ module('Integration | card-basics', function (hooks) {
 
   test('rerender when a containsMany field is mutated via assignment', async function (assert) {
     let { field, containsMany, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
     class Person extends CardDef {
-      @field pets = containsMany(StringCard);
+      @field pets = containsMany(StringField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <@fields.pets />
@@ -1242,9 +1246,9 @@ module('Integration | card-basics', function (hooks) {
 
   test('rerender when a containsMany field changes size', async function (assert) {
     let { field, containsMany, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
     class Person extends CardDef {
-      @field pets = containsMany(StringCard);
+      @field pets = containsMany(StringField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <@fields.pets />
@@ -1265,10 +1269,11 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('supports an empty containsMany composite field', async function (assert) {
-    let { field, contains, containsMany, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
-    class Person extends CardDef {
-      @field firstName = contains(StringCard);
+    let { field, contains, containsMany, CardDef, FieldDef, Component } =
+      cardApi;
+    let { default: StringField } = string;
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <@fields.firstName />
@@ -1295,10 +1300,10 @@ module('Integration | card-basics', function (hooks) {
 
   test('throws if contains many value is set with a non-array', async function (assert) {
     let { field, contains, containsMany, CardDef } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
-      @field languagesSpoken = containsMany(StringCard);
+      @field firstName = contains(StringField);
+      @field languagesSpoken = containsMany(StringField);
     }
     await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
     assert.throws(
@@ -1317,14 +1322,14 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('render default edit template', async function (assert) {
-    let { field, contains, CardDef } = cardApi;
-    let { default: StringCard } = string;
-    class Person extends CardDef {
-      @field firstName = contains(StringCard);
+    let { field, contains, CardDef, FieldDef } = cardApi;
+    let { default: StringField } = string;
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
     }
 
     class Post extends CardDef {
-      @field title = contains(StringCard);
+      @field title = contains(StringField);
       @field author = contains(Person);
     }
     await shimModule(`${testRealmURL}test-cards`, { Post, Person }, loader);
@@ -1357,13 +1362,13 @@ module('Integration | card-basics', function (hooks) {
 
   test('renders field name for boolean default view values', async function (assert) {
     let { field, contains, CardDef } = cardApi;
-    let { default: StringCard } = string;
-    let { default: BooleanCard } = boolean;
+    let { default: StringField } = string;
+    let { default: BooleanField } = boolean;
 
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
-      @field isCool = contains(BooleanCard);
-      @field title = contains(StringCard, {
+      @field firstName = contains(StringField);
+      @field isCool = contains(BooleanField);
+      @field title = contains(StringField, {
         computeVia(this: Person) {
           return this.firstName;
         },
@@ -1381,13 +1386,13 @@ module('Integration | card-basics', function (hooks) {
 
   test('renders boolean edit view', async function (assert) {
     let { field, contains, CardDef } = cardApi;
-    let { default: StringCard } = string;
-    let { default: BooleanCard } = boolean;
+    let { default: StringField } = string;
+    let { default: BooleanField } = boolean;
 
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
-      @field isCool = contains(BooleanCard);
-      @field isHuman = contains(BooleanCard);
+      @field firstName = contains(StringField);
+      @field isCool = contains(BooleanField);
+      @field isHuman = contains(BooleanField);
     }
     await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
     let mango = new Person({
@@ -1463,11 +1468,11 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('can edit primitive and composite fields', async function (assert) {
-    let { field, contains, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
-    let { default: NumberCard } = number;
-    class Person extends CardDef {
-      @field firstName = contains(StringCard);
+    let { field, contains, CardDef, FieldDef, Component } = cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <@fields.firstName />
@@ -1476,8 +1481,8 @@ module('Integration | card-basics', function (hooks) {
     }
 
     class Post extends CardDef {
-      @field title = contains(StringCard);
-      @field reviews = contains(NumberCard);
+      @field title = contains(StringField);
+      @field reviews = contains(NumberField);
       @field author = contains(Person);
       static edit = class Edit extends Component<typeof this> {
         <template>
@@ -1522,9 +1527,9 @@ module('Integration | card-basics', function (hooks) {
 
   test('component stability when editing containsMany primitive field', async function (assert) {
     let { field, containsMany, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
     let counter = 0;
-    class TestString extends StringCard {
+    class TestString extends StringField {
       static edit = class Edit extends Component<typeof this> {
         private counter: number;
         constructor(
@@ -1576,9 +1581,9 @@ module('Integration | card-basics', function (hooks) {
 
   test('add, remove and edit items in containsMany string field', async function (assert) {
     let { field, containsMany, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
     class Person extends CardDef {
-      @field languagesSpoken = containsMany(StringCard);
+      @field languagesSpoken = containsMany(StringField);
       static edit = class Edit extends Component<typeof this> {
         <template>
           <@fields.languagesSpoken />
@@ -1619,10 +1624,11 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('add, remove and edit items in containsMany composite field', async function (assert) {
-    let { field, containsMany, contains, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
-    class Post extends CardDef {
-      @field title = contains(StringCard);
+    let { field, containsMany, contains, CardDef, FieldDef, Component } =
+      cardApi;
+    let { default: StringField } = string;
+    class Post extends FieldDef {
+      @field title = contains(StringField);
     }
 
     class Blog extends CardDef {
@@ -1663,16 +1669,16 @@ module('Integration | card-basics', function (hooks) {
 
   test('add, remove and edit items in containsMany date and datetime fields', async function (assert) {
     let { field, containsMany, CardDef, Component } = cardApi;
-    let { default: DateCard } = date;
-    let { default: DatetimeCard } = datetime;
+    let { default: DateField } = date;
+    let { default: DatetimeField } = datetime;
 
     function toDateString(date: Date | null) {
       return date instanceof Date ? format(date, 'yyyy-MM-dd') : null;
     }
 
     class Person extends CardDef {
-      @field dates = containsMany(DateCard);
-      @field appointments = containsMany(DatetimeCard);
+      @field dates = containsMany(DateField);
+      @field appointments = containsMany(DatetimeField);
       static edit = class Edit extends Component<typeof this> {
         <template>
           <@fields.dates />
@@ -1759,9 +1765,9 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('can get a queryable value for a field', async function (assert) {
-    let { CardDef, getQueryableValue } = cardApi;
+    let { FieldDef, getQueryableValue } = cardApi;
 
-    class TestField extends CardDef {
+    class TestField extends FieldDef {
       static [primitive]: TestShape;
       static [queryableValue](value: TestShape) {
         return value.firstName;
@@ -1821,22 +1827,22 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('queryable value for a field defaults to current field value when not specified', async function (assert) {
-    let { CardDef, getQueryableValue } = cardApi;
-    class StringCard extends CardDef {
+    let { FieldDef, getQueryableValue } = cardApi;
+    class StringField extends FieldDef {
       static [primitive]: string;
     }
 
     assert.strictEqual(
-      getQueryableValue(StringCard, 'Van Gogh'),
+      getQueryableValue(StringField, 'Van Gogh'),
       'Van Gogh',
       'The queryable value from user supplied data is correct',
     );
   });
 
   test('throws when card returns non-scalar queryable value from "queryableValue" function', async function (assert) {
-    let { CardDef, getQueryableValue } = cardApi;
+    let { FieldDef, getQueryableValue } = cardApi;
 
-    class TestField1 extends CardDef {
+    class TestField1 extends FieldDef {
       static [primitive]: TestShape;
       static [queryableValue](_value: TestShape) {
         return { notAScalar: true };
@@ -1851,7 +1857,7 @@ module('Integration | card-basics', function (hooks) {
       /expected queryableValue for field type TestField1 to be scalar/,
     );
 
-    class TestField2 extends CardDef {
+    class TestField2 extends FieldDef {
       static [primitive]: TestShape;
       static [queryableValue](_value: TestShape) {
         return [{ notAScalar: true }];
@@ -1868,9 +1874,9 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('throws when card returns non-scalar queryable value when there is no "queryableValue" function', async function (assert) {
-    let { CardDef, getQueryableValue } = cardApi;
+    let { FieldDef, getQueryableValue } = cardApi;
 
-    class TestField extends CardDef {
+    class TestField extends FieldDef {
       static [primitive]: TestShape;
     }
     assert.throws(
@@ -1886,8 +1892,8 @@ module('Integration | card-basics', function (hooks) {
 
 async function testString(label: string) {
   cardApi = await loader.import(`${baseRealm.url}card-api`);
-  let { CardDef, Component } = cardApi;
-  return class TestString extends CardDef {
+  let { FieldDef, Component } = cardApi;
+  return class TestString extends FieldDef {
     static [primitive]: string;
     static embedded = class Embedded extends Component<typeof this> {
       <template>

@@ -24,10 +24,10 @@ import {
 import type LoaderService from './loader-service';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type {
-  RoomCard,
+  RoomField,
   MatrixEvent as DiscreteMatrixEvent,
 } from 'https://cardstack.com/base/room';
-import type { RoomObjectiveCard } from 'https://cardstack.com/base/room-objective';
+import type { RoomObjectiveField } from 'https://cardstack.com/base/room-objective';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 const { matrixURL } = ENV;
@@ -41,8 +41,8 @@ export default class MatrixService extends Service {
   @service declare cardService: CardService;
   @tracked private _client: MatrixClient | undefined;
 
-  roomCards: TrackedMap<string, Promise<RoomCard>> = new TrackedMap();
-  roomObjectives: TrackedMap<string, RoomObjectiveCard> = new TrackedMap();
+  rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
+  roomObjectives: TrackedMap<string, RoomObjectiveField> = new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[] = [];
@@ -329,7 +329,7 @@ export default class MatrixService extends Service {
   }
 
   private resetState() {
-    this.roomCards = new TrackedMap();
+    this.rooms = new TrackedMap();
     this.roomMembershipQueue = [];
     this.timelineQueue = [];
     this.flushMembership = undefined;

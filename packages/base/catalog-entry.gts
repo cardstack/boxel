@@ -3,6 +3,7 @@ import {
   field,
   Component,
   CardDef,
+  FieldDef,
   BaseDef,
   primitive,
   relativeTo,
@@ -48,7 +49,7 @@ export class CatalogEntry extends CardDef {
       return new URL(this.ref.module, this[relativeTo]).href;
     },
   });
-  @field demo = contains(CardDef);
+  @field demo = contains(FieldDef);
   @field realmName = contains(StringField, {
     computeVia: function (this: CatalogEntry) {
       return this[realmInfo]?.name;

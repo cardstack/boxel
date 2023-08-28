@@ -14,6 +14,7 @@
   "scripts": {
     "start:synapse": "mkdir -p ./synapse-data/db && SYNAPSE_DATA_DIR=./synapse-data ts-node --transpileOnly ./scripts/synapse.ts start",
     "stop:synapse": "ts-node --transpileOnly ./scripts/synapse.ts stop",
+    "stop:synapse:tests": "docker container kill $(docker container ls -q --filter name=synapsedocker-*)",
     "assert-synapse-running": "if [ \"`docker ps -f name='boxel-synapse' --format '{{.Names}}'`\" = 'boxel-synapse' ]; then echo 'synapse is already running'; else pnpm run start:synapse; fi",
     "start:admin": "docker start synapse-admin",
     "start:host-pre-built": "cd ../host && pnpm start --path ./dist",
