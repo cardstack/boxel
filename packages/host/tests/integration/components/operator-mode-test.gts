@@ -1953,13 +1953,13 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-submode-switcher]').exists();
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
 
-    await click('[data-test-submode-switcher] .trigger');
+    await click('[data-test-submode-switcher] > [data-test-boxel-button]');
     await percySnapshot(assert);
 
     await click('[data-test-boxel-menu-item-text="Code"]');
     assert.dom('[data-test-submode-switcher]').hasText('Code');
 
-    await click('[data-test-submode-switcher] .trigger');
+    await click('[data-test-submode-switcher] > [data-test-boxel-button]');
     await click('[data-test-boxel-menu-item-text="Interact"]');
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
   });

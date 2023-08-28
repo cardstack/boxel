@@ -44,8 +44,15 @@ interface Signature {
 }
 
 export default class Menu extends Component<Signature> {
-  @action invokeMenuItemAction(actionOrLink: unknown, e: Event): void {
+  @action invokeMenuItemAction(
+    actionOrLink: unknown,
+    e: Event | KeyboardEvent,
+  ): void {
     e.preventDefault();
+
+    if (e.type === 'keypress' && (e as KeyboardEvent).key !== 'Enter') {
+      return;
+    }
 
     if (actionOrLink instanceof Link && actionOrLink.transitionTo) {
       actionOrLink.transitionTo();
@@ -90,6 +97,10 @@ export default class Menu extends Component<Signature> {
                   data-test-boxel-menu-item-text={{menuItem.text}}
                   tabindex={{menuItem.tabindex}}
                   {{on 'click' (fn this.invokeMenuItemAction menuItem.action)}}
+                  {{on
+                    'keypress'
+                    (fn this.invokeMenuItemAction menuItem.action)
+                  }}
                   disabled={{menuItem.disabled}}
                 >
                   <span class='menu-item'>
@@ -184,6 +195,10 @@ export default class Menu extends Component<Signature> {
           color: inherit;
         }
 
+        .boxel-menu__item__content:focus-visible {
+          outline: var(--boxel-outline);
+        }
+
         .boxel-menu__item--dangerous {
           color: var(--boxel-danger);
           fill: var(--boxel-danger);
@@ -223,10 +238,6 @@ export default class Menu extends Component<Signature> {
         }
         .check-icon--selected {
           visibility: visible;
-        }
-
-        [role='menuitem']:focus-visible {
-          outline: var(--boxel-outline);
         }
       }
     </style>
