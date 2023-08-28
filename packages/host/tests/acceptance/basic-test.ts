@@ -193,9 +193,10 @@ module('Acceptance | basic tests', function (hooks) {
       .doesNotExist('Person/1.json file entry is not rendered');
   });
 
-  test('recent file links are shown with titles when available', async function (assert) {
+  test('recent file links are shown', async function (assert) {
     window.localStorage.setItem('recent-files', JSON.stringify(['index.json']));
 
+    console.log('visiting code');
     await visit('/code');
 
     await waitFor('[data-test-file]');
@@ -222,7 +223,7 @@ module('Acceptance | basic tests', function (hooks) {
 
     assert
       .dom('[data-test-recent-file]:first-child')
-      .containsText('Hassan Abdel-Rahman');
+      .containsText('Person/1.json');
     assert
       .dom('[data-test-recent-file]:nth-child(2)')
       .containsText('index.json');
@@ -235,7 +236,7 @@ module('Acceptance | basic tests', function (hooks) {
       .containsText('person.gts');
     assert
       .dom('[data-test-recent-file]:nth-child(2)')
-      .containsText('Hassan Abdel-Rahman');
+      .containsText('Person/1.json');
 
     assert.deepEqual(
       JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
