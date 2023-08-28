@@ -28,7 +28,7 @@ export default class CardURLBar extends Component<Signature> {
       ...attributes
     >
       <div class='realm-info' data-test-card-url-bar-realm-info>
-        <img src={{this.realmIcon}} />
+        <img src={{this.realmIcon}} alt='realm-icon' />
         <span>in
           {{if this.realmName this.realmName 'Unknown Workspace'}}</span>
       </div>

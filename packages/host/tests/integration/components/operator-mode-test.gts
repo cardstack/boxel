@@ -1976,6 +1976,12 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-submode-switcher] .trigger');
     await click('[data-test-boxel-menu-item-text="Code"]');
     assert.dom('[data-test-submode-switcher]').hasText('Code');
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-card-url-bar-realm-info]')
+        ?.textContent?.includes('Operator Mode Workspace'),
+    );
+
     assert.dom('[data-test-card-url-bar]').exists();
     assert
       .dom('[data-test-card-url-bar-realm-info]')
@@ -2017,6 +2023,12 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-submode-switcher] .trigger');
     await click('[data-test-boxel-menu-item-text="Code"]');
     assert.dom('[data-test-submode-switcher]').hasText('Code');
+
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-card-url-bar-realm-info]')
+        ?.textContent?.includes('Operator Mode Workspace'),
+    );
     assert.dom('[data-test-card-url-bar]').exists();
     assert
       .dom('[data-test-card-url-bar-realm-info]')
