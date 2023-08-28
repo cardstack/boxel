@@ -673,7 +673,7 @@ export default class OperatorModeContainer extends Component<Signature> {
                   )
                 }}
               >
-                {{svgJar 'download' width='100%' height='100%'}}
+                {{svgJar 'download' width='25' height='25'}}
               </button>
               <button
                 data-test-add-card-right-stack
@@ -693,7 +693,7 @@ export default class OperatorModeContainer extends Component<Signature> {
                   )
                 }}
               >
-                {{svgJar 'download' width='100%' height='100%'}}
+                {{svgJar 'download' width='25' height='25'}}
               </button>
             {{/if}}
           </div>
@@ -708,8 +708,8 @@ export default class OperatorModeContainer extends Component<Signature> {
             data-test-open-chat
             class='chat-btn'
             @icon='sparkle'
-            @width='100%'
-            @height='100%'
+            @width='25'
+            @height='25'
             {{on 'click' this.toggleChat}}
           />
         {{/if}}
@@ -769,7 +769,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         position: absolute;
         width: var(--container-button-size);
         height: var(--container-button-size);
-        padding: var(--boxel-sp-xxxs);
+        padding: 0;
         border-radius: 50%;
         background-color: var(--boxel-light-100);
         border-color: transparent;
