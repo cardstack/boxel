@@ -59,27 +59,13 @@ export default class OperatorModeStateService extends Service {
     let stackItems = this.state?.stacks.flat() ?? [];
     for (let item of stackItems) {
       if ('card' in item && item.card.id == id) {
-        await this.setFieldValues.perform(item.card, attributes);
-      }
-    }
-  });
+        let document = await this.cardService.serializeCard(item.card);
+        document.data.attributes = {
+          ...document.data.attributes,
+          ...attributes,
+        };
 
-  private setFieldValues = task(async (card: CardDef, values: any) => {
-    let fields = await this.cardService.getFields(card);
-    for (let fieldName of Object.keys(values)) {
-      let field = fields[fieldName];
-      if (fieldName === 'id') continue;
-      if (
-        (field.fieldType === 'contains' ||
-          field.fieldType === 'containsMany') &&
-        !(await this.cardService.isPrimitive(field.card))
-      ) {
-        await this.setFieldValues.perform(
-          (card as any)[fieldName],
-          values[fieldName],
-        );
-      } else {
-        (card as any)[fieldName] = values[fieldName];
+        await this.cardService.patchCard(item.card, document);
       }
     }
   });

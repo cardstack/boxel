@@ -255,8 +255,10 @@ type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
 
 type JSONObject = { [x: string]: JSONValue };
 
-class JSONObjectField extends FieldDef {
-  static [primitive]: JSONObject;
+type PatchObject = { patch: { attributes: JSONObject }; id: string };
+
+class PatchObjectField extends FieldDef {
+  static [primitive]: PatchObject;
 }
 
 class CommandType extends FieldDef {
@@ -264,9 +266,9 @@ class CommandType extends FieldDef {
 }
 
 // Subclass, add a validator that checks the fields required?
-class CommandField extends FieldDef {
+class PatchField extends FieldDef {
   @field commandType = contains(CommandType);
-  @field payload = contains(JSONObjectField);
+  @field payload = contains(PatchObjectField);
 }
 
 export class MessageCard extends FieldDef {
@@ -277,7 +279,7 @@ export class MessageCard extends FieldDef {
   @field attachedCardId = contains(StringField);
   @field index = contains(NumberField);
   @field transactionId = contains(StringField);
-  @field command = contains(CommandField);
+  @field command = contains(PatchField);
 
   static embedded = EmbeddedMessageCard;
   // The edit template is meant to be read-only, this field card is not mutable
@@ -492,7 +494,13 @@ export class RoomCard extends CardDef {
           }
           messageCard = new MessageCard({ ...cardArgs, attachedCardId });
         } else if (event.content.msgtype === 'org.boxel.command') {
-          let command = new CommandField({
+          // We only handle patches for now
+          if (event.content.command.type !== 'patch') {
+            throw new Error(
+              `cannot handle commands in room with type ${event.content.command.type}`,
+            );
+          }
+          let command = new PatchField({
             commandType: event.content.command.type,
             payload: event.content.command,
           });

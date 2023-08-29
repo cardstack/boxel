@@ -6,7 +6,6 @@ import { on } from '@ember/modifier';
 import { tracked, cached } from '@glimmer/tracking';
 import { not, and, eq } from '@cardstack/host/helpers/truth-helpers';
 import { restartableTask, task, timeout, all } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
 import {
   BoxelInput,
   LoadingIndicator,
@@ -27,6 +26,7 @@ import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type CardService from '@cardstack/host/services/card-service';
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import config from '@cardstack/host/config/environment';
+import { fn } from '@ember/helper';
 
 const { environment } = config;
 
@@ -103,8 +103,8 @@ export default class Room extends Component<RoomArgs> {
               data-test-command-apply
               {{on
                 'click'
-                (perform
-                  this.operatorModeStateService.patchCard
+                (fn
+                  this.patchCard
                   Message.card.command.payload.id
                   Message.card.command.payload.patch.attributes
                 )
@@ -295,6 +295,10 @@ export default class Room extends Component<RoomArgs> {
   private get objective() {
     return this.matrixService.roomObjectives.get(this.args.roomId);
   }
+
+  private patchCard = (cardId: string, attributes: any) => {
+    this.operatorModeStateService.patchCard.perform(cardId, attributes);
+  };
 
   private subscribeToRoomChanges = task(async () => {
     await this.cardService.ready;
