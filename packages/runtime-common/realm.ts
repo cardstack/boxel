@@ -385,7 +385,7 @@ export class Realm {
       ref.content instanceof Uint8Array ||
       typeof ref.content === 'string'
     ) {
-      return createResponse(ref.content, {
+      return createResponse(this.url, ref.content, {
         headers: {
           'last-modified': formatRFC7231(ref.lastModified),
         },
@@ -397,7 +397,7 @@ export class Realm {
     }
 
     // add the node stream to the response which will get special handling in the node env
-    let response = createResponse(null, {
+    let response = createResponse(this.url, null, {
       headers: {
         'last-modified': formatRFC7231(ref.lastModified),
       },
@@ -411,7 +411,7 @@ export class Realm {
       this.paths.local(request.url),
       await request.text(),
     );
-    return createResponse(null, {
+    return createResponse(this.url, null, {
       status: 204,
       headers: { 'last-modified': formatRFC7231(lastModified) },
     });
@@ -427,7 +427,7 @@ export class Realm {
     }
 
     if (handle.path !== localName) {
-      return createResponse(null, {
+      return createResponse(this.url, null, {
         status: 302,
         headers: { Location: `${new URL(this.url).pathname}${handle.path}` },
       });
@@ -442,7 +442,7 @@ export class Realm {
       return notFound(request, `${localName} not found`);
     }
     await this.delete(handle.path);
-    return createResponse(null, { status: 204 });
+    return createResponse(this.url, null, { status: 204 });
   }
 
   private transpileJS(content: string, debugFilename: string): string {
@@ -496,14 +496,14 @@ export class Realm {
     try {
       content = this.transpileJS(content, debugFilename);
     } catch (err: any) {
-      return createResponse(err.message, {
+      return createResponse(this.url, err.message, {
         // using "Not Acceptable" here because no text/javascript representation
         // can be made and we're sending text/html error page instead
         status: 406,
         headers: { 'content-type': 'text/html' },
       });
     }
-    return createResponse(content, {
+    return createResponse(this.url, content, {
       status: 200,
       headers: { 'content-type': 'text/javascript' },
     });
@@ -590,7 +590,7 @@ export class Realm {
         meta: { lastModified },
       },
     });
-    return createResponse(JSON.stringify(doc, null, 2), {
+    return createResponse(this.url, JSON.stringify(doc, null, 2), {
       status: 201,
       headers: {
         'content-type': SupportedMimeType.CardJson,
@@ -679,7 +679,7 @@ export class Realm {
         meta: { lastModified },
       },
     });
-    return createResponse(JSON.stringify(doc, null, 2), {
+    return createResponse(this.url, JSON.stringify(doc, null, 2), {
       headers: {
         'content-type': SupportedMimeType.CardJson,
         ...lastModifiedHeader(doc),
@@ -705,7 +705,7 @@ export class Realm {
     }
     let { doc: card } = maybeError;
     card.data.links = { self: url.href };
-    return createResponse(JSON.stringify(card, null, 2), {
+    return createResponse(this.url, JSON.stringify(card, null, 2), {
       headers: {
         'last-modified': formatRFC7231(card.data.meta.lastModified!),
         'content-type': SupportedMimeType.CardJson,
@@ -723,7 +723,7 @@ export class Realm {
     }
     let localPath = this.paths.local(url) + '.json';
     await this.delete(localPath);
-    return createResponse(null, { status: 204 });
+    return createResponse(this.url, null, { status: 204 });
   }
 
   private async directoryEntries(
@@ -809,7 +809,7 @@ export class Realm {
       ] = relationship;
     }
 
-    return createResponse(JSON.stringify({ data }, null, 2), {
+    return createResponse(this.url, JSON.stringify({ data }, null, 2), {
       headers: { 'content-type': SupportedMimeType.DirectoryListing },
     });
   }
@@ -834,7 +834,7 @@ export class Realm {
       parseQueryString(new URL(request.url).search.slice(1)),
       { loadLinks: true },
     );
-    return createResponse(JSON.stringify(doc, null, 2), {
+    return createResponse(this.url, JSON.stringify(doc, null, 2), {
       headers: { 'content-type': SupportedMimeType.CardJson },
     });
   }
@@ -867,7 +867,7 @@ export class Realm {
         attributes: realmInfo,
       },
     };
-    return createResponse(JSON.stringify(doc, null, 2), {
+    return createResponse(this.url, JSON.stringify(doc, null, 2), {
       headers: { 'content-type': SupportedMimeType.RealmInfo },
     });
   }
@@ -962,7 +962,7 @@ export class Realm {
   }
 
   private async respondWithHTML() {
-    return createResponse(await this.getIndexHTML(), {
+    return createResponse(this.url, await this.getIndexHTML(), {
       headers: { 'content-type': 'text/html' },
     });
   }

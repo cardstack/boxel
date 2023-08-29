@@ -133,6 +133,7 @@ export function serializableError(err: any): any {
 
 export function responseWithError(error: CardError): Response {
   return createResponse(
+    null,
     JSON.stringify({ errors: [serializableError(error)] }),
     {
       status: error.status,

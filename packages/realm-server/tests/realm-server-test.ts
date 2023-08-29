@@ -132,6 +132,11 @@ module('Realm Server', function (hooks) {
     let json = response.body;
     assert.ok(json.data.meta.lastModified, 'lastModified exists');
     delete json.data.meta.lastModified;
+    assert.strictEqual(
+      response.get('X-boxel-realm-url'),
+      testRealmURL.href,
+      'realm url header is correct',
+    );
     assert.deepEqual(json, {
       data: {
         id: `${testRealmHref}person-1`,
@@ -149,7 +154,7 @@ module('Realm Server', function (hooks) {
             backgroundURL: null,
             iconURL: null,
           },
-          realmURL: 'http://127.0.0.1:4444/',
+          realmURL: testRealmURL.href,
         },
         links: {
           self: `${testRealmHref}person-1`,
@@ -181,6 +186,11 @@ module('Realm Server', function (hooks) {
         .set('Accept', 'application/vnd.card+json');
     });
     assert.strictEqual(response.status, 201, 'HTTP 201 status');
+    assert.strictEqual(
+      response.get('X-boxel-realm-url'),
+      testRealmURL.href,
+      'realm url header is correct',
+    );
     let json = response.body;
 
     if (isSingleCardDocument(json)) {
@@ -237,6 +247,11 @@ module('Realm Server', function (hooks) {
     });
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
+    assert.strictEqual(
+      response.get('X-boxel-realm-url'),
+      testRealmURL.href,
+      'realm url header is correct',
+    );
 
     let json = response.body;
     assert.ok(json.data.meta.lastModified, 'lastModified exists');
@@ -303,6 +318,11 @@ module('Realm Server', function (hooks) {
     });
 
     assert.strictEqual(response.status, 204, 'HTTP 204 status');
+    assert.strictEqual(
+      response.get('X-boxel-realm-url'),
+      testRealmURL.href,
+      'realm url header is correct',
+    );
     let cardFile = join(dir.name, entry);
     assert.strictEqual(existsSync(cardFile), false, 'card json does not exist');
   });
@@ -313,6 +333,11 @@ module('Realm Server', function (hooks) {
       .set('Accept', 'application/vnd.card+source');
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
+    assert.strictEqual(
+      response.get('X-boxel-realm-url'),
+      testRealmURL.href,
+      'realm url header is correct',
+    );
     let result = response.body.toString().trim();
     assert.strictEqual(result, cardSrc, 'the card source is correct');
     assert.ok(response.headers['last-modified'], 'last-modified header exists');
@@ -324,6 +349,11 @@ module('Realm Server', function (hooks) {
       .set('Accept', 'application/vnd.card+source');
 
     assert.strictEqual(response.status, 302, 'HTTP 302 status');
+    assert.strictEqual(
+      response.get('X-boxel-realm-url'),
+      testRealmURL.href,
+      'realm url header is correct',
+    );
     assert.ok(response.headers['location'], '/person.gts');
   });
 
@@ -337,6 +367,11 @@ module('Realm Server', function (hooks) {
     });
 
     assert.strictEqual(response.status, 204, 'HTTP 204 status');
+    assert.strictEqual(
+      response.get('X-boxel-realm-url'),
+      testRealmURL.href,
+      'realm url header is correct',
+    );
     let cardFile = join(dir.name, entry);
     assert.strictEqual(
       existsSync(cardFile),
@@ -356,6 +391,11 @@ module('Realm Server', function (hooks) {
     });
 
     assert.strictEqual(response.status, 204, 'HTTP 204 status');
+    assert.strictEqual(
+      response.get('X-boxel-realm-url'),
+      testRealmURL.href,
+      'realm url header is correct',
+    );
 
     let srcFile = join(dir.name, entry);
     assert.ok(existsSync(srcFile), 'card src exists');
@@ -371,6 +411,11 @@ module('Realm Server', function (hooks) {
     let response = await request.get('/person');
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
+    assert.strictEqual(
+      response.get('X-boxel-realm-url'),
+      testRealmURL.href,
+      'realm url header is correct',
+    );
     let body = response.text.trim();
     let moduleAbsolutePath = resolve(join(__dirname, '..', 'person.gts'));
 
@@ -392,6 +437,11 @@ module('Realm Server', function (hooks) {
       .set('Accept', 'application/vnd.api+json');
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
+    assert.strictEqual(
+      response.get('X-boxel-realm-url'),
+      testRealmURL.href,
+      'realm url header is correct',
+    );
     let json = response.body;
     assert.deepEqual(
       json,
@@ -449,6 +499,11 @@ module('Realm Server', function (hooks) {
       .set('Accept', 'application/vnd.card+json');
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
+    assert.strictEqual(
+      response.get('X-boxel-realm-url'),
+      testRealmURL.href,
+      'realm url header is correct',
+    );
     let json = response.body;
     assert.strictEqual(
       json.data.length,
@@ -468,6 +523,11 @@ module('Realm Server', function (hooks) {
       .set('Accept', 'application/vnd.api+json');
 
     assert.strictEqual(response.status, 200, 'HTTP 200 status');
+    assert.strictEqual(
+      response.get('X-boxel-realm-url'),
+      testRealmURL.href,
+      'realm url header is correct',
+    );
     let json = response.body;
     assert.deepEqual(
       json,

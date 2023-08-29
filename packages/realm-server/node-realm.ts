@@ -126,7 +126,11 @@ export class NodeAdapter implements RealmAdapter {
     cleanup: () => void,
   ) {
     let s = new MessageStream();
-    let response = createResponse(null, responseInit) as ResponseWithNodeStream;
+    let response = createResponse(
+      null,
+      null,
+      responseInit,
+    ) as ResponseWithNodeStream;
     response.nodeStream = s;
     onClose(request, cleanup);
     return { response, writable: s as unknown as WritableStream };
