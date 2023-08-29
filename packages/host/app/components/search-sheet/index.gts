@@ -23,7 +23,6 @@ import {
 } from '@cardstack/boxel-ui';
 
 import { Label } from '@cardstack/boxel-ui';
-
 import {
   isSingleCardDocument,
   baseRealm,

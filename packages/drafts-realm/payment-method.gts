@@ -8,7 +8,7 @@ import {
 import StringCard from 'https://cardstack.com/base/string';
 import { Chain } from './chain';
 import { Token, Currency } from './asset';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers.ts';
 import { FieldContainer } from '@cardstack/boxel-ui';
 
 class CryptoPayment extends FieldDef {

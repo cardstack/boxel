@@ -15,7 +15,6 @@ import { and, bool, eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
-
 import OperatorModeOverlayItemHeader from './overlay-item-header';
 import { RenderedCardForOverlayActions } from './stack-item';
 

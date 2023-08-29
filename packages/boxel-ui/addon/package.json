@@ -1,0 +1,167 @@
+{
+  "name": "@cardstack/boxel-ui",
+  "version": "0.0.0",
+  "description": "Boxel UI component library",
+  "keywords": [
+    "ember-addon"
+  ],
+  "repository": "",
+  "license": "MIT",
+  "author": "",
+  "directories": {
+    "doc": "doc",
+    "test": "tests"
+  },
+  "scripts": {
+    "build": "concurrently \"npm:build:*\" --names \"build:\"",
+    "build:js": "rollup --config",
+    "build:types": "glint --declaration",
+    "lint": "concurrently \"npm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:fix": "concurrently \"npm:lint:*:fix\" --names \"fix:\"",
+    "lint:glint": "glint",
+    "lint:hbs": "ember-template-lint .",
+    "lint:hbs:fix": "ember-template-lint . --fix",
+    "lint:js": "eslint . --cache",
+    "lint:js:fix": "eslint . --fix",
+    "lint:types": "glint",
+    "prepack": "rollup --config",
+    "start": "concurrently \"npm:start:*\" --names \"start:\"",
+    "start:js": "rollup --config --watch --no-watch.clearScreen",
+    "start:types": "glint --declaration --watch",
+    "test": "echo 'A v2 addon does not have tests, run tests in test-app'",
+    "test:ember": "ember test"
+  },
+  "dependencies": {
+    "@embroider/addon-shim": "^1.8.6",
+    "@floating-ui/dom": "^1.4.3",
+    "@glint/template": "^1.0.0",
+    "classnames": "^2.3.2",
+    "dayjs": "^1.11.7",
+    "ember-basic-dropdown": "^7.1.0",
+    "ember-css-url": "^1.0.0",
+    "ember-composable-helpers": "^5.0.0",
+    "ember-focus-trap": "^1.0.1",
+    "ember-freestyle": "^0.18.0",
+    "ember-link": "^2.1.0",
+    "ember-load-initializers": "^2.1.2",
+    "ember-modifier": "^4.1.0",
+    "ember-set-body-class": "^1.0.2",
+    "ember-svg-jar": "^2.4.2",
+    "ember-template-imports": "^3.1.2",
+    "ember-velcro": "^2.1.0",
+    "file-loader": "^6.2.0",
+    "focus-trap": "^7.4.3",
+    "glimmer-scoped-css": "^0.4.0",
+    "lodash": "^4.17.21"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.22.11",
+    "@babel/plugin-proposal-decorators": "^7.22.10",
+    "@babel/plugin-transform-class-static-block": "^7.22.11",
+    "@babel/plugin-transform-class-properties": "^7.22.5",
+    "@babel/preset-typescript": "^7.22.11",
+    "@babel/runtime": "^7.22.11",
+    "@embroider/addon-dev": "^4.1.0",
+    "@rollup/plugin-babel": "^6.0.3",
+    "@types/lodash": "^4.14.182",
+    "@typescript-eslint/eslint-plugin": "^5.48.1",
+    "@typescript-eslint/parser": "^5.48.1",
+    "babel-plugin-ember-template-compilation": "^2.2.0",
+    "concurrently": "^8.0.1",
+    "ember-template-lint": "^5.11.2",
+    "ember-template-lint-plugin-prettier": "^5.0.0",
+    "eslint": "^8.31.0",
+    "eslint-config-prettier": "^8.6.0",
+    "eslint-plugin-ember": "^11.4.2",
+    "eslint-plugin-n": "^15.6.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "eslint-plugin-simple-import-sort": "^8.0.0",
+    "eslint-plugin-typescript-sort-keys": "^2.1.0",
+    "prettier": "^2.8.7",
+    "prettier-plugin-ember-template-tag": "^1.0.0",
+    "rollup": "^3.28.1",
+    "rollup-plugin-copy": "^3.4.0"
+  },
+  "peerDependencies": {
+    "@glint/environment-ember-loose": "^1.0.0",
+    "ember-source": "^4.0.0",
+    "typescript": "^5.1.6"
+  },
+  "engines": {
+    "node": "14.* || 16.* || >= 18"
+  },
+  "volta": {
+    "extends": "../../../package.json"
+  },
+  "ember": {
+    "edition": "octane"
+  },
+  "ember-addon": {
+    "app-js": {},
+    "main": "addon-main.cjs",
+    "public-assets": {
+      "./public/assets/arrow-left.svg": "/@cardstack/boxel-ui/assets/arrow-left.svg",
+      "./public/assets/arrow-right.svg": "/@cardstack/boxel-ui/assets/arrow-right.svg",
+      "./public/assets/cardbot-lg.svg": "/@cardstack/boxel-ui/assets/cardbot-lg.svg",
+      "./public/assets/check-mark.svg": "/@cardstack/boxel-ui/assets/check-mark.svg",
+      "./public/assets/download.svg": "/@cardstack/boxel-ui/assets/download.svg",
+      "./public/assets/dropdown-arrow-down.svg": "/@cardstack/boxel-ui/assets/dropdown-arrow-down.svg",
+      "./public/assets/dropdown-arrow-up.svg": "/@cardstack/boxel-ui/assets/dropdown-arrow-up.svg",
+      "./public/assets/eye.svg": "/@cardstack/boxel-ui/assets/eye.svg",
+      "./public/assets/failure-bordered.svg": "/@cardstack/boxel-ui/assets/failure-bordered.svg",
+      "./public/assets/icon-circle-selected.svg": "/@cardstack/boxel-ui/assets/icon-circle-selected.svg",
+      "./public/assets/icon-circle.svg": "/@cardstack/boxel-ui/assets/icon-circle.svg",
+      "./public/assets/icon-code.svg": "/@cardstack/boxel-ui/assets/icon-code.svg",
+      "./public/assets/icon-link.svg": "/@cardstack/boxel-ui/assets/icon-link.svg",
+      "./public/assets/icon-minus-circle.svg": "/@cardstack/boxel-ui/assets/icon-minus-circle.svg",
+      "./public/assets/icon-pencil.svg": "/@cardstack/boxel-ui/assets/icon-pencil.svg",
+      "./public/assets/icon-plus-circle.svg": "/@cardstack/boxel-ui/assets/icon-plus-circle.svg",
+      "./public/assets/icon-plus.svg": "/@cardstack/boxel-ui/assets/icon-plus.svg",
+      "./public/assets/icon-search.svg": "/@cardstack/boxel-ui/assets/icon-search.svg",
+      "./public/assets/icon-trash.svg": "/@cardstack/boxel-ui/assets/icon-trash.svg",
+      "./public/assets/icon-turn-down-right.svg": "/@cardstack/boxel-ui/assets/icon-turn-down-right.svg",
+      "./public/assets/icon-x.svg": "/@cardstack/boxel-ui/assets/icon-x.svg",
+      "./public/assets/loading-indicator.svg": "/@cardstack/boxel-ui/assets/loading-indicator.svg",
+      "./public/assets/profile.svg": "/@cardstack/boxel-ui/assets/profile.svg",
+      "./public/assets/search.svg": "/@cardstack/boxel-ui/assets/search.svg",
+      "./public/assets/sparkle.svg": "/@cardstack/boxel-ui/assets/sparkle.svg",
+      "./public/assets/success-bordered.svg": "/@cardstack/boxel-ui/assets/success-bordered.svg",
+      "./public/assets/three-dots-horizontal.svg": "/@cardstack/boxel-ui/assets/three-dots-horizontal.svg",
+      "./public/fonts/OpenSans-Bold.ttf": "/@cardstack/boxel-ui/fonts/OpenSans-Bold.ttf",
+      "./public/fonts/OpenSans-Regular.ttf": "/@cardstack/boxel-ui/fonts/OpenSans-Regular.ttf",
+      "./public/fonts/OpenSans-SemiBold.ttf": "/@cardstack/boxel-ui/fonts/OpenSans-SemiBold.ttf",
+      "./public/fonts/Poppins-Bold.ttf": "/@cardstack/boxel-ui/fonts/Poppins-Bold.ttf",
+      "./public/fonts/Poppins-BoldItalic.ttf": "/@cardstack/boxel-ui/fonts/Poppins-BoldItalic.ttf",
+      "./public/fonts/Poppins-Italic.ttf": "/@cardstack/boxel-ui/fonts/Poppins-Italic.ttf",
+      "./public/fonts/Poppins-Medium.ttf": "/@cardstack/boxel-ui/fonts/Poppins-Medium.ttf",
+      "./public/fonts/Poppins-MediumItalic.ttf": "/@cardstack/boxel-ui/fonts/Poppins-MediumItalic.ttf",
+      "./public/fonts/Poppins-Regular.ttf": "/@cardstack/boxel-ui/fonts/Poppins-Regular.ttf"
+    },
+    "type": "addon",
+    "version": 2
+  },
+  "exports": {
+    ".": {
+      "types": "./declarations/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./*": {
+      "types": "./declarations/*.d.ts",
+      "default": "./dist/*.js"
+    },
+    "./addon-main.js": "./addon-main.cjs"
+  },
+  "files": [
+    "addon-main.cjs",
+    "declarations",
+    "dist",
+    "public"
+  ],
+  "typesVersions": {
+    "*": {
+      "*": [
+        "declarations/*"
+      ]
+    }
+  }
+}

@@ -12,7 +12,7 @@ import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Address } from './address';
 import { FieldContainer } from '@cardstack/boxel-ui';
 import { startCase } from 'lodash';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers.ts';
 import { PaymentMethod } from './payment-method';
 import GlimmerComponent from '@glimmer/component';
 

@@ -20,7 +20,6 @@ import type {
   Format,
   FieldType,
 } from 'https://cardstack.com/base/card-api';
-
 import { type RenderedCardForOverlayActions } from './stack-item';
 
 interface Signature {

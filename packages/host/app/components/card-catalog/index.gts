@@ -48,30 +48,30 @@ export default class CardCatalog extends Component<Signature> {
           <ul class='card-catalog__group'>
             {{#each realm.displayedCards as |card|}}
               {{#let (eq @selectedCard.id card.id) as |isSelected|}}
-              <li
-                class={{cn 'item' selected=isSelected}}
-                data-test-card-catalog-item={{card.id}}
-                data-test-card-catalog-item-selected={{isSelected}}
-              >
-                <CardCatalogItem
-                  @isSelected={{isSelected}}
-                  @title={{card.title}}
-                  @description={{card.description}}
-                  @thumbnailURL={{card.thumbnailURL}}
-                  @context={{@context}}
-                />
-                <button
-                  class='select'
-                  {{on 'click' (fn @toggleSelect card)}}
-                  data-test-select={{card.id}}
-                  aria-label='Select'
-                />
-                <IconButton
-                  class='hover-button preview'
-                  @icon='eye'
-                  aria-label='preview'
-                />
-              </li>
+                <li
+                  class={{cn 'item' selected=isSelected}}
+                  data-test-card-catalog-item={{card.id}}
+                  data-test-card-catalog-item-selected={{isSelected}}
+                >
+                  <CardCatalogItem
+                    @isSelected={{isSelected}}
+                    @title={{card.title}}
+                    @description={{card.description}}
+                    @thumbnailURL={{card.thumbnailURL}}
+                    @context={{@context}}
+                  />
+                  <button
+                    class='select'
+                    {{on 'click' (fn @toggleSelect card)}}
+                    data-test-select={{card.id}}
+                    aria-label='Select'
+                  />
+                  <IconButton
+                    class='hover-button preview'
+                    @icon='eye'
+                    aria-label='preview'
+                  />
+                </li>
               {{/let}}
             {{/each}}
           </ul>

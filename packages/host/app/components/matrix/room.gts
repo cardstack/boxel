@@ -7,7 +7,6 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 //@ts-expect-error the types don't recognize the cached export
 import { tracked, cached } from '@glimmer/tracking';
-
 import { restartableTask, task, timeout, all } from 'ember-concurrency';
 
 import { TrackedMap } from 'tracked-built-ins';
