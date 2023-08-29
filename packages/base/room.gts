@@ -251,6 +251,23 @@ class EmbeddedMessageCard extends Component<typeof MessageCard> {
   });
 }
 
+type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
+
+type JSONObject = { [x: string]: JSONValue };
+
+class JSONObjectField extends FieldDef {
+  static [primitive]: JSONObject;
+}
+
+class CommandType extends FieldDef {
+  static [primitive]: 'patch';
+}
+
+// Subclass, add a validator that checks the fields required?
+class CommandField extends FieldDef {
+  @field commandType = contains(CommandType);
+  @field payload = contains(JSONObjectField);
+}
 
 export class MessageCard extends FieldDef {
   @field author = contains(RoomMemberCard);
@@ -260,24 +277,12 @@ export class MessageCard extends FieldDef {
   @field attachedCardId = contains(StringField);
   @field index = contains(NumberField);
   @field transactionId = contains(StringField);
+  @field command = contains(CommandField);
 
   static embedded = EmbeddedMessageCard;
   // The edit template is meant to be read-only, this field card is not mutable
   static edit = class Edit extends JSONView {};
 }
-
-class AnyField extends FieldDef {
-  static [primitive]: any;
-  static embedded = class Embedded extends JSONView {};
-  static isolated = class Isolated extends JSONView {};
-  // The edit template is meant to be read-only, this field card is not mutable
-  static edit = class Edit extends JSONView {};
-}
-
-export class CommandField extends MessageCard {
-  @field command = contains(AnyField);
-}
-
 
 interface RoomState {
   name?: string;
@@ -475,7 +480,8 @@ export class RoomCard extends CardDef {
           index,
           // These are not guaranteed to exist in the event
           transactionId: event.unsigned?.transaction_id || null,
-          attachedCard: null
+          attachedCard: null,
+          command: null,
         };
         let messageCard = undefined;
         if (event.content.msgtype === 'org.boxel.card') {
@@ -485,10 +491,18 @@ export class RoomCard extends CardDef {
             throw new Error(`cannot handle cards in room without an ID`);
           }
           messageCard = new MessageCard({ ...cardArgs, attachedCardId });
-        } else if (event.content.msgtype === 'org.boxel.command' ) {
-          messageCard = new CommandField({...cardArgs, command: event.content.command});
-        }
-        else {
+        } else if (event.content.msgtype === 'org.boxel.command') {
+          let command = new CommandField({
+            commandType: event.content.command.type,
+            payload: event.content.command,
+          });
+          messageCard = new MessageCard({
+            ...cardArgs,
+            command,
+          } else {
+            throw new Error('cannot handle commands in room without a type');
+          }
+        } else {
           messageCard = new MessageCard(cardArgs);
         }
         newMessages.set(event_id, messageCard);

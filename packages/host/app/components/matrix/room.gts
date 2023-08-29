@@ -4,7 +4,7 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 //@ts-expect-error the types don't recognize the cached export
 import { tracked, cached } from '@glimmer/tracking';
-import { not, and } from '@cardstack/host/helpers/truth-helpers';
+import { not, and, eq } from '@cardstack/host/helpers/truth-helpers';
 import { restartableTask, task, timeout, all } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import {
@@ -23,8 +23,7 @@ import {
 import { registerDestructor } from '@ember/destroyable';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import { type CardDef, type Format } from 'https://cardstack.com/base/card-api';
-import { type MessageCard } from 'https://cardstack.com/base/room';
+import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type CardService from '@cardstack/host/services/card-service';
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import config from '@cardstack/host/config/environment';
@@ -35,31 +34,6 @@ interface RoomArgs {
   Args: {
     roomId: string;
   };
-}
-
-interface Patch {
-  Args: {
-    command: any;
-  };
-}
-
-class PatchMessage extends Component<Patch> {
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  <template>
-    <Button
-      data-test-command-apply
-      {{on 'click' (perform this.patchCard)}}
-      @loading={{this.patchCard.isRunning}}
-      @disabled={{this.patchCard.isRunning}}
-    >Apply</Button>
-  </template>
-
-  private patchCard = task({ drop: true }, async () => {
-    let commandParsed = this.args.command;
-    let id = commandParsed.id;
-    let attributes = commandParsed.patch.attributes;
-    await this.operatorModeStateService.patchCard.perform(id, attributes);
-  });
 }
 
 export default class Room extends Component<RoomArgs> {
@@ -121,10 +95,23 @@ export default class Room extends Component<RoomArgs> {
           </div>
         </div>
         {{#each this.messageCardComponents as |Message|}}
-          {{#if Message.command}}
-            <PatchMessage @command={{Message.command}} />
-          {{else}}
+          {{#unless Message.card.command}}
             <Message.component />
+          {{/unless}}
+          {{#if (eq Message.card.command.commandType 'patch')}}
+            <Button
+              data-test-command-apply
+              {{on
+                'click'
+                (perform
+                  this.operatorModeStateService.patchCard
+                  Message.card.command.payload.id
+                  Message.card.command.payload.patch.attributes
+                )
+              }}
+              @loading={{this.operatorModeStateService.patchCard.isRunning}}
+              @disabled={{this.operatorModeStateService.patchCard.isRunning}}
+            >Apply</Button>
           {{/if}}
         {{else}}
           <div data-test-no-messages>
@@ -374,18 +361,17 @@ export default class Room extends Component<RoomArgs> {
     return;
   }
 
-  private getComponent(card: MessageCard, mode: Format) {
-    return {
-      component: card.constructor.getComponent(card, mode),
-      command: card.command,
-    };
-  }
-
   private get messageCardComponents() {
     return this.roomCard
-      ? this.roomCard.messages.map((messageCard) =>
-          this.getComponent(messageCard, 'embedded'),
-        )
+      ? this.roomCard.messages.map((messageCard) => {
+          return {
+            component: messageCard.constructor.getComponent(
+              messageCard,
+              'embedded',
+            ),
+            card: messageCard,
+          };
+        })
       : [];
   }
 
