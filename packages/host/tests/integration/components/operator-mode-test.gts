@@ -687,13 +687,16 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-enter-room="test_a"]');
 
     await waitFor('[data-test-command-apply]');
+    this.onSave((json) => {
+      assert.strictEqual(json.data.attributes?.firstName, 'Dave');
+    });
     await click('[data-test-command-apply]');
 
     await waitFor('[data-test-person="Dave"]');
     assert.dom('[data-test-person]').hasText('Dave');
   });
 
-  test<TestContextWithSave>('it allows only applies changes from the chat if the stack contains a card with that ID', async function (assert) {
+  test('it allows only applies changes from the chat if the stack contains a card with that ID', async function (assert) {
     this.owner.register('service:matrixService', MockMatrixService);
     let matrixService = this.owner.lookup(
       'service:matrixService',
