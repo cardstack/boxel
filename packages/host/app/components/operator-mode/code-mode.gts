@@ -5,7 +5,6 @@ import CardService from '@cardstack/host/services/card-service';
 import { htmlSafe } from '@ember/template';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import { restartableTask } from 'ember-concurrency';
 import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-preview-panel';
 
 interface Signature {
