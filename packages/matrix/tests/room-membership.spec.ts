@@ -1,7 +1,5 @@
 import { expect } from '@playwright/test';
-import {
-  registerUser,
-} from '../docker/synapse';
+import { registerUser } from '../docker/synapse';
 import {
   login,
   logout,
@@ -12,7 +10,7 @@ import {
   openRoom,
   inviteToRoom,
   reloadAndOpenChat,
-  test
+  test,
 } from '../helpers';
 
 test.describe('Room membership', () => {
@@ -122,12 +120,12 @@ test.describe('Room membership', () => {
     await expect(page.locator('[data-test-room-members]')).toHaveText(
       `Members: user1`,
     );
-    expect(
+    await expect(
       page.locator('[data-test-room-invite-field]'),
       'the invite dialog is not displayed',
     ).toHaveCount(0);
     await inviteToRoom(page, ['user2']);
-    expect(
+    await expect(
       page.locator('[data-test-room-invite-field]'),
       'the invite dialog is not displayed',
     ).toHaveCount(0);
@@ -150,17 +148,17 @@ test.describe('Room membership', () => {
       name: 'Room 1',
     });
     await openRoom(page, 'Room 1');
-    expect(
+    await expect(
       page.locator('[data-test-room-invite-field]'),
       'the invite dialog is not displayed',
     ).toHaveCount(0);
     await page.locator(`[data-test-invite-mode-btn]`).click();
-    expect(
+    await expect(
       page.locator('[data-test-room-invite-field]'),
       'the invite dialog is displayed',
     ).toHaveCount(1);
     await page.locator(`[data-test-room-invite-cancel-btn]`).click();
-    expect(
+    await expect(
       page.locator('[data-test-room-invite-field]'),
       'the invite dialog is not displayed',
     ).toHaveCount(0);

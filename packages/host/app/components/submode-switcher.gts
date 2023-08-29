@@ -27,7 +27,7 @@ export default class SubmodeSwitcher extends Component<Signature> {
       <BoxelDropdown @contentClass='submode-switcher-dropdown'>
         <:trigger as |bindings|>
           <Button
-            class='trigger'
+            class='submode-switcher-dropdown-trigger'
             aria-label='Options'
             {{on 'click' this.toggleDropdown}}
             {{bindings}}
@@ -49,7 +49,7 @@ export default class SubmodeSwitcher extends Component<Signature> {
         </:trigger>
         <:content as |dd|>
           <Menu
-            class='menu'
+            class='submode-switcher-dropdown-menu'
             @closeMenu={{dd.close}}
             @items={{this.buildMenuItems}}
           />
@@ -57,11 +57,20 @@ export default class SubmodeSwitcher extends Component<Signature> {
       </BoxelDropdown>
     </div>
     <style>
-      .trigger {
+      :global(:root) {
+        --submode-switcher-trigger-height: 2.5rem;
+        --submode-switcher-dropdown-content-border-radius: 0 0
+          var(--boxel-border-radius) var(--boxel-border-radius);
+        --submode-switcher-dropdown-content-bg-color: rgba(0, 0, 0, 0.45);
+      }
+      .submode-switcher-dropdown-trigger {
+        --icon-color: var(--boxel-highlight);
+
+        height: var(--submode-switcher-trigger-height);
         border: none;
-        padding: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xxs);
         border-radius: var(--boxel-border-radius);
-        background: var(--boxel-purple-700);
+        background: var(--boxel-dark);
         color: var(--boxel-light);
         font: 500 var(--boxel-font-sm);
 
@@ -71,8 +80,10 @@ export default class SubmodeSwitcher extends Component<Signature> {
         align-items: center;
         width: 190px;
         gap: var(--boxel-sp-sm);
-
-        --icon-color: var(--boxel-cyan);
+      }
+      .submode-switcher-dropdown-trigger[aria-expanded='true'] {
+        border-bottom-right-radius: 0;
+        border-bottom-left-radius: 0;
       }
       .arrow-icon {
         margin-left: auto;
@@ -80,16 +91,21 @@ export default class SubmodeSwitcher extends Component<Signature> {
         display: flex;
       }
       :global(.submode-switcher-dropdown) {
-        background: none;
+        --boxel-dropdown-content-border-radius: var(
+          --submode-switcher-dropdown-content-border-radius
+        );
+        background-color: var(--submode-switcher-dropdown-content-bg-color);
       }
-      .menu {
-        border-radius: var(--boxel-border-radius);
+      .submode-switcher-dropdown-menu {
         width: 190px;
         color: var(--boxel-light);
         font: 500 var(--boxel-font-sm);
 
         --icon-color: var(--boxel-light);
-        --boxel-menu-color: rgba(0, 0, 0, 0.45);
+        --boxel-menu-border-radius: var(
+          --submode-switcher-dropdown-content-border-radius
+        );
+        --boxel-menu-color: var(--submode-switcher-dropdown-content-bg-color);
         --boxel-menu-current-color: rgba(0, 0, 0, 0.3);
         --boxel-menu-item-gap: var(--boxel-sp-sm);
         --boxel-menu-item-content-padding: var(--boxel-sp-xs);

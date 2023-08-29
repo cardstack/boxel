@@ -1,7 +1,5 @@
 import { expect } from '@playwright/test';
-import {
-  registerUser,
-} from '../docker/synapse';
+import { registerUser } from '../docker/synapse';
 import {
   assertLoggedIn,
   assertLoggedOut,
@@ -11,11 +9,10 @@ import {
   openChat,
   reloadAndOpenChat,
   toggleOperatorMode,
-  test
+  test,
 } from '../helpers';
 
 test.describe('Login', () => {
-
   test.beforeEach(async ({ synapse }) => {
     await registerUser(synapse, 'user1', 'pass');
   });
