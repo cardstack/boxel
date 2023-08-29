@@ -622,7 +622,9 @@ export default class OperatorModeContainer extends Component<Signature> {
   loadCardForCodeModeTask = restartableTask(async (codePath: URL) => {
     try {
       let realmURL = this.cardService.getRealmURLFor(codePath);
-      if (!realmURL) throw new Error('URL is not in any realms');
+      if (!realmURL) {
+        throw new Error('URL is not in any realms');
+      }
 
       this.codeModeCard = await this.cardService.loadModel(codePath);
       this.operatorModeStateService.updateCodePath(codePath);

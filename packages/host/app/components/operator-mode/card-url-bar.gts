@@ -131,8 +131,11 @@ export default class CardURLBar extends Component<Signature> {
   }
 
   get errorMessage() {
-    if (this.isInvalidURL) return 'Not a valid URL';
-    else return this.args.cardError;
+    if (this.isInvalidURL) {
+      return 'Not a valid URL';
+    } else {
+      return this.args.cardError;
+    }
   }
 
   get cssClasses() {
@@ -146,7 +149,10 @@ export default class CardURLBar extends Component<Signature> {
   }
 
   fetchRealmInfo = trackedFunction(this, async () => {
-    if (!this.args.card) return;
+    if (!this.args.card) {
+      return;
+    }
+
     return this.cardService.getRealmInfo(this.args.card);
   });
 
@@ -159,7 +165,9 @@ export default class CardURLBar extends Component<Signature> {
 
   @action
   onKeyPress(event: KeyboardEvent) {
-    if (event.key !== 'Enter') return;
+    if (event.key !== 'Enter') {
+      return;
+    }
 
     let url;
     try {
@@ -168,7 +176,9 @@ export default class CardURLBar extends Component<Signature> {
       this.isInvalidURL = true;
     }
 
-    if (url) this.args.onEnterPressed(url);
+    if (url) {
+      this.args.onEnterPressed(url);
+    }
   }
 
   @action
