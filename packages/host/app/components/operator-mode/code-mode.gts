@@ -37,29 +37,25 @@ export default class CodeMode extends Component<Signature> {
     <div class='code-mode' data-test-code-mode>
       <div class='columns'>
         <div class='column'>
-          {{! Move container and styles to separate component }}
-          <div class='file-browser'>
-            <header class='file-browser__header'>
-              Inheritance / File Browser
-            </header>
-            <section class='file-browser__content'></section>
+          {{!-- Move each container and styles to separate component --}}
+          <div class='inner-container'>
+            Inheritance / File Browser
+            <section class='inner-container__content'></section>
           </div>
-
-          {{! Move container and styles to separate component }}
-          <aside class='recent-files'>
-            <header class='recent-files__header'>Recent Files</header>
-            <section class='recent-files__content'></section>
+          <aside class='inner-container'>
+            <header class='inner-container__header'>
+              Recent Files
+            </header>
+            <section class='inner-container__content'></section>
           </aside>
         </div>
         <div class='column'>
-          {{! Move container and styles to separate component }}
-          <div class='code-editor'>
+          <div class='inner-container'>
             Code
           </div>
         </div>
         <div class='column'>
-          {{! Move container and styles to separate component }}
-          <div class='schema-editor'>
+          <div class='inner-container'>
             Schema Editor
           </div>
         </div>
@@ -81,11 +77,13 @@ export default class CodeMode extends Component<Signature> {
 
       .code-mode {
         height: 100%;
+        max-height: 100vh;
         left: 0;
         right: 0;
         z-index: 1;
         padding: var(--code-mode-padding-top) var(--boxel-sp)
           var(--code-mode-padding-bottom);
+        overflow: auto;
       }
 
       .code-mode-background {
@@ -102,66 +100,47 @@ export default class CodeMode extends Component<Signature> {
       .columns {
         display: flex;
         flex-direction: row;
-        flex-wrap: wrap;
+        flex-shrink: 0;
         gap: var(--boxel-sp-lg);
         height: 100%;
       }
-
       .column {
         flex: 1;
-        display: grid;
+        display: flex;
+        flex-direction: column;
         gap: var(--boxel-sp);
         min-width: var(--code-mode-column-min-width);
       }
-
-      .column:first-child {
-        flex: 0.3;
+      .column:nth-child(2) {
+        flex: 2;
       }
-
       .column:last-child {
-        flex: 0.6;
+        flex: 1.2;
+      }
+      .column:first-child > *:first-child {
+        max-height: 50%;
+        background-color: var(--boxel-200);
+      }
+      .column:first-child > *:last-child {
+        max-height: calc(50% - var(--boxel-sp));
+        background-color: var(--boxel-200);
       }
 
-      .file-browser {
+      .inner-container {
         height: 100%;
+        display: flex;
+        flex-direction: column;
         background-color: var(--boxel-light);
-        border-radius: var(--boxel-border-radius);
-        overflow: hidden;
+        border-radius: var(--boxel-border-radius-xl);
       }
-      .file-browser__header {
-        padding: var(--boxel-sp-sm) var(--boxel-sp-xs);
-        background-color: var(--boxel-200);
-      }
-      .file-browser__content {
-        padding: 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
-      }
-
-      .recent-files {
-        height: 100%;
-        background-color: var(--boxel-200);
-        border-radius: var(--boxel-border-radius);
-        overflow: hidden;
-      }
-      .recent-files__header {
+      .inner-container__header {
         padding: var(--boxel-sp-sm) var(--boxel-sp-xs);
         font: 700 var(--boxel-font);
+        letter-spacing: var(--boxel-lsp-xs);
       }
-      .recent-files__content {
+      .inner-container__content {
         padding: 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
-      }
-
-      .code-editor {
-        height: 100%;
-        border-radius: var(--boxel-border-radius);
-        background-color: var(--boxel-light);
-        overflow: hidden;
-      }
-
-      .schema-editor {
-        height: 100%;
-        border-radius: var(--boxel-border-radius);
-        background-color: var(--boxel-light);
-        overflow: hidden;
+        overflow-y: auto;
       }
     </style>
   </template>
