@@ -317,20 +317,20 @@ export default class CardService extends Service {
 
   // intentionally not async so that this can run in a destructor--this means
   // that callers need to await this.ready
-  unsubscribeFromCard(
-    card: CardDef,
+  unsubscribe(
+    fieldOrCard: BaseDef,
     subscriber: (fieldName: string, value: any) => void,
   ) {
-    this.api.unsubscribeFromChanges(card, subscriber);
+    this.api.unsubscribeFromChanges(fieldOrCard, subscriber);
   }
 
   // also not async to reflect the fact the unsubscribe is not async. Callers
   // needs to await this.ready
-  subscribeToCard(
-    card: CardDef,
+  subscribe(
+    fieldOrCard: BaseDef,
     subscriber: (fieldName: string, value: any) => void,
   ) {
-    this.api.subscribeToChanges(card, subscriber);
+    this.api.subscribeToChanges(fieldOrCard, subscriber);
   }
 
   getRealmURLFor(url: URL) {

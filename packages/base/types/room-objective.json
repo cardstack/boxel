@@ -6,7 +6,7 @@
       "description": "A room objective used to get all the members of the room to say \"Hello\".",
       "ref": {
         "module": "https://cardstack.com/base/room-objective",
-        "name": "RoomObjectiveCard"
+        "name": "RoomObjectiveField"
       }
     },
     "meta": {

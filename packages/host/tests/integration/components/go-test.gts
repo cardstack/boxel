@@ -27,6 +27,7 @@ import type {
 } from '@cardstack/host/services/monaco-service';
 import CodeController from '@cardstack/host/controllers/code';
 import { OpenFiles } from '@cardstack/host/controllers/code';
+import CodeService from '@cardstack/host/services/code-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { formatRFC7231 } from 'date-fns';
@@ -115,7 +116,9 @@ module('Integration | Component | go', function (hooks) {
     monacoService = this.owner.lookup(
       'service:monaco-service',
     ) as MonacoService;
-    mockOpenFiles = new OpenFiles(new CodeController());
+    let codeController = new CodeController();
+    codeController.codeService = new CodeService();
+    mockOpenFiles = new OpenFiles(codeController);
     await realm.ready;
   });
 

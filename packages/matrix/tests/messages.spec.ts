@@ -1,7 +1,5 @@
 import { expect } from '@playwright/test';
-import {
-  registerUser,
-} from '../docker/synapse';
+import { registerUser } from '../docker/synapse';
 import {
   login,
   logout,

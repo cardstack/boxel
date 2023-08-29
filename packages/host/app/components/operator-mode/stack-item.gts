@@ -39,7 +39,6 @@ import { htmlSafe, SafeString } from '@ember/template';
 import OperatorModeOverlays from './overlays';
 import ElementTracker from '../../resources/element-tracker';
 import config from '@cardstack/host/config/environment';
-import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import { formatDistanceToNow } from 'date-fns';
 import Modifier from 'ember-modifier';
 import { schedule } from '@ember/runloop';
@@ -223,7 +222,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private subscribeToCard = task(async () => {
     await this.cardService.ready;
     registerDestructor(this, this.cleanup);
-    this.cardService.subscribeToCard(this.subscribedCard, this.onCardChange);
+    this.cardService.subscribe(this.subscribedCard, this.onCardChange);
     this.refreshSaveMsg = setInterval(
       () => this.calculateLastSavedMsg(),
       10 * 1000,
@@ -231,10 +230,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   });
 
   private cleanup = () => {
-    this.cardService.unsubscribeFromCard(
-      this.subscribedCard,
-      this.onCardChange,
-    );
+    this.cardService.unsubscribe(this.subscribedCard, this.onCardChange);
     clearInterval(this.refreshSaveMsg);
   };
 
@@ -245,7 +241,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private doWhenCardChanges = restartableTask(async () => {
     await timeout(autoSaveDelayMs);
     this.isSaving = true;
-    await this.args.save(this.args.item, false);
+    this.args.save(this.args.item, false);
     this.isSaving = false;
     this.lastSaved = Date.now();
     this.calculateLastSavedMsg();
@@ -287,32 +283,21 @@ export default class OperatorModeStackItem extends Component<Signature> {
       <CardContainer class={{cn 'card' edit=(eq @item.format 'edit')}}>
         <Header
           @title={{this.headerTitle}}
-          class='header'
+          class={{cn 'header' header--icon-hovered=this.isHoverOnRealmIcon}}
           {{on
             'click'
             (optional (if this.isBuried (fn @dismissStackedCardsAbove @index)))
           }}
-          style={{cssVar
-            boxel-header-icon-width='30px'
-            boxel-header-icon-height='30px'
-            boxel-header-text-size=(if
-              this.isHoverOnRealmIcon 'var(--boxel-font)' 'var(--boxel-font-lg)'
-            )
-            boxel-header-text-color=(if
-              this.isHoverOnRealmIcon 'var(--boxel-teal)' 'var(--boxel-dark)'
-            )
-            boxel-header-padding='var(--boxel-sp-xs) var(--boxel-sp)'
-            boxel-header-action-padding='var(--boxel-sp-xs) var(--boxel-sp)'
-          }}
           data-test-stack-card-header
         >
           <:icon>
-            {{#if this.headerIcon}}
+            {{#if this.headerIcon.URL}}
               <img
                 class='header-icon'
                 src={{this.headerIcon.URL}}
                 data-test-boxel-header-icon={{this.headerIcon.URL}}
-                alt='Header icon'
+                alt=''
+                role='presentation'
                 {{on 'mouseenter' this.headerIcon.onMouseEnter}}
                 {{on 'mouseleave' this.headerIcon.onMouseLeave}}
               />
@@ -460,8 +445,21 @@ export default class OperatorModeStackItem extends Component<Signature> {
       }
 
       .header {
+        --boxel-header-icon-width: var(--boxel-icon-med);
+        --boxel-header-icon-height: var(--boxel-icon-med);
+        --boxel-header-padding: var(--boxel-sp-xs);
+        --boxel-header-text-size: var(--boxel-font-med);
+
         z-index: 1;
-        background: var(--boxel-light);
+        background-color: var(--boxel-light);
+        max-width: max-content;
+        min-width: 100%;
+        gap: var(--boxel-sp-xxs);
+      }
+
+      .header--icon-hovered {
+        --boxel-header-text-color: var(--boxel-highlight);
+        --boxel-header-text-size: var(--boxel-font);
       }
 
       .save-indicator {
@@ -512,6 +510,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
       .buried .card {
         background-color: var(--boxel-200);
         grid-template-rows: var(--buried-operator-mode-header-height) auto;
+      }
+
+      .buried > .card > .content {
+        display: none;
       }
 
       .buried .header .icon-button {
