@@ -9,7 +9,6 @@ import type CardService from '../../services/card-service';
 import get from 'lodash/get';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { Modal, IconButton } from '@cardstack/boxel-ui';
-import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import SearchSheet, { SearchSheetMode } from '../search-sheet';
 import { restartableTask, task, dropTask } from 'ember-concurrency';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
@@ -674,7 +673,7 @@ export default class OperatorModeContainer extends Component<Signature> {
                   )
                 }}
               >
-                {{svgJar 'download' width='30px' height='30px'}}
+                {{svgJar 'download' width='25' height='25'}}
               </button>
               <button
                 data-test-add-card-right-stack
@@ -694,25 +693,23 @@ export default class OperatorModeContainer extends Component<Signature> {
                   )
                 }}
               >
-                {{svgJar 'download' width='30px' height='30px'}}
+                {{svgJar 'download' width='25' height='25'}}
               </button>
             {{/if}}
           </div>
         {{/if}}
 
         {{#if this.isChatVisible}}
-          <ChatSidebar @onClose={{this.toggleChat}} />
+          <div class='container__chat-sidebar'>
+            <ChatSidebar @onClose={{this.toggleChat}} />
+          </div>
         {{else}}
           <IconButton
             data-test-open-chat
             class='chat-btn'
             @icon='sparkle'
-            @width='30px'
-            @height='30px'
-            style={{cssVar
-              boxel-icon-button-width='50px'
-              boxel-icon-button-height='50px'
-            }}
+            @width='25'
+            @height='25'
             {{on 'click' this.toggleChat}}
           />
         {{/if}}
@@ -731,6 +728,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       :global(:root) {
         --operator-mode-bg-color: #686283;
         --boxel-modal-max-width: 100%;
+        --container-button-size: var(--boxel-icon-lg);
       }
       :global(.operator-mode .boxel-modal__inner) {
         display: block;
@@ -766,8 +764,9 @@ export default class OperatorModeContainer extends Component<Signature> {
       .add-card-to-neighbor-stack {
         --icon-color: var(--boxel-highlight-hover);
         position: absolute;
-        width: 60px;
-        height: 60px;
+        width: var(--container-button-size);
+        height: var(--container-button-size);
+        padding: 0;
         border-radius: 50%;
         background-color: var(--boxel-light-100);
         border-color: transparent;
@@ -779,12 +778,10 @@ export default class OperatorModeContainer extends Component<Signature> {
         background-color: var(--boxel-light);
       }
       .add-card-to-neighbor-stack--left {
-        left: 0;
-        margin-left: var(--boxel-sp-lg);
+        left: var(--boxel-sp);
       }
       .add-card-to-neighbor-stack--right {
-        right: 0;
-        margin-right: var(--boxel-sp-lg);
+        right: var(--boxel-sp);
       }
 
       .operator-mode__with-chat {
@@ -805,7 +802,7 @@ export default class OperatorModeContainer extends Component<Signature> {
 
       .operator-mode__main {
         display: flex;
-        justify-content: stretch;
+        justify-content: center;
         align-items: center;
         position: relative;
         background-position: center;
@@ -813,19 +810,25 @@ export default class OperatorModeContainer extends Component<Signature> {
       }
 
       .chat-btn {
+        --boxel-icon-button-width: var(--container-button-size);
+        --boxel-icon-button-height: var(--container-button-size);
         --icon-color: var(--boxel-highlight-hover);
+
         position: absolute;
-        bottom: 6px;
-        right: 6px;
+        bottom: var(--boxel-sp);
+        right: var(--boxel-sp);
         margin-right: 0;
+        padding: var(--boxel-sp-xxxs);
         border-radius: var(--boxel-border-radius);
-        background-color: var(--boxel-light-100);
-        border: solid 1px var(--boxel-border-color);
+        background-color: var(--boxel-dark);
+        border: none;
         box-shadow: var(--boxel-deep-box-shadow);
+        transition: background-color var(--boxel-transition);
+        z-index: 1;
       }
       .chat-btn:hover {
-        --icon-color: var(--boxel-highlight);
-        background-color: var(--boxel-light);
+        --icon-color: var(--boxel-dark);
+        background-color: var(--boxel-highlight-hover);
       }
 
       .submode-switcher {
@@ -834,6 +837,11 @@ export default class OperatorModeContainer extends Component<Signature> {
         left: 0;
         z-index: 2;
         padding: var(--boxel-sp);
+      }
+
+      .container__chat-sidebar {
+        grid-column: 2;
+        z-index: 1;
       }
     </style>
   </template>

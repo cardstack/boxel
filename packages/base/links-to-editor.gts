@@ -30,7 +30,7 @@ interface Signature {
 
 class LinksToEditor extends GlimmerComponent<Signature> {
   <template>
-    <div class='links-to-editor {{if this.isEmpty "empty"}}'>
+    <div class='links-to-editor'>
       {{#if this.isEmpty}}
         <Button @size='small' {{on 'click' this.choose}} data-test-choose-card>
           Choose
@@ -42,38 +42,39 @@ class LinksToEditor extends GlimmerComponent<Signature> {
         {{/if}}
       {{else}}
         <this.linkedCard />
-        <IconButton
-          @icon='icon-minus-circle'
-          @width='20px'
-          @height='20px'
-          class='remove'
-          aria-label='Remove'
-          {{on 'click' this.remove}}
-          disabled={{this.isEmpty}}
-          data-test-remove-card
-        />
+        <div class='remove-button-container'>
+          <IconButton
+            @variant='primary'
+            @icon='icon-minus-circle'
+            @width='20px'
+            @height='20px'
+            class='remove'
+            {{on 'click' this.remove}}
+            disabled={{this.isEmpty}}
+            aria-label='Remove'
+            data-test-remove-card
+          />
+        </div>
       {{/if}}
     </div>
     <style>
       .links-to-editor {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        gap: var(--boxel-sp-xs);
+        position: relative;
+      }
+      .remove-button-container {
+        position: absolute;
+        top: 0;
+        left: 100%;
+        height: 100%;
+        display: flex;
         align-items: center;
       }
-
-      .empty {
-        display: block;
-      }
-
       .remove {
-        --icon-bg: var(--boxel-highlight);
-        --icon-border: var(--icon-bg);
         --icon-color: var(--boxel-light);
       }
-
       .remove:hover {
         --icon-bg: var(--boxel-dark);
+        --icon-border: var(--boxel-dark);
       }
     </style>
   </template>
