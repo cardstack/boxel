@@ -499,9 +499,7 @@ export class RoomCard extends CardDef {
           messageCard = new MessageCard({
             ...cardArgs,
             command,
-          } else {
-            throw new Error('cannot handle commands in room without a type');
-          }
+          });
         } else {
           messageCard = new MessageCard(cardArgs);
         }
