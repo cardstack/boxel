@@ -20,6 +20,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import CodeController from '@cardstack/host/controllers/code';
 import { OpenFiles } from '@cardstack/host/controllers/code';
+import CodeService from '@cardstack/host/services/code-service';
 
 let loader: Loader;
 
@@ -28,6 +29,7 @@ module('Integration | file-tree', function (hooks) {
   let realm: Realm;
   let mockController = new CodeController();
   let mockOpenFiles = new OpenFiles(mockController);
+  mockController.codeService = new CodeService();
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
 

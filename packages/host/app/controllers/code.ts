@@ -1,6 +1,8 @@
 import Controller from '@ember/controller';
 import { Model } from '../routes/code';
 import { tracked } from '@glimmer/tracking';
+import { service } from '@ember/service';
+import type CodeService from '@cardstack/host/services/code-service';
 
 export default class CodeController extends Controller {
   queryParams = ['path', 'openDirs'];
@@ -8,10 +10,27 @@ export default class CodeController extends Controller {
   @tracked path: string | undefined;
   @tracked openDirs: string | undefined;
 
+  @service declare codeService: CodeService;
+
   declare model: Model;
 
   get codeParams() {
     return new OpenFiles(this);
+  }
+
+  openFile(newPath: string | undefined) {
+    this.path = newPath;
+
+    if (newPath) {
+      const existingIndex = this.codeService.recentFiles.indexOf(newPath);
+
+      if (existingIndex > -1) {
+        this.codeService.recentFiles.splice(existingIndex, 1);
+      }
+
+      this.codeService.recentFiles.unshift(newPath);
+      this.codeService.persistRecentFiles();
+    }
   }
 }
 
@@ -21,7 +40,7 @@ export class OpenFiles {
     return this.controller.path;
   }
   set path(newPath: string | undefined) {
-    this.controller.path = newPath;
+    this.controller.openFile(newPath);
   }
   get openDirs(): string[] {
     return this.controller.openDirs ? this.controller.openDirs.split(',') : [];

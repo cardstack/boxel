@@ -24,8 +24,12 @@ export default class SearchResult extends Component<Signature> {
       ...attributes
     >
       <header class='search-result__title'>{{@card.title}}</header>
-      <p class='search-result__display-name'>{{cardTypeDisplayName @card}}</p>
-      <p class='search-result__realm-name'>In {{this.realmName}}</p>
+      <p class='search-result__subtitle'>
+        <span class='search-result__display-name'>
+          {{cardTypeDisplayName @card}}
+        </span>
+        <span class='search-result__realm-name'>In {{this.realmName}}</span>
+      </p>
     </CardContainer>
     <style>
       .search-result {
@@ -37,13 +41,18 @@ export default class SearchResult extends Component<Signature> {
         width: 199px;
         height: 50px;
         padding: var(--boxel-sp-xxs);
-        overflow: hidden;
       }
       .search-result__title {
         margin-bottom: var(--boxel-sp-xs);
         font: 500 var(--boxel-font-sm);
         overflow: hidden;
         text-wrap: nowrap;
+      }
+      .search-result__subtitle {
+        margin: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       .is-compact .search-result__title {
         margin-bottom: 0;
@@ -53,14 +62,13 @@ export default class SearchResult extends Component<Signature> {
         font: 500 var(--boxel-font-xs);
         color: #919191;
       }
+      .search-result:not(.is-compact) .search-result__realm-name {
+        display: block;
+      }
       .search-result__realm-name {
         margin: 0;
         color: var(--boxel-teal);
         font-size: var(--boxel-font-size-xs);
-      }
-      .is-compact .search-result__display-name,
-      .is-compact .search-result__realm-name {
-        display: inline-block;
       }
       .is-compact .search-result__display-name:after {
         content: ', ';

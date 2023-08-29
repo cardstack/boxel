@@ -79,7 +79,7 @@ class BoxelDropdown extends Component<Signature> {
         )
         as |ddModifier|
       }}
-        {{! @glint-ignore }}
+        {{!-- @glint-ignore --}}
         {{yield ddModifier to='trigger'}}
       {{/let}}
 
@@ -101,17 +101,20 @@ class BoxelDropdown extends Component<Signature> {
       </dd.Content>
     </BasicDropdown>
     <style>
-      .boxel-dropdown__content {
-        border-radius: var(--boxel-border-radius);
-        box-shadow: 0 5px 15px 0 rgb(0 0 0 / 25%);
-      }
+      @layer {
+        .boxel-dropdown__content {
+          --boxel-dropdown-content-border-radius: var(--boxel-border-radius);
+          border-radius: var(--boxel-dropdown-content-border-radius);
+          box-shadow: 0 5px 15px 0 rgb(0 0 0 / 25%);
+        }
 
-      .boxel-dropdown__content.ember-basic-dropdown-content--below.ember-basic-dropdown--transitioning-in {
-        animation: drop-fade-below var(0.2s ease);
-      }
+        .boxel-dropdown__content.ember-basic-dropdown-content--below.ember-basic-dropdown--transitioning-in {
+          animation: drop-fade-below var(0.2s ease);
+        }
 
-      .boxel-dropdown__content.ember-basic-dropdown-content--below.ember-basic-dropdown--transitioning-out {
-        animation: drop-fade-below var(0.2s ease) reverse;
+        .boxel-dropdown__content.ember-basic-dropdown-content--below.ember-basic-dropdown--transitioning-out {
+          animation: drop-fade-below var(0.2s ease) reverse;
+        }
       }
     </style>
   </template>

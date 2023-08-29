@@ -11,7 +11,8 @@ import {
 } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
 import type { ComponentLike } from '@glint/template';
-import { Button, IconButton } from '@cardstack/boxel-ui';
+import { AddButton, IconButton } from '@cardstack/boxel-ui';
+import { getPlural } from '@cardstack/runtime-common';
 
 interface Signature {
   Args: {
@@ -44,44 +45,51 @@ class ContainsManyEditor extends GlimmerComponent<Signature> {
               }}
                 <Item />
               {{/let}}
-              <IconButton
-                @icon='icon-trash'
-                @width='20px'
-                @height='20px'
-                class='remove'
-                {{on 'click' (fn this.remove i)}}
-                data-test-remove={{i}}
-                aria-label='Remove'
-              />
+              <div class='remove-button-container'>
+                <IconButton
+                  @icon='icon-trash'
+                  @width='20px'
+                  @height='20px'
+                  class='remove'
+                  {{on 'click' (fn this.remove i)}}
+                  data-test-remove={{i}}
+                  aria-label='Remove'
+                />
+              </div>
             </li>
           {{/each}}
         </ul>
       {{/if}}
-      <Button
-        @size='small'
+      <AddButton
+        class='add-new'
+        @variant='full-width'
         {{on 'click' this.add}}
-        type='button'
         data-test-add-new
-      >+ Add New</Button>
+      >
+        Add
+        {{getPlural @field.card.displayName}}
+      </AddButton>
     </div>
     <style>
-      .editor {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        gap: var(--boxel-sp-xs);
-        align-items: center;
-      }
-
       .list {
         list-style: none;
         padding: 0;
         margin: 0 0 var(--boxel-sp);
       }
-
       .list > li + li {
         margin-top: var(--boxel-sp);
       }
-
+      .editor {
+        position: relative;
+      }
+      .remove-button-container {
+        position: absolute;
+        top: 0;
+        left: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+      }
       .remove {
         --icon-color: var(--boxel-red);
       }
