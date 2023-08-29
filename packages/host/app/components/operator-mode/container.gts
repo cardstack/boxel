@@ -729,9 +729,13 @@ export default class OperatorModeContainer extends Component<Signature> {
         --operator-mode-bg-color: #686283;
         --boxel-modal-max-width: 100%;
         --container-button-size: var(--boxel-icon-lg);
+        --operator-mode-min-width: 20.5rem;
       }
       :global(.operator-mode .boxel-modal__inner) {
         display: block;
+      }
+      .operator-mode {
+        min-width: var(--operator-mode-min-width);
       }
       .operator-mode > div {
         align-items: flex-start;
