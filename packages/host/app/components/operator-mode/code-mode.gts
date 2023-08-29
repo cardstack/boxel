@@ -27,7 +27,7 @@ export default class CodeMode extends Component<Signature> {
     return this.fetchRealmInfo.value?.backgroundURL;
   }
 
-  get iconURL() {
+  get realmIconURL() {
     return this.fetchRealmInfo.value?.iconURL;
   }
 
@@ -50,7 +50,10 @@ export default class CodeMode extends Component<Signature> {
         <div class='column column--with-border'>File tree</div>
         <div class='column column--with-border'>Code</div>
         <div class='column' data-test-column-card-preview>
-          <CardPreviewPanel @card={{@card}} @realmIconURL={{this.iconURL}} />
+          <CardPreviewPanel
+            @card={{@card}}
+            @realmIconURL={{this.realmIconURL}}
+          />
         </div>
       </div>
     </div>
