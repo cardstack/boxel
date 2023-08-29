@@ -14,8 +14,8 @@ interface Signature {
     url: URL;
     onEnterPressed: (url: URL) => void;
     card: CardDef | null;
-    notFoundError: string | null;
-    resetNotFoundError: () => void;
+    cardError: string | null;
+    resetCardError: () => void;
   };
 }
 
@@ -127,12 +127,12 @@ export default class CardURLBar extends Component<Signature> {
   }
 
   get showErrorMessage() {
-    return this.isInvalidURL || this.args.notFoundError;
+    return this.isInvalidURL || this.args.cardError;
   }
 
   get errorMessage() {
     if (this.isInvalidURL) return 'Not a valid URL';
-    else return this.args.notFoundError;
+    else return this.args.cardError;
   }
 
   get cssClasses() {
@@ -154,7 +154,7 @@ export default class CardURLBar extends Component<Signature> {
   onInput(url: string) {
     this.url = url;
     this.isInvalidURL = false;
-    this.args.resetNotFoundError();
+    this.args.resetCardError();
   }
 
   @action

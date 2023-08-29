@@ -95,8 +95,8 @@ export default class OperatorModeContainer extends Component<Signature> {
   @tracked searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked isChatVisible = false;
 
-  @tracked cardForCardMode: CardDef | null = null;
-  @tracked cardNotFoundError: string | null = null;
+  @tracked codeModeCard: CardDef | null = null;
+  @tracked codeModeCardError: string | null = null;
 
   private deleteModal: DeleteModal | undefined;
 
@@ -611,8 +611,8 @@ export default class OperatorModeContainer extends Component<Signature> {
     this.operatorModeStateService.updateSubmode(submode);
   }
 
-  @action resetCardNotFoundError() {
-    this.cardNotFoundError = null;
+  @action resetCodeModeCardError() {
+    this.codeModeCardError = null;
   }
 
   @action loadCardForCodeMode(codePath: URL) {
@@ -624,10 +624,10 @@ export default class OperatorModeContainer extends Component<Signature> {
       let realmURL = this.cardService.getRealmURLFor(codePath);
       if (!realmURL) throw new Error('URL is not in any realms');
 
-      this.cardForCardMode = await this.cardService.loadModel(codePath);
+      this.codeModeCard = await this.cardService.loadModel(codePath);
       this.operatorModeStateService.updateCodePath(codePath);
     } catch (e: any) {
-      this.cardNotFoundError =
+      this.codeModeCardError =
         e.message === 'URL is not in any realms'
           ? e.message
           : 'File is not found';
@@ -662,15 +662,15 @@ export default class OperatorModeContainer extends Component<Signature> {
             <CardURLBar
               @url={{this.codePath}}
               @onEnterPressed={{this.loadCardForCodeMode}}
-              @card={{this.cardForCardMode}}
-              @notFoundError={{this.cardNotFoundError}}
-              @resetNotFoundError={{this.resetCardNotFoundError}}
+              @card={{this.codeModeCard}}
+              @cardError={{this.codeModeCardError}}
+              @resetCardError={{this.resetCodeModeCardError}}
             />
           {{/if}}
         </div>
 
         {{#if this.isCodeMode}}
-          <CodeMode @card={{this.cardForCardMode}} />
+          <CodeMode @card={{this.codeModeCard}} />
         {{else}}
           <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
             {{#if (eq this.allStackItems.length 0)}}
