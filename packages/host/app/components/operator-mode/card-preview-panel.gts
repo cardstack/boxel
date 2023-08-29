@@ -35,7 +35,7 @@ export default class CardPreviewPanel extends Component<Signature> {
   <template>
     <div class='preview-header' data-test-code-mode-card-preview-header>
       <div class='header-icon'>
-        <img src={{@realmIconURL}} />
+        <img src={{@realmIconURL}} alt='Realm icon' />
       </div>
       <div class='header-title'>
         {{cardTypeDisplayName @card}}
