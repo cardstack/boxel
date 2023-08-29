@@ -312,6 +312,8 @@ module('Acceptance | basic tests', function (hooks) {
 
     // Syntax highlighting is breadth-first, this is the latest and deepest token
     await waitForSyntaxHighlighting("''", 'rgb(163, 21, 21)');
+    await waitFor('[data-test-boxel-card-container] [data-test-description]');
+
     await percySnapshot(assert);
   });
 
