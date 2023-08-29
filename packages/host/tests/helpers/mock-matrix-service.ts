@@ -2,8 +2,8 @@ import { TrackedMap } from 'tracked-built-ins';
 import Service, { service } from '@ember/service';
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import type LoaderService from '@cardstack/host/services/loader-service';
-import type { RoomCard } from 'https://cardstack.com/base/room';
-import type { RoomObjectiveCard } from 'https://cardstack.com/base/room-objective';
+import type { RoomField } from 'https://cardstack.com/base/room';
+import type { RoomObjectiveField } from 'https://cardstack.com/base/room-objective';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 
@@ -20,8 +20,8 @@ export class MockMatrixService extends Service {
 
   cardAPI!: typeof cardApi;
   // These will be empty in the tests, but we need to define them to satisfy the interface
-  roomCards: TrackedMap<string, Promise<RoomCard>> = new TrackedMap();
-  roomObjectives: TrackedMap<string, RoomObjectiveCard> = new TrackedMap();
+  rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
+  roomObjectives: TrackedMap<string, RoomObjectiveField> = new TrackedMap();
 
   async start(_auth?: any) {}
 
