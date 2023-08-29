@@ -35,10 +35,6 @@ export default class CodeMode extends Component<Signature> {
     return htmlSafe(`background-image: url(${this.realmBackgroundURL});`);
   }
 
-  copyToClipboard = restartableTask(async () => {
-    await navigator.clipboard.writeText(this.args.card.id);
-  });
-
   <template>
     <div
       class='code-mode-background'
