@@ -1,11 +1,12 @@
 import Component from '@glimmer/component';
 import { service } from '@ember/service';
-import MonacoService from '@cardstack/host/services/monaco-service';
 import { trackedFunction } from 'ember-resources/util/function';
 import CardService from '@cardstack/host/services/card-service';
 import { htmlSafe } from '@ember/template';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+import { restartableTask } from 'ember-concurrency';
+import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-preview-panel';
 
 interface Signature {
   Args: {
@@ -14,7 +15,6 @@ interface Signature {
 }
 
 export default class CodeMode extends Component<Signature> {
-  @service declare monacoService: MonacoService;
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
 
@@ -23,22 +23,35 @@ export default class CodeMode extends Component<Signature> {
     return realmInfo;
   });
 
-  get backgroundURL() {
+  get realmBackgroundURL() {
     return this.fetchRealmInfo.value?.backgroundURL;
   }
 
-  get backgroundURLStyle() {
-    return htmlSafe(`background-image: url(${this.backgroundURL});`);
+  get iconURL() {
+    return this.fetchRealmInfo.value?.iconURL;
   }
 
+  get realmBackgroundURLStyle() {
+    return htmlSafe(`background-image: url(${this.realmBackgroundURL});`);
+  }
+
+  copyToClipboard = restartableTask(async () => {
+    await navigator.clipboard.writeText(this.args.card.id);
+  });
+
   <template>
-    <div class='code-mode-background' style={{this.backgroundURLStyle}}></div>
+    <div
+      class='code-mode-background'
+      style={{this.realmBackgroundURLStyle}}
+    ></div>
 
     <div class='code-mode' data-test-code-mode>
       <div class='columns'>
-        <div class='column'>File tree</div>
-        <div class='column'>Code</div>
-        <div class='column'>Schema editor</div>
+        <div class='column column--with-border'>File tree</div>
+        <div class='column column--with-border'>Code</div>
+        <div class='column' data-test-column-card-preview>
+          <CardPreviewPanel @card={{@card}} @realmIconURL={{this.iconURL}} />
+        </div>
       </div>
     </div>
 
@@ -72,10 +85,12 @@ export default class CodeMode extends Component<Signature> {
 
       .column {
         flex: 1;
-        border: 1px solid black;
         margin-right: var(--boxel-sp-lg);
-
         border-radius: var(--boxel-border-radius);
+      }
+
+      .column--with-border {
+        border: 1px solid black;
       }
     </style>
   </template>

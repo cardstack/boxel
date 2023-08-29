@@ -829,5 +829,51 @@ module('Acceptance | operator mode tests', function (hooks) {
         )}`,
       );
     });
+
+    test('card preview will show in the 3rd column when submode is set to code', async function (assert) {
+      let operatorModeStateParam = stringify({
+        stacks: [
+          [
+            {
+              id: 'http://test-realm/test/Person/fadhlan',
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+      })!;
+
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam,
+        )}`,
+      );
+
+      assert.dom('[data-test-code-mode-card-preview-header]').hasText('Person');
+      assert
+        .dom('[data-test-code-mode-card-preview-body]')
+        .includesText('Fadhlan');
+
+      assert
+        .dom('[data-test-preview-card-footer-button-isolated]')
+        .hasClass('active');
+
+      await click('[data-test-preview-card-footer-button-embedded]');
+      assert
+        .dom('[data-test-preview-card-footer-button-embedded]')
+        .hasClass('active');
+      assert
+        .dom('[data-test-code-mode-card-preview-body ] .embedded-card')
+        .exists();
+
+      await click('[data-test-preview-card-footer-button-edit]');
+      assert
+        .dom('[data-test-preview-card-footer-button-edit]')
+        .hasClass('active');
+
+      assert
+        .dom('[data-test-code-mode-card-preview-body ] .edit-card')
+        .exists();
+    });
   });
 });
