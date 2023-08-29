@@ -8,9 +8,12 @@ import {
   type RealmInfo,
   RealmPaths,
   isCardDocument,
+  identifyCard,
+  moduleFrom,
+  type CodeRef,
 } from '@cardstack/runtime-common';
 import { maybe } from '@cardstack/host/resources/maybe';
-import { file } from '@cardstack/host/resources/file';
+import { Ready, file, isReady } from '@cardstack/host/resources/file';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import CardService from '@cardstack/host/services/card-service';
 import { restartableTask } from 'ember-concurrency';
@@ -20,6 +23,9 @@ import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-prev
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
+import CardInheritancePanel from './card-inheritance-panel';
+import { importResource } from '@cardstack/host/resources/import';
+import LoaderService from '@cardstack/host/services/loader-service';
 
 interface Signature {
   Args: {};
@@ -29,6 +35,7 @@ export default class CodeMode extends Component<Signature> {
   @service declare monacoService: MonacoService;
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
+  @service declare loaderService: LoaderService;
   @tracked realmInfo: RealmInfo | null = null;
   @tracked loadFileError: string | null = null;
 
@@ -99,6 +106,24 @@ export default class CodeMode extends Component<Signature> {
     }
   });
 
+  @use importedModule = resource(() => {
+    if (isReady(this.openFile.current)) {
+      let f: Ready = this.openFile.current;
+      if (f.name.endsWith('.json')) {
+        let ref = identifyCard(this.cardResource.value?.constructor);
+        if (ref !== undefined) {
+          return importResource(this, () => moduleFrom(ref as CodeRef));
+        } else {
+          return;
+        }
+      } else {
+        return importResource(this, () => f.url);
+      }
+    } else {
+      return undefined;
+    }
+  });
+
   @use cardResource = resource(() => {
     if (
       this.openFile.current?.state === 'ready' &&
@@ -159,8 +184,17 @@ export default class CodeMode extends Component<Signature> {
         <div class='column'>
           {{! Move each container and styles to separate component }}
           <div class='inner-container'>
-            Inheritance / File Browser
-            <section class='inner-container__content'></section>
+            <header class='inner-container__header'>
+              Inheritance
+            </header>
+            <section class='inner-container__content'>
+              <CardInheritancePanel
+                @cardInstance={{this.cardResource.value}}
+                @openFile={{this.openFile}}
+                @realmInfo={{this.realmInfo}}
+                @importedModule={{this.importedModule}}
+              />
+            </section>
           </div>
           <aside class='inner-container'>
             <header class='inner-container__header'>
