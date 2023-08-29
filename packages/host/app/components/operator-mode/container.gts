@@ -701,21 +701,21 @@ export default class OperatorModeContainer extends Component<Signature> {
             {{/if}}
           </div>
         {{/if}}
-      {{#if APP.experimentalAIEnabled}}
-        {{#if this.isChatVisible}}
-          <div class='container__chat-sidebar'>
-            <ChatSidebar @onClose={{this.toggleChat}} />
-          </div>
-        {{else}}
-          <IconButton
-            data-test-open-chat
-            class='chat-btn'
-            @icon='sparkle'
-            @width='25'
-            @height='25'
-            {{on 'click' this.toggleChat}}
-          />
-        {{/if}}
+        {{#if APP.experimentalAIEnabled}}
+          {{#if this.isChatVisible}}
+            <div class='container__chat-sidebar'>
+              <ChatSidebar @onClose={{this.toggleChat}} />
+            </div>
+          {{else}}
+            <IconButton
+              data-test-open-chat
+              class='chat-btn'
+              @icon='sparkle'
+              @width='25'
+              @height='25'
+              {{on 'click' this.toggleChat}}
+            />
+          {{/if}}
         {{/if}}
       </div>
 
@@ -844,6 +844,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       }
 
       .container__chat-sidebar {
+        height: 100vh;
         grid-column: 2;
         z-index: 1;
       }
