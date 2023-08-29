@@ -162,7 +162,7 @@ export class RoomMemberField extends FieldDef {
 
 class ScrollIntoView extends Modifier {
   modify(element: HTMLElement) {
-    //element.scrollIntoView();
+    element.scrollIntoView();
   }
 }
 
