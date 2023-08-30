@@ -15,7 +15,8 @@ interface LoginOptions {
 }
 
 export const test = base.extend<{ synapse: SynapseInstance }>({
-  synapse: async (_, use) => {
+  // eslint-disable-next-line no-empty-pattern
+  synapse: async ({}, use) => {
     let synapseInstance = await synapseStart();
     await use(synapseInstance);
     await synapseStop(synapseInstance.synapseId);
