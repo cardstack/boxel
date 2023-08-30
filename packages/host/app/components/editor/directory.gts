@@ -66,12 +66,15 @@ export default class Directory extends Component<Args> {
         cursor: pointer;
       }
 
-      .directory.selected,
-      .file.selected,
-      .file:active {
-        color: var(--boxel-highlight);
+      .directory, .file {
+        border-radius: var(--boxel-border-radius-xs);
       }
 
+      .file.selected,
+      .file:active {
+        color: var(--boxel-light);
+        background-color: var(--boxel-highlight);
+      }
     </style>
   </template>
 
