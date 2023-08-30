@@ -1,6 +1,6 @@
 # Card Rendering
 
-To render a card, the primary step is to obtain a Glimmer component identified by the template tags within the card. A card may contain several Glimmer components, including fields and other miscellaneous components, that are categorized into three formats: isolated, embedded, and edit. These formats determine which component should be rendered. If there are no components available for the isolated or edit formats, the [default format](../packages/base/default-card-component.gts) is used instead. The Glimmer components themselves are building blocks that can be used to create many other things.
+To render a card, the primary step is to obtain a Glimmer component identified by the template tags within the card. A card may contain several Glimmer components, including fields and other miscellaneous components, that are categorized into three formats: isolated, embedded, and edit. These formats determine which component should be rendered. If there are no components available for the isolated or edit formats, the default format from the CardDef base class is used instead. The Glimmer components themselves are building blocks that can be used to create many other things.
 
 ## Format
 
