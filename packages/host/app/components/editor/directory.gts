@@ -24,16 +24,16 @@ export default class Directory extends Component<Args> {
       <div class='level' data-test-directory-level>
         {{#let (concat @relativePath entry.name) as |entryPath|}}
           {{#if (eq entry.kind 'file')}}
-            <div
+            <button
               data-test-file={{entryPath}}
               role='button'
               {{on 'click' (fn this.openFile entryPath)}}
               class='file {{if (eq entryPath @openFiles.path) "selected"}}'
             >
               {{entry.name}}
-            </div>
+            </button>
           {{else}}
-            <div
+            <button
               data-test-directory={{entryPath}}
               role='button'
               {{on 'click' (fn this.toggleDirectory entryPath)}}
@@ -47,7 +47,7 @@ export default class Directory extends Component<Args> {
                   (if (isOpen entryPath @openFiles.openDirs) 'open' 'closed')
                 )
               }}{{entry.name}}
-            </div>
+            </button>
             {{#if (isOpen entryPath @openFiles.openDirs)}}
               <Directory
                 @openFiles={{@openFiles}}
@@ -78,6 +78,8 @@ export default class Directory extends Component<Args> {
       .directory,
       .file {
         border-radius: var(--boxel-border-radius-xs);
+        background: transparent;
+        border: 0;
       }
 
       .file.selected,
