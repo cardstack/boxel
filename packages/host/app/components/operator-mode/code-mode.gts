@@ -36,18 +36,54 @@ export default class CodeMode extends Component<Signature> {
 
     <div class='code-mode' data-test-code-mode>
       <div class='columns'>
-        <div class='column'>File tree</div>
-        <div class='column'>Code</div>
-        <div class='column'>Schema editor</div>
+        <div class='column'>
+          {{!-- Move each container and styles to separate component --}}
+          <div class='inner-container'>
+            Inheritance / File Browser
+            <section class='inner-container__content'></section>
+          </div>
+          <aside class='inner-container'>
+            <header class='inner-container__header'>
+              Recent Files
+            </header>
+            <section class='inner-container__content'></section>
+          </aside>
+        </div>
+        <div class='column'>
+          <div class='inner-container'>
+            Code
+          </div>
+        </div>
+        <div class='column'>
+          <div class='inner-container'>
+            Schema Editor
+          </div>
+        </div>
       </div>
     </div>
 
     <style>
+      :global(:root) {
+        --code-mode-padding-top: calc(
+          var(--submode-switcher-trigger-height) + (2 * (var(--boxel-sp)))
+        );
+        --code-mode-padding-bottom: calc(
+          var(--search-sheet-closed-height) + (var(--boxel-sp))
+        );
+        --code-mode-column-min-width: calc(
+          var(--operator-mode-min-width) - 2 * var(--boxel-sp)
+        );
+      }
+
       .code-mode {
         height: 100%;
+        max-height: 100vh;
         left: 0;
         right: 0;
         z-index: 1;
+        padding: var(--code-mode-padding-top) var(--boxel-sp)
+          var(--code-mode-padding-bottom);
+        overflow: auto;
       }
 
       .code-mode-background {
@@ -64,17 +100,47 @@ export default class CodeMode extends Component<Signature> {
       .columns {
         display: flex;
         flex-direction: row;
-        height: calc(100% - var(--search-sheet-closed-height) - 90px);
-        margin-top: 70px;
-        padding: var(--boxel-sp);
+        flex-shrink: 0;
+        gap: var(--boxel-sp-lg);
+        height: 100%;
       }
-
       .column {
         flex: 1;
-        border: 1px solid black;
-        margin-right: var(--boxel-sp-lg);
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp);
+        min-width: var(--code-mode-column-min-width);
+      }
+      .column:nth-child(2) {
+        flex: 2;
+      }
+      .column:last-child {
+        flex: 1.2;
+      }
+      .column:first-child > *:first-child {
+        max-height: 50%;
+        background-color: var(--boxel-200);
+      }
+      .column:first-child > *:last-child {
+        max-height: calc(50% - var(--boxel-sp));
+        background-color: var(--boxel-200);
+      }
 
-        border-radius: var(--boxel-border-radius);
+      .inner-container {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        background-color: var(--boxel-light);
+        border-radius: var(--boxel-border-radius-xl);
+      }
+      .inner-container__header {
+        padding: var(--boxel-sp-sm) var(--boxel-sp-xs);
+        font: 700 var(--boxel-font);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      .inner-container__content {
+        padding: 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
+        overflow-y: auto;
       }
     </style>
   </template>
