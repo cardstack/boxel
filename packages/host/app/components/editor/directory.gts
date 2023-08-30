@@ -64,15 +64,11 @@ export default class Directory extends Component<Args> {
         --icon-length: 12px;
 
         padding-left: 0em;
+        margin-bottom: 2px;
       }
 
       .level .level {
         padding-left: 1em;
-      }
-
-      .file:hover {
-        color: var(--boxel-highlight);
-        cursor: pointer;
       }
 
       .directory,
@@ -83,6 +79,11 @@ export default class Directory extends Component<Args> {
         padding: var(--boxel-sp-xxs);
         width: 100%;
         text-align: start;
+      }
+
+      .directory:hover,
+      .file:hover {
+        background-color: var(--boxel-200);
       }
 
       .file.selected,
