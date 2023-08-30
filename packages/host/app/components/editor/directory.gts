@@ -80,12 +80,19 @@ export default class Directory extends Component<Args> {
         border-radius: var(--boxel-border-radius-xs);
         background: transparent;
         border: 0;
+        padding: var(--boxel-sp-xxs);
+        width: 100%;
+        text-align: start;
       }
 
       .file.selected,
       .file:active {
         color: var(--boxel-light);
         background-color: var(--boxel-highlight);
+      }
+
+      .directory {
+        padding-left: 0;
       }
 
       .directory :deep(.icon) {
