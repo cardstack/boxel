@@ -136,6 +136,42 @@ module('Acceptance | code mode tests', function (hooks) {
     await realm.ready;
   });
 
+  test('defaults to inheritance view and can toggle to file view', async function (assert) {
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: 'http://test-realm/test/index',
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+
+    assert.dom('[data-test-inheritance-toggle]').hasClass('active');
+    assert.dom('[data-test-file-browser-toggle]').doesNotHaveClass('active');
+
+    assert.dom('[data-test-inheritance-placeholder]').exists();
+    assert.dom('[data-test-file]').doesNotExist();
+
+    await click('[data-test-file-browser-toggle]');
+
+    assert.dom('[data-test-inheritance-toggle]').doesNotHaveClass('active');
+    assert.dom('[data-test-file-browser-toggle]').hasClass('active');
+
+    await waitFor('[data-test-file]');
+
+    assert.dom('[data-test-inheritance-placeholder]').doesNotExist();
+    assert.dom('[data-test-file]').exists();
+  });
+
   test('can navigate file tree', async function (assert) {
     let codeModeStateParam = stringify({
       stacks: [
@@ -154,6 +190,7 @@ module('Acceptance | code mode tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
+    await click('[data-test-file-browser-toggle]');
     await waitFor('[data-test-file]');
     assert
       .dom('[data-test-directory="Person/"]')

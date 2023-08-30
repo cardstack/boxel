@@ -8,6 +8,11 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
 import FileTree from '../editor/file-tree';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { on } from '@ember/modifier';
+import { fn } from '@ember/helper';
+import { tracked } from '@glimmer/tracking';
+import { action } from '@ember/object';
 const { ownRealmURL } = ENV;
 
 interface Signature {
@@ -22,6 +27,9 @@ export default class CodeMode extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
 
+  // FIXME better name to encompass inheritance vs file browser?
+  @tracked fileView = 'inheritance';
+
   fetchRealmInfo = trackedFunction(this, async () => {
     let realmInfo = await this.cardService.getRealmInfo(this.args.card);
     return realmInfo;
@@ -35,6 +43,10 @@ export default class CodeMode extends Component<Signature> {
     return htmlSafe(`background-image: url(${this.backgroundURL});`);
   }
 
+  @action setFileView(view: string) {
+    this.fileView = view;
+  }
+
   <template>
     <div class='code-mode-background' style={{this.backgroundURLStyle}}></div>
 
@@ -42,13 +54,33 @@ export default class CodeMode extends Component<Signature> {
       <div class='columns'>
         <div class='column'>
           {{! Move each container and styles to separate component }}
-          <div class='inner-container'>
-            Inheritance / File Browser
+          <div
+            class='inner-container file-view
+              {{if (eq this.fileView "browser") "file-browser"}}'
+          >
+            <header>
+              <button
+                class='{{if (eq this.fileView "inheritance") "active"}}'
+                {{on 'click' (fn this.setFileView 'inheritance')}}
+                data-test-inheritance-toggle
+              >
+                Inheritance</button>
+              <button
+                class='{{if (eq this.fileView "browser") "active"}}'
+                {{on 'click' (fn this.setFileView 'browser')}}
+                data-test-file-browser-toggle
+              >
+                File Browser</button>
+            </header>
             <section class='inner-container__content'>
-              <FileTree
-                @url={{ownRealmURL}}
-                @openFiles={{@controller.codeParams}}
-              />
+              {{#if (eq this.fileView 'inheritance')}}
+                <span data-test-inheritance-placeholder>Inheritance forthcoming</span>
+              {{else}}
+                <FileTree
+                  @url={{ownRealmURL}}
+                  @openFiles={{@controller.codeParams}}
+                />
+              {{/if}}
             </section>
           </div>
           <aside class='inner-container'>
@@ -150,6 +182,34 @@ export default class CodeMode extends Component<Signature> {
       .inner-container__content {
         padding: 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
         overflow-y: auto;
+      }
+
+      .file-view header {
+        margin: var(--boxel-sp-sm);
+        display: flex;
+        gap: var(--boxel-sp-sm);
+      }
+
+      /* FIXME why is the border chamfered-esque? */
+      .file-view header button {
+        padding: var(--boxel-sp-xxxs) var(--boxel-sp-lg);
+        font-weight: 700;
+        background: transparent;
+        color: var(--boxel-dark);
+        border-radius: var(--boxel-border-radius-sm);
+        border-color: var(--boxel-400);
+        border-width: 1px;
+        flex: 1;
+      }
+
+      .file-view header button.active {
+        background: var(--boxel-dark);
+        color: var(--boxel-highlight);
+        border-color: var(--boxel-dark);
+      }
+
+      .file-view.file-browser .inner-container__content {
+        background: var(--boxel-light);
       }
     </style>
   </template>
