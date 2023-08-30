@@ -1,5 +1,4 @@
 import {
-  type OperatorModeState,
   type Stack,
   type StackItem,
 } from '../components/operator-mode/container';
@@ -17,6 +16,12 @@ import { Submode } from '@cardstack/host/components/submode-switcher';
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
 // This is because we don't have a way to serialize a stack configuration of linked cards that have not been saved yet.
+
+export interface OperatorModeState {
+  stacks: Stack[];
+  submode: Submode;
+  codePath: URL | null;
+}
 
 interface CardItem {
   id: string;

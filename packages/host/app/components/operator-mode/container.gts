@@ -19,7 +19,6 @@ import {
   type Actions,
   type CodeRef,
   LooseSingleCardDocument,
-  type RealmInfo,
 } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type LoaderService from '../../services/loader-service';
@@ -46,10 +45,7 @@ import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import SubmodeSwitcher, { Submode } from '../submode-switcher';
 import CodeMode from '@cardstack/host/components/operator-mode/code-mode';
-import CardURLBar from '@cardstack/host/components/operator-mode/card-url-bar';
 import { assertNever } from '@cardstack/host/utils/assert-never';
-import { maybe } from '@cardstack/host/resources/maybe';
-import { file } from '@cardstack/host/resources/file';
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
 
@@ -57,12 +53,6 @@ interface Signature {
   Args: {
     onClose: () => void;
   };
-}
-
-export interface OperatorModeState {
-  stacks: Stack[];
-  submode: Submode;
-  codePath: URL | null;
 }
 
 export type Stack = StackItem[];
@@ -97,9 +87,6 @@ export default class OperatorModeContainer extends Component<Signature> {
   @tracked searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked isChatVisible = false;
 
-  @tracked codeModeRealmInfo: RealmInfo | null = null;
-  @tracked loadFileError: string | null = null;
-
   private deleteModal: DeleteModal | undefined;
 
   constructor(owner: unknown, args: any) {
@@ -111,10 +98,6 @@ export default class OperatorModeContainer extends Component<Signature> {
       delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
       this.operatorModeStateService.clearStacks();
     });
-
-    if (this.operatorModeStateService.state.submode === Submode.Code) {
-      this.fetchCodeModeRealmInfo.perform();
-    }
   }
 
   get stacks() {
@@ -611,7 +594,6 @@ export default class OperatorModeContainer extends Component<Signature> {
           ? new URL(this.lastCardInRightMostStack.id + '.json')
           : new URL(this.cardService.defaultURL + 'index.json');
         this.operatorModeStateService.updateCodePath(codePath);
-        this.fetchCodeModeRealmInfo.perform();
         break;
       default:
         throw assertNever(submode);
@@ -619,58 +601,6 @@ export default class OperatorModeContainer extends Component<Signature> {
 
     this.operatorModeStateService.updateSubmode(submode);
   }
-
-  @action resetLoadFileError() {
-    this.loadFileError = null;
-  }
-
-  openFile = maybe(this, (context) => {
-    if (!this.operatorModeStateService.state.codePath) {
-      return undefined;
-    }
-
-    let realmURL = this.cardService.getRealmURLFor(
-      this.operatorModeStateService.state.codePath,
-    );
-    if (!realmURL) {
-      return undefined;
-    }
-
-    const realmPaths = new RealmPaths(realmURL);
-    const relativePath = realmPaths.local(
-      this.operatorModeStateService.state.codePath,
-    );
-    if (relativePath) {
-      return file(context, () => ({
-        relativePath,
-        realmURL: realmPaths.url,
-        onStateChange: (state) => {
-          if (state === 'not-found') {
-            this.loadFileError = 'File is not found';
-          }
-        },
-      }));
-    } else {
-      return undefined;
-    }
-  });
-
-  fetchCodeModeRealmInfo = restartableTask(async () => {
-    if (!this.operatorModeStateService.state.codePath) {
-      return;
-    }
-
-    let realmURL = this.cardService.getRealmURLFor(
-      this.operatorModeStateService.state.codePath,
-    );
-    if (!realmURL) {
-      this.codeModeRealmInfo = null;
-    } else {
-      this.codeModeRealmInfo = await this.cardService.getRealmInfoByRealmURL(
-        realmURL,
-      );
-    }
-  });
 
   <template>
     <Modal
@@ -684,26 +614,14 @@ export default class OperatorModeContainer extends Component<Signature> {
       <CardCatalogModal />
 
       <div class='operator-mode__with-chat {{this.chatVisibilityClass}}'>
-        <div class='operator-mode__top-menu'>
-          <SubmodeSwitcher
-            @submode={{this.operatorModeStateService.state.submode}}
-            @onSubmodeSelect={{this.updateSubmode}}
-          />
-          {{#if this.isCodeMode}}
-            <CardURLBar
-              @onEnterPressed={{perform this.fetchCodeModeRealmInfo}}
-              @loadFileError={{this.loadFileError}}
-              @resetLoadFileError={{this.resetLoadFileError}}
-              @realmInfo={{this.codeModeRealmInfo}}
-            />
-          {{/if}}
-        </div>
+        <SubmodeSwitcher
+          @submode={{this.operatorModeStateService.state.submode}}
+          @onSubmodeSelect={{this.updateSubmode}}
+          class='submode-switcher'
+        />
 
         {{#if this.isCodeMode}}
-          <CodeMode
-            @openFile={{this.openFile}}
-            @realmInfo={{this.codeModeRealmInfo}}
-          />
+          <CodeMode />
         {{else}}
           <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
             {{#if (eq this.allStackItems.length 0)}}
@@ -929,16 +847,13 @@ export default class OperatorModeContainer extends Component<Signature> {
         --icon-color: var(--boxel-dark);
         background-color: var(--boxel-highlight-hover);
       }
-      .operator-mode__top-menu {
+
+      .submode-switcher {
         position: absolute;
         top: 0;
         left: 0;
         z-index: 2;
         padding: var(--boxel-sp);
-        width: 100%;
-
-        display: flex;
-        gap: var(--boxel-sp);
       }
 
       .container__chat-sidebar {

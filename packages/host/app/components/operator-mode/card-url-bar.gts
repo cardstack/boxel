@@ -50,16 +50,18 @@ export default class CardURLBar extends Component<Signature> {
       {{/if}}
     </div>
     <style>
+      :global(:root) {
+        --card-url-bar-width: 100%;
+      }
       .card-url-bar {
         display: flex;
         align-items: center;
 
-        background-color: var(--boxel-purple-700);
+        background-color: var(--boxel-dark);
         border-radius: var(--boxel-border-radius-xl);
         padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
 
-        width: 100%;
-        position: relative;
+        width: var(--card-url-bar-width);
       }
       .focused {
         outline: 2px solid var(--boxel-highlight);
