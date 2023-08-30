@@ -1,14 +1,5 @@
 import { module, test } from 'qunit';
-import {
-  find,
-  findAll,
-  visit,
-  currentURL,
-  click,
-  waitFor,
-  fillIn,
-  waitUntil,
-} from '@ember/test-helpers';
+import { visit, click, waitFor } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { baseRealm } from '@cardstack/runtime-common';
 import {
@@ -16,12 +7,10 @@ import {
   TestRealmAdapter,
   setupLocalIndexing,
   setupMockMessageService,
-  testRealmURL,
 } from '../helpers';
 import stringify from 'safe-stable-stringify';
 import { Realm } from '@cardstack/runtime-common/realm';
 import type LoaderService from '@cardstack/host/services/loader-service';
-import percySnapshot from '@percy/ember';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import window from 'ember-window-mock';
 
