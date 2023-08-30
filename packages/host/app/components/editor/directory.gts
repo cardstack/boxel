@@ -8,6 +8,7 @@ import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { directory } from '@cardstack/host/resources/directory';
 import { concat } from '@ember/helper';
 import { OpenFiles } from '@cardstack/host/controllers/code';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
 interface Args {
   Args: {
@@ -39,7 +40,13 @@ export default class Directory extends Component<Args> {
               class='directory
                 {{if (isSelected entryPath @openFiles.path) "selected"}}'
             >
-              {{entry.name}}
+              {{svgJar
+                'dropdown-arrow-down'
+                class=(concat
+                  'icon '
+                  (if (isOpen entryPath @openFiles.openDirs) 'open' 'closed')
+                )
+              }}{{entry.name}}
             </div>
             {{#if (isOpen entryPath @openFiles.openDirs)}}
               <Directory
@@ -54,6 +61,8 @@ export default class Directory extends Component<Args> {
     {{/each}}
     <style>
       .level {
+        --icon-length: 12px;
+
         padding-left: 0em;
       }
 
@@ -66,7 +75,8 @@ export default class Directory extends Component<Args> {
         cursor: pointer;
       }
 
-      .directory, .file {
+      .directory,
+      .file {
         border-radius: var(--boxel-border-radius-xs);
       }
 
@@ -74,6 +84,19 @@ export default class Directory extends Component<Args> {
       .file:active {
         color: var(--boxel-light);
         background-color: var(--boxel-highlight);
+      }
+
+      .directory :deep(.icon) {
+        width: var(--icon-length);
+        height: var(--icon-length);
+      }
+
+      .directory :deep(.icon.closed) {
+        transform: rotate(-90deg);
+      }
+
+      .file {
+        padding-left: var(--icon-length);
       }
     </style>
   </template>

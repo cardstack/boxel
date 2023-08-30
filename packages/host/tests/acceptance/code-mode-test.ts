@@ -192,13 +192,19 @@ module('Acceptance | code mode tests', function (hooks) {
     );
     await click('[data-test-file-browser-toggle]');
     await waitFor('[data-test-file]');
+
     assert
       .dom('[data-test-directory="Person/"]')
       .exists('Person/ directory entry is rendered');
+    assert.dom('[data-test-directory="Person/"] .icon').hasClass('closed');
+
     assert
       .dom('[data-test-file="person.gts"]')
       .exists('person.gts file entry is rendered');
+
     await click('[data-test-directory="Person/"]');
+    assert.dom('[data-test-directory="Person/"] .icon').hasClass('open');
+
     await waitFor('[data-test-file="Person/1.json"]');
     assert
       .dom('[data-test-file="Person/1.json"]')
