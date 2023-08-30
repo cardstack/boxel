@@ -54,7 +54,7 @@ export default class CardURLBar extends Component<Signature> {
         display: flex;
         align-items: center;
 
-        background: var(--boxel-purple-700);
+        background-color: var(--boxel-purple-700);
         border-radius: var(--boxel-border-radius-xl);
         padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
 
@@ -62,10 +62,10 @@ export default class CardURLBar extends Component<Signature> {
         position: relative;
       }
       .focused {
-        outline: 2px solid var(--boxel-teal);
+        outline: 2px solid var(--boxel-highlight);
       }
       .error {
-        outline: 2px solid red;
+        outline: 2px solid var(--boxel-error-200);
       }
       .realm-info {
         display: flex;
@@ -92,7 +92,7 @@ export default class CardURLBar extends Component<Signature> {
         --icon-color: var(--boxel-cyan);
       }
       .error .input {
-        --icon-color: red;
+        --icon-color: var(--boxel-error-200);
       }
       .url-input {
         background: none;
