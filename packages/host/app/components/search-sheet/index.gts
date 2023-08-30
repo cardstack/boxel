@@ -400,11 +400,11 @@ export default class SearchSheet extends Component<Signature> {
         display: flex;
         flex-direction: column;
         width: 100%;
-        height: 100%;
       }
       .prompt .search-result-section {
         flex-direction: row;
         align-items: center;
+        height: 100%;
       }
 
       .search-result-section .boxel-label {
