@@ -502,7 +502,11 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.operatorModeStateService.state?.stacks.flat() ?? [];
   }
 
-  get lastCardInRightMostStack(): CardDef {
+  get lastCardInRightMostStack(): CardDef | null {
+    if (this.allStackItems.length <= 0) {
+      return null;
+    }
+
     return this.allStackItems[this.allStackItems.length - 1].card;
   }
 
@@ -603,7 +607,9 @@ export default class OperatorModeContainer extends Component<Signature> {
         this.updateCodePath(null);
         break;
       case Submode.Code:
-        let codePath = new URL(this.lastCardInRightMostStack.id + '.json');
+        let codePath = this.lastCardInRightMostStack
+          ? new URL(this.lastCardInRightMostStack.id + '.json')
+          : new URL(this.cardService.defaultURL + 'index.json');
         this.updateCodePath(codePath);
         break;
       default:
@@ -622,16 +628,13 @@ export default class OperatorModeContainer extends Component<Signature> {
     if (!realmURL) {
       return undefined;
     }
-    const relativePath = this.codePath
-      .toString()
-      .replace(realmURL.toString(), '');
-    console.log(relativePath);
+
+    const realmPaths = new RealmPaths(realmURL);
+    const relativePath = realmPaths.local(this.codePath);
     if (relativePath) {
       return file(context, () => ({
         relativePath,
-        // @ts-ignore type 'undefined' is not assignable to type 'string | URL'
-        // we have ensured its value above.
-        realmURL: new RealmPaths(realmURL).url,
+        realmURL: realmPaths.url,
         onStateChange: (state) => {
           if (state === 'not-found') {
             this.loadFileError = 'File is not found';
@@ -646,7 +649,9 @@ export default class OperatorModeContainer extends Component<Signature> {
   get codePath() {
     return (
       this.operatorModeStateService.state.codePath ??
-      new URL(this.lastCardInRightMostStack.id + '.json')
+      (this.lastCardInRightMostStack
+        ? new URL(this.lastCardInRightMostStack.id + '.json')
+        : new URL(this.cardService.defaultURL + 'index.json'))
     );
   }
 

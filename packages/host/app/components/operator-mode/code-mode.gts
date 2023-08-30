@@ -47,7 +47,8 @@ export default class CodeMode extends Component<Signature> {
         </div>
         <div class='column'>
           <div class='inner-container'>
-            Code
+            Code, Open File Status:
+            {{! This is to trigger openFile function }}
             {{@openFile.current.state}}
           </div>
         </div>
