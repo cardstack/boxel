@@ -190,15 +190,13 @@ export default class CodeMode extends Component<Signature> {
         gap: var(--boxel-sp-sm);
       }
 
-      /* FIXME why is the border chamfered-esque? */
       .file-view header button {
         padding: var(--boxel-sp-xxxs) var(--boxel-sp-lg);
         font-weight: 700;
         background: transparent;
         color: var(--boxel-dark);
         border-radius: var(--boxel-border-radius-sm);
-        border-color: var(--boxel-400);
-        border-width: 1px;
+        border: 1px solid var(--boxel-400);
         flex: 1;
       }
 
