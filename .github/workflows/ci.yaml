@@ -136,6 +136,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       boxel: ${{ steps.filter.outputs.boxel }}
+      ai-bot: ${{ steps.filter.outputs.ai-bot }}
     steps:
       - uses: actions/checkout@v3
       - uses: dorny/paths-filter@v2
