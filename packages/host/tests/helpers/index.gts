@@ -551,12 +551,13 @@ export class TestRealmAdapter implements RealmAdapter {
   }
 
   createStreamingResponse(
+    unresolvedRealmURL: string,
     _request: Request,
     responseInit: ResponseInit,
     cleanup: () => void,
   ) {
     let s = new WebMessageStream();
-    let response = createResponse(s.readable, responseInit);
+    let response = createResponse(unresolvedRealmURL, s.readable, responseInit);
     messageCloseHandler(s.readable, cleanup);
     return { response, writable: s.writable };
   }

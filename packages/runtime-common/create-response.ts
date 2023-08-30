@@ -1,5 +1,5 @@
 export function createResponse(
-  unresolvedRealmURL: string | null,
+  unresolvedRealmURL: string,
   body?: BodyInit | null | undefined,
   init?: ResponseInit | undefined,
 ): Response {

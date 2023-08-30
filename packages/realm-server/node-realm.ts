@@ -121,13 +121,14 @@ export class NodeAdapter implements RealmAdapter {
   }
 
   createStreamingResponse(
+    unresolvedRealmURL: string,
     request: Request,
     responseInit: ResponseInit,
     cleanup: () => void,
   ) {
     let s = new MessageStream();
     let response = createResponse(
-      null,
+      unresolvedRealmURL,
       null,
       responseInit,
     ) as ResponseWithNodeStream;

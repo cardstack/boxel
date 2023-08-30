@@ -131,9 +131,12 @@ export function serializableError(err: any): any {
   return result;
 }
 
-export function responseWithError(error: CardError): Response {
+export function responseWithError(
+  unresolvedRealmURL: string,
+  error: CardError,
+): Response {
   return createResponse(
-    null,
+    unresolvedRealmURL,
     JSON.stringify({ errors: [serializableError(error)] }),
     {
       status: error.status,
@@ -143,8 +146,12 @@ export function responseWithError(error: CardError): Response {
   );
 }
 
-export function methodNotAllowed(request: Request): Response {
+export function methodNotAllowed(
+  unresolvedRealmURL: string,
+  request: Request,
+): Response {
   return responseWithError(
+    unresolvedRealmURL,
     new CardError(`${request.method} not allowed for ${request.url}`, {
       status: 405,
     }),
@@ -152,21 +159,38 @@ export function methodNotAllowed(request: Request): Response {
 }
 
 export function notFound(
+  unresolvedRealmURL: string,
   request: Request,
   message = `Could not find ${request.url}`,
 ): Response {
-  return responseWithError(new CardError(message, { status: 404 }));
+  return responseWithError(
+    unresolvedRealmURL,
+    new CardError(message, { status: 404 }),
+  );
 }
 
-export function badRequest(message: string): Response {
-  return responseWithError(new CardError(message, { status: 400 }));
+export function badRequest(
+  unresolvedRealmURL: string,
+  message: string,
+): Response {
+  return responseWithError(
+    unresolvedRealmURL,
+    new CardError(message, { status: 400 }),
+  );
 }
 
-export function systemUnavailable(message: string): Response {
-  return responseWithError(new CardError(message, { status: 503 }));
+export function systemUnavailable(
+  unresolvedRealmURL: string,
+  message: string,
+): Response {
+  return responseWithError(
+    unresolvedRealmURL,
+    new CardError(message, { status: 503 }),
+  );
 }
 
 export function systemError(
+  unresolvedRealmURL: string,
   message: string,
   additionalError?: CardError | Error,
 ): Response {
@@ -174,5 +198,5 @@ export function systemError(
   if (additionalError) {
     err.additionalErrors = [additionalError];
   }
-  return responseWithError(err);
+  return responseWithError(unresolvedRealmURL, err);
 }
