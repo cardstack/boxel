@@ -7,7 +7,7 @@ export function createResponse(
     ...init,
     headers: {
       ...init?.headers,
-      'X-boxel-realm-url': unresolvedRealmURL ? unresolvedRealmURL : '',
+      'X-boxel-realm-url': unresolvedRealmURL,
       vary: 'Accept',
     },
   });
