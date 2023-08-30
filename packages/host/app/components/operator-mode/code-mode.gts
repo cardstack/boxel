@@ -6,10 +6,14 @@ import CardService from '@cardstack/host/services/card-service';
 import { htmlSafe } from '@ember/template';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+import ENV from '@cardstack/host/config/environment';
+import FileTree from '../editor/file-tree';
+const { ownRealmURL } = ENV;
 
 interface Signature {
   Args: {
     card: CardDef;
+    controller: CardController;
   };
 }
 
@@ -36,7 +40,12 @@ export default class CodeMode extends Component<Signature> {
 
     <div class='code-mode' data-test-code-mode>
       <div class='columns'>
-        <div class='column'>File tree</div>
+        <div class='column'>
+          <FileTree
+            @url={{ownRealmURL}}
+            @openFiles={{@controller.codeParams}}
+          />
+        </div>
         <div class='column'>Code</div>
         <div class='column'>Schema editor</div>
       </div>

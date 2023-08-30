@@ -24,6 +24,7 @@ import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type LoaderService from '../../services/loader-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
+import type CardController from '@cardstack/host/controllers/card';
 
 import { registerDestructor } from '@ember/destroyable';
 import type { Query } from '@cardstack/runtime-common/query';
@@ -51,6 +52,7 @@ const waiter = buildWaiter('operator-mode-container:write-waiter');
 interface Signature {
   Args: {
     onClose: () => void;
+    controller: CardController;
   };
 }
 
@@ -608,7 +610,10 @@ export default class OperatorModeContainer extends Component<Signature> {
         />
 
         {{#if this.isCodeMode}}
-          <CodeMode @card={{this.cardForCodeMode}} />
+          <CodeMode
+            @card={{this.cardForCodeMode}}
+            @controller={{@controller}}
+          />
         {{else}}
           <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
             {{#if (eq this.allStackItems.length 0)}}
