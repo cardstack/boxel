@@ -154,6 +154,13 @@ jobs:
               - 'packages/realm-server/**'
               - 'packages/runtime-common/**'
               - 'pnpm-lock.yaml'
+            ai-bot:
+              - '.github/workflows/waypoint-build.yml'
+              - '.github/workflows/waypoint-deploy.yml'
+              - '.github/workflows/ci.yaml'
+              - 'packages/runtime-common/**'
+              - 'packages/ai-bot/**'
+              - 'pnpm-lock.yaml'
 
   build-host:
     name: Build host
@@ -162,7 +169,7 @@ jobs:
     uses: ./.github/workflows/build-host.yml
     secrets: inherit
     with:
-      environment: 'staging'
+      environment: "staging"
 
   build-realm-server:
     name: Build realm-server
@@ -171,9 +178,20 @@ jobs:
     uses: ./.github/workflows/waypoint-build.yml
     secrets: inherit
     with:
-      app: 'realm-demo'
-      environment: 'staging'
+      app: "realm-demo"
+      environment: "staging"
       restore-mtime: true
+
+  build-ai-bot:
+    name: Build ai-bot
+    needs: [change-check]
+    if: ${{ needs.change-check.outputs.ai-bot == 'true' }}
+    uses: ./.github/workflows/waypoint-build.yml
+    secrets: inherit
+    with:
+      app: "boxel-ai-bot"
+      environment: "staging"
+      working-directory: "packages/ai-bot"
 
   deploy-host:
     name: Deploy host
@@ -186,7 +204,7 @@ jobs:
     uses: ./.github/workflows/deploy-host.yml
     secrets: inherit
     with:
-      environment: 'staging'
+      environment: "staging"
 
   deploy-realm-server:
     name: Deploy realm server to staging
@@ -199,5 +217,16 @@ jobs:
     uses: ./.github/workflows/waypoint-deploy.yml
     secrets: inherit
     with:
-      app: 'realm-demo'
-      environment: 'staging'
+      app: "realm-demo"
+      environment: "staging"
+
+  deploy-ai-bot:
+    name: Deploy ai-bot to staging
+    if: false
+    needs: [build-ai-bot]
+    uses: ./.github/workflows/waypoint-deploy.yml
+    secrets: inherit
+    with:
+      app: "boxel-ai-bot"
+      environment: "staging"
+      working-directory: "packages/ai-bot"
