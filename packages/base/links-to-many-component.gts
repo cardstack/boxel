@@ -11,7 +11,7 @@ import {
 } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
 import type { ComponentLike } from '@glint/template';
-import { IconButton } from '@cardstack/boxel-ui';
+import { AddButton, IconButton } from '@cardstack/boxel-ui';
 import {
   restartableTask,
   type EncapsulatedTaskDescriptor as Descriptor,
@@ -22,7 +22,6 @@ import {
   identifyCard,
   getPlural,
 } from '@cardstack/runtime-common';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
 interface Signature {
   Args: {
@@ -42,7 +41,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
   <template>
     <div data-test-links-to-many={{this.args.field.name}}>
       {{#if @arrayField.children.length}}
-        <ul>
+        <ul class='list'>
           {{#each @arrayField.children as |boxedElement i|}}
             <li class='editor' data-test-item={{i}}>
               {{#let
@@ -57,67 +56,59 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
               }}
                 <Item />
               {{/let}}
-              <IconButton
-                @icon='icon-minus-circle'
-                @width='20px'
-                @height='20px'
-                class='remove'
-                {{on 'click' (fn this.remove i)}}
-                data-test-remove-card
-                data-test-remove={{i}}
-                aria-label='Remove'
-              />
+              <div class='remove-button-container'>
+                <IconButton
+                  @variant='primary'
+                  @icon='icon-minus-circle'
+                  @width='20px'
+                  @height='20px'
+                  class='remove'
+                  {{on 'click' (fn this.remove i)}}
+                  aria-label='Remove'
+                  data-test-remove-card
+                  data-test-remove={{i}}
+                />
+              </div>
             </li>
           {{/each}}
         </ul>
       {{/if}}
-      <div class='add-new' {{on 'click' this.add}} data-test-add-new>
-        {{svgJar 'icon-plus' width='20px' height='20px'}}
+      <AddButton
+        class='add-new'
+        @variant='full-width'
+        {{on 'click' this.add}}
+        data-test-add-new
+      >
         Add
         {{getPlural @field.card.displayName}}
-      </div>
+      </AddButton>
     </div>
     <style>
+      .list {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 var(--boxel-sp);
+      }
+      .list > li + li {
+        margin-top: var(--boxel-sp);
+      }
       .editor {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        gap: var(--boxel-sp-xs);
+        position: relative;
+      }
+      .remove-button-container {
+        position: absolute;
+        top: 0;
+        left: 100%;
+        height: 100%;
+        display: flex;
         align-items: center;
       }
-
-      .empty {
-        display: block;
-      }
-
       .remove {
-        --icon-bg: var(--boxel-highlight);
-        --icon-border: var(--icon-bg);
         --icon-color: var(--boxel-light);
       }
-
       .remove:hover {
         --icon-bg: var(--boxel-dark);
-      }
-
-      .add-new {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        gap: var(--boxel-sp-xxxs);
-
-        background: var(--boxel-light-100);
-        box-sizing: border-box;
-        cursor: pointer;
-        width: 100%;
-        height: calc(var(--boxel-sp-xxxl) * var(--boxel-ratio));
-        border: 1px solid var(--boxel-form-control-border-color);
-        border-radius: var(--boxel-form-control-border-radius);
-        color: var(--boxel-teal);
-        font: var(--boxel-font-sm);
-        font-weight: 500;
-        letter-spacing: var(--boxel-lsp-xs);
-        transition: border-color var(--boxel-transition);
-        --icon-color: var(--boxel-teal);
+        --icon-border: var(--boxel-dark);
       }
     </style>
   </template>

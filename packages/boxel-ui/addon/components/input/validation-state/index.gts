@@ -71,45 +71,39 @@ export default class BoxelInputValidationState extends Component<Signature> {
         data-test-boxel-input-validation-state={{if @disabled true @state}}
       />
       {{#if this.icon}}
-        {{svgJar
-          this.icon
-          class='boxel-validation-state-input-group__icon'
-          role='presentation'
-        }}
+        <span class='boxel-validation-state-input-group__icon'>
+          {{svgJar this.icon role='presentation'}}
+        </span>
       {{/if}}
     </div>
 
     <style>
-      .input-group {
-        --input-height: 2.5rem;
-        --input-icon-size: var(--boxel-icon-sm);
-        --input-icon-space: var(--boxel-sp-xs);
-        --input-font-size: inherit;
+      @layer {
+        .input-group {
+          --validation-group-height: 4.375rem;
+          --validation-group-icon-size: var(--boxel-icon-sm);
+          --validation-group-icon-space: var(--boxel-sp-xs);
 
-        position: relative;
-        width: 100%;
-        font-family: var(--boxel-font-family);
-        font-size: var(--input-font-size);
-        line-height: calc(27 / 20);
-        letter-spacing: var(--boxel-lsp-xs);
-      }
+          position: relative;
+          width: 100%;
+          height: var(--validation-group-height);
+        }
 
-      .input {
-        height: var(--input-height);
-        padding-right: calc(
-          var(--input-icon-size) + var(--input-icon-space) * 2
-        );
-        font: inherit;
-        letter-spacing: inherit;
-      }
+        .input {
+          padding-right: calc(
+            var(--validation-group-icon-size) +
+              var(--validation-group-icon-space) * 2
+          );
+        }
 
-      :global(.boxel-validation-state-input-group__icon) {
-        position: absolute;
-        width: var(--input-icon-size);
-        height: var(--input-height);
-        right: var(--input-icon-space);
-        top: 0;
-        user-select: none;
+        .boxel-validation-state-input-group__icon {
+          position: absolute;
+          width: var(--validation-group-icon-size);
+          right: var(--validation-group-icon-space);
+          top: var(--validation-group-icon-space);
+          display: inline-block;
+          user-select: none;
+        }
       }
     </style>
   </template>

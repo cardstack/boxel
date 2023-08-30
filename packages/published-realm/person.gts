@@ -3,14 +3,14 @@ import {
   linksTo,
   field,
   Component,
-  CardDef,
+  FieldDef,
 } from 'https://cardstack.com/base/card-api';
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import StringCard from 'https://cardstack.com/base/string';
 import { Pet } from './pet';
 import { GridContainer } from '@cardstack/boxel-ui';
 
-export class Person extends CardDef {
+export class Person extends FieldDef {
   static displayName = 'Person';
   @field firstName = contains(StringCard);
   @field lastName = contains(StringCard);

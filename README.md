@@ -81,6 +81,18 @@ In order to support server-side rendered cards, this project incorporates FastBo
 
 The realm server also uses FastBoot to pre-render card html. The realm server boots up the host app in a FastBoot container. The realm server will automatically look for the host app's `dist/` output to use when booting up the infrastructure for pre-rendering cards. Make sure to start to the host app first before starting the realm server so that the host app's `dist/` output will be generated. If you are making changes that effect the `/render` route in the host app, you'll want to restart the host app (or run `pnpm build`) in order for the realm server to pick up your changes.
 
+### Request Accept Header
+The realm server uses the request accept header to determine the type of request being made and in what format it should return the content. 
+
+| Accept Header | URL rules | Description |
+|---------------|-------------------|-------------|
+| `application/vnd.card+json`| Card instance URL's should not include the `.json` file extension. This is considered a 404 | Used to request card instances for normal consumption|
+| `application/vnd.card+source`| For code modules we support node-like resolution, which means that the extension is optional. If the extension is not provided the server will redirect to the URL with the extension.| Used to request source file format for code modules or card instances (note that card instances are returned using file serialization which notably contains no `id` property)|
+| `application/vnd.api+json` | Directory listing requests need to have their URL's end with a `/` character| Used to request a directory listing or to get realm info|
+| `text/event-stream`| only `<REALM_URL>/_messages` is supported |Used to subscribe to realm events via Server Sent Events|
+| `text/html`| Card instance URL's should not include the `.json` file extension. This is considered a 404 | Used to request rendered card instance html (this serves the host application) |
+|`*/*` | We support node-like resolution, which means that the extension is optional | Used to request transpiled executable code modules|
+
 ### Matrix Server
 
 The boxel platform leverages a Matrix server called Synapse in order to support identity, workflow, and chat behaviors. This project uses a dockerized Matrix server. We have multiple matrix server configurations (currently one for development that uses a persistent DB, and one for testing that uses an in-memory DB). You can find and configure these matrix servers at `packages/matrix/docker/synapse/*`.

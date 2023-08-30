@@ -891,9 +891,7 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await click('[data-test-stack-card-index="3"] [data-test-close-button]');
-    await waitUntil(
-      () => !document.querySelector('[data-test-stack-card-index="3"]'),
-    );
+    await waitFor('[data-test-stack-card-index="3"]', { count: 0 });
 
     assert
       .dom('[data-test-stack-card-index="2"] [data-test-field="authorBio"]')
@@ -904,10 +902,7 @@ module('Integration | operator-mode', function (hooks) {
       'Mad As a Hatter',
     );
     await click('[data-test-stack-card-index="2"] [data-test-close-button]');
-    await waitUntil(
-      () => !document.querySelector('[data-test-stack-card-index="2"]'),
-    );
-
+    await waitFor('[data-test-stack-card-index="2"]', { count: 0 });
     await waitFor(
       `[data-test-stack-card-index="1"][data-test-stack-card="${testRealmURL}PublishingPacket/1"]`,
     );
@@ -958,6 +953,20 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-choose-card]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
     await click(`[data-test-select="${testRealmURL}Author/2"]`);
+    assert
+      .dom(
+        `[data-test-card-catalog-item="${testRealmURL}Author/2"][data-test-card-catalog-item-selected]`,
+      )
+      .exists();
+
+    await waitUntil(
+      () =>
+        (
+          document.querySelector(`[data-test-card-catalog-go-button]`) as
+            | HTMLButtonElement
+            | undefined
+        )?.disabled === false,
+    );
     await click('[data-test-card-catalog-go-button]');
 
     await waitFor(`.operator-mode [data-test-author="R2-D2"]`);
@@ -977,7 +986,6 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
     await click('[data-test-edit-button]');
-
     assert.dom('[data-test-choose-card]').exists();
     assert.dom('[data-test-create-new]').exists();
 
@@ -1010,7 +1018,6 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
     await click('[data-test-edit-button]');
-
     assert.dom('[data-test-choose-card]').exists();
     assert.dom('[data-test-create-new]').exists();
 
@@ -1030,9 +1037,7 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await click('[data-test-stack-card-index="1"] [data-test-close-button]');
-    await waitUntil(
-      () => !document.querySelector('[data-test-stack-card-index="1"]'),
-    );
+    await waitFor('[data-test-stack-card-index="1"]', { count: 0 });
     assert.dom('[data-test-choose-card]').doesNotExist();
     assert.dom('[data-test-create-new]').doesNotExist();
     assert.dom('[data-test-field="authorBio"]').containsText('Alice');
@@ -1950,11 +1955,13 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-submode-switcher]').exists();
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
 
-    await click('[data-test-submode-switcher] .trigger');
+    await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+    await percySnapshot(assert);
+
     await click('[data-test-boxel-menu-item-text="Code"]');
     assert.dom('[data-test-submode-switcher]').hasText('Code');
 
-    await click('[data-test-submode-switcher] .trigger');
+    await click('[data-test-submode-switcher] > [data-test-boxel-button]');
     await click('[data-test-boxel-menu-item-text="Interact"]');
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
   });

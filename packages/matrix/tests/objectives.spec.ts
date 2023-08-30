@@ -1,7 +1,5 @@
 import { expect } from '@playwright/test';
-import {
-  registerUser,
-} from '../docker/synapse';
+import { registerUser } from '../docker/synapse';
 import {
   login,
   logout,
@@ -11,7 +9,7 @@ import {
   setObjective,
   sendMessage,
   joinRoom,
-  test
+  test,
 } from '../helpers';
 
 test.describe('Room objectives', () => {
