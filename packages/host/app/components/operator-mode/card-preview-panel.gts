@@ -132,6 +132,7 @@ export default class CardPreviewPanel extends Component<Signature> {
           100% - var(--code-mode-preview-footer-height) -
             var(--code-mode-preview-header-height)
         );
+        overflow: scroll;
       }
 
       .header-actions {
@@ -141,7 +142,6 @@ export default class CardPreviewPanel extends Component<Signature> {
       .preview-body :deep(.boxel-card-container) {
         border-radius: 0;
         box-shadow: none;
-        height: 100%;
       }
 
       .header-title {
@@ -152,7 +152,7 @@ export default class CardPreviewPanel extends Component<Signature> {
       .preview-footer {
         bottom: 0;
         height: var(--code-mode-preview-footer-height);
-        background: #e8e8e8;
+        background-color: var(--boxel-200);
         border-bottom-left-radius: var(--boxel-border-radius);
         border-bottom-right-radius: var(--boxel-border-radius);
       }
@@ -169,12 +169,12 @@ export default class CardPreviewPanel extends Component<Signature> {
         background: transparent;
         color: var(--boxel-dark);
         border-radius: 6px;
-        border-color: #888888;
+        border-color: var(--boxel-400);
         border-width: 1px;
       }
 
       .footer-button.active {
-        background: #262330;
+        background: #27232f;
         color: var(--boxel-teal);
       }
 

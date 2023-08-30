@@ -75,7 +75,7 @@ export default class CodeMode extends Component<Signature> {
       .columns {
         display: flex;
         flex-direction: row;
-        height: calc(100% - var(--search-sheet-closed-height) - 90px);
+        height: calc(100vh - var(--search-sheet-closed-height) - 90px);
         margin-top: 70px;
         padding: var(--boxel-sp);
       }
