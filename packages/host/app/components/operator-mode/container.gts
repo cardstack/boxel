@@ -604,13 +604,14 @@ export default class OperatorModeContainer extends Component<Signature> {
   @action updateSubmode(submode: Submode) {
     switch (submode) {
       case Submode.Interact:
-        this.updateCodePath(null);
+        this.operatorModeStateService.updateCodePath(null);
         break;
       case Submode.Code:
         let codePath = this.lastCardInRightMostStack
           ? new URL(this.lastCardInRightMostStack.id + '.json')
           : new URL(this.cardService.defaultURL + 'index.json');
-        this.updateCodePath(codePath);
+        this.operatorModeStateService.updateCodePath(codePath);
+        this.fetchCodeModeRealmInfo.perform();
         break;
       default:
         throw assertNever(submode);
@@ -624,13 +625,21 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   openFile = maybe(this, (context) => {
-    let realmURL = this.cardService.getRealmURLFor(this.codePath);
+    if (!this.operatorModeStateService.state.codePath) {
+      return undefined;
+    }
+
+    let realmURL = this.cardService.getRealmURLFor(
+      this.operatorModeStateService.state.codePath,
+    );
     if (!realmURL) {
       return undefined;
     }
 
     const realmPaths = new RealmPaths(realmURL);
-    const relativePath = realmPaths.local(this.codePath);
+    const relativePath = realmPaths.local(
+      this.operatorModeStateService.state.codePath,
+    );
     if (relativePath) {
       return file(context, () => ({
         relativePath,
@@ -646,23 +655,14 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   });
 
-  get codePath() {
-    return (
-      this.operatorModeStateService.state.codePath ??
-      (this.lastCardInRightMostStack
-        ? new URL(this.lastCardInRightMostStack.id + '.json')
-        : new URL(this.cardService.defaultURL + 'index.json'))
-    );
-  }
-
-  @action
-  updateCodePath(codePath: URL | null) {
-    this.operatorModeStateService.updateCodePath(codePath);
-    this.fetchCodeModeRealmInfo.perform();
-  }
-
   fetchCodeModeRealmInfo = restartableTask(async () => {
-    let realmURL = this.cardService.getRealmURLFor(this.codePath);
+    if (!this.operatorModeStateService.state.codePath) {
+      return;
+    }
+
+    let realmURL = this.cardService.getRealmURLFor(
+      this.operatorModeStateService.state.codePath,
+    );
     if (!realmURL) {
       this.codeModeRealmInfo = null;
     } else {
@@ -691,8 +691,7 @@ export default class OperatorModeContainer extends Component<Signature> {
           />
           {{#if this.isCodeMode}}
             <CardURLBar
-              @url={{this.codePath}}
-              @onEnterPressed={{this.updateCodePath}}
+              @onEnterPressed={{perform this.fetchCodeModeRealmInfo}}
               @loadFileError={{this.loadFileError}}
               @resetLoadFileError={{this.resetLoadFileError}}
               @realmInfo={{this.codeModeRealmInfo}}

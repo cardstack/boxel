@@ -6,11 +6,11 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { type RealmInfo } from '@cardstack/runtime-common';
 import type CardService from '../../services/card-service';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 interface Signature {
   Element: HTMLElement;
   Args: {
-    url: URL;
     onEnterPressed: (url: URL) => void;
     loadFileError: string | null;
     resetLoadFileError: () => void;
@@ -112,10 +112,19 @@ export default class CardURLBar extends Component<Signature> {
     </style>
   </template>
 
+  @service declare operatorModeStateService: OperatorModeStateService;
   @service declare cardService: CardService;
-  @tracked url: string = this.args.url.toString();
+  @tracked url: string | null = null;
   @tracked isFocused = false;
   @tracked isInvalidURL = false;
+
+  constructor(args: any, owner: any) {
+    super(args, owner);
+
+    this.url = this.operatorModeStateService.state.codePath
+      ? this.operatorModeStateService.state.codePath.toString()
+      : null;
+  }
 
   get realmIcon() {
     return this.args.realmInfo?.iconURL;
@@ -168,6 +177,7 @@ export default class CardURLBar extends Component<Signature> {
     }
 
     if (url) {
+      this.operatorModeStateService.updateCodePath(url);
       this.args.onEnterPressed(url);
     }
   }
