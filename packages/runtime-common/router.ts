@@ -89,13 +89,13 @@ export class Router {
   async handle(request: Request): Promise<Response> {
     let handler = this.lookupHandler(request);
     if (!handler) {
-      return notFound(request);
+      return notFound(this.#paths.url, request);
     }
     try {
       return await handler(request);
     } catch (err) {
       if (err instanceof CardError) {
-        return responseWithError(err);
+        return responseWithError(this.#paths.url, err);
       }
       this.log.error(err);
       return new Response(`unexpected exception in realm ${err}`, {
