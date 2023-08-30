@@ -52,7 +52,7 @@ const waiter = buildWaiter('operator-mode-container:write-waiter');
 interface Signature {
   Args: {
     onClose: () => void;
-    controller: CardController;
+    controller?: CardController;
   };
 }
 
