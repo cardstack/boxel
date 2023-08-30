@@ -1,30 +1,19 @@
-import { test, expect } from '@playwright/test';
-import {
-  synapseStart,
-  synapseStop,
-  registerUser,
-  type SynapseInstance,
-} from '../docker/synapse';
+import { expect } from '@playwright/test';
+import { registerUser } from '../docker/synapse';
 import {
   login,
   logout,
   assertRooms,
   createRoom,
   reloadAndOpenChat,
+  test,
 } from '../helpers';
 
 test.describe('Room creation', () => {
-  let synapse: SynapseInstance;
-  test.beforeEach(async () => {
-    synapse = await synapseStart();
+  test.beforeEach(async ({ synapse }) => {
     await registerUser(synapse, 'user1', 'pass');
     await registerUser(synapse, 'user2', 'pass');
   });
-
-  test.afterEach(async () => {
-    await synapseStop(synapse.synapseId);
-  });
-
   test('it can create a room', async ({ page }) => {
     await login(page, 'user1', 'pass');
     await expect(

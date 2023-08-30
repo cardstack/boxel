@@ -1,10 +1,5 @@
-import { test, expect } from '@playwright/test';
-import {
-  synapseStart,
-  synapseStop,
-  registerUser,
-  type SynapseInstance,
-} from '../docker/synapse';
+import { expect } from '@playwright/test';
+import { registerUser } from '../docker/synapse';
 import {
   login,
   logout,
@@ -15,21 +10,15 @@ import {
   openRoom,
   inviteToRoom,
   reloadAndOpenChat,
+  test,
 } from '../helpers';
 
 test.describe('Room membership', () => {
-  let synapse: SynapseInstance;
-  test.beforeEach(async () => {
-    synapse = await synapseStart();
+  test.beforeEach(async ({ synapse }) => {
     await registerUser(synapse, 'user1', 'pass');
     await registerUser(synapse, 'user2', 'pass');
     await registerUser(synapse, 'user3', 'pass');
   });
-
-  test.afterEach(async () => {
-    await synapseStop(synapse.synapseId);
-  });
-
   test('it can decline an invite', async ({ page }) => {
     await login(page, 'user1', 'pass');
     await createRoom(page, {
@@ -131,12 +120,12 @@ test.describe('Room membership', () => {
     await expect(page.locator('[data-test-room-members]')).toHaveText(
       `Members: user1`,
     );
-    expect(
+    await expect(
       page.locator('[data-test-room-invite-field]'),
       'the invite dialog is not displayed',
     ).toHaveCount(0);
     await inviteToRoom(page, ['user2']);
-    expect(
+    await expect(
       page.locator('[data-test-room-invite-field]'),
       'the invite dialog is not displayed',
     ).toHaveCount(0);
@@ -159,17 +148,17 @@ test.describe('Room membership', () => {
       name: 'Room 1',
     });
     await openRoom(page, 'Room 1');
-    expect(
+    await expect(
       page.locator('[data-test-room-invite-field]'),
       'the invite dialog is not displayed',
     ).toHaveCount(0);
     await page.locator(`[data-test-invite-mode-btn]`).click();
-    expect(
+    await expect(
       page.locator('[data-test-room-invite-field]'),
       'the invite dialog is displayed',
     ).toHaveCount(1);
     await page.locator(`[data-test-room-invite-cancel-btn]`).click();
-    expect(
+    await expect(
       page.locator('[data-test-room-invite-field]'),
       'the invite dialog is not displayed',
     ).toHaveCount(0);

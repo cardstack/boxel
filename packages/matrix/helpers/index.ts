@@ -1,8 +1,10 @@
-import { expect, type Page } from '@playwright/test';
-
+import { expect, type Page, test as base } from '@playwright/test';
+import {
+  synapseStart,
+  synapseStop,
+  type SynapseInstance,
+} from '../docker/synapse';
 export const testHost = 'http://localhost:4202/test';
-export const rootPath =
-  new URL(testHost).pathname === '/' ? '' : new URL(testHost).pathname;
 
 interface ProfileAssertions {
   userId?: string;
@@ -10,6 +12,46 @@ interface ProfileAssertions {
 }
 interface LoginOptions {
   expectFailure?: true;
+}
+
+export const test = base.extend<{ synapse: SynapseInstance }>({
+  synapse: async ({}, use) => {
+    let synapseInstance = await synapseStart();
+    await use(synapseInstance);
+    await synapseStop(synapseInstance.synapseId);
+  },
+
+  page: async ({ page, synapse }, use) => {
+    // Setup overrides
+    await setupMatrixOverride(page, synapse);
+    await use(page);
+  },
+});
+
+export async function setupMatrixOverride(
+  page: Page,
+  synapse: SynapseInstance,
+) {
+  // Save the original goto function
+  const originalGoto = page.goto.bind(page);
+
+  // Patch the goto function
+  page.goto = async (url, options) => {
+    const newUrl = new URL(url);
+    const params = new URLSearchParams(newUrl.search);
+
+    // Override the matrix URL
+    params.set('matrixURL', `http://localhost:${synapse.mappedPort}`);
+    newUrl.search = params.toString();
+
+    // Call the original goto function with the new URL
+    return originalGoto(newUrl.toString(), options);
+  };
+
+  // Patch the reload function
+  page.reload = async (options) => {
+    return page.goto(page.url(), options);
+  };
 }
 
 export async function reloadAndOpenChat(page: Page) {
@@ -28,8 +70,12 @@ export async function openChat(page: Page) {
   );
 }
 
+export async function openRoot(page: Page) {
+  await page.goto(testHost);
+}
+
 export async function gotoRegistration(page: Page) {
-  await page.goto(rootPath);
+  await openRoot(page);
   await toggleOperatorMode(page);
   await openChat(page);
   await page.locator('[data-test-register-user]').click();
@@ -41,7 +87,7 @@ export async function login(
   password: string,
   opts?: LoginOptions,
 ) {
-  await page.goto(rootPath);
+  await openRoot(page);
   await toggleOperatorMode(page);
   await openChat(page);
   await page.locator('[data-test-username-field]').fill(username);

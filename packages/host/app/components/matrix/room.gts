@@ -12,7 +12,7 @@ import {
   FieldContainer,
   Button,
 } from '@cardstack/boxel-ui';
-import { getRoomCard } from '../../resources/room-card';
+import { getRoom } from '../../resources/room';
 import { getAttachedCards } from '../../resources/attached-cards';
 import { TrackedMap } from 'tracked-built-ins';
 import {
@@ -22,7 +22,10 @@ import {
 } from '@cardstack/runtime-common';
 import { registerDestructor } from '@ember/destroyable';
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import {
+  type CardDef,
+  type FieldDef,
+} from 'https://cardstack.com/base/card-api';
 import type CardService from '@cardstack/host/services/card-service';
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import config from '@cardstack/host/config/environment';
@@ -84,7 +87,7 @@ export default class Room extends Component<RoomArgs> {
 
     <div
       class='messages-wrapper'
-      data-test-room-settled={{this.doWhenCardChanges.isIdle}}
+      data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
     >
       <div class='messages'>
         <div class='notices'>
@@ -92,7 +95,7 @@ export default class Room extends Component<RoomArgs> {
             - Beginning of conversation -
           </div>
         </div>
-        {{#each this.messageCardComponents as |Message|}}
+        {{#each this.messageComponents as |Message|}}
           <Message />
         {{else}}
           <div data-test-no-messages>
@@ -241,17 +244,17 @@ export default class Room extends Component<RoomArgs> {
   @tracked private isInviteMode = false;
   @tracked private membersToInvite: string[] = [];
   @tracked private allowedToSetObjective: boolean | undefined;
-  @tracked private subscribedCard: CardDef | undefined;
+  @tracked private subscribedRoom: FieldDef | undefined;
   private attachedCards = getAttachedCards(
     this,
-    () => this.roomCard,
+    () => this.room,
     () => this.attachedCardIds,
   );
   private messagesToSend: TrackedMap<string, string | undefined> =
     new TrackedMap();
   private cardsToSend: TrackedMap<string, CardDef | undefined> =
     new TrackedMap();
-  private roomCardResource = getRoomCard(this, () => this.args.roomId);
+  private roomResource = getRoom(this, () => this.args.roomId);
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -266,8 +269,8 @@ export default class Room extends Component<RoomArgs> {
     }
   }
 
-  private get roomCard() {
-    return this.roomCardResource.roomCard;
+  private get room() {
+    return this.roomResource.room;
   }
 
   private get objective() {
@@ -277,46 +280,37 @@ export default class Room extends Component<RoomArgs> {
   private subscribeToRoomChanges = task(async () => {
     await this.cardService.ready;
     while (true) {
-      if (this.roomCard && this.subscribedCard !== this.roomCard) {
-        if (this.subscribedCard) {
-          this.cardService.unsubscribeFromCard(
-            this.subscribedCard,
-            this.onCardChange,
-          );
+      if (this.room && this.subscribedRoom !== this.room) {
+        if (this.subscribedRoom) {
+          this.cardService.unsubscribe(this.subscribedRoom, this.onCardChange);
         }
-        this.subscribedCard = this.roomCard;
-        this.cardService.subscribeToCard(
-          this.subscribedCard,
-          this.onCardChange,
-        );
+        this.subscribedRoom = this.room;
+        this.cardService.subscribe(this.subscribedRoom, this.onCardChange);
       }
       await timeout(50);
     }
   });
 
   private onCardChange = () => {
-    this.doWhenCardChanges.perform();
+    this.doWhenRoomChanges.perform();
   };
 
-  private doWhenCardChanges = restartableTask(async () => {
+  private doWhenRoomChanges = restartableTask(async () => {
     await all([this.cardService.cardsSettled(), timeout(500)]);
   });
 
   private cleanup = () => {
-    if (this.subscribedCard) {
-      this.cardService.unsubscribeFromCard(
-        this.subscribedCard,
-        this.onCardChange,
-      );
+    if (this.subscribedRoom) {
+      this.cardService.unsubscribe(this.subscribedRoom, this.onCardChange);
     }
   };
 
   @cached
   private get attachedCardIds() {
-    if (!this.roomCard) {
+    if (!this.room) {
       return [];
     }
-    return this.roomCard.messages
+    return this.room.messages
       .filter((m) => m.attachedCardId)
       .map((m) => m.attachedCardId);
   }
@@ -331,22 +325,22 @@ export default class Room extends Component<RoomArgs> {
     return;
   }
 
-  private get messageCardComponents() {
-    return this.roomCard
-      ? this.roomCard.messages.map((messageCard) =>
-          messageCard.constructor.getComponent(messageCard, 'embedded'),
+  private get messageComponents() {
+    return this.room
+      ? this.room.messages.map((message) =>
+          message.constructor.getComponent(message, 'embedded'),
         )
       : [];
   }
 
   @cached
   private get memberNames() {
-    if (!this.roomCard) {
+    if (!this.room) {
       return;
     }
     return [
-      ...this.roomCard.joinedMembers.map((m) => m.displayName),
-      ...this.roomCard.invitedMembers.map((m) => `${m.displayName} (invited)`),
+      ...this.room.joinedMembers.map((m) => m.displayName),
+      ...this.room.invitedMembers.map((m) => `${m.displayName} (invited)`),
     ].join(', ');
   }
 
@@ -442,7 +436,7 @@ export default class Room extends Component<RoomArgs> {
   private doMatrixEventFlush = restartableTask(async () => {
     await this.matrixService.flushMembership;
     await this.matrixService.flushTimeline;
-    await this.roomCardResource.loading;
+    await this.roomResource.loading;
     this.allowedToSetObjective = await this.matrixService.allowedToSetObjective(
       this.args.roomId,
     );

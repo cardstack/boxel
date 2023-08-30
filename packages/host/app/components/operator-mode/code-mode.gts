@@ -55,7 +55,6 @@ export default class CodeMode extends Component<Signature> {
 
     <style>
       .code-mode {
-        position: fixed;
         height: 100%;
         left: 0;
         right: 0;

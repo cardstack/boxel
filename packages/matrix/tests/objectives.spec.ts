@@ -1,10 +1,5 @@
-import { expect, test } from '@playwright/test';
-import {
-  synapseStart,
-  synapseStop,
-  registerUser,
-  type SynapseInstance,
-} from '../docker/synapse';
+import { expect } from '@playwright/test';
+import { registerUser } from '../docker/synapse';
 import {
   login,
   logout,
@@ -14,20 +9,14 @@ import {
   setObjective,
   sendMessage,
   joinRoom,
+  test,
 } from '../helpers';
 
 test.describe('Room objectives', () => {
-  let synapse: SynapseInstance;
-  test.beforeEach(async () => {
-    synapse = await synapseStart();
+  test.beforeEach(async ({ synapse }) => {
     await registerUser(synapse, 'user1', 'pass');
     await registerUser(synapse, 'user2', 'pass');
   });
-
-  test.afterEach(async () => {
-    await synapseStop(synapse.synapseId);
-  });
-
   test('room objective updates milestones as they are completed', async ({
     page,
   }) => {

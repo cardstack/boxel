@@ -60,13 +60,13 @@ module('Integration | serialization', function (hooks) {
 
   test('can deserialize field', async function (assert) {
     let { field, contains, CardDef, Component, createFromSerialized } = cardApi;
-    let { default: StringCard } = string;
-    let { default: DateCard } = date;
-    let { default: DatetimeCard } = datetime;
+    let { default: StringField } = string;
+    let { default: DateField } = date;
+    let { default: DatetimeField } = datetime;
     class Post extends CardDef {
-      @field title = contains(StringCard);
-      @field created = contains(DateCard);
-      @field published = contains(DatetimeCard);
+      @field title = contains(StringField);
+      @field created = contains(DateField);
+      @field published = contains(DatetimeField);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <@fields.title />
@@ -111,9 +111,9 @@ module('Integration | serialization', function (hooks) {
 
   test('can deserialize a card that has an ID', async function (assert) {
     let { field, contains, CardDef, createFromSerialized, isSaved } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
     }
     await shimModule(`${realmURL}test-cards`, { Person }, loader);
 
@@ -158,16 +158,18 @@ module('Integration | serialization', function (hooks) {
 
   test('can serialize a card that has an ID', async function (assert) {
     let { field, contains, CardDef, serializeCard } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
-      @field description = contains(StringCard, { computeVia: () => 'Person' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     await shimModule(`${realmURL}test-cards`, { Person }, loader);
 
@@ -195,9 +197,9 @@ module('Integration | serialization', function (hooks) {
 
   test('can update an instance from serialized data', async function (assert) {
     let { field, contains, CardDef, updateFromSerialized, isSaved } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
     }
     await shimModule(`${realmURL}test-cards`, { Person }, loader);
 
@@ -241,9 +243,9 @@ module('Integration | serialization', function (hooks) {
       updateFromSerialized,
       createFromSerialized,
     } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
     }
     await shimModule(`${realmURL}test-cards`, { Person }, loader);
 
@@ -363,11 +365,11 @@ module('Integration | serialization', function (hooks) {
 
   test('can serialize field', async function (assert) {
     let { field, contains, CardDef, serializeCard } = cardApi;
-    let { default: DateCard } = date;
-    let { default: DatetimeCard } = datetime;
+    let { default: DateField } = date;
+    let { default: DatetimeField } = datetime;
     class Post extends CardDef {
-      @field created = contains(DateCard);
-      @field published = contains(DatetimeCard);
+      @field created = contains(DateField);
+      @field published = contains(DatetimeField);
     }
     await shimModule(`${realmURL}test-cards`, { Post }, loader);
 
@@ -388,13 +390,13 @@ module('Integration | serialization', function (hooks) {
 
   test('can deserialize a date field with null value', async function (assert) {
     let { field, contains, CardDef, Component, createFromSerialized } = cardApi;
-    let { default: StringCard } = string;
-    let { default: DateCard } = date;
-    let { default: DatetimeCard } = datetime;
+    let { default: StringField } = string;
+    let { default: DateField } = date;
+    let { default: DatetimeField } = datetime;
     class Post extends CardDef {
-      @field title = contains(StringCard);
-      @field created = contains(DateCard);
-      @field published = contains(DatetimeCard);
+      @field title = contains(StringField);
+      @field created = contains(DateField);
+      @field published = contains(DatetimeField);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <@fields.title />
@@ -434,37 +436,39 @@ module('Integration | serialization', function (hooks) {
 
   test('can serialize a linksTo relationship', async function (assert) {
     let { field, contains, linksTo, CardDef, serializeCard } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
     class Toy extends CardDef {
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Toy) {
           return this.description;
         },
       });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     class Pet extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       @field favoriteToy = linksTo(Toy);
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.firstName;
         },
       });
-      @field description = contains(StringCard, { computeVia: () => 'Pet' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, { computeVia: () => 'Pet' });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
-      @field description = contains(StringCard, { computeVia: () => 'Person' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy }, loader);
 
@@ -563,17 +567,17 @@ module('Integration | serialization', function (hooks) {
       relationshipMeta,
       isSaved,
     } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
     class Toy extends CardDef {
-      @field description = contains(StringCard);
+      @field description = contains(StringField);
     }
     class Pet extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       @field favoriteToy = linksTo(Toy);
     }
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
     }
     await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy }, loader);
@@ -705,28 +709,30 @@ module('Integration | serialization', function (hooks) {
       relationshipMeta,
       serializeCard,
     } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
     class Pet extends CardDef {
-      @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.firstName;
         },
       });
-      @field description = contains(StringCard, { computeVia: () => 'Pet' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, { computeVia: () => 'Pet' });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
-      @field description = contains(StringCard, { computeVia: () => 'Person' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
     let doc: LooseSingleCardDocument = {
@@ -810,26 +816,28 @@ module('Integration | serialization', function (hooks) {
 
   test('can serialize an empty linksTo relationship', async function (assert) {
     let { field, contains, linksTo, CardDef, serializeCard } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
     class Pet extends CardDef {
-      @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.firstName;
         },
       });
     }
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
-      @field description = contains(StringCard, { computeVia: () => 'Person' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
 
@@ -885,13 +893,13 @@ module('Integration | serialization', function (hooks) {
 
   test('can deserialize an empty linksTo relationship', async function (assert) {
     let { field, contains, linksTo, CardDef, createFromSerialized } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
     class Pet extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
     }
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
     }
     await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
@@ -936,19 +944,20 @@ module('Integration | serialization', function (hooks) {
       linksTo,
       CardDef,
       createFromSerialized,
+      FieldDef,
       relationshipMeta,
       isSaved,
     } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
     }
-    class Toy extends CardDef {
-      @field description = contains(StringCard);
+    class Toy extends FieldDef {
+      @field description = contains(StringField);
     }
     class Pet extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       @field owner = linksTo(Person);
       @field favoriteToy = contains(Toy);
       @field toys = containsMany(Toy);
@@ -1014,15 +1023,12 @@ module('Integration | serialization', function (hooks) {
       assert.ok(false, '"owner" field value is not an instance of Person');
     }
     assert.strictEqual(toys.length, 2);
-    toys.map((toy, i) => {
-      if (toy instanceof Toy) {
-        assert.strictEqual(isSaved(toy), false, `Toy ${i} card is not saved`);
-      } else {
+    toys.map((toy) => {
+      if (!(toy instanceof Toy)) {
         assert.ok(false, '"toys" field value is not an instance of Toy');
       }
     });
     if (favoriteToy instanceof Toy) {
-      assert.strictEqual(isSaved(favoriteToy), false, 'Toy card is not saved');
       assert.strictEqual(favoriteToy.description, 'treat ball');
     } else {
       assert.ok(false, '"favoriteToy" field value is not an instance of Toy');
@@ -1059,18 +1065,20 @@ module('Integration | serialization', function (hooks) {
 
   test('can serialize a linksTo relationship that points to own card class', async function (assert) {
     let { field, contains, linksTo, CardDef, serializeCard } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       @field friend = linksTo(() => Person);
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
-      @field description = contains(StringCard, { computeVia: () => 'Person' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     await shimModule(`${realmURL}test-cards`, { Person }, loader);
 
@@ -1130,10 +1138,10 @@ module('Integration | serialization', function (hooks) {
   test('can deserialize a linksTo relationship that points to own card class', async function (assert) {
     let { field, contains, linksTo, CardDef, createFromSerialized, isSaved } =
       cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       @field friend = linksTo(() => Person);
     }
     await shimModule(`${realmURL}test-cards`, { Person }, loader);
@@ -1201,13 +1209,13 @@ module('Integration | serialization', function (hooks) {
 
   test('throws when serializing a linksTo relationship to an unsaved card', async function (assert) {
     let { field, contains, linksTo, CardDef, serializeCard } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
     class Pet extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
     }
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
     }
     await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
@@ -1234,40 +1242,43 @@ module('Integration | serialization', function (hooks) {
       contains,
       linksTo,
       CardDef,
+      FieldDef,
       serializeCard,
       createFromSerialized,
     } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
     class Toy extends CardDef {
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Toy) {
           return this.description;
         },
       });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    class Pet extends CardDef {
-      @field firstName = contains(StringCard);
+    class Pet extends FieldDef {
+      @field firstName = contains(StringField);
       @field favoriteToy = linksTo(Toy);
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.firstName;
         },
       });
-      @field description = contains(StringCard, { computeVia: () => 'Pet' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, { computeVia: () => 'Pet' });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       @field pet = contains(Pet);
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
-      @field description = contains(StringCard, { computeVia: () => 'Person' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy }, loader);
 
@@ -1367,41 +1378,44 @@ module('Integration | serialization', function (hooks) {
       containsMany,
       linksTo,
       CardDef,
+      FieldDef,
       serializeCard,
       createFromSerialized,
     } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
     class Toy extends CardDef {
-      @field description = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field description = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Toy) {
           return this.description;
         },
       });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    class Pet extends CardDef {
-      @field firstName = contains(StringCard);
+    class Pet extends FieldDef {
+      @field firstName = contains(StringField);
       @field favoriteToy = linksTo(Toy);
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.firstName;
         },
       });
-      @field description = contains(StringCard, { computeVia: () => 'Pet' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, { computeVia: () => 'Pet' });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       @field pets = containsMany(Pet);
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
-      @field description = contains(StringCard, { computeVia: () => 'Person' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy }, loader);
 
@@ -1504,9 +1518,9 @@ module('Integration | serialization', function (hooks) {
 
   test('can maintain object identity when deserializing linksTo relationship', async function (assert) {
     let { field, contains, linksTo, CardDef, createFromSerialized } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       @field parent = linksTo(() => Person);
       @field favorite = linksTo(() => Person);
     }
@@ -1579,11 +1593,11 @@ module('Integration | serialization', function (hooks) {
 
   test('can serialize a date field with null value', async function (assert) {
     let { field, contains, CardDef, serializeCard } = cardApi;
-    let { default: DateCard } = date;
-    let { default: DatetimeCard } = datetime;
+    let { default: DateField } = date;
+    let { default: DatetimeField } = datetime;
     class Post extends CardDef {
-      @field created = contains(DateCard);
-      @field published = contains(DatetimeCard);
+      @field created = contains(DateField);
+      @field published = contains(DatetimeField);
     }
     await shimModule(`${realmURL}test-cards`, { Post }, loader);
 
@@ -1596,18 +1610,25 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a nested field', async function (assert) {
-    let { field, contains, CardDef, Component, createFromSerialized } = cardApi;
-    let { default: StringCard } = string;
-    let { default: DateCard } = date;
-    let { default: DatetimeCard } = datetime;
-    class Person extends CardDef {
-      @field firstName = contains(StringCard);
-      @field birthdate = contains(DateCard);
-      @field lastLogin = contains(DatetimeCard);
+    let {
+      field,
+      contains,
+      CardDef,
+      FieldDef,
+      Component,
+      createFromSerialized,
+    } = cardApi;
+    let { default: StringField } = string;
+    let { default: DateField } = date;
+    let { default: DatetimeField } = datetime;
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field birthdate = contains(DateField);
+      @field lastLogin = contains(DatetimeField);
     }
 
     class Post extends CardDef {
-      @field title = contains(StringCard);
+      @field title = contains(StringField);
       @field author = contains(Person);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
@@ -1652,14 +1673,21 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a composite field', async function (assert) {
-    let { field, contains, CardDef, Component, createFromSerialized } = cardApi;
-    let { default: StringCard } = string;
-    let { default: DateCard } = date;
-    let { default: DatetimeCard } = datetime;
-    class Person extends CardDef {
-      @field firstName = contains(StringCard);
-      @field birthdate = contains(DateCard);
-      @field lastLogin = contains(DatetimeCard);
+    let {
+      field,
+      contains,
+      CardDef,
+      FieldDef,
+      Component,
+      createFromSerialized,
+    } = cardApi;
+    let { default: StringField } = string;
+    let { default: DateField } = date;
+    let { default: DatetimeField } = datetime;
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field birthdate = contains(DateField);
+      @field lastLogin = contains(DatetimeField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <div data-test><@fields.firstName />
@@ -1672,7 +1700,7 @@ module('Integration | serialization', function (hooks) {
     }
 
     class Post extends CardDef {
-      @field title = contains(StringCard);
+      @field title = contains(StringField);
       @field author = contains(Person);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
@@ -1715,16 +1743,16 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a composite field', async function (assert) {
-    let { field, contains, serializeCard, CardDef } = cardApi;
-    let { default: DateCard } = date;
-    let { default: DatetimeCard } = datetime;
-    let { default: StringCard } = string;
+    let { field, contains, serializeCard, CardDef, FieldDef } = cardApi;
+    let { default: DateField } = date;
+    let { default: DatetimeField } = datetime;
+    let { default: StringField } = string;
 
-    class Person extends CardDef {
-      @field firstName = contains(StringCard);
-      @field birthdate = contains(DateCard);
-      @field lastLogin = contains(DatetimeCard);
-      @field title = contains(StringCard, {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field birthdate = contains(DateField);
+      @field lastLogin = contains(DatetimeField);
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
@@ -1733,7 +1761,7 @@ module('Integration | serialization', function (hooks) {
 
     class Post extends CardDef {
       @field author = contains(Person);
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Post) {
           return this.author?.title ?? 'Post';
         },
@@ -1746,8 +1774,6 @@ module('Integration | serialization', function (hooks) {
         firstName: 'Mango',
         birthdate: p('2019-10-30'),
         lastLogin: parseISO('2022-04-27T16:30+00:00'),
-        description: 'Author',
-        thumbnailURL: './mango.png',
       }),
       description: 'Post by Mango',
       thumbnailURL: './post.jpg',
@@ -1761,8 +1787,6 @@ module('Integration | serialization', function (hooks) {
         birthdate: '2019-10-30',
         firstName: 'Mango',
         lastLogin: '2022-04-27T16:30:00.000Z',
-        description: 'Author',
-        thumbnailURL: './mango.png',
       },
       description: 'Post by Mango',
       thumbnailURL: './post.jpg',
@@ -1773,19 +1797,19 @@ module('Integration | serialization', function (hooks) {
 
   test('can serialize a polymorphic composite field', async function (assert) {
     let { field, contains, serializeCard, CardDef, FieldDef } = cardApi;
-    let { default: StringCard } = string;
-    let { default: DateCard } = date;
-    let { default: DatetimeCard } = datetime;
+    let { default: StringField } = string;
+    let { default: DateField } = date;
+    let { default: DatetimeField } = datetime;
 
     class Person extends FieldDef {
-      @field firstName = contains(StringCard);
-      @field birthdate = contains(DateCard);
-      @field lastLogin = contains(DatetimeCard);
+      @field firstName = contains(StringField);
+      @field birthdate = contains(DateField);
+      @field lastLogin = contains(DatetimeField);
     }
 
     class Employee extends Person {
-      @field department = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field department = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Employee) {
           return `${this.firstName} - ${this.department}`;
         },
@@ -1829,18 +1853,21 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a composite field that has been edited', async function (assert) {
-    let { field, contains, serializeCard, CardDef, Component } = cardApi;
-    let { default: StringCard } = string;
-    let { default: NumberCard } = number;
-    class Person extends CardDef {
-      @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+    let { field, contains, serializeCard, CardDef, FieldDef, Component } =
+      cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
-      @field description = contains(StringCard, { computeVia: () => 'Person' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <@fields.firstName />
@@ -1849,11 +1876,11 @@ module('Integration | serialization', function (hooks) {
     }
 
     class Post extends CardDef {
-      @field title = contains(StringCard);
-      @field reviews = contains(NumberCard);
+      @field title = contains(StringField);
+      @field reviews = contains(NumberField);
       @field author = contains(Person);
-      @field description = contains(StringCard, { computeVia: () => 'Post' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, { computeVia: () => 'Post' });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
       static edit = class Edit extends Component<typeof this> {
         <template>
           <fieldset>
@@ -1907,10 +1934,10 @@ module('Integration | serialization', function (hooks) {
 
   test('can serialize a computed field', async function (assert) {
     let { field, contains, serializeCard, CardDef } = cardApi;
-    let { default: DateCard } = date;
+    let { default: DateField } = date;
     class Person extends CardDef {
-      @field birthdate = contains(DateCard);
-      @field firstBirthday = contains(DateCard, {
+      @field birthdate = contains(DateField);
+      @field firstBirthday = contains(DateField, {
         computeVia: function (this: Person) {
           return new Date(
             this.birthdate.getFullYear() + 1,
@@ -1932,16 +1959,16 @@ module('Integration | serialization', function (hooks) {
   module('computed linksTo', function () {
     test('can serialize a computed linksTo field', async function (assert) {
       let { field, contains, linksTo, serializeCard, CardDef } = cardApi;
-      let { default: StringCard } = string;
+      let { default: StringField } = string;
       class Pet extends CardDef {
-        @field name = contains(StringCard);
-        @field description = contains(StringCard, { computeVia: () => 'Pet' });
-        @field thumbnailURL = contains(StringCard, {
+        @field name = contains(StringField);
+        @field description = contains(StringField, { computeVia: () => 'Pet' });
+        @field thumbnailURL = contains(StringField, {
           computeVia: () => '../pet.svg',
         });
       }
       class Person extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field friend = linksTo(() => Person);
         @field pet = linksTo(Pet);
         @field friendPet = linksTo(Pet, {
@@ -1949,10 +1976,10 @@ module('Integration | serialization', function (hooks) {
             return this.friend?.pet;
           },
         });
-        @field description = contains(StringCard, {
+        @field description = contains(StringField, {
           computeVia: () => 'Person',
         });
-        @field thumbnailURL = contains(StringCard, {
+        @field thumbnailURL = contains(StringField, {
           computeVia: () => '../../person.svg',
         });
       }
@@ -2038,12 +2065,12 @@ module('Integration | serialization', function (hooks) {
         relationshipMeta,
         isSaved,
       } = cardApi;
-      let { default: StringCard } = string;
+      let { default: StringField } = string;
       class Pet extends CardDef {
-        @field name = contains(StringCard);
+        @field name = contains(StringField);
       }
       class Person extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field friend = linksTo(() => Person);
         @field pet = linksTo(Pet);
         @field friendPet = linksTo(Pet, {
@@ -2139,12 +2166,12 @@ module('Integration | serialization', function (hooks) {
 
     test('can serialize an empty computed linksTo field', async function (assert) {
       let { field, contains, linksTo, CardDef, serializeCard } = cardApi;
-      let { default: StringCard } = string;
+      let { default: StringField } = string;
       class Pet extends CardDef {
-        @field name = contains(StringCard);
+        @field name = contains(StringField);
       }
       class Person extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field friend = linksTo(() => Person);
         @field pet = linksTo(Pet);
         @field friendPet = linksTo(Pet, {
@@ -2189,12 +2216,12 @@ module('Integration | serialization', function (hooks) {
         createFromSerialized,
         relationshipMeta,
       } = cardApi;
-      let { default: StringCard } = string;
+      let { default: StringField } = string;
       class Pet extends CardDef {
-        @field name = contains(StringCard);
+        @field name = contains(StringField);
       }
       class Person extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field friend = linksTo(() => Person);
         @field pet = linksTo(Pet);
         @field friendPet = linksTo(Pet, {
@@ -2241,12 +2268,12 @@ module('Integration | serialization', function (hooks) {
         createFromSerialized,
         relationshipMeta,
       } = cardApi;
-      let { default: StringCard } = string;
+      let { default: StringField } = string;
       class Pet extends CardDef {
-        @field name = contains(StringCard);
+        @field name = contains(StringField);
       }
       class Person extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field friend = linksTo(() => Person);
         @field pet = linksTo(Pet);
         @field friendPet = linksTo(Pet, {
@@ -2306,9 +2333,9 @@ module('Integration | serialization', function (hooks) {
   test('can deserialize a containsMany field', async function (assert) {
     let { field, containsMany, CardDef, Component, createFromSerialized } =
       cardApi;
-    let { default: DateCard } = date;
+    let { default: DateField } = date;
     class Schedule extends CardDef {
-      @field dates = containsMany(DateCard);
+      @field dates = containsMany(DateField);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <@fields.dates />
@@ -2349,15 +2376,16 @@ module('Integration | serialization', function (hooks) {
       contains,
       containsMany,
       CardDef,
+      FieldDef,
       Component,
       createFromSerialized,
     } = cardApi;
-    let { default: StringCard } = string;
-    let { default: DateCard } = date;
-    class Appointment extends CardDef {
-      @field date = contains(DateCard);
-      @field location = contains(StringCard);
-      @field title = contains(StringCard);
+    let { default: StringField } = string;
+    let { default: DateField } = date;
+    class Appointment extends FieldDef {
+      @field date = contains(DateField);
+      @field location = contains(StringField);
+      @field title = contains(StringField);
       static embedded = class Isolated extends Component<typeof this> {
         <template>
           <div data-test='appointment'><@fields.title />
@@ -2418,9 +2446,9 @@ module('Integration | serialization', function (hooks) {
 
   test('can serialize a containsMany field', async function (assert) {
     let { field, containsMany, serializeCard, CardDef } = cardApi;
-    let { default: DateCard } = date;
+    let { default: DateField } = date;
     class Schedule extends CardDef {
-      @field dates = containsMany(DateCard);
+      @field dates = containsMany(DateField);
     }
     await shimModule(`${realmURL}test-cards`, { Schedule }, loader);
 
@@ -2433,21 +2461,22 @@ module('Integration | serialization', function (hooks) {
   });
 
   test("can serialize a containsMany's nested field", async function (assert) {
-    let { field, contains, containsMany, serializeCard, CardDef } = cardApi;
-    let { default: StringCard } = string;
-    let { default: DateCard } = date;
-    class Appointment extends CardDef {
-      @field date = contains(DateCard);
-      @field location = contains(StringCard);
-      @field title = contains(StringCard);
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+    let { field, contains, containsMany, serializeCard, CardDef, FieldDef } =
+      cardApi;
+    let { default: StringField } = string;
+    let { default: DateField } = date;
+    class Appointment extends FieldDef {
+      @field date = contains(DateField);
+      @field location = contains(StringField);
+      @field title = contains(StringField);
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     class Schedule extends CardDef {
       @field appointments = containsMany(Appointment);
-      @field description = contains(StringCard, {
+      @field description = contains(StringField, {
         computeVia: () => 'Schedule',
       });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     await shimModule(
       `${realmURL}test-cards`,
@@ -2461,13 +2490,11 @@ module('Integration | serialization', function (hooks) {
           date: p('2022-4-1'),
           location: 'Room 332',
           title: 'Biology',
-          description: 'Class',
         }),
         new Appointment({
           date: p('2022-4-4'),
           location: 'Room 102',
           title: 'Civics',
-          description: 'Class',
         }),
       ],
     });
@@ -2480,13 +2507,11 @@ module('Integration | serialization', function (hooks) {
         date: '2022-04-01',
         location: 'Room 332',
         title: 'Biology',
-        description: 'Class',
       },
       {
         date: '2022-04-04',
         location: 'Room 102',
         title: 'Civics',
-        description: 'Class',
       },
     ]);
     assert.deepEqual(serialized.data.meta?.fields?.appointments, undefined); // this means the field card for the value is the same as the field's card
@@ -2494,13 +2519,13 @@ module('Integration | serialization', function (hooks) {
 
   test('can serialize a card with primitive fields', async function (assert) {
     let { field, contains, serializeCard, CardDef, recompute } = cardApi;
-    let { default: StringCard } = string;
-    let { default: DateCard } = date;
-    let { default: DatetimeCard } = datetime;
+    let { default: StringField } = string;
+    let { default: DateField } = date;
+    let { default: DatetimeField } = datetime;
     class Post extends CardDef {
-      @field title = contains(StringCard);
-      @field created = contains(DateCard);
-      @field published = contains(DatetimeCard);
+      @field title = contains(StringField);
+      @field created = contains(DateField);
+      @field published = contains(DatetimeField);
     }
     await shimModule(`${realmURL}test-cards`, { Post }, loader);
 
@@ -2538,29 +2563,31 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a card with composite field', async function (assert) {
-    let { field, contains, serializeCard, CardDef } = cardApi;
-    let { default: StringCard } = string;
-    let { default: DateCard } = date;
-    class Animal extends CardDef {
-      @field species = contains(StringCard);
-      @field description = contains(StringCard, { computeVia: () => 'Animal' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+    let { field, contains, serializeCard, CardDef, FieldDef } = cardApi;
+    let { default: StringField } = string;
+    let { default: DateField } = date;
+    class Animal extends FieldDef {
+      @field species = contains(StringField);
+      @field description = contains(StringField, {
+        computeVia: () => 'Animal',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     class Person extends Animal {
-      @field firstName = contains(StringCard);
-      @field birthdate = contains(DateCard);
-      @field title = contains(StringCard, {
+      @field firstName = contains(StringField);
+      @field birthdate = contains(DateField);
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
-      @field description = contains(StringCard);
+      @field description = contains(StringField);
     }
     class Post extends CardDef {
-      @field title = contains(StringCard);
+      @field title = contains(StringField);
       @field author = contains(Person);
-      @field description = contains(StringCard, { computeVia: () => 'Post' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, { computeVia: () => 'Post' });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     await shimModule(`${realmURL}test-cards`, { Post, Person, Animal }, loader);
 
@@ -2605,19 +2632,21 @@ module('Integration | serialization', function (hooks) {
       FieldDef,
       createFromSerialized,
     } = cardApi;
-    let { default: StringCard } = string;
-    let { default: DateCard } = date;
+    let { default: StringField } = string;
+    let { default: DateField } = date;
 
     class Person extends FieldDef {
-      @field firstName = contains(StringCard);
-      @field birthdate = contains(DateCard);
-      @field description = contains(StringCard, { computeVia: () => 'Person' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field firstName = contains(StringField);
+      @field birthdate = contains(DateField);
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
     class Employee extends Person {
-      @field department = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field department = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Employee) {
           return `${this.firstName} - ${this.department}`;
         },
@@ -2625,10 +2654,10 @@ module('Integration | serialization', function (hooks) {
     }
 
     class Post extends CardDef {
-      @field title = contains(StringCard);
+      @field title = contains(StringField);
       @field author = contains(Person);
-      @field description = contains(StringCard, { computeVia: () => 'Post' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, { computeVia: () => 'Post' });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
     await shimModule(
@@ -2698,20 +2727,22 @@ module('Integration | serialization', function (hooks) {
       FieldDef,
       createFromSerialized,
     } = cardApi;
-    let { default: StringCard } = string;
-    let { default: DateCard } = date;
+    let { default: StringField } = string;
+    let { default: DateField } = date;
 
     class Person extends FieldDef {
-      @field firstName = contains(StringCard);
-      @field birthdate = contains(DateCard);
+      @field firstName = contains(StringField);
+      @field birthdate = contains(DateField);
       @field loves = contains(FieldDef);
-      @field description = contains(StringCard, { computeVia: () => 'Person' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
     class Pet extends FieldDef {
-      @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.firstName;
         },
@@ -2719,8 +2750,8 @@ module('Integration | serialization', function (hooks) {
     }
 
     class Employee extends Person {
-      @field department = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field department = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Employee) {
           return `${this.firstName} - ${this.department}`;
         },
@@ -2728,10 +2759,10 @@ module('Integration | serialization', function (hooks) {
     }
 
     class Post extends CardDef {
-      @field title = contains(StringCard);
+      @field title = contains(StringField);
       @field author = contains(Person);
-      @field description = contains(StringCard, { computeVia: () => 'Post' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, { computeVia: () => 'Post' });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
     await shimModule(
@@ -2824,23 +2855,25 @@ module('Integration | serialization', function (hooks) {
       FieldDef,
       createFromSerialized,
     } = cardApi;
-    let { default: NumberCard } = number;
-    let { default: StringCard } = string;
+    let { default: NumberField } = number;
+    let { default: StringField } = string;
 
     class Person extends FieldDef {
-      @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
-      @field description = contains(StringCard, { computeVia: () => 'Person' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
     class Employee extends Person {
-      @field department = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field department = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Employee) {
           return this.department;
         },
@@ -2848,20 +2881,20 @@ module('Integration | serialization', function (hooks) {
     }
 
     class Customer extends Person {
-      @field billAmount = contains(NumberCard);
+      @field billAmount = contains(NumberField);
     }
 
     class Group extends CardDef {
       @field people = containsMany(Person);
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return 'Group';
         },
       });
-      @field description = contains(StringCard, {
+      @field description = contains(StringField, {
         computeVia: () => 'A group of people',
       });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
     await shimModule(
@@ -2964,33 +2997,35 @@ module('Integration | serialization', function (hooks) {
       FieldDef,
       createFromSerialized,
     } = cardApi;
-    let { default: NumberCard } = number;
-    let { default: StringCard } = string;
+    let { default: NumberField } = number;
+    let { default: StringField } = string;
 
     class Person extends FieldDef {
-      @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
-      @field description = contains(StringCard, { computeVia: () => 'Person' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
     class Role extends FieldDef {
-      @field roleName = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field roleName = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Role) {
           return this.roleName;
         },
       });
-      @field description = contains(StringCard, { computeVia: () => 'Role' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, { computeVia: () => 'Role' });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
     class DogWalker extends Role {
-      @field poopBagCount = contains(NumberCard);
+      @field poopBagCount = contains(NumberField);
     }
 
     class Employee extends Person {
@@ -2999,11 +3034,11 @@ module('Integration | serialization', function (hooks) {
 
     class Group extends CardDef {
       @field people = containsMany(Person);
-      @field title = contains(StringCard, { computeVia: () => 'Group' });
-      @field description = contains(StringCard, {
+      @field title = contains(StringField, { computeVia: () => 'Group' });
+      @field description = contains(StringField, {
         computeVia: () => 'A group of people',
       });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
     await shimModule(
@@ -3119,17 +3154,17 @@ module('Integration | serialization', function (hooks) {
       createFromSerialized,
       isSaved,
     } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
     class Toy extends CardDef {
-      @field description = contains(StringCard);
+      @field description = contains(StringField);
     }
     class Pet extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       @field favorite = contains(FieldDef);
     }
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
+      @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
     }
     await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy }, loader);
@@ -3212,17 +3247,19 @@ module('Integration | serialization', function (hooks) {
   test('can deserialize a card from a resource object', async function (assert) {
     let { field, contains, serializeCard, CardDef, createFromSerialized } =
       cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
     class Person extends CardDef {
-      @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
-      @field description = contains(StringCard, { computeVia: () => 'Person' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     await shimModule(`${realmURL}person`, { Person }, loader);
 
@@ -3268,25 +3305,33 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a card from a resource object with composite fields', async function (assert) {
-    let { field, contains, serializeCard, CardDef, createFromSerialized } =
-      cardApi;
-    let { default: StringCard } = string;
+    let {
+      field,
+      contains,
+      serializeCard,
+      CardDef,
+      FieldDef,
+      createFromSerialized,
+    } = cardApi;
+    let { default: StringField } = string;
 
-    class Person extends CardDef {
-      @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
-      @field description = contains(StringCard, { computeVia: () => 'Person' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     class Post extends CardDef {
-      @field title = contains(StringCard);
+      @field title = contains(StringField);
       @field author = contains(Person);
-      @field description = contains(StringCard, { computeVia: () => 'Post' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, { computeVia: () => 'Post' });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
     await shimModule(`${realmURL}person`, { Person }, loader);
@@ -3347,35 +3392,38 @@ module('Integration | serialization', function (hooks) {
       containsMany,
       serializeCard,
       CardDef,
+      FieldDef,
       createFromSerialized,
     } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
-    class Person extends CardDef {
-      @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
-      @field description = contains(StringCard, {
+      @field description = contains(StringField, {
         computeVia: () => 'A person',
       });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    class Post extends CardDef {
-      @field title = contains(StringCard);
+    class Post extends FieldDef {
+      @field title = contains(StringField);
       @field author = contains(Person);
-      @field description = contains(StringCard, { computeVia: () => 'A post' });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field description = contains(StringField, {
+        computeVia: () => 'A post',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     class Blog extends CardDef {
       @field posts = containsMany(Post);
-      @field _metadata = contains(StringCard, { computeVia: () => 'Blog' });
-      @field description = contains(StringCard, {
+      @field _metadata = contains(StringField, { computeVia: () => 'Blog' });
+      @field description = contains(StringField, {
         computeVia: () => 'A blog post',
       });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     await shimModule(`${realmURL}person`, { Person }, loader);
     await shimModule(`${realmURL}post`, { Post }, loader);
@@ -3457,11 +3505,11 @@ module('Integration | serialization', function (hooks) {
 
   test('can serialize a card with computed field', async function (assert) {
     let { field, contains, serializeCard, CardDef } = cardApi;
-    let { default: DateCard } = date;
-    let { default: StringCard } = string;
+    let { default: DateField } = date;
+    let { default: StringField } = string;
     class Person extends CardDef {
-      @field birthdate = contains(DateCard);
-      @field firstBirthday = contains(DateCard, {
+      @field birthdate = contains(DateField);
+      @field firstBirthday = contains(DateField, {
         computeVia: function (this: Person) {
           return new Date(
             this.birthdate.getFullYear() + 1,
@@ -3470,11 +3518,11 @@ module('Integration | serialization', function (hooks) {
           );
         },
       });
-      @field title = contains(StringCard, { computeVia: () => 'Person' });
-      @field description = contains(StringCard, {
+      @field title = contains(StringField, { computeVia: () => 'Person' });
+      @field description = contains(StringField, {
         computeVia: () => 'A person with birthdate',
       });
-      @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     await shimModule(`${realmURL}test-cards`, { Person }, loader);
 
@@ -3525,20 +3573,20 @@ module('Integration | serialization', function (hooks) {
   module('linksToMany', function () {
     test('can serialize a linksToMany relationship', async function (assert) {
       let { field, contains, linksToMany, CardDef, serializeCard } = cardApi;
-      let { default: StringCard } = string;
+      let { default: StringField } = string;
 
       class Pet extends CardDef {
-        @field firstName = contains(StringCard);
-        @field title = contains(StringCard, {
+        @field firstName = contains(StringField);
+        @field title = contains(StringField, {
           computeVia: function (this: Person) {
             return this.firstName;
           },
         });
       }
       class Person extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
-        @field title = contains(StringCard, {
+        @field title = contains(StringField, {
           computeVia: function (this: Person) {
             return this.firstName;
           },
@@ -3614,13 +3662,13 @@ module('Integration | serialization', function (hooks) {
         relationshipMeta,
         isSaved,
       } = cardApi;
-      let { default: StringCard } = string;
+      let { default: StringField } = string;
 
       class Pet extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
       }
       class Person extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
       await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
@@ -3736,29 +3784,29 @@ module('Integration | serialization', function (hooks) {
         serializeCard,
         createFromSerialized,
       } = cardApi;
-      let { default: StringCard } = string;
+      let { default: StringField } = string;
 
       class Toy extends CardDef {
-        @field description = contains(StringCard);
-        @field title = contains(StringCard, {
+        @field description = contains(StringField);
+        @field title = contains(StringField, {
           computeVia: function (this: Toy) {
             return this.description;
           },
         });
       }
       class Pet extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field favoriteToy = linksTo(Toy);
-        @field title = contains(StringCard, {
+        @field title = contains(StringField, {
           computeVia: function (this: Pet) {
             return this.firstName;
           },
         });
       }
       class Person extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
-        @field title = contains(StringCard, {
+        @field title = contains(StringField, {
           computeVia: function (this: Pet) {
             return this.firstName;
           },
@@ -3869,28 +3917,28 @@ module('Integration | serialization', function (hooks) {
 
     test('can serialize an empty linksToMany relationship', async function (assert) {
       let { field, contains, linksToMany, CardDef, serializeCard } = cardApi;
-      let { default: StringCard } = string;
+      let { default: StringField } = string;
 
       class Pet extends CardDef {
-        @field firstName = contains(StringCard);
-        @field title = contains(StringCard, {
+        @field firstName = contains(StringField);
+        @field title = contains(StringField, {
           computeVia: function (this: Pet) {
             return this.firstName;
           },
         });
       }
       class Person extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
-        @field title = contains(StringCard, {
+        @field title = contains(StringField, {
           computeVia: function (this: Person) {
             return this.firstName;
           },
         });
-        @field description = contains(StringCard, {
+        @field description = contains(StringField, {
           computeVia: () => 'Person',
         });
-        @field thumbnailURL = contains(StringCard, {
+        @field thumbnailURL = contains(StringField, {
           computeVia: () => 'person.svg',
         });
       }
@@ -3939,13 +3987,13 @@ module('Integration | serialization', function (hooks) {
     test('can deserialize an empty linksToMany relationship', async function (assert) {
       let { field, contains, linksToMany, CardDef, createFromSerialized } =
         cardApi;
-      let { default: StringCard } = string;
+      let { default: StringField } = string;
 
       class Pet extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
       }
       class Person extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
       await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
@@ -3987,32 +4035,32 @@ module('Integration | serialization', function (hooks) {
         relationshipMeta,
         serializeCard,
       } = cardApi;
-      let { default: StringCard } = string;
+      let { default: StringField } = string;
 
       class Pet extends CardDef {
-        @field firstName = contains(StringCard);
-        @field title = contains(StringCard, {
+        @field firstName = contains(StringField);
+        @field title = contains(StringField, {
           computeVia: function (this: Pet) {
             return this.firstName;
           },
         });
-        @field description = contains(StringCard, { computeVia: () => 'Pet' });
-        @field thumbnailURL = contains(StringCard, {
+        @field description = contains(StringField, { computeVia: () => 'Pet' });
+        @field thumbnailURL = contains(StringField, {
           computeVia: () => 'pet.svg',
         });
       }
       class Person extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
-        @field title = contains(StringCard, {
+        @field title = contains(StringField, {
           computeVia: function (this: Person) {
             return this.firstName;
           },
         });
-        @field description = contains(StringCard, {
+        @field description = contains(StringField, {
           computeVia: () => 'Person',
         });
-        @field thumbnailURL = contains(StringCard, {
+        @field thumbnailURL = contains(StringField, {
           computeVia: () => 'person.svg',
         });
       }
@@ -4128,20 +4176,20 @@ module('Integration | serialization', function (hooks) {
 
     test('can serialize a linksToMany relationship that points to own card class', async function (assert) {
       let { field, contains, linksToMany, CardDef, serializeCard } = cardApi;
-      let { default: StringCard } = string;
+      let { default: StringField } = string;
 
       class Person extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field friends = linksToMany(() => Person);
-        @field title = contains(StringCard, {
+        @field title = contains(StringField, {
           computeVia: function (this: Person) {
             return this.firstName;
           },
         });
-        @field description = contains(StringCard, {
+        @field description = contains(StringField, {
           computeVia: () => 'Person',
         });
-        @field thumbnailURL = contains(StringCard, {
+        @field thumbnailURL = contains(StringField, {
           computeVia: () => 'person.svg',
         });
       }
@@ -4212,12 +4260,12 @@ module('Integration | serialization', function (hooks) {
         createFromSerialized,
         isSaved,
       } = cardApi;
-      let { default: StringCard } = string;
+      let { default: StringField } = string;
 
       class Person extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field friends = linksToMany(() => Person);
-        @field title = contains(StringCard, {
+        @field title = contains(StringField, {
           computeVia: function (this: Person) {
             return this.firstName;
           },
@@ -4301,16 +4349,16 @@ module('Integration | serialization', function (hooks) {
     test('can serialize a computed linksToMany relationship', async function (assert) {
       let { field, contains, linksTo, linksToMany, serializeCard, CardDef } =
         cardApi;
-      let { default: StringCard } = string;
+      let { default: StringField } = string;
       class Pet extends CardDef {
-        @field name = contains(StringCard);
+        @field name = contains(StringField);
       }
       class Friend extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
       class Person extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field friend = linksTo(Friend);
         @field friendPets = linksToMany(Pet, {
           computeVia: function (this: Person) {
@@ -4425,16 +4473,16 @@ module('Integration | serialization', function (hooks) {
         isSaved,
         relationshipMeta,
       } = cardApi;
-      let { default: StringCard } = string;
+      let { default: StringField } = string;
       class Pet extends CardDef {
-        @field name = contains(StringCard);
+        @field name = contains(StringField);
       }
       class Friend extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
       class Person extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field friend = linksTo(Friend);
         @field friendPets = linksToMany(Pet, {
           computeVia: function (this: Person) {
@@ -4541,16 +4589,16 @@ module('Integration | serialization', function (hooks) {
     test('can serialize an empty computed linksToMany relationship', async function (assert) {
       let { field, contains, linksTo, linksToMany, serializeCard, CardDef } =
         cardApi;
-      let { default: StringCard } = string;
+      let { default: StringField } = string;
       class Pet extends CardDef {
-        @field name = contains(StringCard);
+        @field name = contains(StringField);
       }
       class Friend extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
       class Person extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field friend = linksTo(Friend);
         @field friendPets = linksToMany(Pet, {
           computeVia: function (this: Person) {
@@ -4597,16 +4645,16 @@ module('Integration | serialization', function (hooks) {
         createFromSerialized,
         CardDef,
       } = cardApi;
-      let { default: StringCard } = string;
+      let { default: StringField } = string;
       class Pet extends CardDef {
-        @field name = contains(StringCard);
+        @field name = contains(StringField);
       }
       class Friend extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
       class Person extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field friend = linksTo(Friend);
         @field friendPets = linksToMany(Pet, {
           computeVia: function (this: Person) {
@@ -4655,16 +4703,16 @@ module('Integration | serialization', function (hooks) {
         relationshipMeta,
         serializeCard,
       } = cardApi;
-      let { default: StringCard } = string;
+      let { default: StringField } = string;
       class Pet extends CardDef {
-        @field name = contains(StringCard);
+        @field name = contains(StringField);
       }
       class Friend extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
       class Person extends CardDef {
-        @field firstName = contains(StringCard);
+        @field firstName = contains(StringField);
         @field friend = linksTo(Friend);
         @field friendPets = linksToMany(Pet, {
           computeVia: function (this: Person) {
@@ -4779,24 +4827,24 @@ module('Integration | serialization', function (hooks) {
     // this module checks the custom serialization and deserialization behaviour of base cards
     // which have custom serialize and deserialize
 
-    module('NumberCard', function () {
+    module('NumberField', function () {
       test('can deserialize field', async function (assert) {
         let { field, contains, CardDef, createFromSerialized } = cardApi;
-        let { default: StringCard } = string;
-        let { default: NumberCard } = number;
+        let { default: StringField } = string;
+        let { default: NumberField } = number;
         class Sample extends CardDef {
-          @field title = contains(StringCard);
-          @field someNumber = contains(NumberCard);
-          @field someNegativeNumber = contains(NumberCard);
-          @field someNumberString = contains(NumberCard);
-          @field someBigInt = contains(NumberCard);
-          @field someNegativeBigInt = contains(NumberCard);
-          @field someNull = contains(NumberCard);
-          @field someString = contains(NumberCard);
-          @field someDecimal = contains(NumberCard);
-          @field zeroNumber = contains(NumberCard);
-          @field notANumber = contains(NumberCard);
-          @field infinity = contains(NumberCard);
+          @field title = contains(StringField);
+          @field someNumber = contains(NumberField);
+          @field someNegativeNumber = contains(NumberField);
+          @field someNumberString = contains(NumberField);
+          @field someBigInt = contains(NumberField);
+          @field someNegativeBigInt = contains(NumberField);
+          @field someNull = contains(NumberField);
+          @field someString = contains(NumberField);
+          @field someDecimal = contains(NumberField);
+          @field zeroNumber = contains(NumberField);
+          @field notANumber = contains(NumberField);
+          @field infinity = contains(NumberField);
         }
         await shimModule(`${realmURL}test-cards`, { Sample }, loader);
 
@@ -4846,12 +4894,12 @@ module('Integration | serialization', function (hooks) {
 
       test('can serialize field', async function (assert) {
         let { field, contains, CardDef, serializeCard } = cardApi;
-        let { default: StringCard } = string;
-        let { default: NumberCard } = number;
+        let { default: StringField } = string;
+        let { default: NumberField } = number;
         class Sample extends CardDef {
-          @field title = contains(StringCard);
-          @field someNumber = contains(NumberCard);
-          @field someNull = contains(NumberCard);
+          @field title = contains(StringField);
+          @field someNumber = contains(NumberField);
+          @field someNull = contains(NumberField);
         }
 
         await shimModule(`${realmURL}test-cards`, { Sample }, loader);
@@ -4878,23 +4926,23 @@ module('Integration | serialization', function (hooks) {
       });
     });
 
-    module('BigIntegerCard', function () {
+    module('BigIntegerField', function () {
       function isBigInt(input: any) {
         return typeof input == 'bigint';
       }
       test('can deserialize field', async function (assert) {
         let { field, contains, CardDef, createFromSerialized } = cardApi;
-        let { default: StringCard } = string;
-        let { default: BigIntegerCard } = bigInteger;
+        let { default: StringField } = string;
+        let { default: BigIntegerField } = bigInteger;
         class Sample extends CardDef {
-          @field title = contains(StringCard);
-          @field someBigInt = contains(BigIntegerCard);
-          @field someNull = contains(BigIntegerCard);
-          @field someString = contains(BigIntegerCard);
-          @field someNumber = contains(BigIntegerCard);
-          @field someNegativeNumber = contains(BigIntegerCard);
-          @field someDecimal = contains(BigIntegerCard);
-          @field someZeroString = contains(BigIntegerCard);
+          @field title = contains(StringField);
+          @field someBigInt = contains(BigIntegerField);
+          @field someNull = contains(BigIntegerField);
+          @field someString = contains(BigIntegerField);
+          @field someNumber = contains(BigIntegerField);
+          @field someNegativeNumber = contains(BigIntegerField);
+          @field someDecimal = contains(BigIntegerField);
+          @field someZeroString = contains(BigIntegerField);
         }
         await shimModule(`${realmURL}test-cards`, { Sample }, loader);
 
@@ -4936,12 +4984,12 @@ module('Integration | serialization', function (hooks) {
 
       test('can serialize field', async function (assert) {
         let { field, contains, CardDef, serializeCard } = cardApi;
-        let { default: StringCard } = string;
-        let { default: BigIntegerCard } = bigInteger;
+        let { default: StringField } = string;
+        let { default: BigIntegerField } = bigInteger;
         class Sample extends CardDef {
-          @field title = contains(StringCard);
-          @field someBigInt = contains(BigIntegerCard);
-          @field someNull = contains(BigIntegerCard);
+          @field title = contains(StringField);
+          @field someBigInt = contains(BigIntegerField);
+          @field someNull = contains(BigIntegerField);
         }
 
         await shimModule(`${realmURL}test-cards`, { Sample }, loader);
@@ -4972,36 +5020,36 @@ module('Integration | serialization', function (hooks) {
 
       test('queryable value', async function (assert) {
         let { getQueryableValue } = cardApi;
-        let { default: BigIntegerCard } = bigInteger;
+        let { default: BigIntegerField } = bigInteger;
         assert.strictEqual(
-          getQueryableValue(BigIntegerCard, BigInt('9223372036854775808')),
+          getQueryableValue(BigIntegerField, BigInt('9223372036854775808')),
           '9223372036854775808',
         );
-        assert.strictEqual(getQueryableValue(BigIntegerCard, null), undefined);
+        assert.strictEqual(getQueryableValue(BigIntegerField, null), undefined);
         assert.strictEqual(
-          getQueryableValue(BigIntegerCard, undefined),
+          getQueryableValue(BigIntegerField, undefined),
           undefined,
         );
       });
 
       test('can perform bigint operations with computed', async function (assert) {
         let { field, contains, CardDef, serializeCard } = cardApi;
-        let { default: StringCard } = string;
-        let { default: BigIntegerCard } = bigInteger;
+        let { default: StringField } = string;
+        let { default: BigIntegerField } = bigInteger;
 
         class Sample extends CardDef {
-          @field title = contains(StringCard);
-          @field someBigInt = contains(BigIntegerCard);
-          @field anotherBigInt = contains(BigIntegerCard);
-          @field someNull = contains(BigIntegerCard);
-          @field someComputed = contains(BigIntegerCard, {
+          @field title = contains(StringField);
+          @field someBigInt = contains(BigIntegerField);
+          @field anotherBigInt = contains(BigIntegerField);
+          @field someNull = contains(BigIntegerField);
+          @field someComputed = contains(BigIntegerField, {
             computeVia: function (this: Sample) {
               return this.someBigInt + this.anotherBigInt;
             },
           });
           //TODO: This doesn't seem to work
           // Promise rejected during "can perform bigint operations with computed": Cannot mix BigInt and other types, use explicit conversions
-          // @field someComputedWithNull = contains(BigIntegerCard, {
+          // @field someComputedWithNull = contains(BigIntegerField, {
           //   computeVia: function (this: Sample) {
           //     return this.someBigInt + this.someNull;
           //   },
@@ -5027,24 +5075,24 @@ module('Integration | serialization', function (hooks) {
       });
     });
 
-    module('EthereumAddressCard', function () {
+    module('EthereumAddressField', function () {
       function isEthAddress(address: string): boolean {
         return isAddress(address);
       }
       test('can deserialize field', async function (assert) {
         let { field, contains, CardDef, createFromSerialized } = cardApi;
-        let { default: StringCard } = string;
-        let { default: EthereumAddressCard } = ethereumAddress;
+        let { default: StringField } = string;
+        let { default: EthereumAddressField } = ethereumAddress;
         class Sample extends CardDef {
-          @field title = contains(StringCard);
-          @field someAddress = contains(EthereumAddressCard);
-          @field nonChecksummedAddress = contains(EthereumAddressCard);
+          @field title = contains(StringField);
+          @field someAddress = contains(EthereumAddressField);
+          @field nonChecksummedAddress = contains(EthereumAddressField);
           @field checksummedAddressThatDontLookLikeOne =
-            contains(EthereumAddressCard);
-          @field faultyAddress = contains(EthereumAddressCard);
-          @field bitcoinAddress = contains(EthereumAddressCard);
-          @field someString = contains(EthereumAddressCard);
-          @field someNull = contains(EthereumAddressCard);
+            contains(EthereumAddressField);
+          @field faultyAddress = contains(EthereumAddressField);
+          @field bitcoinAddress = contains(EthereumAddressField);
+          @field someString = contains(EthereumAddressField);
+          @field someNull = contains(EthereumAddressField);
         }
         await shimModule(`${realmURL}test-cards`, { Sample }, loader);
 
@@ -5090,13 +5138,13 @@ module('Integration | serialization', function (hooks) {
 
       test('can serialize field', async function (assert) {
         let { field, contains, CardDef, serializeCard } = cardApi;
-        let { default: StringCard } = string;
-        let { default: EthereumAddressCard } = ethereumAddress;
+        let { default: StringField } = string;
+        let { default: EthereumAddressField } = ethereumAddress;
         class Sample extends CardDef {
-          @field title = contains(StringCard);
-          @field someAddress = contains(EthereumAddressCard);
-          @field nonChecksummedAddress = contains(EthereumAddressCard);
-          @field someNull = contains(EthereumAddressCard);
+          @field title = contains(StringField);
+          @field someAddress = contains(EthereumAddressField);
+          @field nonChecksummedAddress = contains(EthereumAddressField);
+          @field someNull = contains(EthereumAddressField);
         }
 
         await shimModule(`${realmURL}test-cards`, { Sample }, loader);
@@ -5132,20 +5180,20 @@ module('Integration | serialization', function (hooks) {
 
       test('queryable value', async function (assert) {
         let { getQueryableValue } = cardApi;
-        let { default: EthereumAddressCard } = ethereumAddress;
+        let { default: EthereumAddressField } = ethereumAddress;
         assert.strictEqual(
           getQueryableValue(
-            EthereumAddressCard,
+            EthereumAddressField,
             '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b',
           ),
           '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b',
         );
         assert.strictEqual(
-          getQueryableValue(EthereumAddressCard, null),
+          getQueryableValue(EthereumAddressField, null),
           undefined,
         );
         assert.strictEqual(
-          getQueryableValue(EthereumAddressCard, undefined),
+          getQueryableValue(EthereumAddressField, undefined),
           undefined,
         );
       });

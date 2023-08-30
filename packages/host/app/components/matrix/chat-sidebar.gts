@@ -61,6 +61,8 @@ export default class ChatSidebar extends Component<Args> {
       .chat-sidebar {
         background-color: var(--boxel-light);
         overflow-y: auto;
+        height: 100%;
+        position: relative;
       }
       .chat-sidebar__inner {
         padding-bottom: calc(
@@ -71,8 +73,10 @@ export default class ChatSidebar extends Component<Args> {
         margin-left: var(--boxel-sp);
       }
       .close-chat-wrapper {
-        display: flex;
-        justify-content: flex-end;
+        position: absolute;
+        top: 0;
+        right: 0;
+        z-index: 1;
       }
       .registration-link {
         background: none;
