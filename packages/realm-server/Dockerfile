@@ -7,7 +7,7 @@ ENV realm_server_script=$realm_server_script
 WORKDIR /realm-server
 
 RUN apt-get update && apt-get install -y ca-certificates curl unzip
-RUN npm install -g pnpm@8
+RUN npm install -g pnpm@8.5.1
 
 COPY pnpm-lock.yaml ./
 
@@ -16,8 +16,8 @@ COPY vendor/ ./vendor
 
 ADD . ./
 
-RUN pnpm fetch
-RUN pnpm install -r --offline
+RUN CI=1 pnpm fetch
+RUN CI=1 pnpm install -r --offline
 
 EXPOSE 3000
 
