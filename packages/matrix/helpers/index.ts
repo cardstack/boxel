@@ -15,6 +15,7 @@ interface LoginOptions {
 }
 
 export const test = base.extend<{ synapse: SynapseInstance }>({
+  // eslint-disable-next-line no-empty-pattern
   synapse: async ({}, use) => {
     let synapseInstance = await synapseStart();
     await use(synapseInstance);
@@ -45,12 +46,12 @@ export async function setupMatrixOverride(
     newUrl.search = params.toString();
 
     // Call the original goto function with the new URL
-    return originalGoto(newUrl.toString(), options);
+    return await originalGoto(newUrl.toString(), options);
   };
 
   // Patch the reload function
   page.reload = async (options) => {
-    return page.goto(page.url(), options);
+    return await page.goto(page.url(), options);
   };
 }
 
