@@ -495,10 +495,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
         box-shadow: none;
       }
 
-      :global(.content > .boxel-card-container > header) {
-        display: none;
-      }
-
       .edit .content {
         margin-bottom: var(--stack-card-footer-height);
       }

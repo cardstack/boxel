@@ -144,12 +144,6 @@ export default class CardPreviewPanel extends Component<Signature> {
         height: 100%;
       }
 
-      /* hide the Header component that the card renderer adds in getBoxComponent, until we refactor it to not render it anymore. It shouldn't render it
-         because card creators might not want the header displayed when creating custom cards. */
-      .preview-body :deep(header) {
-        display: none;
-      }
-
       .header-title {
         font-weight: 600;
         font-size: 1.2rem;
