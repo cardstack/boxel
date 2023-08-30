@@ -6,6 +6,7 @@ import {
   triggerEvent,
   triggerKeyEvent,
   waitFor,
+  fillIn,
 } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import {
@@ -828,6 +829,56 @@ module('Acceptance | operator mode tests', function (hooks) {
           })!,
         )}`,
       );
+    });
+  });
+
+  module('0 stacks', function () {
+    test('Clicking card in search panel opens card on a new stack', async function (assert) {
+      let operatorModeStateParam = stringify({
+        stacks: [],
+      })!;
+
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam,
+        )}`,
+      );
+
+      assert.dom('[data-test-operator-mode-stack]').doesNotExist();
+      assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
+
+      // Click on search-input
+      await click('[data-test-search-input] input');
+
+      assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
+
+      await fillIn('[data-test-search-input] input', 'Mango');
+
+      assert.dom('[data-test-search-sheet]').hasClass('results'); // Search open
+
+      await waitFor(
+        '[data-test-search-result="http://test-realm/test/Pet/mango"]',
+      );
+
+      // Click on search result
+      await click(
+        '[data-test-search-result="http://test-realm/test/Pet/mango"]',
+      );
+
+      assert.dom('[data-test-search-sheet]').doesNotHaveClass('results'); // Search closed
+
+      // The card appears on a new stack
+      assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
+      assert
+        .dom(
+          '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="0"]',
+        )
+        .includesText('Mango');
+      assert
+        .dom(
+          '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"]',
+        )
+        .doesNotExist();
     });
   });
 });
