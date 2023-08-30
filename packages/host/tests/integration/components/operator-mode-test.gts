@@ -1988,9 +1988,12 @@ module('Integration | operator-mode', function (hooks) {
       .hasText('in Operator Mode Workspace');
     assert
       .dom('[data-test-card-url-bar-input]')
-      .hasValue(`${testRealmURL}BlogPost/1`);
+      .hasValue(`${testRealmURL}BlogPost/1.json`);
 
-    await fillIn('[data-test-card-url-bar-input]', `${testRealmURL}Pet/mango`);
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `${testRealmURL}Pet/mango.json`,
+    );
     await triggerKeyEvent(
       '[data-test-card-url-bar-input]',
       'keypress',
@@ -2002,7 +2005,7 @@ module('Integration | operator-mode', function (hooks) {
       .hasText('in Operator Mode Workspace');
     assert
       .dom('[data-test-card-url-bar-input]')
-      .hasValue(`${testRealmURL}Pet/mango`);
+      .hasValue(`${testRealmURL}Pet/mango.json`);
     assert.dom('[data-test-card-url-bar-error]').doesNotExist();
   });
 
@@ -2035,7 +2038,7 @@ module('Integration | operator-mode', function (hooks) {
       .hasText('in Operator Mode Workspace');
     assert
       .dom('[data-test-card-url-bar-input]')
-      .hasValue(`${testRealmURL}BlogPost/1`);
+      .hasValue(`${testRealmURL}BlogPost/1.json`);
 
     await fillIn(
       '[data-test-card-url-bar-input]',
@@ -2055,18 +2058,5 @@ module('Integration | operator-mode', function (hooks) {
       'Enter',
     );
     assert.dom('[data-test-card-url-bar-error]').hasText('Not a valid URL');
-
-    await fillIn(
-      '[data-test-card-url-bar-input]',
-      `http://not-known-realm.com/BlogPost/1`,
-    );
-    await triggerKeyEvent(
-      '[data-test-card-url-bar-input]',
-      'keypress',
-      'Enter',
-    );
-    assert
-      .dom('[data-test-card-url-bar-error]')
-      .hasText('URL is not in any realms');
   });
 });

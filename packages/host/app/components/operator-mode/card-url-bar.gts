@@ -4,8 +4,7 @@ import { BoxelInput } from '@cardstack/boxel-ui';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
-import { trackedFunction } from 'ember-resources/util/function';
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import { type RealmInfo } from '@cardstack/runtime-common';
 import type CardService from '../../services/card-service';
 
 interface Signature {
@@ -13,9 +12,9 @@ interface Signature {
   Args: {
     url: URL;
     onEnterPressed: (url: URL) => void;
-    card: CardDef | null;
-    cardError: string | null;
-    resetCardError: () => void;
+    loadFileError: string | null;
+    resetLoadFileError: () => void;
+    realmInfo: RealmInfo | null;
   };
 }
 
@@ -119,22 +118,22 @@ export default class CardURLBar extends Component<Signature> {
   @tracked isInvalidURL = false;
 
   get realmIcon() {
-    return this.fetchRealmInfo.value?.iconURL;
+    return this.args.realmInfo?.iconURL;
   }
 
   get realmName() {
-    return this.fetchRealmInfo.value?.name;
+    return this.args.realmInfo?.name;
   }
 
   get showErrorMessage() {
-    return this.isInvalidURL || this.args.cardError;
+    return this.isInvalidURL || this.args.loadFileError;
   }
 
   get errorMessage() {
     if (this.isInvalidURL) {
       return 'Not a valid URL';
     } else {
-      return this.args.cardError;
+      return this.args.loadFileError;
     }
   }
 
@@ -148,24 +147,16 @@ export default class CardURLBar extends Component<Signature> {
     }
   }
 
-  fetchRealmInfo = trackedFunction(this, async () => {
-    if (!this.args.card) {
-      return;
-    }
-
-    return this.cardService.getRealmInfo(this.args.card);
-  });
-
   @action
   onInput(url: string) {
     this.url = url;
     this.isInvalidURL = false;
-    this.args.resetCardError();
+    this.args.resetLoadFileError();
   }
 
   @action
   onKeyPress(event: KeyboardEvent) {
-    if (event.key !== 'Enter') {
+    if (event.key !== 'Enter' || !this.url) {
       return;
     }
 

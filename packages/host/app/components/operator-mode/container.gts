@@ -20,6 +20,7 @@ import {
   type Actions,
   type CodeRef,
   LooseSingleCardDocument,
+  type RealmInfo,
 } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type LoaderService from '../../services/loader-service';
@@ -48,6 +49,8 @@ import SubmodeSwitcher, { Submode } from '../submode-switcher';
 import CodeMode from '@cardstack/host/components/operator-mode/code-mode';
 import CardURLBar from '@cardstack/host/components/operator-mode/card-url-bar';
 import { assertNever } from '@cardstack/host/utils/assert-never';
+import { maybe } from '@cardstack/host/resources/maybe';
+import { file } from '@cardstack/host/resources/file';
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
 
@@ -95,8 +98,8 @@ export default class OperatorModeContainer extends Component<Signature> {
   @tracked searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked isChatVisible = false;
 
-  @tracked codeModeCard: CardDef | null = null;
-  @tracked codeModeCardError: string | null = null;
+  @tracked codeModeRealmInfo: RealmInfo | null = null;
+  @tracked loadFileError: string | null = null;
 
   private deleteModal: DeleteModal | undefined;
 
@@ -109,8 +112,9 @@ export default class OperatorModeContainer extends Component<Signature> {
       delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
       this.operatorModeStateService.clearStacks();
     });
+
     if (this.operatorModeStateService.state.submode === Submode.Code) {
-      this.loadCardForCodeMode(this.codePath);
+      this.fetchCodeModeRealmInfo.perform();
     }
   }
 
@@ -597,12 +601,11 @@ export default class OperatorModeContainer extends Component<Signature> {
   @action updateSubmode(submode: Submode) {
     switch (submode) {
       case Submode.Interact:
-        this.operatorModeStateService.updateCodePath(null);
+        this.updateCodePath(null);
         break;
       case Submode.Code:
-        let codePath = new URL(this.lastCardInRightMostStack.id);
-        this.operatorModeStateService.updateCodePath(codePath);
-        this.loadCardForCodeMode(codePath);
+        let codePath = new URL(this.lastCardInRightMostStack.id + '.json');
+        this.updateCodePath(codePath);
         break;
       default:
         throw assertNever(submode);
@@ -611,37 +614,59 @@ export default class OperatorModeContainer extends Component<Signature> {
     this.operatorModeStateService.updateSubmode(submode);
   }
 
-  @action resetCodeModeCardError() {
-    this.codeModeCardError = null;
+  @action resetLoadFileError() {
+    this.loadFileError = null;
   }
 
-  @action loadCardForCodeMode(codePath: URL) {
-    this.loadCardForCodeModeTask.perform(codePath);
-  }
-
-  loadCardForCodeModeTask = restartableTask(async (codePath: URL) => {
-    try {
-      let realmURL = this.cardService.getRealmURLFor(codePath);
-      if (!realmURL) {
-        throw new Error('URL is not in any realms');
-      }
-
-      this.codeModeCard = await this.cardService.loadModel(codePath);
-      this.operatorModeStateService.updateCodePath(codePath);
-    } catch (e: any) {
-      this.codeModeCardError =
-        e.message === 'URL is not in any realms'
-          ? e.message
-          : 'File is not found';
+  openFile = maybe(this, (context) => {
+    let realmURL = this.cardService.getRealmURLFor(this.codePath);
+    if (!realmURL) {
+      return undefined;
+    }
+    const relativePath = this.codePath
+      .toString()
+      .replace(realmURL.toString(), '');
+    console.log(relativePath);
+    if (relativePath) {
+      return file(context, () => ({
+        relativePath,
+        // @ts-ignore type 'undefined' is not assignable to type 'string | URL'
+        // we have ensured its value above.
+        realmURL: new RealmPaths(realmURL).url,
+        onStateChange: (state) => {
+          if (state === 'not-found') {
+            this.loadFileError = 'File is not found';
+          }
+        },
+      }));
+    } else {
+      return undefined;
     }
   });
 
   get codePath() {
     return (
       this.operatorModeStateService.state.codePath ??
-      new URL(this.lastCardInRightMostStack.id)
+      new URL(this.lastCardInRightMostStack.id + '.json')
     );
   }
+
+  @action
+  updateCodePath(codePath: URL | null) {
+    this.operatorModeStateService.updateCodePath(codePath);
+    this.fetchCodeModeRealmInfo.perform();
+  }
+
+  fetchCodeModeRealmInfo = restartableTask(async () => {
+    let realmURL = this.cardService.getRealmURLFor(this.codePath);
+    if (!realmURL) {
+      this.codeModeRealmInfo = null;
+    } else {
+      this.codeModeRealmInfo = await this.cardService.getRealmInfoByRealmURL(
+        realmURL,
+      );
+    }
+  });
 
   <template>
     <Modal
@@ -663,16 +688,19 @@ export default class OperatorModeContainer extends Component<Signature> {
           {{#if this.isCodeMode}}
             <CardURLBar
               @url={{this.codePath}}
-              @onEnterPressed={{this.loadCardForCodeMode}}
-              @card={{this.codeModeCard}}
-              @cardError={{this.codeModeCardError}}
-              @resetCardError={{this.resetCodeModeCardError}}
+              @onEnterPressed={{this.updateCodePath}}
+              @loadFileError={{this.loadFileError}}
+              @resetLoadFileError={{this.resetLoadFileError}}
+              @realmInfo={{this.codeModeRealmInfo}}
             />
           {{/if}}
         </div>
 
         {{#if this.isCodeMode}}
-          <CodeMode @card={{this.codeModeCard}} />
+          <CodeMode
+            @openFile={{this.openFile}}
+            @realmInfo={{this.codeModeRealmInfo}}
+          />
         {{else}}
           <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
             {{#if (eq this.allStackItems.length 0)}}

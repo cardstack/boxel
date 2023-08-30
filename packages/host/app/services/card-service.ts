@@ -331,4 +331,19 @@ export default class CardService extends Service {
     }
     return undefined;
   }
+
+  async getRealmInfoByRealmURL(realmURL: URL): Promise<RealmInfo> {
+    let response = await this.loaderService.loader.fetch(`${realmURL}_info`, {
+      headers: { Accept: SupportedMimeType.RealmInfo },
+      method: 'GET',
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `status: ${response.status} -
+        ${response.statusText}. ${await response.text()}`,
+      );
+    }
+    return (await response.json()).data.attributes;
+  }
 }

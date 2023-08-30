@@ -1,31 +1,26 @@
 import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import MonacoService from '@cardstack/host/services/monaco-service';
-import { trackedFunction } from 'ember-resources/util/function';
-import CardService from '@cardstack/host/services/card-service';
 import { htmlSafe } from '@ember/template';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import { FileResource } from '@cardstack/host/resources/file';
+import { type RealmInfo } from '@cardstack/runtime-common';
 
 interface Signature {
   Args: {
-    card: CardDef | null;
+    openFile: { current: FileResource | undefined };
+    realmInfo: RealmInfo | null;
   };
 }
 
 export default class CodeMode extends Component<Signature> {
   @service declare monacoService: MonacoService;
-  @service declare cardService: CardService;
-  @service declare operatorModeStateService: OperatorModeStateService;
 
-  fetchRealmInfo = trackedFunction(this, async () => {
-    if (!this.args.card) return;
-    let realmInfo = await this.cardService.getRealmInfo(this.args.card);
-    return realmInfo;
-  });
+  constructor(args: any, owner: any) {
+    super(args, owner);
+  }
 
   get backgroundURL() {
-    return this.fetchRealmInfo.value?.backgroundURL;
+    return this.args.realmInfo?.backgroundURL;
   }
 
   get backgroundURLStyle() {
@@ -38,7 +33,9 @@ export default class CodeMode extends Component<Signature> {
     <div class='code-mode' data-test-code-mode>
       <div class='columns'>
         <div class='column'>File tree</div>
-        <div class='column'>Code</div>
+        <div class='column'>Code, Open File Status:
+          {{! This is to trigger openFile function }}
+          {{@openFile.current.state}}</div>
         <div class='column'>Schema editor</div>
       </div>
     </div>
