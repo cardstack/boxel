@@ -132,7 +132,7 @@ export default class CardPreviewPanel extends Component<Signature> {
           100% - var(--code-mode-preview-footer-height) -
             var(--code-mode-preview-header-height)
         );
-        overflow: scroll;
+        overflow-y: auto;
       }
 
       .header-actions {
@@ -169,8 +169,7 @@ export default class CardPreviewPanel extends Component<Signature> {
         background: transparent;
         color: var(--boxel-dark);
         border-radius: 6px;
-        border-color: var(--boxel-400);
-        border-width: 1px;
+        border: 1px solid var(--boxel-400);
       }
 
       .footer-button.active {
