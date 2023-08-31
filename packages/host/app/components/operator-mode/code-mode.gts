@@ -53,6 +53,10 @@ export default class CodeMode extends Component<Signature> {
     this.fileView = view;
   }
 
+  get fileViewTitle() {
+    return this.fileView === 'inheritance' ? 'Inheritance' : 'File Browser';
+  }
+
   @action resetLoadFileError() {
     this.loadFileError = null;
   }
@@ -120,7 +124,7 @@ export default class CodeMode extends Component<Signature> {
             class='inner-container file-view
               {{if (eq this.fileView "browser") "file-browser"}}'
           >
-            <header>
+            <header aria-label={{this.fileViewTitle}} data-test-file-view-header>
               <button
                 class='{{if (eq this.fileView "inheritance") "active"}}'
                 {{on 'click' (fn this.setFileView 'inheritance')}}
@@ -146,7 +150,7 @@ export default class CodeMode extends Component<Signature> {
             </section>
           </div>
           <aside class='inner-container'>
-            <header class='inner-container__header'>
+            <header class='inner-container__header' aria-label='Recent Files'>
               Recent Files
             </header>
             <section class='inner-container__content'></section>

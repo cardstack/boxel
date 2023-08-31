@@ -155,6 +155,9 @@ module('Acceptance | code mode tests', function (hooks) {
       )}`,
     );
 
+    assert
+      .dom('[data-test-file-view-header]')
+      .hasAttribute('aria-label', 'Inheritance');
     assert.dom('[data-test-inheritance-toggle]').hasClass('active');
     assert.dom('[data-test-file-browser-toggle]').doesNotHaveClass('active');
 
@@ -163,6 +166,9 @@ module('Acceptance | code mode tests', function (hooks) {
 
     await click('[data-test-file-browser-toggle]');
 
+    assert
+      .dom('[data-test-file-view-header]')
+      .hasAttribute('aria-label', 'File Browser');
     assert.dom('[data-test-inheritance-toggle]').doesNotHaveClass('active');
     assert.dom('[data-test-file-browser-toggle]').hasClass('active');
 
