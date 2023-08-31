@@ -1886,6 +1886,86 @@ module('Integration | operator-mode', function (hooks) {
       .hasText('Pet');
   });
 
+  test(`cancel button closes the catalog-entry card picker`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+    await click(`[data-test-create-new-card-button]`);
+
+    await fillIn(`[data-test-search-input] input`, `pet`);
+    assert.dom(`[data-test-search-input] input`).hasValue('pet');
+    await waitFor('[data-test-card-catalog-item]', { count: 2 });
+    await click(`[data-test-select="${testRealmURL}CatalogEntry/pet-room"]`);
+    assert
+      .dom(
+        `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-room"][data-test-card-catalog-item-selected]`,
+      )
+      .exists({ count: 1 });
+
+    await click('[data-test-card-catalog-cancel-button]');
+    await waitFor('[data-test-card-catalog]', { count: 0 });
+
+    assert.dom('[data-test-operator-mode-stack="0"]').exists();
+    assert
+      .dom('[data-test-operator-mode-stack="1"]')
+      .doesNotExist('no cards are added');
+
+    await click(`[data-test-create-new-card-button]`);
+    await waitFor('[data-test-card-catalog-item]');
+    assert
+      .dom(`[data-test-search-input] input`)
+      .hasNoValue('Card picker state is reset');
+    assert.dom('[data-test-card-catalog-item-selected]').doesNotExist();
+  });
+
+  test(`cancel button closes the field picker`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}BlogPost/2`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
+    await click('[data-test-edit-button]');
+    await click(`[data-test-field="authorBio"] [data-test-choose-card]`);
+
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor('[data-test-card-catalog-item]', { count: 3 });
+    await fillIn(`[data-test-search-input] input`, `bob`);
+    assert.dom(`[data-test-search-input] input`).hasValue('bob');
+    await waitFor('[data-test-card-catalog-item]', { count: 1 });
+    await click(`[data-test-select="${testRealmURL}Author/1"]`);
+    assert
+      .dom(
+        `[data-test-card-catalog-item="${testRealmURL}Author/1"][data-test-card-catalog-item-selected]`,
+      )
+      .exists({ count: 1 });
+
+    await click('[data-test-card-catalog-cancel-button]');
+    await waitFor('[data-test-card-catalog]', { count: 0 });
+
+    assert
+      .dom(`[data-test-field="authorBio"] [data-test-choose-card]`)
+      .exists('no card is chosen');
+
+    await click(`[data-test-field="authorBio"] [data-test-choose-card]`);
+    assert
+      .dom(`[data-test-search-input] input`)
+      .hasNoValue('Field picker state is reset');
+    assert.dom('[data-test-card-catalog-item-selected]').doesNotExist();
+  });
+
   test(`can add a card to the stack by URL from search sheet`, async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
