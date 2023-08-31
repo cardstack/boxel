@@ -20,7 +20,7 @@ import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-prev
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
-
+import { bool } from '@cardstack/boxel-ui/helpers/truth-helpers';
 interface Signature {
   Args: {};
 }
@@ -180,8 +180,9 @@ export default class CodeMode extends Component<Signature> {
           <div class='inner-container'>
             {{#if this.cardResource.value}}
               <CardPreviewPanel
-                @card={{this.this.cardResource.value}}
+                @card={{this.cardResource.value}}
                 @realmIconURL={{this.realmIconURL}}
+                data-test-card-resource-loaded
               />
             {{else if this.cardResource.error}}
               {{this.cardResource.error.message}}

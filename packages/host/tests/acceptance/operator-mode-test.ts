@@ -6,6 +6,8 @@ import {
   triggerEvent,
   triggerKeyEvent,
   waitFor,
+  waitUntil,
+  find,
 } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import {
@@ -850,6 +852,8 @@ module('Acceptance | operator mode tests', function (hooks) {
           operatorModeStateParam,
         )}`,
       );
+
+      await waitUntil(() => find('[data-test-card-resource-loaded]'));
 
       assert.dom('[data-test-code-mode-card-preview-header]').hasText('Person');
       assert

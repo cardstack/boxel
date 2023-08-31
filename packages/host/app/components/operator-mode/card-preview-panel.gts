@@ -15,10 +15,12 @@ import Preview from '@cardstack/host/components/preview';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 interface Signature {
+  Element: HTMLElement;
   Args: {
     card: CardDef;
     realmIconURL: string | null | undefined;
   };
+  Blocks: {};
 }
 
 export default class CardPreviewPanel extends Component<Signature> {
@@ -33,7 +35,11 @@ export default class CardPreviewPanel extends Component<Signature> {
   }
 
   <template>
-    <div class='preview-header' data-test-code-mode-card-preview-header>
+    <div
+      class='preview-header'
+      data-test-code-mode-card-preview-header
+      ...attributes
+    >
       <div class='header-icon'>
         <img src={{@realmIconURL}} alt='Realm icon' />
       </div>
