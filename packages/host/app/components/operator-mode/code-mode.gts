@@ -1,24 +1,28 @@
 import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import MonacoService from '@cardstack/host/services/monaco-service';
-import { trackedFunction } from 'ember-resources/util/function';
 import CardService from '@cardstack/host/services/card-service';
 import { htmlSafe } from '@ember/template';
+import { type RealmInfo, RealmPaths } from '@cardstack/runtime-common';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type { CardDef } from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
+import { restartableTask } from 'ember-concurrency';
 import FileTree from '../editor/file-tree';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
+import { maybe } from '@cardstack/host/resources/maybe';
+import { file } from '@cardstack/host/resources/file';
+import perform from 'ember-concurrency/helpers/perform';
+import CardURLBar from '@cardstack/host/components/operator-mode/card-url-bar';
 const { ownRealmURL } = ENV;
+import type CardController from '@cardstack/host/controllers/card';
 
 interface Signature {
   Args: {
-    card: CardDef;
-    controller: CardController;
+    controller?: CardController;
   };
 }
 
@@ -26,17 +30,19 @@ export default class CodeMode extends Component<Signature> {
   @service declare monacoService: MonacoService;
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
+  @tracked realmInfo: RealmInfo | null = null;
+  @tracked loadFileError: string | null = null;
 
   // FIXME better name to encompass inheritance vs file browser?
   @tracked fileView = 'inheritance';
 
-  fetchRealmInfo = trackedFunction(this, async () => {
-    let realmInfo = await this.cardService.getRealmInfo(this.args.card);
-    return realmInfo;
-  });
+  constructor(args: any, owner: any) {
+    super(args, owner);
+    this.fetchCodeModeRealmInfo.perform();
+  }
 
   get backgroundURL() {
-    return this.fetchRealmInfo.value?.backgroundURL;
+    return this.realmInfo?.backgroundURL;
   }
 
   get backgroundURLStyle() {
@@ -47,9 +53,65 @@ export default class CodeMode extends Component<Signature> {
     this.fileView = view;
   }
 
+  @action resetLoadFileError() {
+    this.loadFileError = null;
+  }
+
+  fetchCodeModeRealmInfo = restartableTask(async () => {
+    if (!this.operatorModeStateService.state.codePath) {
+      return;
+    }
+
+    let realmURL = this.cardService.getRealmURLFor(
+      this.operatorModeStateService.state.codePath,
+    );
+    if (!realmURL) {
+      this.realmInfo = null;
+    } else {
+      this.realmInfo = await this.cardService.getRealmInfoByRealmURL(realmURL);
+    }
+  });
+
+  openFile = maybe(this, (context) => {
+    if (!this.operatorModeStateService.state.codePath) {
+      return undefined;
+    }
+
+    let realmURL = this.cardService.getRealmURLFor(
+      this.operatorModeStateService.state.codePath,
+    );
+    if (!realmURL) {
+      return undefined;
+    }
+
+    const realmPaths = new RealmPaths(realmURL);
+    const relativePath = realmPaths.local(
+      this.operatorModeStateService.state.codePath,
+    );
+    if (relativePath) {
+      return file(context, () => ({
+        relativePath,
+        realmURL: realmPaths.url,
+        onStateChange: (state) => {
+          if (state === 'not-found') {
+            this.loadFileError = 'File is not found';
+          }
+        },
+      }));
+    } else {
+      return undefined;
+    }
+  });
+
   <template>
     <div class='code-mode-background' style={{this.backgroundURLStyle}}></div>
-
+    <CardURLBar
+      @onEnterPressed={{perform this.fetchCodeModeRealmInfo}}
+      @loadFileError={{this.loadFileError}}
+      @resetLoadFileError={{this.resetLoadFileError}}
+      @realmInfo={{this.realmInfo}}
+      class='card-url-bar'
+    />
     <div class='code-mode' data-test-code-mode>
       <div class='columns'>
         <div class='column'>
@@ -92,7 +154,9 @@ export default class CodeMode extends Component<Signature> {
         </div>
         <div class='column'>
           <div class='inner-container'>
-            Code
+            Code, Open File Status:
+            {{! This is to trigger openFile function }}
+            {{this.openFile.current.state}}
           </div>
         </div>
         <div class='column'>
@@ -208,6 +272,19 @@ export default class CodeMode extends Component<Signature> {
 
       .file-view.file-browser .inner-container__content {
         background: var(--boxel-light);
+      }
+
+      .card-url-bar {
+        position: absolute;
+        top: var(--boxel-sp);
+        left: calc(var(--submode-switcher-width) + (var(--boxel-sp) * 2));
+
+        --card-url-bar-width: calc(
+          100% - (var(--submode-switcher-width) + (var(--boxel-sp) * 3))
+        );
+        height: var(--submode-switcher-height);
+
+        z-index: 2;
       }
     </style>
   </template>

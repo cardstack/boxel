@@ -18,14 +18,18 @@ import {
   TestRealm,
   type TestContextWithSave,
 } from '../../helpers';
+import { MockMatrixService } from '../../helpers/mock-matrix-service';
 import {
   waitFor,
   waitUntil,
   click,
   fillIn,
   focus,
+  blur,
   triggerEvent,
+  triggerKeyEvent,
 } from '@ember/test-helpers';
+import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import percySnapshot from '@percy/ember';
@@ -636,6 +640,115 @@ module('Integration | operator-mode', function (hooks) {
         ],
       });
     };
+  });
+
+  test<TestContextWithSave>('it allows chat commands to change cards in the stack', async function (assert) {
+    this.owner.register('service:matrixService', MockMatrixService);
+    let matrixService = this.owner.lookup(
+      'service:matrixService',
+    ) as MockMatrixService;
+    matrixService.cardAPI = cardApi;
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor('[data-test-person]');
+    assert.dom('[data-test-boxel-header-title]').hasText('Person');
+    assert.dom('[data-test-person]').hasText('Fadhlan');
+    await click('[data-test-open-chat]');
+
+    matrixService.createAndJoinRoom('testroom');
+
+    addRoomEvent(matrixService, {
+      event_id: 'event1',
+      room_id: 'testroom',
+      state_key: 'state',
+      type: 'm.room.message',
+      content: {
+        body: 'i am the body',
+        msgtype: 'org.boxel.command',
+        formatted_body: 'A patch',
+        format: 'org.matrix.custom.html',
+        command: {
+          type: 'patch',
+          id: `${testRealmURL}Person/fadhlan`,
+          patch: {
+            attributes: { firstName: 'Dave' },
+          },
+        },
+      },
+    });
+
+    await waitFor('[data-test-enter-room="test_a"]');
+    await click('[data-test-enter-room="test_a"]');
+
+    await waitFor('[data-test-command-apply]');
+    this.onSave((json) => {
+      assert.strictEqual(json.data.attributes?.firstName, 'Dave');
+    });
+    await click('[data-test-command-apply]');
+
+    await waitFor('[data-test-person="Dave"]');
+    assert.dom('[data-test-person]').hasText('Dave');
+  });
+
+  test('it allows only applies changes from the chat if the stack contains a card with that ID', async function (assert) {
+    this.owner.register('service:matrixService', MockMatrixService);
+    let matrixService = this.owner.lookup(
+      'service:matrixService',
+    ) as MockMatrixService;
+    matrixService.cardAPI = cardApi;
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor('[data-test-person]');
+    assert.dom('[data-test-boxel-header-title]').hasText('Person');
+    assert.dom('[data-test-person]').hasText('Fadhlan');
+    await click('[data-test-open-chat]');
+
+    matrixService.createAndJoinRoom('testroom');
+
+    addRoomEvent(matrixService, {
+      event_id: 'event1',
+      room_id: 'testroom',
+      state_key: 'state',
+      type: 'm.room.message',
+      content: {
+        body: 'i am the body',
+        msgtype: 'org.boxel.command',
+        formatted_body: 'A patch',
+        format: 'org.matrix.custom.html',
+        command: {
+          type: 'patch',
+          id: `${testRealmURL}Person/anotherPerson`,
+          patch: {
+            attributes: { firstName: 'Dave' },
+          },
+        },
+      },
+    });
+
+    await waitFor('[data-test-enter-room="test_a"]');
+    await click('[data-test-enter-room="test_a"]');
+
+    await waitFor('[data-test-command-apply]');
+    await click('[data-test-command-apply]');
+
+    await waitFor('[data-test-person="Fadhlan"]');
+    assert.dom('[data-test-person]').hasText('Fadhlan');
   });
 
   test('it loads a card and renders its isolated view', async function (assert) {
@@ -1773,6 +1886,86 @@ module('Integration | operator-mode', function (hooks) {
       .hasText('Pet');
   });
 
+  test(`cancel button closes the catalog-entry card picker`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+    await click(`[data-test-create-new-card-button]`);
+
+    await fillIn(`[data-test-search-input] input`, `pet`);
+    assert.dom(`[data-test-search-input] input`).hasValue('pet');
+    await waitFor('[data-test-card-catalog-item]', { count: 2 });
+    await click(`[data-test-select="${testRealmURL}CatalogEntry/pet-room"]`);
+    assert
+      .dom(
+        `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-room"][data-test-card-catalog-item-selected]`,
+      )
+      .exists({ count: 1 });
+
+    await click('[data-test-card-catalog-cancel-button]');
+    await waitFor('[data-test-card-catalog]', { count: 0 });
+
+    assert.dom('[data-test-operator-mode-stack="0"]').exists();
+    assert
+      .dom('[data-test-operator-mode-stack="1"]')
+      .doesNotExist('no cards are added');
+
+    await click(`[data-test-create-new-card-button]`);
+    await waitFor('[data-test-card-catalog-item]');
+    assert
+      .dom(`[data-test-search-input] input`)
+      .hasNoValue('Card picker state is reset');
+    assert.dom('[data-test-card-catalog-item-selected]').doesNotExist();
+  });
+
+  test(`cancel button closes the field picker`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}BlogPost/2`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
+    await click('[data-test-edit-button]');
+    await click(`[data-test-field="authorBio"] [data-test-choose-card]`);
+
+    await waitFor('[data-test-card-catalog-modal]');
+    await waitFor('[data-test-card-catalog-item]', { count: 3 });
+    await fillIn(`[data-test-search-input] input`, `bob`);
+    assert.dom(`[data-test-search-input] input`).hasValue('bob');
+    await waitFor('[data-test-card-catalog-item]', { count: 1 });
+    await click(`[data-test-select="${testRealmURL}Author/1"]`);
+    assert
+      .dom(
+        `[data-test-card-catalog-item="${testRealmURL}Author/1"][data-test-card-catalog-item-selected]`,
+      )
+      .exists({ count: 1 });
+
+    await click('[data-test-card-catalog-cancel-button]');
+    await waitFor('[data-test-card-catalog]', { count: 0 });
+
+    assert
+      .dom(`[data-test-field="authorBio"] [data-test-choose-card]`)
+      .exists('no card is chosen');
+
+    await click(`[data-test-field="authorBio"] [data-test-choose-card]`);
+    assert
+      .dom(`[data-test-search-input] input`)
+      .hasNoValue('Field picker state is reset');
+    assert.dom('[data-test-card-catalog-item-selected]').doesNotExist();
+  });
+
   test(`can add a card to the stack by URL from search sheet`, async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
@@ -1962,5 +2155,110 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-submode-switcher] > [data-test-boxel-button]');
     await click('[data-test-boxel-menu-item-text="Interact"]');
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
+  });
+
+  test(`card url bar shows realm info of valid URL`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    assert.dom('[data-test-submode-switcher]').exists();
+    assert.dom('[data-test-submode-switcher]').hasText('Interact');
+
+    await click(
+      '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
+    );
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    assert.dom('[data-test-submode-switcher]').hasText('Code');
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-card-url-bar-realm-info]')
+        ?.textContent?.includes('Operator Mode Workspace'),
+    );
+
+    assert.dom('[data-test-card-url-bar]').exists();
+    assert
+      .dom('[data-test-card-url-bar-realm-info]')
+      .hasText('in Operator Mode Workspace');
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}BlogPost/1.json`);
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `${testRealmURL}Pet/mango.json`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    await blur('[data-test-card-url-bar-input]');
+    assert
+      .dom('[data-test-card-url-bar-realm-info]')
+      .hasText('in Operator Mode Workspace');
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}Pet/mango.json`);
+    assert.dom('[data-test-card-url-bar-error]').doesNotExist();
+  });
+
+  test(`card url bar shows error message when URL is invalid`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    assert.dom('[data-test-submode-switcher]').exists();
+    assert.dom('[data-test-submode-switcher]').hasText('Interact');
+
+    await click(
+      '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
+    );
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    assert.dom('[data-test-submode-switcher]').hasText('Code');
+
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-card-url-bar-realm-info]')
+        ?.textContent?.includes('Operator Mode Workspace'),
+    );
+    assert.dom('[data-test-card-url-bar]').exists();
+    assert
+      .dom('[data-test-card-url-bar-realm-info]')
+      .hasText('in Operator Mode Workspace');
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}BlogPost/1.json`);
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `${testRealmURL}Pet/NotFoundCard`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    assert.dom('[data-test-card-url-bar-error]').hasText('File is not found');
+
+    await fillIn('[data-test-card-url-bar-input]', `Wrong URL`);
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    assert.dom('[data-test-card-url-bar-error]').hasText('Not a valid URL');
   });
 });

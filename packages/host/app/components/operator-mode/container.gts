@@ -6,8 +6,10 @@ import { fn } from '@ember/helper';
 import { trackedFunction } from 'ember-resources/util/function';
 import CardCatalogModal from '../card-catalog/modal';
 import type CardService from '../../services/card-service';
+import type CardController from '@cardstack/host/controllers/card';
 import get from 'lodash/get';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import ENV from '@cardstack/host/config/environment';
 import { Modal, IconButton } from '@cardstack/boxel-ui';
 import SearchSheet, { SearchSheetMode } from '../search-sheet';
 import { restartableTask, task, dropTask } from 'ember-concurrency';
@@ -24,7 +26,6 @@ import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type LoaderService from '../../services/loader-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-import type CardController from '@cardstack/host/controllers/card';
 
 import { registerDestructor } from '@ember/destroyable';
 import type { Query } from '@cardstack/runtime-common/query';
@@ -46,19 +47,17 @@ import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import SubmodeSwitcher, { Submode } from '../submode-switcher';
 import CodeMode from '@cardstack/host/components/operator-mode/code-mode';
+import { assertNever } from '@cardstack/host/utils/assert-never';
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
+
+const { APP } = ENV;
 
 interface Signature {
   Args: {
     onClose: () => void;
     controller?: CardController;
   };
-}
-
-export interface OperatorModeState {
-  stacks: Stack[];
-  submode: Submode;
 }
 
 export type Stack = StackItem[];
@@ -491,9 +490,12 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.operatorModeStateService.state?.stacks.flat() ?? [];
   }
 
-  get cardForCodeMode() {
-    // Last card in rightmost stack
-    return this.allStackItems.reverse()[0].card;
+  get lastCardInRightMostStack(): CardDef | null {
+    if (this.allStackItems.length <= 0) {
+      return null;
+    }
+
+    return this.allStackItems[this.allStackItems.length - 1].card;
   }
 
   get isCodeMode() {
@@ -502,8 +504,6 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   @action onCardSelectFromSearch(card: CardDef) {
     let searchSheetTrigger = this.searchSheetTrigger; // Will be set by onFocusSearchInput
-
-    // This logic assumes there is currently one stack when this method is called (i.e. the stack with index 0)
 
     // In case the left button was clicked, whatever is currently in stack with index 0 will be moved to stack with index 1,
     // and the card will be added to stack with index 0. shiftStack executes this logic.
@@ -544,9 +544,16 @@ export default class OperatorModeContainer extends Component<Signature> {
       // the rightmost stack will be REPLACED by the selection
       let numberOfStacks = this.operatorModeStateService.numberOfStacks();
       let stackIndex = numberOfStacks - 1;
-      if (numberOfStacks > 0) {
-        //there will always be 1 stack
-        let stack = this.operatorModeStateService.rightMostStack();
+      let stack: Stack | undefined;
+
+      if (numberOfStacks === 0) {
+        this.operatorModeStateService.addItemToStack({
+          format: 'isolated',
+          stackIndex: 0,
+          card,
+        });
+      } else {
+        stack = this.operatorModeStateService.rightMostStack();
         if (stack) {
           let bottomMostItem = stack[0];
           if (bottomMostItem) {
@@ -588,6 +595,20 @@ export default class OperatorModeContainer extends Component<Signature> {
   };
 
   @action updateSubmode(submode: Submode) {
+    switch (submode) {
+      case Submode.Interact:
+        this.operatorModeStateService.updateCodePath(null);
+        break;
+      case Submode.Code:
+        let codePath = this.lastCardInRightMostStack
+          ? new URL(this.lastCardInRightMostStack.id + '.json')
+          : new URL(this.cardService.defaultURL + 'index.json');
+        this.operatorModeStateService.updateCodePath(codePath);
+        break;
+      default:
+        throw assertNever(submode);
+    }
+
     this.operatorModeStateService.updateSubmode(submode);
   }
 
@@ -610,10 +631,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         />
 
         {{#if this.isCodeMode}}
-          <CodeMode
-            @card={{this.cardForCodeMode}}
-            @controller={{@controller}}
-          />
+          <CodeMode @controller={{@controller}} />
         {{else}}
           <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
             {{#if (eq this.allStackItems.length 0)}}
@@ -703,20 +721,21 @@ export default class OperatorModeContainer extends Component<Signature> {
             {{/if}}
           </div>
         {{/if}}
-
-        {{#if this.isChatVisible}}
-          <div class='container__chat-sidebar'>
-            <ChatSidebar @onClose={{this.toggleChat}} />
-          </div>
-        {{else}}
-          <IconButton
-            data-test-open-chat
-            class='chat-btn'
-            @icon='sparkle'
-            @width='25'
-            @height='25'
-            {{on 'click' this.toggleChat}}
-          />
+        {{#if APP.experimentalAIEnabled}}
+          {{#if this.isChatVisible}}
+            <div class='container__chat-sidebar'>
+              <ChatSidebar @onClose={{this.toggleChat}} />
+            </div>
+          {{else}}
+            <IconButton
+              data-test-open-chat
+              class='chat-btn'
+              @icon='sparkle'
+              @width='25'
+              @height='25'
+              {{on 'click' this.toggleChat}}
+            />
+          {{/if}}
         {{/if}}
       </div>
 
@@ -849,6 +868,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       }
 
       .container__chat-sidebar {
+        height: 100vh;
         grid-column: 2;
         z-index: 1;
       }

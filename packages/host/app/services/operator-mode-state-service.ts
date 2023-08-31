@@ -1,5 +1,4 @@
 import {
-  type OperatorModeState,
   type Stack,
   type StackItem,
 } from '../components/operator-mode/container';
@@ -8,6 +7,7 @@ import type CardService from '../services/card-service';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
+import { task } from 'ember-concurrency';
 import { getOwner } from '@ember/application';
 import { scheduleOnce } from '@ember/runloop';
 import stringify from 'safe-stable-stringify';
@@ -17,6 +17,12 @@ import { Submode } from '@cardstack/host/components/submode-switcher';
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
 // This is because we don't have a way to serialize a stack configuration of linked cards that have not been saved yet.
+
+export interface OperatorModeState {
+  stacks: Stack[];
+  submode: Submode;
+  codePath: URL | null;
+}
 
 interface CardItem {
   id: string;
@@ -29,12 +35,14 @@ type SerializedStack = SerializedItem[];
 export type SerializedState = {
   stacks: SerializedStack[];
   submode?: Submode;
+  codePath?: string;
 };
 
 export default class OperatorModeStateService extends Service {
   @tracked state: OperatorModeState = new TrackedObject({
     stacks: new TrackedArray([]),
     submode: Submode.Interact,
+    codePath: null,
   });
   @tracked recentCards = new TrackedArray<CardDef>([]);
 
@@ -53,6 +61,21 @@ export default class OperatorModeStateService extends Service {
     this.addRecentCard(item.card);
     this.schedulePersist();
   }
+
+  patchCard = task({ enqueue: true }, async (id: string, attributes: any) => {
+    let stackItems = this.state?.stacks.flat() ?? [];
+    for (let item of stackItems) {
+      if ('card' in item && item.card.id == id) {
+        let document = await this.cardService.serializeCard(item.card);
+        document.data.attributes = {
+          ...document.data.attributes,
+          ...attributes,
+        };
+
+        await this.cardService.patchCard(item.card, document);
+      }
+    }
+  });
 
   trimItemsFromStack(item: StackItem) {
     let stackIndex = item.stackIndex;
@@ -153,6 +176,11 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
+  updateCodePath(codePath: URL | null) {
+    this.state.codePath = codePath;
+    this.schedulePersist();
+  }
+
   clearStacks() {
     this.state.stacks.splice(0);
     this.schedulePersist();
@@ -183,7 +211,11 @@ export default class OperatorModeStateService extends Service {
   // clicking on "Crate New" in linked card editor. Here we want to draw a boundary
   // between navigatable states in the query parameter
   rawStateWithSavedCardsOnly() {
-    let state: SerializedState = { stacks: [], submode: this.state.submode };
+    let state: SerializedState = {
+      stacks: [],
+      submode: this.state.submode,
+      codePath: this.state.codePath?.toString(),
+    };
 
     for (let stack of this.state.stacks) {
       let serializedStack: SerializedStack = [];
@@ -215,6 +247,7 @@ export default class OperatorModeStateService extends Service {
     let newState: OperatorModeState = new TrackedObject({
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submode.Interact,
+      codePath: rawState.codePath ? new URL(rawState.codePath) : null,
     });
 
     let stackIndex = 0;

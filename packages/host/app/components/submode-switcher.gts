@@ -62,6 +62,8 @@ export default class SubmodeSwitcher extends Component<Signature> {
         --submode-switcher-dropdown-content-border-radius: 0 0
           var(--boxel-border-radius) var(--boxel-border-radius);
         --submode-switcher-dropdown-content-bg-color: rgba(0, 0, 0, 0.45);
+        --submode-switcher-width: 190px;
+        --submode-switcher-height: 40px;
       }
       .submode-switcher-dropdown-trigger {
         --icon-color: var(--boxel-highlight);
@@ -78,7 +80,8 @@ export default class SubmodeSwitcher extends Component<Signature> {
         display: flex;
         justify-content: flex-start;
         align-items: center;
-        width: 190px;
+        width: var(--submode-switcher-width);
+        height: var(--submode-switcher-height);
         gap: var(--boxel-sp-sm);
       }
       .submode-switcher-dropdown-trigger[aria-expanded='true'] {

@@ -4,7 +4,7 @@ import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 //@ts-expect-error the types don't recognize the cached export
 import { tracked, cached } from '@glimmer/tracking';
-import { not, and } from '@cardstack/host/helpers/truth-helpers';
+import { not, and, eq } from '@cardstack/host/helpers/truth-helpers';
 import { restartableTask, task, timeout, all } from 'ember-concurrency';
 import {
   BoxelInput,
@@ -13,7 +13,6 @@ import {
   Button,
 } from '@cardstack/boxel-ui';
 import { getRoom } from '../../resources/room';
-import { getAttachedCards } from '../../resources/attached-cards';
 import { TrackedMap } from 'tracked-built-ins';
 import {
   chooseCard,
@@ -22,6 +21,7 @@ import {
 } from '@cardstack/runtime-common';
 import { registerDestructor } from '@ember/destroyable';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import {
   type CardDef,
   type FieldDef,
@@ -29,6 +29,7 @@ import {
 import type CardService from '@cardstack/host/services/card-service';
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import config from '@cardstack/host/config/environment';
+import { fn } from '@ember/helper';
 
 const { environment } = config;
 
@@ -37,9 +38,10 @@ interface RoomArgs {
     roomId: string;
   };
 }
+
 export default class Room extends Component<RoomArgs> {
   <template>
-    <div>Number of cards: {{this.attachedCards.instances.length}}</div>
+    <div>Number of cards: {{this.totalCards}}</div>
     <div class='room-members'>
       <div data-test-room-members class='members'><b>Members:</b>
         {{this.memberNames}}
@@ -95,8 +97,25 @@ export default class Room extends Component<RoomArgs> {
             - Beginning of conversation -
           </div>
         </div>
-        {{#each this.messageComponents as |Message|}}
-          <Message />
+        {{#each this.messageCardComponents as |Message|}}
+          {{#unless Message.card.command}}
+            <Message.component />
+          {{/unless}}
+          {{#if (eq Message.card.command.commandType 'patch')}}
+            <Button
+              data-test-command-apply
+              {{on
+                'click'
+                (fn
+                  this.patchCard
+                  Message.card.command.payload.id
+                  Message.card.command.payload.patch.attributes
+                )
+              }}
+              @loading={{this.operatorModeStateService.patchCard.isRunning}}
+              @disabled={{this.operatorModeStateService.patchCard.isRunning}}
+            >Apply</Button>
+          {{/if}}
         {{else}}
           <div data-test-no-messages>
             (No messages)
@@ -131,6 +150,12 @@ export default class Room extends Component<RoomArgs> {
           @disabled={{this.doChooseCard.isRunning}}
           {{on 'click' this.chooseCard}}
         >Choose Card</Button>
+        <Button
+          data-test-send-open-cards-btn
+          @loading={{this.doSendMessage.isRunning}}
+          @disabled={{this.doSendMessage.isRunning}}
+          {{on 'click' this.sendOpenCards}}
+        >Send open cards</Button>
       {{/if}}
       <Button
         data-test-send-message-btn
@@ -241,15 +266,11 @@ export default class Room extends Component<RoomArgs> {
 
   @service private declare matrixService: MatrixService;
   @service private declare cardService: CardService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
   @tracked private isInviteMode = false;
   @tracked private membersToInvite: string[] = [];
   @tracked private allowedToSetObjective: boolean | undefined;
   @tracked private subscribedRoom: FieldDef | undefined;
-  private attachedCards = getAttachedCards(
-    this,
-    () => this.room,
-    () => this.attachedCardIds,
-  );
   private messagesToSend: TrackedMap<string, string | undefined> =
     new TrackedMap();
   private cardsToSend: TrackedMap<string, CardDef | undefined> =
@@ -276,6 +297,10 @@ export default class Room extends Component<RoomArgs> {
   private get objective() {
     return this.matrixService.roomObjectives.get(this.args.roomId);
   }
+
+  private patchCard = (cardId: string, attributes: any) => {
+    this.operatorModeStateService.patchCard.perform(cardId, attributes);
+  };
 
   private subscribeToRoomChanges = task(async () => {
     await this.cardService.ready;
@@ -315,6 +340,14 @@ export default class Room extends Component<RoomArgs> {
       .map((m) => m.attachedCardId);
   }
 
+  @cached
+  private get totalCards() {
+    if (!this.room) {
+      return 0;
+    }
+    return this.attachedCardIds.length;
+  }
+
   private get objectiveComponent() {
     if (this.objective) {
       return this.objective.constructor.getComponent(
@@ -325,11 +358,17 @@ export default class Room extends Component<RoomArgs> {
     return;
   }
 
-  private get messageComponents() {
+  private get messageCardComponents() {
     return this.room
-      ? this.room.messages.map((message) =>
-          message.constructor.getComponent(message, 'embedded'),
-        )
+      ? this.room.messages.map((messageCard) => {
+          return {
+            component: messageCard.constructor.getComponent(
+              messageCard,
+              'embedded',
+            ),
+            card: messageCard,
+          };
+        })
       : [];
   }
 
@@ -383,6 +422,13 @@ export default class Room extends Component<RoomArgs> {
       );
     }
     this.doSendMessage.perform(this.messageToSend, this.cardtoSend);
+  }
+
+  @action
+  private sendOpenCards() {
+    for (let stackItem of this.operatorModeStateService.topMostStackItems()) {
+      this.doSendMessage.perform(undefined, stackItem.card);
+    }
   }
 
   @action
