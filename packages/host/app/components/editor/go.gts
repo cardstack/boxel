@@ -32,6 +32,13 @@ import type {
 } from '@cardstack/host/services/monaco-service';
 import type { OpenFiles } from '@cardstack/host/controllers/code';
 import { maybe } from '@cardstack/host/resources/maybe';
+import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+import {
+  chooseCard,
+  catalogEntryRef,
+  createNewCard,
+} from '@cardstack/runtime-common';
+import { AddButton, Tooltip } from '@cardstack/boxel-ui';
 
 const { ownRealmURL } = ENV;
 const log = logger('component:go');
@@ -49,6 +56,14 @@ export default class Go extends Component<Signature> {
     <div class='main'>
       <div class='main-column'>
         <FileTree @url={{ownRealmURL}} @openFiles={{@openFiles}} />
+        <Tooltip @placement='left'>
+          <:trigger>
+            <AddButton {{on 'click' this.createNew}} />
+          </:trigger>
+          <:content>
+            Create a new card
+          </:content>
+        </Tooltip>
         <RecentFiles />
       </div>
       {{#if (isReady this.openFile.current)}}
@@ -318,6 +333,33 @@ export default class Go extends Component<Signature> {
         }. ${await response.text()}`,
       );
     }
+  });
+
+  @action
+  async createNew() {
+    this.createNewCard.perform();
+  }
+
+  private createNewCard = restartableTask(async () => {
+    let card = await chooseCard<CatalogEntry>({
+      filter: {
+        on: catalogEntryRef,
+        eq: { isPrimitive: false },
+      },
+    });
+    if (!card) {
+      return;
+    }
+    let newCard = await createNewCard(card.ref, new URL(card.id));
+    if (!newCard) {
+      throw new Error(
+        `bug: could not create new card from catalog entry ${JSON.stringify(
+          catalogEntryRef,
+        )}`,
+      );
+    }
+    let path = `${newCard.id.slice(ownRealmURL.length)}.json`;
+    this.args.openFiles.path = path;
   });
 
   // File serialization is a special type of card serialization that the host would
