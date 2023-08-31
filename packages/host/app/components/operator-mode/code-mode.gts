@@ -20,7 +20,7 @@ import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-prev
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
-import { bool } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
 interface Signature {
   Args: {};
 }
