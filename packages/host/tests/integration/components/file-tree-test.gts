@@ -19,7 +19,7 @@ import { waitUntil, waitFor, fillIn, click } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import CodeController from '@cardstack/host/controllers/code';
-import { OpenFiles } from '@cardstack/host/controllers/code';
+import { OpenFiles } from '@cardstack/host/controllers/card';
 import CodeService from '@cardstack/host/services/code-service';
 
 let loader: Loader;

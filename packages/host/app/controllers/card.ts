@@ -15,12 +15,13 @@ import OperatorModeStateService, {
 } from '@cardstack/host/services/operator-mode-state-service';
 import type CodeService from '@cardstack/host/services/code-service';
 import { Submode } from '@cardstack/host/components/submode-switcher';
+import type CodeController from '@cardstack/host/controllers/code';
 
 export default class CardController extends Controller {
   queryParams = [
     'operatorModeState',
     'operatorModeEnabled',
-    'path',
+    'openFile',
     'openDirs',
   ];
 
@@ -35,7 +36,7 @@ export default class CardController extends Controller {
   @tracked model: Model | undefined;
   @tracked operatorModeState: string | null = null;
 
-  @tracked path: string | undefined;
+  @tracked openFile: string | undefined;
   @tracked openDirs: string | undefined;
 
   constructor(args: any) {
@@ -50,8 +51,8 @@ export default class CardController extends Controller {
     return new OpenFiles(this);
   }
 
-  openFile(newPath: string | undefined) {
-    this.path = newPath;
+  openPath(newPath: string | undefined) {
+    this.openFile = newPath;
 
     if (newPath) {
       const existingIndex = this.codeService.recentFiles.indexOf(newPath);
@@ -102,12 +103,12 @@ export default class CardController extends Controller {
 }
 
 export class OpenFiles {
-  constructor(private controller: CodeController) {}
+  constructor(private controller: CardController | CodeController) {}
   get path(): string | undefined {
-    return this.controller.path;
+    return this.controller.openFile;
   }
   set path(newPath: string | undefined) {
-    this.controller.openFile(newPath);
+    this.controller.openPath(newPath);
   }
   get openDirs(): string[] {
     return this.controller.openDirs ? this.controller.openDirs.split(',') : [];

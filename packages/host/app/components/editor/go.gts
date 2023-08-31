@@ -30,7 +30,7 @@ import type {
   MonacoSDK,
   IStandaloneCodeEditor,
 } from '@cardstack/host/services/monaco-service';
-import type { OpenFiles } from '@cardstack/host/controllers/code';
+import type { OpenFiles } from '@cardstack/host/controllers/card';
 import { maybe } from '@cardstack/host/resources/maybe';
 import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import {

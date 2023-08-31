@@ -214,4 +214,30 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom('[data-test-file="Person/1.json"]')
       .doesNotExist('Person/1.json file entry is not rendered');
   });
+
+  test('can open a file', async function (assert) {
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: 'http://test-realm/test/index',
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+    await click('[data-test-file-browser-toggle]');
+    await waitFor('[data-test-file]');
+
+    await click('[data-test-file="person.gts"]');
+
+    assert.dom('[data-test-file="person.gts"]').hasClass('selected');
+  });
 });

@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import type RouterService from '@ember/routing/router-service';
 import Directory from './directory';
-import { OpenFiles } from '@cardstack/host/controllers/code';
+import { OpenFiles } from '@cardstack/host/controllers/card';
 
 interface Args {
   Args: {

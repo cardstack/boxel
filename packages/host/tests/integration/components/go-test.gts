@@ -26,7 +26,7 @@ import type {
   IStandaloneCodeEditor,
 } from '@cardstack/host/services/monaco-service';
 import CodeController from '@cardstack/host/controllers/code';
-import { OpenFiles } from '@cardstack/host/controllers/code';
+import { OpenFiles } from '@cardstack/host/controllers/card';
 import CodeService from '@cardstack/host/services/code-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { Loader } from '@cardstack/runtime-common/loader';

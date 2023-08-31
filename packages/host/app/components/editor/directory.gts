@@ -7,7 +7,7 @@ import { fn } from '@ember/helper';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { directory } from '@cardstack/host/resources/directory';
 import { concat } from '@ember/helper';
-import { OpenFiles } from '@cardstack/host/controllers/code';
+import type { OpenFiles } from '@cardstack/host/controllers/card';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
 interface Args {

@@ -20,7 +20,7 @@ import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import CodeController from '@cardstack/host/controllers/code';
-import { OpenFiles } from '@cardstack/host/controllers/code';
+import { OpenFiles } from '@cardstack/host/controllers/card';
 import CodeService from '@cardstack/host/services/code-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { TestContext } from '@ember/test-helpers';
