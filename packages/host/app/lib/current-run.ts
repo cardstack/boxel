@@ -131,6 +131,7 @@ export class CurrentRun {
     loader,
     entrySetter,
     renderCard,
+    onInvalidation,
   }: {
     url: URL;
     operation: 'update' | 'delete';
@@ -139,6 +140,7 @@ export class CurrentRun {
     loader: Loader;
     entrySetter: EntrySetter;
     renderCard: RenderCard;
+    onInvalidation?: (invalidatedURLs: URL[]) => void;
   }) {
     let start = Date.now();
     log.debug(`starting from incremental indexing for ${url.href}`);
@@ -180,6 +182,10 @@ export class CurrentRun {
         Date.now() - start
       }ms`,
     );
+
+    if (onInvalidation) {
+      onInvalidation([url, ...invalidations]);
+    }
     return current;
   }
 

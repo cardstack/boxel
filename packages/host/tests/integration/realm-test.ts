@@ -378,8 +378,10 @@ module('Integration | realm', function (hooks) {
     await realm.ready;
     let expected = [
       'added: CardDef/1.json',
+      `index-invalidation: ["${testRealmURL}CardDef/1.json"]`,
       'index: incremental',
       'added: CardDef/2.json',
+      `index-invalidation: ["${testRealmURL}CardDef/2.json"]`,
       'index: incremental',
     ];
     await this.expectEvents(assert, realm, adapter, expected, async () => {

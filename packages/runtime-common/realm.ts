@@ -233,7 +233,14 @@ export class Realm {
     contents: string,
   ): Promise<{ lastModified: number }> {
     let results = await this.#adapter.write(path, contents);
-    await this.#searchIndex.update(this.paths.fileURL(path));
+    await this.#searchIndex.update(this.paths.fileURL(path), {
+      onInvalidation: (invalidatedURLs: URL[]) => {
+        this.sendUpdateMessages({
+          type: 'update',
+          data: { 'index-invalidation': JSON.stringify(invalidatedURLs) },
+        });
+      },
+    });
 
     this.sendUpdateMessages({ type: 'update', data: { index: 'incremental' } });
     return results;
@@ -243,6 +250,12 @@ export class Realm {
     await this.#adapter.remove(path);
     await this.#searchIndex.update(this.paths.fileURL(path), {
       delete: true,
+      onInvalidation: (invalidatedURLs: URL[]) => {
+        this.sendUpdateMessages({
+          type: 'update',
+          data: { 'index-invalidation': JSON.stringify(invalidatedURLs) },
+        });
+      },
     });
     this.sendUpdateMessages({ type: 'update', data: { index: 'incremental' } });
   }

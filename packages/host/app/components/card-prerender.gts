@@ -65,12 +65,18 @@ export default class CardPrerender extends Component {
     prev: RunState,
     url: URL,
     operation: 'delete' | 'update',
+    onInvalidation?: (invalidatedURLs: URL[]) => void,
   ): Promise<RunState> {
     if (hasExecutableExtension(url.href) && !this.fastboot.isFastBoot) {
       this.loaderService.reset();
     }
     try {
-      let state = await this.doIncremental.perform(prev, url, operation);
+      let state = await this.doIncremental.perform(
+        prev,
+        url,
+        operation,
+        onInvalidation,
+      );
       return state;
     } catch (e: any) {
       if (!didCancel(e)) {
@@ -120,7 +126,12 @@ export default class CardPrerender extends Component {
   });
 
   private doIncremental = enqueueTask(
-    async (prev: RunState, url: URL, operation: 'delete' | 'update') => {
+    async (
+      prev: RunState,
+      url: URL,
+      operation: 'delete' | 'update',
+      onInvalidation?: (invalidatedURLs: URL[]) => void,
+    ) => {
       let { reader, entrySetter } = this.getRunnerParams();
       let current = await CurrentRun.incremental({
         url,
@@ -130,6 +141,7 @@ export default class CardPrerender extends Component {
         loader: this.loaderService.loader,
         entrySetter,
         renderCard: this.renderService.renderCard.bind(this.renderService),
+        onInvalidation,
       });
       this.renderService.indexRunDeferred?.fulfill();
       return current;
