@@ -254,7 +254,7 @@ module('Acceptance | basic tests', function (hooks) {
 
     assert.strictEqual(
       currentURL(),
-      '/code?openDirs=Person%2F&path=Person%2F1.json',
+      '/code?openDirs=Person%2F&openFile=Person%2F1.json',
     );
     assert
       .dom('[data-test-file="Person/1.json"]')
@@ -295,7 +295,7 @@ module('Acceptance | basic tests', function (hooks) {
     await click('[data-test-file="person.gts"]');
     await waitFor('[data-test-card-id]');
 
-    assert.strictEqual(currentURL(), '/code?path=person.gts');
+    assert.strictEqual(currentURL(), '/code?openFile=person.gts');
     assert
       .dom('[data-test-card-id]')
       .containsText(`${testRealmURL}person/Person`);
@@ -359,7 +359,7 @@ module('Acceptance | basic tests', function (hooks) {
     await fillIn('[data-test-field="description"] input', 'Person');
     await fillIn('[data-test-field="thumbnailURL"] input', './mango.png');
     await click('[data-test-save-card]');
-    await waitUntil(() => currentURL() === '/code?path=Person%2F2.json');
+    await waitUntil(() => currentURL() === '/code?openFile=Person%2F2.json');
 
     await click('[data-test-directory="Person/"]');
     await waitFor('[data-test-file="Person/2.json"]');

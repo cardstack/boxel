@@ -100,10 +100,13 @@ QUnit.module(
     });
 
     test('renders card source', async function (assert) {
-      await boot(`${testRealmURL}/code?path=person.gts`, '[data-test-card-id]');
+      await boot(
+        `${testRealmURL}/code?openFile=person.gts`,
+        '[data-test-card-id]',
+      );
       assert.strictEqual(
         testDocument().location.href,
-        `${testRealmURL}/code?path=person.gts`,
+        `${testRealmURL}/code?openFile=person.gts`,
       );
       let cardId = querySelector('[data-test-card-id');
       assert.ok(cardId, 'card ID element exists');
@@ -133,10 +136,13 @@ QUnit.module(
     });
 
     test('renders card instance', async function (assert) {
-      await boot(`${testRealmURL}/code?path=person-2.json`, '[data-test-card]');
+      await boot(
+        `${testRealmURL}/code?openFile=person-2.json`,
+        '[data-test-card]',
+      );
       assert.strictEqual(
         testDocument().location.href,
-        `${testRealmURL}/code?path=person-2.json`,
+        `${testRealmURL}/code?openFile=person-2.json`,
       );
       let card = querySelector('[data-test-card]');
       assert.strictEqual(
@@ -158,7 +164,7 @@ QUnit.module(
       await waitFor('[data-test-card]');
       assert.strictEqual(
         testDocument().location.href,
-        `${testRealmURL}/code?path=person-1.json`,
+        `${testRealmURL}/code?openFile=person-1.json`,
       );
       let card = querySelector('[data-test-card]');
       assert.strictEqual(
