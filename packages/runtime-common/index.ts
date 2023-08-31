@@ -36,6 +36,7 @@ export interface DirectoryEntryRelationship {
 import { RealmPaths } from './paths';
 import { Query } from './query';
 export {
+  aiBotUsername,
   baseRealm,
   catalogEntryRef,
   baseCardRef,

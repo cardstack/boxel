@@ -18,6 +18,7 @@ import {
   TestRealm,
   type TestContextWithSave,
 } from '../../helpers';
+import { MockMatrixService } from '../../helpers/mock-matrix-service';
 import {
   waitFor,
   waitUntil,
@@ -28,6 +29,7 @@ import {
   triggerEvent,
   triggerKeyEvent,
 } from '@ember/test-helpers';
+import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import percySnapshot from '@percy/ember';
@@ -638,6 +640,115 @@ module('Integration | operator-mode', function (hooks) {
         ],
       });
     };
+  });
+
+  test<TestContextWithSave>('it allows chat commands to change cards in the stack', async function (assert) {
+    this.owner.register('service:matrixService', MockMatrixService);
+    let matrixService = this.owner.lookup(
+      'service:matrixService',
+    ) as MockMatrixService;
+    matrixService.cardAPI = cardApi;
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor('[data-test-person]');
+    assert.dom('[data-test-boxel-header-title]').hasText('Person');
+    assert.dom('[data-test-person]').hasText('Fadhlan');
+    await click('[data-test-open-chat]');
+
+    matrixService.createAndJoinRoom('testroom');
+
+    addRoomEvent(matrixService, {
+      event_id: 'event1',
+      room_id: 'testroom',
+      state_key: 'state',
+      type: 'm.room.message',
+      content: {
+        body: 'i am the body',
+        msgtype: 'org.boxel.command',
+        formatted_body: 'A patch',
+        format: 'org.matrix.custom.html',
+        command: {
+          type: 'patch',
+          id: `${testRealmURL}Person/fadhlan`,
+          patch: {
+            attributes: { firstName: 'Dave' },
+          },
+        },
+      },
+    });
+
+    await waitFor('[data-test-enter-room="test_a"]');
+    await click('[data-test-enter-room="test_a"]');
+
+    await waitFor('[data-test-command-apply]');
+    this.onSave((json) => {
+      assert.strictEqual(json.data.attributes?.firstName, 'Dave');
+    });
+    await click('[data-test-command-apply]');
+
+    await waitFor('[data-test-person="Dave"]');
+    assert.dom('[data-test-person]').hasText('Dave');
+  });
+
+  test('it allows only applies changes from the chat if the stack contains a card with that ID', async function (assert) {
+    this.owner.register('service:matrixService', MockMatrixService);
+    let matrixService = this.owner.lookup(
+      'service:matrixService',
+    ) as MockMatrixService;
+    matrixService.cardAPI = cardApi;
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor('[data-test-person]');
+    assert.dom('[data-test-boxel-header-title]').hasText('Person');
+    assert.dom('[data-test-person]').hasText('Fadhlan');
+    await click('[data-test-open-chat]');
+
+    matrixService.createAndJoinRoom('testroom');
+
+    addRoomEvent(matrixService, {
+      event_id: 'event1',
+      room_id: 'testroom',
+      state_key: 'state',
+      type: 'm.room.message',
+      content: {
+        body: 'i am the body',
+        msgtype: 'org.boxel.command',
+        formatted_body: 'A patch',
+        format: 'org.matrix.custom.html',
+        command: {
+          type: 'patch',
+          id: `${testRealmURL}Person/anotherPerson`,
+          patch: {
+            attributes: { firstName: 'Dave' },
+          },
+        },
+      },
+    });
+
+    await waitFor('[data-test-enter-room="test_a"]');
+    await click('[data-test-enter-room="test_a"]');
+
+    await waitFor('[data-test-command-apply]');
+    await click('[data-test-command-apply]');
+
+    await waitFor('[data-test-person="Fadhlan"]');
+    assert.dom('[data-test-person]').hasText('Fadhlan');
   });
 
   test('it loads a card and renders its isolated view', async function (assert) {

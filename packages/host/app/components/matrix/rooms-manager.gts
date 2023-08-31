@@ -13,12 +13,13 @@ import {
   LoadingIndicator,
   BoxelInputValidationState,
   Button,
-  IconButton,
   FieldContainer,
 } from '@cardstack/boxel-ui';
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import { eventDebounceMs } from '@cardstack/host/lib/matrix-utils';
 import { getRoom, RoomResource } from '@cardstack/host/resources/room';
+import { aiBotUsername } from '@cardstack/runtime-common';
+import format from 'date-fns/format';
 import { TrackedMap } from 'tracked-built-ins';
 import RouterService from '@ember/routing/router-service';
 import Room from './room';
@@ -31,16 +32,27 @@ import type {
 export default class RoomsManager extends Component {
   <template>
     <div class='header-wrapper'>
+      {{#unless this.isCreateRoomMode}}
+        <div class='create-button-wrapper'>
+          <Button
+            data-test-create-room-mode-btn
+            class='room__button'
+            {{on 'click' this.showCreateRoomMode}}
+            @disabled={{this.isCreateRoomMode}}
+          >Create Room</Button>
+        </div>
+        <div class='create-button-wrapper'>
+          <Button
+            data-test-create-ai-chat-btn
+            class='room__button'
+            {{on 'click' this.createAIChat}}
+          >Start new AI chat</Button>
+        </div>
+      {{/unless}}
       <BoxelHeader
         class='matrix'
         @title={{this.headerTitle}}
         @hasBackground={{true}}
-      />
-      <IconButton
-        class='toggle-btn'
-        data-test-toggle-rooms-view
-        @icon={{this.toggleIcon}}
-        {{on 'click' this.toggleRooms}}
       />
     </div>
     {{#if this.isCreateRoomMode}}
@@ -94,17 +106,13 @@ export default class RoomsManager extends Component {
     {{#if this.loadRooms.isRunning}}
       <LoadingIndicator />
     {{else}}
-      {{#unless this.isCollapsed}}
-        {{#unless this.isCreateRoomMode}}
-          <div class='create-button-wrapper'>
-            <Button
-              data-test-create-room-mode-btn
-              class='room__button'
-              {{on 'click' this.showCreateRoomMode}}
-              @disabled={{this.isCreateRoomMode}}
-            >Create Room</Button>
-          </div>
-        {{/unless}}
+
+      {{#if this.currentRoomId}}
+        <Room @roomId={{this.currentRoomId}} />
+      {{/if}}
+
+      <hr />
+      {{#if this.hasInvites}}
         <div class='room-list' data-test-invites-list>
           <h3>Invites</h3>
           {{#each this.sortedInvites as |invite|}}
@@ -130,41 +138,34 @@ export default class RoomsManager extends Component {
                 <LoadingIndicator />
               {{/if}}
             </div>
-          {{else}}
-            (No invites)
           {{/each}}
         </div>
-        <div class='room-list' data-test-rooms-list>
-          <h3>Rooms</h3>
-          {{#each this.sortedJoinedRooms as |joined|}}
-            <div class='room' data-test-joined-room={{joined.room.name}}>
-              <span class='room-item'>
-                <button
-                  class='enter-room link'
-                  data-test-enter-room={{joined.room.name}}
-                  {{on 'click' (fn this.enterRoom joined.room.roomId)}}
-                >
-                  {{joined.room.name}}
-                </button>
-              </span>
-              <Button
-                data-test-leave-room-btn={{joined.room.name}}
-                {{on 'click' (fn this.leaveRoom joined.room.roomId)}}
-              >Leave</Button>
-              {{#if (eq joined.room.roomId this.roomIdForCurrentAction)}}
-                <LoadingIndicator />
-              {{/if}}
-            </div>
-          {{else}}
-            (No rooms)
-          {{/each}}
-        </div>
-        <hr />
-      {{/unless}}
-    {{/if}}
-
-    {{#if this.currentRoomId}}
-      <Room @roomId={{this.currentRoomId}} />
+      {{/if}}
+      <div class='room-list' data-test-rooms-list>
+        <h3>Existing chats</h3>
+        {{#each this.sortedJoinedRooms as |joined|}}
+          <div class='room' data-test-joined-room={{joined.room.name}}>
+            <span class='room-item'>
+              <button
+                class='enter-room link'
+                data-test-enter-room={{joined.room.name}}
+                {{on 'click' (fn this.enterRoom joined.room.roomId)}}
+              >
+                {{joined.room.name}}
+              </button>
+            </span>
+            <Button
+              data-test-leave-room-btn={{joined.room.name}}
+              {{on 'click' (fn this.leaveRoom joined.room.roomId)}}
+            >Leave</Button>
+            {{#if (eq joined.room.roomId this.roomIdForCurrentAction)}}
+              <LoadingIndicator />
+            {{/if}}
+          </div>
+        {{else}}
+          (No rooms)
+        {{/each}}
+      </div>
     {{/if}}
 
     <style>
@@ -199,12 +200,6 @@ export default class RoomsManager extends Component {
         position: relative;
       }
 
-      .toggle-btn {
-        position: absolute;
-        z-index: 1;
-        margin-top: calc(-2 * var(--boxel-sp-xl) + 2px);
-      }
-
       .create-room {
         padding: 0 var(--boxel-sp);
       }
@@ -233,7 +228,6 @@ export default class RoomsManager extends Component {
   @tracked private roomNameError: string | undefined;
   @tracked private roomIdForCurrentAction: string | undefined;
   @tracked private currentRoomId: string | undefined;
-  @tracked private isCollapsed = false;
   private currentRoomResource = getRoom(this, () => this.currentRoomId);
 
   constructor(owner: unknown, args: any) {
@@ -267,14 +261,14 @@ export default class RoomsManager extends Component {
         continue;
       }
       let joinedMember = resource.room.joinedMembers.find(
-        (m) => this.matrixService.client.getUserId() === m.userId,
+        (m) => this.matrixService.userId === m.userId,
       );
       if (joinedMember) {
         rooms.joined.push({ room: resource.room, member: joinedMember });
         continue;
       }
       let invitedMember = resource.room.invitedMembers.find(
-        (m) => this.matrixService.client.getUserId() === m.userId,
+        (m) => this.matrixService.userId === m.userId,
       );
       if (invitedMember) {
         rooms.invited.push({ room: resource.room, member: invitedMember });
@@ -313,21 +307,16 @@ export default class RoomsManager extends Component {
     return this.currentRoomResource.room;
   }
 
+  private get hasInvites() {
+    return this.myRooms.invited.length > 0;
+  }
+
   private get cleanNewRoomName() {
     return this.newRoomName ?? '';
   }
 
   private get roomNameInputState() {
     return this.roomNameError ? 'invalid' : 'initial';
-  }
-
-  private get toggleIcon() {
-    return this.isCollapsed ? 'icon-plus-circle' : 'icon-minus-circle';
-  }
-
-  @action
-  private toggleRooms() {
-    this.isCollapsed = !this.isCollapsed;
   }
 
   @action
@@ -369,7 +358,16 @@ export default class RoomsManager extends Component {
   @action
   private enterRoom(roomId: string) {
     this.currentRoomId = roomId;
-    this.isCollapsed = true;
+  }
+
+  @action
+  private createAIChat() {
+    this.newRoomName = `${format(
+      new Date(),
+      "yyyy-MM-dd'T'HH:mm:ss.SSSxxx",
+    )} - ${this.matrixService.userId}`;
+    this.newRoomInvite = [aiBotUsername];
+    this.doCreateRoom.perform();
   }
 
   private doCreateRoom = restartableTask(async () => {
@@ -379,7 +377,11 @@ export default class RoomsManager extends Component {
       );
     }
     try {
-      await this.matrixService.createRoom(this.newRoomName, this.newRoomInvite);
+      let newRoomId = await this.matrixService.createRoom(
+        this.newRoomName,
+        this.newRoomInvite,
+      );
+      this.enterRoom(newRoomId);
     } catch (e) {
       if (isMatrixError(e) && e.data.errcode === 'M_ROOM_IN_USE') {
         this.roomNameError = 'Room already exists';
@@ -418,7 +420,6 @@ export default class RoomsManager extends Component {
 
   private resetCreateRoom() {
     this.newRoomName = undefined;
-    this.newRoomInvite = [];
     this.isCreateRoomMode = false;
   }
 }

@@ -7,6 +7,7 @@ import type CardService from '../services/card-service';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
+import { task } from 'ember-concurrency';
 import { getOwner } from '@ember/application';
 import { scheduleOnce } from '@ember/runloop';
 import stringify from 'safe-stable-stringify';
@@ -60,6 +61,21 @@ export default class OperatorModeStateService extends Service {
     this.addRecentCard(item.card);
     this.schedulePersist();
   }
+
+  patchCard = task({ enqueue: true }, async (id: string, attributes: any) => {
+    let stackItems = this.state?.stacks.flat() ?? [];
+    for (let item of stackItems) {
+      if ('card' in item && item.card.id == id) {
+        let document = await this.cardService.serializeCard(item.card);
+        document.data.attributes = {
+          ...document.data.attributes,
+          ...attributes,
+        };
+
+        await this.cardService.patchCard(item.card, document);
+      }
+    }
+  });
 
   trimItemsFromStack(item: StackItem) {
     let stackIndex = item.stackIndex;

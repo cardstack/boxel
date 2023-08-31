@@ -171,6 +171,18 @@ export default class CardService extends Service {
     return result;
   }
 
+  async patchCard(
+    card: CardDef,
+    doc: LooseSingleCardDocument,
+  ): Promise<CardDef> {
+    await this.apiModule.loaded;
+    let updatedCard = await this.api.updateFromSerialized<typeof CardDef>(
+      card,
+      doc,
+    );
+    return await this.saveModel(updatedCard);
+  }
+
   private async saveCardDocument(
     doc: LooseSingleCardDocument,
     realmUrl?: URL,

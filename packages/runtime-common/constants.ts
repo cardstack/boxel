@@ -14,3 +14,5 @@ export const baseCardRef: CodeRef = {
 
 export const isField = Symbol('cardstack-field');
 export const primitive = Symbol('cardstack-primitive');
+
+export const aiBotUsername = 'aibot';

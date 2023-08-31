@@ -97,6 +97,9 @@ importers:
 
   packages/ai-bot:
     devDependencies:
+      '@cardstack/runtime-common':
+        specifier: workspace:^
+        version: link:../runtime-common
       matrix-js-sdk:
         specifier: ^25.0.0
         version: 25.0.0(patch_hash=vlqn3jrrd7zoh7xnqjj35ihq2i)
