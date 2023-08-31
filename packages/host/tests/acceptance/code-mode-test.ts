@@ -178,7 +178,7 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.dom('[data-test-file]').exists();
   });
 
-  test('can navigate file tree', async function (assert) {
+  test('can navigate file tree, file view mode is persisted in query parameter', async function (assert) {
     let codeModeStateParam = stringify({
       stacks: [
         [
@@ -192,11 +192,10 @@ module('Acceptance | code mode tests', function (hooks) {
     })!;
 
     await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+      `/?fileView=browser&operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
         codeModeStateParam,
       )}`,
     );
-    await click('[data-test-file-browser-toggle]');
     await waitFor('[data-test-file]');
 
     assert

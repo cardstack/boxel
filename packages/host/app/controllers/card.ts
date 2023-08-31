@@ -21,6 +21,7 @@ export default class CardController extends Controller {
   queryParams = [
     'operatorModeState',
     'operatorModeEnabled',
+    'fileView',
     'openFile',
     'openDirs',
   ];
@@ -36,6 +37,7 @@ export default class CardController extends Controller {
   @tracked model: Model | undefined;
   @tracked operatorModeState: string | null = null;
 
+  @tracked fileView = 'inheritance';
   @tracked openFile: string | undefined;
   @tracked openDirs: string | undefined;
 

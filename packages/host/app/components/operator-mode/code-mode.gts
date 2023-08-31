@@ -33,8 +33,6 @@ export default class CodeMode extends Component<Signature> {
   @tracked realmInfo: RealmInfo | null = null;
   @tracked loadFileError: string | null = null;
 
-  @tracked fileView = 'inheritance';
-
   constructor(args: any, owner: any) {
     super(args, owner);
     this.fetchCodeModeRealmInfo.perform();
@@ -49,11 +47,17 @@ export default class CodeMode extends Component<Signature> {
   }
 
   @action setFileView(view: string) {
-    this.fileView = view;
+    this.args.controller.fileView = view;
+  }
+
+  get fileView() {
+    return this.args.controller.fileView;
   }
 
   get fileViewTitle() {
-    return this.fileView === 'inheritance' ? 'Inheritance' : 'File Browser';
+    return this.args.controller.fileView === 'inheritance'
+      ? 'Inheritance'
+      : 'File Browser';
   }
 
   @action resetLoadFileError() {
@@ -123,7 +127,10 @@ export default class CodeMode extends Component<Signature> {
             class='inner-container file-view
               {{if (eq this.fileView "browser") "file-browser"}}'
           >
-            <header aria-label={{this.fileViewTitle}} data-test-file-view-header>
+            <header
+              aria-label={{this.fileViewTitle}}
+              data-test-file-view-header
+            >
               <button
                 class='{{if (eq this.fileView "inheritance") "active"}}'
                 {{on 'click' (fn this.setFileView 'inheritance')}}
