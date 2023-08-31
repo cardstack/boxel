@@ -22,7 +22,7 @@ import type CardController from '@cardstack/host/controllers/card';
 
 interface Signature {
   Args: {
-    controller?: CardController;
+    controller: CardController;
   };
 }
 

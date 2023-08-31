@@ -56,7 +56,7 @@ const { APP } = ENV;
 interface Signature {
   Args: {
     onClose: () => void;
-    controller?: CardController;
+    controller: CardController;
   };
 }
 
