@@ -174,13 +174,6 @@ class _FileResource extends Resource<Args> {
     },
   );
 
-  async ready() {
-    await this.read.perform();
-    if (this.innerState.state != 'ready') {
-      throw new Error('File not ready');
-    }
-  }
-
   get state() {
     return this.innerState.state;
   }
