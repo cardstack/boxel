@@ -842,6 +842,7 @@ module('Acceptance | operator mode tests', function (hooks) {
           ],
         ],
         submode: 'code',
+        codePath: `http://test-realm/test/Person/fadhlan.json`,
       })!;
 
       await visit(
