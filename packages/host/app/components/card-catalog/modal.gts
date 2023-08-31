@@ -126,7 +126,7 @@ export default class CardCatalogModal extends Component<Signature> {
                 @kind='secondary-light'
                 @size='tall'
                 class='footer-button'
-                {{on 'click' this.cancel}}
+                {{on 'click' (fn this.pick undefined)}}
                 data-test-card-catalog-cancel-button
               >
                 Cancel
@@ -352,10 +352,6 @@ export default class CardCatalogModal extends Component<Signature> {
       this.currentRequest.deferred.fulfill(card);
       this.currentRequest = undefined;
     }
-    this.resetState();
-  }
-
-  @action cancel(): void {
     this.resetState();
   }
 

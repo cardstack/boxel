@@ -33,17 +33,20 @@ export interface RoomMeta {
 
 export type Event = Partial<IEvent>;
 
-export interface Context {
+export interface EventSendingContext {
   rooms: Map<string, Promise<RoomField>>;
+  cardAPI: typeof CardAPI;
+  loaderService: LoaderService;
+}
+
+export interface Context extends EventSendingContext {
   roomObjectives: Map<string, RoomObjectiveField>;
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[];
   timelineQueue: MatrixEvent[];
-  cardAPI: typeof CardAPI;
   client: MatrixClient;
   matrixSDK: typeof MatrixSDK;
-  loaderService: LoaderService;
   handleMessage?: (
     context: Context,
     event: Event,
@@ -51,7 +54,7 @@ export interface Context {
   ) => Promise<void>;
 }
 
-export async function addRoomEvent(context: Context, event: Event) {
+export async function addRoomEvent(context: EventSendingContext, event: Event) {
   let { event_id: eventId, room_id: roomId, state_key: stateKey } = event;
   eventId = eventId ?? stateKey; // room state may not necessary have an event ID
   if (!eventId) {

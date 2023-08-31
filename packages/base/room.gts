@@ -251,7 +251,27 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
   });
 }
 
-class MessageField extends FieldDef {
+type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
+
+type JSONObject = { [x: string]: JSONValue };
+
+type PatchObject = { patch: { attributes: JSONObject }; id: string };
+
+class PatchObjectField extends FieldDef {
+  static [primitive]: PatchObject;
+}
+
+class CommandType extends FieldDef {
+  static [primitive]: 'patch';
+}
+
+// Subclass, add a validator that checks the fields required?
+class PatchField extends FieldDef {
+  @field commandType = contains(CommandType);
+  @field payload = contains(PatchObjectField);
+}
+
+export class MessageField extends FieldDef {
   @field author = contains(RoomMemberField);
   @field message = contains(MarkdownField);
   @field formattedMessage = contains(StringField);
@@ -259,6 +279,7 @@ class MessageField extends FieldDef {
   @field attachedCardId = contains(StringField);
   @field index = contains(NumberField);
   @field transactionId = contains(StringField);
+  @field command = contains(PatchField);
 
   static embedded = EmbeddedMessageField;
   // The edit template is meant to be read-only, this field card is not mutable
@@ -442,7 +463,6 @@ export class RoomField extends FieldDef {
         let update = false;
         if (event.content['m.relates_to']?.rel_type === 'm.replace') {
           event_id = event.content['m.relates_to'].event_id;
-          console.log('Updating', event_id);
           update = true;
         }
         if (cache.has(event_id) && !update) {
@@ -460,23 +480,38 @@ export class RoomField extends FieldDef {
           message: event.content.body,
           formattedMessage,
           index,
-          transactionId: event.unsigned.transaction_id,
+          // These are not guaranteed to exist in the event
+          transactionId: event.unsigned?.transaction_id || null,
           attachedCard: null,
+          command: null,
         };
+        let messageField = undefined;
         if (event.content.msgtype === 'org.boxel.card') {
           let cardDoc = event.content.instance;
           let attachedCardId = cardDoc.data.id;
           if (attachedCardId == null) {
             throw new Error(`cannot handle cards in room without an ID`);
           }
-          newMessages.set(
-            event_id,
-            new MessageField({ ...cardArgs, attachedCardId }),
-          );
+          messageField = new MessageField({ ...cardArgs, attachedCardId });
+        } else if (event.content.msgtype === 'org.boxel.command') {
+          // We only handle patches for now
+          if (event.content.command.type !== 'patch') {
+            throw new Error(
+              `cannot handle commands in room with type ${event.content.command.type}`,
+            );
+          }
+          let command = new PatchField({
+            commandType: event.content.command.type,
+            payload: event.content.command,
+          });
+          messageField = new MessageField({
+            ...cardArgs,
+            command,
+          });
         } else {
-          console.log('Setting new messages with ', event_id, cardArgs);
-          newMessages.set(event_id, new MessageField(cardArgs));
+          messageField = new MessageField(cardArgs);
         }
+        newMessages.set(event_id, messageField);
         index++;
       }
 
@@ -601,6 +636,27 @@ interface MessageEvent extends BaseMatrixEvent {
   };
 }
 
+interface CommandEvent extends BaseMatrixEvent {
+  type: 'm.room.message';
+  content: {
+    command: any;
+    'm.relates_to'?: {
+      rel_type: string;
+      event_id: string;
+    };
+    msgtype: 'org.boxel.command';
+    format: 'org.matrix.custom.html';
+    body: string;
+    formatted_body: string;
+  };
+  unsigned: {
+    age: number;
+    transaction_id: string;
+    prev_content?: any;
+    prev_sender?: string;
+  };
+}
+
 interface CardMessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: {
@@ -644,6 +700,7 @@ interface ObjectiveEvent extends BaseMatrixEvent {
 export type MatrixEvent =
   | RoomCreateEvent
   | MessageEvent
+  | CommandEvent
   | CardMessageEvent
   | ObjectiveEvent
   | RoomNameEvent

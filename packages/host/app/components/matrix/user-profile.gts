@@ -98,7 +98,7 @@ export default class UserProfile extends Component {
   }
 
   private get userId() {
-    return this.matrixService.client.getUserId()!; // This component only renders when we are logged in, so we'll always have a userId
+    return this.matrixService.userId!; // This component only renders when we are logged in, so we'll always have a userId
   }
 
   private get showLoading() {
