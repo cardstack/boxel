@@ -24,7 +24,9 @@ import {
   click,
   fillIn,
   focus,
+  blur,
   triggerEvent,
+  triggerKeyEvent,
 } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -1962,5 +1964,110 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-submode-switcher] > [data-test-boxel-button]');
     await click('[data-test-boxel-menu-item-text="Interact"]');
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
+  });
+
+  test(`card url bar shows realm info of valid URL`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    assert.dom('[data-test-submode-switcher]').exists();
+    assert.dom('[data-test-submode-switcher]').hasText('Interact');
+
+    await click(
+      '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
+    );
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    assert.dom('[data-test-submode-switcher]').hasText('Code');
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-card-url-bar-realm-info]')
+        ?.textContent?.includes('Operator Mode Workspace'),
+    );
+
+    assert.dom('[data-test-card-url-bar]').exists();
+    assert
+      .dom('[data-test-card-url-bar-realm-info]')
+      .hasText('in Operator Mode Workspace');
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}BlogPost/1.json`);
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `${testRealmURL}Pet/mango.json`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    await blur('[data-test-card-url-bar-input]');
+    assert
+      .dom('[data-test-card-url-bar-realm-info]')
+      .hasText('in Operator Mode Workspace');
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}Pet/mango.json`);
+    assert.dom('[data-test-card-url-bar-error]').doesNotExist();
+  });
+
+  test(`card url bar shows error message when URL is invalid`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    assert.dom('[data-test-submode-switcher]').exists();
+    assert.dom('[data-test-submode-switcher]').hasText('Interact');
+
+    await click(
+      '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
+    );
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    assert.dom('[data-test-submode-switcher]').hasText('Code');
+
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-card-url-bar-realm-info]')
+        ?.textContent?.includes('Operator Mode Workspace'),
+    );
+    assert.dom('[data-test-card-url-bar]').exists();
+    assert
+      .dom('[data-test-card-url-bar-realm-info]')
+      .hasText('in Operator Mode Workspace');
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}BlogPost/1.json`);
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `${testRealmURL}Pet/NotFoundCard`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    assert.dom('[data-test-card-url-bar-error]').hasText('File is not found');
+
+    await fillIn('[data-test-card-url-bar-input]', `Wrong URL`);
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    assert.dom('[data-test-card-url-bar-error]').hasText('Not a valid URL');
   });
 });
