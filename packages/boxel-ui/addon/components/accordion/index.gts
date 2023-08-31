@@ -1,25 +1,19 @@
 import Component from '@glimmer/component';
 
-interface Signature {
-  title: string;
-  // content: string;
-  // isOpen: boolean;
-  // toggle: () => void;
-}
-
-export default class Accordion extends Component<Signature> {
+export default class Accordion extends Component {
   <template>
     <div class='accordion'>
-      <details>
+      <details class='accordion-item'>
         <summary class='title'>Schema Editor</summary>
         <div class='content'>I'm a schema editor</div>
       </details>
-      <details>
+      <details class='accordion-item'>
         <summary class='title'>Playground</summary>
         <div class='content'>Play here!</div>
       </details>
-      <details>
-        <summary class='title'>Last item with a longer name</summary>
+      <details class='accordion-item'>
+        <summary class='title'>Lorem ipsum dolor sit amet, consectetur
+          adipiscing elit sed do eiusmod tempor incididunt ut labore</summary>
         <div class='content'>Lorem ipsum dolor sit amet, consectetur adipiscing
           elit, sed do eiusmod tempor incididunt ut labore et dolore magna
           aliqua. Odio eu feugiat pretium nibh ipsum consequat nisl vel pretium.
@@ -38,5 +32,49 @@ export default class Accordion extends Component<Signature> {
         </div>
       </details>
     </div>
+    <style>
+      .accordion {
+        --accordion-border: var(--boxel-border);
+        --accordion-border-radius: var(--boxel-border-radius-xl);
+        --accordion-item-closed-min-height: 40px;
+        --accordion-item-open-min-height: 500px;
+        --accordion-item-title-font: 700 var(--boxel-font);
+        --accordion-item-title-letter-spacing: var(--boxel-lsp-xs);
+        --accordion-item-title-padding: var(--boxel-sp-xs);
+        --accordion-item-content-padding: var(--boxel-sp-xs);
+
+        border: var(--accordion-border);
+        border-radius: var(--accordion-border-radius);
+      }
+      .accordion > * + * {
+        border-top: var(--accordion-border);
+      }
+      .accordion-item {
+        min-height: var(--accordion-item-closed-min-height);
+        transition: min-height var(--boxel-transition);
+      }
+      .accordion-item[open] {
+        min-height: var(--accordion-item-open-min-height);
+      }
+      .accordion-item > .content {
+        height: 0;
+        transition: min-height var(--boxel-transition);
+      }
+      .accordion-item[open] > .content {
+        min-height: max-content;
+      }
+      .title {
+        padding: var(--accordion-item-title-padding);
+        font: var(--accordion-item-title-font);
+        letter-spacing: var(--accordion-item-title-letter-spacing);
+      }
+      .title:hover {
+        cursor: pointer;
+      }
+      .content {
+        padding: var(--accordion-item-content-padding);
+        border-top: var(--accordion-border);
+      }
+    </style>
   </template>
 }
