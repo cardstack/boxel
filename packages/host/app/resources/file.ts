@@ -174,12 +174,11 @@ class _FileResource extends Resource<Args> {
     },
   );
 
-  async ready(lastModified?: string) {
+  async ready() {
     await this.read.perform();
     if (this.innerState.state != 'ready') {
       throw new Error('File not ready');
     }
-    this.innerState.lastModified = lastModified;
   }
 
   get state() {
