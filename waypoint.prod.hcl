@@ -79,6 +79,7 @@ app "boxel-ai-bot" {
       cpu     = 256
       memory  = 512
       cluster = "production"
+      disable_alb = true
 
       subnets = [
         "subnet-0464e7c634d7d2bb8",

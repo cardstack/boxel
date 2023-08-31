@@ -64,7 +64,7 @@ app "boxel-ai-bot" {
     use "docker" {
       context = "./"
     }
-    
+
     registry {
       use "aws-ecr" {
         region     = "us-east-1"
@@ -85,6 +85,7 @@ app "boxel-ai-bot" {
       execution_role_name = "boxel-ai-bot-staging-ecs-task-execution"
       security_group_ids  = ["sg-026f518a4e82d8a44"]
       region              = "us-east-1"
+      disable_alb         = true
 
       secrets = {
         BOXEL_AIBOT_USERNAME = "arn:aws:ssm:us-east-1:680542703984:parameter/staging/aibot/matrix/username"
