@@ -1,4 +1,5 @@
 import FreestyleController from 'ember-freestyle/controllers/freestyle';
+import AccordionUsage from '@cardstack/boxel-ui/components/accordion/usage';
 import AddButtonUsage from '@cardstack/boxel-ui/components/add-button/usage';
 import CardContainerUsage from '@cardstack/boxel-ui/components/card-container/usage';
 import FieldContainerUsage from '@cardstack/boxel-ui/components/field-container/usage';
@@ -21,6 +22,7 @@ export default class IndexController extends FreestyleController {
   constructor() {
     super(...arguments);
     this.usageComponents = [
+      ['Boxel::Accordion', AccordionUsage],
       ['Boxel::AddButton', AddButtonUsage],
       ['Boxel::CardContainer', CardContainerUsage],
       ['Boxel::FieldContainer', FieldContainerUsage],
