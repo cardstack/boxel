@@ -168,7 +168,7 @@ module('Integration | file-tree', function (hooks) {
     await fillIn('[data-test-field="firstName"] input', 'Jackie');
     await click('[data-test-save-card]');
     await waitUntil(() => !document.querySelector('[data-test-saving]'));
-    assert.strictEqual(mockController.path, 'Person/1.json');
+    assert.strictEqual(mockController.openFile, 'Person/1.json');
     assert.strictEqual(mockController.openDirs, undefined);
 
     let entry = await realm.searchIndex.card(
