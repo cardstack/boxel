@@ -33,7 +33,6 @@ export default class CodeMode extends Component<Signature> {
   @tracked realmInfo: RealmInfo | null = null;
   @tracked loadFileError: string | null = null;
 
-  // FIXME better name to encompass inheritance vs file browser?
   @tracked fileView = 'inheritance';
 
   constructor(args: any, owner: any) {
