@@ -45,6 +45,7 @@ import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import SubmodeSwitcher, { Submode } from '../submode-switcher';
 import CodeMode from '@cardstack/host/components/operator-mode/code-mode';
+import { assertNever } from '@cardstack/host/utils/assert-never';
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
 
@@ -52,11 +53,6 @@ interface Signature {
   Args: {
     onClose: () => void;
   };
-}
-
-export interface OperatorModeState {
-  stacks: Stack[];
-  submode: Submode;
 }
 
 export type Stack = StackItem[];
@@ -489,9 +485,12 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.operatorModeStateService.state?.stacks.flat() ?? [];
   }
 
-  get cardForCodeMode() {
-    // Last card in rightmost stack
-    return this.allStackItems.reverse()[0].card;
+  get lastCardInRightMostStack(): CardDef | null {
+    if (this.allStackItems.length <= 0) {
+      return null;
+    }
+
+    return this.allStackItems[this.allStackItems.length - 1].card;
   }
 
   get isCodeMode() {
@@ -586,6 +585,20 @@ export default class OperatorModeContainer extends Component<Signature> {
   };
 
   @action updateSubmode(submode: Submode) {
+    switch (submode) {
+      case Submode.Interact:
+        this.operatorModeStateService.updateCodePath(null);
+        break;
+      case Submode.Code:
+        let codePath = this.lastCardInRightMostStack
+          ? new URL(this.lastCardInRightMostStack.id + '.json')
+          : new URL(this.cardService.defaultURL + 'index.json');
+        this.operatorModeStateService.updateCodePath(codePath);
+        break;
+      default:
+        throw assertNever(submode);
+    }
+
     this.operatorModeStateService.updateSubmode(submode);
   }
 
@@ -608,7 +621,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         />
 
         {{#if this.isCodeMode}}
-          <CodeMode @card={{this.cardForCodeMode}} />
+          <CodeMode />
         {{else}}
           <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
             {{#if (eq this.allStackItems.length 0)}}
@@ -729,9 +742,13 @@ export default class OperatorModeContainer extends Component<Signature> {
         --operator-mode-bg-color: #686283;
         --boxel-modal-max-width: 100%;
         --container-button-size: var(--boxel-icon-lg);
+        --operator-mode-min-width: 20.5rem;
       }
       :global(.operator-mode .boxel-modal__inner) {
         display: block;
+      }
+      .operator-mode {
+        min-width: var(--operator-mode-min-width);
       }
       .operator-mode > div {
         align-items: flex-start;

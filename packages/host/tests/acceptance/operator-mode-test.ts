@@ -794,6 +794,7 @@ module('Acceptance | operator mode tests', function (hooks) {
               ],
             ],
             submode: 'code',
+            codePath: 'http://test-realm/test/Pet/mango.json',
           })!,
         )}`,
       );
