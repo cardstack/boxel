@@ -33,6 +33,9 @@ import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import percySnapshot from '@percy/ember';
+import CardController from '@cardstack/host/controllers/card';
+
+let mockCardController = new CardController({});
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 const realmName = 'Operator Mode Workspace';
@@ -652,7 +655,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -708,7 +711,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -756,7 +759,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -785,7 +788,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -809,7 +812,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -842,7 +845,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -877,7 +880,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -918,7 +921,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -946,7 +949,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1045,7 +1048,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1089,7 +1092,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1121,7 +1124,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1162,7 +1165,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1186,7 +1189,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1214,7 +1217,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1239,7 +1242,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1268,7 +1271,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1306,7 +1309,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1351,7 +1354,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1385,7 +1388,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1410,7 +1413,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1437,7 +1440,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1488,7 +1491,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1511,7 +1514,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1564,7 +1567,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1596,7 +1599,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1632,7 +1635,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1675,7 +1678,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1729,7 +1732,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1758,7 +1761,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1778,7 +1781,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1855,7 +1858,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1891,7 +1894,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1931,7 +1934,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1971,7 +1974,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -1998,7 +2001,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -2034,7 +2037,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -2075,7 +2078,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -2099,7 +2102,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -2114,7 +2117,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -2137,7 +2140,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -2162,7 +2165,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -2214,7 +2217,7 @@ module('Integration | operator-mode', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },

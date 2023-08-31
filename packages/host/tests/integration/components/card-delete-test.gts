@@ -23,6 +23,9 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 import type CardService from '@cardstack/host/services/card-service';
 import percySnapshot from '@percy/ember';
 import { CardDef } from 'https://cardstack.com/base/card-api';
+import CardController from '@cardstack/host/controllers/card';
+
+let mockCardController = new CardController({});
 
 let loader: Loader;
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -84,14 +87,14 @@ module('Integration | card-delete', function (hooks) {
 
       let stacks = [
         leftCards.map((url) => ({
-          type: 'card' as 'card',
+          type: 'card' as const,
           id: url,
-          format: 'isolated' as 'isolated',
+          format: 'isolated' as const,
         })),
         rightCards.map((url) => ({
-          type: 'card' as 'card',
+          type: 'card' as const,
           id: url,
-          format: 'isolated' as 'isolated',
+          format: 'isolated' as const,
         })),
       ].filter((a) => a.length > 0);
       await operatorModeStateService.restore({ stacks });
@@ -187,7 +190,7 @@ module('Integration | card-delete', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -233,7 +236,7 @@ module('Integration | card-delete', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -272,7 +275,7 @@ module('Integration | card-delete', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -327,7 +330,7 @@ module('Integration | card-delete', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -385,7 +388,7 @@ module('Integration | card-delete', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -451,7 +454,7 @@ module('Integration | card-delete', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -507,7 +510,7 @@ module('Integration | card-delete', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -576,7 +579,7 @@ module('Integration | card-delete', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
@@ -632,7 +635,7 @@ module('Integration | card-delete', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} />
+          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
           <CardPrerender />
         </template>
       },
