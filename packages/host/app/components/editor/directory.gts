@@ -77,7 +77,7 @@ export default class Directory extends Component<Args> {
         border-radius: var(--boxel-border-radius-xs);
         background: transparent;
         border: 0;
-        padding: var(--boxel-sp-xxs);
+        padding: var(--boxel-sp-xxxs);
         width: 100%;
         text-align: start;
       }
