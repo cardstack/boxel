@@ -223,7 +223,6 @@ jobs:
 
   deploy-ai-bot:
     name: Deploy ai-bot to staging
-    if: false
     needs: [build-ai-bot]
     uses: ./.github/workflows/waypoint-deploy.yml
     secrets: inherit

@@ -23,7 +23,6 @@ jobs:
       working-directory: "packages/ai-bot"
 
   deploy:
-    if: false
     name: Deploy
     needs: [build]
     uses: ./.github/workflows/waypoint-deploy.yml
