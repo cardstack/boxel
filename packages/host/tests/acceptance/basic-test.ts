@@ -292,17 +292,16 @@ module('Acceptance | basic tests', function (hooks) {
   });
 
   test<TestContextWithSSE>('Card instance live updates when index changes', async function (assert) {
-    await visit('/code');
-    await waitFor('[data-test-file]');
-    await click('[data-test-directory="Person/"]');
-    await waitFor('[data-test-file="Person/1.json"]');
-
-    await click('[data-test-file="Person/1.json"]');
-
     let expectedEvents = [
       `index-invalidation: ["${testRealmURL}Person/1"]`,
       'index: incremental',
     ];
+
+    await visit('/code');
+    await waitFor('[data-test-file]');
+    await click('[data-test-directory="Person/"]');
+    await waitFor('[data-test-file="Person/1.json"]');
+    await click('[data-test-file="Person/1.json"]');
 
     await this.expectEvents(
       assert,
