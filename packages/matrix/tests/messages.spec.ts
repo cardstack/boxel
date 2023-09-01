@@ -6,11 +6,13 @@ import {
   createRoom,
   openRoom,
   assertMessages,
+  writeMessage,
   sendMessage,
   joinRoom,
   testHost,
   reloadAndOpenChat,
   test,
+  isInRoom,
 } from '../helpers';
 
 test.describe('Room messages', () => {
@@ -30,7 +32,7 @@ test.describe('Room messages', () => {
     await assertMessages(page, []);
 
     await expect(page.locator('[data-test-send-message-btn]')).toBeDisabled();
-    await page.locator('[data-test-message-field]').fill('Message 1');
+    await writeMessage(page, 'Room 1', 'Message 1');
     await expect(page.locator('[data-test-send-message-btn]')).toBeEnabled();
     await page.locator('[data-test-send-message-btn]').click();
 
@@ -49,6 +51,7 @@ test.describe('Room messages', () => {
 
     // make sure that room state doesn't leak
     await openRoom(page, 'Room 2');
+    await isInRoom(page, 'Room 2');
     await assertMessages(page, []);
 
     await openRoom(page, 'Room 1');
@@ -62,7 +65,7 @@ test.describe('Room messages', () => {
       invites: ['user2'],
     });
     await openRoom(page, 'Room 1');
-    await sendMessage(page, 'first message');
+    await sendMessage(page, 'Room 1', 'first message');
     await logout(page);
 
     await login(page, 'user2', 'pass');
@@ -70,7 +73,7 @@ test.describe('Room messages', () => {
     await openRoom(page, 'Room 1');
 
     await assertMessages(page, [{ from: 'user1', message: 'first message' }]);
-    await sendMessage(page, 'second message');
+    await sendMessage(page, 'Room 1', 'second message');
     await assertMessages(page, [
       { from: 'user1', message: 'first message' },
       { from: 'user2', message: 'second message' },
@@ -106,7 +109,7 @@ test.describe('Room messages', () => {
     await openRoom(page, 'Room 1');
 
     for (let i = 1; i <= totalMessageCount; i++) {
-      await sendMessage(page, `message ${i}`);
+      await sendMessage(page, 'Room 1', `message ${i}`);
     }
     await logout(page);
 
@@ -125,8 +128,7 @@ test.describe('Room messages', () => {
     await createRoom(page, {
       name: 'Room 1',
     });
-    await openRoom(page, 'Room 1');
-    await sendMessage(page, 'message with _style_');
+    await sendMessage(page, 'Room 1', 'message with _style_');
     await assertMessages(page, [
       {
         from: 'user1',
@@ -144,25 +146,27 @@ test.describe('Room messages', () => {
     await createRoom(page, { name: 'Room 2' });
     await openRoom(page, 'Room 1');
 
-    await page.locator('[data-test-message-field]').fill('room 1 message');
+    await writeMessage(page, 'Room 1', 'room 1 message');
     await openRoom(page, 'Room 2');
-    await expect(page.locator('[data-test-message-field]')).toHaveValue('');
-    await page.locator('[data-test-message-field]').fill('room 2 message');
+    await expect(
+      page.locator('[data-test-message-field="Room 2"]'),
+    ).toHaveValue('');
+
+    await writeMessage(page, 'Room 2', 'room 2 message');
     await openRoom(page, 'Room 1');
-    await expect(page.locator('[data-test-message-field]')).toHaveValue(
-      'room 1 message',
-    );
+    await expect(
+      page.locator('[data-test-message-field="Room 1"]'),
+    ).toHaveValue('room 1 message');
     await openRoom(page, 'Room 2');
-    await expect(page.locator('[data-test-message-field]')).toHaveValue(
-      'room 2 message',
-    );
+    await expect(
+      page.locator('[data-test-message-field="Room 2"]'),
+    ).toHaveValue('room 2 message');
   });
 
   test('can add a card to a markdown message', async ({ page }) => {
     const testCard = `${testHost}/hassan`;
     await login(page, 'user1', 'pass');
     await createRoom(page, { name: 'Room 1' });
-    await openRoom(page, 'Room 1');
 
     await page.locator('[data-test-choose-card-btn]').click();
     await page.locator(`[data-test-select="${testCard}"]`).click();
@@ -191,9 +195,8 @@ test.describe('Room messages', () => {
     const testCard = `${testHost}/hassan`;
     await login(page, 'user1', 'pass');
     await createRoom(page, { name: 'Room 1' });
-    await openRoom(page, 'Room 1');
 
-    await sendMessage(page, undefined, testCard);
+    await sendMessage(page, 'Room 1', undefined, testCard);
     await assertMessages(page, [
       {
         from: 'user1',
@@ -206,7 +209,6 @@ test.describe('Room messages', () => {
     const testCard = `${testHost}/hassan`;
     await login(page, 'user1', 'pass');
     await createRoom(page, { name: 'Room 1' });
-    await openRoom(page, 'Room 1');
 
     await page.locator('[data-test-choose-card-btn]').click();
     await page.locator(`[data-test-select="${testCard}"]`).click();
@@ -236,9 +238,8 @@ test.describe('Room messages', () => {
 
     await login(page, 'user1', 'pass');
     await createRoom(page, { name: 'Room 1' });
-    await openRoom(page, 'Room 1');
 
-    await sendMessage(page, 'message 1', testCard1);
+    await sendMessage(page, 'Room 1', 'message 1', testCard1);
     await assertMessages(page, [
       {
         from: 'user1',
@@ -250,7 +251,7 @@ test.describe('Room messages', () => {
       },
     ]);
 
-    await sendMessage(page, 'message 2', testCard2);
+    await sendMessage(page, 'Room 1', 'message 2', testCard2);
     await assertMessages(page, [
       {
         from: 'user1',

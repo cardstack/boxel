@@ -119,6 +119,12 @@ export async function createRoom(
       .fill(roomDetails.invites.join(', '));
   }
   await page.locator('[data-test-create-room-btn]').click();
+  await isInRoom(page, roomDetails.name);
+}
+
+export async function isInRoom(page: Page, roomName: string) {
+  await page.locator(`[data-test-rooms-header="${roomName}"]`).waitFor();
+  await expect(page.locator(`[data-test-room-settled]`)).toHaveCount(1);
 }
 
 export async function joinRoom(page: Page, roomName: string) {
@@ -131,7 +137,18 @@ export async function leaveRoom(page: Page, roomName: string) {
 
 export async function openRoom(page: Page, roomName: string) {
   await page.locator(`[data-test-enter-room="${roomName}"]`).click();
-  await expect(page.locator(`[data-test-room-settled]`)).toHaveCount(1);
+  await isInRoom(page, roomName);
+}
+
+export async function writeMessage(
+  page: Page,
+  roomName: string,
+  message: string,
+) {
+  await page.locator(`[data-test-message-field="${roomName}"]`).fill(message);
+  await expect(
+    page.locator(`[data-test-message-field="${roomName}"]`),
+  ).toHaveValue(message);
 }
 
 export async function setObjective(page: Page, objectiveURI: string) {
@@ -144,6 +161,7 @@ export async function setObjective(page: Page, objectiveURI: string) {
 
 export async function sendMessage(
   page: Page,
+  roomName: string,
   message: string | undefined,
   cardId?: string,
 ) {
@@ -153,13 +171,14 @@ export async function sendMessage(
     );
   }
   if (message != null) {
-    await page.locator('[data-test-message-field]').fill(message);
+    await writeMessage(page, roomName, message);
   }
   if (cardId != null) {
     await page.locator('[data-test-choose-card-btn]').click();
     await page.locator(`[data-test-select="${cardId}"]`).click();
     await page.locator('[data-test-card-catalog-go-button]').click();
   }
+  // can we check it's higher than before?
   await expect(page.locator(`[data-test-room-settled]`)).toHaveCount(1);
   await page.locator('[data-test-send-message-btn]').click();
 }
