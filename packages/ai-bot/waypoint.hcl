@@ -21,11 +21,13 @@ app "boxel-ai-bot" {
       cpu                 = 256
       memory              = 512
       cluster             = "staging"
-      subnets             = ["subnet-03791d3b2b429e0cf", "subnet-068197c72e4e1fad2"]
       task_role_name      = "boxel-ai-bot-staging-ecs-task"
       execution_role_name = "boxel-ai-bot-staging-ecs-task-execution"
       security_group_ids  = ["sg-026f518a4e82d8a44"]
       region              = "us-east-1"
+      disable_alb         = true
+
+      subnets = ["subnet-03791d3b2b429e0cf", "subnet-068197c72e4e1fad2"]
 
       secrets = {
         MATRIX_URL           = "arn:aws:ssm:us-east-1:680542703984:parameter/staging/aibot/matrix/host"
