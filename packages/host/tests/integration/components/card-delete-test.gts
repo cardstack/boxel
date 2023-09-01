@@ -183,9 +183,7 @@ module('Integration | card-delete', function (hooks) {
   test<TestContextWithSSE>('can delete a card from the index card stack item', async function (assert) {
     assert.expect(4);
     let expectedEvents = [
-      'removed: Pet/mango.json',
-
-      `index-invalidation: ["${testRealmURL}Pet/mango.json"]`,
+      `index-invalidation: ["${testRealmURL}Pet/mango"]`,
       'index: incremental',
     ];
     await setCardInOperatorModeState([`${testRealmURL}index`]);
@@ -270,9 +268,7 @@ module('Integration | card-delete', function (hooks) {
   test<TestContextWithSSE>('can delete a card stack item in non-edit mode', async function (assert) {
     assert.expect(6);
     let expectedEvents = [
-      'removed: Pet/mango.json',
-
-      `index-invalidation: ["${testRealmURL}Pet/mango.json"]`,
+      `index-invalidation: ["${testRealmURL}Pet/mango"]`,
       'index: incremental',
     ];
     await setCardInOperatorModeState([
@@ -330,9 +326,7 @@ module('Integration | card-delete', function (hooks) {
   test<TestContextWithSSE>('can delete a card stack item in edit mode', async function (assert) {
     assert.expect(6);
     let expectedEvents = [
-      'removed: Pet/mango.json',
-
-      `index-invalidation: ["${testRealmURL}Pet/mango.json"]`,
+      `index-invalidation: ["${testRealmURL}Pet/mango"]`,
       'index: incremental',
     ];
     await setCardInOperatorModeState([
@@ -393,9 +387,7 @@ module('Integration | card-delete', function (hooks) {
   test<TestContextWithSSE>('can delete a card that appears in both stacks as a stack item', async function (assert) {
     assert.expect(8);
     let expectedEvents = [
-      'removed: Pet/mango.json',
-
-      `index-invalidation: ["${testRealmURL}Pet/mango.json"]`,
+      `index-invalidation: ["${testRealmURL}Pet/mango"]`,
       'index: incremental',
     ];
     await setCardInOperatorModeState(
@@ -464,9 +456,7 @@ module('Integration | card-delete', function (hooks) {
   test<TestContextWithSSE>('can delete a card that appears in both stacks as an element of the index card', async function (assert) {
     assert.expect(4);
     let expectedEvents = [
-      'removed: Pet/mango.json',
-
-      `index-invalidation: ["${testRealmURL}Pet/mango.json"]`,
+      `index-invalidation: ["${testRealmURL}Pet/mango"]`,
       'index: incremental',
     ];
     await setCardInOperatorModeState(
@@ -525,9 +515,7 @@ module('Integration | card-delete', function (hooks) {
   test<TestContextWithSSE>('can delete a card that appears in both stacks as an index item and an element of the index card', async function (assert) {
     assert.expect(6);
     let expectedEvents = [
-      'removed: Pet/mango.json',
-
-      `index-invalidation: ["${testRealmURL}Pet/mango.json"]`,
+      `index-invalidation: ["${testRealmURL}Pet/mango"]`,
       'index: incremental',
     ];
     await setCardInOperatorModeState(
@@ -594,8 +582,7 @@ module('Integration | card-delete', function (hooks) {
   test<TestContextWithSSE>('can delete a card that is a recent item', async function (assert) {
     assert.expect(6);
     let expectedEvents = [
-      'removed: Pet/mango.json',
-      `index-invalidation: ["${testRealmURL}Pet/mango.json"]`,
+      `index-invalidation: ["${testRealmURL}Pet/mango"]`,
       'index: incremental',
     ];
 
@@ -659,8 +646,7 @@ module('Integration | card-delete', function (hooks) {
   test<TestContextWithSSE>('can delete a card that is a selected item', async function (assert) {
     assert.expect(6);
     let expectedEvents = [
-      'removed: Pet/mango.json',
-      `index-invalidation: ["${testRealmURL}Pet/mango.json"]`,
+      `index-invalidation: ["${testRealmURL}Pet/mango"]`,
       'index: incremental',
     ];
     await setCardInOperatorModeState(

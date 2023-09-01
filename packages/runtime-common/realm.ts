@@ -128,6 +128,11 @@ interface IndexHTMLOptions {
   realmsServed?: string[];
 }
 
+interface UpdateEvent {
+  operation: 'add' | 'update' | 'remove';
+  url: URL;
+}
+
 export class Realm {
   #startedUp = new Deferred<void>();
   #searchIndex: SearchIndex;
@@ -139,6 +144,9 @@ export class Realm {
   #transpileCache = new Map<string, string>();
   #log = logger('realm');
   #getIndexHTML: () => Promise<string>;
+  #updateEvents: UpdateEvent[] = [];
+  #flushUpdateEvents: Promise<void> | undefined;
+  #recentWrites: Map<string, number> = new Map();
   readonly paths: RealmPaths;
 
   get url(): string {
@@ -228,10 +236,15 @@ export class Realm {
     await this.ready;
   }
 
+  async flushUpdateEvents() {
+    return this.#flushUpdateEvents;
+  }
+
   async write(
     path: LocalPath,
     contents: string,
   ): Promise<{ lastModified: number }> {
+    await this.trackOwnWrite(path);
     let results = await this.#adapter.write(path, contents);
     await this.#searchIndex.update(this.paths.fileURL(path), {
       onInvalidation: (invalidatedURLs: URL[]) => {
@@ -246,7 +259,52 @@ export class Realm {
     return results;
   }
 
+  // we track our own writes so that we can eliminate echoes in the file watcher
+  private async trackOwnWrite(path: LocalPath, opts?: { isDelete: true }) {
+    let type = opts?.isDelete
+      ? 'removed'
+      : (await this.#adapter.exists(path))
+      ? 'updated'
+      : 'added';
+    let messageHash = `${type}-${JSON.stringify({ [type]: path })}`;
+    this.#recentWrites.set(
+      messageHash,
+      setTimeout(() => {
+        this.#recentWrites.delete(messageHash);
+      }, 500) as unknown as number, // don't use NodeJS Timeout type
+    );
+  }
+
+  private getTrackedWrite(
+    data: Record<string, any>,
+  ): { isTracked: boolean; url: URL } | undefined {
+    let type =
+      'updated' in data
+        ? 'updated'
+        : 'added' in data
+        ? 'added'
+        : 'removed' in data
+        ? 'removed'
+        : undefined;
+    if (!type) {
+      // this is some other type of event--ignore it
+      return;
+    }
+    let messageHash = `${type}-${JSON.stringify(data)}`;
+    let url = this.paths.fileURL(data[type]);
+    let timeout = this.#recentWrites.get(messageHash);
+    if (timeout) {
+      // This is a best attempt to eliminate an echo here since it's unclear whether this update is one
+      // that we wrote or one that was created outside of us
+      clearTimeout(timeout);
+      this.#recentWrites.delete(messageHash);
+      return { isTracked: true, url };
+    }
+    return { isTracked: false, url };
+  }
+
   async delete(path: LocalPath): Promise<void> {
+    await this.trackOwnWrite(path, { isDelete: true });
     await this.#adapter.remove(path);
     await this.#searchIndex.update(this.paths.fileURL(path), {
       delete: true,
@@ -939,9 +997,22 @@ export class Realm {
     );
 
     if (this.listeningClients.length === 0) {
-      await this.#adapter.subscribe((data: Record<string, any>) =>
-        this.sendUpdateMessages({ type: 'update', data }),
-      );
+      await this.#adapter.subscribe((data: Record<string, any>) => {
+        let tracked = this.getTrackedWrite(data);
+        if (!tracked || tracked.isTracked) {
+          return;
+        }
+        this.sendUpdateMessages({ type: 'update', data });
+        this.#updateEvents.push({
+          operation: (data.added
+            ? 'add'
+            : data.updated
+            ? 'update'
+            : 'removed') as UpdateEvent['operation'],
+          url: tracked.url,
+        });
+        this.drainUpdates();
+      });
     }
 
     this.listeningClients.push(writable);
@@ -955,6 +1026,26 @@ export class Realm {
     waitForClose(writable);
 
     return response;
+  }
+
+  private async drainUpdates() {
+    await this.#flushUpdateEvents;
+    let eventsDrained: () => void;
+    this.#flushUpdateEvents = new Promise((res) => (eventsDrained = res));
+    let events = [...this.#updateEvents];
+    this.#updateEvents = [];
+    for (let { operation, url } of events) {
+      await this.#searchIndex.update(url, {
+        onInvalidation: (invalidatedURLs: URL[]) => {
+          this.sendUpdateMessages({
+            type: 'update',
+            data: { 'index-invalidation': JSON.stringify(invalidatedURLs) },
+          });
+        },
+        ...(operation === 'remove' ? { delete: true } : {}),
+      });
+    }
+    eventsDrained!();
   }
 
   private async sendUpdateMessages(message: {

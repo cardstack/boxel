@@ -1,7 +1,7 @@
 import Component from '@glimmer/component';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { restartableTask, timeout } from 'ember-concurrency';
+import { task, restartableTask, timeout } from 'ember-concurrency';
 import { service } from '@ember/service';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
@@ -17,6 +17,7 @@ import { RealmPaths } from '@cardstack/runtime-common/paths';
 import merge from 'lodash/merge';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type CardService from '@cardstack/host/services/card-service';
+import type MessageService from '@cardstack/host/services/message-service';
 import { file, FileResource, isReady } from '@cardstack/host/resources/file';
 import CardEditor from '@cardstack/host/components/card-editor';
 import Module from './module';
@@ -32,9 +33,13 @@ import type {
 } from '@cardstack/host/services/monaco-service';
 import type { OpenFiles } from '@cardstack/host/controllers/code';
 import { maybe } from '@cardstack/host/resources/maybe';
+import { registerDestructor } from '@ember/destroyable';
+import { buildWaiter } from '@ember/test-waiters';
+import { isTesting } from '@embroider/macros';
 
 const { ownRealmURL } = ENV;
 const log = logger('component:go');
+const waiter = buildWaiter('code-route:load-card-waiter');
 
 interface Signature {
   Args: {
@@ -46,7 +51,7 @@ interface Signature {
 
 export default class Go extends Component<Signature> {
   <template>
-    <div class='main'>
+    <div class='main' data-test-isLoadIdle={{this.loadCard.isIdle}}>
       <div class='main-column'>
         <FileTree @url={{ownRealmURL}} @openFiles={{@openFiles}} />
         <RecentFiles />
@@ -139,11 +144,34 @@ export default class Go extends Component<Signature> {
 
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
+  @service declare messageService: MessageService;
   @tracked jsonError: string | undefined;
   @tracked card: CardDef | undefined;
+  // note this is only subscribed to events from our own realm
+  private subscription: { url: string; unsubscribe: () => void } | undefined;
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
+    let url = `${this.cardService.defaultURL}_message`;
+    this.subscription = {
+      url,
+      unsubscribe: this.messageService.subscribe(url, ({ data }) => {
+        if (!this.card || !data.startsWith('index-invalidation:')) {
+          return;
+        }
+        let invalidations = JSON.parse(
+          data.substring('index-invalidation:'.length),
+        ) as string[];
+        if (invalidations.includes(this.card.id)) {
+          this.loadCard.perform(new URL(this.card.id));
+        }
+      }),
+    };
+    registerDestructor(this, () => {
+      if (this.subscription) {
+        this.subscription.unsubscribe();
+      }
+    });
   }
 
   @action
@@ -275,9 +303,25 @@ export default class Go extends Component<Signature> {
   }
 
   private loadCard = restartableTask(async (url: URL) => {
-    this.card = await this.cardService.loadModel(url);
+    await this.withTestWaiters(async () => {
+      this.card = await this.cardService.loadModel(url);
+    });
   });
 
+  private async withTestWaiters<T>(cb: () => Promise<T>) {
+    let token = waiter.beginAsync();
+    try {
+      let result = await cb();
+      // only do this in test env--this makes sure that we also wait for any
+      // interior card instance async as part of our ember-test-waiters
+      if (isTesting()) {
+        await this.cardService.cardsSettled();
+      }
+      return result;
+    } finally {
+      waiter.endAsync(token);
+    }
+  }
   @action
   onSave(card: CardDef) {
     this.card = card;

@@ -377,11 +377,9 @@ module('Integration | realm', function (hooks) {
     let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let expected = [
-      'added: CardDef/1.json',
-      `index-invalidation: ["${testRealmURL}CardDef/1.json"]`,
+      `index-invalidation: ["${testRealmURL}CardDef/1"]`,
       'index: incremental',
-      'added: CardDef/2.json',
-      `index-invalidation: ["${testRealmURL}CardDef/2.json"]`,
+      `index-invalidation: ["${testRealmURL}CardDef/2"]`,
       'index: incremental',
     ];
     await this.expectEvents(assert, realm, adapter, expected, async () => {
@@ -674,7 +672,7 @@ module('Integration | realm', function (hooks) {
     });
     let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
-    let expected = ['updated: dir/card.json'];
+    let expected = [`index-invalidation: ["${testRealmURL}dir/card"]`];
     let response = await this.expectEvents(
       assert,
       realm,
@@ -1933,7 +1931,7 @@ module('Integration | realm', function (hooks) {
       'found card in index',
     );
 
-    let expected = ['removed: cards/2.json'];
+    let expected = [`index-invalidation: ["${testRealmURL}cards/2"]`];
     let response = await this.expectEvents(
       assert,
       realm,
@@ -2039,7 +2037,7 @@ module('Integration | realm', function (hooks) {
     await realm.ready;
 
     {
-      let expected = ['added: dir/person.gts'];
+      let expected = [`index-invalidation: ["${testRealmURL}dir/person.gts"]`];
       let response = await this.expectEvents(
         assert,
         realm,
@@ -2093,7 +2091,7 @@ module('Integration | realm', function (hooks) {
     let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
-    let expected = ['removed: person.gts'];
+    let expected = [`index-invalidation: ["${testRealmURL}person.gts"]`];
     let response = await this.expectEvents(
       assert,
       realm,

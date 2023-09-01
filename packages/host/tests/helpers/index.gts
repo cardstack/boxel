@@ -251,7 +251,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
       expectedContents: string[],
       callback: () => Promise<T>,
     ): Promise<T> => {
-      let defer = new Deferred<string[]>();
+      let defer = new Deferred();
       let events: string[] = [];
       let response = await realm.handle(
         new Request(`${realm.url}_message`, {
@@ -265,17 +265,22 @@ export function setupServerSentEvents(hooks: NestedHooks) {
         throw new Error(`failed to connect to realm: ${response.status}`);
       }
       let reader = response.body!.getReader();
-      let timeout = setTimeout(() => {
-        defer.reject(
-          new Error(
-            `expectEvent timed out, saw events ${JSON.stringify(events)}`,
+      let timeout = setTimeout(
+        () =>
+          defer.reject(
+            new Error(
+              `expectEvent timed out, saw events ${JSON.stringify(events)}`,
+            ),
           ),
-        );
-      }, 3000);
+        3000,
+      );
       let result = await callback();
       let decoder = new TextDecoder();
       while (events.length < expectedContents.length) {
-        let { done, value } = await reader.read();
+        let { done, value } = await Promise.race([
+          reader.read(),
+          defer.promise as any, // this one always throws so type is not important
+        ]);
         if (done) {
           throw new Error('expected more events');
         }
@@ -433,8 +438,15 @@ export class TestRealmAdapter implements RealmAdapter {
   }
 
   async exists(path: string): Promise<boolean> {
+    let maybeFilename = path.split('/').pop()!;
     try {
-      await this.#traverse(path.split('/'), 'directory');
+      // a quirk of our test file system's traverse is that it creates
+      // directories as it goes--so do our best to determine if we are checking for
+      // a file that exists (because of this behavior directories always exist)
+      await this.#traverse(
+        path.split('/'),
+        maybeFilename.includes('.') ? 'file' : 'directory',
+      );
       return true;
     } catch (err: any) {
       if (err.name === 'NotFoundError') {
@@ -499,7 +511,7 @@ export class TestRealmAdapter implements RealmAdapter {
     let lastModified = Date.now();
     this.#lastModified.set(this.#paths.fileURL(path).href, lastModified);
 
-    this.postUpdateEvent({ [type]: [path] });
+    this.postUpdateEvent({ [type]: path });
 
     return { lastModified };
   }

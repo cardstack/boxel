@@ -184,7 +184,10 @@ export class CurrentRun {
     );
 
     if (onInvalidation) {
-      onInvalidation([url, ...invalidations]);
+      let urls = [url, ...invalidations].map(
+        (i) => new URL(i.href.replace(/\.json$/, '')),
+      );
+      onInvalidation(urls);
     }
     return current;
   }

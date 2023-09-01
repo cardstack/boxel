@@ -590,8 +590,7 @@ module('Integration | card-copy', function (hooks) {
   test<TestContextForCopy>('can copy a card', async function (assert) {
     assert.expect(11);
     let expectedEvents = [
-      'added: Pet/1.json',
-      `index-invalidation: ["${testRealm2URL}Pet/1.json"]`,
+      `index-invalidation: ["${testRealm2URL}Pet/1"]`,
       'index: incremental',
     ];
     await setCardInOperatorModeState(
@@ -677,11 +676,9 @@ module('Integration | card-copy', function (hooks) {
   test<TestContextForCopy>('can copy mulitple cards', async function (assert) {
     assert.expect(8);
     let expectedEvents = [
-      'added: Pet/1.json',
-      `index-invalidation: ["${testRealm2URL}Pet/1.json"]`,
+      `index-invalidation: ["${testRealm2URL}Pet/1"]`,
       'index: incremental',
-      'added: Pet/2.json',
-      `index-invalidation: ["${testRealm2URL}Pet/2.json"]`,
+      `index-invalidation: ["${testRealm2URL}Pet/2"]`,
       'index: incremental',
     ];
     await setCardInOperatorModeState(
@@ -762,9 +759,7 @@ module('Integration | card-copy', function (hooks) {
   test<TestContextForCopy>('can copy a card that has a relative link to card in source realm', async function (assert) {
     assert.expect(15);
     let expectedEvents = [
-      'added: Person/1.json',
-
-      `index-invalidation: ["${testRealm2URL}Person/1.json"]`,
+      `index-invalidation: ["${testRealm2URL}Person/1"]`,
       'index: incremental',
     ];
     await setCardInOperatorModeState(
@@ -865,8 +860,7 @@ module('Integration | card-copy', function (hooks) {
   test<TestContextForCopy>('can copy a card that has a link to card in destination realm', async function (assert) {
     assert.expect(15);
     let expectedEvents = [
-      'added: Person/1.json',
-      `index-invalidation: ["${testRealm2URL}Person/1.json"]`,
+      `index-invalidation: ["${testRealm2URL}Person/1"]`,
       'index: incremental',
     ];
     await setCardInOperatorModeState(
