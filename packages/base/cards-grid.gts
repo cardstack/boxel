@@ -107,9 +107,7 @@ class Isolated extends Component<typeof CardsGrid> {
       .operator-mode .buried .add-button {
         display: none;
       }
-      .content > .boxel-card-container > header {
-        display: none;
-      }
+
       .add-button {
         display: inline-block;
         position: sticky;
