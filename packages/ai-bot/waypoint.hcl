@@ -28,6 +28,7 @@ app "boxel-ai-bot" {
       region              = "us-east-1"
 
       secrets = {
+        MATRIX_URL           = "arn:aws:ssm:us-east-1:680542703984:parameter/staging/aibot/matrix/host"
         BOXEL_AIBOT_USERNAME = "arn:aws:ssm:us-east-1:680542703984:parameter/staging/aibot/matrix/username"
         BOXEL_AIBOT_PASSWORD = "arn:aws:ssm:us-east-1:680542703984:parameter/staging/aibot/matrix/password"
         OPENAI_API_KEY       = "arn:aws:ssm:us-east-1:680542703984:parameter/staging/aibot/openai/apikey"
