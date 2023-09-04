@@ -4,7 +4,11 @@ import { service } from '@ember/service';
 import { action } from '@ember/object';
 import MonacoService from '@cardstack/host/services/monaco-service';
 import { htmlSafe } from '@ember/template';
-import { type RealmInfo, RealmPaths } from '@cardstack/runtime-common';
+import {
+  type RealmInfo,
+  RealmPaths,
+  isCardDocument,
+} from '@cardstack/runtime-common';
 import { maybe } from '@cardstack/host/resources/maybe';
 import { file } from '@cardstack/host/resources/file';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -16,6 +20,9 @@ import { on } from '@ember/modifier';
 import { registerDestructor } from '@ember/destroyable';
 import { TrackedObject } from 'tracked-built-ins';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
+import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-preview-panel';
+import { CardDef } from 'https://cardstack.com/base/card-api';
+import { use, resource } from 'ember-resources';
 
 interface Signature {
   Args: {};
@@ -71,6 +78,10 @@ export default class CodeMode extends Component<Signature> {
 
   get backgroundURLStyle() {
     return htmlSafe(`background-image: url(${this.backgroundURL});`);
+  }
+
+  get realmIconURL() {
+    return this.realmInfo?.iconURL;
   }
 
   @action resetLoadFileError() {
@@ -244,6 +255,51 @@ export default class CodeMode extends Component<Signature> {
       JSON.stringify(this.columnWidths),
     );
   }
+  @use cardResource = resource(() => {
+    if (
+      this.openFile.current?.state === 'ready' &&
+      this.openFile.current.name.endsWith('.json')
+    ) {
+      const state: {
+        isLoading: boolean;
+        value: CardDef | null;
+        error: Error | undefined;
+        load: () => Promise<void>;
+      } = new TrackedObject({
+        isLoading: true,
+        value: null,
+        error: undefined,
+        load: async () => {
+          state.isLoading = true;
+
+          try {
+            let currentlyOpenedFile = this.openFile.current as any;
+            let cardDoc = JSON.parse(currentlyOpenedFile.content);
+            if (isCardDocument(cardDoc)) {
+              let url = currentlyOpenedFile.url.replace(/\.json$/, '');
+              state.value = await this.cardService.loadModel(url);
+            }
+          } catch (error: any) {
+            state.error = error;
+          } finally {
+            state.isLoading = false;
+          }
+        },
+      });
+
+      state.load();
+      return state;
+    } else {
+      return new TrackedObject({
+        error:
+          this.openFile.current?.state == 'not-found'
+            ? new Error('File not found')
+            : null,
+        isLoading: false,
+        value: null,
+      });
+    }
+  });
 
   <template>
     <div class='code-mode-background' style={{this.backgroundURLStyle}}></div>
@@ -312,7 +368,15 @@ export default class CodeMode extends Component<Signature> {
           }}
         >
           <div class='inner-container'>
-            Schema Editor
+            {{#if this.cardResource.value}}
+              <CardPreviewPanel
+                @card={{this.cardResource.value}}
+                @realmIconURL={{this.realmIconURL}}
+                data-test-card-resource-loaded
+              />
+            {{else if this.cardResource.error}}
+              {{this.cardResource.error.message}}
+            {{/if}}
           </div>
         </div>
       </div>

@@ -38,7 +38,14 @@ export default class SubmodeSwitcher extends Component<Signature> {
               height='18px'
             }}
             {{capitalize @submode}}
-            <div class='arrow-icon'>
+            <div
+              class='arrow-icon'
+              data-test-submode-arrow-direction={{if
+                this.isExpanded
+                'up'
+                'down'
+              }}
+            >
               {{svgJar
                 (if this.isExpanded 'dropdown-arrow-up' 'dropdown-arrow-down')
                 width='22px'
@@ -127,12 +134,22 @@ export default class SubmodeSwitcher extends Component<Signature> {
     this.isExpanded = !this.isExpanded;
   }
 
+  @action onSubmodeSelect(submode: Submode) {
+    this.isExpanded = false;
+    this.args.onSubmodeSelect(submode);
+  }
+
   get buildMenuItems(): MenuItem[] {
     return Object.values(Submode)
       .filter((submode) => submode !== this.args.submode)
       .map((submode) =>
         menuItemFunc(
-          [capitalize(submode), () => this.args.onSubmodeSelect(submode)],
+          [
+            capitalize(submode),
+            () => {
+              this.onSubmodeSelect(submode);
+            },
+          ],
           {
             icon: this.submodeIcons[submode],
           },

@@ -25,7 +25,7 @@ app "realm-demo" {
     use "aws-ecs" {
       region              = "us-east-1"
       memory              = 4096
-      cpu                 = 2048 # 2 vCPU's
+      cpu                 = 2048                                                     # 2 vCPU's
       cluster             = "realm-demo-staging"
       count               = 1
       subnets             = ["subnet-099d721ad678d073a", "subnet-0d1196fa815f3d057"]

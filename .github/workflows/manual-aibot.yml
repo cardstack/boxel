@@ -20,7 +20,7 @@ jobs:
     with:
       app: "boxel-ai-bot"
       environment: ${{ inputs.environment }}
-      working-directory: "./packages/aibot"
+      working-directory: "packages/ai-bot"
 
   deploy:
     name: Deploy
@@ -30,4 +30,4 @@ jobs:
     with:
       app: "boxel-ai-bot"
       environment: ${{ inputs.environment }}
-      working-directory: "./packages/aibot"
+      working-directory: "packages/ai-bot"

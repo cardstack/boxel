@@ -503,8 +503,6 @@ export default class OperatorModeContainer extends Component<Signature> {
   @action onCardSelectFromSearch(card: CardDef) {
     let searchSheetTrigger = this.searchSheetTrigger; // Will be set by onFocusSearchInput
 
-    // This logic assumes there is currently one stack when this method is called (i.e. the stack with index 0)
-
     // In case the left button was clicked, whatever is currently in stack with index 0 will be moved to stack with index 1,
     // and the card will be added to stack with index 0. shiftStack executes this logic.
     if (
@@ -544,9 +542,16 @@ export default class OperatorModeContainer extends Component<Signature> {
       // the rightmost stack will be REPLACED by the selection
       let numberOfStacks = this.operatorModeStateService.numberOfStacks();
       let stackIndex = numberOfStacks - 1;
-      if (numberOfStacks > 0) {
-        //there will always be 1 stack
-        let stack = this.operatorModeStateService.rightMostStack();
+      let stack: Stack | undefined;
+
+      if (numberOfStacks === 0) {
+        this.operatorModeStateService.addItemToStack({
+          format: 'isolated',
+          stackIndex: 0,
+          card,
+        });
+      } else {
+        stack = this.operatorModeStateService.rightMostStack();
         if (stack) {
           let bottomMostItem = stack[0];
           if (bottomMostItem) {
