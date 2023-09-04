@@ -193,6 +193,7 @@ export default class CodeMode extends Component<Signature> {
                 @openFile={{this.openFile}}
                 @realmInfo={{this.realmInfo}}
                 @importedModule={{this.importedModule}}
+                data-test-card-inheritance-panel
               />
             </section>
           </div>

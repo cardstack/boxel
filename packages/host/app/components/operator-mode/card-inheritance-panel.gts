@@ -14,6 +14,7 @@ import { BaseDef } from 'https://cardstack.com/base/card-api';
 import { type ImportResource } from '@cardstack/host/resources/import';
 
 interface Args {
+  Element: HTMLElement;
   Args: {
     realmInfo: RealmInfo | null;
     openFile: { current: FileResource | undefined };
@@ -47,7 +48,7 @@ export default class CardInheritancePanel extends Component<Args> {
   }
 
   <template>
-    <div class='container'>
+    <div class='container' ...attributes>
       {{#if @importedModule.module}}
         {{#each (cardsFromModule @importedModule.module) as |card|}}
           <DefinitionContainer
@@ -60,6 +61,7 @@ export default class CardInheritancePanel extends Component<Args> {
             @onCreate={{this.createAction}}
             @onInherit={{this.inheritAction}}
             @isActive={{false}}
+            data-test-card-module-definition
           />
         {{/each}}
       {{/if}}
@@ -72,6 +74,7 @@ export default class CardInheritancePanel extends Component<Args> {
           @variant='instance'
           @isActive={{true}}
           @onDuplicate={{this.duplicateAction}}
+          data-test-card-instance-definition
         />
       {{/if}}
     </div>

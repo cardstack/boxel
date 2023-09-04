@@ -69,12 +69,18 @@ export default class DefinitionContainer extends Component<Signature> {
       <div class='banner {{if @isActive "active"}}'>
         <Label class='banner-title'>
           {{this.title}}</Label>
-        <span class='banner-title'>{{@fileExtension}}</span>
+        <span
+          class='banner-title'
+          data-test-definition-file-extension
+        >{{@fileExtension}}</span>
       </div>
       <div class='content'>
         <div class='realm-info'>
           <img src={{this.realmIconSrc}} alt='realm-icon' />
-          <Label class='realm-name'>{{this.realmName}}</Label>
+          <Label
+            class='realm-name'
+            data-test-definition-realm-name
+          >{{this.realmName}}</Label>
         </div>
         <div class='name'>{{@name}}</div>
       </div>
@@ -109,7 +115,7 @@ export default class DefinitionContainer extends Component<Signature> {
         {{/if}}
       </div>
       {{#if @isActive}}
-        <div class='info-footer'>
+        <div class='info-footer' data-test-definition-info-text>
           <p class='message'>{{this.args.infoText}}</p>
         </div>
       {{/if}}
