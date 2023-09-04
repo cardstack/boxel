@@ -116,7 +116,7 @@ export default class DefinitionContainer extends Component<Signature> {
       </div>
       {{#if @isActive}}
         <div class='info-footer' data-test-definition-info-text>
-          <p class='message'>{{this.args.infoText}}</p>
+          <p class='message'>{{@infoText}}</p>
         </div>
       {{/if}}
     </div>

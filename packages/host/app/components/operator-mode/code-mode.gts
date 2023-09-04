@@ -184,7 +184,10 @@ export default class CodeMode extends Component<Signature> {
         <div class='column'>
           {{! Move each container and styles to separate component }}
           <div class='inner-container'>
-            <header class='inner-container__header'>
+            <header
+              class='inner-container__header'
+              aria-label='Inheritance Header'
+            >
               Inheritance
             </header>
             <section class='inner-container__content'>
@@ -198,7 +201,10 @@ export default class CodeMode extends Component<Signature> {
             </section>
           </div>
           <aside class='inner-container'>
-            <header class='inner-container__header'>
+            <header
+              class='inner-container__header'
+              aria-label='Recent Files Header'
+            >
               Recent Files
             </header>
             <section class='inner-container__content'></section>
