@@ -194,9 +194,9 @@ export default class DefinitionContainer extends Component<Signature> {
         color: var(--boxel-highlight);
         border: none;
         padding: 0;
-        display: flex; /* Makes button a flex container */
-        justify-content: flex-start; /* Aligns items to the left */
-        align-items: center; /* Vertically centers items */
+        display: flex;
+        justify-content: flex-start;
+        align-items: center;
         gap: var(--boxel-sp-xs);
       }
     </style>
