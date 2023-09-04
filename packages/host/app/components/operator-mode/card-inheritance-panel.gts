@@ -54,7 +54,7 @@ export default class CardInheritancePanel extends Component<Args> {
           <DefinitionContainer
             @name={{cardTypeDisplayName card}}
             @fileExtension='.GTS'
-            @realmInfo={{this.args.realmInfo}}
+            @realmInfo={{@realmInfo}}
             @infoText={{this.lastModified}}
             @variant='module'
             @onDuplicate={{this.duplicateAction}}
@@ -65,11 +65,11 @@ export default class CardInheritancePanel extends Component<Args> {
           />
         {{/each}}
       {{/if}}
-      {{#if this.args.cardInstance}}
+      {{#if @cardInstance}}
         <DefinitionContainer
-          @name={{this.args.cardInstance.title}}
+          @name={{@cardInstance.title}}
           @fileExtension='.JSON'
-          @realmInfo={{this.args.realmInfo}}
+          @realmInfo={{@realmInfo}}
           @infoText={{this.lastModified}}
           @variant='instance'
           @isActive={{true}}
