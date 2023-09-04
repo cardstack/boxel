@@ -333,15 +333,24 @@ export default class CardService extends Service {
     this.api.subscribeToChanges(fieldOrCard, subscriber);
   }
 
-  getRealmURLFor(url: URL) {
-    let realmURLS = new Set([ownRealmURL, ...otherRealmURLs]);
-    for (let realmURL of realmURLS) {
+  async getRealmURLFor(url: URL) {
+    let knownRealmURLS = new Set([ownRealmURL, ...otherRealmURLs]);
+
+    for (let realmURL of knownRealmURLS) {
       let path = new RealmPaths(realmURL);
       if (path.inRealm(url)) {
         return new URL(realmURL);
       }
     }
-    return undefined;
+
+    // Are we dealing with a realm that we don't know about? We can check if the file's response includes the realm URL header
+    let realmURL = (
+      await fetch(url, {
+        method: 'GET',
+      })
+    ).headers.get('x-boxel-realm-url');
+
+    return realmURL ? new URL(realmURL) : undefined;
   }
 
   async getRealmInfoByRealmURL(realmURL: URL): Promise<RealmInfo> {

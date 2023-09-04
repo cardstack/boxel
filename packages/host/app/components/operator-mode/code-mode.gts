@@ -13,8 +13,6 @@ import { maybe } from '@cardstack/host/resources/maybe';
 import { file } from '@cardstack/host/resources/file';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import CardService from '@cardstack/host/services/card-service';
-import { restartableTask } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
 import CardURLBar from '@cardstack/host/components/operator-mode/card-url-bar';
 import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-preview-panel';
 import { CardDef } from 'https://cardstack.com/base/card-api';
@@ -29,12 +27,10 @@ export default class CodeMode extends Component<Signature> {
   @service declare monacoService: MonacoService;
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
-  @tracked realmInfo: RealmInfo | null = null;
   @tracked loadFileError: string | null = null;
 
-  constructor(args: any, owner: any) {
-    super(args, owner);
-    this.fetchCodeModeRealmInfo.perform();
+  get realmInfo() {
+    return this.realmInfoResource.value;
   }
 
   get backgroundURL() {
@@ -49,41 +45,73 @@ export default class CodeMode extends Component<Signature> {
     return this.realmInfo?.iconURL;
   }
 
+  get codePath() {
+    return this.operatorModeStateService.state.codePath;
+  }
+
   @action resetLoadFileError() {
     this.loadFileError = null;
   }
 
-  fetchCodeModeRealmInfo = restartableTask(async () => {
-    if (!this.operatorModeStateService.state.codePath) {
-      return;
-    }
+  @action loadRealmInfo() {
+    this.realmInfoResource.load();
+  }
 
-    let realmURL = this.cardService.getRealmURLFor(
-      this.operatorModeStateService.state.codePath,
-    );
-    if (!realmURL) {
-      this.realmInfo = null;
+  @use realmInfoResource = resource(() => {
+    if (this.codePath) {
+      const state: {
+        isLoading: boolean;
+        value: (RealmInfo & { realmURL: URL }) | null;
+        error: Error | undefined;
+        load: () => Promise<void>;
+      } = new TrackedObject({
+        isLoading: true,
+        value: null,
+        error: undefined,
+        load: async () => {
+          state.isLoading = true;
+
+          try {
+            let realmURL = await this.cardService.getRealmURLFor(this.codePath!);
+
+            if (!realmURL) {
+              throw new Error(`Cannot find realm URL for code path: ${this.codePath}}`);
+            }
+
+            let realmInfo = await this.cardService.getRealmInfoByRealmURL(
+              realmURL,
+            );
+            state.value = { ...realmInfo, realmURL };
+          } catch (error: any) {
+            state.error = error;
+          } finally {
+            state.isLoading = false;
+          }
+        },
+      });
+
+      state.load();
+      return state;
     } else {
-      this.realmInfo = await this.cardService.getRealmInfoByRealmURL(realmURL);
+      return new TrackedObject({
+        error: null,
+        isLoading: false,
+        value: null,
+        load: () => Promise<void>,
+      });
     }
   });
 
   openFile = maybe(this, (context) => {
-    if (!this.operatorModeStateService.state.codePath) {
-      return undefined;
-    }
+    let realmURL = this.realmInfoResource.value?.realmURL;
 
-    let realmURL = this.cardService.getRealmURLFor(
-      this.operatorModeStateService.state.codePath,
-    );
-    if (!realmURL) {
+    if (!realmURL || !this.codePath) {
       return undefined;
     }
 
     const realmPaths = new RealmPaths(realmURL);
-    const relativePath = realmPaths.local(
-      this.operatorModeStateService.state.codePath,
-    );
+    const relativePath = realmPaths.local(this.codePath);
+
     if (relativePath) {
       return file(context, () => ({
         relativePath,
@@ -148,7 +176,7 @@ export default class CodeMode extends Component<Signature> {
   <template>
     <div class='code-mode-background' style={{this.backgroundURLStyle}}></div>
     <CardURLBar
-      @onEnterPressed={{perform this.fetchCodeModeRealmInfo}}
+      @onEnterPressed={{this.loadRealmInfo}}
       @loadFileError={{this.loadFileError}}
       @resetLoadFileError={{this.resetLoadFileError}}
       @realmInfo={{this.realmInfo}}
