@@ -188,7 +188,7 @@ export default class CodeMode extends Component<Signature> {
               class='inner-container__header'
               aria-label='Inheritance Header'
             >
-              Inheritance
+              Card Inheritance
             </header>
             <section class='inner-container__content'>
               <CardInheritancePanel

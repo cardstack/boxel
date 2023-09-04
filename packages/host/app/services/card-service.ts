@@ -11,7 +11,6 @@ import {
   type SingleCardDocument,
   type LooseSingleCardDocument,
   type RealmInfo,
-  type Meta,
 } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
 import { importResource } from '../resources/import';
@@ -87,17 +86,6 @@ export default class CardService extends Service {
     if (response.status !== 204) {
       return await response.json();
     }
-  }
-
-  async getMeta(url: URL): Promise<Meta> {
-    let doc = await this.fetchJSON(url, { method: 'GET' });
-    if (!isSingleCardDocument(doc)) {
-      throw new Error(
-        `bug: server returned a non card document for ${url}:
-        ${JSON.stringify(doc, null, 2)}`,
-      );
-    }
-    return doc.data.meta;
   }
 
   async createFromSerialized(
