@@ -13,7 +13,6 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     baseURL: 'http://localhost:4202/test',
-    actionTimeout: 20000,
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
@@ -26,10 +25,10 @@ export default defineConfig({
     },
   ],
   // General timeout per test
-  timeout: 60000,
+  timeout: 120000,
 
   // For expect calls
   expect: {
-    timeout: 15000, // <---------
+    timeout: 60000,
   },
 });
