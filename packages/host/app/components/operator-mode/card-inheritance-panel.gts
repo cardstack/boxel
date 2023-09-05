@@ -91,7 +91,7 @@ export default class CardInheritancePanel extends Component<Args> {
       .realm-info img,
       .realm-info div {
         display: inline-block;
-        vertical-align: middle; /* To align the middles of the elements vertically */
+        vertical-align: middle;
       }
 
       .realm-info img {
