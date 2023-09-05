@@ -26,27 +26,6 @@ interface Signature {
 }
 
 export default class DefinitionContainer extends Component<Signature> {
-  @action
-  duplicateAction() {
-    if (this.args.onDuplicate) {
-      this.args.onDuplicate();
-    }
-  }
-
-  @action
-  createAction() {
-    if (this.args.onCreate) {
-      this.args.onCreate();
-    }
-  }
-
-  @action
-  inheritAction() {
-    if (this.args.onInherit) {
-      this.args.onInherit();
-    }
-  }
-
   get title(): string {
     switch (this.args.variant) {
       case 'module':
@@ -87,19 +66,19 @@ export default class DefinitionContainer extends Component<Signature> {
       <div class='action-buttons'>
         {{#if (and (eq @variant 'module') @isActive)}}
           {{#if @onCreate}}
-            <Button class='action-button' {{on 'click' this.createAction}}>
+            <Button class='action-button' {{on 'click' @onCreate}}>
               {{svgJar 'icon-plus' width='24px' height='24px'}}
               Create Instance
             </Button>
           {{/if}}
           {{#if @onInherit}}
-            <Button class='action-button' {{on 'click' this.inheritAction}}>
+            <Button class='action-button' {{on 'click' @onInherit}}>
               {{svgJar 'icon_inherit' width='24px' height='24px'}}
               Inherit
             </Button>
           {{/if}}
           {{#if @onDuplicate}}
-            <Button class='action-button' {{on 'click' this.duplicateAction}}>
+            <Button class='action-button' {{on 'click' @onDuplicate}}>
               {{svgJar 'copy' width='24px' height='24px'}}
               Duplicate
             </Button>
@@ -107,7 +86,7 @@ export default class DefinitionContainer extends Component<Signature> {
         {{/if}}
         {{#if (eq @variant 'instance')}}
           {{#if @onDuplicate}}
-            <Button class='action-button' {{on 'click' this.duplicateAction}}>
+            <Button class='action-button' {{on 'click' @onDuplicate}}>
               {{svgJar 'copy' width='24px' height='24px'}}
               Duplicate
             </Button>
