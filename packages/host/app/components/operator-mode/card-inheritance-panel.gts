@@ -3,9 +3,7 @@ import { service } from '@ember/service';
 import CardService from '@cardstack/host/services/card-service';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type RealmInfo, cardTypeDisplayName } from '@cardstack/runtime-common';
-import DefinitionContainer, {
-  DefinitionVariant,
-} from '../definition-container';
+import DefinitionContainer, { DefinitionVariant } from './definition-container';
 import { isReady, FileResource } from '@cardstack/host/resources/file';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
