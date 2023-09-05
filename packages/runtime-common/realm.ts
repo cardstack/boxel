@@ -999,7 +999,9 @@ export class Realm {
     if (this.listeningClients.length === 0) {
       await this.#adapter.subscribe((data: Record<string, any>) => {
         let tracked = this.getTrackedWrite(data);
-        if (!tracked || tracked.isTracked) {
+        // TODO debugging....
+        // if (!tracked || tracked.isTracked) {
+        if (!tracked) {
           return;
         }
         this.sendUpdateMessages({ type: 'update', data });
