@@ -23,11 +23,16 @@ interface Signature {
   Args: {};
 }
 
+interface RealmInfoWithUrl extends RealmInfo {
+  realmURL: URL;
+}
+
 export default class CodeMode extends Component<Signature> {
   @service declare monacoService: MonacoService;
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @tracked loadFileError: string | null = null;
+  _cachedRealmInfo: RealmInfoWithUrl | null = null; // This is to cache realm info during reload after code path change so that realm assets don't produce a flicker when code patch changes and the realm is the same
 
   get realmInfo() {
     return this.realmInfoResource.value;
@@ -53,20 +58,16 @@ export default class CodeMode extends Component<Signature> {
     this.loadFileError = null;
   }
 
-  @action loadRealmInfo() {
-    this.realmInfoResource.load();
-  }
-
   @use realmInfoResource = resource(() => {
     if (this.codePath) {
       const state: {
         isLoading: boolean;
-        value: (RealmInfo & { realmURL: URL }) | null;
+        value: RealmInfoWithUrl | null;
         error: Error | undefined;
         load: () => Promise<void>;
       } = new TrackedObject({
         isLoading: true,
-        value: null,
+        value: this._cachedRealmInfo,
         error: undefined,
         load: async () => {
           state.isLoading = true;
@@ -81,7 +82,11 @@ export default class CodeMode extends Component<Signature> {
             let realmInfo = await this.cardService.getRealmInfoByRealmURL(
               realmURL,
             );
-            state.value = { ...realmInfo, realmURL };
+
+            let realmInfoWithRealmURL = { ...realmInfo, realmURL };
+            this._cachedRealmInfo = realmInfoWithRealmURL; // See comment next to _cachedRealmInfo property
+
+            state.value = realmInfoWithRealmURL;
           } catch (error: any) {
             state.error = error;
           } finally {
@@ -103,7 +108,7 @@ export default class CodeMode extends Component<Signature> {
   });
 
   openFile = maybe(this, (context) => {
-    let realmURL = this.realmInfoResource.value?.realmURL;
+    let realmURL = this.realmInfoResource.isLoading ? null : this.realmInfoResource.value?.realmURL;
 
     if (!realmURL || !this.codePath) {
       return undefined;
