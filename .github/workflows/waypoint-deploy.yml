@@ -62,7 +62,7 @@ jobs:
           version: ${{ inputs.waypoint_version }}
 
       - name: Deploy app
-        run: waypoint deploy -app=${{ inputs.app }} -plain -local -prune-retain=${{ inputs.retain }}}
+        run: waypoint deploy -app=${{ inputs.app }} -plain -local -prune-retain=${{ inputs.retain }}
         working-directory: ${{ inputs.working-directory }}
         env:
           WAYPOINT_SERVER_TLS: '1'
