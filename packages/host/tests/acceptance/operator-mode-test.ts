@@ -888,8 +888,13 @@ module('Acceptance | operator mode tests', function (hooks) {
 
   test<TestContextWithSSE>('card preview live updates when index changes', async function (assert) {
     let expectedEvents = [
-      `index-invalidation: ["${testRealmURL}Person/fadhlan"]`,
-      'index: incremental',
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Person/fadhlan`],
+        },
+      },
     ];
     let operatorModeStateParam = stringify({
       stacks: [

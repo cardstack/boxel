@@ -174,26 +174,26 @@ class Isolated extends Component<typeof CardsGrid> {
     let url = `${this.args.model[realmURL]}_message`;
     this.subscription = {
       url,
-      unsubscribe: subscribeToRealm(url, ({ data }) => {
+      unsubscribe: subscribeToRealm(url, ({ type }) => {
+        // we are only interested in index events
+        if (type !== 'index') {
+          return;
+        }
         // we show stale instances during a live refresh while we are
         // waiting for the new instances to arrive--this eliminates the flash
         // while we wait
         this.staleInstances = [...(this.instances ?? [])];
 
-        // we are only interested in events related to index changes.
-        // currently these look like "index: full" and "index: incremental"
-        if (data.startsWith('index:')) {
-          if (this.args.context?.actions) {
-            this.args.context?.actions?.doWithStableScroll(
-              this.args.model as CardDef,
-              async () => {
-                this.refresh();
-                await this.request.ready;
-              },
-            );
-          } else {
-            this.refresh();
-          }
+        if (this.args.context?.actions) {
+          this.args.context?.actions?.doWithStableScroll(
+            this.args.model as CardDef,
+            async () => {
+              this.refresh();
+              await this.request.ready;
+            },
+          );
+        } else {
+          this.refresh();
         }
       }),
     };

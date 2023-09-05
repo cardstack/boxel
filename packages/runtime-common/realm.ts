@@ -114,7 +114,7 @@ export interface RealmAdapter {
     writable: WritableStream;
   };
 
-  subscribe(cb: (message: Record<string, any>) => void): Promise<void>;
+  subscribe(cb: (message: UpdateEventData) => void): Promise<void>;
 
   unsubscribe(): void;
 }
@@ -128,9 +128,51 @@ interface IndexHTMLOptions {
   realmsServed?: string[];
 }
 
-interface UpdateEvent {
+interface UpdateItem {
   operation: 'add' | 'update' | 'remove';
   url: URL;
+}
+
+type ServerEvents = UpdateEvent | IndexEvent | MessageEvent;
+
+interface UpdateEvent {
+  type: 'update';
+  data: UpdateEventData;
+  id?: string;
+}
+
+export type UpdateEventData =
+  | FileAddedEventData
+  | FileUpdatedEventData
+  | FileRemovedEventData;
+
+interface FileAddedEventData {
+  added: string;
+}
+interface FileUpdatedEventData {
+  updated: string;
+}
+interface FileRemovedEventData {
+  removed: string;
+}
+
+interface IndexEvent {
+  type: 'index';
+  data: IncrementalIndexEventData | FullIndexEventData;
+  id?: string;
+}
+interface IncrementalIndexEventData {
+  type: 'incremental';
+  invalidations: string[];
+}
+interface FullIndexEventData {
+  type: 'full';
+}
+
+interface MessageEvent {
+  type: 'message';
+  data: Record<string, string>;
+  id?: string;
 }
 
 export class Realm {
@@ -144,7 +186,7 @@ export class Realm {
   #transpileCache = new Map<string, string>();
   #log = logger('realm');
   #getIndexHTML: () => Promise<string>;
-  #updateEvents: UpdateEvent[] = [];
+  #updateItems: UpdateItem[] = [];
   #flushUpdateEvents: Promise<void> | undefined;
   #recentWrites: Map<string, number> = new Map();
   readonly paths: RealmPaths;
@@ -248,14 +290,15 @@ export class Realm {
     let results = await this.#adapter.write(path, contents);
     await this.#searchIndex.update(this.paths.fileURL(path), {
       onInvalidation: (invalidatedURLs: URL[]) => {
-        this.sendUpdateMessages({
-          type: 'update',
-          data: { 'index-invalidation': JSON.stringify(invalidatedURLs) },
+        this.sendServerEvent({
+          type: 'index',
+          data: {
+            type: 'incremental',
+            invalidations: invalidatedURLs.map((u) => u.href),
+          },
         });
       },
     });
-
-    this.sendUpdateMessages({ type: 'update', data: { index: 'incremental' } });
     return results;
   }
 
@@ -276,22 +319,24 @@ export class Realm {
   }
 
   private getTrackedWrite(
-    data: Record<string, any>,
+    data: UpdateEventData,
   ): { isTracked: boolean; url: URL } | undefined {
-    let type =
-      'updated' in data
-        ? 'updated'
-        : 'added' in data
-        ? 'added'
-        : 'removed' in data
-        ? 'removed'
-        : undefined;
-    if (!type) {
-      // this is some other type of event--ignore it
+    let file: string | undefined;
+    let type: string | undefined;
+    if ('updated' in data) {
+      file = data.updated;
+      type = 'updated';
+    } else if ('added' in data) {
+      file = data.added;
+      type = 'added';
+    } else if ('removed' in data) {
+      file = data.removed;
+      type = 'removed';
+    } else {
       return;
     }
     let messageHash = `${type}-${JSON.stringify(data)}`;
-    let url = this.paths.fileURL(data[type]);
+    let url = this.paths.fileURL(file);
     let timeout = this.#recentWrites.get(messageHash);
     if (timeout) {
       // This is a best attempt to eliminate an echo here since it's unclear whether this update is one
@@ -309,13 +354,15 @@ export class Realm {
     await this.#searchIndex.update(this.paths.fileURL(path), {
       delete: true,
       onInvalidation: (invalidatedURLs: URL[]) => {
-        this.sendUpdateMessages({
-          type: 'update',
-          data: { 'index-invalidation': JSON.stringify(invalidatedURLs) },
+        this.sendServerEvent({
+          type: 'index',
+          data: {
+            type: 'incremental',
+            invalidations: invalidatedURLs.map((u) => u.href),
+          },
         });
       },
     });
-    this.sendUpdateMessages({ type: 'update', data: { index: 'incremental' } });
   }
 
   get loader() {
@@ -328,14 +375,14 @@ export class Realm {
 
   async reindex() {
     await this.#searchIndex.run();
-    this.sendUpdateMessages({ type: 'update', data: { index: 'full' } });
+    this.sendServerEvent({ type: 'index', data: { type: 'full' } });
   }
 
   async #startup() {
     await Promise.resolve();
     await this.#warmUpCache();
     await this.#searchIndex.run();
-    this.sendUpdateMessages({ type: 'update', data: { index: 'full' } });
+    this.sendServerEvent({ type: 'index', data: { type: 'full' } });
   }
 
   // Take advantage of the fact that the base realm modules are static (for now)
@@ -986,7 +1033,7 @@ export class Realm {
         this.listeningClients = this.listeningClients.filter(
           (w) => w !== writable,
         );
-        this.sendUpdateMessages({
+        this.sendServerEvent({
           type: 'message',
           data: { cleanup: `${this.listeningClients.length} clients` },
         });
@@ -997,20 +1044,18 @@ export class Realm {
     );
 
     if (this.listeningClients.length === 0) {
-      await this.#adapter.subscribe((data: Record<string, any>) => {
+      await this.#adapter.subscribe((data) => {
         let tracked = this.getTrackedWrite(data);
-        // TODO debugging....
-        // if (!tracked || tracked.isTracked) {
-        if (!tracked) {
+        if (!tracked || tracked.isTracked) {
           return;
         }
-        this.sendUpdateMessages({ type: 'update', data });
-        this.#updateEvents.push({
-          operation: (data.added
+        this.sendServerEvent({ type: 'update', data });
+        this.#updateItems.push({
+          operation: ('added' in data
             ? 'add'
-            : data.updated
+            : 'updated' in data
             ? 'update'
-            : 'removed') as UpdateEvent['operation'],
+            : 'removed') as UpdateItem['operation'],
           url: tracked.url,
         });
         this.drainUpdates();
@@ -1018,7 +1063,7 @@ export class Realm {
     }
 
     this.listeningClients.push(writable);
-    this.sendUpdateMessages({
+    this.sendServerEvent({
       type: 'message',
       data: { count: `${this.listeningClients.length} clients` },
     });
@@ -1032,38 +1077,37 @@ export class Realm {
 
   private async drainUpdates() {
     await this.#flushUpdateEvents;
-    let eventsDrained: () => void;
-    this.#flushUpdateEvents = new Promise((res) => (eventsDrained = res));
-    let events = [...this.#updateEvents];
-    this.#updateEvents = [];
-    for (let { operation, url } of events) {
+    let itemsDrained: () => void;
+    this.#flushUpdateEvents = new Promise((res) => (itemsDrained = res));
+    let items = [...this.#updateItems];
+    this.#updateItems = [];
+    for (let { operation, url } of items) {
       await this.#searchIndex.update(url, {
         onInvalidation: (invalidatedURLs: URL[]) => {
-          this.sendUpdateMessages({
-            type: 'update',
-            data: { 'index-invalidation': JSON.stringify(invalidatedURLs) },
+          this.sendServerEvent({
+            type: 'index',
+            data: {
+              type: 'incremental',
+              invalidations: invalidatedURLs.map((u) => u.href),
+            },
           });
         },
         ...(operation === 'remove' ? { delete: true } : {}),
       });
     }
-    eventsDrained!();
+    itemsDrained!();
   }
 
-  private async sendUpdateMessages(message: {
-    type: string;
-    data: Record<string, any>;
-    id?: string;
-  }): Promise<void> {
+  private async sendServerEvent(event: ServerEvents): Promise<void> {
     this.#log.info(
       `sending updates to ${this.listeningClients.length} clients`,
     );
-    let { type, data, id } = message;
+    let { type, data, id } = event;
     let chunkArr = [];
     for (let item in data) {
-      chunkArr.push(`${item}: ${data[item]}`);
+      chunkArr.push(`"${item}": ${JSON.stringify((data as any)[item])}`);
     }
-    let chunk = sseToChunkData(type, chunkArr.join(', '), id);
+    let chunk = sseToChunkData(type, `{${chunkArr.join(', ')}}`, id);
     await Promise.all(
       this.listeningClients.map((client) => writeToStream(client, chunk)),
     );

@@ -42,18 +42,24 @@ export default class CodeMode extends Component<Signature> {
     let url = `${this.cardService.defaultURL}_message`;
     this.subscription = {
       url,
-      unsubscribe: this.messageService.subscribe(url, ({ data }) => {
-        let card = this.cardResource.value;
-        if (!card || !data.startsWith('index-invalidation:')) {
-          return;
-        }
-        let invalidations = JSON.parse(
-          data.substring('index-invalidation:'.length),
-        ) as string[];
-        if (invalidations.includes(card.id)) {
-          this.reloadCard.perform();
-        }
-      }),
+      unsubscribe: this.messageService.subscribe(
+        url,
+        ({ type, data: dataStr }) => {
+          if (type !== 'index') {
+            return;
+          }
+          debugger;
+          let card = this.cardResource.value;
+          let data = JSON.parse(dataStr);
+          if (!card || data.type !== 'incremental') {
+            return;
+          }
+          let invalidations = data.invalidations as string[];
+          if (invalidations.includes(card.id)) {
+            this.reloadCard.perform();
+          }
+        },
+      ),
     };
     registerDestructor(this, () => {
       if (this.subscription) {

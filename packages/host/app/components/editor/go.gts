@@ -155,17 +155,22 @@ export default class Go extends Component<Signature> {
     let url = `${this.cardService.defaultURL}_message`;
     this.subscription = {
       url,
-      unsubscribe: this.messageService.subscribe(url, ({ data }) => {
-        if (!this.card || !data.startsWith('index-invalidation:')) {
-          return;
-        }
-        let invalidations = JSON.parse(
-          data.substring('index-invalidation:'.length),
-        ) as string[];
-        if (invalidations.includes(this.card.id)) {
-          this.loadCard.perform(new URL(this.card.id));
-        }
-      }),
+      unsubscribe: this.messageService.subscribe(
+        url,
+        ({ type, data: dataStr }) => {
+          if (type !== 'index') {
+            return;
+          }
+          let data = JSON.parse(dataStr);
+          if (!this.card || data.type !== 'incremental') {
+            return;
+          }
+          let invalidations = data.invalidations as string[];
+          if (invalidations.includes(this.card.id)) {
+            this.loadCard.perform(new URL(this.card.id));
+          }
+        },
+      ),
     };
     registerDestructor(this, () => {
       if (this.subscription) {

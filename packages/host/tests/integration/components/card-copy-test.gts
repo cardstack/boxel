@@ -590,8 +590,13 @@ module('Integration | card-copy', function (hooks) {
   test<TestContextForCopy>('can copy a card', async function (assert) {
     assert.expect(11);
     let expectedEvents = [
-      `index-invalidation: ["${testRealm2URL}Pet/1"]`,
-      'index: incremental',
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealm2URL}Pet/1`],
+        },
+      },
     ];
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
@@ -676,10 +681,20 @@ module('Integration | card-copy', function (hooks) {
   test<TestContextForCopy>('can copy mulitple cards', async function (assert) {
     assert.expect(8);
     let expectedEvents = [
-      `index-invalidation: ["${testRealm2URL}Pet/1"]`,
-      'index: incremental',
-      `index-invalidation: ["${testRealm2URL}Pet/2"]`,
-      'index: incremental',
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealm2URL}Pet/1`],
+        },
+      },
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealm2URL}Pet/2`],
+        },
+      },
     ];
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
@@ -759,8 +774,13 @@ module('Integration | card-copy', function (hooks) {
   test<TestContextForCopy>('can copy a card that has a relative link to card in source realm', async function (assert) {
     assert.expect(15);
     let expectedEvents = [
-      `index-invalidation: ["${testRealm2URL}Person/1"]`,
-      'index: incremental',
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealm2URL}Person/1`],
+        },
+      },
     ];
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
@@ -860,8 +880,13 @@ module('Integration | card-copy', function (hooks) {
   test<TestContextForCopy>('can copy a card that has a link to card in destination realm', async function (assert) {
     assert.expect(15);
     let expectedEvents = [
-      `index-invalidation: ["${testRealm2URL}Person/1"]`,
-      'index: incremental',
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealm2URL}Person/1`],
+        },
+      },
     ];
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],

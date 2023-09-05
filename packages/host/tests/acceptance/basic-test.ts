@@ -293,8 +293,13 @@ module('Acceptance | basic tests', function (hooks) {
 
   test<TestContextWithSSE>('Card instance live updates when index changes', async function (assert) {
     let expectedEvents = [
-      `index-invalidation: ["${testRealmURL}Person/1"]`,
-      'index: incremental',
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Person/1`],
+        },
+      },
     ];
 
     await visit('/code');
