@@ -41,9 +41,6 @@ interface RoomArgs {
 
 export default class Room extends Component<RoomArgs> {
   <template>
-    <!-- this is part of testing that the actual component is now rendered, -->
-    <div data-test-rooms-header={{this.room.name}}>Room:
-      {{this.room.name}}</div>
     <div>Number of cards: {{this.totalCards}}</div>
     <div class='room-members'>
       <div data-test-room-members class='members'><b>Members:</b>
@@ -93,6 +90,7 @@ export default class Room extends Component<RoomArgs> {
     <div
       class='messages-wrapper'
       data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
+      data-test-room-name={{this.room.name}}
     >
       <div class='messages'>
         <div class='notices'>
