@@ -3,9 +3,11 @@ import GlimmerComponent from '@glimmer/component';
 import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
-import { on } from '@ember/modifier';
 import { BoxelInput } from '@cardstack/boxel-ui';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { on } from '@ember/modifier';
 import pick from '@cardstack/boxel-ui/helpers/pick';
+import { startCase } from 'lodash';
 import { getBoxComponent } from './field-component';
 import { getContainsManyComponent } from './contains-many-component';
 import { getLinksToEditor } from './links-to-editor';
@@ -41,6 +43,7 @@ import {
   type RealmInfo,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
+import { FieldContainer } from '@cardstack/boxel-ui';
 
 export { primitive, isField };
 export const serialize = Symbol('cardstack-serialize');
@@ -77,9 +80,7 @@ export type FieldsTypeFor<T extends BaseDef> = {
 export type Format = 'isolated' | 'embedded' | 'edit';
 export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
 
-type Setter = { setters: { [fieldName: string]: Setter } } & ((
-  value: any,
-) => void);
+type Setter = (value: any) => void;
 
 interface Options {
   computeVia?: string | (() => unknown);
@@ -1596,15 +1597,65 @@ export function isCard(card: any): card is CardDef {
   return card && typeof card === 'object' && isBaseInstance in card;
 }
 
+class DefaultTemplate extends GlimmerComponent<{
+  Args: {
+    model: BaseDef;
+    fields: Record<string, new () => GlimmerComponent>;
+  };
+}> {
+  <template>
+    <div class='default-card-template'>
+      {{#each-in @fields as |key Field|}}
+        {{#unless (eq key 'id')}}
+          <FieldContainer
+            {{! @glint-ignore (glint is arriving at an incorrect type signature for 'startCase') }}
+            @label={{startCase key}}
+            data-test-field={{key}}
+          >
+            <Field />
+          </FieldContainer>
+        {{/unless}}
+      {{/each-in}}
+    </div>
+    <style>
+      .default-card-template {
+        display: grid;
+        gap: var(--boxel-sp-lg);
+      }
+    </style>
+  </template>
+}
+
 export class Component<
   CardT extends BaseDefConstructor,
 > extends GlimmerComponent<SignatureFor<CardT>> {}
+
+export type BaseDefComponent = ComponentLike<{
+  Blocks: {};
+  Element: any;
+  Args: {
+    fields: any;
+    model: any;
+    set: Setter;
+    fieldName: string | undefined;
+    context?: CardContext;
+  };
+}>;
 
 export class FieldDef extends BaseDef {
   // this changes the shape of the class type FieldDef so that a CardDef
   // class type cannot masquarade as a FieldDef class type
   static isFieldDef = true;
   static displayName = 'Field';
+
+  static embedded: BaseDefComponent = class Embedded extends Component<
+    typeof this
+  > {
+    <template>
+      <!-- Inherited from FieldDef embedded view. Did your field forget to specify its embedded component? -->
+    </template>
+  };
+  static edit: BaseDefComponent = DefaultTemplate;
 }
 
 class IDField extends FieldDef {
@@ -1671,6 +1722,16 @@ export class CardDef extends BaseDef {
       super.assignInitialFieldValue(instance, fieldName, value);
     }
   }
+
+  static embedded: BaseDefComponent = class Embedded extends Component<
+    typeof this
+  > {
+    <template>
+      <!-- Inherited from CardDef embedded view. Did your card forget to specify its embedded component? -->
+    </template>
+  };
+  static isolated: BaseDefComponent = DefaultTemplate;
+  static edit: BaseDefComponent = DefaultTemplate;
 }
 
 export type BaseDefConstructor = typeof BaseDef;
@@ -2576,7 +2637,7 @@ export class Box<T> {
     | {
         type: 'derived';
         containingBox: Box<any>;
-        fieldName: string | number | symbol;
+        fieldName: string;
         useIndexBasedKeys: boolean;
       };
 
@@ -2601,12 +2662,17 @@ export class Box<T> {
       throw new Error(`can't set topmost model`);
     } else {
       let value = this.state.containingBox.value;
-      if (Array.isArray(value) && typeof this.state.fieldName !== 'number') {
-        throw new Error(
-          `Cannot set a value on an array item with non-numeric index '${String(
-            this.state.fieldName,
-          )}'`,
-        );
+      if (Array.isArray(value)) {
+        let index = parseInt(this.state.fieldName);
+        if (typeof index !== 'number') {
+          throw new Error(
+            `Cannot set a value on an array item with non-numeric index '${String(
+              this.state.fieldName,
+            )}'`,
+          );
+        }
+        this.state.containingBox.value[index] = v;
+        return;
       }
       this.state.containingBox.value[this.state.fieldName] = v;
     }
@@ -2624,7 +2690,7 @@ export class Box<T> {
       box = new Box({
         type: 'derived',
         containingBox: this,
-        fieldName,
+        fieldName: fieldName as string,
         useIndexBasedKeys,
       });
       this.fieldBoxes.set(fieldName as string, box);
@@ -2663,14 +2729,14 @@ export class Box<T> {
           if (found.state.type === 'root') {
             throw new Error('bug');
           }
-          found.state.fieldName = index;
+          found.state.fieldName = String(index);
         }
         return found;
       } else {
         return new Box({
           type: 'derived',
           containingBox: this,
-          fieldName: index,
+          fieldName: String(index),
           useIndexBasedKeys: false,
         });
       }

@@ -2151,10 +2151,12 @@ module('Integration | operator-mode', function (hooks) {
 
     await click('[data-test-boxel-menu-item-text="Code"]');
     assert.dom('[data-test-submode-switcher]').hasText('Code');
+    assert.dom('[data-test-submode-arrow-direction="down"]').exists();
 
     await click('[data-test-submode-switcher] > [data-test-boxel-button]');
     await click('[data-test-boxel-menu-item-text="Interact"]');
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
+    assert.dom('[data-test-submode-arrow-direction="down"]').exists();
   });
 
   test(`card url bar shows realm info of valid URL`, async function (assert) {
