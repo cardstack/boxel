@@ -62,9 +62,7 @@ export default class CodeMode extends Component<Signature> {
       ),
     };
     registerDestructor(this, () => {
-      if (this.subscription) {
-        this.subscription.unsubscribe();
-      }
+      this.subscription?.unsubscribe();
     });
   }
 

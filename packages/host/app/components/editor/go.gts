@@ -173,9 +173,7 @@ export default class Go extends Component<Signature> {
       ),
     };
     registerDestructor(this, () => {
-      if (this.subscription) {
-        this.subscription.unsubscribe();
-      }
+      this.subscription?.unsubscribe();
     });
   }
 
