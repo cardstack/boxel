@@ -31,4 +31,4 @@ jobs:
       app: 'boxel-ai-bot'
       environment: ${{ inputs.environment }}
       working-directory: 'packages/ai-bot'
-      keep_previous: '0'
+      retain: '0'

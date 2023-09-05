@@ -220,7 +220,6 @@ jobs:
     with:
       app: 'realm-demo'
       environment: 'staging'
-      keep_previous: '1'
 
   deploy-ai-bot:
     name: Deploy ai-bot to staging
@@ -231,4 +230,4 @@ jobs:
       app: 'boxel-ai-bot'
       environment: 'staging'
       working-directory: 'packages/ai-bot'
-      keep_previous: '0'
+      retain: '0'

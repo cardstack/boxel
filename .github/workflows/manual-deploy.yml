@@ -45,4 +45,3 @@ jobs:
     with:
       app: 'realm-demo'
       environment: ${{ inputs.environment }}
-      keep_previous: '1'
