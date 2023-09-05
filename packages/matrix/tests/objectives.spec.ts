@@ -30,7 +30,7 @@ test.describe('Room objectives', () => {
     await joinRoom(page, 'Room 1');
     await openRoom(page, 'Room 1');
 
-    await sendMessage(page, `I'm not saying Hello yet...`);
+    await sendMessage(page, 'Room 1', `I'm not saying Hello yet...`);
 
     await expect(page.locator(`[data-test-objective-progress]`)).toContainText(
       `Completed 0 of 2 (0%)`,
@@ -39,7 +39,7 @@ test.describe('Room objectives', () => {
       `user1, user2`,
     );
 
-    await sendMessage(page, `_Hello_`);
+    await sendMessage(page, 'Room 1', `_Hello_`);
     await expect(page.locator(`[data-test-objective-progress]`)).toContainText(
       `Completed 1 of 2 (50%)`,
     );
@@ -114,7 +114,7 @@ test.describe('Room objectives', () => {
     await openRoom(page, 'Room 1');
 
     await setObjective(page, 'https://cardstack.com/base/types/room-objective');
-    await sendMessage(page, `hello!`);
+    await sendMessage(page, 'Room 1', `hello!`);
 
     await expect(page.locator(`[data-test-objective-progress]`)).toContainText(
       `Completed 1 of 1 (100%)`,
@@ -132,7 +132,7 @@ test.describe('Room objectives', () => {
     await openRoom(page, 'Room 1');
 
     await setObjective(page, 'https://cardstack.com/base/types/room-objective');
-    await sendMessage(page, `hello`);
+    await sendMessage(page, 'Room 1', `hello`);
     await expect(
       page.locator(`[data-test-objective-is-complete]`),
     ).toContainText('The objective is completed');
@@ -152,7 +152,7 @@ test.describe('Room objectives', () => {
       0,
     );
 
-    await sendMessage(page, `Hello`);
+    await sendMessage(page, 'Room 1', `Hello`);
     await expect(page.locator(`[data-test-objective-progress]`)).toContainText(
       `Completed 2 of 2 (100%)`,
     );
