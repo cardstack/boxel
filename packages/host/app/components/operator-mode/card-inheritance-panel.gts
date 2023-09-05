@@ -3,7 +3,9 @@ import { service } from '@ember/service';
 import CardService from '@cardstack/host/services/card-service';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type RealmInfo, cardTypeDisplayName } from '@cardstack/runtime-common';
-import DefinitionContainer from '../definition-container';
+import DefinitionContainer, {
+  DefinitionVariant,
+} from '../definition-container';
 import { isReady, FileResource } from '@cardstack/host/resources/file';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
@@ -57,7 +59,7 @@ export default class CardInheritancePanel extends Component<Args> {
             @fileExtension='.GTS'
             @realmInfo={{@realmInfo}}
             @realmIconURL={{@realmIconURL}}
-            @variant='module'
+            @variant={{DefinitionVariant.Module}}
             @onDuplicate={{this.duplicateAction}}
             @onCreate={{this.createAction}}
             @onInherit={{this.inheritAction}}
@@ -73,7 +75,7 @@ export default class CardInheritancePanel extends Component<Args> {
           @realmInfo={{@realmInfo}}
           @realmIconURL={{@realmIconURL}}
           @infoText={{this.lastModified}}
-          @variant='instance'
+          @variant={{DefinitionVariant.Instance}}
           @isActive={{true}}
           @onDuplicate={{this.duplicateAction}}
           data-test-card-instance-definition

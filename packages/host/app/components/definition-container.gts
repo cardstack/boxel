@@ -4,10 +4,14 @@ import { on } from '@ember/modifier';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { Button } from '@cardstack/boxel-ui';
 import { eq, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { assertNever } from '@cardstack/host/utils/assert-never';
 // boxel- specific
 import { type RealmInfo } from '@cardstack/runtime-common';
 
-export type DefinitionVariant = 'instance' | 'module';
+export enum DefinitionVariant {
+  Instance = 'instance',
+  Module = 'module',
+}
 
 interface Signature {
   Element: HTMLElement;
@@ -28,12 +32,12 @@ interface Signature {
 export default class DefinitionContainer extends Component<Signature> {
   get title(): string {
     switch (this.args.variant) {
-      case 'module':
+      case DefinitionVariant.Module:
         return 'CARD DEFINITION';
-      case 'instance':
+      case DefinitionVariant.Instance:
         return 'CARD INSTANCE';
       default:
-        return 'CARD DEFINITION';
+        throw assertNever(this.args.variant);
     }
   }
   get realmName(): string | undefined {
