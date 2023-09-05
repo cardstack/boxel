@@ -181,7 +181,6 @@ export default class CodeMode extends Component<Signature> {
   <template>
     <div class='code-mode-background' style={{this.backgroundURLStyle}}></div>
     <CardURLBar
-      @onEnterPressed={{this.loadRealmInfo}}
       @loadFileError={{this.loadFileError}}
       @resetLoadFileError={{this.resetLoadFileError}}
       @realmInfo={{this.realmInfo}}

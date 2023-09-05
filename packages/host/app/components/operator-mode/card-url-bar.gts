@@ -11,7 +11,6 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 interface Signature {
   Element: HTMLElement;
   Args: {
-    onEnterPressed: (url: URL) => void;
     loadFileError: string | null;
     resetLoadFileError: () => void;
     realmInfo: RealmInfo | null;
@@ -180,7 +179,6 @@ export default class CardURLBar extends Component<Signature> {
 
     if (url) {
       this.operatorModeStateService.updateCodePath(url);
-      this.args.onEnterPressed(url);
     }
   }
 
