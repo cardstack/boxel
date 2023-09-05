@@ -1,7 +1,6 @@
 import Label from '@cardstack/boxel-ui/components/label';
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
-import { action } from '@ember/object';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { Button } from '@cardstack/boxel-ui';
 import { eq, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
@@ -16,9 +15,10 @@ interface Signature {
     name: string | undefined;
     fileExtension: string;
     realmInfo: RealmInfo | null;
-    infoText: string | undefined;
+    realmIconURL: string | null | undefined;
     variant: DefinitionVariant;
     isActive: boolean;
+    infoText?: string;
     onCreate?: () => void;
     onInherit?: () => void;
     onDuplicate?: () => void;
@@ -39,9 +39,6 @@ export default class DefinitionContainer extends Component<Signature> {
   get realmName(): string | undefined {
     return this.args.realmInfo?.name;
   }
-  get realmIconSrc(): string | null | undefined {
-    return this.args.realmInfo?.iconURL;
-  }
 
   <template>
     <div class='container' ...attributes>
@@ -55,7 +52,7 @@ export default class DefinitionContainer extends Component<Signature> {
       </div>
       <div class='content'>
         <div class='realm-info'>
-          <img src={{this.realmIconSrc}} alt='realm-icon' />
+          <img src={{@realmIconURL}} alt='realm-icon' />
           <Label
             class='realm-name'
             data-test-definition-realm-name

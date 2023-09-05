@@ -17,6 +17,7 @@ interface Args {
   Element: HTMLElement;
   Args: {
     realmInfo: RealmInfo | null;
+    realmIconURL: string | null | undefined;
     openFile: { current: FileResource | undefined };
     cardInstance: CardDef | null;
     importedModule?: ImportResource;
@@ -55,7 +56,7 @@ export default class CardInheritancePanel extends Component<Args> {
             @name={{cardTypeDisplayName card}}
             @fileExtension='.GTS'
             @realmInfo={{@realmInfo}}
-            @infoText={{this.lastModified}}
+            @realmIconURL={{@realmIconURL}}
             @variant='module'
             @onDuplicate={{this.duplicateAction}}
             @onCreate={{this.createAction}}
@@ -70,6 +71,7 @@ export default class CardInheritancePanel extends Component<Args> {
           @name={{@cardInstance.title}}
           @fileExtension='.JSON'
           @realmInfo={{@realmInfo}}
+          @realmIconURL={{@realmIconURL}}
           @infoText={{this.lastModified}}
           @variant='instance'
           @isActive={{true}}
