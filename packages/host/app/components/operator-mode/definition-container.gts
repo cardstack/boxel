@@ -33,9 +33,9 @@ export default class DefinitionContainer extends Component<Signature> {
   get title(): string {
     switch (this.args.variant) {
       case DefinitionVariant.Module:
-        return 'CARD DEFINITION';
+        return 'Card Definition';
       case DefinitionVariant.Instance:
-        return 'CARD INSTANCE';
+        return 'Card Instance';
       default:
         throw assertNever(this.args.variant);
     }
@@ -120,6 +120,7 @@ export default class DefinitionContainer extends Component<Signature> {
         font-size: var(--boxel-font-size-xs);
         font-weight: 500;
         letter-spacing: var(--boxel-lsp-lg);
+        text-transform: uppercase;
       }
       .active {
         background-color: var(--boxel-highlight);
