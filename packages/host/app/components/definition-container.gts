@@ -73,7 +73,7 @@ export default class DefinitionContainer extends Component<Signature> {
           {{/if}}
           {{#if @onInherit}}
             <Button class='action-button' {{on 'click' @onInherit}}>
-              {{svgJar 'icon_inherit' width='24px' height='24px'}}
+              {{svgJar 'icon-inherit' width='24px' height='24px'}}
               Inherit
             </Button>
           {{/if}}
