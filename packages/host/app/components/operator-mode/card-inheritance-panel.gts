@@ -86,19 +86,6 @@ export default class CardInheritancePanel extends Component<Args> {
         flex-direction: column;
         gap: var(--boxel-sp-xs);
       }
-      .realm-info {
-        display: inline-block;
-      }
-
-      .realm-info img,
-      .realm-info div {
-        display: inline-block;
-        vertical-align: middle;
-      }
-
-      .realm-info img {
-        width: 22px;
-      }
     </style>
   </template>
 
