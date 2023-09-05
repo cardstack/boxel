@@ -1526,6 +1526,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-search-label]`).containsText('Searching for "Ma"');
 
     await waitFor(`[data-test-search-sheet-search-result]`);
+    // Keep in mind that any test data created drafts or published realms will show up here too...
     assert
       .dom(`[data-test-search-result-label]`)
       .containsText('2 Results for "Ma"');

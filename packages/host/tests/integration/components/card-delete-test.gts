@@ -182,7 +182,15 @@ module('Integration | card-delete', function (hooks) {
 
   test<TestContextWithSSE>('can delete a card from the index card stack item', async function (assert) {
     assert.expect(4);
-    let expectedEvents = ['removed: Pet/mango.json', 'index: incremental'];
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Pet/mango`],
+        },
+      },
+    ];
     await setCardInOperatorModeState([`${testRealmURL}index`]);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -228,7 +236,7 @@ module('Integration | card-delete', function (hooks) {
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
   });
 
-  test<TestContextWithSSE>('can cancel delete', async function (assert) {
+  test('can cancel delete', async function (assert) {
     await setCardInOperatorModeState([`${testRealmURL}index`]);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -264,7 +272,15 @@ module('Integration | card-delete', function (hooks) {
 
   test<TestContextWithSSE>('can delete a card stack item in non-edit mode', async function (assert) {
     assert.expect(6);
-    let expectedEvents = ['removed: Pet/mango.json', 'index: incremental'];
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Pet/mango`],
+        },
+      },
+    ];
     await setCardInOperatorModeState([
       `${testRealmURL}index`,
       `${testRealmURL}Pet/mango`,
@@ -319,7 +335,15 @@ module('Integration | card-delete', function (hooks) {
 
   test<TestContextWithSSE>('can delete a card stack item in edit mode', async function (assert) {
     assert.expect(6);
-    let expectedEvents = ['removed: Pet/mango.json', 'index: incremental'];
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Pet/mango`],
+        },
+      },
+    ];
     await setCardInOperatorModeState([
       `${testRealmURL}index`,
       `${testRealmURL}Pet/mango`,
@@ -377,7 +401,15 @@ module('Integration | card-delete', function (hooks) {
 
   test<TestContextWithSSE>('can delete a card that appears in both stacks as a stack item', async function (assert) {
     assert.expect(8);
-    let expectedEvents = ['removed: Pet/mango.json', 'index: incremental'];
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Pet/mango`],
+        },
+      },
+    ];
     await setCardInOperatorModeState(
       [`${testRealmURL}index`, `${testRealmURL}Pet/mango`],
       [`${testRealmURL}index`, `${testRealmURL}Pet/mango`],
@@ -443,7 +475,15 @@ module('Integration | card-delete', function (hooks) {
 
   test<TestContextWithSSE>('can delete a card that appears in both stacks as an element of the index card', async function (assert) {
     assert.expect(4);
-    let expectedEvents = ['removed: Pet/mango.json', 'index: incremental'];
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Pet/mango`],
+        },
+      },
+    ];
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`${testRealmURL}index`],
@@ -499,7 +539,15 @@ module('Integration | card-delete', function (hooks) {
 
   test<TestContextWithSSE>('can delete a card that appears in both stacks as an index item and an element of the index card', async function (assert) {
     assert.expect(6);
-    let expectedEvents = ['removed: Pet/mango.json', 'index: incremental'];
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Pet/mango`],
+        },
+      },
+    ];
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`${testRealmURL}index`, `${testRealmURL}Pet/mango`],
@@ -563,7 +611,15 @@ module('Integration | card-delete', function (hooks) {
 
   test<TestContextWithSSE>('can delete a card that is a recent item', async function (assert) {
     assert.expect(6);
-    let expectedEvents = ['removed: Pet/mango.json', 'index: incremental'];
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Pet/mango`],
+        },
+      },
+    ];
 
     // creates a recent item
     let operatorModeStateService = this.owner.lookup(
@@ -624,7 +680,15 @@ module('Integration | card-delete', function (hooks) {
 
   test<TestContextWithSSE>('can delete a card that is a selected item', async function (assert) {
     assert.expect(6);
-    let expectedEvents = ['removed: Pet/mango.json', 'index: incremental'];
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Pet/mango`],
+        },
+      },
+    ];
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`http://localhost:4202/test/`],
