@@ -170,7 +170,7 @@ jobs:
     uses: ./.github/workflows/build-host.yml
     secrets: inherit
     with:
-      environment: "staging"
+      environment: 'staging'
 
   build-realm-server:
     name: Build realm-server
@@ -179,8 +179,8 @@ jobs:
     uses: ./.github/workflows/waypoint-build.yml
     secrets: inherit
     with:
-      app: "realm-demo"
-      environment: "staging"
+      app: 'realm-demo'
+      environment: 'staging'
       restore-mtime: true
 
   build-ai-bot:
@@ -190,9 +190,9 @@ jobs:
     uses: ./.github/workflows/waypoint-build.yml
     secrets: inherit
     with:
-      app: "boxel-ai-bot"
-      environment: "staging"
-      working-directory: "packages/ai-bot"
+      app: 'boxel-ai-bot'
+      environment: 'staging'
+      working-directory: 'packages/ai-bot'
 
   deploy-host:
     name: Deploy host
@@ -205,7 +205,7 @@ jobs:
     uses: ./.github/workflows/deploy-host.yml
     secrets: inherit
     with:
-      environment: "staging"
+      environment: 'staging'
 
   deploy-realm-server:
     name: Deploy realm server to staging
@@ -218,8 +218,9 @@ jobs:
     uses: ./.github/workflows/waypoint-deploy.yml
     secrets: inherit
     with:
-      app: "realm-demo"
-      environment: "staging"
+      app: 'realm-demo'
+      environment: 'staging'
+      keep_previous: '1'
 
   deploy-ai-bot:
     name: Deploy ai-bot to staging
@@ -227,6 +228,7 @@ jobs:
     uses: ./.github/workflows/waypoint-deploy.yml
     secrets: inherit
     with:
-      app: "boxel-ai-bot"
-      environment: "staging"
-      working-directory: "packages/ai-bot"
+      app: 'boxel-ai-bot'
+      environment: 'staging'
+      working-directory: 'packages/ai-bot'
+      keep_previous: '0'

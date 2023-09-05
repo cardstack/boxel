@@ -18,9 +18,9 @@ jobs:
     uses: ./.github/workflows/waypoint-build.yml
     secrets: inherit
     with:
-      app: "boxel-ai-bot"
+      app: 'boxel-ai-bot'
       environment: ${{ inputs.environment }}
-      working-directory: "packages/ai-bot"
+      working-directory: 'packages/ai-bot'
 
   deploy:
     name: Deploy
@@ -28,6 +28,7 @@ jobs:
     uses: ./.github/workflows/waypoint-deploy.yml
     secrets: inherit
     with:
-      app: "boxel-ai-bot"
+      app: 'boxel-ai-bot'
       environment: ${{ inputs.environment }}
-      working-directory: "packages/ai-bot"
+      working-directory: 'packages/ai-bot'
+      keep_previous: '0'
