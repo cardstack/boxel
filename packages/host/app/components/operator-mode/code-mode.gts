@@ -48,7 +48,6 @@ export default class CodeMode extends Component<Signature> {
           if (type !== 'index') {
             return;
           }
-          debugger;
           let card = this.cardResource.value;
           let data = JSON.parse(dataStr);
           if (!card || data.type !== 'incremental') {
