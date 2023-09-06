@@ -9,9 +9,9 @@ import {
   type SingleCardDocument,
   RealmPaths,
   isCardDocument,
+  logger,
   isSingleCardDocument,
 } from '@cardstack/runtime-common';
-import merge from 'lodash/merge';
 import { file, type FileResource } from '@cardstack/host/resources/file';
 import { LoadingIndicator } from '@cardstack/boxel-ui';
 import { maybe } from '@cardstack/host/resources/maybe';
@@ -32,6 +32,7 @@ import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 interface Signature {
   Args: {};
 }
+const log = logger('component:code-mode');
 
 export default class CodeMode extends Component<Signature> {
   @service declare monacoService: MonacoService;
@@ -216,24 +217,25 @@ export default class CodeMode extends Component<Signature> {
     }
 
     let isJSON = this.openFile.current.name.endsWith('.json');
-    let json = isJSON && this.safeJSONParse(content);
-
+    let validJSON = isJSON && this.safeJSONParse(content);
     // Here lies the difference in how json files and other source code files
     // are treated during editing in the code editor
-    if (json && isSingleCardDocument(json)) {
+    if (validJSON && isSingleCardDocument(validJSON)) {
       // writes json instance but doesn't update state of the file resource
       // relies on message service subscription to update state
-      await this.saveFileSerializedCard(json);
+      await this.saveFileSerializedCard.perform(validJSON);
       return;
-    } else {
-      //writes source code and updates the state of the file resource
+    } else if (!isJSON || validJSON) {
+      // writes source code and non-card instance valid JSON,
+      // then updates the state of the file resource
       await this.writeSourceCodeToFile(this.openFile.current, content);
     }
   });
 
   private writeSourceCodeToFile(file: FileResource, content: string) {
-    if (file.state !== 'ready')
+    if (file.state !== 'ready') {
       throw new Error('File is not ready to be written to');
+    }
 
     return file.write(content);
   }
@@ -243,20 +245,20 @@ export default class CodeMode extends Component<Signature> {
       return JSON.parse(content);
     } catch (err) {
       log.warn(
-        `content for ${this.args.openFiles.path} is not valid JSON, skipping write`,
+        `content for ${this.codePath} is not valid JSON, skipping write`,
       );
       return;
     }
   }
 
-  // TODO turn this into a task!!
-  private async saveFileSerializedCard(json: SingleCardDocument) {
+  private saveFileSerializedCard = task(async (json: SingleCardDocument) => {
+    if (!this.codePath) {
+      return;
+    }
     let realmPath = new RealmPaths(this.cardService.defaultURL);
-    let url = realmPath.fileURL(
-      this.args.openFiles.path!.replace(/\.json$/, ''),
-    );
+    let url = realmPath.fileURL(this.codePath.href.replace(/\.json$/, ''));
 
-    let doc = this.reverseFileSerialization(json, url.href);
+    let doc = this.monacoService.reverseFileSerialization(json, url.href);
     let card: CardDef | undefined;
     try {
       card = await this.cardService.createFromSerialized(doc.data, doc, url);
@@ -269,11 +271,11 @@ export default class CodeMode extends Component<Signature> {
 
     try {
       await this.cardService.saveModel(card);
-      await this.loadCard.perform(url);
+      await this.reloadCard.perform();
     } catch (e) {
       console.error('Failed to save single card document', e);
     }
-  }
+  });
 
   private get language(): string | undefined {
     if (this.codePath) {
@@ -285,41 +287,6 @@ export default class CodeMode extends Component<Signature> {
       return language?.id ?? 'plaintext';
     }
     return undefined;
-  }
-
-  // File serialization is a special type of card serialization that the host would
-  // otherwise not encounter, but it does here since it's using the accept header
-  // application/vnd.card+source to load the file that we see in monaco. This is
-  // the only place that we use this accept header for loading card instances--everywhere
-  // else we use application/vnd.card+json. Because of this the resulting JSON has
-  // different semantics than the host would normally encounter--for instance, this
-  // file serialization format is always missing an ID (because the ID is the filename).
-  // Whereas for card isntances obtained via application/vnd.card+json, a missing ID
-  // means that the card is not saved.
-  //
-  // In order to prevent confusion around which type of serialization you are dealing
-  // with, we convert the file serialization back to the form the host is accustomed
-  // to (application/vnd.card+json) as soon as possible so that the semantics around
-  // file serialization don't leak outside of where they are immediately used.
-
-  // TODO probably move this into monaco service?
-  private reverseFileSerialization(
-    fileSerializationJSON: SingleCardDocument,
-    id: string,
-  ): SingleCardDocument {
-    let realmURL = this.cardService.getRealmURLFor(new URL(id))?.href;
-    if (!realmURL) {
-      throw new Error(`Could not determine realm for url ${id}`);
-    }
-    return merge({}, fileSerializationJSON, {
-      data: {
-        id,
-        type: 'card',
-        meta: {
-          realmURL,
-        },
-      },
-    });
   }
 
   <template>
@@ -360,7 +327,9 @@ export default class CodeMode extends Component<Signature> {
                 }}
               ></div>
             {{else if this.isLoading}}
-              <LoadingIndicator />
+              <div class='loading'>
+                <LoadingIndicator />
+              </div>
             {{/if}}
           </div>
         </div>
@@ -450,6 +419,7 @@ export default class CodeMode extends Component<Signature> {
         flex-direction: column;
         background-color: var(--boxel-light);
         border-radius: var(--boxel-border-radius-xl);
+        overflow: hidden;
       }
       .inner-container__header {
         padding: var(--boxel-sp-sm) var(--boxel-sp-xs);
@@ -475,6 +445,11 @@ export default class CodeMode extends Component<Signature> {
 
       .monaco-container {
         height: 100%;
+        padding: var(--boxel-sp) 0;
+      }
+
+      .loading {
+        margin: 40vh auto;
       }
     </style>
   </template>
