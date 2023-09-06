@@ -36,7 +36,6 @@ import { renderComponent } from '../../helpers/render-component';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 import { shimExternals } from '@cardstack/host/lib/externals';
-import { isScopedCSSRequest } from 'glimmer-scoped-css';
 
 const sourceContent = `
 import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
