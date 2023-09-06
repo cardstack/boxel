@@ -27,7 +27,6 @@ import type {
   IStandaloneCodeEditor,
 } from '@cardstack/host/services/monaco-service';
 import CodeController from '@cardstack/host/controllers/code';
-import { OpenFiles } from '@cardstack/host/controllers/card';
 import CodeService from '@cardstack/host/services/code-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { Loader } from '@cardstack/runtime-common/loader';
@@ -127,7 +126,6 @@ module('Integration | Component | go', function (hooks) {
     ) as MonacoService;
     let codeController = new CodeController();
     codeController.codeService = new CodeService();
-    mockOpenFiles = new OpenFiles(codeController);
     await realm.ready;
   });
   hooks.afterEach(async function () {
@@ -146,11 +144,7 @@ module('Integration | Component | go', function (hooks) {
     };
     setupLoaderWithHandler(loader, realm, moduleMap);
     await render(<template>
-      <Go
-        @openFiles={{mockOpenFiles}}
-        @monaco={{monacoContext}}
-        @onEditorSetup={{onEditorSetup}}
-      />
+      <Go @monaco={{monacoContext}} @onEditorSetup={{onEditorSetup}} />
       <CardPrerender />
     </template>);
 
@@ -167,11 +161,7 @@ module('Integration | Component | go', function (hooks) {
       editor = receivedEditor;
     };
     await render(<template>
-      <Go
-        @openFiles={{mockOpenFiles}}
-        @monaco={{monacoContext}}
-        @onEditorSetup={{onEditorSetup}}
-      />
+      <Go @monaco={{monacoContext}} @onEditorSetup={{onEditorSetup}} />
       <CardPrerender />
     </template>);
     await waitFor('[data-test-file]');
@@ -223,11 +213,7 @@ module('Integration | Component | go', function (hooks) {
       editor = receivedEditor;
     };
     await render(<template>
-      <Go
-        @openFiles={{mockOpenFiles}}
-        @monaco={{monacoContext}}
-        @onEditorSetup={{onEditorSetup}}
-      />
+      <Go @monaco={{monacoContext}} @onEditorSetup={{onEditorSetup}} />
       <CardPrerender />
     </template>);
     await waitFor('[data-test-file]');
@@ -274,11 +260,7 @@ module('Integration | Component | go', function (hooks) {
       editor = receivedEditor;
     };
     await render(<template>
-      <Go
-        @openFiles={{mockOpenFiles}}
-        @monaco={{monacoContext}}
-        @onEditorSetup={{onEditorSetup}}
-      />
+      <Go @monaco={{monacoContext}} @onEditorSetup={{onEditorSetup}} />
       <CardPrerender />
     </template>);
     await waitFor('[data-test-file]');
@@ -295,7 +277,6 @@ module('Integration | Component | go | new card', function (hooks) {
   let realm: Realm;
   let mockController = new CodeController();
   let monacoService: MonacoService;
-  let mockOpenFiles = new OpenFiles(mockController);
   let loader;
   let editor: IStandaloneCodeEditor;
   let monacoContext: MonacoSDK;
@@ -406,11 +387,7 @@ module('Integration | Component | go | new card', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Go
-            @openFiles={{mockOpenFiles}}
-            @monaco={{monacoContext}}
-            @onEditorSetup={{onEditorSetup}}
-          />
+          <Go @monaco={{monacoContext}} @onEditorSetup={{onEditorSetup}} />
           <CreateCardModal />
           <CardCatalogModal />
           <CardPrerender />

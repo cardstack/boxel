@@ -3,7 +3,6 @@ import { Model } from '../routes/code';
 import { tracked } from '@glimmer/tracking';
 import { service } from '@ember/service';
 import type CodeService from '@cardstack/host/services/code-service';
-import { OpenFiles } from '@cardstack/host/controllers/card';
 
 export default class CodeController extends Controller {
   queryParams = ['openFile', 'openDirs'];
@@ -14,10 +13,6 @@ export default class CodeController extends Controller {
   @service declare codeService: CodeService;
 
   declare model: Model;
-
-  get codeParams() {
-    return new OpenFiles(this);
-  }
 
   openPath(newPath: string | undefined) {
     this.openFile = newPath;

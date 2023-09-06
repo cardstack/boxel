@@ -16,10 +16,9 @@ import OperatorModeStateService, {
 } from '@cardstack/host/services/operator-mode-state-service';
 import type CodeService from '@cardstack/host/services/code-service';
 import { Submode } from '@cardstack/host/components/submode-switcher';
-import type CodeController from '@cardstack/host/controllers/code';
 
 export default class CardController extends Controller {
-  queryParams = ['operatorModeState', 'operatorModeEnabled', 'openDirs'];
+  queryParams = ['operatorModeState', 'operatorModeEnabled'];
 
   isolatedCardComponent: ComponentLike | undefined;
   withPreventDefault = withPreventDefault;
@@ -33,18 +32,12 @@ export default class CardController extends Controller {
   @tracked model: Model | undefined;
   @tracked operatorModeState: string | null = null;
 
-  @tracked openDirs: string | undefined;
-
   constructor(args: any) {
     super(args);
     (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
     registerDestructor(this, () => {
       delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
     });
-  }
-
-  get codeParams() {
-    return new OpenFiles(this);
   }
 
   openPath(newPath: string | undefined) {
@@ -96,39 +89,5 @@ export default class CardController extends Controller {
   @action
   closeOperatorMode() {
     this.operatorModeEnabled = false;
-  }
-}
-
-export class OpenFiles {
-  constructor(private controller: CardController | CodeController) {}
-  get path(): string | undefined {
-    return this.controller.openFile;
-  }
-  set path(newPath: string | undefined) {
-    this.controller.openPath(newPath);
-  }
-  get openDirs(): string[] {
-    return this.controller.openDirs ? this.controller.openDirs.split(',') : [];
-  }
-  toggleOpenDir(entryPath: string): void {
-    let dirs = this.openDirs.slice();
-    for (let i = 0; i < dirs.length; i++) {
-      if (dirs[i].startsWith(entryPath)) {
-        let localParts = entryPath.split('/').filter((p) => p.trim() != '');
-        localParts.pop();
-        if (localParts.length) {
-          dirs[i] = localParts.join('/') + '/';
-        } else {
-          dirs.splice(i, 1);
-        }
-        this.controller.openDirs = dirs.join(',');
-        return;
-      } else if (entryPath.startsWith(dirs[i])) {
-        dirs[i] = entryPath;
-        this.controller.openDirs = dirs.join(',');
-        return;
-      }
-    }
-    this.controller.openDirs = [...dirs, entryPath].join(',');
   }
 }

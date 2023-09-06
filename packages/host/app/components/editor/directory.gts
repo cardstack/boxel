@@ -9,12 +9,10 @@ import { fn } from '@ember/helper';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { directory } from '@cardstack/host/resources/directory';
 import { concat } from '@ember/helper';
-import type { OpenFiles } from '@cardstack/host/controllers/card';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
 interface Args {
   Args: {
-    openFiles: OpenFiles;
     relativePath: string;
     realmURL: string;
   };
@@ -47,13 +45,16 @@ export default class Directory extends Component<Args> {
                 'dropdown-arrow-down'
                 class=(concat
                   'icon '
-                  (if (isOpen entryPath @openFiles.openDirs) 'open' 'closed')
+                  (if
+                    (isOpen entryPath this.operatorModeStateService)
+                    'open'
+                    'closed'
+                  )
                 )
               }}{{entry.name}}
             </button>
-            {{#if (isOpen entryPath @openFiles.openDirs)}}
+            {{#if (isOpen entryPath this.operatorModeStateService)}}
               <Directory
-                @openFiles={{@openFiles}}
                 @relativePath='{{@relativePath}}{{entry.name}}'
                 @realmURL={{@realmURL}}
               />
@@ -128,14 +129,13 @@ export default class Directory extends Component<Args> {
 
   @action
   openFile(entryPath: string) {
-    this.args.openFiles.path = entryPath;
     let fileUrl = new URL(this.cardService.defaultURL + entryPath);
     this.operatorModeStateService.updateCodePath(fileUrl);
   }
 
   @action
   toggleDirectory(entryPath: string) {
-    this.args.openFiles.toggleOpenDir(entryPath);
+    this.operatorModeStateService.toggleOpenDir(entryPath);
   }
 }
 
@@ -146,6 +146,11 @@ function fileIsSelected(
   return operatorModeStateService.state.codePath?.pathname.endsWith(localPath);
 }
 
-function isOpen(path: string, openDirs: string[]) {
-  return openDirs.find((item) => item.startsWith(path));
+function isOpen(
+  path: string,
+  operatorModeStateService: OperatorModeStateService,
+) {
+  return operatorModeStateService.state.openDirs.find((item) =>
+    item.startsWith(path),
+  );
 }

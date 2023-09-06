@@ -31,7 +31,6 @@ import type {
   MonacoSDK,
   IStandaloneCodeEditor,
 } from '@cardstack/host/services/monaco-service';
-import type { OpenFiles } from '@cardstack/host/controllers/card';
 import { maybe } from '@cardstack/host/resources/maybe';
 import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import {
@@ -50,7 +49,6 @@ const waiter = buildWaiter('code-route:load-card-waiter');
 
 interface Signature {
   Args: {
-    openFiles: OpenFiles;
     monaco: MonacoSDK;
     onEditorSetup?(editor: IStandaloneCodeEditor): void;
   };
@@ -60,7 +58,7 @@ export default class Go extends Component<Signature> {
   <template>
     <div class='main' data-test-isLoadIdle={{this.loadCard.isIdle}}>
       <div class='main-column'>
-        <FileTree @url={{ownRealmURL}} @openFiles={{@openFiles}} />
+        <FileTree @url={{ownRealmURL}} />
         <Tooltip @placement='left'>
           <:trigger>
             <AddButton {{on 'click' this.createNew}} />
@@ -226,9 +224,7 @@ export default class Go extends Component<Signature> {
     try {
       return JSON.parse(content);
     } catch (err) {
-      log.warn(
-        `content for ${this.args.openFiles.path} is not valid JSON, skipping write`,
-      );
+      log.warn(`content ${content} is not valid JSON, skipping write`);
       return;
     }
   }

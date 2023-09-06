@@ -32,7 +32,6 @@ import { file, FileResource } from '@cardstack/host/resources/file';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type MessageService from '@cardstack/host/services/message-service';
 import Owner from '@ember/owner';
-import { OpenFiles } from '@cardstack/host/controllers/card';
 import { buildWaiter } from '@ember/test-waiters';
 import type { UpdateEventData } from '@cardstack/runtime-common/realm';
 const waiter = buildWaiter('@cardstack/host/test/helpers/index:onFetch-waiter');

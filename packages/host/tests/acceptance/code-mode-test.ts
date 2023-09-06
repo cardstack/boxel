@@ -251,4 +251,29 @@ module('Acceptance | code mode tests', function (hooks) {
 
     assert.dom('[data-test-person]').exists();
   });
+
+  test('open directories are persisted', async function (assert) {
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: 'http://test-realm/test/index',
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      openDirs: ['Person/'],
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-file]');
+
+    assert.dom('[data-test-directory="Person/"] .icon').hasClass('open');
+  });
 });
