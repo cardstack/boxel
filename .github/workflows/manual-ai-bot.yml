@@ -25,7 +25,7 @@ jobs:
   deploy:
     name: Deploy
     needs: [build]
-    uses: cardstack/gh-actions/.github/workflows/waypoint-deploy.yml@fix/wait-service-stable-directory
+    uses: cardstack/gh-actions/.github/workflows/waypoint-deploy.yml@main
     secrets: inherit
     with:
       app: "boxel-ai-bot"
