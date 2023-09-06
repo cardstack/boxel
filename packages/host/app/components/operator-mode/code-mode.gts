@@ -12,7 +12,6 @@ import type MessageService from '@cardstack/host/services/message-service';
 import CardService from '@cardstack/host/services/card-service';
 import { restartableTask } from 'ember-concurrency';
 import { registerDestructor } from '@ember/destroyable';
-import perform from 'ember-concurrency/helpers/perform';
 import CardURLBar from '@cardstack/host/components/operator-mode/card-url-bar';
 import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-preview-panel';
 import { CardDef } from 'https://cardstack.com/base/card-api';
