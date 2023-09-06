@@ -2,6 +2,9 @@ import Component from '@glimmer/component';
 
 interface Signature {
   Element: HTMLDetailsElement;
+  Args: {
+    className: string;
+  };
   Blocks: {
     title: [];
     content: [];
@@ -10,7 +13,7 @@ interface Signature {
 
 export default class AccordionItem extends Component<Signature> {
   <template>
-    <details class='accordion-item'>
+    <details class='accordion-item {{@className}}' ...attributes>
       <summary class='title'>
         {{yield to='title'}}
       </summary>
@@ -20,9 +23,9 @@ export default class AccordionItem extends Component<Signature> {
     </details>
     <style>
       .accordion-item {
-        --accordion-item-closed-min-height: 40px;
-        --accordion-item-open-min-height: 500px;
-        --accordion-item-border: var(--boxel-border);
+        --accordion-item-closed-min-height: 2.5rem;
+        --accordion-item-open-min-height: 30rem;
+        --accordion-item-border: var(--accordion-border);
         --accordion-item-title-font: 700 var(--boxel-font);
         --accordion-item-title-letter-spacing: var(--boxel-lsp-xs);
         --accordion-item-title-padding: var(--boxel-sp-xs);
@@ -55,9 +58,6 @@ export default class AccordionItem extends Component<Signature> {
       }
       .content {
         padding: var(--accordion-item-content-padding);
-        border-top: var(--accordion-item-border);
-      }
-      .accordion-item + .accordion-item {
         border-top: var(--accordion-item-border);
       }
     </style>

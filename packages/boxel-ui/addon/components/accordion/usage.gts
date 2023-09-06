@@ -2,22 +2,21 @@
 import Component from '@glimmer/component';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import Accordion from './index';
-import AccordionItem from './item';
 
 export default class AccordionUsage extends Component {
   <template>
     <FreestyleUsage @name='Accordion'>
       <:example>
-        <Accordion>
-          <AccordionItem>
+        <Accordion as |A|>
+          <A.Item>
             <:title>Schema Editor</:title>
             <:content>Content</:content>
-          </AccordionItem>
-          <AccordionItem>
+          </A.Item>
+          <A.Item>
             <:title>Playground</:title>
             <:content>Content</:content>
-          </AccordionItem>
-          <AccordionItem>
+          </A.Item>
+          <A.Item>
             <:title>Lorem ipsum dolor sit amet, consectetur adipiscing elit sed
               do eiusmod tempor incididunt ut labore</:title>
             <:content>
@@ -37,7 +36,7 @@ export default class AccordionUsage extends Component {
               consectetur adipiscing elit ut. Pellentesque adipiscing commodo
               elit at imperdiet dui accumsan. Sed blandit libero volutpat sed.
             </:content>
-          </AccordionItem>
+          </A.Item>
         </Accordion>
       </:example>
       <:description>
