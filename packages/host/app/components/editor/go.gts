@@ -259,7 +259,7 @@ export default class Go extends Component<Signature> {
       this.args.openFiles.path!.replace(/\.json$/, ''),
     );
 
-    let doc = await this.reverseFileSerialization(json, url.href);
+    let doc = this.reverseFileSerialization(json, url.href);
     let card: CardDef | undefined;
     try {
       card = await this.cardService.createFromSerialized(doc.data, doc, url);
@@ -380,10 +380,10 @@ export default class Go extends Component<Signature> {
   // with, we convert the file serialization back to the form the host is accustomed
   // to (application/vnd.card+json) as soon as possible so that the semantics around
   // file serialization don't leak outside of where they are immediately used.
-  private async reverseFileSerialization(
+  private reverseFileSerialization(
     fileSerializationJSON: SingleCardDocument,
     id: string,
-  ): Promise<SingleCardDocument> {
+  ): SingleCardDocument {
     let realmURL = this.cardService.getRealmURLFor(new URL(id))?.href;
     if (!realmURL) {
       throw new Error(`Could not determine realm for url ${id}`);
