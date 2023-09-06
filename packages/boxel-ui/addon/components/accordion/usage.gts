@@ -40,6 +40,13 @@ export default class AccordionUsage extends Component {
         </Accordion>
       </:example>
       <:description>
+        Use
+        <code>--accordion-item-closed-min-height</code>
+        and
+        <code>--accordion-item-open-min-height</code>
+        css variables in
+        <code>AccordionItem</code>
+        component to adjust the height of the accordion item.
       </:description>
     </FreestyleUsage>
   </template>
