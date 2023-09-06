@@ -11,8 +11,7 @@ const log = logger('resource:file');
 
 interface Args {
   named: {
-    relativePath: string;
-    realmURL: string;
+    url: string;
     onStateChange?: (state: FileResource['state']) => void;
   };
 }
@@ -37,6 +36,7 @@ export interface Ready {
   name: string;
   url: string;
   lastModified: string | undefined;
+  realmURL: string | undefined;
   write(content: string, flushLoader?: boolean): void;
 }
 
@@ -80,11 +80,11 @@ class _FileResource extends Resource<Args> {
   }
 
   modify(_positional: never[], named: Args['named']) {
-    let { relativePath, realmURL, onStateChange } = named;
-    this._url = realmURL + relativePath;
+    let { url, onStateChange } = named;
+
+    this._url = url;
     this.onStateChange = onStateChange;
-    this.read.perform(); //initial read
-    this.setSubscription(realmURL, () => this.read.perform());
+    this.read.perform();
   }
 
   private updateState(newState: FileResource): void {
@@ -101,6 +101,7 @@ class _FileResource extends Resource<Args> {
         Accept: 'application/vnd.card+source',
       },
     });
+
     if (!response.ok) {
       log.error(
         `Could not get file ${this._url}, status ${response.status}: ${
@@ -114,7 +115,9 @@ class _FileResource extends Resource<Args> {
       }
       return;
     }
+
     let lastModified = response.headers.get('last-modified') || undefined;
+
     if (
       lastModified &&
       this.innerState.state === 'ready' &&
@@ -122,11 +125,20 @@ class _FileResource extends Resource<Args> {
     ) {
       return;
     }
+
+    let realmURL = response.headers.get('x-boxel-realm-url');
+
+    if (!realmURL) {
+      throw new Error('Missing x-boxel-realm-url header in response.');
+    }
+
     let content = await response.text();
     let self = this;
+
     this.updateState({
       state: 'ready',
-      lastModified: lastModified,
+      lastModified,
+      realmURL,
       content,
       name: this._url.split('/').pop()!,
       url: this._url,
@@ -134,6 +146,8 @@ class _FileResource extends Resource<Args> {
         self.writeTask.perform(this, content, flushLoader);
       },
     });
+
+    this.setSubscription(realmURL, () => this.read.perform());
   });
 
   writeTask = restartableTask(
@@ -145,6 +159,7 @@ class _FileResource extends Resource<Args> {
         },
         body: content,
       });
+
       if (!response.ok) {
         let errorMessage = `Could not write file ${this._url}, status ${
           response.status
@@ -192,6 +207,10 @@ class _FileResource extends Resource<Args> {
 
   get lastModified() {
     return (this.innerState as Ready).lastModified;
+  }
+
+  get realmURL() {
+    return (this.innerState as Ready).realmURL;
   }
 
   get write() {

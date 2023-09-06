@@ -203,8 +203,7 @@ export default class Go extends Component<Signature> {
     const relativePath = this.args.openFiles.path;
     if (relativePath) {
       return file(context, () => ({
-        relativePath,
-        realmURL: new RealmPaths(this.cardService.defaultURL).url,
+        url: new RealmPaths(this.cardService.defaultURL).url + relativePath,
         onStateChange: (state) => {
           if (state === 'not-found') {
             this.args.openFiles.path = undefined;
@@ -338,7 +337,7 @@ export default class Go extends Component<Signature> {
     fileSerializationJSON: SingleCardDocument,
     id: string,
   ): Promise<SingleCardDocument> {
-    let realmURL = (await this.cardService.getRealmURLFor(new URL(id)))?.href;
+    let realmURL = this.cardService.getRealmURLFor(new URL(id))?.href;
     if (!realmURL) {
       throw new Error(`Could not determine realm for url ${id}`);
     }

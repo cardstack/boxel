@@ -4,11 +4,7 @@ import { service } from '@ember/service';
 import { action } from '@ember/object';
 import MonacoService from '@cardstack/host/services/monaco-service';
 import { htmlSafe } from '@ember/template';
-import {
-  type RealmInfo,
-  RealmPaths,
-  isCardDocument,
-} from '@cardstack/runtime-common';
+import { type RealmInfo, isCardDocument } from '@cardstack/runtime-common';
 import { maybe } from '@cardstack/host/resources/maybe';
 import { file } from '@cardstack/host/resources/file';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -23,16 +19,12 @@ interface Signature {
   Args: {};
 }
 
-interface RealmInfoWithUrl extends RealmInfo {
-  realmURL: URL;
-}
-
 export default class CodeMode extends Component<Signature> {
   @service declare monacoService: MonacoService;
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @tracked loadFileError: string | null = null;
-  _cachedRealmInfo: RealmInfoWithUrl | null = null; // This is to cache realm info during reload after code path change so that realm assets don't produce a flicker when code patch changes and the realm is the same
+  _cachedRealmInfo: RealmInfo | null = null; // This is to cache realm info during reload after code path change so that realm assets don't produce a flicker when code patch changes and the realm is the same
 
   get realmInfo() {
     return this.realmInfoResource.value;
@@ -59,10 +51,15 @@ export default class CodeMode extends Component<Signature> {
   }
 
   @use realmInfoResource = resource(() => {
-    if (this.codePath) {
+    if (
+      this.openFile.current?.state === 'ready' &&
+      this.openFile.current.realmURL
+    ) {
+      let realmURL = this.openFile.current.realmURL;
+
       const state: {
         isLoading: boolean;
-        value: RealmInfoWithUrl | null;
+        value: RealmInfo | null;
         error: Error | undefined;
         load: () => Promise<void>;
       } = new TrackedObject({
@@ -73,20 +70,15 @@ export default class CodeMode extends Component<Signature> {
           state.isLoading = true;
 
           try {
-            let realmURL = await this.cardService.getRealmURLFor(this.codePath!);
-
-            if (!realmURL) {
-              throw new Error(`Cannot find realm URL for code path: ${this.codePath}}`);
-            }
-
             let realmInfo = await this.cardService.getRealmInfoByRealmURL(
-              realmURL,
+              new URL(realmURL),
             );
 
-            let realmInfoWithRealmURL = { ...realmInfo, realmURL };
-            this._cachedRealmInfo = realmInfoWithRealmURL; // See comment next to _cachedRealmInfo property
+            if (realmInfo) {
+              this._cachedRealmInfo = realmInfo;
+            }
 
-            state.value = realmInfoWithRealmURL;
+            state.value = realmInfo;
           } catch (error: any) {
             state.error = error;
           } finally {
@@ -101,35 +93,25 @@ export default class CodeMode extends Component<Signature> {
       return new TrackedObject({
         error: null,
         isLoading: false,
-        value: null,
+        value: this._cachedRealmInfo,
         load: () => Promise<void>,
       });
     }
   });
 
   openFile = maybe(this, (context) => {
-    let realmURL = this.realmInfoResource.isLoading ? null : this.realmInfoResource.value?.realmURL;
-
-    if (!realmURL || !this.codePath) {
+    if (!this.codePath) {
       return undefined;
     }
 
-    const realmPaths = new RealmPaths(realmURL);
-    const relativePath = realmPaths.local(this.codePath);
-
-    if (relativePath) {
-      return file(context, () => ({
-        relativePath,
-        realmURL: realmPaths.url,
-        onStateChange: (state) => {
-          if (state === 'not-found') {
-            this.loadFileError = 'File is not found';
-          }
-        },
-      }));
-    } else {
-      return undefined;
-    }
+    return file(context, () => ({
+      url: this.codePath!.href,
+      onStateChange: (state) => {
+        if (state === 'not-found') {
+          this.loadFileError = 'File is not found';
+        }
+      },
+    }));
   });
 
   @use cardResource = resource(() => {

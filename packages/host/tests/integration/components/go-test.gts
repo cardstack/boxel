@@ -59,6 +59,7 @@ export const setupLoaderWithHandler = (
             headers: {
               'Content-Type': 'application/vnd.card+source',
               'Last-Modified': opts.lastModified,
+              'X-Boxel-Realm-Url': testRealmURL,
             },
           },
           r.url,
