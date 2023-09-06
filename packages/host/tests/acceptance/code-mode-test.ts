@@ -189,10 +189,11 @@ module('Acceptance | code mode tests', function (hooks) {
         ],
       ],
       submode: 'code',
+      fileView: 'browser',
     })!;
 
     await visit(
-      `/?fileView=browser&operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
         codeModeStateParam,
       )}`,
     );

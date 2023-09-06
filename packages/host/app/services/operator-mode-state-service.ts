@@ -22,12 +22,15 @@ export interface OperatorModeState {
   stacks: Stack[];
   submode: Submode;
   codePath: URL | null;
+  fileView?: FileView;
 }
 
 interface CardItem {
   id: string;
   format: 'isolated' | 'edit';
 }
+
+type FileView = 'inheritance' | 'browser';
 
 type SerializedItem = CardItem;
 type SerializedStack = SerializedItem[];
@@ -36,6 +39,7 @@ export type SerializedState = {
   stacks: SerializedStack[];
   submode?: Submode;
   codePath?: string;
+  fileView?: FileView;
 };
 
 export default class OperatorModeStateService extends Service {
@@ -43,6 +47,7 @@ export default class OperatorModeStateService extends Service {
     stacks: new TrackedArray([]),
     submode: Submode.Interact,
     codePath: null,
+    fileView: 'inheritance' as FileView,
   });
   @tracked recentCards = new TrackedArray<CardDef>([]);
 
@@ -181,6 +186,11 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
+  updateFileView(fileView: FileView) {
+    this.state.fileView = fileView;
+    this.schedulePersist();
+  }
+
   clearStacks() {
     this.state.stacks.splice(0);
     this.schedulePersist();
@@ -248,6 +258,7 @@ export default class OperatorModeStateService extends Service {
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submode.Interact,
       codePath: rawState.codePath ? new URL(rawState.codePath) : null,
+      fileView: rawState.fileView ?? 'inheritance',
     });
 
     let stackIndex = 0;

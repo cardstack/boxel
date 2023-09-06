@@ -82,17 +82,15 @@ export default class CodeMode extends Component<Signature> {
   }
 
   @action setFileView(view: string) {
-    this.args.controller.fileView = view;
+    this.operatorModeStateService.updateFileView(view);
   }
 
   get fileView() {
-    return this.args.controller.fileView;
+    return this.operatorModeStateService.state.fileView;
   }
 
   get fileViewTitle() {
-    return this.args.controller.fileView === 'inheritance'
-      ? 'Inheritance'
-      : 'File Browser';
+    return this.fileView === 'inheritance' ? 'Inheritance' : 'File Browser';
   }
 
   get realmIconURL() {
