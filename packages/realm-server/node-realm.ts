@@ -22,6 +22,7 @@ import {
 } from 'fs-extra';
 import { join } from 'path';
 import { Duplex } from 'node:stream';
+import type { UpdateEventData } from '@cardstack/runtime-common/realm';
 
 export class NodeAdapter implements RealmAdapter {
   constructor(private realmDir: string) {}
@@ -52,12 +53,12 @@ export class NodeAdapter implements RealmAdapter {
 
   private watcher: Watcher | undefined = undefined;
 
-  async subscribe(cb: (message: Record<string, any>) => void): Promise<void> {
+  async subscribe(cb: (message: UpdateEventData) => void): Promise<void> {
     if (this.watcher) {
       throw new Error(`tried to subscribe to watcher twice`);
     }
     this.watcher = sane(join(this.realmDir, '/'));
-    this.watcher.on('change', (path) => cb({ changed: path }));
+    this.watcher.on('change', (path) => cb({ updated: path }));
     this.watcher.on('add', (path) => cb({ added: path }));
     this.watcher.on('delete', (path) => cb({ removed: path }));
     this.watcher.on('error', (err) => {

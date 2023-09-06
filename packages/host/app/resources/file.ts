@@ -64,7 +64,10 @@ class _FileResource extends Resource<Args> {
     });
   }
 
-  private setSubscription(realmURL: string, callback: () => void) {
+  private setSubscription(
+    realmURL: string,
+    callback: (ev: { type: string }) => void,
+  ) {
     let messageServiceUrl = `${realmURL}_message`;
     if (this.subscription && this.subscription.url !== messageServiceUrl) {
       this.subscription.unsubscribe();
@@ -84,7 +87,11 @@ class _FileResource extends Resource<Args> {
     this._url = realmURL + relativePath;
     this.onStateChange = onStateChange;
     this.read.perform(); //initial read
-    this.setSubscription(realmURL, () => this.read.perform());
+    this.setSubscription(realmURL, ({ type }) => {
+      if (type === 'update') {
+        this.read.perform();
+      }
+    });
   }
 
   private updateState(newState: FileResource): void {
