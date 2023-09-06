@@ -164,6 +164,7 @@ export default class DefinitionContainer extends Component<Signature> {
 
       .info-footer .message {
         color: #919191;
+        font-weight: 500;
       }
 
       .action-buttons {
