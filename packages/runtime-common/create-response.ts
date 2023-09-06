@@ -7,8 +7,9 @@ export function createResponse(
     ...init,
     headers: {
       ...init?.headers,
-      'X-Boxel-Realm-URL': unresolvedRealmURL,
+      'X-Boxel-Realm-Url': unresolvedRealmURL,
       vary: 'Accept',
+      'Access-Control-Expose-Headers': 'X-Boxel-Realm-Url',
     },
   });
 }
