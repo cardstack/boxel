@@ -259,6 +259,8 @@ export default class CodeMode extends Component<Signature> {
     }
   });
 
+  // We use this to write non-cards to the realm--so it doesn't make
+  // sense to go thru the card-service for this
   private writeSourceCodeToFile(file: FileResource, content: string) {
     if (file.state !== 'ready') {
       throw new Error('File is not ready to be written to');
@@ -290,6 +292,8 @@ export default class CodeMode extends Component<Signature> {
     try {
       card = await this.cardService.createFromSerialized(doc.data, doc, url);
     } catch (e) {
+      // TODO probably we should show a message in the UI that the card
+      // instance JSON is not actually a valid card
       console.error(
         'JSON is not a valid card--TODO this should be an error message in the code editor',
       );
