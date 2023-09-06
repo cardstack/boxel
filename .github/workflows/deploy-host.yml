@@ -56,6 +56,6 @@ jobs:
         uses: cardstack/gh-actions/discord-notification-deploy@main
         with:
           app: "boxel-host"
-          status: ${{ github.action_status }}
+          status: ${{ job.status }}
           environment: ${{ inputs.environment }}
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
