@@ -2257,6 +2257,8 @@ module('Integration | operator-mode', function (hooks) {
       'keypress',
       'Enter',
     );
+
+    await waitFor('[data-test-card-url-bar-error]');
     assert.dom('[data-test-card-url-bar-error]').hasText('File is not found');
 
     await fillIn('[data-test-card-url-bar-input]', `Wrong URL`);

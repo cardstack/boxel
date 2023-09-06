@@ -610,8 +610,7 @@ export async function getFileResource(
   }
   let relativePath = openFiles.path;
   let f = file(context, () => ({
-    relativePath,
-    realmURL: new RealmPaths(realmURL).url,
+    url: new RealmPaths(realmURL).url + relativePath,
     onStateChange: (state) => {
       if (state === 'not-found') {
         openFiles.path = undefined;
