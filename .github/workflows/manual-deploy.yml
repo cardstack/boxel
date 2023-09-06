@@ -22,10 +22,10 @@ jobs:
 
   build-realm-server:
     name: Build realm-server
-    uses: ./.github/workflows/waypoint-build.yml
+    uses: cardstack/gh-actions/.github/workflows/waypoint-build.yml@main
     secrets: inherit
     with:
-      app: 'realm-demo'
+      app: "realm-demo"
       environment: ${{ inputs.environment }}
       restore-mtime: true
 
@@ -40,8 +40,8 @@ jobs:
   deploy-realm-server:
     name: Deploy realm server to staging
     needs: [build-host, build-realm-server]
-    uses: ./.github/workflows/waypoint-deploy.yml
+    uses: cardstack/gh-actions/.github/workflows/waypoint-deploy.yml@main
     secrets: inherit
     with:
-      app: 'realm-demo'
+      app: "realm-demo"
       environment: ${{ inputs.environment }}

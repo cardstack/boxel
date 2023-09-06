@@ -19,8 +19,8 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type MessageService from '@cardstack/host/services/message-service';
 import CardService from '@cardstack/host/services/card-service';
 import { task, restartableTask, timeout } from 'ember-concurrency';
-import { registerDestructor } from '@ember/destroyable';
 import perform from 'ember-concurrency/helpers/perform';
+import { registerDestructor } from '@ember/destroyable';
 import CardURLBar from '@cardstack/host/components/operator-mode/card-url-bar';
 import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-preview-panel';
 import { CardDef } from 'https://cardstack.com/base/card-api';
@@ -39,14 +39,13 @@ export default class CodeMode extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
   @service declare operatorModeStateService: OperatorModeStateService;
-  @tracked private realmInfo: RealmInfo | null = null;
   @tracked private loadFileError: string | null = null;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
+  private _cachedRealmInfo: RealmInfo | null = null; // This is to cache realm info during reload after code path change so that realm assets don't produce a flicker when code patch changes and the realm is the same
 
   constructor(args: any, owner: any) {
     super(args, owner);
-    this.fetchCodeModeRealmInfo.perform();
     let url = `${this.cardService.defaultURL}_message`;
     this.subscription = {
       url,
@@ -74,6 +73,10 @@ export default class CodeMode extends Component<Signature> {
     this.loadMonaco.perform();
   }
 
+  private get realmInfo() {
+    return this.realmInfoResource.value;
+  }
+
   private get backgroundURL() {
     return this.realmInfo?.backgroundURL;
   }
@@ -85,23 +88,6 @@ export default class CodeMode extends Component<Signature> {
   private get realmIconURL() {
     return this.realmInfo?.iconURL;
   }
-
-  @action private resetLoadFileError() {
-    this.loadFileError = null;
-  }
-
-  private fetchCodeModeRealmInfo = restartableTask(async () => {
-    if (!this.codePath) {
-      return;
-    }
-
-    let realmURL = this.cardService.getRealmURLFor(this.codePath);
-    if (!realmURL) {
-      this.realmInfo = null;
-    } else {
-      this.realmInfo = await this.cardService.getRealmInfoByRealmURL(realmURL);
-    }
-  });
 
   private get isLoading() {
     return (
@@ -137,31 +123,72 @@ export default class CodeMode extends Component<Signature> {
     return this.operatorModeStateService.state.codePath;
   }
 
+  @action private resetLoadFileError() {
+    this.loadFileError = null;
+  }
+
+  @use private realmInfoResource = resource(() => {
+    if (
+      this.openFile.current?.state === 'ready' &&
+      this.openFile.current.realmURL
+    ) {
+      let realmURL = this.openFile.current.realmURL;
+
+      const state: {
+        isLoading: boolean;
+        value: RealmInfo | null;
+        error: Error | undefined;
+        load: () => Promise<void>;
+      } = new TrackedObject({
+        isLoading: true,
+        value: this._cachedRealmInfo,
+        error: undefined,
+        load: async () => {
+          state.isLoading = true;
+
+          try {
+            let realmInfo = await this.cardService.getRealmInfoByRealmURL(
+              new URL(realmURL),
+            );
+
+            if (realmInfo) {
+              this._cachedRealmInfo = realmInfo;
+            }
+
+            state.value = realmInfo;
+          } catch (error: any) {
+            state.error = error;
+          } finally {
+            state.isLoading = false;
+          }
+        },
+      });
+
+      state.load();
+      return state;
+    } else {
+      return new TrackedObject({
+        error: null,
+        isLoading: false,
+        value: this._cachedRealmInfo,
+        load: () => Promise<void>,
+      });
+    }
+  });
+
   private openFile = maybe(this, (context) => {
     if (!this.codePath) {
       return undefined;
     }
 
-    let realmURL = this.cardService.getRealmURLFor(this.codePath);
-    if (!realmURL) {
-      return undefined;
-    }
-
-    const realmPaths = new RealmPaths(realmURL);
-    const relativePath = realmPaths.local(this.codePath);
-    if (relativePath) {
-      return file(context, () => ({
-        relativePath,
-        realmURL: realmPaths.url,
-        onStateChange: (state) => {
-          if (state === 'not-found') {
-            this.loadFileError = 'File is not found';
-          }
-        },
-      }));
-    } else {
-      return undefined;
-    }
+    return file(context, () => ({
+      url: this.codePath!.href,
+      onStateChange: (state) => {
+        if (state === 'not-found') {
+          this.loadFileError = 'File is not found';
+        }
+      },
+    }));
   });
 
   private reloadCard = restartableTask(async () => {
@@ -292,7 +319,6 @@ export default class CodeMode extends Component<Signature> {
   <template>
     <div class='code-mode-background' style={{this.backgroundURLStyle}}></div>
     <CardURLBar
-      @onEnterPressed={{perform this.fetchCodeModeRealmInfo}}
       @loadFileError={{this.loadFileError}}
       @resetLoadFileError={{this.resetLoadFileError}}
       @realmInfo={{this.realmInfo}}

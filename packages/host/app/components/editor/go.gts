@@ -235,8 +235,7 @@ export default class Go extends Component<Signature> {
     const relativePath = this.args.openFiles.path;
     if (relativePath) {
       return file(context, () => ({
-        relativePath,
-        realmURL: new RealmPaths(this.cardService.defaultURL).url,
+        url: new RealmPaths(this.cardService.defaultURL).url + relativePath,
         onStateChange: (state) => {
           if (state === 'not-found') {
             this.args.openFiles.path = undefined;
