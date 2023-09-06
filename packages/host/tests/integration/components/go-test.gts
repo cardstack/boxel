@@ -28,6 +28,7 @@ import type {
 } from '@cardstack/host/services/monaco-service';
 import CodeController from '@cardstack/host/controllers/code';
 import CodeService from '@cardstack/host/services/code-service';
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { formatRFC7231 } from 'date-fns';
@@ -101,7 +102,7 @@ module('Integration | Component | go', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
   let monacoService: MonacoService;
-  let mockOpenFiles: OpenFiles;
+  let operatorModeStateService: OperatorModeStateService;
   let editor: IStandaloneCodeEditor;
   let monacoContext: MonacoSDK;
   let loader: Loader;
@@ -125,6 +126,9 @@ module('Integration | Component | go', function (hooks) {
     ) as MonacoService;
     let codeController = new CodeController();
     codeController.codeService = new CodeService();
+    operatorModeStateService = this.owner.lookup(
+      'service:operator-mode-state-service',
+    ) as OperatorModeStateService;
     await realm.ready;
   });
   hooks.afterEach(async function () {
@@ -167,8 +171,8 @@ module('Integration | Component | go', function (hooks) {
     assert.dom('[data-test-file="person.gts"]').exists();
     await click('[data-test-file="person.gts"]');
 
-    assert.strictEqual(mockOpenFiles.path, 'person.gts');
-    assert.strictEqual(mockOpenFiles.openDirs.length, 0);
+    assert.strictEqual(operatorModeStateService.state.path, 'person.gts');
+    assert.strictEqual(operatorModeStateService.state.openDirs.length, 0);
 
     await waitUntil(() => find('[data-test-editor'));
 
@@ -218,13 +222,16 @@ module('Integration | Component | go', function (hooks) {
     await waitFor('[data-test-file]');
     assert.dom('[data-test-directory="Person/"]').exists();
     await click('[data-test-directory="Person/"]');
-    assert.strictEqual(mockOpenFiles.openDirs.length, 1);
-    assert.strictEqual(mockOpenFiles.openDirs[0], 'Person/');
+    assert.strictEqual(operatorModeStateService.state.openDirs.length, 1);
+    assert.strictEqual(operatorModeStateService.state.openDirs[0], 'Person/');
     await waitFor('[data-test-file="Person/hassan.json"]');
     assert.dom('[data-test-file="Person/hassan.json"]').exists();
     await click('[data-test-file="Person/hassan.json"]');
     await waitUntil(() => find('[data-test-editor]'));
-    assert.strictEqual(mockOpenFiles.path, 'Person/hassan.json');
+    assert.strictEqual(
+      operatorModeStateService.state.path,
+      'Person/hassan.json',
+    );
     assert
       .dom('[data-test-editor]')
       .containsText('data')
@@ -265,7 +272,7 @@ module('Integration | Component | go', function (hooks) {
     await waitFor('[data-test-file]');
     assert.dom('[data-test-file="person.gts"]').exists();
     await click('[data-test-file="person.gts"]');
-    assert.strictEqual(mockOpenFiles.path, 'person.gts');
+    assert.strictEqual(operatorModeStateService.state.path, 'person.gts');
     await waitUntil(() => find('[data-test-last-edit]'));
     assert.dom('[data-test-last-edit]').hasText(`Last edit was 10 minutes ago`);
   });
