@@ -52,7 +52,9 @@ jobs:
             echo "AWS_ROLE_ARN=arn:aws:iam::120317779495:role/waypoint" >> $GITHUB_ENV
             echo "WAYPOINT_SERVER_ADDR=${{ secrets.PRODUCTION_WAYPOINT_SERVER_ADDR }}" >> $GITHUB_ENV
             echo "WAYPOINT_SERVER_TOKEN=${{ secrets.PRODUCTION_WAYPOINT_SERVER_TOKEN }}" >> $GITHUB_ENV
+            cd ${{ inputs.working-directory }}
             cp waypoint.prod.hcl waypoint.hcl
+            cd -
           elif [ "$INPUT_ENVIRONMENT" = "staging" ]; then
             echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/waypoint" >> $GITHUB_ENV
             echo "WAYPOINT_SERVER_ADDR=${{ secrets.STAGING_WAYPOINT_SERVER_ADDR }}" >> $GITHUB_ENV
