@@ -63,6 +63,7 @@ export type RunnerRegistration = (
     prev: RunState,
     url: URL,
     operation: 'update' | 'delete',
+    onInvalidation?: (invalidatedURLs: URL[]) => void,
   ) => Promise<RunState>,
 ) => Promise<void>;
 
@@ -156,6 +157,7 @@ export class SearchIndex {
         prev: RunState,
         url: URL,
         operation: 'update' | 'delete',
+        onInvalidation?: (invalidatedURLs: URL[]) => void,
       ) => Promise<RunState>)
     | undefined;
 
@@ -219,7 +221,10 @@ export class SearchIndex {
     });
   }
 
-  async update(url: URL, opts?: { delete?: true }): Promise<void> {
+  async update(
+    url: URL,
+    opts?: { delete?: true; onInvalidation?: (invalidatedURLs: URL[]) => void },
+  ): Promise<void> {
     await this.setupRunner(async () => {
       if (!this.#incremental) {
         throw new Error(`Index runner has not been registered`);
@@ -228,6 +233,7 @@ export class SearchIndex {
         this.#index,
         url,
         opts?.delete ? 'delete' : 'update',
+        opts?.onInvalidation,
       );
       this.#index = {
         // we overwrite the instances in the incremental update, as there may

@@ -58,13 +58,9 @@ export class DirectoryResource extends Resource<Args> {
     if (!this.subscription) {
       this.subscription = {
         url: path,
-        unsubscribe: this.messageService.subscribe(path, ({ data }) => {
+        unsubscribe: this.messageService.subscribe(path, ({ type }) => {
           // we are only interested in the filesystem based events
-          if (
-            data.startsWith('added:') ||
-            data.startsWith('removed:') ||
-            data.startsWith('changed:')
-          ) {
+          if (type === 'update') {
             this.readdir.perform();
           }
         }),

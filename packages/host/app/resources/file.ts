@@ -64,7 +64,10 @@ class _FileResource extends Resource<Args> {
     });
   }
 
-  private setSubscription(realmURL: string, callback: () => void) {
+  private setSubscription(
+    realmURL: string,
+    callback: (ev: { type: string }) => void,
+  ) {
     let messageServiceUrl = `${realmURL}_message`;
     if (this.subscription && this.subscription.url !== messageServiceUrl) {
       this.subscription.unsubscribe();
@@ -181,6 +184,7 @@ class _FileResource extends Resource<Args> {
         url: state.url,
         name: state.name,
         write: state.write,
+        realmURL: state.realmURL,
       });
 
       if (flushLoader) {

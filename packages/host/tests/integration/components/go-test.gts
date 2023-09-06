@@ -122,6 +122,9 @@ module('Integration | Component | go', function (hooks) {
     mockOpenFiles = new OpenFiles(codeController);
     await realm.ready;
   });
+  hooks.afterEach(async function () {
+    await waitFor('[data-test-isLoadIdle]');
+  });
 
   setupCardLogs(
     hooks,

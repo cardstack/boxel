@@ -90,6 +90,7 @@ export default class Room extends Component<RoomArgs> {
     <div
       class='messages-wrapper'
       data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
+      data-test-room-name={{this.room.name}}
     >
       <div class='messages'>
         <div class='notices'>
@@ -126,7 +127,7 @@ export default class Room extends Component<RoomArgs> {
 
     <div class='send-message'>
       <BoxelInput
-        data-test-message-field
+        data-test-message-field={{this.room.name}}
         type='text'
         @multiline={{true}}
         @value={{this.messageToSend}}

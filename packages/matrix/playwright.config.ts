@@ -24,4 +24,11 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
+  // General timeout per test
+  timeout: 120000,
+
+  // For expect calls
+  expect: {
+    timeout: 60000,
+  },
 });
