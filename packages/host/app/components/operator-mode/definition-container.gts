@@ -55,48 +55,50 @@ export default class DefinitionContainer extends Component<Signature> {
         >{{@fileExtension}}</span>
       </div>
       <div class='content'>
-        <div class='realm-info'>
-          <img src={{@realmIconURL}} alt='realm-icon' />
-          <Label class='realm-name' data-test-definition-realm-name>In
-            {{this.realmName}}</Label>
+        <div class='definition-info'>
+          <div class='realm-info'>
+            <img src={{@realmIconURL}} alt='realm-icon' />
+            <Label class='realm-name' data-test-definition-realm-name>In
+              {{this.realmName}}</Label>
+          </div>
+          <div class='definition-name'>{{@name}}</div>
         </div>
-        <div class='name'>{{@name}}</div>
-      </div>
-      <div class='action-buttons'>
-        {{#if (and (eq @variant 'module') @isActive)}}
-          {{#if @onCreate}}
-            <Button class='action-button' {{on 'click' @onCreate}}>
-              {{svgJar 'icon-plus' width='24px' height='24px'}}
-              Create Instance
-            </Button>
+        <div class='action-buttons'>
+          {{#if (and (eq @variant 'module') @isActive)}}
+            {{#if @onCreate}}
+              <Button class='action-button' {{on 'click' @onCreate}}>
+                {{svgJar 'icon-plus' width='24px' height='24px'}}
+                Create Instance
+              </Button>
+            {{/if}}
+            {{#if @onInherit}}
+              <Button class='action-button' {{on 'click' @onInherit}}>
+                {{svgJar 'icon-inherit' width='24px' height='24px'}}
+                Inherit
+              </Button>
+            {{/if}}
+            {{#if @onDuplicate}}
+              <Button class='action-button' {{on 'click' @onDuplicate}}>
+                {{svgJar 'copy' width='24px' height='24px'}}
+                Duplicate
+              </Button>
+            {{/if}}
           {{/if}}
-          {{#if @onInherit}}
-            <Button class='action-button' {{on 'click' @onInherit}}>
-              {{svgJar 'icon-inherit' width='24px' height='24px'}}
-              Inherit
-            </Button>
+          {{#if (eq @variant 'instance')}}
+            {{#if @onDuplicate}}
+              <Button class='action-button' {{on 'click' @onDuplicate}}>
+                {{svgJar 'copy' width='24px' height='24px'}}
+                Duplicate
+              </Button>
+            {{/if}}
           {{/if}}
-          {{#if @onDuplicate}}
-            <Button class='action-button' {{on 'click' @onDuplicate}}>
-              {{svgJar 'copy' width='24px' height='24px'}}
-              Duplicate
-            </Button>
-          {{/if}}
-        {{/if}}
-        {{#if (eq @variant 'instance')}}
-          {{#if @onDuplicate}}
-            <Button class='action-button' {{on 'click' @onDuplicate}}>
-              {{svgJar 'copy' width='24px' height='24px'}}
-              Duplicate
-            </Button>
-          {{/if}}
-        {{/if}}
-      </div>
-      {{#if @isActive}}
-        <div class='info-footer' data-test-definition-info-text>
-          <p class='message'>{{@infoText}}</p>
         </div>
-      {{/if}}
+        {{#if @isActive}}
+          <div class='info-footer' data-test-definition-info-text>
+            <div class='message'>{{@infoText}}</div>
+          </div>
+        {{/if}}
+      </div>
     </div>
 
     <style>
@@ -108,9 +110,8 @@ export default class DefinitionContainer extends Component<Signature> {
       .banner {
         display: grid;
         grid-template-columns: 1fr auto;
-        gap: var(--boxel-sp-xs);
         align-items: center;
-        padding: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-sm);
         border-top-left-radius: var(--boxel-border-radius);
         border-top-right-radius: var(--boxel-border-radius);
         background-color: var(--boxel-100);
@@ -133,30 +134,34 @@ export default class DefinitionContainer extends Component<Signature> {
         color: var(--boxel-light);
       }
       .content {
-        padding: var(--boxel-sp-sm);
+        display: flex;
+        flex-direction: column;
+        padding: var(--boxel-sp-xs);
+        gap: var(--boxel-sp-sm);
       }
       .realm-info {
         display: flex;
         justify-content: flex-start;
         align-items: center;
-        gap: var(--boxel-sp-xs);
+        gap: var(--boxel-sp-xxxs);
       }
       .realm-info img {
-        width: 22px;
+        width: var(--boxel-icon-sm);
       }
-
-      .realm-name {
+      .realm-info .realm-name {
         letter-spacing: var(--boxel-lsp-xs);
         font-weight: 500;
       }
-      .name {
+      .definition-info {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xxxs);
+      }
+      .definition-name {
         font-size: var(--boxel-font-size);
         font-weight: bold;
       }
 
-      .info-footer {
-        padding: var(--boxel-sp-sm);
-      }
       .info-footer .message {
         color: #919191;
       }
@@ -165,14 +170,13 @@ export default class DefinitionContainer extends Component<Signature> {
         display: flex;
         flex-direction: column;
         width: 80%;
-        padding: var(--boxel-sp-sm);
       }
       .action-button {
         --boxel-button-text-color: var(--boxel-highlight);
+        --boxel-button-padding: 0px;
         --icon-color: var(--boxel-highlight);
         color: var(--boxel-highlight);
         border: none;
-        padding: 0;
         display: flex;
         justify-content: flex-start;
         align-items: center;
