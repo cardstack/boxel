@@ -47,7 +47,6 @@ export default class OperatorModeStateService extends Service {
     stacks: new TrackedArray([]),
     submode: Submode.Interact,
     codePath: null,
-    fileView: 'inheritance' as FileView,
   });
   @tracked recentCards = new TrackedArray<CardDef>([]);
 
@@ -225,6 +224,7 @@ export default class OperatorModeStateService extends Service {
       stacks: [],
       submode: this.state.submode,
       codePath: this.state.codePath?.toString(),
+      fileView: this.state.fileView?.toString() as FileView,
     };
 
     for (let stack of this.state.stacks) {
