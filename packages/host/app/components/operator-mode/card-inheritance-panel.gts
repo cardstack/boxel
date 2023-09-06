@@ -1,8 +1,16 @@
 import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import CardService from '@cardstack/host/services/card-service';
-import { type CardDef } from 'https://cardstack.com/base/card-api';
-import { type RealmInfo, cardTypeDisplayName } from '@cardstack/runtime-common';
+import {
+  type CardDef,
+  type BaseDef,
+} from 'https://cardstack.com/base/card-api';
+import {
+  type RealmInfo,
+  cardTypeDisplayName,
+  identifyCard,
+  moduleFrom,
+} from '@cardstack/runtime-common';
 import DefinitionContainer, { DefinitionVariant } from './definition-container';
 import { isReady, FileResource } from '@cardstack/host/resources/file';
 import { tracked } from '@glimmer/tracking';
@@ -10,7 +18,6 @@ import { action } from '@ember/object';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import LoaderService from '@cardstack/host/services/loader-service';
 import moment from 'moment';
-import { BaseDef } from 'https://cardstack.com/base/card-api';
 import { type ImportResource } from '@cardstack/host/resources/import';
 
 interface Args {
@@ -53,7 +60,7 @@ export default class CardInheritancePanel extends Component<Args> {
       {{#if @importedModule.module}}
         {{#each (cardsFromModule @importedModule.module) as |card|}}
           <DefinitionContainer
-            @name={{cardTypeDisplayName card}}
+            @name={{this.getCardTypeDisplayName card}}
             @fileExtension='.GTS'
             @realmInfo={{@realmInfo}}
             @realmIconURL={{@realmIconURL}}
@@ -100,15 +107,29 @@ export default class CardInheritancePanel extends Component<Args> {
     }
     return;
   }
+
+  getCardTypeDisplayName(t: typeof BaseDef) {
+    let card = new t();
+    return cardTypeDisplayName(card);
+  }
+
+  moduleUrl(t: typeof BaseDef | undefined) {
+    if (t) {
+      let ref = identifyCard(t);
+      if (ref) {
+        return new URL(moduleFrom(ref));
+      }
+      throw new Error('Could not identify card');
+    }
+    return;
+  }
 }
 
 function cardsFromModule(
   module: Record<string, any>,
   _never?: never, // glint insists that w/o this last param that there are actually no params
-): BaseDef[] {
-  return Object.values(module)
-    .filter(
-      (maybeCard) => typeof maybeCard === 'function' && 'baseDef' in maybeCard,
-    )
-    .map((o) => new o()) as BaseDef[]; //instantiating as instance needed to get display name
+): (typeof BaseDef)[] {
+  return Object.values(module).filter(
+    (maybeCard) => typeof maybeCard === 'function' && 'baseDef' in maybeCard,
+  );
 }
