@@ -45,8 +45,8 @@ export default class DefinitionContainer extends Component<Signature> {
   }
 
   <template>
-    <div class='container' ...attributes>
-      <div class='banner {{if @isActive "active"}}'>
+    <div class='container {{if @isActive "active"}}' ...attributes>
+      <div class='banner'>
         <Label class='banner-title'>
           {{this.title}}</Label>
         <span
@@ -124,6 +124,10 @@ export default class DefinitionContainer extends Component<Signature> {
         text-transform: uppercase;
       }
       .active {
+        box-shadow: var(--boxel-box-shadow);
+      }
+
+      .active .banner {
         background-color: var(--boxel-highlight);
       }
 
