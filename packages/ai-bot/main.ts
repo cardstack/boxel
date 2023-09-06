@@ -12,6 +12,7 @@ import {
 import OpenAI from 'openai';
 import { ChatCompletionChunk } from 'openai/resources/chat';
 import { logger, aiBotUsername } from '@cardstack/runtime-common';
+import { constructHistory, extractContentFromStream } from './helpers';
 
 let log = logger('ai-bot');
 
@@ -168,8 +169,7 @@ async function sendStream(
   let content = '';
   let unsent = 0;
   let currentParsingMode: ParsingMode = ParsingMode.Text;
-  for await (const part of stream) {
-    let token = part.choices[0].delta?.content;
+  for await (const token of extractContentFromStream(stream)) {
     log.info('Token: ', token);
     // The final token is undefined, so we need to break out of the loop
     if (token == undefined) {
@@ -210,7 +210,7 @@ async function sendStream(
       append_to = undefined;
     } else if (token) {
       unsent += 1;
-      content += part.choices[0].delta?.content;
+      content += token;
       // buffer up to 20 tokens before sending, but only when parsing text
       if (currentParsingMode == ParsingMode.Text && unsent > 20) {
         await sendMessage(client, room, content, append_to);
@@ -222,29 +222,6 @@ async function sendStream(
   if (content) {
     await sendMessage(client, room, content, append_to);
   }
-}
-
-function constructHistory(history: IRoomEvent[]) {
-  const latestEventsMap = new Map<string, IRoomEvent>();
-  for (let event of history) {
-    let content = event.content;
-    if (event.type == 'm.room.message') {
-      let eventId = event.event_id!;
-      if (content['m.relates_to']?.rel_type === 'm.replace') {
-        eventId = content['m.relates_to']!.event_id!;
-      }
-      const existingEvent = latestEventsMap.get(eventId);
-      if (
-        !existingEvent ||
-        existingEvent.origin_server_ts < event.origin_server_ts
-      ) {
-        latestEventsMap.set(eventId, event);
-      }
-    }
-  }
-  let latestEvents = Array.from(latestEventsMap.values());
-  latestEvents.sort((a, b) => a.origin_server_ts - b.origin_server_ts);
-  return latestEvents;
 }
 
 function getLastUploadedCardID(history: IRoomEvent[]): String | undefined {
