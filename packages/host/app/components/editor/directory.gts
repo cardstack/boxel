@@ -150,7 +150,7 @@ function isOpen(
   path: string,
   operatorModeStateService: OperatorModeStateService,
 ) {
-  return operatorModeStateService.state.openDirs.find((item) =>
+  return (operatorModeStateService.state.openDirs ?? []).find((item) =>
     item.startsWith(path),
   );
 }

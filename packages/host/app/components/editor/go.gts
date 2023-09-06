@@ -18,6 +18,7 @@ import merge from 'lodash/merge';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type CardService from '@cardstack/host/services/card-service';
 import type MessageService from '@cardstack/host/services/message-service';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import { file, FileResource, isReady } from '@cardstack/host/resources/file';
 import CardEditor from '@cardstack/host/components/card-editor';
 import Module from './module';
@@ -158,6 +159,7 @@ export default class Go extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
+  @service declare operatorModeStateService: OperatorModeStateService;
   @tracked jsonError: string | undefined;
   @tracked card: CardDef | undefined;
   // note this is only subscribed to events from our own realm
@@ -230,9 +232,14 @@ export default class Go extends Component<Signature> {
   }
 
   get language(): string | undefined {
-    if (this.args.openFiles.path) {
+    if (this.operatorModeStateService.state.codePath) {
       const editorLanguages = this.args.monaco.languages.getLanguages();
-      let extension = '.' + this.args.openFiles.path.split('.').pop();
+      let extension =
+        '.' +
+        this.operatorModeStateService.state.codePath
+          .toString()
+          .split('.')
+          .pop();
       let language = editorLanguages.find((lang) =>
         lang.extensions?.find((ext) => ext === extension),
       );
@@ -242,13 +249,14 @@ export default class Go extends Component<Signature> {
   }
 
   openFile = maybe(this, (context) => {
-    const relativePath = this.args.openFiles.path;
+    const relativePath =
+      this.operatorModeStateService.state.codePath?.toString();
     if (relativePath) {
       return file(context, () => ({
         url: new RealmPaths(this.cardService.defaultURL).url + relativePath,
         onStateChange: (state) => {
           if (state === 'not-found') {
-            this.args.openFiles.path = undefined;
+            this.operatorModeStateService.state.codePath = null;
           }
         },
       }));
@@ -266,9 +274,12 @@ export default class Go extends Component<Signature> {
 
   async saveFileSerializedCard(json: SingleCardDocument) {
     let realmPath = new RealmPaths(this.cardService.defaultURL);
-    let url = realmPath.fileURL(
-      this.args.openFiles.path!.replace(/\.json$/, ''),
-    );
+    let openPath = this.operatorModeStateService.state.codePath;
+    if (!openPath) {
+      return;
+    }
+
+    let url = realmPath.fileURL(openPath.toString()!.replace(/\.json$/, ''));
 
     let doc = this.reverseFileSerialization(json, url.href);
     let card: CardDef | undefined;
@@ -341,11 +352,11 @@ export default class Go extends Component<Signature> {
   }
 
   get path() {
-    return this.args.openFiles.path ?? '/';
+    return this.operatorModeStateService.state.codePath ?? '/';
   }
 
   get isRunnable(): boolean {
-    let filename = this.path;
+    let filename = this.path.toString();
     return ['.gjs', '.js', '.gts', '.ts'].some((extension) =>
       filename.endsWith(extension),
     );
@@ -401,7 +412,7 @@ export default class Go extends Component<Signature> {
       );
     }
     let path = `${newCard.id.slice(ownRealmURL.length)}.json`;
-    this.args.openFiles.path = path;
+    this.operatorModeStateService.state.codePath = new URL(path);
   });
 
   // File serialization is a special type of card serialization that the host would
