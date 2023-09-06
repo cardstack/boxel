@@ -298,7 +298,11 @@ export default class CodeMode extends Component<Signature> {
       @realmInfo={{this.realmInfo}}
       class='card-url-bar'
     />
-    <div class='code-mode' data-test-code-mode>
+    <div
+      class='code-mode'
+      data-test-code-mode
+      data-test-save-idle={{this.contentChangedTask.isIdle}}
+    >
       <div class='columns'>
         <div class='column'>
           {{! Move each container and styles to separate component }}
