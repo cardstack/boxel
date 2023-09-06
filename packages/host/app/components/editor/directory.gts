@@ -29,7 +29,11 @@ export default class Directory extends Component<Args> {
             <button
               data-test-file={{entryPath}}
               {{on 'click' (fn this.openFile entryPath)}}
-              class='file {{if (eq entryPath @openFiles.path) "selected"}}'
+              class='file
+                {{if
+                  (fileIsSelected entryPath this.operatorModeStateService)
+                  "selected"
+                }}'
             >
               {{entry.name}}
             </button>
@@ -37,8 +41,7 @@ export default class Directory extends Component<Args> {
             <button
               data-test-directory={{entryPath}}
               {{on 'click' (fn this.toggleDirectory entryPath)}}
-              class='directory
-                {{if (isSelected entryPath @openFiles.path) "selected"}}'
+              class='directory'
             >
               {{svgJar
                 'dropdown-arrow-down'
@@ -136,8 +139,11 @@ export default class Directory extends Component<Args> {
   }
 }
 
-function isSelected(localPath: string, openFile: string | undefined) {
-  return openFile?.startsWith(localPath);
+function fileIsSelected(
+  localPath: string,
+  operatorModeStateService: OperatorModeStateService,
+) {
+  return operatorModeStateService.state.codePath?.pathname.endsWith(localPath);
 }
 
 function isOpen(path: string, openDirs: string[]) {

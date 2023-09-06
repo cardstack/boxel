@@ -10,6 +10,7 @@ import { Model } from '@cardstack/host/routes/card';
 import { registerDestructor } from '@ember/destroyable';
 import type { Query } from '@cardstack/runtime-common/query';
 import { getSearchResults, type Search } from '../resources/search';
+import type CardService from '@cardstack/host/services/card-service';
 import OperatorModeStateService, {
   SerializedState as OperatorModeSerializedState,
 } from '@cardstack/host/services/operator-mode-state-service';
@@ -18,16 +19,12 @@ import { Submode } from '@cardstack/host/components/submode-switcher';
 import type CodeController from '@cardstack/host/controllers/code';
 
 export default class CardController extends Controller {
-  queryParams = [
-    'operatorModeState',
-    'operatorModeEnabled',
-    'openFile',
-    'openDirs',
-  ];
+  queryParams = ['operatorModeState', 'operatorModeEnabled', 'openDirs'];
 
   isolatedCardComponent: ComponentLike | undefined;
   withPreventDefault = withPreventDefault;
 
+  @service declare cardService: CardService;
   @service declare router: RouterService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare codeService: CodeService;
@@ -36,7 +33,6 @@ export default class CardController extends Controller {
   @tracked model: Model | undefined;
   @tracked operatorModeState: string | null = null;
 
-  @tracked openFile: string | undefined;
   @tracked openDirs: string | undefined;
 
   constructor(args: any) {
@@ -52,9 +48,10 @@ export default class CardController extends Controller {
   }
 
   openPath(newPath: string | undefined) {
-    this.openFile = newPath;
-
     if (newPath) {
+      let fileUrl = new URL(this.cardService.defaultURL + newPath);
+      this.operatorModeStateService.updateCodePath(fileUrl);
+
       const existingIndex = this.codeService.recentFiles.indexOf(newPath);
 
       if (existingIndex > -1) {
