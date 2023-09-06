@@ -327,8 +327,12 @@ export default class OperatorModeStateService extends Service {
     );
   }
 
+  get openDirs() {
+    return this.state.openDirs ?? [];
+  }
+
   toggleOpenDir(entryPath: string): void {
-    let dirs = this.state.openDirs.slice();
+    let dirs = this.openDirs.slice();
     for (let i = 0; i < dirs.length; i++) {
       if (dirs[i].startsWith(entryPath)) {
         let localParts = entryPath.split('/').filter((p) => p.trim() != '');
