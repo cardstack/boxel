@@ -101,7 +101,7 @@ export default class CardInheritancePanel extends Component<Args> {
       isReady(this.args.openFile.current) &&
       this.args.openFile.current?.lastModified != undefined
     ) {
-      return `Last edit was ${moment(
+      return `Last saved was ${moment(
         this.args.openFile.current?.lastModified,
       ).fromNow()}`;
     }
