@@ -34,6 +34,7 @@ import type MessageService from '@cardstack/host/services/message-service';
 import Owner from '@ember/owner';
 import { OpenFiles } from '@cardstack/host/controllers/card';
 import { buildWaiter } from '@ember/test-waiters';
+import type { UpdateEventData } from '@cardstack/runtime-common/realm';
 const waiter = buildWaiter('@cardstack/host/test/helpers/index:onFetch-waiter');
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
@@ -80,10 +81,10 @@ export interface TestContextWithSSE extends TestContext {
     assert: Assert,
     realm: Realm,
     adapter: TestRealmAdapter,
-    expectedContents: string[],
+    expectedContents: { type: string; data: Record<string, any> }[],
     callback: () => Promise<any>,
   ) => Promise<any>;
-  subscribers: ((e: { data: string }) => void)[];
+  subscribers: ((e: { type: string; data: string }) => void)[];
 }
 
 interface Options {
@@ -233,7 +234,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
       register() {
         (globalThis as any)._CARDSTACK_REALM_SUBSCRIBE = this;
       }
-      subscribe(_: never, cb: (e: { data: string }) => void) {
+      subscribe(_: never, cb: (e: { type: string; data: string }) => void) {
         self.subscribers.push(cb);
         return () => {};
       }
@@ -248,11 +249,11 @@ export function setupServerSentEvents(hooks: NestedHooks) {
       assert: Assert,
       realm: Realm,
       adapter: TestRealmAdapter,
-      expectedContents: string[],
+      expectedContents: { type: string; data: Record<string, any> }[],
       callback: () => Promise<T>,
     ): Promise<T> => {
-      let defer = new Deferred<string[]>();
-      let events: string[] = [];
+      let defer = new Deferred();
+      let events: { type: string; data: Record<string, any> }[] = [];
       let response = await realm.handle(
         new Request(`${realm.url}_message`, {
           method: 'GET',
@@ -265,26 +266,35 @@ export function setupServerSentEvents(hooks: NestedHooks) {
         throw new Error(`failed to connect to realm: ${response.status}`);
       }
       let reader = response.body!.getReader();
-      let timeout = setTimeout(() => {
-        defer.reject(
-          new Error(
-            `expectEvent timed out, saw events ${JSON.stringify(events)}`,
+      let timeout = setTimeout(
+        () =>
+          defer.reject(
+            new Error(
+              `expectEvent timed out, saw events ${JSON.stringify(events)}`,
+            ),
           ),
-        );
-      }, 3000);
+        3000,
+      );
       let result = await callback();
       let decoder = new TextDecoder();
       while (events.length < expectedContents.length) {
-        let { done, value } = await reader.read();
+        let { done, value } = await Promise.race([
+          reader.read(),
+          defer.promise as any, // this one always throws so type is not important
+        ]);
         if (done) {
           throw new Error('expected more events');
         }
         if (value) {
-          let data = getUpdateData(decoder.decode(value, { stream: true }));
-          if (data) {
-            events.push(data);
+          let ev = getEventData(decoder.decode(value, { stream: true }));
+          if (ev) {
+            events.push(ev);
             for (let subscriber of this.subscribers) {
-              subscriber({ data });
+              let evWireFormat = {
+                type: ev.type,
+                data: JSON.stringify(ev.data),
+              };
+              subscriber(evWireFormat);
             }
           }
         }
@@ -297,10 +307,14 @@ export function setupServerSentEvents(hooks: NestedHooks) {
   });
 }
 
-function getUpdateData(message: string) {
-  let [type, data] = message.split('\n');
-  if (type.trim().split(':')[1].trim() === 'update') {
-    return data.split('data:')[1].trim();
+function getEventData(message: string) {
+  let [rawType, data] = message.split('\n');
+  let type = rawType.trim().split(':')[1].trim();
+  if (['index', 'update'].includes(type)) {
+    return {
+      type,
+      data: JSON.parse(data.split('data:')[1].trim()),
+    };
   }
   return;
 }
@@ -382,7 +396,7 @@ export class TestRealmAdapter implements RealmAdapter {
   #files: Dir = {};
   #lastModified: Map<string, number> = new Map();
   #paths: RealmPaths;
-  #subscriber: ((message: Record<string, any>) => void) | undefined;
+  #subscriber: ((message: UpdateEventData) => void) | undefined;
 
   constructor(
     flatFiles: Record<
@@ -433,8 +447,15 @@ export class TestRealmAdapter implements RealmAdapter {
   }
 
   async exists(path: string): Promise<boolean> {
+    let maybeFilename = path.split('/').pop()!;
     try {
-      await this.#traverse(path.split('/'), 'directory');
+      // a quirk of our test file system's traverse is that it creates
+      // directories as it goes--so do our best to determine if we are checking for
+      // a file that exists (because of this behavior directories always exist)
+      await this.#traverse(
+        path.split('/'),
+        maybeFilename.includes('.') ? 'file' : 'directory',
+      );
       return true;
     } catch (err: any) {
       if (err.name === 'NotFoundError') {
@@ -499,12 +520,14 @@ export class TestRealmAdapter implements RealmAdapter {
     let lastModified = Date.now();
     this.#lastModified.set(this.#paths.fileURL(path).href, lastModified);
 
-    this.postUpdateEvent({ [type]: [path] });
+    this.postUpdateEvent({ [type]: path } as
+      | { added: string }
+      | { updated: string });
 
     return { lastModified };
   }
 
-  postUpdateEvent(data: Record<string, any>) {
+  postUpdateEvent(data: UpdateEventData) {
     this.#subscriber?.(data);
   }
 
@@ -562,7 +585,7 @@ export class TestRealmAdapter implements RealmAdapter {
     return { response, writable: s.writable };
   }
 
-  async subscribe(cb: (message: Record<string, any>) => void): Promise<void> {
+  async subscribe(cb: (message: UpdateEventData) => void): Promise<void> {
     this.#subscriber = cb;
   }
 

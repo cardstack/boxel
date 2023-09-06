@@ -5,15 +5,14 @@ import {
   type Format,
   type FieldsTypeFor,
   type BaseDef,
+  type BaseDefComponent,
   CardContext,
   isCard,
   isSaved,
 } from './card-api';
-import { defaultComponent } from './default-card-component';
-import { getField, cardTypeDisplayName } from '@cardstack/runtime-common';
+import { getField } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
-import { CardContainer, Header } from '@cardstack/boxel-ui';
-import { eq, not, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { CardContainer } from '@cardstack/boxel-ui';
 import Modifier from 'ember-modifier';
 
 const componentCache = new WeakMap<
@@ -33,7 +32,7 @@ export function getBoxComponent(
     return stable;
   }
 
-  let Implementation = (card as any)[format] ?? defaultComponent[format];
+  let Implementation: BaseDefComponent = (card as any)[format];
 
   // *inside* our own component, @fields is a proxy object that looks
   // up our fields on demand.
@@ -58,13 +57,6 @@ export function getBoxComponent(
         {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
         ...attributes
       >
-        {{#if (and (not (eq format 'embedded')) (isSaved model.value))}}
-          <Header
-            @title='{{if (eq format "edit") "Edit "}} {{cardTypeDisplayName
-              model.value
-            }}'
-          />
-        {{/if}}
         <div
           class='field-component-card
             {{format}}-card

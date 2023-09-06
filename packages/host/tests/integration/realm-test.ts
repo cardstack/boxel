@@ -377,10 +377,20 @@ module('Integration | realm', function (hooks) {
     let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
     let expected = [
-      'added: CardDef/1.json',
-      'index: incremental',
-      'added: CardDef/2.json',
-      'index: incremental',
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}CardDef/1`],
+        },
+      },
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}CardDef/2`],
+        },
+      },
     ];
     await this.expectEvents(assert, realm, adapter, expected, async () => {
       {
@@ -672,7 +682,15 @@ module('Integration | realm', function (hooks) {
     });
     let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
-    let expected = ['updated: dir/card.json'];
+    let expected = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}dir/card`],
+        },
+      },
+    ];
     let response = await this.expectEvents(
       assert,
       realm,
@@ -1931,7 +1949,15 @@ module('Integration | realm', function (hooks) {
       'found card in index',
     );
 
-    let expected = ['removed: cards/2.json'];
+    let expected = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}cards/2`],
+        },
+      },
+    ];
     let response = await this.expectEvents(
       assert,
       realm,
@@ -2037,7 +2063,15 @@ module('Integration | realm', function (hooks) {
     await realm.ready;
 
     {
-      let expected = ['added: dir/person.gts'];
+      let expected = [
+        {
+          type: 'index',
+          data: {
+            type: 'incremental',
+            invalidations: [`${testRealmURL}dir/person.gts`],
+          },
+        },
+      ];
       let response = await this.expectEvents(
         assert,
         realm,
@@ -2091,7 +2125,15 @@ module('Integration | realm', function (hooks) {
     let realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
 
-    let expected = ['removed: person.gts'];
+    let expected = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}person.gts`],
+        },
+      },
+    ];
     let response = await this.expectEvents(
       assert,
       realm,

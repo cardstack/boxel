@@ -15,9 +15,11 @@ import {
   TestRealm,
   TestRealmAdapter,
   setupLocalIndexing,
-  setupMockMessageService,
+  setupServerSentEvents,
   testRealmURL,
+  type TestContextWithSSE,
 } from '../helpers';
+import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import percySnapshot from '@percy/ember';
@@ -78,7 +80,7 @@ module('Acceptance | basic tests', function (hooks) {
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupMockMessageService(hooks);
+  setupServerSentEvents(hooks);
   setupWindowMock(hooks);
 
   hooks.afterEach(async function () {
@@ -287,6 +289,57 @@ module('Acceptance | basic tests', function (hooks) {
 
     await waitForSyntaxHighlighting('"Person"', 'rgb(4, 81, 165)');
     await percySnapshot(assert);
+  });
+
+  test<TestContextWithSSE>('Card instance live updates when index changes', async function (assert) {
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Person/1`],
+        },
+      },
+    ];
+
+    await visit('/code');
+    await waitFor('[data-test-file]');
+    await click('[data-test-directory="Person/"]');
+    await waitFor('[data-test-file="Person/1.json"]');
+    await click('[data-test-file="Person/1.json"]');
+
+    await this.expectEvents(
+      assert,
+      realm,
+      adapter,
+      expectedEvents,
+      async () => {
+        await realm.write(
+          'Person/1.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'HassanXXX',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
+                },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+      },
+    );
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-person]')!
+          .textContent?.includes('HassanXXX'),
+    );
+    assert.dom('[data-test-person]').containsText('First name: HassanXXX');
   });
 
   test('Can view a card schema', async function (assert) {

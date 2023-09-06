@@ -6,6 +6,8 @@ import {
   triggerEvent,
   triggerKeyEvent,
   waitFor,
+  waitUntil,
+  find,
   fillIn,
 } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
@@ -13,9 +15,11 @@ import {
   TestRealm,
   TestRealmAdapter,
   setupLocalIndexing,
-  setupMockMessageService,
+  setupServerSentEvents,
   testRealmURL,
+  type TestContextWithSSE,
 } from '../helpers';
+import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 import stringify from 'safe-stable-stringify';
 import { Realm } from '@cardstack/runtime-common/realm';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -28,7 +32,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupMockMessageService(hooks);
+  setupServerSentEvents(hooks);
 
   hooks.afterEach(async function () {
     localStorage.removeItem('recent-cards');
@@ -831,6 +835,119 @@ module('Acceptance | operator mode tests', function (hooks) {
         )}`,
       );
     });
+
+    test('card preview will show in the 3rd column when submode is set to code', async function (assert) {
+      let operatorModeStateParam = stringify({
+        stacks: [
+          [
+            {
+              id: 'http://test-realm/test/Person/fadhlan',
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        codePath: `http://test-realm/test/Person/fadhlan.json`,
+      })!;
+
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam,
+        )}`,
+      );
+
+      await waitUntil(() => find('[data-test-card-resource-loaded]'));
+
+      assert.dom('[data-test-code-mode-card-preview-header]').hasText('Person');
+      assert
+        .dom('[data-test-code-mode-card-preview-body]')
+        .includesText('Fadhlan');
+
+      assert
+        .dom('[data-test-preview-card-footer-button-isolated]')
+        .hasClass('active');
+
+      await click('[data-test-preview-card-footer-button-embedded]');
+      assert
+        .dom('[data-test-preview-card-footer-button-embedded]')
+        .hasClass('active');
+      assert
+        .dom('[data-test-code-mode-card-preview-body ] .embedded-card')
+        .exists();
+
+      await click('[data-test-preview-card-footer-button-edit]');
+      assert
+        .dom('[data-test-preview-card-footer-button-edit]')
+        .hasClass('active');
+
+      assert
+        .dom('[data-test-code-mode-card-preview-body ] .edit-card')
+        .exists();
+    });
+  });
+
+  test<TestContextWithSSE>('card preview live updates when index changes', async function (assert) {
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Person/fadhlan`],
+        },
+      },
+    ];
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: 'http://test-realm/test/Person/fadhlan',
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `http://test-realm/test/Person/fadhlan.json`,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitUntil(() => find('[data-test-card-resource-loaded]'));
+    await this.expectEvents(
+      assert,
+      realm,
+      adapter,
+      expectedEvents,
+      async () => {
+        await realm.write(
+          'Person/fadhlan.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'FadhlanXXX',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
+                },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+      },
+    );
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-code-mode-card-preview-body]')
+          ?.textContent?.includes('FadhlanXXX'),
+    );
+    assert
+      .dom('[data-test-code-mode-card-preview-body]')
+      .includesText('FadhlanXXX');
   });
 
   module('0 stacks', function () {

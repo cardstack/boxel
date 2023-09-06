@@ -2585,7 +2585,6 @@ module('Integration | search-index', function (hooks) {
         'ember-modifier',
         'http://localhost:4201/base/card-api',
         'http://localhost:4201/base/contains-many-component',
-        'http://localhost:4201/base/default-card-component',
         'http://localhost:4201/base/field-component',
         'http://localhost:4201/base/links-to-editor',
         'http://localhost:4201/base/links-to-many-component',

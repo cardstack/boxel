@@ -17,6 +17,7 @@ import { RealmPaths } from '@cardstack/runtime-common/paths';
 import merge from 'lodash/merge';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type CardService from '@cardstack/host/services/card-service';
+import type MessageService from '@cardstack/host/services/message-service';
 import { file, FileResource, isReady } from '@cardstack/host/resources/file';
 import CardEditor from '@cardstack/host/components/card-editor';
 import Module from './module';
@@ -39,9 +40,13 @@ import {
   createNewCard,
 } from '@cardstack/runtime-common';
 import { AddButton, Tooltip } from '@cardstack/boxel-ui';
+import { registerDestructor } from '@ember/destroyable';
+import { buildWaiter } from '@ember/test-waiters';
+import { isTesting } from '@embroider/macros';
 
 const { ownRealmURL } = ENV;
 const log = logger('component:go');
+const waiter = buildWaiter('code-route:load-card-waiter');
 
 interface Signature {
   Args: {
@@ -53,7 +58,7 @@ interface Signature {
 
 export default class Go extends Component<Signature> {
   <template>
-    <div class='main'>
+    <div class='main' data-test-isLoadIdle={{this.loadCard.isIdle}}>
       <div class='main-column'>
         <FileTree @url={{ownRealmURL}} @openFiles={{@openFiles}} />
         <Tooltip @placement='left'>
@@ -154,11 +159,37 @@ export default class Go extends Component<Signature> {
 
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
+  @service declare messageService: MessageService;
   @tracked jsonError: string | undefined;
   @tracked card: CardDef | undefined;
+  // note this is only subscribed to events from our own realm
+  private subscription: { url: string; unsubscribe: () => void } | undefined;
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
+    let url = `${this.cardService.defaultURL}_message`;
+    this.subscription = {
+      url,
+      unsubscribe: this.messageService.subscribe(
+        url,
+        ({ type, data: dataStr }) => {
+          if (type !== 'index') {
+            return;
+          }
+          let data = JSON.parse(dataStr);
+          if (!this.card || data.type !== 'incremental') {
+            return;
+          }
+          let invalidations = data.invalidations as string[];
+          if (invalidations.includes(this.card.id)) {
+            this.loadCard.perform(new URL(this.card.id));
+          }
+        },
+      ),
+    };
+    registerDestructor(this, () => {
+      this.subscription?.unsubscribe();
+    });
   }
 
   @action
@@ -290,9 +321,25 @@ export default class Go extends Component<Signature> {
   }
 
   private loadCard = restartableTask(async (url: URL) => {
-    this.card = await this.cardService.loadModel(url);
+    await this.withTestWaiters(async () => {
+      this.card = await this.cardService.loadModel(url);
+    });
   });
 
+  private async withTestWaiters<T>(cb: () => Promise<T>) {
+    let token = waiter.beginAsync();
+    try {
+      let result = await cb();
+      // only do this in test env--this makes sure that we also wait for any
+      // interior card instance async as part of our ember-test-waiters
+      if (isTesting()) {
+        await this.cardService.cardsSettled();
+      }
+      return result;
+    } finally {
+      waiter.endAsync(token);
+    }
+  }
   @action
   onSave(card: CardDef) {
     this.card = card;
