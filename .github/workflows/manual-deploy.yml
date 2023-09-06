@@ -40,7 +40,7 @@ jobs:
   deploy-realm-server:
     name: Deploy realm server to staging
     needs: [build-host, build-realm-server]
-    uses: cardstack/gh-actions/.github/workflows/waypoint-deploy.yml@main
+    uses: cardstack/gh-actions/.github/workflows/waypoint-deploy.yml@fix/wait-service-stable-directory
     secrets: inherit
     with:
       app: "realm-demo"
