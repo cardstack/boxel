@@ -236,10 +236,7 @@ export default class Go extends Component<Signature> {
       const editorLanguages = this.args.monaco.languages.getLanguages();
       let extension =
         '.' +
-        this.operatorModeStateService.state.codePath
-          .toString()
-          .split('.')
-          .pop();
+        this.operatorModeStateService.state.codePath.pathname.split('.').pop();
       let language = editorLanguages.find((lang) =>
         lang.extensions?.find((ext) => ext === extension),
       );
