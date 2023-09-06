@@ -115,14 +115,26 @@ export default class CardURLBar extends Component<Signature> {
 
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare cardService: CardService;
-  @tracked url: string | null = null;
+  @tracked _url: string | null = null;
+  @tracked _lastEdited: string | null = null;
   @tracked isFocused = false;
   @tracked isInvalidURL = false;
 
-  constructor(args: any, owner: any) {
-    super(args, owner);
+  get url() {
+    if (this._lastEdited != null) {
+      return this._lastEdited;
+    }
+    if (this._url == null) {
+      return this.codePath;
+    }
+    if (this._url != this.codePath) {
+      return this._url;
+    }
+    return this._url !== null ? this._url : this.codePath;
+  }
 
-    this.url = this.operatorModeStateService.state.codePath
+  get codePath() {
+    return this.operatorModeStateService.state.codePath
       ? this.operatorModeStateService.state.codePath.toString()
       : null;
   }
@@ -158,8 +170,8 @@ export default class CardURLBar extends Component<Signature> {
   }
 
   @action
-  onInput(url: string) {
-    this.url = url;
+  onInput(inputUrl: string) {
+    this._url = inputUrl;
     this.isInvalidURL = false;
     this.args.resetLoadFileError();
   }
@@ -179,11 +191,20 @@ export default class CardURLBar extends Component<Signature> {
 
     if (url) {
       this.operatorModeStateService.updateCodePath(url);
+      this.args.onEnterPressed(url);
+      this._url = null;
     }
   }
 
   @action
   toggleFocus() {
     this.isFocused = !this.isFocused;
+    if (!this.isFocused) {
+      this._lastEdited = this._url;
+      this._url = null;
+    } else {
+      this._url = this._lastEdited;
+      this._lastEdited = null;
+    }
   }
 }

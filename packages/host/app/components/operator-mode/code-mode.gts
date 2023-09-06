@@ -217,6 +217,10 @@ export default class CodeMode extends Component<Signature> {
     return state;
   });
 
+  @action updateCodePath(newUrl: URL) {
+    this.operatorModeStateService.updateCodePath(newUrl);
+  }
+
   <template>
     <div class='code-mode-background' style={{this.backgroundURLStyle}}></div>
     <CardURLBar
@@ -243,6 +247,7 @@ export default class CodeMode extends Component<Signature> {
                 @realmInfo={{this.realmInfo}}
                 @realmIconURL={{this.realmIconURL}}
                 @importedModule={{this.importedModule}}
+                @onSelectDefinition={{this.updateCodePath}}
                 data-test-card-inheritance-panel
               />
             </section>

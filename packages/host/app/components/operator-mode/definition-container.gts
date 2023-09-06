@@ -5,7 +5,7 @@ import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { Button } from '@cardstack/boxel-ui';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { assertNever } from '@cardstack/host/utils/assert-never';
-// boxel- specific
+import { action } from '@ember/object';
 import { type RealmInfo } from '@cardstack/runtime-common';
 
 export enum DefinitionVariant {
@@ -22,6 +22,8 @@ interface Signature {
     realmIconURL: string | null | undefined;
     variant: DefinitionVariant;
     isActive: boolean;
+    url?: URL;
+    onSelectDefinition?: (newUrl: URL) => void;
     infoText?: string;
     onCreate?: () => void;
     onInherit?: () => void;
@@ -44,8 +46,21 @@ export default class DefinitionContainer extends Component<Signature> {
     return this.args.realmInfo?.name;
   }
 
+  @action
+  onClick() {
+    if (this.args.onSelectDefinition && this.args.url) {
+      this.args.onSelectDefinition(this.args.url!);
+    }
+  }
+
   <template>
-    <div class='container {{if @isActive "active"}}' ...attributes>
+    <div
+      class='container
+        {{if @isActive "active"}}
+        {{if (not @isActive) "clickable"}}'
+      {{on 'click' this.onClick}}
+      ...attributes
+    >
       <div class='banner'>
         <Label class='banner-title'>
           {{this.title}}</Label>
@@ -187,6 +202,13 @@ export default class DefinitionContainer extends Component<Signature> {
         justify-content: flex-start;
         align-items: center;
         gap: var(--boxel-sp-xs);
+      }
+      .clickable {
+        cursor: pointer;
+      }
+
+      .clickable:hover {
+        outline: 2px solid var(--boxel-highlight);
       }
     </style>
   </template>

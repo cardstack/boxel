@@ -23,6 +23,7 @@ interface Args {
     openFile: { current: FileResource | undefined };
     cardInstance: CardDef | null;
     importedModule?: ImportResource;
+    onSelectDefinition: (newUrl: URL) => void;
     onCreate?: () => void;
     onInherit?: () => void;
     onDuplicate?: () => void;
@@ -64,6 +65,8 @@ export default class CardInheritancePanel extends Component<Args> {
             @onCreate={{this.createAction}}
             @onInherit={{this.inheritAction}}
             @isActive={{false}}
+            @url={{this.moduleUrl card}}
+            @onSelectDefinition={{@onSelectDefinition}}
             data-test-card-module-definition
           />
         {{/each}}
