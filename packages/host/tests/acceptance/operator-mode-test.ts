@@ -921,7 +921,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         )
         .includesText('Test Workspace B');
       assert
-        .dom('[data-test-card-module-definition] .banner')
+        .dom('[data-test-card-module-definition] .container')
         .doesNotHaveClass('active');
       assert
         .dom('[data-test-card-instance-definition]')
@@ -943,7 +943,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         .includesText('Last saved was a few seconds ago');
 
       assert
-        .dom('[data-test-card-instance-definition] .banner')
+        .dom('[data-test-card-instance-definition] .container')
         .hasClass('active');
     });
   });
