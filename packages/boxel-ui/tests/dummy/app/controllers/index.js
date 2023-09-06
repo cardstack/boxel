@@ -15,6 +15,7 @@ import ModalUsage from '@cardstack/boxel-ui/components/modal/usage';
 import MenuUsage from '@cardstack/boxel-ui/components/menu/usage';
 import DropdownUsage from '@cardstack/boxel-ui/components/dropdown/usage';
 import TooltipUsage from '@cardstack/boxel-ui/components/tooltip/usage';
+import ResizablePanelUsage from '@cardstack/boxel-ui/components/resizable-panel/usage';
 
 export default class IndexController extends FreestyleController {
   constructor() {
@@ -36,6 +37,7 @@ export default class IndexController extends FreestyleController {
       ['Boxel::Menu', MenuUsage],
       ['Boxel::Dropdown', DropdownUsage],
       ['Boxel::Tooltip', TooltipUsage],
+      ['Boxel::ResizablePanel', ResizablePanelUsage],
     ].map(([name, c]) => {
       return {
         title: name,

@@ -16,23 +16,26 @@ import CardService from '@cardstack/host/services/card-service';
 import { restartableTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import CardURLBar from '@cardstack/host/components/operator-mode/card-url-bar';
-import { on } from '@ember/modifier';
-import { registerDestructor } from '@ember/destroyable';
 import { TrackedObject } from 'tracked-built-ins';
-import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-preview-panel';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { use, resource } from 'ember-resources';
+import ResizablePanelGroup, {
+  PanelContext,
+} from '@cardstack/boxel-ui/components/resizable-panel/resizable-panel-group';
+import ResizablePanel from '@cardstack/boxel-ui/components/resizable-panel/resizable-panel';
 
 interface Signature {
   Args: {};
 }
 
-type ColumnWidths = {
-  leftColumn: string;
-  codeEditorColumn: string;
-  rightColumn: string;
+type PanelWidths = {
+  rightPanel: string;
+  codeEditorPanel: string;
+  leftPanel: string;
 };
+
+const CodeModePanelWidths = 'code-mode-panel-widths';
 
 export default class CodeMode extends Component<Signature> {
   @service declare monacoService: MonacoService;
@@ -40,36 +43,20 @@ export default class CodeMode extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
   @tracked realmInfo: RealmInfo | null = null;
   @tracked loadFileError: string | null = null;
-  columnDefaultWidths: ColumnWidths = {
-    leftColumn: '25%',
-    codeEditorColumn: '50%',
-    rightColumn: '25%',
-  };
-  columnWidths: ColumnWidths;
-  currentResizeHandler: {
-    id: string;
-    initialXPosition: number;
-    leftEl?: HTMLElement | null;
-    rightEl?: HTMLElement | null;
-  } | null = null;
+  panelWidths: PanelWidths;
 
   constructor(args: any, owner: any) {
     super(args, owner);
     this.fetchCodeModeRealmInfo.perform();
 
-    this.columnWidths = localStorage.getItem('code-mode-column-widths')
-      ? new TrackedObject(
-          //@ts-ignore Type 'null' is not assignable to type 'string'
-          JSON.parse(localStorage.getItem('code-mode-column-widths')),
-        )
-      : new TrackedObject(this.columnDefaultWidths);
-    document.addEventListener('mouseup', this.onResizeHandlerMouseUp);
-    document.addEventListener('mousemove', this.onResizeHandlerMouseMove);
-
-    registerDestructor(this, () => {
-      document.removeEventListener('mouseup', this.onResizeHandlerMouseUp);
-      document.removeEventListener('mousedown', this.onResizeHandlerMouseMove);
-    });
+    this.panelWidths = localStorage.getItem(CodeModePanelWidths)
+      ? // @ts-ignore Type 'null' is not assignable to type 'string'
+        JSON.parse(localStorage.getItem(CodeModePanelWidths))
+      : {
+          rightPanel: '25%',
+          codeEditorPanel: '50%',
+          leftPanel: '25%',
+        };
   }
 
   get backgroundURL() {
@@ -134,127 +121,6 @@ export default class CodeMode extends Component<Signature> {
     }
   });
 
-  @action
-  onResizeHandlerMouseDown(event: MouseEvent) {
-    let buttonId = (event.target as HTMLElement).id;
-    if (this.currentResizeHandler || !buttonId) {
-      return;
-    }
-
-    let parentElement = document.querySelector(`#${buttonId}`)?.parentElement;
-    this.currentResizeHandler = {
-      id: buttonId,
-      initialXPosition: event.clientX,
-      leftEl: parentElement?.previousElementSibling as HTMLElement,
-      rightEl: parentElement?.nextElementSibling as HTMLElement,
-    };
-  }
-
-  @action
-  onResizeHandlerMouseUp(_event: MouseEvent) {
-    this.currentResizeHandler = null;
-  }
-
-  @action
-  onResizeHandlerMouseMove(event: MouseEvent) {
-    if (
-      !this.currentResizeHandler ||
-      !this.currentResizeHandler.leftEl ||
-      !this.currentResizeHandler.rightEl
-    ) {
-      return;
-    }
-
-    let deltaX = event.clientX - this.currentResizeHandler.initialXPosition;
-    let newLeftElWidth = this.currentResizeHandler.leftEl.clientWidth + deltaX;
-    let newRightElWidth =
-      this.currentResizeHandler.rightEl.clientWidth - deltaX;
-    if (newLeftElWidth < 0 && newRightElWidth > 0) {
-      newRightElWidth = newRightElWidth + newLeftElWidth;
-      newLeftElWidth = 0;
-    } else if (newLeftElWidth > 0 && newRightElWidth < 0) {
-      newLeftElWidth = newLeftElWidth + newRightElWidth;
-      newRightElWidth = 0;
-    }
-
-    let leftElMinWidth = this.currentResizeHandler.leftEl
-      .computedStyleMap()
-      .get('min-width') as { value: number };
-    let rightElMinWidth = this.currentResizeHandler.rightEl
-      .computedStyleMap()
-      .get('min-width') as { value: number };
-    if (
-      (leftElMinWidth && newLeftElWidth < leftElMinWidth.value) ||
-      (rightElMinWidth && newRightElWidth < rightElMinWidth.value)
-    ) {
-      return;
-    }
-
-    this.setColumnWidths({
-      leftColumn:
-        this.currentResizeHandler.id === 'left-resizer'
-          ? `${newLeftElWidth}px`
-          : this.columnWidths.leftColumn,
-      codeEditorColumn:
-        this.currentResizeHandler.id === 'left-resizer'
-          ? `${newRightElWidth}px`
-          : `${newLeftElWidth}px`,
-      rightColumn:
-        this.currentResizeHandler.id === 'right-resizer'
-          ? `${newRightElWidth}px`
-          : this.columnWidths.rightColumn,
-    });
-
-    this.currentResizeHandler.initialXPosition = event.clientX;
-  }
-
-  @action
-  onResizeHandlerDblClick(event: MouseEvent) {
-    let buttonId = (event.target as HTMLElement).id;
-    let parentElement = document.querySelector(`#${buttonId}`)?.parentElement;
-    let leftEl = parentElement?.previousElementSibling as HTMLElement;
-    let rightEl = parentElement?.nextElementSibling as HTMLElement;
-    let leftElWidth = leftEl.offsetWidth;
-    let rightElWidth = rightEl.offsetWidth;
-
-    if (buttonId === 'left-resizer' && leftElWidth > 0) {
-      this.setColumnWidths({
-        leftColumn: '0px',
-        codeEditorColumn: `${leftElWidth + rightElWidth}px`,
-        rightColumn: this.columnWidths.rightColumn,
-      });
-    } else if (buttonId === 'left-resizer' && leftElWidth <= 0) {
-      this.setColumnWidths({
-        leftColumn: this.columnDefaultWidths.leftColumn,
-        codeEditorColumn: `calc(${this.columnWidths.codeEditorColumn} - ${this.columnDefaultWidths.leftColumn})`,
-        rightColumn: this.columnWidths.rightColumn,
-      });
-    } else if (buttonId === 'right-resizer' && rightElWidth > 0) {
-      this.setColumnWidths({
-        leftColumn: this.columnWidths.leftColumn,
-        codeEditorColumn: `${leftElWidth + rightElWidth}px`,
-        rightColumn: '0px',
-      });
-    } else if (buttonId === 'right-resizer' && rightElWidth <= 0) {
-      this.setColumnWidths({
-        leftColumn: this.columnWidths.leftColumn,
-        codeEditorColumn: `calc(${this.columnWidths.codeEditorColumn} - ${this.columnDefaultWidths.rightColumn})`,
-        rightColumn: this.columnDefaultWidths.rightColumn,
-      });
-    }
-  }
-
-  @action
-  setColumnWidths(columnWidths: ColumnWidths) {
-    this.columnWidths.leftColumn = columnWidths.leftColumn;
-    this.columnWidths.codeEditorColumn = columnWidths.codeEditorColumn;
-    this.columnWidths.rightColumn = columnWidths.rightColumn;
-
-    localStorage.setItem(
-      'code-mode-column-widths',
-      JSON.stringify(this.columnWidths),
-    );
-  }
   @use cardResource = resource(() => {
     if (
       this.openFile.current?.state === 'ready' &&
@@ -301,6 +167,15 @@ export default class CodeMode extends Component<Signature> {
     }
   });
 
+  @action
+  onListPanelContextChange(listPanelContext: PanelContext[]) {
+    this.panelWidths.leftPanel = listPanelContext[0].width;
+    this.panelWidths.codeEditorPanel = listPanelContext[1].width;
+    this.panelWidths.rightPanel = listPanelContext[2].width;
+
+    localStorage.setItem(CodeModePanelWidths, JSON.stringify(this.panelWidths));
+  }
+
   <template>
     <div class='code-mode-background' style={{this.backgroundURLStyle}}></div>
     <CardURLBar
@@ -311,13 +186,15 @@ export default class CodeMode extends Component<Signature> {
       class='card-url-bar'
     />
     <div class='code-mode' data-test-code-mode>
-      <div class='columns'>
-        <div
+      <ResizablePanelGroup
+        @onListPanelContextChange={{this.onListPanelContextChange}}
+        class='columns'
+        as |pg|
+      >
+        <ResizablePanel
           class='column'
-          style={{cssVar
-            code-mode-column-width=this.columnWidths.leftColumn
-            code-mode-column-min-width='0px'
-          }}
+          @defaultWidth={{this.panelWidths.leftPanel}}
+          @panelGroupApi={{pg.api}}
         >
           {{! Move each container and styles to separate component }}
           <div class='inner-container'>
@@ -330,42 +207,23 @@ export default class CodeMode extends Component<Signature> {
             </header>
             <section class='inner-container__content'></section>
           </aside>
-        </div>
-        <div class='separator'>
-          <button
-            id='left-resizer'
-            class='resize-handler'
-            {{on 'mousedown' this.onResizeHandlerMouseDown}}
-            {{on 'dblclick' this.onResizeHandlerDblClick}}
-          />
-        </div>
-        <div
+        </ResizablePanel>
+        <ResizablePanel
           class='column'
-          style={{cssVar
-            code-mode-column-width=this.columnWidths.codeEditorColumn
-            code-mode-column-min-width='300px'
-          }}
+          @defaultWidth={{this.panelWidths.codeEditorPanel}}
+          @minWidth='300px'
+          @panelGroupApi={{pg.api}}
         >
           <div class='inner-container'>
             Code, Open File Status:
             {{! This is to trigger openFile function }}
             {{this.openFile.current.state}}
           </div>
-        </div>
-        <div class='separator'>
-          <button
-            id='right-resizer'
-            class='resize-handler'
-            {{on 'mousedown' this.onResizeHandlerMouseDown}}
-            {{on 'dblclick' this.onResizeHandlerDblClick}}
-          />
-        </div>
-        <div
+        </ResizablePanel>
+        <ResizablePanel
           class='column'
-          style={{cssVar
-            code-mode-column-width=this.columnWidths.rightColumn
-            code-mode-column-min-width='0px'
-          }}
+          @defaultWidth={{this.panelWidths.rightPanel}}
+          @panelGroupApi={{pg.api}}
         >
           <div class='inner-container'>
             {{#if this.cardResource.value}}
@@ -378,8 +236,8 @@ export default class CodeMode extends Component<Signature> {
               {{this.cardResource.error.message}}
             {{/if}}
           </div>
-        </div>
-      </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
 
     <style>
@@ -390,10 +248,6 @@ export default class CodeMode extends Component<Signature> {
         --code-mode-padding-bottom: calc(
           var(--search-sheet-closed-height) + (var(--boxel-sp))
         );
-        --code-mode-column-min-width: calc(
-          var(--operator-mode-min-width) - 2 * var(--boxel-sp)
-        );
-        --code-mode-column-width: var(--code-mode-column-min-width);
       }
 
       .code-mode {
@@ -424,28 +278,6 @@ export default class CodeMode extends Component<Signature> {
         flex-shrink: 0;
         height: 100%;
       }
-      .column {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp);
-        overflow: hidden;
-        width: var(--code-mode-column-width);
-        min-width: var(--code-mode-column-min-width);
-      }
-      .column:nth-child(2) {
-        flex: 2;
-      }
-      .column:last-child {
-        flex: 1.2;
-      }
-      .column:first-child > *:first-child {
-        max-height: 50%;
-        background-color: var(--boxel-200);
-      }
-      .column:first-child > *:last-child {
-        max-height: calc(50% - var(--boxel-sp));
-        background-color: var(--boxel-200);
-      }
 
       .inner-container {
         height: 100%;
@@ -474,23 +306,6 @@ export default class CodeMode extends Component<Signature> {
         height: var(--submode-switcher-height);
 
         z-index: 2;
-      }
-
-      .separator {
-        display: flex;
-        align-items: center;
-
-        padding: var(--boxel-sp-xxxs);
-      }
-      .resize-handler {
-        cursor: col-resize;
-
-        height: 100px;
-        width: 5px;
-        border: none;
-        border-radius: var(--boxel-border-radius-xl);
-        padding: 0;
-        background-color: var(--boxel-200);
       }
     </style>
   </template>
