@@ -940,7 +940,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         .dom(
           '[data-test-card-instance-definition] [data-test-definition-info-text]',
         )
-        .includesText('Last edit was a few seconds ago');
+        .includesText('Last saved was a few seconds ago');
 
       assert
         .dom('[data-test-card-instance-definition] .banner')
