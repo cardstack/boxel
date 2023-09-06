@@ -220,7 +220,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .doesNotExist('Person/1.json file entry is not rendered');
   });
 
-  test('can open a file', async function (assert) {
+  test('can open files', async function (assert) {
     let codeModeStateParam = stringify({
       stacks: [
         [
@@ -244,5 +244,10 @@ module('Acceptance | code mode tests', function (hooks) {
     await click('[data-test-file="person.gts"]');
 
     assert.dom('[data-test-file="person.gts"]').hasClass('selected');
+
+    await click('[data-test-directory="Person/"]');
+    await click('[data-test-file="Person/1.json"]');
+
+    assert.dom('[data-test-person]').exists();
   });
 });
