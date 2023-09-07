@@ -13,9 +13,6 @@ import {
 import { waitFor, click } from '@ember/test-helpers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import CardController from '@cardstack/host/controllers/card';
-
-let mockCardController = new CardController({});
 
 const realmName = 'Local Workspace';
 
@@ -147,7 +144,7 @@ module('Integration | card-catalog filters', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <OperatorMode @onClose={{noop}} @controller={{mockCardController}} />
+          <OperatorMode @onClose={{noop}} />
           <CardPrerender />
         </template>
       },

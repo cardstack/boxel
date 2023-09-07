@@ -37,7 +37,6 @@ import perform from 'ember-concurrency/helpers/perform';
 import { registerDestructor } from '@ember/destroyable';
 import CardURLBar from '@cardstack/host/components/operator-mode/card-url-bar';
 const { ownRealmURL } = ENV;
-import type CardController from '@cardstack/host/controllers/card';
 import { TrackedObject } from 'tracked-built-ins';
 import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-preview-panel';
 import { CardDef } from 'https://cardstack.com/base/card-api';
@@ -52,9 +51,7 @@ import ResizablePanelGroup, {
 import ResizablePanel from '@cardstack/boxel-ui/components/resizable-panel/resizable-panel';
 
 interface Signature {
-  Args: {
-    controller: CardController;
-  };
+  Args: {};
 }
 const log = logger('component:code-mode');
 

@@ -6,7 +6,6 @@ import { fn } from '@ember/helper';
 import { trackedFunction } from 'ember-resources/util/function';
 import CardCatalogModal from '../card-catalog/modal';
 import type CardService from '../../services/card-service';
-import type CardController from '@cardstack/host/controllers/card';
 import get from 'lodash/get';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import ENV from '@cardstack/host/config/environment';
@@ -56,7 +55,6 @@ const { APP } = ENV;
 interface Signature {
   Args: {
     onClose: () => void;
-    controller: CardController;
   };
 }
 
@@ -631,7 +629,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         />
 
         {{#if this.isCodeMode}}
-          <CodeMode @controller={{@controller}} />
+          <CodeMode />
         {{else}}
           <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
             {{#if (eq this.allStackItems.length 0)}}
