@@ -37,8 +37,8 @@ export default class CardURLBar extends Component<Signature> {
           @value={{this.url}}
           @onInput={{this.onInput}}
           @onKeyPress={{this.onKeyPress}}
-          @onFocus={{this.toggleFocus}}
-          @onBlur={{this.toggleFocus}}
+          @onFocus={{this.onFocus}}
+          @onBlur={{this.onBlur}}
           data-test-card-url-bar-input
         />
       </div>
@@ -117,20 +117,49 @@ export default class CardURLBar extends Component<Signature> {
   @service declare cardService: CardService;
   @tracked _url: string | null = null;
   @tracked _lastEdited: string | null = null;
+  @tracked _lastCodePath: string | null = null;
   @tracked isFocused = false;
   @tracked isInvalidURL = false;
 
   get url() {
-    if (this._lastEdited != null) {
-      return this._lastEdited;
+    console.log('======');
+    console.log(`is focused ${this.isFocused}`);
+    console.log(`Last Edited ${this._lastEdited}`);
+    console.log(`_url path ${this._url}`);
+    console.log(`Code path ${this.codePath}`);
+    console.log(`Last Code path ${this._lastCodePath}`);
+    if (!this.isFocused) {
+      if (this.codePath != this._lastCodePath) {
+        console.log('external change of codePath');
+        return this.codePath;
+      }
+      if (this._lastEdited && this._url == null) {
+        console.log('on blur will retain what you have been typing');
+        return this._lastEdited;
+      }
+    } else {
+      console.log('focused');
+      // if (this._url == null) {
+      //   console.log('1');
+      //   return this.codePath;
+      // }
+      // if (this._lastEdited != null) {
+      //   console.log('2');
+      //   return this._lastEdited;
+      // }
+      // if (this._url != this.codePath) {
+      //   console.log('3');
+      //   return this._url;
+      // }
+      // if (this._lastEdited) {
+      //   return this._lastEdited;
+      // }
+      if (this._url != null) {
+        console.log('4');
+        return this._url;
+      }
     }
-    if (this._url == null) {
-      return this.codePath;
-    }
-    if (this._url != this.codePath) {
-      return this._url;
-    }
-    return this._url !== null ? this._url : this.codePath;
+    return this.codePath;
   }
 
   get codePath() {
@@ -191,19 +220,35 @@ export default class CardURLBar extends Component<Signature> {
 
     if (url) {
       this.operatorModeStateService.updateCodePath(url);
-      this._url = null;
     }
   }
 
-  @action
-  toggleFocus() {
-    this.isFocused = !this.isFocused;
-    if (!this.isFocused) {
+  // @action
+  // toggleFocus() {
+  //   this.isFocused = !this.isFocused;
+  //   if (!this.isFocused) {
+  //     this._lastEdited = this._url;
+  //     this._url = null;
+  //   } else {
+  //     this._url = this._lastEdited;
+  //     this._lastEdited = null;
+  //   }
+  //   // // else {
+  //   // //   this._url = this._lastEdited;
+  //   //   this._lastEdited = null;
+  //   // // }
+  // }
+  @action onFocus() {
+    this.isFocused = true;
+    this._url = this._lastEdited;
+    this._lastEdited = null;
+  }
+  @action onBlur() {
+    this.isFocused = false;
+    if (this._lastCodePath == this.codePath) {
       this._lastEdited = this._url;
       this._url = null;
-    } else {
-      this._url = this._lastEdited;
-      this._lastEdited = null;
     }
+    this._lastCodePath = this.codePath;
   }
 }
