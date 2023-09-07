@@ -1,5 +1,7 @@
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 import { service } from '@ember/service';
+import { action } from '@ember/object';
 import MonacoService from '@cardstack/host/services/monaco-service';
 import { htmlSafe } from '@ember/template';
 import ENV from '@cardstack/host/config/environment';
@@ -7,8 +9,6 @@ import FileTree from '../editor/file-tree';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
 import {
   type RealmInfo,
   type SingleCardDocument,
