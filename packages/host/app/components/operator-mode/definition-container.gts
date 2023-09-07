@@ -3,7 +3,7 @@ import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { Button } from '@cardstack/boxel-ui';
-import { eq, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { assertNever } from '@cardstack/host/utils/assert-never';
 // boxel- specific
 import { type RealmInfo } from '@cardstack/runtime-common';
