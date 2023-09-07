@@ -1080,7 +1080,6 @@ module('Acceptance | operator mode tests', function (hooks) {
       )}`,
     );
     await waitUntil(() => find('[data-test-editor]'));
-    await waitForSyntaxHighlighting('"Pet"', 'rgb(4, 81, 165)');
 
     this.onSave((json) => {
       assert.strictEqual(json.data.attributes?.name, 'MangoXXX');
@@ -1111,7 +1110,6 @@ module('Acceptance | operator mode tests', function (hooks) {
       )}`,
     );
     await waitUntil(() => find('[data-test-editor]'));
-    await waitForSyntaxHighlighting('"Pet"', 'rgb(4, 81, 165)');
 
     this.onSave(() => {
       assert.ok(false, `save should never happen`);
