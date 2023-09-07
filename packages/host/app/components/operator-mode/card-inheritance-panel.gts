@@ -112,17 +112,6 @@ export default class CardInheritancePanel extends Component<Args> {
     let card = new t();
     return cardTypeDisplayName(card);
   }
-
-  moduleUrl(t: typeof BaseDef | undefined) {
-    if (t) {
-      let ref = identifyCard(t);
-      if (ref) {
-        return new URL(moduleFrom(ref));
-      }
-      throw new Error('Could not identify card');
-    }
-    return;
-  }
 }
 
 function cardsFromModule(
