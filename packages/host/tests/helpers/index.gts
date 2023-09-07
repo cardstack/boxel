@@ -34,6 +34,7 @@ import type MessageService from '@cardstack/host/services/message-service';
 import Owner from '@ember/owner';
 import { OpenFiles } from '@cardstack/host/controllers/code';
 import { buildWaiter } from '@ember/test-waiters';
+import { findAll, waitUntil } from '@ember/test-helpers';
 import type { UpdateEventData } from '@cardstack/runtime-common/realm';
 const waiter = buildWaiter('@cardstack/host/test/helpers/index:onFetch-waiter');
 
@@ -56,6 +57,39 @@ export function p(dateString: string): Date {
   return parse(dateString, 'yyyy-MM-dd', new Date());
 }
 
+export function getMonacoContent(): string {
+  return (window as any).monaco.editor.getModels()[0].getValue();
+}
+
+export function setMonacoContent(content: string): string {
+  return (window as any).monaco.editor.getModels()[0].setValue(content);
+}
+
+export async function waitForSyntaxHighlighting(
+  textContent: string,
+  color: string,
+) {
+  let codeTokens;
+  let finalHighlightedToken: Element | undefined;
+
+  await waitUntil(
+    () => {
+      codeTokens = findAll('.view-line span span');
+      finalHighlightedToken = codeTokens.find(
+        (t) => t.innerHTML === textContent,
+      );
+      return finalHighlightedToken;
+    },
+    { timeoutMessage: `timed out waiting for \`${textContent}\` token` },
+  );
+
+  await waitUntil(
+    () =>
+      finalHighlightedToken?.computedStyleMap()?.get('color')?.toString() ===
+      color,
+    { timeoutMessage: 'timed out waiting for syntax highlighting' },
+  );
+}
 export interface Dir {
   [name: string]: string | Dir;
 }

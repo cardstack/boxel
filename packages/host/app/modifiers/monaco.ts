@@ -48,6 +48,8 @@ export default class Monaco extends Modifier<Signature> {
         {
           value: content,
           language,
+          scrollBeyondLastLine: false,
+          automaticLayout: true,
         };
 
       // Code rendering is inconsistently wrapped without this, producing spurious visual diffs
