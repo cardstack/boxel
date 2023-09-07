@@ -59,11 +59,8 @@ export default class MonacoService extends Service {
   reverseFileSerialization(
     fileSerializationJSON: SingleCardDocument,
     id: string,
+    realmURL: string,
   ): SingleCardDocument {
-    let realmURL = this.cardService.getRealmURLFor(new URL(id))?.href;
-    if (!realmURL) {
-      throw new Error(`Could not determine realm for url ${id}`);
-    }
     return merge({}, fileSerializationJSON, {
       data: {
         id,

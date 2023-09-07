@@ -103,9 +103,9 @@ export default class CodeMode extends Component<Signature> {
     this.maybeMonacoSDK = await this.monacoService.getMonacoContext();
   });
 
-  private get fileContent() {
+  private get readyFile() {
     if (this.openFile.current?.state === 'ready') {
-      return this.openFile.current.content;
+      return this.openFile.current;
     }
     throw new Error(
       `cannot access file contents ${this.codePath} before file is open`,
@@ -286,8 +286,16 @@ export default class CodeMode extends Component<Signature> {
     }
     let realmPath = new RealmPaths(this.cardService.defaultURL);
     let url = realmPath.fileURL(this.codePath.href.replace(/\.json$/, ''));
+    let realmURL = this.readyFile.realmURL;
+    if (!realmURL) {
+      throw new Error(`cannot determine realm for ${this.codePath}`);
+    }
 
-    let doc = this.monacoService.reverseFileSerialization(json, url.href);
+    let doc = this.monacoService.reverseFileSerialization(
+      json,
+      url.href,
+      realmURL,
+    );
     let card: CardDef | undefined;
     try {
       card = await this.cardService.createFromSerialized(doc.data, doc, url);
@@ -354,7 +362,7 @@ export default class CodeMode extends Component<Signature> {
                 class='monaco-container'
                 data-test-editor
                 {{monacoModifier
-                  content=this.fileContent
+                  content=this.readyFile.content
                   contentChanged=(perform this.contentChangedTask)
                   monacoSDK=this.monacoSDK
                   language=this.language
