@@ -63,37 +63,37 @@ export default class DefinitionContainer extends Component<Signature> {
           </div>
           <div class='definition-name'>{{@name}}</div>
         </div>
-        <div class='action-buttons'>
-          {{#if (and (eq @variant 'module') @isActive)}}
-            {{#if @onCreate}}
-              <Button class='action-button' {{on 'click' @onCreate}}>
-                {{svgJar 'icon-plus' width='24px' height='24px'}}
-                Create Instance
-              </Button>
-            {{/if}}
-            {{#if @onInherit}}
-              <Button class='action-button' {{on 'click' @onInherit}}>
-                {{svgJar 'icon-inherit' width='24px' height='24px'}}
-                Inherit
-              </Button>
-            {{/if}}
-            {{#if @onDuplicate}}
-              <Button class='action-button' {{on 'click' @onDuplicate}}>
-                {{svgJar 'copy' width='24px' height='24px'}}
-                Duplicate
-              </Button>
-            {{/if}}
-          {{/if}}
-          {{#if (eq @variant 'instance')}}
-            {{#if @onDuplicate}}
-              <Button class='action-button' {{on 'click' @onDuplicate}}>
-                {{svgJar 'copy' width='24px' height='24px'}}
-                Duplicate
-              </Button>
-            {{/if}}
-          {{/if}}
-        </div>
         {{#if @isActive}}
+          <div class='action-buttons'>
+            {{#if (eq @variant 'module')}}
+              {{#if @onCreate}}
+                <Button class='action-button' {{on 'click' @onCreate}}>
+                  {{svgJar 'icon-plus' width='24px' height='24px'}}
+                  Create Instance
+                </Button>
+              {{/if}}
+              {{#if @onInherit}}
+                <Button class='action-button' {{on 'click' @onInherit}}>
+                  {{svgJar 'icon-inherit' width='24px' height='24px'}}
+                  Inherit
+                </Button>
+              {{/if}}
+              {{#if @onDuplicate}}
+                <Button class='action-button' {{on 'click' @onDuplicate}}>
+                  {{svgJar 'copy' width='24px' height='24px'}}
+                  Duplicate
+                </Button>
+              {{/if}}
+            {{/if}}
+            {{#if (eq @variant 'instance')}}
+              {{#if @onDuplicate}}
+                <Button class='action-button' {{on 'click' @onDuplicate}}>
+                  {{svgJar 'copy' width='24px' height='24px'}}
+                  Duplicate
+                </Button>
+              {{/if}}
+            {{/if}}
+          </div>
           <div class='info-footer' data-test-definition-info-text>
             <div class='message'>{{@infoText}}</div>
           </div>
