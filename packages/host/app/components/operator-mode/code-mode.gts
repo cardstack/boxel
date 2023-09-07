@@ -43,6 +43,11 @@ export default class CodeMode extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
   @tracked realmInfo: RealmInfo | null = null;
   @tracked loadFileError: string | null = null;
+  defaultPanelWidths: PanelWidths = {
+    leftPanel: '20%',
+    codeEditorPanel: '48%',
+    rightPanel: '32%',
+  };
   panelWidths: PanelWidths;
 
   constructor(args: any, owner: any) {
@@ -52,11 +57,7 @@ export default class CodeMode extends Component<Signature> {
     this.panelWidths = localStorage.getItem(CodeModePanelWidths)
       ? // @ts-ignore Type 'null' is not assignable to type 'string'
         JSON.parse(localStorage.getItem(CodeModePanelWidths))
-      : {
-          rightPanel: '25%',
-          codeEditorPanel: '50%',
-          leftPanel: '25%',
-        };
+      : this.defaultPanelWidths;
   }
 
   get backgroundURL() {
@@ -192,25 +193,27 @@ export default class CodeMode extends Component<Signature> {
         as |pg|
       >
         <ResizablePanel
-          class='column'
-          @defaultWidth={{this.panelWidths.leftPanel}}
+          @defaultWidth={{this.defaultPanelWidths.leftPanel}}
+          @width={{this.panelWidths.leftPanel}}
           @panelGroupApi={{pg.api}}
         >
-          {{! Move each container and styles to separate component }}
-          <div class='inner-container'>
-            Inheritance / File Browser
-            <section class='inner-container__content'></section>
+          <div class='column'>
+            {{! Move each container and styles to separate component }}
+            <div class='inner-container'>
+              Inheritance / File Browser
+              <section class='inner-container__content'></section>
+            </div>
+            <aside class='inner-container'>
+              <header class='inner-container__header'>
+                Recent Files
+              </header>
+              <section class='inner-container__content'></section>
+            </aside>
           </div>
-          <aside class='inner-container'>
-            <header class='inner-container__header'>
-              Recent Files
-            </header>
-            <section class='inner-container__content'></section>
-          </aside>
         </ResizablePanel>
         <ResizablePanel
-          class='column'
-          @defaultWidth={{this.panelWidths.codeEditorPanel}}
+          @defaultWidth={{this.defaultPanelWidths.codeEditorPanel}}
+          @width={{this.panelWidths.codeEditorPanel}}
           @minWidth='300px'
           @panelGroupApi={{pg.api}}
         >
@@ -221,8 +224,8 @@ export default class CodeMode extends Component<Signature> {
           </div>
         </ResizablePanel>
         <ResizablePanel
-          class='column'
-          @defaultWidth={{this.panelWidths.rightPanel}}
+          @defaultWidth={{this.defaultPanelWidths.rightPanel}}
+          @width={{this.panelWidths.rightPanel}}
           @panelGroupApi={{pg.api}}
         >
           <div class='inner-container'>
@@ -277,6 +280,26 @@ export default class CodeMode extends Component<Signature> {
         flex-direction: row;
         flex-shrink: 0;
         height: 100%;
+      }
+      .column {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp);
+        height: 100%;
+      }
+      .column:nth-child(2) {
+        flex: 2;
+      }
+      .column:last-child {
+        flex: 1.2;
+      }
+      .column:first-child > *:first-child {
+        max-height: 50%;
+        background-color: var(--boxel-200);
+      }
+      .column:first-child > *:last-child {
+        max-height: calc(50% - var(--boxel-sp));
+        background-color: var(--boxel-200);
       }
 
       .inner-container {
