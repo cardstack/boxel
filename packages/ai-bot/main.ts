@@ -12,7 +12,12 @@ import {
 import OpenAI from 'openai';
 import { ChatCompletionChunk } from 'openai/resources/chat';
 import { logger, aiBotUsername } from '@cardstack/runtime-common';
-import { constructHistory, extractContentFromStream } from './helpers';
+import {
+  constructHistory,
+  extractContentFromStream,
+  processStream,
+  ParsingMode,
+} from './helpers';
 
 let log = logger('ai-bot');
 
@@ -83,11 +88,6 @@ Modify only the parts you are asked to. Only return modified fields.\
 You must not return any fields that you do not see in the input data.\
 If the user hasn\'t shared any cards with you or what they\'re asking for doesn\'t make sense for the card type, you can ask them to "send their open cards" to you.';
 
-enum ParsingMode {
-  Text,
-  Command,
-}
-
 function getUserMessage(event: IRoomEvent) {
   const content = event.content;
   if (content.msgtype === 'org.boxel.card') {
@@ -109,6 +109,7 @@ async function sendMessage(
   content: string,
   previous: string | undefined,
 ) {
+  console.log('Sending', content);
   if (content.startsWith('option>')) {
     content = content.replace('option>', '');
   }
@@ -134,7 +135,7 @@ async function sendMessage(
 }
 
 async function sendOption(client: MatrixClient, room: Room, content: string) {
-  log.info(content);
+  log.info('sending option', content);
   let parsedContent = JSON.parse(content);
   let patch = parsedContent['patch'];
   if (patch['attributes']) {
@@ -166,61 +167,50 @@ async function sendStream(
   room: Room,
   append_to?: string,
 ) {
-  let content = '';
   let unsent = 0;
-  let currentParsingMode: ParsingMode = ParsingMode.Text;
-  for await (const token of extractContentFromStream(stream)) {
-    log.info('Token: ', token);
-    // The final token is undefined, so we need to break out of the loop
-    if (token == undefined) {
-      break;
-    }
-
+  let lastUnsentMessage = undefined;
+  for await (const message of processStream(extractContentFromStream(stream))) {
     // If we've not got a current message to edit and we're processing text
     // rather than structured data, start a new message to update.
-    if (!append_to && currentParsingMode == ParsingMode.Text) {
-      let placeholder = await sendMessage(client, room, '...', undefined);
-      append_to = placeholder.event_id;
+    if (message.type == ParsingMode.Text) {
+      // If there's no message to append to, just send the message
+      // If there's more than 20 pending messages, send the message
+      if (!append_to) {
+        let initialMessage = await sendMessage(
+          client,
+          room,
+          message.content,
+          append_to,
+        );
+        unsent = 0;
+        lastUnsentMessage = undefined;
+        append_to = initialMessage.event_id;
+      }
+
+      if (unsent > 20) {
+        await sendMessage(client, room, message.content, append_to);
+        unsent = 0;
+        lastUnsentMessage = undefined;
+      } else {
+        lastUnsentMessage = message;
+        unsent += 1;
+      }
     }
 
-    // The parsing here has to deal with a streaming response that
-    // alternates between sections of text (to stream back to the client)
-    // and structured data (to batch and send in one block)
-    if (token.includes('</')) {
-      // Content is the text we have built up so far
-      if (content.startsWith('option>')) {
-        content = content.replace('option>', '');
+    if (message.type == ParsingMode.Command) {
+      if (lastUnsentMessage) {
+        await sendMessage(client, room, lastUnsentMessage.content, append_to);
+        lastUnsentMessage = undefined;
       }
-      if (content.startsWith('>')) {
-        content = content.replace('>', '');
-      }
-      content += token.split('</')[0];
-      // Now we need to drop into card mode for the stream
-      await sendOption(client, room, content);
-      content = '';
-      currentParsingMode = ParsingMode.Text;
-      unsent = 0;
-    } else if (token.includes('<')) {
-      currentParsingMode = ParsingMode.Command;
-      // Send the last update
-      let beforeTag = token.split('<')[0];
-      await sendMessage(client, room, content + beforeTag, append_to);
-      content = '';
+      await sendOption(client, room, message.content);
       unsent = 0;
       append_to = undefined;
-    } else if (token) {
-      unsent += 1;
-      content += token;
-      // buffer up to 20 tokens before sending, but only when parsing text
-      if (currentParsingMode == ParsingMode.Text && unsent > 20) {
-        await sendMessage(client, room, content, append_to);
-        unsent = 0;
-      }
     }
   }
+
   // Make sure we send any remaining content at the end of the stream
-  if (content) {
-    await sendMessage(client, room, content, append_to);
+  if (lastUnsentMessage) {
+    await sendMessage(client, room, lastUnsentMessage.content, append_to);
   }
 }
 
