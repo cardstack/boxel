@@ -161,7 +161,7 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.dom('[data-test-inheritance-toggle]').hasClass('active');
     assert.dom('[data-test-file-browser-toggle]').doesNotHaveClass('active');
 
-    assert.dom('[data-test-inheritance-placeholder]').exists();
+    assert.dom('[data-test-card-inheritance-panel]').exists();
     assert.dom('[data-test-file]').doesNotExist();
 
     await click('[data-test-file-browser-toggle]');
