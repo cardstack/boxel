@@ -23,9 +23,7 @@ interface Signature {
     variant: DefinitionVariant;
     isActive: boolean;
     infoText?: string;
-    onCreate?: () => void;
-    onInherit?: () => void;
-    onDuplicate?: () => void;
+    delete: () => void;
   };
 }
 
@@ -43,6 +41,10 @@ export default class DefinitionContainer extends Component<Signature> {
   get realmName(): string | undefined {
     return this.args.realmInfo?.name;
   }
+
+  notImplemented = () => {
+    throw new Error(`not implemented`);
+  };
 
   <template>
     <div class='container {{if @isActive "active"}}' ...attributes>
@@ -66,32 +68,24 @@ export default class DefinitionContainer extends Component<Signature> {
         {{#if @isActive}}
           <div class='action-buttons'>
             {{#if (eq @variant 'module')}}
-              {{#if @onCreate}}
-                <Button class='action-button' {{on 'click' @onCreate}}>
-                  {{svgJar 'icon-plus' width='24px' height='24px'}}
-                  Create Instance
-                </Button>
-              {{/if}}
-              {{#if @onInherit}}
-                <Button class='action-button' {{on 'click' @onInherit}}>
-                  {{svgJar 'icon-inherit' width='24px' height='24px'}}
-                  Inherit
-                </Button>
-              {{/if}}
-              {{#if @onDuplicate}}
-                <Button class='action-button' {{on 'click' @onDuplicate}}>
-                  {{svgJar 'copy' width='24px' height='24px'}}
-                  Duplicate
-                </Button>
-              {{/if}}
+              <Button class='action-button' {{on 'click' this.notImplemented}}>
+                {{svgJar 'icon-plus' width='24px' height='24px'}}
+                Create Instance
+              </Button>
+              <Button class='action-button' {{on 'click' this.notImplemented}}>
+                {{svgJar 'icon-inherit' width='24px' height='24px'}}
+                Inherit
+              </Button>
+              <Button class='action-button' {{on 'click' @delete}}>
+                {{svgJar 'icon-trash' width='24px' height='24px'}}
+                Delete
+              </Button>
             {{/if}}
             {{#if (eq @variant 'instance')}}
-              {{#if @onDuplicate}}
-                <Button class='action-button' {{on 'click' @onDuplicate}}>
-                  {{svgJar 'copy' width='24px' height='24px'}}
-                  Duplicate
-                </Button>
-              {{/if}}
+              <Button class='action-button' {{on 'click' @delete}}>
+                {{svgJar 'icon-trash' width='24px' height='24px'}}
+                Delete
+              </Button>
             {{/if}}
           </div>
           <div class='info-footer' data-test-definition-info-text>

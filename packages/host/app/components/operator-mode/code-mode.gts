@@ -44,7 +44,9 @@ import ResizablePanelGroup, {
 import ResizablePanel from '@cardstack/boxel-ui/components/resizable-panel/resizable-panel';
 
 interface Signature {
-  Args: {};
+  Args: {
+    delete: (card: CardDef) => void;
+  };
 }
 const log = logger('component:code-mode');
 
@@ -388,6 +390,14 @@ export default class CodeMode extends Component<Signature> {
     localStorage.setItem(CodeModePanelWidths, JSON.stringify(this.panelWidths));
   }
 
+  @action
+  private delete() {
+    if (this.cardResource.value) {
+      this.args.delete(this.cardResource.value);
+    }
+    // TODO HASSAN START HERE FRI else if this is a module perform a module delete
+  }
+
   <template>
     <div class='code-mode-background' style={{this.backgroundURLStyle}}></div>
     <CardURLBar
@@ -427,6 +437,7 @@ export default class CodeMode extends Component<Signature> {
                   @realmInfo={{this.realmInfo}}
                   @realmIconURL={{this.realmIconURL}}
                   @importedModule={{this.importedModule}}
+                  @delete={{this.delete}}
                   data-test-card-inheritance-panel
                 />
               </section>

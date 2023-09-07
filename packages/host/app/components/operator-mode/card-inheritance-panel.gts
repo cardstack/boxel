@@ -9,7 +9,6 @@ import { type RealmInfo, cardTypeDisplayName } from '@cardstack/runtime-common';
 import DefinitionContainer, { DefinitionVariant } from './definition-container';
 import { isReady, FileResource } from '@cardstack/host/resources/file';
 import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import LoaderService from '@cardstack/host/services/loader-service';
 import moment from 'moment';
@@ -23,9 +22,7 @@ interface Args {
     openFile: { current: FileResource | undefined };
     cardInstance: CardDef | null;
     importedModule?: ImportResource;
-    onCreate?: () => void;
-    onInherit?: () => void;
-    onDuplicate?: () => void;
+    delete: () => void;
   };
 }
 
@@ -34,21 +31,6 @@ export default class CardInheritancePanel extends Component<Args> {
   @service declare loaderService: LoaderService;
   @tracked cardInstance: CardDef | undefined;
   @tracked module: ModuleSyntax | undefined;
-
-  @action
-  duplicateAction() {
-    console.log('running duplicate');
-  }
-
-  @action
-  createAction() {
-    console.log('running create');
-  }
-
-  @action
-  inheritAction() {
-    console.log('running inherit');
-  }
 
   <template>
     <div class='container' ...attributes>
@@ -60,9 +42,7 @@ export default class CardInheritancePanel extends Component<Args> {
             @realmInfo={{@realmInfo}}
             @realmIconURL={{@realmIconURL}}
             @variant={{DefinitionVariant.Module}}
-            @onDuplicate={{this.duplicateAction}}
-            @onCreate={{this.createAction}}
-            @onInherit={{this.inheritAction}}
+            @delete={{@delete}}
             @isActive={{false}}
             data-test-card-module-definition
           />
@@ -77,7 +57,7 @@ export default class CardInheritancePanel extends Component<Args> {
           @infoText={{this.lastModified}}
           @variant={{DefinitionVariant.Instance}}
           @isActive={{true}}
-          @onDuplicate={{this.duplicateAction}}
+          @delete={{@delete}}
           data-test-card-instance-definition
         />
       {{/if}}
