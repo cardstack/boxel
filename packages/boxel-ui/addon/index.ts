@@ -20,6 +20,8 @@ import Modal from './components/modal';
 import BoxelDropdown from './components/dropdown';
 import BoxelButton from './components/button';
 import Tooltip from './components/tooltip';
+import ResizablePanelGroup from './components/resizable-panel/resizable-panel-group';
+import ResizablePanel from './components/resizable-panel/resizable-panel';
 
 export {
   AddButton,
@@ -43,4 +45,6 @@ export {
   Modal,
   BoxelDropdown,
   Tooltip,
+  ResizablePanelGroup,
+  ResizablePanel,
 };
