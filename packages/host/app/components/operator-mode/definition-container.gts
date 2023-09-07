@@ -111,16 +111,16 @@ export default class DefinitionContainer extends Component<Signature> {
         display: grid;
         grid-template-columns: 1fr auto;
         align-items: center;
-        padding: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-sm) var(--boxel-sp-xxs);
         border-top-left-radius: var(--boxel-border-radius);
         border-top-right-radius: var(--boxel-border-radius);
         background-color: var(--boxel-100);
       }
       .banner-title {
         color: #919191;
-        font-size: var(--boxel-font-size-xs);
+        font-size: var(--boxel-font-size-sm);
         font-weight: 500;
-        letter-spacing: var(--boxel-lsp-lg);
+        letter-spacing: var(--boxel-lsp-xl);
         text-transform: uppercase;
       }
       .active {
@@ -155,6 +155,7 @@ export default class DefinitionContainer extends Component<Signature> {
       .realm-info .realm-name {
         letter-spacing: var(--boxel-lsp-xs);
         font-weight: 500;
+        font-size: var(--boxel-font-size-sm);
       }
       .definition-info {
         display: flex;
