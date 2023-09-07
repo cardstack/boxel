@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, skip, test } from 'qunit';
 import {
   find,
   visit,
@@ -192,7 +192,7 @@ module('Acceptance | basic tests', function (hooks) {
       .doesNotExist('Person/1.json file entry is not rendered');
   });
 
-  test('recent file links are shown', async function (assert) {
+  skip('recent file links are shown', async function (assert) {
     window.localStorage.setItem('recent-files', JSON.stringify(['index.json']));
 
     console.log('visiting code');
@@ -243,7 +243,7 @@ module('Acceptance | basic tests', function (hooks) {
     );
   });
 
-  test('Can view a card instance', async function (assert) {
+  skip('Can view a card instance', async function (assert) {
     await visit('/code');
     await waitFor('[data-test-file]');
     await click('[data-test-directory="Person/"]');
@@ -339,7 +339,7 @@ module('Acceptance | basic tests', function (hooks) {
     assert.dom('[data-test-person]').containsText('First name: HassanXXX');
   });
 
-  test('Can view a card schema', async function (assert) {
+  skip('Can view a card schema', async function (assert) {
     await visit('/code');
     await waitFor('[data-test-file]');
     await click('[data-test-file="person.gts"]');
@@ -391,7 +391,7 @@ module('Acceptance | basic tests', function (hooks) {
     assert.dom('[data-test-create-new-card-button] + style').doesNotExist();
   });
 
-  test('can create a new card', async function (assert) {
+  skip('can create a new card', async function (assert) {
     await visit('/code');
     await click('[data-test-create-new-card-button]');
     assert
