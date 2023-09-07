@@ -24,7 +24,7 @@ const Accordion: TemplateOnlyComponent<Signature> = <template>
       border: var(--accordion-border);
       border-radius: var(--accordion-border-radius);
     }
-    :global(.accordion > .item + .item) {
+    .accordion > :deep(.item + .item) {
       border-top: var(--accordion-border);
     }
   </style>
