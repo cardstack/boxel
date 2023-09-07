@@ -20,7 +20,6 @@ import {
   testRealmURL,
   getMonacoContent,
   setMonacoContent,
-  waitForSyntaxHighlighting,
   type TestContextWithSSE,
   type TestContextWithSave,
 } from '../helpers';
@@ -1040,7 +1039,6 @@ module('Acceptance | operator mode tests', function (hooks) {
         },
       },
     });
-    await waitForSyntaxHighlighting('"Pet"', 'rgb(4, 81, 165)');
     await percySnapshot(assert);
   });
 
