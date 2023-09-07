@@ -119,12 +119,12 @@ export default class DefinitionContainer extends Component<Signature> {
       .banner-title {
         color: #919191;
         font-size: var(--boxel-font-size-sm);
-        font-weight: 500;
-        letter-spacing: var(--boxel-lsp-xl);
+        font-weight: 200;
+        letter-spacing: var(--boxel-lsp-xxl);
         text-transform: uppercase;
       }
       .active {
-        box-shadow: var(--boxel-box-shadow);
+        box-shadow: var(--boxel-box-shadow-hover);
       }
 
       .active .banner {
@@ -169,7 +169,7 @@ export default class DefinitionContainer extends Component<Signature> {
 
       .info-footer .message {
         color: #919191;
-        font-weight: 500;
+        font-weight: 200;
       }
 
       .action-buttons {
