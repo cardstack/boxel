@@ -28,7 +28,6 @@ import {
 import { WebMessageStream, messageCloseHandler } from './stream';
 import type CardService from '@cardstack/host/services/card-service';
 import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
-import { file, FileResource } from '@cardstack/host/resources/file';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type MessageService from '@cardstack/host/services/message-service';
 import Owner from '@ember/owner';
@@ -631,26 +630,6 @@ export function delay(delayAmountMs: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, delayAmountMs);
   });
-}
-
-export async function getFileResource(
-  context: TestContext,
-  realmURL: string,
-  openFiles: OpenFiles,
-): Promise<FileResource> {
-  if (openFiles.path === undefined) {
-    throw new Error('Wrong relativePath undefined');
-  }
-  let relativePath = openFiles.path;
-  let f = file(context, () => ({
-    url: new RealmPaths(realmURL).url + relativePath,
-    onStateChange: (state) => {
-      if (state === 'not-found') {
-        openFiles.path = undefined;
-      }
-    },
-  }));
-  return f;
 }
 
 function changedEntry(
