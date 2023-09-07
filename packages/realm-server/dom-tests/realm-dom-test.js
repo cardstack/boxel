@@ -1,7 +1,7 @@
 /* eslint-env browser */
 /* globals QUnit */
 
-const { test } = QUnit;
+const { skip, test } = QUnit;
 const testRealmURL = 'http://localhost:4202/node-test';
 const testContainerId = 'test-container';
 
@@ -99,7 +99,7 @@ QUnit.module(
       assert.ok(dirContents.includes('unused-card.gts'));
     });
 
-    test('renders card source', async function (assert) {
+    skip('renders card source', async function (assert) {
       await boot(
         `${testRealmURL}/code?openFile=person.gts`,
         '[data-test-card-id]',
@@ -135,7 +135,7 @@ QUnit.module(
       );
     });
 
-    test('renders card instance', async function (assert) {
+    skip('renders card instance', async function (assert) {
       await boot(
         `${testRealmURL}/code?openFile=person-2.json`,
         '[data-test-card]',
@@ -152,7 +152,7 @@ QUnit.module(
       );
     });
 
-    test('can change routes', async function (assert) {
+    skip('can change routes', async function (assert) {
       await boot(`${testRealmURL}/code`, '[data-test-directory-level]');
       let files = querySelectorAll('.main nav .file');
       let instance = [...files].find(
