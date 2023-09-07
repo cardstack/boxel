@@ -885,69 +885,66 @@ module('Acceptance | operator mode tests', function (hooks) {
         .exists();
     });
 
-    QUnit.only(
-      'card inheritance panel will show json instance definition and module definition when is set to code',
-      async function (assert) {
-        let operatorModeStateParam = stringify({
-          stacks: [
-            [
-              {
-                id: 'http://test-realm/test/Person/fadhlan',
-                format: 'isolated',
-              },
-            ],
+    test('card inheritance panel will show json instance definition and module definition when is set to code', async function (assert) {
+      let operatorModeStateParam = stringify({
+        stacks: [
+          [
+            {
+              id: 'http://test-realm/test/Person/fadhlan',
+              format: 'isolated',
+            },
           ],
-          submode: 'code',
-          codePath: `http://test-realm/test/Person/fadhlan.json`,
-        })!;
+        ],
+        submode: 'code',
+        codePath: `http://test-realm/test/Person/fadhlan.json`,
+      })!;
 
-        await visit(
-          `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-            operatorModeStateParam,
-          )}`,
-        );
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam,
+        )}`,
+      );
 
-        await waitUntil(() => find('[data-test-card-inheritance-panel]'));
-        await waitUntil(() => find('[data-test-card-module-definition]'));
-        await waitUntil(() => find('[data-test-card-instance-definition]'));
+      await waitUntil(() => find('[data-test-card-inheritance-panel]'));
+      await waitUntil(() => find('[data-test-card-module-definition]'));
+      await waitUntil(() => find('[data-test-card-instance-definition]'));
 
-        assert.dom('[data-test-card-module-definition]').includesText('Person');
-        assert
-          .dom(
-            '[data-test-card-module-definition] [data-test-definition-file-extension]',
-          )
-          .includesText('.GTS');
-        assert
-          .dom(
-            '[data-test-card-module-definition] [data-test-definition-realm-name]',
-          )
-          .includesText('Test Workspace B');
-        assert
-          .dom('[data-test-card-module-definition]')
-          .doesNotHaveClass('active');
-        assert
-          .dom('[data-test-card-instance-definition]')
-          .includesText('Fadhlan');
-        assert
-          .dom(
-            '[data-test-card-instance-definition] [data-test-definition-file-extension]',
-          )
-          .includesText('.JSON');
-        assert
-          .dom(
-            '[data-test-card-instance-definition] [data-test-definition-realm-name]',
-          )
-          .includesText('Test Workspace B');
-        assert
-          .dom(
-            '[data-test-card-instance-definition] [data-test-definition-info-text]',
-          )
-          .includesText('Last saved was a few seconds ago');
+      assert.dom('[data-test-card-module-definition]').includesText('Person');
+      assert
+        .dom(
+          '[data-test-card-module-definition] [data-test-definition-file-extension]',
+        )
+        .includesText('.GTS');
+      assert
+        .dom(
+          '[data-test-card-module-definition] [data-test-definition-realm-name]',
+        )
+        .includesText('Test Workspace B');
+      assert
+        .dom('[data-test-card-module-definition]')
+        .doesNotHaveClass('active');
+      assert
+        .dom('[data-test-card-instance-definition]')
+        .includesText('Fadhlan');
+      assert
+        .dom(
+          '[data-test-card-instance-definition] [data-test-definition-file-extension]',
+        )
+        .includesText('.JSON');
+      assert
+        .dom(
+          '[data-test-card-instance-definition] [data-test-definition-realm-name]',
+        )
+        .includesText('Test Workspace B');
+      assert
+        .dom(
+          '[data-test-card-instance-definition] [data-test-definition-info-text]',
+        )
+        .includesText('Last saved was a few seconds ago');
 
-        debugger;
-        assert.dom('[data-test-card-instance-definition]').hasClass('active');
-      },
-    );
+      debugger;
+      assert.dom('[data-test-card-instance-definition]').hasClass('active');
+    });
   });
 
   test<TestContextWithSSE>('card preview live updates when index changes', async function (assert) {
