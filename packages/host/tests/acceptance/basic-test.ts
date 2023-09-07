@@ -1,7 +1,6 @@
 import { module, test } from 'qunit';
 import {
   find,
-  findAll,
   visit,
   currentURL,
   click,
@@ -17,6 +16,8 @@ import {
   setupLocalIndexing,
   setupServerSentEvents,
   testRealmURL,
+  getMonacoContent,
+  waitForSyntaxHighlighting,
   type TestContextWithSSE,
 } from '../helpers';
 import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
@@ -25,10 +26,6 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import percySnapshot from '@percy/ember';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import window from 'ember-window-mock';
-
-function getMonacoContent(): string {
-  return (window as any).monaco.editor.getModels()[0].getValue();
-}
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -466,26 +463,3 @@ module('Acceptance | basic tests', function (hooks) {
     );
   });
 });
-
-async function waitForSyntaxHighlighting(textContent: string, color: string) {
-  let codeTokens;
-  let finalHighlightedToken: Element | undefined;
-
-  await waitUntil(
-    () => {
-      codeTokens = findAll('.view-line span span');
-      finalHighlightedToken = codeTokens.find(
-        (t) => t.innerHTML === textContent,
-      );
-      return finalHighlightedToken;
-    },
-    { timeoutMessage: `timed out waiting for \`${textContent}\` token` },
-  );
-
-  await waitUntil(
-    () =>
-      finalHighlightedToken?.computedStyleMap()?.get('color')?.toString() ===
-      color,
-    { timeoutMessage: 'timed out waiting for syntax highlighting' },
-  );
-}
