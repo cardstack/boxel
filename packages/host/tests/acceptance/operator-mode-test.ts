@@ -336,6 +336,8 @@ module('Acceptance | operator mode tests', function (hooks) {
               ],
             ],
             submode: 'interact',
+            fileView: 'inheritance',
+            openDirs: [],
           })!,
         )}`,
       );
@@ -361,6 +363,8 @@ module('Acceptance | operator mode tests', function (hooks) {
               ],
             ],
             submode: 'interact',
+            fileView: 'inheritance',
+            openDirs: [],
           })!,
         )}`,
       );
@@ -386,6 +390,8 @@ module('Acceptance | operator mode tests', function (hooks) {
               ],
             ],
             submode: 'interact',
+            fileView: 'inheritance',
+            openDirs: [],
           })!,
         )}`,
       );
@@ -635,6 +641,8 @@ module('Acceptance | operator mode tests', function (hooks) {
               ],
             ],
             submode: 'interact',
+            fileView: 'inheritance',
+            openDirs: [],
           })!,
         )}`,
       );
