@@ -37,6 +37,7 @@
     "ember-focus-trap": "^1.0.1",
     "ember-link": "^2.1.0",
     "ember-load-initializers": "^2.1.2",
+    "ember-resize-modifier": "^0.6.0",
     "ember-set-body-class": "^1.0.2",
     "ember-svg-jar": "^2.4.2",
     "ember-template-imports": "^3.1.2",

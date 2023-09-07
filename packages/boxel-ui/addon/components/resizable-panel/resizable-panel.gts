@@ -10,6 +10,7 @@ interface Signature {
   Args: {
     panelGroupApi: PanelGroupApi;
     defaultWidth: string;
+    width?: string;
     minWidth?: string;
   };
   Blocks: {
@@ -80,7 +81,7 @@ export default class Panel extends Component<Signature> {
     // eslint-disable-next-line ember/no-incorrect-calls-with-inline-anonymous-functions
     scheduleOnce('afterRender', this, () => {
       this.id = this.args.panelGroupApi.registerPanel({
-        width: this.args.defaultWidth,
+        width: this.args.width ?? this.args.defaultWidth,
         defaultWidth: this.args.defaultWidth,
       });
     });

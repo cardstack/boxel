@@ -3,6 +3,7 @@ import { hash } from '@ember/helper';
 import { action } from '@ember/object';
 import { registerDestructor } from '@ember/destroyable';
 import { TrackedMap } from 'tracked-built-ins';
+import didResizeModifier from 'ember-resize-modifier/modifiers/did-resize';
 
 export type PanelContext = {
   width: string;
@@ -30,7 +31,11 @@ interface Signature {
 
 export default class ResizablePanelGroup extends Component<Signature> {
   <template>
-    <div class='boxel-panel-group' ...attributes>
+    <div
+      class='boxel-panel-group'
+      {{didResizeModifier this.onWindowResize}}
+      ...attributes
+    >
       {{yield
         (hash
           api=(hash
@@ -245,5 +250,68 @@ export default class ResizablePanelGroup extends Component<Signature> {
     this.args.onListPanelContextChange?.(
       Array.from(this.listPanelContext, ([_name, value]) => value),
     );
+  }
+
+  @action
+  onWindowResize(entry: ResizeObserverEntry, _observer: ResizeObserver) {
+    let panelGroupEl = entry.target as HTMLElement;
+
+    let panelWidths = [];
+    for (let index = 1; index <= this.listPanelContext.size; index++) {
+      let panelEl = panelGroupEl.querySelector(
+        `[id='${index}'].boxel-panel`,
+      ) as HTMLElement;
+      panelWidths.push(panelEl.offsetWidth);
+    }
+    let totalPanelWidth = panelWidths.reduce((partialSum, a) => partialSum + a);
+    let resizeHandlerEl = panelGroupEl.querySelector(
+      '#resize-handler-1',
+    ) as HTMLElement;
+
+    let resizeHandlerWidth = (resizeHandlerEl as HTMLElement).offsetWidth;
+    let totalResizeHandlerWidth =
+      resizeHandlerWidth * (this.listPanelContext.size - 1);
+
+    let panelGroupWithoutResizeHandlerWidth =
+      entry.contentRect.width - totalResizeHandlerWidth;
+    let panelGroupRemainingWidth =
+      panelGroupWithoutResizeHandlerWidth - totalPanelWidth;
+
+    if (panelGroupRemainingWidth <= 0) {
+      return;
+    }
+
+    let largestPanel = {
+      id: 1,
+      width: 0,
+    };
+    for (let index = 1; index <= this.listPanelContext.size; index++) {
+      let panelWidth = panelWidths[index - 1];
+      let newWidth =
+        panelWidth +
+        Math.round((panelWidth / totalPanelWidth) * panelGroupRemainingWidth);
+      let panelContext = this.listPanelContext.get(index);
+      if (panelContext) {
+        this.listPanelContext.set(index, {
+          ...panelContext,
+          width: `${newWidth}px`,
+        });
+      }
+      if (largestPanel.width < newWidth) {
+        largestPanel.id = index;
+        largestPanel.width = newWidth;
+      }
+
+      panelGroupWithoutResizeHandlerWidth =
+        panelGroupWithoutResizeHandlerWidth - newWidth;
+    }
+
+    let largestPanelContext = this.listPanelContext.get(largestPanel.id);
+    if (panelGroupWithoutResizeHandlerWidth > 0 && largestPanelContext) {
+      this.listPanelContext.set(largestPanel.id, {
+        ...largestPanelContext,
+        width: `${largestPanel.width + panelGroupWithoutResizeHandlerWidth}px`,
+      });
+    }
   }
 }
