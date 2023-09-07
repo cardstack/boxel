@@ -942,7 +942,6 @@ module('Acceptance | operator mode tests', function (hooks) {
         )
         .includesText('Last saved was a few seconds ago');
 
-      debugger;
       assert.dom('[data-test-card-instance-definition]').hasClass('active');
     });
   });
