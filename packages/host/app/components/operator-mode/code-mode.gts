@@ -23,9 +23,8 @@ import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-prev
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
-import CardInheritancePanel from './card-inheritance-panel';
+import CardInheritancePanel from '@cardstack/host/components/operator-mode/card-inheritance-panel';
 import { importResource } from '@cardstack/host/resources/import';
-import LoaderService from '@cardstack/host/services/loader-service';
 
 interface Signature {
   Args: {};
@@ -36,11 +35,6 @@ export default class CodeMode extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
   @service declare operatorModeStateService: OperatorModeStateService;
-<<<<<<< HEAD
-  @service declare loaderService: LoaderService;
-  @tracked realmInfo: RealmInfo | null = null;
-=======
->>>>>>> main
   @tracked loadFileError: string | null = null;
   _cachedRealmInfo: RealmInfo | null = null; // This is to cache realm info during reload after code path change so that realm assets don't produce a flicker when code patch changes and the realm is the same
 
