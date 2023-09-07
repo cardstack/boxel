@@ -55,6 +55,11 @@ type PanelWidths = {
 };
 
 const CodeModePanelWidths = 'code-mode-panel-widths';
+const defaultPanelWidths: PanelWidths = {
+  leftPanel: '20%',
+  codeEditorPanel: '48%',
+  rightPanel: '32%',
+};
 
 export default class CodeMode extends Component<Signature> {
   @service declare monacoService: MonacoService;
@@ -63,11 +68,6 @@ export default class CodeMode extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
   @tracked private loadFileError: string | null = null;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
-  private defaultPanelWidths: PanelWidths = {
-    leftPanel: '20%',
-    codeEditorPanel: '48%',
-    rightPanel: '32%',
-  };
   private panelWidths: PanelWidths;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
   private _cachedRealmInfo: RealmInfo | null = null; // This is to cache realm info during reload after code path change so that realm assets don't produce a flicker when code patch changes and the realm is the same
@@ -77,7 +77,7 @@ export default class CodeMode extends Component<Signature> {
     this.panelWidths = localStorage.getItem(CodeModePanelWidths)
       ? // @ts-ignore Type 'null' is not assignable to type 'string'
         JSON.parse(localStorage.getItem(CodeModePanelWidths))
-      : this.defaultPanelWidths;
+      : defaultPanelWidths;
 
     let url = `${this.cardService.defaultURL}_message`;
     this.subscription = {
@@ -407,7 +407,7 @@ export default class CodeMode extends Component<Signature> {
         as |pg|
       >
         <ResizablePanel
-          @defaultWidth={{this.defaultPanelWidths.leftPanel}}
+          @defaultWidth={{defaultPanelWidths.leftPanel}}
           @width={{this.panelWidths.leftPanel}}
           @panelGroupApi={{pg.api}}
         >
@@ -443,7 +443,7 @@ export default class CodeMode extends Component<Signature> {
           </div>
         </ResizablePanel>
         <ResizablePanel
-          @defaultWidth={{this.defaultPanelWidths.codeEditorPanel}}
+          @defaultWidth={{defaultPanelWidths.codeEditorPanel}}
           @width={{this.panelWidths.codeEditorPanel}}
           @minWidth='300px'
           @panelGroupApi={{pg.api}}
@@ -468,7 +468,7 @@ export default class CodeMode extends Component<Signature> {
           </div>
         </ResizablePanel>
         <ResizablePanel
-          @defaultWidth={{this.defaultPanelWidths.rightPanel}}
+          @defaultWidth={{defaultPanelWidths.rightPanel}}
           @width={{this.panelWidths.rightPanel}}
           @panelGroupApi={{pg.api}}
         >
@@ -578,6 +578,9 @@ export default class CodeMode extends Component<Signature> {
 
       .monaco-container {
         height: 100%;
+        min-height: 100%;
+        width: 100%;
+        min-width: 100%;
         padding: var(--boxel-sp) 0;
       }
 
