@@ -224,7 +224,7 @@ export default class CodeMode extends Component<Signature> {
     }));
   });
 
-  @use importedModule = resource(() => {
+  @use private importedModule = resource(() => {
     if (isReady(this.openFile.current)) {
       let f: Ready = this.openFile.current;
       if (f.name.endsWith('.json')) {
