@@ -31,7 +31,7 @@ interface CardItem {
   format: 'isolated' | 'edit';
 }
 
-type FileView = 'inheritance' | 'browser';
+export type FileView = 'inheritance' | 'browser';
 
 type SerializedItem = CardItem;
 type SerializedStack = SerializedItem[];

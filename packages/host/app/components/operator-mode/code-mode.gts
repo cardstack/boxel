@@ -29,6 +29,7 @@ import {
   type FileResource,
 } from '@cardstack/host/resources/file';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import CardService from '@cardstack/host/services/card-service';
 import { task, restartableTask, timeout } from 'ember-concurrency';
@@ -127,7 +128,7 @@ export default class CodeMode extends Component<Signature> {
     return htmlSafe(`background-image: url(${this.backgroundURL});`);
   }
 
-  @action setFileView(view: string) {
+  @action setFileView(view: FileView) {
     this.operatorModeStateService.updateFileView(view);
   }
 
