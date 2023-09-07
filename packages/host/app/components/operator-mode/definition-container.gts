@@ -58,7 +58,7 @@ export default class DefinitionContainer extends Component<Signature> {
         <div class='definition-info'>
           <div class='realm-info'>
             <img src={{@realmIconURL}} alt='realm-icon' />
-            <Label class='realm-name' data-test-definition-realm-name>In
+            <Label class='realm-name' data-test-definition-realm-name>in
               {{this.realmName}}</Label>
           </div>
           <div class='definition-name'>{{@name}}</div>
