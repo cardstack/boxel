@@ -7,14 +7,22 @@ import { htmlSafe } from '@ember/template';
 import {
   type RealmInfo,
   type SingleCardDocument,
+  type CodeRef,
   RealmPaths,
   isCardDocument,
   logger,
   isSingleCardDocument,
+  identifyCard,
+  moduleFrom,
 } from '@cardstack/runtime-common';
-import { file, type FileResource } from '@cardstack/host/resources/file';
 import { LoadingIndicator } from '@cardstack/boxel-ui';
 import { maybe } from '@cardstack/host/resources/maybe';
+import {
+  Ready,
+  file,
+  isReady,
+  type FileResource,
+} from '@cardstack/host/resources/file';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import CardService from '@cardstack/host/services/card-service';
@@ -28,6 +36,8 @@ import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
+import CardInheritancePanel from '@cardstack/host/components/operator-mode/card-inheritance-panel';
+import { importResource } from '@cardstack/host/resources/import';
 
 interface Signature {
   Args: {};
@@ -191,6 +201,24 @@ export default class CodeMode extends Component<Signature> {
     }));
   });
 
+  @use importedModule = resource(() => {
+    if (isReady(this.openFile.current)) {
+      let f: Ready = this.openFile.current;
+      if (f.name.endsWith('.json')) {
+        let ref = identifyCard(this.cardResource.value?.constructor);
+        if (ref !== undefined) {
+          return importResource(this, () => moduleFrom(ref as CodeRef));
+        } else {
+          return;
+        }
+      } else {
+        return importResource(this, () => f.url);
+      }
+    } else {
+      return undefined;
+    }
+  });
+
   private reloadCard = restartableTask(async () => {
     await this.cardResource.load();
   });
@@ -345,11 +373,28 @@ export default class CodeMode extends Component<Signature> {
         <div class='column'>
           {{! Move each container and styles to separate component }}
           <div class='inner-container'>
-            Inheritance / File Browser
-            <section class='inner-container__content'></section>
+            <header
+              class='inner-container__header'
+              aria-label='Inheritance Header'
+            >
+              Card Inheritance
+            </header>
+            <section class='inner-container__content'>
+              <CardInheritancePanel
+                @cardInstance={{this.cardResource.value}}
+                @openFile={{this.openFile}}
+                @realmInfo={{this.realmInfo}}
+                @realmIconURL={{this.realmIconURL}}
+                @importedModule={{this.importedModule}}
+                data-test-card-inheritance-panel
+              />
+            </section>
           </div>
           <aside class='inner-container'>
-            <header class='inner-container__header'>
+            <header
+              class='inner-container__header'
+              aria-label='Recent Files Header'
+            >
               Recent Files
             </header>
             <section class='inner-container__content'></section>
@@ -469,7 +514,7 @@ export default class CodeMode extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-xs);
       }
       .inner-container__content {
-        padding: 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs) var(--boxel-sp-sm);
         overflow-y: auto;
       }
       .card-url-bar {
