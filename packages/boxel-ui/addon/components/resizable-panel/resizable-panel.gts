@@ -37,6 +37,7 @@ export default class Panel extends Component<Signature> {
         <button
           id={{this.resizeHandlerId}}
           class='resize-handler'
+          aria-label={{this.resizeHandlerId}}
           {{on 'mousedown' @panelGroupApi.onResizeHandlerMouseDown}}
           {{on 'dblclick' @panelGroupApi.onResizeHandlerDblClick}}
         />
