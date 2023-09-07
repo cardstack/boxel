@@ -19,10 +19,14 @@ import CardService from '@cardstack/host/services/card-service';
 import { restartableTask } from 'ember-concurrency';
 import { registerDestructor } from '@ember/destroyable';
 import CardURLBar from '@cardstack/host/components/operator-mode/card-url-bar';
+import { TrackedObject } from 'tracked-built-ins';
 import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-preview-panel';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { use, resource } from 'ember-resources';
-import { TrackedObject } from 'tracked-built-ins';
+import ResizablePanelGroup, {
+  PanelContext,
+} from '@cardstack/boxel-ui/components/resizable-panel/resizable-panel-group';
+import ResizablePanel from '@cardstack/boxel-ui/components/resizable-panel/resizable-panel';
 import CardInheritancePanel from '@cardstack/host/components/operator-mode/card-inheritance-panel';
 import { importResource } from '@cardstack/host/resources/import';
 
@@ -30,18 +34,37 @@ interface Signature {
   Args: {};
 }
 
+type PanelWidths = {
+  rightPanel: string;
+  codeEditorPanel: string;
+  leftPanel: string;
+};
+
+const CodeModePanelWidths = 'code-mode-panel-widths';
+
 export default class CodeMode extends Component<Signature> {
   @service declare monacoService: MonacoService;
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @tracked loadFileError: string | null = null;
+  defaultPanelWidths: PanelWidths = {
+    leftPanel: '20%',
+    codeEditorPanel: '48%',
+    rightPanel: '32%',
+  };
+  panelWidths: PanelWidths;
   _cachedRealmInfo: RealmInfo | null = null; // This is to cache realm info during reload after code path change so that realm assets don't produce a flicker when code patch changes and the realm is the same
 
   private subscription: { url: string; unsubscribe: () => void } | undefined;
 
   constructor(args: any, owner: any) {
     super(args, owner);
+    this.panelWidths = localStorage.getItem(CodeModePanelWidths)
+      ? // @ts-ignore Type 'null' is not assignable to type 'string'
+        JSON.parse(localStorage.getItem(CodeModePanelWidths))
+      : this.defaultPanelWidths;
+
     let url = `${this.cardService.defaultURL}_message`;
     this.subscription = {
       url,
@@ -217,6 +240,15 @@ export default class CodeMode extends Component<Signature> {
     return state;
   });
 
+  @action
+  onListPanelContextChange(listPanelContext: PanelContext[]) {
+    this.panelWidths.leftPanel = listPanelContext[0].width;
+    this.panelWidths.codeEditorPanel = listPanelContext[1].width;
+    this.panelWidths.rightPanel = listPanelContext[2].width;
+
+    localStorage.setItem(CodeModePanelWidths, JSON.stringify(this.panelWidths));
+  }
+
   <template>
     <div class='code-mode-background' style={{this.backgroundURLStyle}}></div>
     <CardURLBar
@@ -226,45 +258,64 @@ export default class CodeMode extends Component<Signature> {
       class='card-url-bar'
     />
     <div class='code-mode' data-test-code-mode>
-      <div class='columns'>
-        <div class='column'>
-          {{! Move each container and styles to separate component }}
-          <div class='inner-container'>
-            <header
-              class='inner-container__header'
-              aria-label='Inheritance Header'
-            >
-              Card Inheritance
-            </header>
-            <section class='inner-container__content'>
-              <CardInheritancePanel
-                @cardInstance={{this.cardResource.value}}
-                @openFile={{this.openFile}}
-                @realmInfo={{this.realmInfo}}
-                @realmIconURL={{this.realmIconURL}}
-                @importedModule={{this.importedModule}}
-                data-test-card-inheritance-panel
-              />
-            </section>
+      <ResizablePanelGroup
+        @onListPanelContextChange={{this.onListPanelContextChange}}
+        class='columns'
+        as |pg|
+      >
+        <ResizablePanel
+          @defaultWidth={{this.defaultPanelWidths.leftPanel}}
+          @width={{this.panelWidths.leftPanel}}
+          @panelGroupApi={{pg.api}}
+        >
+          <div class='column'>
+            {{! Move each container and styles to separate component }}
+            <div class='inner-container'>
+              <header
+                class='inner-container__header'
+                aria-label='Inheritance Header'
+              >
+                Card Inheritance
+              </header>
+              <section class='inner-container__content'>
+                <CardInheritancePanel
+                  @cardInstance={{this.cardResource.value}}
+                  @openFile={{this.openFile}}
+                  @realmInfo={{this.realmInfo}}
+                  @realmIconURL={{this.realmIconURL}}
+                  @importedModule={{this.importedModule}}
+                  data-test-card-inheritance-panel
+                />
+              </section>
+            </div>
+            <aside class='inner-container'>
+              <header
+                class='inner-container__header'
+                aria-label='Recent Files Header'
+              >
+                Recent Files
+              </header>
+              <section class='inner-container__content'></section>
+            </aside>
           </div>
-          <aside class='inner-container'>
-            <header
-              class='inner-container__header'
-              aria-label='Recent Files Header'
-            >
-              Recent Files
-            </header>
-            <section class='inner-container__content'></section>
-          </aside>
-        </div>
-        <div class='column'>
+        </ResizablePanel>
+        <ResizablePanel
+          @defaultWidth={{this.defaultPanelWidths.codeEditorPanel}}
+          @width={{this.panelWidths.codeEditorPanel}}
+          @minWidth='300px'
+          @panelGroupApi={{pg.api}}
+        >
           <div class='inner-container'>
             Code, Open File Status:
             {{! This is to trigger openFile function }}
             {{this.openFile.current.state}}
           </div>
-        </div>
-        <div class='column'>
+        </ResizablePanel>
+        <ResizablePanel
+          @defaultWidth={{this.defaultPanelWidths.rightPanel}}
+          @width={{this.panelWidths.rightPanel}}
+          @panelGroupApi={{pg.api}}
+        >
           <div class='inner-container'>
             {{#if this.cardResource.value}}
               <CardPreviewPanel
@@ -276,8 +327,8 @@ export default class CodeMode extends Component<Signature> {
               {{this.cardResource.error.message}}
             {{/if}}
           </div>
-        </div>
-      </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
 
     <style>
@@ -287,9 +338,6 @@ export default class CodeMode extends Component<Signature> {
         );
         --code-mode-padding-bottom: calc(
           var(--search-sheet-closed-height) + (var(--boxel-sp))
-        );
-        --code-mode-column-min-width: calc(
-          var(--operator-mode-min-width) - 2 * var(--boxel-sp)
         );
       }
 
@@ -319,15 +367,13 @@ export default class CodeMode extends Component<Signature> {
         display: flex;
         flex-direction: row;
         flex-shrink: 0;
-        gap: var(--boxel-sp-lg);
         height: 100%;
       }
       .column {
-        flex: 1;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp);
-        min-width: var(--code-mode-column-min-width);
+        height: 100%;
       }
       .column:nth-child(2) {
         flex: 2;
