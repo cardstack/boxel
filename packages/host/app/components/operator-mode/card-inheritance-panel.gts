@@ -5,7 +5,12 @@ import {
   type CardDef,
   type BaseDef,
 } from 'https://cardstack.com/base/card-api';
-import { type RealmInfo, cardTypeDisplayName } from '@cardstack/runtime-common';
+import {
+  type RealmInfo,
+  cardTypeDisplayName,
+  identifyCard,
+  moduleFrom,
+} from '@cardstack/runtime-common';
 import DefinitionContainer, { DefinitionVariant } from './definition-container';
 import { isReady, FileResource } from '@cardstack/host/resources/file';
 import { tracked } from '@glimmer/tracking';
@@ -109,6 +114,17 @@ export default class CardInheritancePanel extends Component<Args> {
   getCardTypeDisplayName(t: typeof BaseDef) {
     let card = new t();
     return cardTypeDisplayName(card);
+  }
+
+  moduleUrl(t: typeof BaseDef | undefined) {
+    if (t) {
+      let ref = identifyCard(t);
+      if (ref) {
+        return new URL(moduleFrom(ref));
+      }
+      throw new Error('Could not identify card');
+    }
+    return;
   }
 }
 

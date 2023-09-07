@@ -191,7 +191,6 @@ export default class CardURLBar extends Component<Signature> {
 
     if (url) {
       this.operatorModeStateService.updateCodePath(url);
-      this.args.onEnterPressed(url);
       this._url = null;
     }
   }
