@@ -336,7 +336,7 @@ export default class CodeMode extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-xs);
       }
       .inner-container__content {
-        padding: 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs) var(--boxel-sp-sm);
         overflow-y: auto;
       }
       .card-url-bar {
