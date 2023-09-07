@@ -1,7 +1,8 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { svgJar } from '../../../helpers/svg-jar';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
-export interface AccordionItemArgs {
+export interface AccordionItemSignature {
+  Element: HTMLDetailsElement;
   Args: {
     className?: string;
   };
@@ -11,13 +12,7 @@ export interface AccordionItemArgs {
   };
 }
 
-interface Signature {
-  Element: HTMLDetailsElement;
-  Args: AccordionItemArgs['Args'];
-  Blocks: AccordionItemArgs['Blocks'];
-}
-
-const AccordionItem: TemplateOnlyComponent<Signature> = <template>
+const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
   <details class='accordion-item {{@className}}' ...attributes>
     <summary class='title'>
       <span class='caret'>
@@ -32,7 +27,10 @@ const AccordionItem: TemplateOnlyComponent<Signature> = <template>
   <style>
     .accordion-item {
       --accordion-item-closed-min-height: 2.5rem;
-      --accordion-item-open-min-height: 20rem;
+      --accordion-item-open-min-height: var(
+        --item-open-min-height,
+        var(--accordion-default-item-height)
+      );
       --accordion-item-border: var(--accordion-border);
       --accordion-item-title-font: 700 var(--boxel-font);
       --accordion-item-title-letter-spacing: var(--boxel-lsp-xs);
@@ -50,7 +48,11 @@ const AccordionItem: TemplateOnlyComponent<Signature> = <template>
       transition: height var(--boxel-transition);
     }
     .accordion-item[open] > .content {
-      height: max-content;
+      height: calc(
+        var(--accordion-item-open-min-height) -
+          var(--accordion-item-closed-min-height)
+      );
+      overflow-y: auto;
     }
     .title {
       display: flex;

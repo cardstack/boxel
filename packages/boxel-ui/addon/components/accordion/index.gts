@@ -1,12 +1,12 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { hash } from '@ember/helper';
 import type { ComponentLike } from '@glint/template';
-import AccordionItem, { type AccordionItemArgs } from './item';
+import AccordionItem, { type AccordionItemSignature } from './item';
 
 interface Signature {
   Element: HTMLDivElement;
   Blocks: {
-    default: [{ Item: ComponentLike<AccordionItemArgs> }];
+    default: [{ Item: ComponentLike<AccordionItemSignature> }];
   };
 }
 
@@ -16,6 +16,7 @@ const Accordion: TemplateOnlyComponent<Signature> = <template>
   </div>
   <style>
     .accordion {
+      --accordion-default-item-height: var(--item-open-min-height, 7rem);
       --accordion-background-color: var(--boxel-light);
       --accordion-border: var(--boxel-border);
       --accordion-border-radius: var(--boxel-border-radius-xl);
