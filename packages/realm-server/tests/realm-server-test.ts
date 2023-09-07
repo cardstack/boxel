@@ -54,14 +54,14 @@ module('Realm Server', function (hooks) {
 
   async function expectEvent<T>(
     assert: Assert,
-    expectedContents: string[],
+    expectedContents: Record<string, any>[],
     callback: () => Promise<T>,
   ): Promise<T> {
-    let defer = new Deferred<string[]>();
-    let events: string[] = [];
+    let defer = new Deferred<Record<string, any>[]>();
+    let events: Record<string, any>[] = [];
     let es = new eventSource(`${testRealmHref}_message`);
-    es.addEventListener('update', (ev: MessageEvent) => {
-      events.push(ev.data);
+    es.addEventListener('index', (ev: MessageEvent) => {
+      events.push(JSON.parse(ev.data));
       if (events.length >= expectedContents.length) {
         defer.fulfill(events);
       }
@@ -165,9 +165,10 @@ module('Realm Server', function (hooks) {
 
   test('serves a card POST request', async function (assert) {
     let expected = [
-      'added: CardDef',
-      'added: CardDef/1.json',
-      'index: incremental',
+      {
+        type: 'incremental',
+        invalidations: [`${testRealmURL}CardDef/1`],
+      },
     ];
     let response = await expectEvent(assert, expected, async () => {
       return await request
@@ -225,7 +226,12 @@ module('Realm Server', function (hooks) {
 
   test('serves a card PATCH request', async function (assert) {
     let entry = 'person-1.json';
-    let expected = [`changed: ${entry}`, 'index: incremental'];
+    let expected = [
+      {
+        type: 'incremental',
+        invalidations: [`${testRealmURL}person-1`],
+      },
+    ];
     let response = await expectEvent(assert, expected, async () => {
       return await request
         .patch('/person-1')
@@ -310,7 +316,12 @@ module('Realm Server', function (hooks) {
 
   test('serves a card DELETE request', async function (assert) {
     let entry = 'person-1.json';
-    let expected = ['index: incremental', `removed: ${entry}`];
+    let expected = [
+      {
+        type: 'incremental',
+        invalidations: [`${testRealmURL}person-1`],
+      },
+    ];
     let response = await expectEvent(assert, expected, async () => {
       return await request
         .delete('/person-1')
@@ -359,7 +370,12 @@ module('Realm Server', function (hooks) {
 
   test('serves a card-source DELETE request', async function (assert) {
     let entry = 'unused-card.gts';
-    let expected = ['index: incremental', `removed: ${entry}`];
+    let expected = [
+      {
+        type: 'incremental',
+        invalidations: [`${testRealmURL}unused-card.gts`],
+      },
+    ];
     let response = await expectEvent(assert, expected, async () => {
       return await request
         .delete('/unused-card.gts')
@@ -382,7 +398,12 @@ module('Realm Server', function (hooks) {
 
   test('serves a card-source POST request', async function (assert) {
     let entry = 'unused-card.gts';
-    let expected = [`changed: ${entry}`, 'index: incremental'];
+    let expected = [
+      {
+        type: 'incremental',
+        invalidations: [`${testRealmURL}unused-card.gts`],
+      },
+    ];
     let response = await expectEvent(assert, expected, async () => {
       return await request
         .post('/unused-card.gts')
