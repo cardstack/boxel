@@ -8,7 +8,7 @@ module('Acceptance | Docs', function (hooks) {
 
   test('accessibility check', async function (assert) {
     await visit('/');
-    assert.dom('h2.FreestyleUsage-name').containsText('AddButton');
+    assert.dom('h2.FreestyleUsage-name').containsText('Accordion');
     // Only audit usage-preview examples
     await a11yAudit({
       include: ['.FreestyleUsage-preview'],
