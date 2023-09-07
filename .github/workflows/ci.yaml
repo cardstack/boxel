@@ -176,7 +176,7 @@ jobs:
     name: Build realm-server
     needs: [change-check]
     if: ${{ needs.change-check.outputs.boxel == 'true' }}
-    uses: ./.github/workflows/waypoint-build.yml
+    uses: cardstack/gh-actions/.github/workflows/waypoint-build.yml@main
     secrets: inherit
     with:
       app: "realm-demo"
@@ -187,7 +187,7 @@ jobs:
     name: Build ai-bot
     needs: [change-check]
     if: ${{ needs.change-check.outputs.ai-bot == 'true' }}
-    uses: ./.github/workflows/waypoint-build.yml
+    uses: cardstack/gh-actions/.github/workflows/waypoint-build.yml@main
     secrets: inherit
     with:
       app: "boxel-ai-bot"
@@ -215,7 +215,7 @@ jobs:
       - realm-server-test
       - build-host
       - build-realm-server
-    uses: ./.github/workflows/waypoint-deploy.yml
+    uses: cardstack/gh-actions/.github/workflows/waypoint-deploy.yml@main
     secrets: inherit
     with:
       app: "realm-demo"
@@ -224,9 +224,10 @@ jobs:
   deploy-ai-bot:
     name: Deploy ai-bot to staging
     needs: [build-ai-bot]
-    uses: ./.github/workflows/waypoint-deploy.yml
+    uses: cardstack/gh-actions/.github/workflows/waypoint-deploy.yml@main
     secrets: inherit
     with:
       app: "boxel-ai-bot"
       environment: "staging"
       working-directory: "packages/ai-bot"
+      retain: "0"

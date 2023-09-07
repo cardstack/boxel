@@ -14,7 +14,7 @@ import {
   logger,
 } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
-import merge from 'lodash/merge';
+import MonacoService from '@cardstack/host/services/monaco-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type CardService from '@cardstack/host/services/card-service';
 import type MessageService from '@cardstack/host/services/message-service';
@@ -145,6 +145,7 @@ export default class Go extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
+  @service declare monacoService: MonacoService;
   @tracked jsonError: string | undefined;
   @tracked card: CardDef | undefined;
   // note this is only subscribed to events from our own realm
@@ -234,8 +235,7 @@ export default class Go extends Component<Signature> {
     const relativePath = this.args.openFiles.path;
     if (relativePath) {
       return file(context, () => ({
-        relativePath,
-        realmURL: new RealmPaths(this.cardService.defaultURL).url,
+        url: new RealmPaths(this.cardService.defaultURL).url + relativePath,
         onStateChange: (state) => {
           if (state === 'not-found') {
             this.args.openFiles.path = undefined;
@@ -259,8 +259,19 @@ export default class Go extends Component<Signature> {
     let url = realmPath.fileURL(
       this.args.openFiles.path!.replace(/\.json$/, ''),
     );
+    if (this.openFile.current?.state !== 'ready') {
+      throw new Error(`Cannot save, ${this.args.openFiles.path} is not open`);
+    }
+    let realmURL = this.openFile.current.realmURL;
+    if (!realmURL) {
+      throw new Error(`Cannot determine realm for ${this.args.openFiles.path}`);
+    }
 
-    let doc = this.reverseFileSerialization(json, url.href);
+    let doc = this.monacoService.reverseFileSerialization(
+      json,
+      url.href,
+      realmURL,
+    );
     let card: CardDef | undefined;
     try {
       card = await this.cardService.createFromSerialized(doc.data, doc, url);
@@ -366,39 +377,6 @@ export default class Go extends Component<Signature> {
       );
     }
   });
-
-  // File serialization is a special type of card serialization that the host would
-  // otherwise not encounter, but it does here since it's using the accept header
-  // application/vnd.card+source to load the file that we see in monaco. This is
-  // the only place that we use this accept header for loading card instances--everywhere
-  // else we use application/vnd.card+json. Because of this the resulting JSON has
-  // different semantics than the host would normally encounter--for instance, this
-  // file serialization format is always missing an ID (because the ID is the filename).
-  // Whereas for card isntances obtained via application/vnd.card+json, a missing ID
-  // means that the card is not saved.
-  //
-  // In order to prevent confusion around which type of serialization you are dealing
-  // with, we convert the file serialization back to the form the host is accustomed
-  // to (application/vnd.card+json) as soon as possible so that the semantics around
-  // file serialization don't leak outside of where they are immediately used.
-  private reverseFileSerialization(
-    fileSerializationJSON: SingleCardDocument,
-    id: string,
-  ): SingleCardDocument {
-    let realmURL = this.cardService.getRealmURLFor(new URL(id))?.href;
-    if (!realmURL) {
-      throw new Error(`Could not determine realm for url ${id}`);
-    }
-    return merge({}, fileSerializationJSON, {
-      data: {
-        id,
-        type: 'card',
-        meta: {
-          realmURL,
-        },
-      },
-    });
-  }
 }
 
 declare module '@glint/environment-ember-loose/registry' {
