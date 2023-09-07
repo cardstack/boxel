@@ -49,6 +49,7 @@ export default class OperatorModeStateService extends Service {
     stacks: new TrackedArray([]),
     submode: Submode.Interact,
     codePath: null,
+    openDirs: [],
   });
   @tracked recentCards = new TrackedArray<CardDef>([]);
 
