@@ -1,12 +1,12 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { hash } from '@ember/helper';
 import type { ComponentLike } from '@glint/template';
-import AccordionItem from './item';
+import AccordionItem, { type AccordionItemArgs } from './item';
 
 interface Signature {
   Element: HTMLDivElement;
   Blocks: {
-    default: [{ Item: ComponentLike<typeof AccordionItem> }];
+    default: [{ Item: ComponentLike<AccordionItemArgs> }];
   };
 }
 

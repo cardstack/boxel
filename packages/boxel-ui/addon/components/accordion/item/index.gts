@@ -1,15 +1,20 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { svgJar } from '../../../helpers/svg-jar';
 
-interface Signature {
-  Element: HTMLDetailsElement;
+export interface AccordionItemArgs {
   Args: {
-    className: string;
+    className?: string;
   };
   Blocks: {
     title: [];
     content: [];
   };
+}
+
+interface Signature {
+  Element: HTMLDetailsElement;
+  Args: AccordionItemArgs['Args'];
+  Blocks: AccordionItemArgs['Blocks'];
 }
 
 const AccordionItem: TemplateOnlyComponent<Signature> = <template>
