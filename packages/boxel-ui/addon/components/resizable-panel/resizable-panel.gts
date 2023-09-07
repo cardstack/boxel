@@ -40,7 +40,7 @@ export default class Panel extends Component<Signature> {
           aria-label={{this.resizeHandlerId}}
           {{on 'mousedown' @panelGroupApi.onResizeHandlerMouseDown}}
           {{on 'dblclick' @panelGroupApi.onResizeHandlerDblClick}}
-        />
+        ><div class={{this.arrowResizeHandlerClass}} /></button>
       </div>
     {{/unless}}
     <style>
@@ -56,20 +56,53 @@ export default class Panel extends Component<Signature> {
       .separator {
         display: flex;
         align-items: center;
+        --boxel-panel-resize-handler-height: 100px;
+        --boxel-panel-resize-handler-width: 5px;
+        --boxel-panel-resize-handler-background-color: var(--boxel-highlight);
 
         padding: var(--boxel-sp-xxxs);
       }
       .resize-handler {
-        --boxel-panel-resize-handler-height: 100px;
-        --boxel-panel-resize-handler-background-color: var(--boxel-200);
         cursor: col-resize;
 
         height: var(--boxel-panel-resize-handler-height);
-        width: 5px;
+        width: var(--boxel-panel-resize-handler-width);
         border: none;
         border-radius: var(--boxel-border-radius-xl);
         padding: 0;
         background-color: var(--boxel-panel-resize-handler-background-color);
+
+        position: relative;
+        z-index: 2;
+      }
+      .arrow-right {
+        content: '';
+        position: absolute;
+        top: 50%;
+        right: calc(var(--boxel-panel-resize-handler-width) * -1);
+        transform: translateY(-50%);
+        width: 0;
+        height: 0;
+        border-top: 6px solid transparent;
+        border-bottom: 6px solid transparent;
+        border-left: 10px solid
+          var(--boxel-panel-resize-handler-background-color);
+        pointer-events: none;
+      }
+
+      .arrow-left {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: calc(var(--boxel-panel-resize-handler-width) * -1);
+        transform: translateY(-50%);
+        width: 0;
+        height: 0;
+        border-top: 6px solid transparent;
+        border-bottom: 6px solid transparent;
+        border-right: 10px solid
+          var(--boxel-panel-resize-handler-background-color);
+        pointer-events: none;
       }
     </style>
   </template>
@@ -105,5 +138,23 @@ export default class Panel extends Component<Signature> {
 
   get isLastPanel() {
     return this.id && this.args.panelGroupApi.isLastPanel(this.id);
+  }
+
+  get arrowResizeHandlerClass() {
+    if (
+      (this.id === 1 && this.panelContext?.width !== '0px') ||
+      (this.id &&
+        this.args.panelGroupApi.isLastPanel(this.id + 1) &&
+        this.args.panelGroupApi.panelContext(this.id + 1)?.width === '0px')
+    ) {
+      return 'arrow-left';
+    } else if (
+      (this.id && this.args.panelGroupApi.isLastPanel(this.id + 1)) ||
+      (this.id === 1 && this.panelContext?.width === '0px')
+    ) {
+      return 'arrow-right';
+    } else {
+      return '';
+    }
   }
 }
