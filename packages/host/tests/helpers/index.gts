@@ -80,7 +80,10 @@ export async function waitForSyntaxHighlighting(
       );
       return finalHighlightedToken;
     },
-    { timeoutMessage: `timed out waiting for \`${textContent}\` token` },
+    {
+      timeout: 10000, // need to wait for monaco to load
+      timeoutMessage: `timed out waiting for \`${textContent}\` token`,
+    },
   );
 
   await waitUntil(
