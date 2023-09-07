@@ -662,6 +662,9 @@ importers:
       ember-load-initializers:
         specifier: ^2.1.2
         version: 2.1.2(@babel/core@7.20.2)
+      ember-resize-modifier:
+        specifier: ^0.6.0
+        version: 0.6.0(@glint/template@1.0.2)(ember-source@4.12.0)(webpack@5.84.0)
       ember-set-body-class:
         specifier: ^1.0.2
         version: 1.0.2
@@ -840,6 +843,9 @@ importers:
       qunit-dom:
         specifier: ^2.0.0
         version: 2.0.0
+      tracked-built-ins:
+        specifier: ^3.2.0
+        version: 3.2.0
       typescript:
         specifier: ^5.1.6
         version: 5.1.6
@@ -13314,7 +13320,7 @@ packages:
       json-formatter-js: 2.3.4
       macro-decorators: 0.1.2
       strip-indent: 3.0.0
-      tracked-built-ins: 3.1.1
+      tracked-built-ins: 3.2.0
     transitivePeerDependencies:
       - '@babel/core'
       - '@glint/template'
@@ -13547,6 +13553,23 @@ packages:
       - supports-color
       - webpack
     dev: true
+
+  /ember-resize-modifier@0.6.0(@glint/template@1.0.2)(ember-source@4.12.0)(webpack@5.84.0):
+    resolution: {integrity: sha512-7KGLYC3MyNNaNKJJsHZsOoyAIA98+1yK9Xyb1dEXUeXboCd2dBcbapDuSmJWV51J03AZ90LGvOH5DDL0y6KXMQ==}
+    engines: {node: 14.* || 16.* || >= 18}
+    peerDependencies:
+      ember-source: ^3.28.0 || ^4.0.0
+    dependencies:
+      ember-auto-import: 2.6.3(@glint/template@1.0.2)(webpack@5.84.0)
+      ember-cli-babel: 7.26.11
+      ember-cli-htmlbars: 6.2.0
+      ember-modifier: 4.1.0(ember-source@4.12.0)
+      ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0)
+    transitivePeerDependencies:
+      - '@glint/template'
+      - supports-color
+      - webpack
+    dev: false
 
   /ember-resolver@10.1.0(@ember/string@3.1.1)(ember-source@4.12.0):
     resolution: {integrity: sha512-Ju/ORUUbGnR83AgC3qV6fIVuM5tyi/nPRf9ggTM2+kdeGPLNTSkNZ0zSbjWEm0kerDezMjj/RoGuLvZl/L758w==}
@@ -24270,6 +24293,16 @@ packages:
     dependencies:
       ember-cli-babel: 7.26.11
       ember-cli-typescript: 5.2.1
+      ember-tracked-storage-polyfill: 1.0.0
+    transitivePeerDependencies:
+      - supports-color
+    dev: true
+
+  /tracked-built-ins@3.2.0:
+    resolution: {integrity: sha512-dB8cFBpyJco3tmMO0w/+K8GYaL4iBjff4avLmNju0q6o8VvKLPpvPk/JHiwSXgX6aDCcOQv4J5JUBCAXBHaiGQ==}
+    engines: {node: 14.* || 16.* || >= 18}
+    dependencies:
+      '@embroider/addon-shim': 1.8.5
       ember-tracked-storage-polyfill: 1.0.0
     transitivePeerDependencies:
       - supports-color

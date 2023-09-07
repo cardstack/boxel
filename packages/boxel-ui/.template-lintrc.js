@@ -4,6 +4,7 @@ module.exports = {
   extends: 'recommended',
   rules: {
     'require-button-type': false,
+    'no-pointer-down-event-binding': false,
   },
   overrides: [
     {
