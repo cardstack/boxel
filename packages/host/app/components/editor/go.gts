@@ -259,8 +259,19 @@ export default class Go extends Component<Signature> {
     let url = realmPath.fileURL(
       this.args.openFiles.path!.replace(/\.json$/, ''),
     );
+    if (this.openFile.current?.state !== 'ready') {
+      throw new Error(`Cannot save, ${this.args.openFiles.path} is not open`);
+    }
+    let realmURL = this.openFile.current.realmURL;
+    if (!realmURL) {
+      throw new Error(`Cannot determine realm for ${this.args.openFiles.path}`);
+    }
 
-    let doc = this.monacoService.reverseFileSerialization(json, url.href);
+    let doc = this.monacoService.reverseFileSerialization(
+      json,
+      url.href,
+      realmURL,
+    );
     let card: CardDef | undefined;
     try {
       card = await this.cardService.createFromSerialized(doc.data, doc, url);
