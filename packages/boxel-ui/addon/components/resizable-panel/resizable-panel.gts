@@ -50,8 +50,6 @@ export default class Panel extends Component<Signature> {
 
         width: var(--boxel-panel-width);
         min-width: var(--boxel-panel-min-width);
-
-        overflow: hidden;
       }
       .separator {
         display: flex;
