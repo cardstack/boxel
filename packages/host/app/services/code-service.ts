@@ -6,8 +6,8 @@ import window from 'ember-window-mock';
 export default class CodeService extends Service {
   @tracked recentFiles = new TrackedArray<string>([]);
 
-  constructor(properties: object) {
-    super(properties);
+  constructor() {
+    super();
 
     let recentFilesString = window.localStorage.getItem('recent-files');
 

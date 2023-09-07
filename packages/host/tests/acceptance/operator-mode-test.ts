@@ -29,7 +29,7 @@ import stringify from 'safe-stable-stringify';
 import { Realm } from '@cardstack/runtime-common/realm';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import percySnapshot from '@percy/ember';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 module('Acceptance | operator mode tests', function (hooks) {
   let realm: Realm;
@@ -940,6 +940,69 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       assert.dom('[data-test-card-instance-definition]').hasClass('active');
     });
+  });
+
+  test<TestContextWithSSE>('stack item live updates when index changes', async function (assert) {
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Person/fadhlan`],
+        },
+      },
+    ];
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    })!;
+    let operatorModeStateService = this.owner.lookup(
+      'service:operator-mode-state-service',
+    ) as OperatorModeStateService;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    assert
+      .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
+      .hasText('Fadhlan');
+    await this.expectEvents(
+      assert,
+      realm,
+      adapter,
+      expectedEvents,
+      async () => {
+        await realm.write(
+          'Person/fadhlan.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'FadhlanXXX',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
+                },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+      },
+    );
+    await waitUntil(() => operatorModeStateService.reloadItem.isIdle);
+    assert
+      .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
+      .hasText('FadhlanXXX');
   });
 
   test<TestContextWithSSE>('card preview live updates when index changes', async function (assert) {

@@ -5,6 +5,7 @@ import {
 import Service from '@ember/service';
 import type CardService from '../services/card-service';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
+import type MessageService from '@cardstack/host/services/message-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
@@ -13,6 +14,7 @@ import { scheduleOnce } from '@ember/runloop';
 import stringify from 'safe-stable-stringify';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import { Submode } from '@cardstack/host/components/submode-switcher';
+import { registerDestructor } from '@ember/destroyable';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
@@ -45,8 +47,56 @@ export default class OperatorModeStateService extends Service {
     codePath: null,
   });
   @tracked recentCards = new TrackedArray<CardDef>([]);
-
   @service declare cardService: CardService;
+  @service declare messageService: MessageService;
+  private subscription: { url: string; unsubscribe: () => void } | undefined;
+
+  constructor(properties: object) {
+    super(properties);
+
+    let url = `${this.cardService.defaultURL}_message`;
+    this.subscription = {
+      url,
+      unsubscribe: this.messageService.subscribe(
+        url,
+        ({ type, data: dataStr }) => {
+          if (type !== 'index') {
+            return;
+          }
+          let data = JSON.parse(dataStr);
+          if (data.type !== 'incremental') {
+            return;
+          }
+          let items = new Map<string, StackItem[]>();
+          for (let stack of this.state.stacks) {
+            for (let item of stack) {
+              let itemList = items.get(item.card.id);
+              if (!itemList) {
+                itemList = [];
+                items.set(item.card.id, itemList);
+              }
+              itemList.push(item);
+            }
+          }
+          let invalidations = data.invalidations as string[];
+          for (let id of invalidations) {
+            let itemList = items.get(id);
+            if (!itemList) {
+              continue;
+            }
+            for (let item of itemList) {
+              this.reloadItem.perform(item);
+            }
+          }
+        },
+      ),
+    };
+    // technically services are never destroyed, but it seems good to be
+    // complete...
+    registerDestructor(this, () => {
+      this.subscription?.unsubscribe();
+    });
+  }
 
   async restore(rawState: SerializedState) {
     this.state = await this.deserialize(rawState);
@@ -61,6 +111,10 @@ export default class OperatorModeStateService extends Service {
     this.addRecentCard(item.card);
     this.schedulePersist();
   }
+
+  reloadItem = task(async (item: StackItem) => {
+    item.card = await this.cardService.reloadModel(item.card);
+  });
 
   patchCard = task({ enqueue: true }, async (id: string, attributes: any) => {
     let stackItems = this.state?.stacks.flat() ?? [];
