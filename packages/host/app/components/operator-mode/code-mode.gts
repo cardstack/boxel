@@ -432,6 +432,7 @@ export default class CodeMode extends Component<Signature> {
                   @realmInfo={{this.realmInfo}}
                   @realmIconURL={{this.realmIconURL}}
                   @importedModule={{this.importedModule}}
+                  @onSelectDefinition={{this.updateCodePath}}
                   data-test-card-inheritance-panel
                 />
               </section>
