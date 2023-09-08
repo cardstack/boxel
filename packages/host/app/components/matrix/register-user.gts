@@ -33,7 +33,7 @@ interface Args {
 export default class RegisterUser extends Component<Args> {
   <template>
     <BoxelHeader @title='Register User' @hasBackground={{true}} />
-    <div class='registration-form'>
+    <div class='registration-form' data-test-register-user>
       {{#if this.doRegistrationFlow.isRunning}}
         <LoadingIndicator />
       {{else if (eq this.state.type 'askForToken')}}

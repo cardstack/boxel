@@ -58,8 +58,16 @@ export class NodeAdapter implements RealmAdapter {
       throw new Error(`tried to subscribe to watcher twice`);
     }
     this.watcher = sane(join(this.realmDir, '/'));
-    this.watcher.on('change', (path) => cb({ updated: path }));
-    this.watcher.on('add', (path) => cb({ added: path }));
+    this.watcher.on('change', (path, _root, stat) => {
+      if (stat.isFile()) {
+        cb({ updated: path });
+      }
+    });
+    this.watcher.on('add', (path, _root, stat) => {
+      if (stat.isFile()) {
+        cb({ added: path });
+      }
+    });
     this.watcher.on('delete', (path) => cb({ removed: path }));
     this.watcher.on('error', (err) => {
       throw new Error(`watcher error: ${err}`);

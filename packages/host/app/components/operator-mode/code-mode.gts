@@ -6,42 +6,79 @@ import MonacoService from '@cardstack/host/services/monaco-service';
 import { htmlSafe } from '@ember/template';
 import {
   type RealmInfo,
+  type SingleCardDocument,
+  type CodeRef,
+  RealmPaths,
   isCardDocument,
+  logger,
+  isSingleCardDocument,
   identifyCard,
   moduleFrom,
-  type CodeRef,
 } from '@cardstack/runtime-common';
+import { LoadingIndicator } from '@cardstack/boxel-ui';
 import { maybe } from '@cardstack/host/resources/maybe';
-import { Ready, file, isReady } from '@cardstack/host/resources/file';
+import {
+  Ready,
+  file,
+  isReady,
+  type FileResource,
+} from '@cardstack/host/resources/file';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import CardService from '@cardstack/host/services/card-service';
-import { restartableTask } from 'ember-concurrency';
+import { task, restartableTask, timeout } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
 import { registerDestructor } from '@ember/destroyable';
 import CardURLBar from '@cardstack/host/components/operator-mode/card-url-bar';
 import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-preview-panel';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
+import monacoModifier from '@cardstack/host/modifiers/monaco';
+import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import CardInheritancePanel from '@cardstack/host/components/operator-mode/card-inheritance-panel';
 import { importResource } from '@cardstack/host/resources/import';
+import ResizablePanelGroup, {
+  PanelContext,
+} from '@cardstack/boxel-ui/components/resizable-panel/resizable-panel-group';
+import ResizablePanel from '@cardstack/boxel-ui/components/resizable-panel/resizable-panel';
 
 interface Signature {
   Args: {};
 }
+const log = logger('component:code-mode');
+
+type PanelWidths = {
+  rightPanel: string;
+  codeEditorPanel: string;
+  leftPanel: string;
+};
+
+const CodeModePanelWidths = 'code-mode-panel-widths';
+const defaultPanelWidths: PanelWidths = {
+  leftPanel: '20%',
+  codeEditorPanel: '48%',
+  rightPanel: '32%',
+};
 
 export default class CodeMode extends Component<Signature> {
   @service declare monacoService: MonacoService;
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
   @service declare operatorModeStateService: OperatorModeStateService;
-  @tracked loadFileError: string | null = null;
-  _cachedRealmInfo: RealmInfo | null = null; // This is to cache realm info during reload after code path change so that realm assets don't produce a flicker when code patch changes and the realm is the same
-
+  @tracked private loadFileError: string | null = null;
+  @tracked private maybeMonacoSDK: MonacoSDK | undefined;
+  private panelWidths: PanelWidths;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
+  private _cachedRealmInfo: RealmInfo | null = null; // This is to cache realm info during reload after code path change so that realm assets don't produce a flicker when code patch changes and the realm is the same
 
   constructor(args: any, owner: any) {
     super(args, owner);
+    this.panelWidths = localStorage.getItem(CodeModePanelWidths)
+      ? // @ts-ignore Type 'null' is not assignable to type 'string'
+        JSON.parse(localStorage.getItem(CodeModePanelWidths))
+      : defaultPanelWidths;
+
     let url = `${this.cardService.defaultURL}_message`;
     this.subscription = {
       url,
@@ -66,33 +103,64 @@ export default class CodeMode extends Component<Signature> {
     registerDestructor(this, () => {
       this.subscription?.unsubscribe();
     });
+    this.loadMonaco.perform();
   }
 
-  get realmInfo() {
+  private get realmInfo() {
     return this.realmInfoResource.value;
   }
 
-  get backgroundURL() {
+  private get backgroundURL() {
     return this.realmInfo?.backgroundURL;
   }
 
-  get backgroundURLStyle() {
+  private get backgroundURLStyle() {
     return htmlSafe(`background-image: url(${this.backgroundURL});`);
   }
 
-  get realmIconURL() {
+  private get realmIconURL() {
     return this.realmInfo?.iconURL;
   }
 
-  get codePath() {
+  private get isLoading() {
+    return (
+      this.loadMonaco.isRunning || this.openFile.current?.state === 'loading'
+    );
+  }
+
+  private get isReady() {
+    return this.maybeMonacoSDK && this.openFile.current?.state === 'ready';
+  }
+
+  private loadMonaco = task(async () => {
+    this.maybeMonacoSDK = await this.monacoService.getMonacoContext();
+  });
+
+  private get readyFile() {
+    if (this.openFile.current?.state === 'ready') {
+      return this.openFile.current;
+    }
+    throw new Error(
+      `cannot access file contents ${this.codePath} before file is open`,
+    );
+  }
+
+  private get monacoSDK() {
+    if (this.maybeMonacoSDK) {
+      return this.maybeMonacoSDK;
+    }
+    throw new Error(`cannot use monaco SDK before it has loaded`);
+  }
+
+  private get codePath() {
     return this.operatorModeStateService.state.codePath;
   }
 
-  @action resetLoadFileError() {
+  @action private resetLoadFileError() {
     this.loadFileError = null;
   }
 
-  @use realmInfoResource = resource(() => {
+  @use private realmInfoResource = resource(() => {
     if (
       this.openFile.current?.state === 'ready' &&
       this.openFile.current.realmURL
@@ -141,7 +209,7 @@ export default class CodeMode extends Component<Signature> {
     }
   });
 
-  openFile = maybe(this, (context) => {
+  private openFile = maybe(this, (context) => {
     if (!this.codePath) {
       return undefined;
     }
@@ -156,7 +224,7 @@ export default class CodeMode extends Component<Signature> {
     }));
   });
 
-  @use importedModule = resource(() => {
+  @use private importedModule = resource(() => {
     if (isReady(this.openFile.current)) {
       let f: Ready = this.openFile.current;
       if (f.name.endsWith('.json')) {
@@ -178,7 +246,7 @@ export default class CodeMode extends Component<Signature> {
     await this.cardResource.load();
   });
 
-  @use cardResource = resource(() => {
+  @use private cardResource = resource(() => {
     let isFileReady =
       this.openFile.current?.state === 'ready' &&
       this.openFile.current.name.endsWith('.json');
@@ -221,6 +289,109 @@ export default class CodeMode extends Component<Signature> {
     this.operatorModeStateService.updateCodePath(newUrl);
   }
 
+  private contentChangedTask = restartableTask(async (content: string) => {
+    await timeout(500);
+    if (
+      this.openFile.current?.state !== 'ready' ||
+      content === this.openFile.current?.content
+    ) {
+      return;
+    }
+
+    let isJSON = this.openFile.current.name.endsWith('.json');
+    let validJSON = isJSON && this.safeJSONParse(content);
+    // Here lies the difference in how json files and other source code files
+    // are treated during editing in the code editor
+    if (validJSON && isSingleCardDocument(validJSON)) {
+      // writes json instance but doesn't update state of the file resource
+      // relies on message service subscription to update state
+      await this.saveFileSerializedCard.perform(validJSON);
+      return;
+    } else if (!isJSON || validJSON) {
+      // writes source code and non-card instance valid JSON,
+      // then updates the state of the file resource
+      await this.writeSourceCodeToFile(this.openFile.current, content);
+    }
+  });
+
+  // We use this to write non-cards to the realm--so it doesn't make
+  // sense to go thru the card-service for this
+  private writeSourceCodeToFile(file: FileResource, content: string) {
+    if (file.state !== 'ready') {
+      throw new Error('File is not ready to be written to');
+    }
+
+    return file.write(content);
+  }
+
+  private safeJSONParse(content: string) {
+    try {
+      return JSON.parse(content);
+    } catch (err) {
+      log.warn(
+        `content for ${this.codePath} is not valid JSON, skipping write`,
+      );
+      return;
+    }
+  }
+
+  private saveFileSerializedCard = task(async (json: SingleCardDocument) => {
+    if (!this.codePath) {
+      return;
+    }
+    let realmPath = new RealmPaths(this.cardService.defaultURL);
+    let url = realmPath.fileURL(this.codePath.href.replace(/\.json$/, ''));
+    let realmURL = this.readyFile.realmURL;
+    if (!realmURL) {
+      throw new Error(`cannot determine realm for ${this.codePath}`);
+    }
+
+    let doc = this.monacoService.reverseFileSerialization(
+      json,
+      url.href,
+      realmURL,
+    );
+    let card: CardDef | undefined;
+    try {
+      card = await this.cardService.createFromSerialized(doc.data, doc, url);
+    } catch (e) {
+      // TODO probably we should show a message in the UI that the card
+      // instance JSON is not actually a valid card
+      console.error(
+        'JSON is not a valid card--TODO this should be an error message in the code editor',
+      );
+      return;
+    }
+
+    try {
+      await this.cardService.saveModel(card);
+      await this.reloadCard.perform();
+    } catch (e) {
+      console.error('Failed to save single card document', e);
+    }
+  });
+
+  private get language(): string | undefined {
+    if (this.codePath) {
+      const editorLanguages = this.monacoSDK.languages.getLanguages();
+      let extension = '.' + this.codePath.href.split('.').pop();
+      let language = editorLanguages.find((lang) =>
+        lang.extensions?.find((ext) => ext === extension),
+      );
+      return language?.id ?? 'plaintext';
+    }
+    return undefined;
+  }
+
+  @action
+  private onListPanelContextChange(listPanelContext: PanelContext[]) {
+    this.panelWidths.leftPanel = listPanelContext[0].width;
+    this.panelWidths.codeEditorPanel = listPanelContext[1].width;
+    this.panelWidths.rightPanel = listPanelContext[2].width;
+
+    localStorage.setItem(CodeModePanelWidths, JSON.stringify(this.panelWidths));
+  }
+
   <template>
     <div class='code-mode-background' style={{this.backgroundURLStyle}}></div>
     <CardURLBar
@@ -230,47 +401,82 @@ export default class CodeMode extends Component<Signature> {
       @updateCodePath={{this.updateCodePath}}
       class='card-url-bar'
     />
-    <div class='code-mode' data-test-code-mode>
-      <div class='columns'>
-        <div class='column'>
-          {{! Move each container and styles to separate component }}
-          <div class='inner-container'>
-            <header
-              class='inner-container__header'
-              aria-label='Inheritance Header'
-            >
-              Card Inheritance
-            </header>
-            <section class='inner-container__content'>
-              <CardInheritancePanel
-                @cardInstance={{this.cardResource.value}}
-                @openFile={{this.openFile}}
-                @realmInfo={{this.realmInfo}}
-                @realmIconURL={{this.realmIconURL}}
-                @importedModule={{this.importedModule}}
-                @onSelectDefinition={{this.updateCodePath}}
-                data-test-card-inheritance-panel
-              />
-            </section>
+    <div
+      class='code-mode'
+      data-test-code-mode
+      data-test-save-idle={{this.contentChangedTask.isIdle}}
+    >
+      <ResizablePanelGroup
+        @onListPanelContextChange={{this.onListPanelContextChange}}
+        class='columns'
+        as |pg|
+      >
+        <ResizablePanel
+          @defaultWidth={{defaultPanelWidths.leftPanel}}
+          @width={{this.panelWidths.leftPanel}}
+          @panelGroupApi={{pg.api}}
+        >
+          <div class='column'>
+            {{! Move each container and styles to separate component }}
+            <div class='inner-container'>
+              <header
+                class='inner-container__header'
+                aria-label='Inheritance Header'
+              >
+                Card Inheritance
+              </header>
+              <section class='inner-container__content'>
+                <CardInheritancePanel
+                  @cardInstance={{this.cardResource.value}}
+                  @openFile={{this.openFile}}
+                  @realmInfo={{this.realmInfo}}
+                  @realmIconURL={{this.realmIconURL}}
+                  @importedModule={{this.importedModule}}
+                  data-test-card-inheritance-panel
+                />
+              </section>
+            </div>
+            <aside class='inner-container'>
+              <header
+                class='inner-container__header'
+                aria-label='Recent Files Header'
+              >
+                Recent Files
+              </header>
+              <section class='inner-container__content'></section>
+            </aside>
           </div>
-          <aside class='inner-container'>
-            <header
-              class='inner-container__header'
-              aria-label='Recent Files Header'
-            >
-              Recent Files
-            </header>
-            <section class='inner-container__content'></section>
-          </aside>
-        </div>
-        <div class='column'>
+        </ResizablePanel>
+        <ResizablePanel
+          @defaultWidth={{defaultPanelWidths.codeEditorPanel}}
+          @width={{this.panelWidths.codeEditorPanel}}
+          @minWidth='300px'
+          @panelGroupApi={{pg.api}}
+        >
           <div class='inner-container'>
-            Code, Open File Status:
-            {{! This is to trigger openFile function }}
-            {{this.openFile.current.state}}
+            {{#if this.isReady}}
+              <div
+                class='monaco-container'
+                data-test-editor
+                {{monacoModifier
+                  content=this.readyFile.content
+                  contentChanged=(perform this.contentChangedTask)
+                  monacoSDK=this.monacoSDK
+                  language=this.language
+                }}
+              ></div>
+            {{else if this.isLoading}}
+              <div class='loading'>
+                <LoadingIndicator />
+              </div>
+            {{/if}}
           </div>
-        </div>
-        <div class='column'>
+        </ResizablePanel>
+        <ResizablePanel
+          @defaultWidth={{defaultPanelWidths.rightPanel}}
+          @width={{this.panelWidths.rightPanel}}
+          @panelGroupApi={{pg.api}}
+        >
           <div class='inner-container'>
             {{#if this.cardResource.value}}
               <CardPreviewPanel
@@ -282,8 +488,8 @@ export default class CodeMode extends Component<Signature> {
               {{this.cardResource.error.message}}
             {{/if}}
           </div>
-        </div>
-      </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
 
     <style>
@@ -293,9 +499,6 @@ export default class CodeMode extends Component<Signature> {
         );
         --code-mode-padding-bottom: calc(
           var(--search-sheet-closed-height) + (var(--boxel-sp))
-        );
-        --code-mode-column-min-width: calc(
-          var(--operator-mode-min-width) - 2 * var(--boxel-sp)
         );
       }
 
@@ -325,15 +528,13 @@ export default class CodeMode extends Component<Signature> {
         display: flex;
         flex-direction: row;
         flex-shrink: 0;
-        gap: var(--boxel-sp-lg);
         height: 100%;
       }
       .column {
-        flex: 1;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp);
-        min-width: var(--code-mode-column-min-width);
+        height: 100%;
       }
       .column:nth-child(2) {
         flex: 2;
@@ -356,6 +557,8 @@ export default class CodeMode extends Component<Signature> {
         flex-direction: column;
         background-color: var(--boxel-light);
         border-radius: var(--boxel-border-radius-xl);
+        box-shadow: var(--boxel-deep-box-shadow);
+        overflow: hidden;
       }
       .inner-container__header {
         padding: var(--boxel-sp-sm) var(--boxel-sp-xs);
@@ -377,6 +580,18 @@ export default class CodeMode extends Component<Signature> {
         height: var(--submode-switcher-height);
 
         z-index: 2;
+      }
+
+      .monaco-container {
+        height: 100%;
+        min-height: 100%;
+        width: 100%;
+        min-width: 100%;
+        padding: var(--boxel-sp) 0;
+      }
+
+      .loading {
+        margin: 40vh auto;
       }
     </style>
   </template>
