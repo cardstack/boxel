@@ -20,12 +20,8 @@ export default class URLBarResource extends Resource<Args> {
     let { getValue, setValue, resetValueError, setValueError } = named;
     this._url = getValue();
     this.setValue = setValue;
-    if (resetValueError) {
-      this.resetValueError = resetValueError;
-    }
-    if (this.setValueError) {
-      this.setValueError = setValueError;
-    }
+    this.resetValueError = resetValueError;
+    this.setValueError = setValueError;
   }
 
   get url() {
