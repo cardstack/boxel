@@ -276,4 +276,71 @@ module('Acceptance | code mode tests', function (hooks) {
 
     assert.dom('[data-test-directory="Person/"] .icon').hasClass('open');
   });
+
+  test('recent file links are shown', async function (assert) {
+    window.localStorage.setItem('recent-files', JSON.stringify(['index.json']));
+
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: 'http://test-realm/test/index',
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      openDirs: [],
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-file]');
+
+    assert
+      .dom('[data-test-recent-file]')
+      .exists({ count: 1 })
+      .containsText('index.json');
+
+    await click('[data-test-file="index.json"]');
+    assert.dom('[data-test-recent-file]').doesNotExist();
+
+    await click('[data-test-directory="Person/"]');
+    await waitFor('[data-test-file="Person/1.json"]');
+
+    await click('[data-test-file="Person/1.json"]');
+
+    assert
+      .dom('[data-test-recent-file]')
+      .exists({ count: 1 })
+      .containsText('index.json');
+
+    await click('[data-test-file="person.gts"]');
+
+    assert
+      .dom('[data-test-recent-file]:first-child')
+      .containsText('Person/1.json');
+    assert
+      .dom('[data-test-recent-file]:nth-child(2)')
+      .containsText('index.json');
+
+    await click('[data-test-recent-file]:nth-child(2)');
+    assert.dom('[data-test-index-card]').exists('index card is rendered');
+
+    assert
+      .dom('[data-test-recent-file]:first-child')
+      .containsText('person.gts');
+    assert
+      .dom('[data-test-recent-file]:nth-child(2)')
+      .containsText('Person/1.json');
+
+    assert.deepEqual(
+      JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
+      ['index.json', 'person.gts', 'Person/1.json'],
+    );
+  });
 });

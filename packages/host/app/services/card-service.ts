@@ -1,4 +1,5 @@
 import Service, { service } from '@ember/service';
+import { tracked } from '@glimmer/tracking';
 import { stringify } from 'qs';
 import type LoaderService from './loader-service';
 import {
@@ -23,14 +24,38 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
+import { TrackedArray } from 'tracked-built-ins';
+import window from 'ember-window-mock';
 
 export type CardSaveSubscriber = (json: SingleCardDocument) => void;
 const { ownRealmURL, otherRealmURLs } = ENV;
 
 export default class CardService extends Service {
   @service declare loaderService: LoaderService;
+  @tracked recentFiles = new TrackedArray<string>([]);
   private subscriber: CardSaveSubscriber | undefined;
   private indexCards: Map<string, CardDef> = new Map();
+
+  constructor(properties: object) {
+    super(properties);
+
+    let recentFilesString = window.localStorage.getItem('recent-files');
+
+    if (recentFilesString) {
+      try {
+        this.recentFiles = new TrackedArray(JSON.parse(recentFilesString));
+      } catch (e) {
+        console.log('Error restoring recent files', e);
+      }
+    }
+  }
+
+  persistRecentFiles() {
+    window.localStorage.setItem(
+      'recent-files',
+      JSON.stringify(this.recentFiles),
+    );
+  }
 
   private apiModule = importResource(
     this,

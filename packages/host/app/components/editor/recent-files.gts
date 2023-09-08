@@ -1,8 +1,7 @@
 import Component from '@glimmer/component';
 import { service } from '@ember/service';
-import type CodeService from '@cardstack/host/services/code-service';
-import type CodeController from '@cardstack/host/controllers/code';
-import { inject as controller } from '@ember/controller';
+import type CardService from '../../services/card-service';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
@@ -13,18 +12,21 @@ interface Args {
 }
 
 export default class RecentFiles extends Component<Args> {
-  @service declare codeService: CodeService;
-  @controller declare code: CodeController;
+  @service declare cardService: CardService;
+  @service declare operatorModeStateService: OperatorModeStateService;
 
   @action
   openFile(entryPath: string) {
-    this.code.openPath(entryPath);
+    let fileUrl = new URL(this.cardService.defaultURL + entryPath);
+    this.operatorModeStateService.updateCodePath(fileUrl);
   }
 
   <template>
     <ul data-test-recent-files>
-      {{#each this.codeService.recentFiles as |file|}}
-        {{#unless (eq file this.code.openFile)}}
+      {{#each this.cardService.recentFiles as |file|}}
+        {{#unless
+          (eq file this.operatorModeStateService.codePathRelativeToRealm)
+        }}
           <li
             data-test-recent-file={{file}}
             role='button'

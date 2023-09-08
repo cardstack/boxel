@@ -49,6 +49,7 @@ import ResizablePanelGroup, {
   PanelContext,
 } from '@cardstack/boxel-ui/components/resizable-panel/resizable-panel-group';
 import ResizablePanel from '@cardstack/boxel-ui/components/resizable-panel/resizable-panel';
+import RecentFiles from '@cardstack/host/components/editor/recent-files';
 
 interface Signature {
   Args: {};
@@ -477,7 +478,9 @@ export default class CodeMode extends Component<Signature> {
               >
                 Recent Files
               </header>
-              <section class='inner-container__content'></section>
+              <section class='inner-container__content'>
+                <RecentFiles />
+              </section>
             </aside>
           </div>
         </ResizablePanel>
