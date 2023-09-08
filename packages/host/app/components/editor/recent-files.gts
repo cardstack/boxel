@@ -18,13 +18,13 @@ export default class RecentFiles extends Component<Args> {
 
   @action
   openFile(entryPath: string) {
-    this.code.openFile(entryPath);
+    this.code.openPath(entryPath);
   }
 
   <template>
     <ul data-test-recent-files>
       {{#each this.codeService.recentFiles as |file|}}
-        {{#unless (eq file this.code.path)}}
+        {{#unless (eq file this.code.openFile)}}
           <li
             data-test-recent-file={{file}}
             role='button'
