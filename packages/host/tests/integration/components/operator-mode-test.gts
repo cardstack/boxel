@@ -2345,7 +2345,7 @@ module('Integration | operator-mode', function (hooks) {
       .hasValue(`${testRealmURL}BlogPost/1.json`);
 
     let someRandomText = 'I am still typing a url';
-    await typeIn('[data-test-card-url-bar-input]', 'i am still typing a url');
+    await typeIn('[data-test-card-url-bar-input]', someRandomText);
 
     let operatorModeStateService = this.owner.lookup(
       'service:operator-mode-state-service',

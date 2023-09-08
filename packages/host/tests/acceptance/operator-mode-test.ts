@@ -941,7 +941,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-card-instance-definition]').hasClass('active');
     });
 
-    test('clicking on card definition will display new definition and update card url', async function (assert) {
+    test('clicking on listed card definition in the inheritance panel will display new definition and update card url', async function (assert) {
       let operatorModeStateParam = stringify({
         stacks: [
           [

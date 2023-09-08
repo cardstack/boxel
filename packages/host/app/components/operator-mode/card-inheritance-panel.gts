@@ -63,6 +63,7 @@ export default class CardInheritancePanel extends Component<Args> {
           <DefinitionContainer
             @name={{this.getCardTypeDisplayName card}}
             @fileExtension='.GTS'
+            {{! //TODO CS-5830: Consolidate hardcoded .gts extensions  }}
             @realmInfo={{@realmInfo}}
             @realmIconURL={{@realmIconURL}}
             @variant={{DefinitionVariant.Module}}
@@ -120,7 +121,7 @@ export default class CardInheritancePanel extends Component<Args> {
     if (t) {
       let ref = identifyCard(t);
       if (ref) {
-        return new URL(moduleFrom(ref));
+        return new URL(moduleFrom(ref) + '.gts'); //TODO CS-5830: Consolidate hardcoded .gts extensions
       }
       throw new Error('Could not identify card');
     }
