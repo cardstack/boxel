@@ -1,10 +1,7 @@
 import Service from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { TrackedArray } from 'tracked-built-ins';
-import ENV from '@cardstack/host/config/environment';
 import window from 'ember-window-mock';
-
-const { ownRealmURL } = ENV;
 
 export default class CodeService extends Service {
   @tracked recentFiles = new TrackedArray<string>([]);
@@ -29,7 +26,4 @@ export default class CodeService extends Service {
       JSON.stringify(this.recentFiles),
     );
   }
-
-  // TODO HASSAN START HERE FRI
-  deleteFile(url: URL) {}
 }
