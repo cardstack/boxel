@@ -25,7 +25,10 @@ export default class CodeService extends Service {
     if (index === -1) {
       return;
     }
-    this.recentFiles.splice(index, 1);
+    while (index !== -1) {
+      this.recentFiles.splice(index, 1);
+      index = this.recentFiles.findIndex((f) => f === file);
+    }
     this.persistRecentFiles();
   }
 

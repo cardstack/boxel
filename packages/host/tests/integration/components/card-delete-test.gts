@@ -69,10 +69,12 @@ module('Integration | card-delete', function (hooks) {
   setupServerSentEvents(hooks);
   hooks.afterEach(async function () {
     localStorage.removeItem('recent-cards');
+    localStorage.removeItem('recent-files');
   });
 
   hooks.beforeEach(async function () {
     localStorage.removeItem('recent-cards');
+    localStorage.removeItem('recent-files');
 
     setCardInOperatorModeState = async (
       leftCards: string[],
