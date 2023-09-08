@@ -1435,7 +1435,6 @@ module('Acceptance | operator mode tests', function (hooks) {
     await waitFor(`[data-test-delete-button]`);
     await click('[data-test-delete-button]');
     await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/vangogh"]`);
-    await percySnapshot(assert);
     await this.expectEvents(
       assert,
       realm,
