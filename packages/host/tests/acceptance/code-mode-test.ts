@@ -1,5 +1,5 @@
 import { module, test } from 'qunit';
-import { visit, click, waitFor } from '@ember/test-helpers';
+import { visit, click, find, waitFor } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { baseRealm } from '@cardstack/runtime-common';
 import {
@@ -125,6 +125,26 @@ module('Acceptance | code mode tests', function (hooks) {
           },
         },
       },
+      'z00.json': '{}',
+      'z01.json': '{}',
+      'z02.json': '{}',
+      'z03.json': '{}',
+      'z04.json': '{}',
+      'z05.json': '{}',
+      'z06.json': '{}',
+      'z07.json': '{}',
+      'z08.json': '{}',
+      'z09.json': '{}',
+      'z10.json': '{}',
+      'z11.json': '{}',
+      'z12.json': '{}',
+      'z13.json': '{}',
+      'z14.json': '{}',
+      'z15.json': '{}',
+      'z16.json': '{}',
+      'z17.json': '{}',
+      'z18.json': '{}',
+      'z19.json': '{}',
     });
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
@@ -275,5 +295,48 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-file]');
 
     assert.dom('[data-test-directory="Person/"] .icon').hasClass('open');
+  });
+
+  test('open file is within view when the file browser renders', async function (assert) {
+    let done = assert.async();
+    let openFilename = 'z19.json';
+
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: 'http://test-realm/test/index',
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `http://test-realm/test/${openFilename}`,
+      fileView: 'browser',
+      openDirs: ['Person/'],
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-file]');
+
+    let fileElement = find(`[data-test-file="${openFilename}"]`)!;
+    let intersectionObserver = new IntersectionObserver(
+      function (entries) {
+        assert.ok(
+          entries[0].isIntersecting,
+          'expected element to be intersecting',
+        );
+
+        intersectionObserver.unobserve(fileElement);
+        done();
+      },
+      { threshold: [0] },
+    );
+
+    intersectionObserver.observe(fileElement);
   });
 });
