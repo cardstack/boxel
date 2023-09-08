@@ -24,12 +24,16 @@ export interface OperatorModeState {
   stacks: Stack[];
   submode: Submode;
   codePath: URL | null;
+  fileView?: FileView;
+  openDirs: string[];
 }
 
 interface CardItem {
   id: string;
   format: 'isolated' | 'edit';
 }
+
+export type FileView = 'inheritance' | 'browser';
 
 type SerializedItem = CardItem;
 type SerializedStack = SerializedItem[];
@@ -38,6 +42,8 @@ export type SerializedState = {
   stacks: SerializedStack[];
   submode?: Submode;
   codePath?: string;
+  fileView?: FileView;
+  openDirs?: string[];
 };
 
 export default class OperatorModeStateService extends Service {
@@ -45,6 +51,7 @@ export default class OperatorModeStateService extends Service {
     stacks: new TrackedArray([]),
     submode: Submode.Interact,
     codePath: null,
+    openDirs: [],
   });
   @tracked recentCards = new TrackedArray<CardDef>([]);
   @service declare cardService: CardService;
@@ -235,6 +242,11 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
+  updateFileView(fileView: FileView) {
+    this.state.fileView = fileView;
+    this.schedulePersist();
+  }
+
   clearStacks() {
     this.state.stacks.splice(0);
     this.schedulePersist();
@@ -269,6 +281,8 @@ export default class OperatorModeStateService extends Service {
       stacks: [],
       submode: this.state.submode,
       codePath: this.state.codePath?.toString(),
+      fileView: this.state.fileView?.toString() as FileView,
+      openDirs: this.state.openDirs,
     };
 
     for (let stack of this.state.stacks) {
@@ -302,6 +316,8 @@ export default class OperatorModeStateService extends Service {
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submode.Interact,
       codePath: rawState.codePath ? new URL(rawState.codePath) : null,
+      fileView: rawState.fileView ?? 'inheritance',
+      openDirs: rawState.openDirs ?? [],
     });
 
     let stackIndex = 0;
@@ -367,5 +383,32 @@ export default class OperatorModeStateService extends Service {
       'recent-cards',
       JSON.stringify(this.recentCards.map((c) => c.id)),
     );
+  }
+
+  get openDirs() {
+    return this.state.openDirs ?? [];
+  }
+
+  toggleOpenDir(entryPath: string): void {
+    let dirs = this.openDirs.slice();
+    for (let i = 0; i < dirs.length; i++) {
+      if (dirs[i].startsWith(entryPath)) {
+        let localParts = entryPath.split('/').filter((p) => p.trim() != '');
+        localParts.pop();
+        if (localParts.length) {
+          dirs[i] = localParts.join('/') + '/';
+        } else {
+          dirs.splice(i, 1);
+        }
+        this.state.openDirs = dirs;
+        return;
+      } else if (entryPath.startsWith(dirs[i])) {
+        dirs[i] = entryPath;
+        this.state.openDirs = dirs;
+        return;
+      }
+    }
+    this.state.openDirs = [...dirs, entryPath];
+    this.schedulePersist();
   }
 }

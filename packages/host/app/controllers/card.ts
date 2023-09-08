@@ -10,9 +10,11 @@ import { Model } from '@cardstack/host/routes/card';
 import { registerDestructor } from '@ember/destroyable';
 import type { Query } from '@cardstack/runtime-common/query';
 import { getSearchResults, type Search } from '../resources/search';
+import type CardService from '@cardstack/host/services/card-service';
 import OperatorModeStateService, {
   SerializedState as OperatorModeSerializedState,
 } from '@cardstack/host/services/operator-mode-state-service';
+import type CodeService from '@cardstack/host/services/code-service';
 import { Submode } from '@cardstack/host/components/submode-switcher';
 
 export default class CardController extends Controller {
@@ -20,11 +22,15 @@ export default class CardController extends Controller {
 
   isolatedCardComponent: ComponentLike | undefined;
   withPreventDefault = withPreventDefault;
+
+  @service declare cardService: CardService;
   @service declare router: RouterService;
+  @service declare operatorModeStateService: OperatorModeStateService;
+  @service declare codeService: CodeService;
+
   @tracked operatorModeEnabled = false;
   @tracked model: Model | undefined;
   @tracked operatorModeState: string | null = null;
-  @service declare operatorModeStateService: OperatorModeStateService;
 
   constructor(args: any) {
     super(args);
@@ -32,6 +38,13 @@ export default class CardController extends Controller {
     registerDestructor(this, () => {
       delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
     });
+  }
+
+  openPath(newPath: string | undefined) {
+    if (newPath) {
+      let fileUrl = new URL(this.cardService.defaultURL + newPath);
+      this.operatorModeStateService.updateCodePath(fileUrl);
+    }
   }
 
   getCards(query: Query, realms?: string[]): Search {
