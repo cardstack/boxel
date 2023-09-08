@@ -11,8 +11,8 @@ interface Args {
 }
 
 export default class URLBarResource extends Resource<Args> {
-  @tracked _url: string | null = null; // Last placeholder URL
-  @tracked _lastEditedValue: string | null = null; // URL user is editing
+  @tracked _value: string | null = null; // url string value
+  @tracked _lastEditedValue: string | null = null; // url string value user when is editing
   @tracked isEditing = false;
   @tracked isFocused = false;
 
@@ -22,26 +22,26 @@ export default class URLBarResource extends Resource<Args> {
 
   modify(_positional: never[], named: Args['named']) {
     let { getValue, setValue, resetValueError, setValueError } = named;
-    this._url = getValue();
+    this._value = getValue();
     this.setValue = setValue;
     this.resetValueError = resetValueError;
     this.setValueError = setValueError;
   }
 
-  get url() {
+  get value() {
     if (this.isEditing) {
       return this._lastEditedValue;
     } else {
-      return this._url;
+      return this._value;
     }
   }
 
   get showErrorMessage() {
-    return !this.validate(this.url) || !!this.setValueError;
+    return !this.validate(this.value) || !!this.setValueError;
   }
 
   get errorMessage() {
-    if (!this.validate(this.url)) {
+    if (!this.validate(this.value)) {
       return 'Not a valid URL';
     } else {
       return (
@@ -68,17 +68,17 @@ export default class URLBarResource extends Resource<Args> {
   }
 
   onBlur() {
-    this._url = this.url;
+    this._value = this.value;
     this.isEditing = false;
     this.isFocused = false;
   }
 
-  validate(url: string | null) {
-    if (url === null) {
+  validate(value: string | null) {
+    if (value === null) {
       return false;
     }
     try {
-      new URL(url);
+      new URL(value);
       return true;
     } catch (e) {
       return false;
@@ -90,7 +90,7 @@ export default class URLBarResource extends Resource<Args> {
       if (this.setValue) {
         this.setValue(newURL);
       }
-      this._url = newURL;
+      this._value = newURL;
       this.isEditing = false;
     }
   }
