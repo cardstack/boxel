@@ -47,16 +47,21 @@ export enum ParsingMode {
   Command,
 }
 
+export type Message = {
+  type: ParsingMode;
+  content: string;
+};
+
 export async function* processStream(stream: AsyncIterable<string>) {
   let content = '';
   let currentParsingMode: ParsingMode = ParsingMode.Text;
-  let all_tokens = [];
   for await (const token of stream) {
-    all_tokens.push(token);
     // The parsing here has to deal with a streaming response that
     // alternates between sections of text (to stream back to the client)
     // and structured data (to batch and send in one block)
     if (currentParsingMode === ParsingMode.Command) {
+      // If we're currently parsing a command, and we hit what looks like the end of the command
+      // then we need to start cleaning up the command and yield it.
       if (token.includes('</')) {
         // Content is the text we have built up so far
         if (content.startsWith('option>')) {
@@ -77,10 +82,12 @@ export async function* processStream(stream: AsyncIterable<string>) {
         content = '';
         currentParsingMode = ParsingMode.Text;
       } else {
-        // We are in command mode, so we need to buffer the content
+        // We are in command mode, and haven't detected the end of the the command
+        // so we will just keep building up the command
         content += token;
       }
     } else if (currentParsingMode === ParsingMode.Text) {
+      // Be explicit about the state we're in for readability
       if (token.includes('<')) {
         // Send the last update
         let beforeTag = token.split('<')[0];
@@ -90,22 +97,27 @@ export async function* processStream(stream: AsyncIterable<string>) {
             content: (content + beforeTag).trim(),
           };
         }
+        // Move into command mode.
+        // TODO: make this more robust against seeing < in the middle of a token
+        // when it later turns out not to be in a command
         currentParsingMode = ParsingMode.Command;
         content = '';
       } else {
         content += token;
-        content = content.replace(/^option/, '');
-        content = content.replace(/^>/, '');
-        content = content.replace(/^`.*/, '');
-        content = content.replace(/`.*$/, '');
-        if (content.trim()) {
-          yield {
-            type: ParsingMode.Text,
-            content: content.trim(),
-          };
+        if (token.trim()) {
+          // These are at the beginning, they don't need to happen on every token
+          content = content.replace(/^option/, '');
+          content = content.replace(/^>/, '');
+          content = content.replace(/^`.*/, '');
+          content = content.replace(/`.*$/, '');
+          if (content.trim()) {
+            yield {
+              type: ParsingMode.Text,
+              content: content.trim(),
+            };
+          }
         }
       }
     }
   }
-  console.log('all_tokens', all_tokens);
 }

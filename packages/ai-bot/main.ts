@@ -161,6 +161,7 @@ async function sendOption(client: MatrixClient, room: Room, content: string) {
   return await client.sendEvent(room.roomId, 'm.room.message', messageObject);
 }
 
+// TODO: make this yield events to send rather than sending them directly
 async function sendStream(
   stream: AsyncIterable<ChatCompletionChunk>,
   client: MatrixClient,
