@@ -401,9 +401,7 @@ export default class CodeMode extends Component<Signature> {
         let previousFile = this.codeService.recentFiles[0] as
           | string
           | undefined;
-        let url = previousFile
-          ? new RealmPaths(this.cardService.defaultURL).fileURL(previousFile)
-          : null;
+        let url = previousFile ? new URL(previousFile) : null;
         this.operatorModeStateService.updateCodePath(url);
       });
     } else {

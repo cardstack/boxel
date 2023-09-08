@@ -287,9 +287,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     this.operatorModeStateService.removeRecentCard(card.id);
     let realmURL = await this.cardService.getRealmURL(card);
     if (realmURL) {
-      let paths = new RealmPaths(realmURL);
-      let file = paths.local(`${card.id}.json`);
-      this.codeService.removeRecentFile(file);
+      this.codeService.removeRecentFile(`${card.id}.json`);
     }
 
     await this.withTestWaiters(async () => {

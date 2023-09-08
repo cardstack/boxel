@@ -1101,8 +1101,6 @@ module('Acceptance | operator mode tests', function (hooks) {
     await waitUntil(() => find('[data-test-editor]'));
     assert.deepEqual(JSON.parse(getMonacoContent()), {
       data: {
-        type: 'card',
-        id: `${testRealmURL}Pet/mango`,
         attributes: {
           name: 'Mango',
         },
@@ -1123,8 +1121,6 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     let expected: LooseSingleCardDocument = {
       data: {
-        type: 'card',
-        id: `${testRealmURL}Pet/mango`,
         attributes: {
           name: 'MangoXXX',
         },
@@ -1231,6 +1227,7 @@ module('Acceptance | operator mode tests', function (hooks) {
           invalidations: [
             `${testRealmURL}pet.gts`,
             `${testRealmURL}Pet/mango`,
+            `${testRealmURL}Pet/vangogh`,
             `${testRealmURL}Person/fadhlan`,
             `${testRealmURL}person`,
           ],
@@ -1309,7 +1306,10 @@ module('Acceptance | operator mode tests', function (hooks) {
         `${testRealmURL}Person/fadhlan`,
       ]),
     );
-    localStorage.setItem('recent-files', JSON.stringify(['Pet/vangogh.json']));
+    localStorage.setItem(
+      'recent-files',
+      JSON.stringify([`${testRealmURL}Pet/vangogh.json`]),
+    );
     await visit(
       `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
         operatorModeStateParam,
@@ -1325,7 +1325,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     await waitUntil(() => find('[data-test-editor]'));
     assert.strictEqual(
       localStorage.getItem('recent-files'),
-      JSON.stringify(['Pet/vangogh.json']),
+      JSON.stringify([`${testRealmURL}Pet/vangogh.json`]),
     );
 
     await click('[data-test-delete-button]');
@@ -1393,7 +1393,10 @@ module('Acceptance | operator mode tests', function (hooks) {
     })!;
     localStorage.setItem(
       'recent-files',
-      JSON.stringify(['Pet/vangogh.json', 'Pet/mango.json']),
+      JSON.stringify([
+        `${testRealmURL}Pet/vangogh.json`,
+        `${testRealmURL}Pet/mango.json`,
+      ]),
     );
     await visit(
       `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
@@ -1410,7 +1413,10 @@ module('Acceptance | operator mode tests', function (hooks) {
     await waitUntil(() => find('[data-test-editor]'));
     assert.strictEqual(
       localStorage.getItem('recent-files'),
-      JSON.stringify(['Pet/vangogh.json', 'Pet/mango.json']),
+      JSON.stringify([
+        `${testRealmURL}Pet/vangogh.json`,
+        `${testRealmURL}Pet/mango.json`,
+      ]),
     );
 
     await click('[data-test-delete-button]');
@@ -1452,7 +1458,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       .doesNotExist('stack item removed');
     assert.deepEqual(
       localStorage.getItem('recent-files'),
-      JSON.stringify(['Pet/mango.json']),
+      JSON.stringify([`${testRealmURL}Pet/mango.json`]),
       'the deleted card has been removed from recent files',
     );
   });

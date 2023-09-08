@@ -29,7 +29,18 @@ export default class CodeService extends Service {
     this.persistRecentFiles();
   }
 
-  persistRecentFiles() {
+  addRecentFile(file: string) {
+    const existingIndex = this.recentFiles.indexOf(file);
+
+    if (existingIndex > -1) {
+      this.recentFiles.splice(existingIndex, 1);
+    }
+
+    this.recentFiles.unshift(file);
+    this.persistRecentFiles();
+  }
+
+  private persistRecentFiles() {
     window.localStorage.setItem(
       'recent-files',
       JSON.stringify(this.recentFiles),
