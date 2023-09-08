@@ -31,7 +31,7 @@ const LoadingIndicator: TemplateOnlyComponent<Signature> = <template>
       Only animate if the user has not said that they want reduced motion
     */
     @media (prefers-reduced-motion: no-preference) {
-      .boxel-loading-indicator {
+      .boxel-loading-indicator :deep(svg) {
         animation: spin 6000ms linear infinite;
       }
     }
