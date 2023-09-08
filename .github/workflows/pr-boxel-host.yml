@@ -29,14 +29,14 @@ jobs:
         uses: tj-actions/changed-files@v39
         with:
           files: |
-            ^packages/host
+            packages/host/**
 
   deploy-host-preview-staging:
     name: Deploy a boxel-host staging preview to S3
     runs-on: ubuntu-latest
     # github.event.pull_request.head.repo.full_name == github.repository: true if pr is from the original repo, false if it's from a fork
     # github.head_ref: the branch that the pull request is from. only appears on pull_request events
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref && needs.check-if-requires-preview.outputs.boxel-host-files-changed == 'true'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref && needs.check-if-requires-preview.outputs.boxel-host-files-changed.any_modified == 'true'
     needs: check-if-requires-preview
     steps:
       - uses: actions/checkout@v3
