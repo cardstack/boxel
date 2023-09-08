@@ -242,58 +242,51 @@ export default class OperatorModeContainer extends Component<Signature> {
   });
 
   // dropTask will ignore any subsequent delete requests until the one in progress is done
-  delete = dropTask(async (cardOrModule: CardDef | URL) => {
-    await this.cardService.ready;
+  delete = dropTask(async (card: CardDef) => {
+    if (!card.id) {
+      // the card isn't actually saved yet, so do nothing
+      return;
+    }
 
-    if (this.cardService.isCard(cardOrModule)) {
-      let card = cardOrModule;
-      if (!card.id) {
-        // the card isn't actually saved yet, so do nothing
-        return;
-      }
+    if (!this.deleteModal) {
+      throw new Error(`bug: DeleteModal not instantiated`);
+    }
+    let deferred: Deferred<void>;
+    let isDeleteConfirmed = await this.deleteModal.confirmDelete(
+      card,
+      (d) => (deferred = d),
+    );
+    if (!isDeleteConfirmed) {
+      return;
+    }
 
-      if (!this.deleteModal) {
-        throw new Error(`bug: DeleteModal not instantiated`);
-      }
-      let deferred: Deferred<void>;
-      let isDeleteConfirmed = await this.deleteModal.confirmDelete(
-        card,
-        (d) => (deferred = d),
+    let items: StackItem[] = [];
+    for (let stack of this.stacks) {
+      items.push(
+        ...(stack.filter((i) => i.card.id === card.id) as StackItem[]),
       );
-      if (!isDeleteConfirmed) {
-        return;
-      }
-
-      let items: StackItem[] = [];
-      for (let stack of this.stacks) {
-        items.push(
-          ...(stack.filter((i) => i.card.id === card.id) as StackItem[]),
-        );
-        // remove all selections for the deleted card
-        for (let item of stack) {
-          let selections = cardSelections.get(item);
-          if (!selections) {
-            continue;
-          }
-          let removedCard = [...selections].find((c) => c.id === card.id);
-          if (removedCard) {
-            selections.delete(removedCard);
-          }
+      // remove all selections for the deleted card
+      for (let item of stack) {
+        let selections = cardSelections.get(item);
+        if (!selections) {
+          continue;
+        }
+        let removedCard = [...selections].find((c) => c.id === card.id);
+        if (removedCard) {
+          selections.delete(removedCard);
         }
       }
-      // remove all stack items for the deleted card
-      for (let item of items) {
-        this.operatorModeStateService.trimItemsFromStack(item);
-      }
-      this.operatorModeStateService.removeRecentCard(card.id);
-
-      await this.withTestWaiters(async () => {
-        await this.cardService.deleteCard(card);
-        deferred!.fulfill();
-      });
-    } else {
-      // TODO HASSAN START HERE FRI handle module deletion
     }
+    // remove all stack items for the deleted card
+    for (let item of items) {
+      this.operatorModeStateService.trimItemsFromStack(item);
+    }
+    this.operatorModeStateService.removeRecentCard(card.id);
+
+    await this.withTestWaiters(async () => {
+      await this.cardService.deleteCard(card);
+      deferred!.fulfill();
+    });
   });
 
   // we debounce saves in the stack item--by the time they reach

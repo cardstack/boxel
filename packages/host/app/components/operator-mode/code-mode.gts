@@ -394,8 +394,9 @@ export default class CodeMode extends Component<Signature> {
   private delete() {
     if (this.cardResource.value) {
       this.args.delete(this.cardResource.value);
+    } else {
+      throw new Error(`TODO: non-card instance deletes are not yet supported`);
     }
-    // TODO HASSAN START HERE FRI else if this is a module perform a module delete
   }
 
   <template>
