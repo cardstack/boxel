@@ -3,7 +3,7 @@ import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { registerDestructor } from '@ember/destroyable';
-import { logger } from '@cardstack/runtime-common';
+import { SupportedMimeType, logger } from '@cardstack/runtime-common';
 import LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
 import type CodeService from '@cardstack/host/services/code-service';
@@ -106,23 +106,27 @@ class _FileResource extends Resource<Args> {
 
   private read = restartableTask(async () => {
     let response = await this.loaderService.loader.fetch(this._url, {
-      headers: {
-        Accept: 'application/vnd.card+source',
-      },
+      headers: { Accept: SupportedMimeType.CardSource },
     });
 
     if (!response.ok) {
-      log.error(
-        `Could not get file ${this._url}, status ${response.status}: ${
-          response.statusText
-        } - ${await response.text()}`,
-      );
-      if (response.status === 404) {
-        this.updateState({ state: 'not-found', url: this._url });
-      } else {
-        this.updateState({ state: 'server-error', url: this._url });
+      response = await this.loaderService.loader.fetch(this._url, {
+        headers: { Accept: SupportedMimeType.CardJson },
+      });
+
+      if (!response.ok) {
+        log.error(
+          `Could not get file ${this._url}, status ${response.status}: ${
+            response.statusText
+          } - ${await response.text()}`,
+        );
+        if (response.status === 404) {
+          this.updateState({ state: 'not-found', url: this._url });
+        } else {
+          this.updateState({ state: 'server-error', url: this._url });
+        }
+        return;
       }
-      return;
     }
 
     let lastModified = response.headers.get('last-modified') || undefined;

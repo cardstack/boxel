@@ -291,8 +291,8 @@ export default class CodeMode extends Component<Signature> {
           let currentlyOpenedFile = this.openFile.current as any;
           let cardDoc = JSON.parse(currentlyOpenedFile.content);
           if (isCardDocument(cardDoc)) {
-            let url = currentlyOpenedFile.url.replace(/\.json$/, '');
-            state.value = await this.cardService.loadModel(url);
+            let path: string = currentlyOpenedFile.url.replace(/\.json$/, '');
+            state.value = await this.cardService.loadModel(new URL(path));
           }
         } catch (error: any) {
           state.error = error;
@@ -329,7 +329,7 @@ export default class CodeMode extends Component<Signature> {
     } else if (!isJSON || validJSON) {
       // writes source code and non-card instance valid JSON,
       // then updates the state of the file resource
-      await this.writeSourceCodeToFile(this.openFile.current, content);
+      this.writeSourceCodeToFile(this.openFile.current, content);
     }
   });
 
