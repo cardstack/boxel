@@ -157,9 +157,14 @@ function isOpen(
   path: string,
   operatorModeStateService: OperatorModeStateService,
 ) {
-  return (operatorModeStateService.state.openDirs ?? []).find((item) =>
-    item.startsWith(path),
-  );
+  let directoryIsPersistedOpen = (
+    operatorModeStateService.state.openDirs ?? []
+  ).find((item) => item.startsWith(path));
+
+  let fileWithinDirectoryIsOpen =
+    operatorModeStateService.codePathRelativeToRealm.startsWith(path);
+
+  return directoryIsPersistedOpen || fileWithinDirectoryIsOpen;
 }
 
 interface ScrollIntoViewModifierArgs {

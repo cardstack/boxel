@@ -15,6 +15,7 @@ import stringify from 'safe-stable-stringify';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import { registerDestructor } from '@ember/destroyable';
+import { RealmPaths } from '@cardstack/runtime-common/paths';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
@@ -235,6 +236,11 @@ export default class OperatorModeStateService extends Service {
   updateSubmode(submode: Submode) {
     this.state.submode = submode;
     this.schedulePersist();
+  }
+
+  get codePathRelativeToRealm() {
+    let realmPath = new RealmPaths(this.cardService.defaultURL.href);
+    return realmPath.local(this.state.codePath!);
   }
 
   updateCodePath(codePath: URL | null) {

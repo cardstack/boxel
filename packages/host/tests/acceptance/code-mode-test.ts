@@ -145,6 +145,7 @@ module('Acceptance | code mode tests', function (hooks) {
       'z17.json': '{}',
       'z18.json': '{}',
       'z19.json': '{}',
+      'zzz/zzz/file.json': '{}',
     });
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
@@ -324,6 +325,56 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-file]');
 
     let fileElement = find(`[data-test-file="${openFilename}"]`)!;
+    let intersectionObserver = new IntersectionObserver(
+      function (entries) {
+        assert.ok(
+          entries[0].isIntersecting,
+          'expected element to be intersecting',
+        );
+
+        intersectionObserver.unobserve(fileElement);
+        done();
+      },
+      { threshold: [0] },
+    );
+
+    intersectionObserver.observe(fileElement);
+  });
+
+  test('open file is within view even when its parent directory is not stored as open', async function (assert) {
+    let done = assert.async();
+    let openFilename = 'zzz/zzz/file.json';
+
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: 'http://test-realm/test/index',
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `http://test-realm/test/${openFilename}`,
+      fileView: 'browser',
+      openDirs: ['Person/'],
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+    await waitFor(`[data-test-file="${openFilename}"]`);
+
+    let fileElement = find(`[data-test-file="${openFilename}"]`)!;
+
+    if (!fileElement) {
+      assert.ok(fileElement, 'file element should exist');
+      done();
+      return;
+    }
+
     let intersectionObserver = new IntersectionObserver(
       function (entries) {
         assert.ok(
