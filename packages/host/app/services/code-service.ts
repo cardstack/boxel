@@ -20,6 +20,15 @@ export default class CodeService extends Service {
     }
   }
 
+  removeRecentFile(file: string) {
+    let index = this.recentFiles.findIndex((f) => f === file);
+    if (index === -1) {
+      return;
+    }
+    this.recentFiles.splice(index, 1);
+    this.persistRecentFiles();
+  }
+
   persistRecentFiles() {
     window.localStorage.setItem(
       'recent-files',

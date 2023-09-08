@@ -63,7 +63,7 @@ export default class DefinitionContainer extends Component<Signature> {
             <Label class='realm-name' data-test-definition-realm-name>in
               {{this.realmName}}</Label>
           </div>
-          <div class='definition-name'>{{@name}}</div>
+          <div data-test-definition-name class='definition-name'>{{@name}}</div>
         </div>
         {{#if @isActive}}
           <div class='action-buttons'>
@@ -76,13 +76,21 @@ export default class DefinitionContainer extends Component<Signature> {
                 {{svgJar 'icon-inherit' width='24px' height='24px'}}
                 Inherit
               </Button>
-              <Button class='action-button' {{on 'click' @delete}}>
+              <Button
+                data-test-delete-button
+                class='action-button'
+                {{on 'click' @delete}}
+              >
                 {{svgJar 'icon-trash' width='24px' height='24px'}}
                 Delete
               </Button>
             {{/if}}
             {{#if (eq @variant 'instance')}}
-              <Button class='action-button' {{on 'click' @delete}}>
+              <Button
+                data-test-delete-button
+                class='action-button'
+                {{on 'click' @delete}}
+              >
                 {{svgJar 'icon-trash' width='24px' height='24px'}}
                 Delete
               </Button>
