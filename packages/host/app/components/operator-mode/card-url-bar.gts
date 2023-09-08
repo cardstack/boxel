@@ -14,7 +14,6 @@ interface Signature {
     loadFileError: string | null;
     resetLoadFileError: () => void;
     realmInfo: RealmInfo | null;
-    updateCodePath: (url: URL) => void;
   };
 }
 
