@@ -3,24 +3,29 @@ import { tracked } from '@glimmer/tracking';
 
 interface Args {
   named: {
-    getValue: () => string | null; //getter of code path
-    setValue: (val: URL) => void; //setter of code path
-    resetLoadFileError: () => void;
-    loadFileError: string | null;
+    getValue: () => string | null;
+    setValue: (val: URL) => void;
+    setValueError?: string | null;
+    resetValueError?: () => void;
   };
 }
 
-export default class CardURLBarResource extends Resource<Args> {
-  @tracked _url: string | null = null; // Placeholder for last commited url
-  @tracked _lastEditedValue: string | null = null; // Url while user is editing
+export default class URLBarResource extends Resource<Args> {
+  @tracked _url: string | null = null; // Last placeholder URL
+  @tracked _lastEditedValue: string | null = null; // URL user is editing
   @tracked isEditing = false;
+  @tracked isFocused = false;
 
   modify(_positional: never[], named: Args['named']) {
-    let { getValue, setValue, resetLoadFileError, loadFileError } = named;
+    let { getValue, setValue, resetValueError, setValueError } = named;
     this._url = getValue();
     this.setValue = setValue;
-    this.resetLoadFileError = resetLoadFileError;
-    this.loadFileError = loadFileError;
+    if (resetValueError) {
+      this.resetValueError = resetValueError;
+    }
+    if (this.setValueError) {
+      this.setValueError = setValueError;
+    }
   }
 
   get url() {
@@ -31,19 +36,17 @@ export default class CardURLBarResource extends Resource<Args> {
     }
   }
 
-  get isFocused() {
-    return this.isEditing;
-  }
-
   get showErrorMessage() {
-    return !this.validate(this.url) || this.loadFileError;
+    return !this.validate(this.url) || !!this.setValueError;
   }
 
   get errorMessage() {
     if (!this.validate(this.url)) {
       return 'Not a valid URL';
     } else {
-      return this.loadFileError;
+      return (
+        this.setValueError || 'An unknown error occured when setting the URL'
+      );
     }
   }
 
@@ -54,17 +57,20 @@ export default class CardURLBarResource extends Resource<Args> {
     this.setURL(this._lastEditedValue);
   }
 
-  onInputChange(newURL: string) {
+  onInput(newURL: string) {
     this.isEditing = true;
     this._lastEditedValue = newURL;
-    this.resetLoadFileError();
+    this.resetValueError?.();
+  }
+
+  onFocus() {
+    this.isFocused = true;
   }
 
   onBlur() {
-    if (this.validate(this._lastEditedValue)) {
-      this._url = this.url;
-    }
+    this._url = this.url;
     this.isEditing = false;
+    this.isFocused = false;
   }
 
   validate(url: string | null) {
@@ -83,15 +89,16 @@ export default class CardURLBarResource extends Resource<Args> {
     if (this.validate(this._lastEditedValue)) {
       this.setValue(newURL);
       this._url = newURL;
+      this.isEditing = false;
     }
   }
 }
 
-export function cardURLBarResource(
+export function urlBarResource(
   parent: object,
   args: () => Args['named'],
-): CardURLBarResource {
-  return CardURLBarResource.from(parent, () => ({
+): URLBarResource {
+  return URLBarResource.from(parent, () => ({
     named: args(),
-  })) as unknown as CardURLBarResource;
+  })) as unknown as URLBarResource;
 }

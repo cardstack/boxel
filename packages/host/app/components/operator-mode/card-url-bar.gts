@@ -6,9 +6,9 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { type RealmInfo } from '@cardstack/runtime-common';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import CardUrlBarResource, {
-  cardURLBarResource,
-} from '@cardstack/host/resources/card-url-bar';
+import URLBarResource, {
+  urlBarResource,
+} from '@cardstack/host/resources/url-bar';
 
 interface Signature {
   Element: HTMLElement;
@@ -37,16 +37,17 @@ export default class CardURLBar extends Component<Signature> {
         {{svgJar 'icon-globe' width='22px' height='22px'}}
         <BoxelInput
           class='url-input'
-          @value={{this.r.url}}
-          @onInput={{this.r.onInputChange}}
-          @onKeyPress={{this.r.onKeyPress}}
-          @onBlur={{this.r.onBlur}}
+          @value={{this.urlBar.url}}
+          @onInput={{this.urlBar.onInput}}
+          @onKeyPress={{this.urlBar.onKeyPress}}
+          @onBlur={{this.urlBar.onBlur}}
+          @onFocus={{this.urlBar.onFocus}}
           data-test-card-url-bar-input
         />
       </div>
-      {{#if this.r.showErrorMessage}}
+      {{#if this.urlBar.showErrorMessage}}
         <div class='error-message' data-test-card-url-bar-error>
-          <span>{{this.r.errorMessage}}</span>
+          <span>{{this.urlBar.errorMessage}}</span>
         </div>
       {{/if}}
 
@@ -118,13 +119,13 @@ export default class CardURLBar extends Component<Signature> {
 
   @service declare operatorModeStateService: OperatorModeStateService;
 
-  r: CardUrlBarResource = cardURLBarResource(this, () => ({
+  urlBar: URLBarResource = urlBarResource(this, () => ({
     getValue: () => this.codePath,
     setValue: (url: string) => {
       this.operatorModeStateService.updateCodePath(new URL(url));
     },
-    resetLoadFileError: this.args.resetLoadFileError,
-    loadFileError: this.args.loadFileError,
+    setValueError: this.args.loadFileError,
+    resetValueError: this.args.resetLoadFileError,
   }));
 
   get codePath() {
@@ -142,9 +143,9 @@ export default class CardURLBar extends Component<Signature> {
   }
 
   get cssClasses() {
-    if (this.r.showErrorMessage) {
+    if (this.urlBar.showErrorMessage) {
       return 'card-url-bar error';
-    } else if (this.r.isFocused) {
+    } else if (this.urlBar.isFocused) {
       return 'card-url-bar focused';
     } else {
       return 'card-url-bar';
