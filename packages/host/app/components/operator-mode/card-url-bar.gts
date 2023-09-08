@@ -5,8 +5,10 @@ import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { type RealmInfo } from '@cardstack/runtime-common';
-import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import CardUrlBarResource, {
+  cardURLBarResource,
+} from '@cardstack/host/resources/card-url-bar';
 
 interface Signature {
   Element: HTMLElement;
@@ -14,6 +16,7 @@ interface Signature {
     loadFileError: string | null;
     resetLoadFileError: () => void;
     realmInfo: RealmInfo | null;
+    updateCodePath: (url: URL) => void;
   };
 }
 
@@ -34,19 +37,19 @@ export default class CardURLBar extends Component<Signature> {
         {{svgJar 'icon-globe' width='22px' height='22px'}}
         <BoxelInput
           class='url-input'
-          @value={{this.url}}
-          @onInput={{this.onInput}}
-          @onKeyPress={{this.onKeyPress}}
-          @onFocus={{this.onFocus}}
-          @onBlur={{this.onBlur}}
+          @value={{this.r.url}}
+          @onInput={{this.r.onInputChange}}
+          @onKeyPress={{this.r.onKeyPress}}
+          @onBlur={{this.r.onBlur}}
           data-test-card-url-bar-input
         />
       </div>
-      {{#if this.showErrorMessage}}
+      {{#if this.r.showErrorMessage}}
         <div class='error-message' data-test-card-url-bar-error>
-          <span>{{this.errorMessage}}</span>
+          <span>{{this.r.errorMessage}}</span>
         </div>
       {{/if}}
+
     </div>
     <style>
       :global(:root) {
@@ -114,28 +117,15 @@ export default class CardURLBar extends Component<Signature> {
   </template>
 
   @service declare operatorModeStateService: OperatorModeStateService;
-  @service declare cardService: CardService;
-  @tracked _url: string | null = null;
-  @tracked _lastEdited: string | null = null;
-  @tracked _lastCodePath: string | null = null;
-  @tracked isFocused = false;
-  @tracked isInvalidURL = false;
 
-  get url() {
-    if (!this.isFocused) {
-      if (this.codePath != this._lastCodePath) {
-        return this.codePath;
-      }
-      if (this._lastEdited && this._url == null) {
-        return this._lastEdited;
-      }
-    } else {
-      if (this._url != null) {
-        return this._url;
-      }
-    }
-    return this.codePath;
-  }
+  r: CardUrlBarResource = cardURLBarResource(this, () => ({
+    getValue: () => this.codePath,
+    setValue: (url: string) => {
+      this.operatorModeStateService.updateCodePath(new URL(url));
+    },
+    resetLoadFileError: this.args.resetLoadFileError,
+    loadFileError: this.args.loadFileError,
+  }));
 
   get codePath() {
     return this.operatorModeStateService.state.codePath
@@ -151,64 +141,13 @@ export default class CardURLBar extends Component<Signature> {
     return this.args.realmInfo?.name;
   }
 
-  get showErrorMessage() {
-    return this.isInvalidURL || this.args.loadFileError;
-  }
-
-  get errorMessage() {
-    if (this.isInvalidURL) {
-      return 'Not a valid URL';
-    } else {
-      return this.args.loadFileError;
-    }
-  }
-
   get cssClasses() {
-    if (this.showErrorMessage) {
+    if (this.r.showErrorMessage) {
       return 'card-url-bar error';
-    } else if (this.isFocused) {
+    } else if (this.r.isFocused) {
       return 'card-url-bar focused';
     } else {
       return 'card-url-bar';
     }
-  }
-
-  @action
-  onInput(inputUrl: string) {
-    this._url = inputUrl;
-    this.isInvalidURL = false;
-    this.args.resetLoadFileError();
-  }
-
-  @action
-  onKeyPress(event: KeyboardEvent) {
-    if (event.key !== 'Enter' || !this.url) {
-      return;
-    }
-
-    let url;
-    try {
-      url = new URL(this.url);
-    } catch (e) {
-      this.isInvalidURL = true;
-    }
-
-    if (url) {
-      this.operatorModeStateService.updateCodePath(url);
-    }
-  }
-
-  @action onFocus() {
-    this.isFocused = true;
-    this._url = this._lastEdited;
-    this._lastEdited = null;
-  }
-  @action onBlur() {
-    this.isFocused = false;
-    if (this._lastCodePath == this.codePath) {
-      this._lastEdited = this._url;
-      this._url = null;
-    }
-    this._lastCodePath = this.codePath;
   }
 }

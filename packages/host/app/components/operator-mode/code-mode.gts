@@ -227,6 +227,7 @@ export default class CodeMode extends Component<Signature> {
       @loadFileError={{this.loadFileError}}
       @resetLoadFileError={{this.resetLoadFileError}}
       @realmInfo={{this.realmInfo}}
+      @updateCodePath={{this.updateCodePath}}
       class='card-url-bar'
     />
     <div class='code-mode' data-test-code-mode>
