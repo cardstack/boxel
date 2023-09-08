@@ -4,7 +4,7 @@ import { tracked } from '@glimmer/tracking';
 interface Args {
   named: {
     getValue: () => string | null;
-    setValue: (val: URL) => void;
+    setValue?: (val: string) => void;
     setValueError?: string | null;
     resetValueError?: () => void;
   };
@@ -15,6 +15,10 @@ export default class URLBarResource extends Resource<Args> {
   @tracked _lastEditedValue: string | null = null; // URL user is editing
   @tracked isEditing = false;
   @tracked isFocused = false;
+
+  setValue?: (val: string) => void;
+  setValueError?: string | null;
+  resetValueError?: () => void;
 
   modify(_positional: never[], named: Args['named']) {
     let { getValue, setValue, resetValueError, setValueError } = named;
@@ -83,7 +87,9 @@ export default class URLBarResource extends Resource<Args> {
 
   setURL(newURL: string) {
     if (this.validate(this._lastEditedValue)) {
-      this.setValue(newURL);
+      if (this.setValue) {
+        this.setValue(newURL);
+      }
       this._url = newURL;
       this.isEditing = false;
     }

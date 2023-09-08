@@ -1,8 +1,6 @@
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 import { BoxelInput } from '@cardstack/boxel-ui';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { type RealmInfo } from '@cardstack/runtime-common';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
