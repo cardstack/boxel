@@ -963,6 +963,48 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       assert.dom('[data-test-card-instance-definition]').hasClass('active');
     });
+
+    test('clicking on listed card definition in the inheritance panel will display new definition and update card url', async function (assert) {
+      let operatorModeStateParam = stringify({
+        stacks: [
+          [
+            {
+              id: 'http://test-realm/test/Person/fadhlan',
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        codePath: `http://test-realm/test/Person/fadhlan.json`,
+      })!;
+
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam,
+        )}`,
+      );
+
+      await waitUntil(() => find('[data-test-card-inheritance-panel]'));
+      await waitUntil(() => find('[data-test-card-module-definition]'));
+      await waitUntil(() => find('[data-test-card-instance-definition]'));
+
+      assert.dom('[data-test-card-module-definition]').includesText('Person');
+      assert
+        .dom(
+          '[data-test-card-module-definition] [data-test-definition-file-extension]',
+        )
+        .includesText('.GTS');
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(`${testRealmURL}Person/fadhlan.json`);
+      await click('[data-test-card-module-definition]');
+      await waitUntil(() => find('[data-test-card-module-definition]'));
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(`${testRealmURL}person.gts`);
+      assert.dom('[data-test-card-module-definition]').includesText('Person');
+      assert.dom('[data-test-card-instance-definition]').doesNotExist();
+    });
   });
 
   test<TestContextWithSSE>('stack item live updates when index changes', async function (assert) {

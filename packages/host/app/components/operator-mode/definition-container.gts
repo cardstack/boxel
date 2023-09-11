@@ -1,56 +1,46 @@
 import Label from '@cardstack/boxel-ui/components/label';
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
+import { not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { Button } from '@cardstack/boxel-ui';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { assertNever } from '@cardstack/host/utils/assert-never';
-// boxel- specific
+import { action } from '@ember/object';
 import { type RealmInfo } from '@cardstack/runtime-common';
 
-export enum DefinitionVariant {
-  Instance = 'instance',
-  Module = 'module',
+interface Action {
+  label: string;
+  handler: () => void;
+  icon: string;
 }
 
-interface Signature {
+interface BaseArgs {
+  title: string | undefined;
+  name: string | undefined;
+  fileExtension: string;
+  realmInfo: RealmInfo | null;
+  realmIconURL: string | null | undefined;
+  isActive: boolean;
+  actions: Action[];
+  url?: URL;
+  onSelectDefinition?: (newUrl: URL | undefined) => void;
+  infoText?: string;
+}
+
+interface BaseSignature {
   Element: HTMLElement;
-  Args: {
-    name: string | undefined;
-    fileExtension: string;
-    realmInfo: RealmInfo | null;
-    realmIconURL: string | null | undefined;
-    variant: DefinitionVariant;
-    isActive: boolean;
-    infoText?: string;
-    delete: () => void;
-  };
+  Args: BaseArgs;
 }
 
-export default class DefinitionContainer extends Component<Signature> {
-  get title(): string {
-    switch (this.args.variant) {
-      case DefinitionVariant.Module:
-        return 'Card Definition';
-      case DefinitionVariant.Instance:
-        return 'Card Instance';
-      default:
-        throw assertNever(this.args.variant);
-    }
-  }
+class BaseDefinitionContainer extends Component<BaseSignature> {
   get realmName(): string | undefined {
     return this.args.realmInfo?.name;
   }
-
-  notImplemented = () => {
-    throw new Error(`not implemented`);
-  };
 
   <template>
     <div class='container {{if @isActive "active"}}' ...attributes>
       <div class='banner'>
         <Label class='banner-title'>
-          {{this.title}}</Label>
+          {{@title}}</Label>
         <span
           class='banner-title'
           data-test-definition-file-extension
@@ -67,34 +57,13 @@ export default class DefinitionContainer extends Component<Signature> {
         </div>
         {{#if @isActive}}
           <div class='action-buttons'>
-            {{#if (eq @variant 'module')}}
-              <Button class='action-button' {{on 'click' this.notImplemented}}>
-                {{svgJar 'icon-plus' width='24px' height='24px'}}
-                Create Instance
+            {{#each @actions as |actionButton|}}
+              <Button class='action-button' {{on 'click' actionButton.handler}}>
+                {{svgJar actionButton.icon width='24px' height='24px'}}
+                {{actionButton.label}}
               </Button>
-              <Button class='action-button' {{on 'click' this.notImplemented}}>
-                {{svgJar 'icon-inherit' width='24px' height='24px'}}
-                Inherit
-              </Button>
-              <Button
-                data-test-delete-button
-                class='action-button'
-                {{on 'click' @delete}}
-              >
-                {{svgJar 'icon-trash' width='24px' height='24px'}}
-                Delete
-              </Button>
-            {{/if}}
-            {{#if (eq @variant 'instance')}}
-              <Button
-                data-test-delete-button
-                class='action-button'
-                {{on 'click' @delete}}
-              >
-                {{svgJar 'icon-trash' width='24px' height='24px'}}
-                Delete
-              </Button>
-            {{/if}}
+            {{/each}}
+
           </div>
           <div class='info-footer' data-test-definition-info-text>
             <div class='message'>{{@infoText}}</div>
@@ -177,7 +146,6 @@ export default class DefinitionContainer extends Component<Signature> {
       .action-buttons {
         display: flex;
         flex-direction: column;
-        width: 80%;
       }
       .action-button {
         --boxel-button-text-color: var(--boxel-highlight);
@@ -185,10 +153,110 @@ export default class DefinitionContainer extends Component<Signature> {
         --icon-color: var(--boxel-highlight);
         color: var(--boxel-highlight);
         border: none;
-        display: flex;
         justify-content: flex-start;
-        align-items: center;
         gap: var(--boxel-sp-xs);
+        align-self: flex-start;
+      }
+    </style>
+  </template>
+}
+
+export class InstanceDefinitionContainer extends Component<BaseSignature> {
+  <template>
+    <BaseDefinitionContainer
+      @title={{@title}}
+      @name={{@name}}
+      @fileExtension={{@fileExtension}}
+      @realmInfo={{@realmInfo}}
+      @realmIconURL={{@realmIconURL}}
+      @isActive={{@isActive}}
+      @infoText={{@infoText}}
+      @actions={{@actions}}
+      data-test-card-instance-definition
+    />
+  </template>
+}
+
+export class ModuleDefinitionContainer extends Component<BaseSignature> {
+  <template>
+    {{#if (not @isActive)}}
+      <Clickable
+        @onSelectDefinition={{@onSelectDefinition}}
+        @url={{@url}}
+        data-test-definition-container
+      >
+        <BaseDefinitionContainer
+          @title={{@title}}
+          @name={{@name}}
+          @fileExtension={{@fileExtension}}
+          @realmInfo={{@realmInfo}}
+          @realmIconURL={{@realmIconURL}}
+          @isActive={{@isActive}}
+          @infoText={{@infoText}}
+          @actions={{@actions}}
+          data-test-card-module-definition
+        />
+      </Clickable>
+    {{else}}
+      <BaseDefinitionContainer
+        @title={{@title}}
+        @name={{@name}}
+        @fileExtension={{@fileExtension}}
+        @realmInfo={{@realmInfo}}
+        @realmIconURL={{@realmIconURL}}
+        @isActive={{@isActive}}
+        @actions={{@actions}}
+        data-test-card-module-definition
+      />
+    {{/if}}
+  </template>
+}
+
+interface ClickableSignature {
+  Element: HTMLElement;
+  Args: {
+    onSelectDefinition?: (newUrl: URL | undefined) => void;
+    url?: URL | undefined;
+  };
+  Blocks: {
+    default: [];
+  };
+}
+
+class Clickable extends Component<ClickableSignature> {
+  @action
+  handleClick() {
+    if (this.args.onSelectDefinition && this.args.url) {
+      this.args.onSelectDefinition(this.args.url);
+    }
+  }
+  <template>
+    <button
+      type='button'
+      {{on 'click' this.handleClick}}
+      class='clickable-button'
+      ...attributes
+    >
+      {{yield}}
+    </button>
+    <style>
+      .clickable-button {
+        background: none;
+        border: none;
+        padding: 0;
+        margin: 0;
+        cursor: pointer;
+        width: 100%;
+        height: 100%;
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        border-radius: var(--boxel-border-radius);
+        text-align: inherit;
+      }
+
+      .clickable-button:hover {
+        outline: 2px solid var(--boxel-highlight);
       }
     </style>
   </template>
