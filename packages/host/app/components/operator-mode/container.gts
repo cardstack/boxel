@@ -140,6 +140,11 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   }
 
+  @action onBlurSearchInput() {
+    this.searchSheetTrigger = null;
+    this.searchSheetMode = SearchSheetMode.Closed;
+  }
+
   @action onSearch(_term: string) {
     this.searchSheetMode = SearchSheetMode.SearchResults;
   }
@@ -741,6 +746,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         @mode={{this.searchSheetMode}}
         @onCancel={{this.onCancelSearchSheet}}
         @onFocus={{this.onFocusSearchInput}}
+        @onBlur={{this.onBlurSearchInput}}
         @onSearch={{this.onSearch}}
         @onCardSelect={{this.onCardSelectFromSearch}}
       />

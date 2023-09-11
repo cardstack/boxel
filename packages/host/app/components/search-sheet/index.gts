@@ -28,6 +28,7 @@ import flatMap from 'lodash/flatMap';
 import { TrackedArray } from 'tracked-built-ins';
 import ENV from '@cardstack/host/config/environment';
 import UrlSearch from '../url-search';
+import { registerDestructor } from '@ember/destroyable';
 
 const { otherRealmURLs } = ENV;
 
@@ -45,6 +46,7 @@ interface Signature {
     mode: SearchSheetMode;
     onCancel: () => void;
     onFocus: () => void;
+    onBlur: () => void;
     onSearch: (term: string) => void;
     onCardSelect: (card: CardDef) => void;
   };
@@ -59,6 +61,15 @@ export default class SearchSheet extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
+
+  constructor(args: any, owner: any) {
+    super(args, owner);
+
+    document.addEventListener('click', this.onMouseClick);
+    registerDestructor(this, () => {
+      document.removeEventListener('click', this.onMouseClick);
+    });
+  }
 
   get inputBottomTreatment() {
     return this.args.mode == SearchSheetMode.Closed
@@ -118,6 +129,18 @@ export default class SearchSheet extends Component<Signature> {
       }
     }
   });
+
+  @action
+  onMouseClick(mouseEvent: MouseEvent) {
+    let searchSheetEl = document.getElementById('search-sheet');
+    if (
+      !searchSheetEl ||
+      !mouseEvent.target ||
+      !searchSheetEl.contains(mouseEvent.target as HTMLElement)
+    ) {
+      this.args.onBlur();
+    }
+  }
 
   @action
   onCancel() {
@@ -226,7 +249,11 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   <template>
-    <div class='search-sheet {{this.sheetSize}}' data-test-search-sheet>
+    <div
+      id='search-sheet'
+      class='search-sheet {{this.sheetSize}}'
+      data-test-search-sheet={{@mode}}
+    >
       <SearchInput
         @variant={{if (eq @mode 'closed') 'default' 'large'}}
         @bottomTreatment={{this.inputBottomTreatment}}

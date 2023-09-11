@@ -2364,4 +2364,38 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}BlogPost/1.json${someRandomText}`);
   });
+
+  test(`can open and close search sheet`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+
+    await focus(`[data-test-search-input] input`);
+    assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
+
+    await click(`[data-test-search-sheet] .search-sheet-content`);
+    assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
+
+    await fillIn(`[data-test-search-input] input`, 'A');
+    await click(
+      `[data-test-search-sheet] .search-sheet-content .search-result-section`,
+    );
+    assert.dom(`[data-test-search-sheet="search-results"]`).exists();
+
+    await click(
+      `[data-test-search-sheet] .search-sheet-content .search-result-section`,
+    );
+    assert.dom(`[data-test-search-sheet="search-results"]`).exists();
+
+    await click(`[data-test-operator-mode-stack]`);
+    assert.dom(`[data-test-search-sheet="closed"]`).exists();
+  });
 });
