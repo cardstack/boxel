@@ -202,27 +202,28 @@ module('Integration | card-delete', function (hooks) {
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
     assert.ok(fileRef, 'card instance exists in file system');
+    await waitFor(
+      `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
+    );
+    await click(
+      `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.more-actions`,
+    );
+    await percySnapshot(assert);
+    await click('[data-test-boxel-menu-item-text="Delete"]');
+    await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
+    assert
+      .dom(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`)
+      .containsText('Delete the card Mango?');
+    await percySnapshot(
+      'Integration | card-delete | can delete a card from the index card stack item, modal',
+    );
+
     await this.expectEvents(
       assert,
       realm,
       adapter,
       expectedEvents,
       async () => {
-        await waitFor(
-          `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-        );
-        await click(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.more-actions`,
-        );
-        await percySnapshot(assert);
-        await click('[data-test-boxel-menu-item-text="Delete"]');
-        await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
-        assert
-          .dom(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`)
-          .containsText('Delete the card Mango?');
-        await percySnapshot(
-          'Integration | card-delete | can delete a card from the index card stack item, modal',
-        );
         await click('[data-test-confirm-delete-button]');
       },
     );

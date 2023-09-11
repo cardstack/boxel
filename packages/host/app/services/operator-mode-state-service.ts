@@ -5,6 +5,7 @@ import {
 import Service from '@ember/service';
 import type CardService from '../services/card-service';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
+import type MessageService from '@cardstack/host/services/message-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
@@ -13,6 +14,7 @@ import { scheduleOnce } from '@ember/runloop';
 import stringify from 'safe-stable-stringify';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import { Submode } from '@cardstack/host/components/submode-switcher';
+import { registerDestructor } from '@ember/destroyable';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
@@ -22,12 +24,16 @@ export interface OperatorModeState {
   stacks: Stack[];
   submode: Submode;
   codePath: URL | null;
+  fileView?: FileView;
+  openDirs: string[];
 }
 
 interface CardItem {
   id: string;
   format: 'isolated' | 'edit';
 }
+
+export type FileView = 'inheritance' | 'browser';
 
 type SerializedItem = CardItem;
 type SerializedStack = SerializedItem[];
@@ -36,6 +42,8 @@ export type SerializedState = {
   stacks: SerializedStack[];
   submode?: Submode;
   codePath?: string;
+  fileView?: FileView;
+  openDirs?: string[];
 };
 
 export default class OperatorModeStateService extends Service {
@@ -43,10 +51,59 @@ export default class OperatorModeStateService extends Service {
     stacks: new TrackedArray([]),
     submode: Submode.Interact,
     codePath: null,
+    openDirs: [],
   });
   @tracked recentCards = new TrackedArray<CardDef>([]);
-
   @service declare cardService: CardService;
+  @service declare messageService: MessageService;
+  private subscription: { url: string; unsubscribe: () => void } | undefined;
+
+  constructor(properties: object) {
+    super(properties);
+
+    let url = `${this.cardService.defaultURL}_message`;
+    this.subscription = {
+      url,
+      unsubscribe: this.messageService.subscribe(
+        url,
+        ({ type, data: dataStr }) => {
+          if (type !== 'index') {
+            return;
+          }
+          let data = JSON.parse(dataStr);
+          if (data.type !== 'incremental') {
+            return;
+          }
+          let items = new Map<string, StackItem[]>();
+          for (let stack of this.state.stacks) {
+            for (let item of stack) {
+              let itemList = items.get(item.card.id);
+              if (!itemList) {
+                itemList = [];
+                items.set(item.card.id, itemList);
+              }
+              itemList.push(item);
+            }
+          }
+          let invalidations = data.invalidations as string[];
+          for (let id of invalidations) {
+            let itemList = items.get(id);
+            if (!itemList) {
+              continue;
+            }
+            for (let item of itemList) {
+              this.reloadItem.perform(item);
+            }
+          }
+        },
+      ),
+    };
+    // technically services are never destroyed, but it seems good to be
+    // complete...
+    registerDestructor(this, () => {
+      this.subscription?.unsubscribe();
+    });
+  }
 
   async restore(rawState: SerializedState) {
     this.state = await this.deserialize(rawState);
@@ -61,6 +118,10 @@ export default class OperatorModeStateService extends Service {
     this.addRecentCard(item.card);
     this.schedulePersist();
   }
+
+  reloadItem = task(async (item: StackItem) => {
+    item.card = await this.cardService.reloadModel(item.card);
+  });
 
   patchCard = task({ enqueue: true }, async (id: string, attributes: any) => {
     let stackItems = this.state?.stacks.flat() ?? [];
@@ -181,6 +242,11 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
+  updateFileView(fileView: FileView) {
+    this.state.fileView = fileView;
+    this.schedulePersist();
+  }
+
   clearStacks() {
     this.state.stacks.splice(0);
     this.schedulePersist();
@@ -215,6 +281,8 @@ export default class OperatorModeStateService extends Service {
       stacks: [],
       submode: this.state.submode,
       codePath: this.state.codePath?.toString(),
+      fileView: this.state.fileView?.toString() as FileView,
+      openDirs: this.state.openDirs,
     };
 
     for (let stack of this.state.stacks) {
@@ -248,6 +316,8 @@ export default class OperatorModeStateService extends Service {
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submode.Interact,
       codePath: rawState.codePath ? new URL(rawState.codePath) : null,
+      fileView: rawState.fileView ?? 'inheritance',
+      openDirs: rawState.openDirs ?? [],
     });
 
     let stackIndex = 0;
@@ -310,5 +380,32 @@ export default class OperatorModeStateService extends Service {
       'recent-cards',
       JSON.stringify(this.recentCards.map((c) => c.id)),
     );
+  }
+
+  get openDirs() {
+    return this.state.openDirs ?? [];
+  }
+
+  toggleOpenDir(entryPath: string): void {
+    let dirs = this.openDirs.slice();
+    for (let i = 0; i < dirs.length; i++) {
+      if (dirs[i].startsWith(entryPath)) {
+        let localParts = entryPath.split('/').filter((p) => p.trim() != '');
+        localParts.pop();
+        if (localParts.length) {
+          dirs[i] = localParts.join('/') + '/';
+        } else {
+          dirs.splice(i, 1);
+        }
+        this.state.openDirs = dirs;
+        return;
+      } else if (entryPath.startsWith(dirs[i])) {
+        dirs[i] = entryPath;
+        this.state.openDirs = dirs;
+        return;
+      }
+    }
+    this.state.openDirs = [...dirs, entryPath];
+    this.schedulePersist();
   }
 }

@@ -80,6 +80,7 @@ export async function gotoRegistration(page: Page) {
   await toggleOperatorMode(page);
   await openChat(page);
   await page.locator('[data-test-register-user]').click();
+  await expect(page.locator('[data-test-register-user]')).toHaveCount(1);
 }
 
 export async function login(

@@ -112,7 +112,23 @@ export default class CardService extends Service {
     return card as CardDef;
   }
 
-  async loadModel(url: URL): Promise<CardDef> {
+  async reloadModel(card: CardDef): Promise<CardDef> {
+    await this.apiModule.loaded;
+    let json = await this.fetchJSON(card.id);
+    if (!isSingleCardDocument(json)) {
+      throw new Error(
+        `bug: server returned a non card document for ${card.id}:
+        ${JSON.stringify(json, null, 2)}`,
+      );
+    }
+    return await this.api.updateFromSerialized<typeof CardDef>(card, json);
+  }
+
+  async loadModel(url: URL | string): Promise<CardDef> {
+    if (typeof url === 'string') {
+      url = new URL(url);
+    }
+
     let index = this.indexCards.get(url.href);
     if (index) {
       return index;
@@ -126,11 +142,7 @@ export default class CardService extends Service {
         ${JSON.stringify(json, null, 2)}`,
       );
     }
-    let card = await this.createFromSerialized(
-      json.data,
-      json,
-      typeof url === 'string' ? new URL(url) : url,
-    );
+    let card = await this.createFromSerialized(json.data, json, url);
     if (this.isIndexCard(card)) {
       this.indexCards.set(url.href, card);
     }
