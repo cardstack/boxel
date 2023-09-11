@@ -285,10 +285,6 @@ export default class CodeMode extends Component<Signature> {
     return state;
   });
 
-  @action updateCodePath(newUrl: URL) {
-    this.operatorModeStateService.updateCodePath(newUrl);
-  }
-
   private contentChangedTask = restartableTask(async (content: string) => {
     await timeout(500);
     if (
@@ -398,7 +394,6 @@ export default class CodeMode extends Component<Signature> {
       @loadFileError={{this.loadFileError}}
       @resetLoadFileError={{this.resetLoadFileError}}
       @realmInfo={{this.realmInfo}}
-      @updateCodePath={{this.updateCodePath}}
       class='card-url-bar'
     />
     <div
