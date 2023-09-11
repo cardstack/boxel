@@ -19,6 +19,7 @@ import ENV from '@cardstack/host/config/environment';
 import {
   type LooseSingleCardDocument,
   type CodeRef,
+  type MatrixCardError,
   sanitizeHtml,
 } from '@cardstack/runtime-common';
 import type LoaderService from './loader-service';
@@ -42,7 +43,8 @@ export default class MatrixService extends Service {
   @tracked private _client: MatrixClient | undefined;
 
   rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
-  roomObjectives: TrackedMap<string, RoomObjectiveField> = new TrackedMap();
+  roomObjectives: TrackedMap<string, RoomObjectiveField | MatrixCardError> =
+    new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[] = [];

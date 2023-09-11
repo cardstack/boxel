@@ -752,6 +752,104 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-person]').hasText('Fadhlan');
   });
 
+  test('it can handle an error in a card attached to a matrix message', async function (assert) {
+    this.owner.register('service:matrixService', MockMatrixService);
+    let matrixService = this.owner.lookup(
+      'service:matrixService',
+    ) as MockMatrixService;
+    matrixService.cardAPI = cardApi;
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    let operatorModeStateService = this.owner.lookup(
+      'service:operator-mode-state-service',
+    ) as OperatorModeStateService;
+
+    await operatorModeStateService.restore({
+      stacks: [[]],
+    });
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await click('[data-test-open-chat]');
+    matrixService.createAndJoinRoom('testroom');
+    addRoomEvent(matrixService, {
+      event_id: 'event1',
+      room_id: 'testroom',
+      state_key: 'state',
+      type: 'm.room.message',
+      origin_server_ts: Date.now(),
+      content: {
+        body: 'card with error',
+        formatted_body: 'card with error',
+        msgtype: 'org.boxel.card',
+        instance: {
+          data: {
+            id: 'http://this-is-not-a-real-card.com',
+            type: 'card',
+            attributes: {
+              firstName: 'Boom',
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://not-a-real-card.com',
+                name: 'Boom',
+              },
+            },
+          },
+        },
+      },
+    });
+    await waitFor('[data-test-enter-room="test_a"]');
+    await click('[data-test-enter-room="test_a"]');
+    await waitFor('[data-test-card-error]');
+    assert
+      .dom('[data-test-card-error]')
+      .hasText(
+        'Error: cannot render card http://this-is-not-a-real-card.com: Failed to fetch',
+      );
+  });
+
+  test('it can handle an error in a room objective card', async function (assert) {
+    this.owner.register('service:matrixService', MockMatrixService);
+    let matrixService = this.owner.lookup(
+      'service:matrixService',
+    ) as MockMatrixService;
+    matrixService.roomObjectives.set('testroom', {
+      error: new Error('error rendering room objective'),
+    });
+    matrixService.cardAPI = cardApi;
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    let operatorModeStateService = this.owner.lookup(
+      'service:operator-mode-state-service',
+    ) as OperatorModeStateService;
+
+    await operatorModeStateService.restore({
+      stacks: [[]],
+    });
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await click('[data-test-open-chat]');
+    matrixService.createAndJoinRoom('testroom');
+    await waitFor('[data-test-enter-room="test_a"]');
+    await click('[data-test-enter-room="test_a"]');
+    await waitFor('[data-test-objective-error]');
+    assert
+      .dom('[data-test-objective-error]')
+      .hasText('Error: cannot render card : error rendering room objective');
+  });
+
   test('it loads a card and renders its isolated view', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
