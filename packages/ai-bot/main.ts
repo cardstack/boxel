@@ -109,7 +109,7 @@ async function sendMessage(
   content: string,
   previous: string | undefined,
 ) {
-  console.log('Sending', content);
+  log.info('Sending', content);
   if (content.startsWith('option>')) {
     content = content.replace('option>', '');
   }
@@ -278,7 +278,7 @@ async function getResponse(history: IRoomEvent[]) {
           log.info('Auto-joined %s', member.roomId);
         })
         .catch(function (err) {
-          console.log(
+          log.info(
             'Error joining this room, typically happens when a user invites then leaves before this is joined',
             err,
           );
@@ -293,7 +293,7 @@ async function getResponse(history: IRoomEvent[]) {
       if (!room) {
         return;
       }
-      console.log(
+      log.info(
         '(%s) %s :: %s',
         room?.name,
         event.getSender(),
