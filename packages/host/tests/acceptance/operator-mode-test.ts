@@ -30,6 +30,8 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import percySnapshot from '@percy/ember';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import { setupWindowMock } from 'ember-window-mock/test-support';
+import window from 'ember-window-mock';
 
 module('Acceptance | operator mode tests', function (hooks) {
   let realm: Realm;
@@ -39,15 +41,16 @@ module('Acceptance | operator mode tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
+  setupWindowMock(hooks);
 
   hooks.afterEach(async function () {
-    localStorage.removeItem('recent-cards');
-    localStorage.removeItem('recent-files');
+    window.localStorage.removeItem('recent-cards');
+    window.localStorage.removeItem('recent-files');
   });
 
   hooks.beforeEach(async function () {
-    localStorage.removeItem('recent-cards');
-    localStorage.removeItem('recent-files');
+    window.localStorage.removeItem('recent-cards');
+    window.localStorage.removeItem('recent-files');
 
     adapter = new TestRealmAdapter({
       'pet.gts': `
@@ -697,7 +700,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     test('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
       // creates a recent search
-      localStorage.setItem(
+      window.localStorage.setItem(
         'recent-cards',
         JSON.stringify([`${testRealmURL}Person/fadhlan`]),
       );
@@ -1353,14 +1356,14 @@ module('Acceptance | operator mode tests', function (hooks) {
         ],
       ],
     })!;
-    localStorage.setItem(
+    window.localStorage.setItem(
       'recent-cards',
       JSON.stringify([
         `${testRealmURL}Pet/vangogh`,
         `${testRealmURL}Person/fadhlan`,
       ]),
     );
-    localStorage.setItem(
+    window.localStorage.setItem(
       'recent-files',
       JSON.stringify([`${testRealmURL}Pet/vangogh.json`]),
     );
@@ -1378,7 +1381,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     await click('[data-test-boxel-menu-item-text="Code"]');
     await waitUntil(() => find('[data-test-editor]'));
     assert.strictEqual(
-      localStorage.getItem('recent-files'),
+      window.localStorage.getItem('recent-files'),
       JSON.stringify([`${testRealmURL}Pet/vangogh.json`]),
     );
 
@@ -1408,12 +1411,12 @@ module('Acceptance | operator mode tests', function (hooks) {
       .dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"`)
       .doesNotExist('stack item removed');
     assert.deepEqual(
-      localStorage.getItem('recent-cards'),
+      window.localStorage.getItem('recent-cards'),
       JSON.stringify([`${testRealmURL}Person/fadhlan`]),
       'the deleted card has been removed from recent cards',
     );
     assert.deepEqual(
-      localStorage.getItem('recent-files'),
+      window.localStorage.getItem('recent-files'),
       '[]',
       'the deleted card has been removed from recent files',
     );
@@ -1446,7 +1449,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         ],
       ],
     })!;
-    localStorage.setItem(
+    window.localStorage.setItem(
       'recent-files',
       JSON.stringify([
         `${testRealmURL}Pet/vangogh.json`,
@@ -1467,7 +1470,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     await click('[data-test-boxel-menu-item-text="Code"]');
     await waitUntil(() => find('[data-test-editor]'));
     assert.strictEqual(
-      localStorage.getItem('recent-files'),
+      window.localStorage.getItem('recent-files'),
       JSON.stringify([
         `${testRealmURL}Pet/vangogh.json`,
         `${testRealmURL}Pet/mango.json`,
@@ -1512,7 +1515,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       .dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"`)
       .doesNotExist('stack item removed');
     assert.deepEqual(
-      localStorage.getItem('recent-files'),
+      window.localStorage.getItem('recent-files'),
       JSON.stringify([`${testRealmURL}Pet/mango.json`]),
       'the deleted card has been removed from recent files',
     );
