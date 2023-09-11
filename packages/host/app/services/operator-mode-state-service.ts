@@ -381,7 +381,10 @@ export default class OperatorModeStateService extends Service {
     if (index === -1) {
       return;
     }
-    this.recentCards.splice(index, 1);
+    while (index !== -1) {
+      this.recentCards.splice(index, 1);
+      index = this.recentCards.findIndex((c) => c.id === id);
+    }
     localStorage.setItem(
       'recent-cards',
       JSON.stringify(this.recentCards.map((c) => c.id)),

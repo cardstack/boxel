@@ -3,6 +3,7 @@ import { service } from '@ember/service';
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RouterService from '@ember/routing/router-service';
+import { RealmPaths, type LocalPath } from '@cardstack/runtime-common/paths';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import Modifier, { PositionalArgs } from 'ember-modifier';
@@ -132,8 +133,10 @@ export default class Directory extends Component<Args> {
   @service declare router: RouterService;
 
   @action
-  openFile(entryPath: string) {
-    let fileUrl = new URL(this.cardService.defaultURL + entryPath);
+  openFile(entryPath: LocalPath) {
+    let fileUrl = new RealmPaths(this.cardService.defaultURL).fileURL(
+      entryPath,
+    );
     this.operatorModeStateService.updateCodePath(fileUrl);
   }
 
