@@ -15,7 +15,6 @@ import stringify from 'safe-stable-stringify';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import { registerDestructor } from '@ember/destroyable';
-import { RealmPaths } from '@cardstack/runtime-common/paths';
 import window from 'ember-window-mock';
 
 // Below types form a raw POJO representation of operator mode state.
