@@ -261,12 +261,24 @@ export default class ResizablePanelGroup extends Component<Signature> {
       let panelEl = panelGroupEl.querySelector(
         `[id='${index}'].boxel-panel`,
       ) as HTMLElement;
+      if (!panelEl) {
+        console.error(
+          `Could not find selector: [id='${index}'].boxel-panel when handling window resize for resizeable panel group`,
+        );
+        continue;
+      }
       panelWidths.push(panelEl.offsetWidth);
     }
     let totalPanelWidth = panelWidths.reduce((partialSum, a) => partialSum + a);
     let resizeHandlerEl = panelGroupEl.querySelector(
       '#resize-handler-1',
     ) as HTMLElement;
+    if (!resizeHandlerEl) {
+      console.error(
+        `Could not find selector: #resize-handler when handling window resize for resizeable panel group`,
+      );
+      return;
+    }
 
     let resizeHandlerWidth = (resizeHandlerEl as HTMLElement).offsetWidth;
     let totalResizeHandlerWidth =

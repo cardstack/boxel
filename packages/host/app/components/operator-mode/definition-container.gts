@@ -53,12 +53,16 @@ class BaseDefinitionContainer extends Component<BaseSignature> {
             <Label class='realm-name' data-test-definition-realm-name>in
               {{this.realmName}}</Label>
           </div>
-          <div class='definition-name'>{{@name}}</div>
+          <div data-test-definition-name class='definition-name'>{{@name}}</div>
         </div>
         {{#if @isActive}}
           <div class='action-buttons'>
             {{#each @actions as |actionButton|}}
-              <Button class='action-button' {{on 'click' actionButton.handler}}>
+              <Button
+                data-test-action-button='{{actionButton.label}}'
+                class='action-button'
+                {{on 'click' actionButton.handler}}
+              >
                 {{svgJar actionButton.icon width='24px' height='24px'}}
                 {{actionButton.label}}
               </Button>

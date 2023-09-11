@@ -251,7 +251,8 @@ export default class Go extends Component<Signature> {
       this.operatorModeStateService.state.codePath?.toString();
     if (relativePath) {
       return file(context, () => ({
-        url: new RealmPaths(this.cardService.defaultURL).url + relativePath,
+        url: new RealmPaths(this.cardService.defaultURL).fileURL(relativePath)
+          .href,
         onStateChange: (state) => {
           if (state === 'not-found') {
             this.operatorModeStateService.state.codePath = null;
