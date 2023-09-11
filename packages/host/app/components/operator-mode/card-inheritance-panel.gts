@@ -40,18 +40,8 @@ export default class CardInheritancePanel extends Component<Args> {
   @service declare operatorModeStateService: OperatorModeStateService;
 
   @action
-  duplicateAction() {
-    console.log('running duplicate');
-  }
-
-  @action
-  createAction() {
-    console.log('running create');
-  }
-
-  @action
-  inheritAction() {
-    console.log('running inherit');
+  notImplemented() {
+    console.log('running action button');
   }
 
   @action
@@ -75,14 +65,16 @@ export default class CardInheritancePanel extends Component<Args> {
             @onSelectDefinition={{fn this.updateCodePath (this.moduleUrl card)}}
             @url={{this.moduleUrl card}}
             @actions={{array
-              (hash label='Duplicate' handler=this.duplicateAction icon='copy')
+              (hash
+                label='Delete' handler=this.notImplemented icon='icon-trash'
+              )
               (hash
                 label='Create Instance'
-                handler=this.createAction
+                handler=this.notImplemented
                 icon='icon-plus'
               )
               (hash
-                label='Inherit' handler=this.inheritAction icon='icon-inherit'
+                label='Inherit' handler=this.notImplemented icon='icon-inherit'
               )
             }}
           />
@@ -98,7 +90,7 @@ export default class CardInheritancePanel extends Component<Args> {
           @infoText={{this.lastModified}}
           @isActive={{true}}
           @actions={{array
-            (hash label='Duplicate' handler=this.duplicateAction icon='copy')
+            (hash label='Delete' handler=this.notImplemented icon='icon-trash')
           }}
         />
       {{/if}}

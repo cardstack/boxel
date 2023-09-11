@@ -146,7 +146,6 @@ class BaseDefinitionContainer extends Component<BaseSignature> {
       .action-buttons {
         display: flex;
         flex-direction: column;
-        width: 80%;
       }
       .action-button {
         --boxel-button-text-color: var(--boxel-highlight);
@@ -154,10 +153,9 @@ class BaseDefinitionContainer extends Component<BaseSignature> {
         --icon-color: var(--boxel-highlight);
         color: var(--boxel-highlight);
         border: none;
-        display: flex;
         justify-content: flex-start;
-        align-items: center;
         gap: var(--boxel-sp-xs);
+        align-self: flex-start;
       }
     </style>
   </template>
