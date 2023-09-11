@@ -205,6 +205,7 @@ export class ModuleDefinitionContainer extends Component<BaseSignature> {
         @realmInfo={{@realmInfo}}
         @realmIconURL={{@realmIconURL}}
         @isActive={{@isActive}}
+        @infoText={{@infoText}}
         @actions={{@actions}}
         data-test-card-module-definition
       />
