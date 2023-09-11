@@ -762,6 +762,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         --boxel-modal-max-width: 100%;
         --container-button-size: var(--boxel-icon-lg);
         --operator-mode-min-width: 20.5rem;
+        --operator-mode-left-column: 14rem;
       }
       :global(.operator-mode .boxel-modal__inner) {
         display: block;
