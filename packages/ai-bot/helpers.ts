@@ -55,6 +55,11 @@ export function constructHistory(history: IRoomEvent[]) {
 export async function* extractContentFromStream(
   iterable: AsyncIterable<ChatCompletion>,
 ) {
+  /**
+   * The OpenAI API returns a stream of updates, which
+   * have extra details that we don't need, this function
+   * extracts out just the content from the stream.
+   */
   for await (const part of iterable) {
     if (part.choices[0]?.delta?.content) {
       yield part.choices[0].delta.content;
@@ -63,6 +68,18 @@ export async function* extractContentFromStream(
 }
 
 export async function* processStream(stream: AsyncIterable<string>) {
+  /**
+   * The stream of tokens from GPT is a mix of text and structured data.
+   * The text data should be yielded token by token so that the users
+   * can see the text as it is generated.
+   *
+   * However we need to also detect structured content and extract that
+   * out so that we can batch it up and send it to the server as one
+   * message.
+   *
+   * TODO: This is fragile, and will be replace with a proper parser
+   * as we remove the <option> format of messages.
+   */
   let content = '';
   let currentParsingMode: ParsingMode = ParsingMode.Text;
   for await (const token of stream) {
