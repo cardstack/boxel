@@ -6,6 +6,7 @@ import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { RealmPaths } from '@cardstack/runtime-common';
 
 interface Args {
   Args: {};
@@ -20,6 +21,10 @@ export default class RecentFiles extends Component<Args> {
     this.operatorModeStateService.updateCodePath(new URL(url));
   }
 
+  get realmPaths() {
+    return new RealmPaths(this.cardService.defaultURL.href);
+  }
+
   <template>
     <ul data-test-recent-files>
       {{#each this.cardService.recentFiles as |file|}}
@@ -29,10 +34,14 @@ export default class RecentFiles extends Component<Args> {
             role='button'
             {{on 'click' (fn this.openFile file)}}
           >
-            {{file}}
+            {{getRelativeFilePath this.realmPaths file}}
           </li>
         {{/unless}}
       {{/each}}
     </ul>
   </template>
+}
+
+function getRelativeFilePath(realmPaths: RealmPaths, fileUrl: string) {
+  return realmPaths.local(fileUrl);
 }

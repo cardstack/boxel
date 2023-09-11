@@ -327,7 +327,8 @@ module('Acceptance | code mode tests', function (hooks) {
 
     assert
       .dom('[data-test-recent-file]:first-child')
-      .containsText('Person/1.json');
+      .containsText('Person/1.json')
+      .doesNotContainText(testRealmURL, 'expected realm root to be hidden');
     assert
       .dom('[data-test-recent-file]:nth-child(2)')
       .containsText('index.json');
