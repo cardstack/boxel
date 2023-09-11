@@ -16,9 +16,8 @@ export default class RecentFiles extends Component<Args> {
   @service declare operatorModeStateService: OperatorModeStateService;
 
   @action
-  openFile(entryPath: string) {
-    let fileUrl = new URL(this.cardService.defaultURL + entryPath);
-    this.operatorModeStateService.updateCodePath(fileUrl);
+  openFile(url: string) {
+    this.operatorModeStateService.updateCodePath(new URL(url));
   }
 
   <template>

@@ -7,6 +7,7 @@ import {
   TestRealmAdapter,
   setupLocalIndexing,
   setupMockMessageService,
+  testRealmURL,
 } from '../helpers';
 import stringify from 'safe-stable-stringify';
 import { Realm } from '@cardstack/runtime-common/realm';
@@ -278,7 +279,10 @@ module('Acceptance | code mode tests', function (hooks) {
   });
 
   test('recent file links are shown', async function (assert) {
-    window.localStorage.setItem('recent-files', JSON.stringify(['index.json']));
+    window.localStorage.setItem(
+      'recent-files',
+      JSON.stringify([`${testRealmURL}index.json`]),
+    );
 
     let codeModeStateParam = stringify({
       stacks: [
@@ -340,7 +344,11 @@ module('Acceptance | code mode tests', function (hooks) {
 
     assert.deepEqual(
       JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
-      ['index.json', 'person.gts', 'Person/1.json'],
+      [
+        `${testRealmURL}index.json`,
+        `${testRealmURL}person.gts`,
+        `${testRealmURL}Person/1.json`,
+      ],
     );
   });
 });

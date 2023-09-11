@@ -6,6 +6,7 @@ import { registerDestructor } from '@ember/destroyable';
 import { logger } from '@cardstack/runtime-common';
 import LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
+import type CardService from '@cardstack/host/services/card-service';
 
 const log = logger('resource:file');
 
@@ -53,6 +54,7 @@ class _FileResource extends Resource<Args> {
 
   @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
+  @service declare cardService: CardService;
 
   constructor(owner: unknown) {
     super(owner);
@@ -95,6 +97,10 @@ class _FileResource extends Resource<Args> {
     this.innerState = newState;
     if (this.onStateChange && this.innerState.state !== prevState.state) {
       this.onStateChange(this.innerState.state);
+    }
+
+    if (newState.state === 'ready') {
+      this.cardService.addRecentFile(newState.url);
     }
   }
 

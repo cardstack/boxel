@@ -50,6 +50,29 @@ export default class CardService extends Service {
     }
   }
 
+  removeRecentFile(file: string) {
+    let index = this.recentFiles.findIndex((f) => f === file);
+    if (index === -1) {
+      return;
+    }
+    while (index !== -1) {
+      this.recentFiles.splice(index, 1);
+      index = this.recentFiles.findIndex((f) => f === file);
+    }
+    this.persistRecentFiles();
+  }
+
+  addRecentFile(file: string) {
+    const existingIndex = this.recentFiles.indexOf(file);
+
+    if (existingIndex > -1) {
+      this.recentFiles.splice(existingIndex, 1);
+    }
+
+    this.recentFiles.unshift(file);
+    this.persistRecentFiles();
+  }
+
   persistRecentFiles() {
     window.localStorage.setItem(
       'recent-files',
@@ -149,7 +172,11 @@ export default class CardService extends Service {
     return await this.api.updateFromSerialized<typeof CardDef>(card, json);
   }
 
-  async loadModel(url: URL): Promise<CardDef> {
+  async loadModel(url: URL | string): Promise<CardDef> {
+    if (typeof url === 'string') {
+      url = new URL(url);
+    }
+
     let index = this.indexCards.get(url.href);
     if (index) {
       return index;
@@ -163,11 +190,7 @@ export default class CardService extends Service {
         ${JSON.stringify(json, null, 2)}`,
       );
     }
-    let card = await this.createFromSerialized(
-      json.data,
-      json,
-      typeof url === 'string' ? new URL(url) : url,
-    );
+    let card = await this.createFromSerialized(json.data, json, url);
     if (this.isIndexCard(card)) {
       this.indexCards.set(url.href, card);
     }
