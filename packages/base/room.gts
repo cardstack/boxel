@@ -343,7 +343,10 @@ export class RoomField extends FieldDef {
   static getAttachedCard(id: string) {
     return attachedCards.get(id);
   }
-  static setAttachedCard(id: string, cardPromise: Promise<CardDef>) {
+  static setAttachedCard(
+    id: string,
+    cardPromise: Promise<CardDef | MatrixCardError>,
+  ) {
     attachedCards.set(id, cardPromise);
   }
 

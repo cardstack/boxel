@@ -5,6 +5,7 @@ import { service } from '@ember/service';
 import type CardService from '../services/card-service';
 import { type RoomField } from 'https://cardstack.com/base/room';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+import { MatrixCardError } from '@cardstack/runtime-common';
 
 interface Args {
   named: { room: RoomField | undefined; ids: string[] };
@@ -12,7 +13,7 @@ interface Args {
 
 export class AttachedCards extends Resource<Args> {
   @service declare cardService: CardService;
-  @tracked instances: CardDef[] = [];
+  @tracked instances: (CardDef | MatrixCardError)[] = [];
 
   modify(_positional: never[], named: Args['named']) {
     let { room, ids } = named;
@@ -27,7 +28,7 @@ export class AttachedCards extends Resource<Args> {
       }
       let RoomFieldClazz = Reflect.getPrototypeOf(room)!
         .constructor as typeof RoomField;
-      let pendingCards: Promise<CardDef>[] = [];
+      let pendingCards: Promise<CardDef | MatrixCardError>[] = [];
       for (let id of ids) {
         let pendingCard = RoomFieldClazz.getAttachedCard(id);
         if (!pendingCard) {
