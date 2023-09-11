@@ -1,6 +1,34 @@
 import { IRoomEvent } from 'matrix-js-sdk';
 
+type ChatCompletion = {
+  choices: Array<{
+    delta?: {
+      content?: string | null | undefined;
+    };
+  }>;
+};
+
+export enum ParsingMode {
+  Text,
+  Command,
+}
+
+export type Message = {
+  type: ParsingMode;
+  content: string;
+};
+
 export function constructHistory(history: IRoomEvent[]) {
+  /**
+   * We send a lot of events to create messages,
+   * as we stream updates to the UI. This works by
+   * sending a new event with the full content and
+   * information about which event it should replace
+   *
+   * This function is to construct the chat as a user
+   * would see it - with only the latest event for each
+   * message.
+   */
   const latestEventsMap = new Map<string, IRoomEvent>();
   for (let event of history) {
     let content = event.content;
@@ -24,14 +52,6 @@ export function constructHistory(history: IRoomEvent[]) {
   return latestEvents;
 }
 
-type ChatCompletion = {
-  choices: Array<{
-    delta?: {
-      content?: string | null | undefined;
-    };
-  }>;
-};
-
 export async function* extractContentFromStream(
   iterable: AsyncIterable<ChatCompletion>,
 ) {
@@ -41,16 +61,6 @@ export async function* extractContentFromStream(
     }
   }
 }
-
-export enum ParsingMode {
-  Text,
-  Command,
-}
-
-export type Message = {
-  type: ParsingMode;
-  content: string;
-};
 
 export async function* processStream(stream: AsyncIterable<string>) {
   let content = '';
