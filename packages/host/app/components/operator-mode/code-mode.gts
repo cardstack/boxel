@@ -4,7 +4,6 @@ import { service } from '@ember/service';
 import { action } from '@ember/object';
 import MonacoService from '@cardstack/host/services/monaco-service';
 import { htmlSafe } from '@ember/template';
-import ENV from '@cardstack/host/config/environment';
 import FileTree from '../editor/file-tree';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { on } from '@ember/modifier';
@@ -36,7 +35,6 @@ import { task, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { registerDestructor } from '@ember/destroyable';
 import CardURLBar from '@cardstack/host/components/operator-mode/card-url-bar';
-const { ownRealmURL } = ENV;
 import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-preview-panel';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { use, resource } from 'ember-resources';
@@ -454,19 +452,21 @@ export default class CodeMode extends Component<Signature> {
                   File Browser</button>
               </header>
               <section class='inner-container__content'>
-                {{#if (eq this.fileView 'inheritance')}}
-                  <section class='inner-container__content'>
-                    <CardInheritancePanel
-                      @cardInstance={{this.cardResource.value}}
-                      @openFile={{this.openFile}}
-                      @realmInfo={{this.realmInfo}}
-                      @realmIconURL={{this.realmIconURL}}
-                      @importedModule={{this.importedModule}}
-                      data-test-card-inheritance-panel
-                    />
-                  </section>
-                {{else}}
-                  <FileTree @url={{ownRealmURL}} />
+                {{#if this.isReady}}
+                  {{#if (eq this.fileView 'inheritance')}}
+                    <section class='inner-container__content'>
+                      <CardInheritancePanel
+                        @cardInstance={{this.cardResource.value}}
+                        @openFile={{this.openFile}}
+                        @realmInfo={{this.realmInfo}}
+                        @realmIconURL={{this.realmIconURL}}
+                        @importedModule={{this.importedModule}}
+                        data-test-card-inheritance-panel
+                      />
+                    </section>
+                  {{else}}
+                    <FileTree @url={{this.readyFile.realmURL}} />
+                  {{/if}}
                 {{/if}}
               </section>
             </div>

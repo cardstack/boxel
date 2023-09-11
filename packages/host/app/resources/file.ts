@@ -36,7 +36,7 @@ export interface Ready {
   name: string;
   url: string;
   lastModified: string | undefined;
-  realmURL: string | undefined;
+  realmURL: string;
   write(content: string, flushLoader?: boolean): void;
 }
 
