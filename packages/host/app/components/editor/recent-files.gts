@@ -23,9 +23,7 @@ export default class RecentFiles extends Component<Args> {
   <template>
     <ul data-test-recent-files>
       {{#each this.cardService.recentFiles as |file|}}
-        {{#unless
-          (eq file this.operatorModeStateService.codePathRelativeToRealm)
-        }}
+        {{#unless (eq file this.operatorModeStateService.state.codePath.href)}}
           <li
             data-test-recent-file={{file}}
             role='button'

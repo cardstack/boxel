@@ -239,16 +239,6 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
-  get codePathRelativeToRealm() {
-    let realmPath = new RealmPaths(this.cardService.defaultURL.href);
-
-    if (this.state.codePath) {
-      return realmPath.local(this.state.codePath);
-    } else {
-      return null;
-    }
-  }
-
   updateCodePath(codePath: URL | null) {
     this.state.codePath = codePath;
     this.schedulePersist();
