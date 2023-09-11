@@ -40,7 +40,7 @@ class BaseDefinitionContainer extends Component<BaseSignature> {
     <div class='container {{if @isActive "active"}}' ...attributes>
       <div class='banner'>
         <Label class='banner-title'>
-          {{this.args.title}}</Label>
+          {{@title}}</Label>
         <span
           class='banner-title'
           data-test-definition-file-extension
