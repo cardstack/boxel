@@ -4,6 +4,11 @@ import { service } from '@ember/service';
 import { action } from '@ember/object';
 import MonacoService from '@cardstack/host/services/monaco-service';
 import { htmlSafe } from '@ember/template';
+import ENV from '@cardstack/host/config/environment';
+import FileTree from '../editor/file-tree';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { on } from '@ember/modifier';
+import { fn } from '@ember/helper';
 import {
   type RealmInfo,
   type SingleCardDocument,
@@ -24,12 +29,14 @@ import {
   type FileResource,
 } from '@cardstack/host/resources/file';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import CardService from '@cardstack/host/services/card-service';
 import { task, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { registerDestructor } from '@ember/destroyable';
 import CardURLBar from '@cardstack/host/components/operator-mode/card-url-bar';
+const { ownRealmURL } = ENV;
 import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-preview-panel';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { use, resource } from 'ember-resources';
@@ -116,6 +123,18 @@ export default class CodeMode extends Component<Signature> {
 
   private get backgroundURLStyle() {
     return htmlSafe(`background-image: url(${this.backgroundURL});`);
+  }
+
+  @action setFileView(view: FileView) {
+    this.operatorModeStateService.updateFileView(view);
+  }
+
+  get fileView() {
+    return this.operatorModeStateService.state.fileView;
+  }
+
+  get fileViewTitle() {
+    return this.fileView === 'inheritance' ? 'Inheritance' : 'File Browser';
   }
 
   private get realmIconURL() {
@@ -413,22 +432,42 @@ export default class CodeMode extends Component<Signature> {
         >
           <div class='column'>
             {{! Move each container and styles to separate component }}
-            <div class='inner-container'>
+            <div
+              class='inner-container file-view
+                {{if (eq this.fileView "browser") "file-browser"}}'
+            >
               <header
-                class='inner-container__header'
-                aria-label='Inheritance Header'
+                aria-label={{this.fileViewTitle}}
+                data-test-file-view-header
               >
-                Card Inheritance
+                <button
+                  class='{{if (eq this.fileView "inheritance") "active"}}'
+                  {{on 'click' (fn this.setFileView 'inheritance')}}
+                  data-test-inheritance-toggle
+                >
+                  Inheritance</button>
+                <button
+                  class='{{if (eq this.fileView "browser") "active"}}'
+                  {{on 'click' (fn this.setFileView 'browser')}}
+                  data-test-file-browser-toggle
+                >
+                  File Browser</button>
               </header>
               <section class='inner-container__content'>
-                <CardInheritancePanel
-                  @cardInstance={{this.cardResource.value}}
-                  @openFile={{this.openFile}}
-                  @realmInfo={{this.realmInfo}}
-                  @realmIconURL={{this.realmIconURL}}
-                  @importedModule={{this.importedModule}}
-                  data-test-card-inheritance-panel
-                />
+                {{#if (eq this.fileView 'inheritance')}}
+                  <section class='inner-container__content'>
+                    <CardInheritancePanel
+                      @cardInstance={{this.cardResource.value}}
+                      @openFile={{this.openFile}}
+                      @realmInfo={{this.realmInfo}}
+                      @realmIconURL={{this.realmIconURL}}
+                      @importedModule={{this.importedModule}}
+                      data-test-card-inheritance-panel
+                    />
+                  </section>
+                {{else}}
+                  <FileTree @url={{ownRealmURL}} />
+                {{/if}}
               </section>
             </div>
             <aside class='inner-container'>
@@ -564,6 +603,33 @@ export default class CodeMode extends Component<Signature> {
         padding: var(--boxel-sp-xxs) var(--boxel-sp-xs) var(--boxel-sp-sm);
         overflow-y: auto;
       }
+
+      .file-view header {
+        margin: var(--boxel-sp-sm);
+        display: flex;
+        gap: var(--boxel-sp-sm);
+      }
+
+      .file-view header button {
+        padding: var(--boxel-sp-xxxs) var(--boxel-sp-lg);
+        font-weight: 700;
+        background: transparent;
+        color: var(--boxel-dark);
+        border-radius: var(--boxel-border-radius-sm);
+        border: 1px solid var(--boxel-400);
+        flex: 1;
+      }
+
+      .file-view header button.active {
+        background: var(--boxel-dark);
+        color: var(--boxel-highlight);
+        border-color: var(--boxel-dark);
+      }
+
+      .file-view.file-browser .inner-container__content {
+        background: var(--boxel-light);
+      }
+
       .card-url-bar {
         position: absolute;
         top: var(--boxel-sp);
