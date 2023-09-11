@@ -252,17 +252,8 @@ export default class OperatorModeStateService extends Service {
     this.state.codePath = codePath;
     this.schedulePersist();
 
-    let newPath = this.codePathRelativeToRealm;
-
-    if (newPath) {
-      const existingIndex = this.cardService.recentFiles.indexOf(newPath);
-
-      if (existingIndex > -1) {
-        this.cardService.recentFiles.splice(existingIndex, 1);
-      }
-
-      this.cardService.recentFiles.unshift(newPath);
-      this.cardService.persistRecentFiles();
+    if (codePath) {
+      this.cardService.addRecentFile(codePath.toString());
     }
   }
 
