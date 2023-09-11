@@ -21,13 +21,19 @@ export default class RecentFiles extends Component<Args> {
     this.operatorModeStateService.updateCodePath(new URL(url));
   }
 
+  get recentFilesInRealm() {
+    return this.cardService.recentFiles.filter((file) =>
+      this.realmPaths.inRealm(new URL(file)),
+    );
+  }
+
   get realmPaths() {
     return new RealmPaths(this.cardService.defaultURL.href);
   }
 
   <template>
     <ul data-test-recent-files>
-      {{#each this.cardService.recentFiles as |file|}}
+      {{#each this.recentFilesInRealm as |file|}}
         {{#unless (eq file this.operatorModeStateService.state.codePath.href)}}
           <li
             data-test-recent-file={{file}}

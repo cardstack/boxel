@@ -279,9 +279,10 @@ module('Acceptance | code mode tests', function (hooks) {
   });
 
   test('recent file links are shown', async function (assert) {
+    let otherRealmCardUrl = 'http://example.com/other-realm-card.json';
     window.localStorage.setItem(
       'recent-files',
-      JSON.stringify([`${testRealmURL}index.json`]),
+      JSON.stringify([`${testRealmURL}index.json`, otherRealmCardUrl]),
     );
 
     let codeModeStateParam = stringify({
@@ -349,6 +350,7 @@ module('Acceptance | code mode tests', function (hooks) {
         `${testRealmURL}index.json`,
         `${testRealmURL}person.gts`,
         `${testRealmURL}Person/1.json`,
+        otherRealmCardUrl,
       ],
     );
   });
