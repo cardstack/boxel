@@ -122,7 +122,6 @@ module('processStream', () => {
       '1',
       ':',
       '\n',
-      '```',
       '<option',
       '>\n',
       '{',
@@ -168,7 +167,6 @@ module('processStream', () => {
       '</',
       'option',
       '>',
-      '```',
     ];
     const expectedResult = [
       {
