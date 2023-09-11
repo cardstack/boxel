@@ -11,8 +11,8 @@ interface Args {
 }
 
 export default class URLBarResource extends Resource<Args> {
-  @tracked _value: string | null = null; // url string value
-  @tracked _lastEditedValue: string | null = null; // url string value user when is editing
+  @tracked private value: string | null = null; // url string url
+  @tracked private lastEditedValue: string | null = null; // url string url user when is editing
   @tracked isEditing = false;
   @tracked isFocused = false;
 
@@ -22,26 +22,26 @@ export default class URLBarResource extends Resource<Args> {
 
   modify(_positional: never[], named: Args['named']) {
     let { getValue, setValue, resetValueError, setValueError } = named;
-    this._value = getValue();
+    this.value = getValue();
     this.setValue = setValue;
     this.resetValueError = resetValueError;
     this.setValueError = setValueError;
   }
 
-  get value() {
+  get url() {
     if (this.isEditing) {
-      return this._lastEditedValue;
+      return this.lastEditedValue;
     } else {
-      return this._value;
+      return this.value;
     }
   }
 
   get showErrorMessage() {
-    return !this.validate(this.value) || !!this.setValueError;
+    return !this.validate(this.url) || !!this.setValueError;
   }
 
   get errorMessage() {
-    if (!this.validate(this.value)) {
+    if (!this.validate(this.url)) {
       return 'Not a valid URL';
     } else {
       return (
@@ -51,15 +51,15 @@ export default class URLBarResource extends Resource<Args> {
   }
 
   onKeyPress(event: KeyboardEvent) {
-    if (event.key !== 'Enter' || !this._lastEditedValue) {
+    if (event.key !== 'Enter' || !this.lastEditedValue) {
       return;
     }
-    this.setURL(this._lastEditedValue);
+    this.setURL(this.lastEditedValue);
   }
 
   onInput(newURL: string) {
     this.isEditing = true;
-    this._lastEditedValue = newURL;
+    this.lastEditedValue = newURL;
     this.resetValueError?.();
   }
 
@@ -68,17 +68,17 @@ export default class URLBarResource extends Resource<Args> {
   }
 
   onBlur() {
-    this._value = this.value;
+    this.value = this.url;
     this.isEditing = false;
     this.isFocused = false;
   }
 
-  validate(value: string | null) {
-    if (value === null) {
+  validate(url: string | null) {
+    if (url === null) {
       return false;
     }
     try {
-      new URL(value);
+      new URL(url);
       return true;
     } catch (e) {
       return false;
@@ -86,11 +86,11 @@ export default class URLBarResource extends Resource<Args> {
   }
 
   setURL(newURL: string) {
-    if (this.validate(this._lastEditedValue)) {
+    if (this.validate(this.lastEditedValue)) {
       if (this.setValue) {
         this.setValue(newURL);
       }
-      this._value = newURL;
+      this.value = newURL;
       this.isEditing = false;
     }
   }

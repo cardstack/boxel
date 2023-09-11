@@ -34,7 +34,7 @@ export default class CardURLBar extends Component<Signature> {
         {{svgJar 'icon-globe' width='22px' height='22px'}}
         <BoxelInput
           class='url-input'
-          @value={{this.urlBar.value}}
+          @value={{this.urlBar.url}}
           @onInput={{this.urlBar.onInput}}
           @onKeyPress={{this.urlBar.onKeyPress}}
           @onBlur={{this.urlBar.onBlur}}
