@@ -86,7 +86,6 @@ export default class OperatorModeContainer extends Component<Signature> {
   @service declare messageService: MessageService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
-  @service declare cardService: CardService;
   @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
   @tracked searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked isChatVisible = false;

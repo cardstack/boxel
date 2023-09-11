@@ -3,7 +3,6 @@ import { tracked } from '@glimmer/tracking';
 import { service } from '@ember/service';
 import { action } from '@ember/object';
 import MonacoService from '@cardstack/host/services/monaco-service';
-import type CodeService from '../../services/code-service';
 import { htmlSafe } from '@ember/template';
 import FileTree from '../editor/file-tree';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
@@ -77,7 +76,6 @@ export default class CodeMode extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
   @service declare operatorModeStateService: OperatorModeStateService;
-  @service declare codeService: CodeService;
   @tracked private loadFileError: string | null = null;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
   private panelWidths: PanelWidths;
@@ -416,7 +414,7 @@ export default class CodeMode extends Component<Signature> {
   private delete() {
     if (this.cardResource.value) {
       this.args.delete(this.cardResource.value, () => {
-        let previousFile = this.codeService.recentFiles[0] as
+        let previousFile = this.cardService.recentFiles[0] as
           | string
           | undefined;
         let url = previousFile ? new URL(previousFile) : null;
