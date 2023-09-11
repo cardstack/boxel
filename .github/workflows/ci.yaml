@@ -16,6 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/init
+      - name: Lint AI Bot
+        if: always()
+        run: pnpm run lint
       - name: Lint Boxel Motion
         # This addition to each step causes the job to proceed even if one lint job fails so we can see all errors
         if: always()
@@ -61,6 +64,16 @@ jobs:
       - name: Run test suite
         run: pnpm test
         working-directory: packages/boxel-ui
+
+  ai-bot-test:
+    name: AI bot Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./.github/actions/init
+      - name: AI Bot test suite
+        run: pnpm test
+        working-directory: packages/ai-bot
 
   host-test:
     name: Host Tests
@@ -223,7 +236,9 @@ jobs:
 
   deploy-ai-bot:
     name: Deploy ai-bot to staging
-    needs: [build-ai-bot]
+    needs:
+      - ai-bot-test
+      - build-ai-bot
     uses: ./.github/workflows/waypoint-deploy.yml
     secrets: inherit
     with:
