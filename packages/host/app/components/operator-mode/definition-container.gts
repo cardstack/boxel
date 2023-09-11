@@ -172,7 +172,9 @@ export class InstanceDefinitionContainer extends Component<BaseSignature> {
       @realmInfo={{@realmInfo}}
       @realmIconURL={{@realmIconURL}}
       @isActive={{@isActive}}
+      @infoText={{@infoText}}
       @actions={{@actions}}
+      data-test-card-instance-definition
     />
   </template>
 }
@@ -192,7 +194,9 @@ export class ModuleDefinitionContainer extends Component<BaseSignature> {
           @realmInfo={{@realmInfo}}
           @realmIconURL={{@realmIconURL}}
           @isActive={{@isActive}}
+          @infoText={{@infoText}}
           @actions={{@actions}}
+          data-test-card-module-definition
         />
       </Clickable>
     {{else}}
@@ -204,6 +208,7 @@ export class ModuleDefinitionContainer extends Component<BaseSignature> {
         @realmIconURL={{@realmIconURL}}
         @isActive={{@isActive}}
         @actions={{@actions}}
+        data-test-card-module-definition
       />
     {{/if}}
   </template>

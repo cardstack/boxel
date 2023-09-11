@@ -59,7 +59,6 @@ export default class CardInheritancePanel extends Component<Args> {
     if (url) {
       this.operatorModeStateService.updateCodePath(url);
     }
-    throw new Error('Could not derive URL for module');
   }
 
   <template>
@@ -86,7 +85,6 @@ export default class CardInheritancePanel extends Component<Args> {
                 label='Inherit' handler=this.inheritAction icon='icon-inherit'
               )
             }}
-            data-test-card-module-definition
           />
         {{/each}}
       {{/if}}
@@ -102,7 +100,6 @@ export default class CardInheritancePanel extends Component<Args> {
           @actions={{array
             (hash label='Duplicate' handler=this.duplicateAction icon='copy')
           }}
-          data-test-card-instance-definition
         />
       {{/if}}
     </div>
