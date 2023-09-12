@@ -9,6 +9,7 @@
     "qunit": "^2.18.0"
   },
   "scripts": {
+    "lint": "eslint . --cache --ext ts",
     "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
     "test": "NODE_NO_WARNINGS=1 qunit --require ts-node/register/transpile-only tests/index.ts"
   },

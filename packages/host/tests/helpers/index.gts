@@ -28,12 +28,11 @@ import {
 import { WebMessageStream, messageCloseHandler } from './stream';
 import type CardService from '@cardstack/host/services/card-service';
 import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
-import { file, FileResource } from '@cardstack/host/resources/file';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type MessageService from '@cardstack/host/services/message-service';
 import Owner from '@ember/owner';
-import { OpenFiles } from '@cardstack/host/controllers/code';
 import { buildWaiter } from '@ember/test-waiters';
+import { findAll, waitUntil } from '@ember/test-helpers';
 import type { UpdateEventData } from '@cardstack/runtime-common/realm';
 const waiter = buildWaiter('@cardstack/host/test/helpers/index:onFetch-waiter');
 
@@ -56,6 +55,42 @@ export function p(dateString: string): Date {
   return parse(dateString, 'yyyy-MM-dd', new Date());
 }
 
+export function getMonacoContent(): string {
+  return (window as any).monaco.editor.getModels()[0].getValue();
+}
+
+export function setMonacoContent(content: string): string {
+  return (window as any).monaco.editor.getModels()[0].setValue(content);
+}
+
+export async function waitForSyntaxHighlighting(
+  textContent: string,
+  color: string,
+) {
+  let codeTokens;
+  let finalHighlightedToken: Element | undefined;
+
+  await waitUntil(
+    () => {
+      codeTokens = findAll('.view-line span span');
+      finalHighlightedToken = codeTokens.find(
+        (t) => t.innerHTML === textContent,
+      );
+      return finalHighlightedToken;
+    },
+    {
+      timeout: 10000, // need to wait for monaco to load
+      timeoutMessage: `timed out waiting for \`${textContent}\` token`,
+    },
+  );
+
+  await waitUntil(
+    () =>
+      finalHighlightedToken?.computedStyleMap()?.get('color')?.toString() ===
+      color,
+    { timeoutMessage: 'timed out waiting for syntax highlighting' },
+  );
+}
 export interface Dir {
   [name: string]: string | Dir;
 }
@@ -598,27 +633,6 @@ export function delay(delayAmountMs: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, delayAmountMs);
   });
-}
-
-export async function getFileResource(
-  context: TestContext,
-  realmURL: string,
-  openFiles: OpenFiles,
-): Promise<FileResource> {
-  if (openFiles.path === undefined) {
-    throw new Error('Wrong relativePath undefined');
-  }
-  let relativePath = openFiles.path;
-  let f = file(context, () => ({
-    relativePath,
-    realmURL: new RealmPaths(realmURL).url,
-    onStateChange: (state) => {
-      if (state === 'not-found') {
-        openFiles.path = undefined;
-      }
-    },
-  }));
-  return f;
 }
 
 function changedEntry(

@@ -16,15 +16,20 @@ import {
   TestRealmAdapter,
   setupLocalIndexing,
   setupServerSentEvents,
+  setupOnSave,
   testRealmURL,
+  getMonacoContent,
+  setMonacoContent,
+  waitForSyntaxHighlighting,
   type TestContextWithSSE,
+  type TestContextWithSave,
 } from '../helpers';
 import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 import stringify from 'safe-stable-stringify';
 import { Realm } from '@cardstack/runtime-common/realm';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import percySnapshot from '@percy/ember';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 module('Acceptance | operator mode tests', function (hooks) {
   let realm: Realm;
@@ -33,13 +38,16 @@ module('Acceptance | operator mode tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
+  setupOnSave(hooks);
 
   hooks.afterEach(async function () {
     localStorage.removeItem('recent-cards');
+    localStorage.removeItem('recent-files');
   });
 
   hooks.beforeEach(async function () {
     localStorage.removeItem('recent-cards');
+    localStorage.removeItem('recent-files');
 
     adapter = new TestRealmAdapter({
       'pet.gts': `
@@ -158,10 +166,21 @@ module('Acceptance | operator mode tests', function (hooks) {
       `,
       'Pet/mango.json': {
         data: {
-          type: 'card',
-          id: `${testRealmURL}Pet/mango`,
           attributes: {
             name: 'Mango',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}pet`,
+              name: 'Pet',
+            },
+          },
+        },
+      },
+      'Pet/vangogh.json': {
+        data: {
+          attributes: {
+            name: 'Van Gogh',
           },
           meta: {
             adoptsFrom: {
@@ -174,8 +193,6 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       'Person/fadhlan.json': {
         data: {
-          type: 'card',
-          id: `${testRealmURL}Person/fadhlan`,
           attributes: {
             firstName: 'Fadhlan',
             address: {
@@ -259,9 +276,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-operator-mode-stack]').exists();
       assert.dom('[data-test-stack-card-index="0"]').exists(); // Index card opens in the stack
 
-      await waitFor(
-        '[data-test-cards-grid-item="http://test-realm/test/Pet/mango"]',
-      );
+      await waitFor(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`);
       await percySnapshot(assert);
 
       // In the URL, operatorModeEnabled is set to true and operatorModeState is set to the current stack
@@ -272,7 +287,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             stacks: [
               [
                 {
-                  id: 'http://test-realm/test/index',
+                  id: `${testRealmURL}index`,
                   format: 'isolated',
                 },
               ],
@@ -288,11 +303,11 @@ module('Acceptance | operator mode tests', function (hooks) {
         stacks: [
           [
             {
-              id: 'http://test-realm/test/Person/fadhlan',
+              id: `${testRealmURL}Person/fadhlan`,
               format: 'isolated',
             },
             {
-              id: 'http://test-realm/test/Pet/mango',
+              id: `${testRealmURL}Pet/mango`,
               format: 'isolated',
             },
           ],
@@ -326,12 +341,14 @@ module('Acceptance | operator mode tests', function (hooks) {
             stacks: [
               [
                 {
-                  id: 'http://test-realm/test/Person/fadhlan',
+                  id: `${testRealmURL}Person/fadhlan`,
                   format: 'isolated',
                 },
               ],
             ],
             submode: 'interact',
+            fileView: 'inheritance',
+            openDirs: [],
           })!,
         )}`,
       );
@@ -347,16 +364,18 @@ module('Acceptance | operator mode tests', function (hooks) {
             stacks: [
               [
                 {
-                  id: 'http://test-realm/test/Person/fadhlan',
+                  id: `${testRealmURL}Person/fadhlan`,
                   format: 'isolated',
                 },
                 {
-                  id: 'http://test-realm/test/Pet/mango',
+                  id: `${testRealmURL}Pet/mango`,
                   format: 'isolated',
                 },
               ],
             ],
             submode: 'interact',
+            fileView: 'inheritance',
+            openDirs: [],
           })!,
         )}`,
       );
@@ -372,16 +391,18 @@ module('Acceptance | operator mode tests', function (hooks) {
             stacks: [
               [
                 {
-                  id: 'http://test-realm/test/Person/fadhlan',
+                  id: `${testRealmURL}Person/fadhlan`,
                   format: 'isolated',
                 },
                 {
-                  id: 'http://test-realm/test/Pet/mango',
+                  id: `${testRealmURL}Pet/mango`,
                   format: 'edit',
                 },
               ],
             ],
             submode: 'interact',
+            fileView: 'inheritance',
+            openDirs: [],
           })!,
         )}`,
       );
@@ -392,7 +413,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         stacks: [
           [
             {
-              id: 'http://test-realm/test/Person/fadhlan',
+              id: `${testRealmURL}Person/fadhlan`,
               format: 'edit',
             },
           ],
@@ -415,11 +436,11 @@ module('Acceptance | operator mode tests', function (hooks) {
         stacks: [
           [
             {
-              id: 'http://test-realm/test/Person/fadhlan',
+              id: `${testRealmURL}Person/fadhlan`,
               format: 'isolated',
             },
             {
-              id: 'http://test-realm/test/Pet/mango',
+              id: `${testRealmURL}Pet/mango`,
               format: 'edit',
             },
           ],
@@ -452,9 +473,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
-      await click(
-        '[data-test-search-result="http://test-realm/test/Pet/mango"]',
-      );
+      await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
 
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
@@ -482,9 +501,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
-      await click(
-        '[data-test-search-result="http://test-realm/test/Person/fadhlan"]',
-      );
+      await click(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`);
 
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
@@ -502,11 +519,11 @@ module('Acceptance | operator mode tests', function (hooks) {
         stacks: [
           [
             {
-              id: 'http://test-realm/test/Person/fadhlan',
+              id: `${testRealmURL}Person/fadhlan`,
               format: 'isolated',
             },
             {
-              id: 'http://test-realm/test/Pet/mango',
+              id: `${testRealmURL}Pet/mango`,
               format: 'isolated',
             },
           ],
@@ -538,9 +555,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
       // Click on a recent search
-      await click(
-        '[data-test-search-result="http://test-realm/test/Pet/mango"]',
-      );
+      await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
 
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
@@ -588,13 +603,13 @@ module('Acceptance | operator mode tests', function (hooks) {
         stacks: [
           [
             {
-              id: 'http://test-realm/test/Person/fadhlan',
+              id: `${testRealmURL}Person/fadhlan`,
               format: 'isolated',
             },
           ],
           [
             {
-              id: 'http://test-realm/test/Pet/mango',
+              id: `${testRealmURL}Pet/mango`,
               format: 'isolated',
             },
           ],
@@ -631,12 +646,14 @@ module('Acceptance | operator mode tests', function (hooks) {
             stacks: [
               [
                 {
-                  id: 'http://test-realm/test/Person/fadhlan',
+                  id: `${testRealmURL}Person/fadhlan`,
                   format: 'isolated',
                 },
               ],
             ],
             submode: 'interact',
+            fileView: 'inheritance',
+            openDirs: [],
           })!,
         )}`,
       );
@@ -654,7 +671,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         stacks: [
           [
             {
-              id: 'http://test-realm/test/Person/fadhlan',
+              id: `${testRealmURL}Person/fadhlan`,
               format: 'isolated',
             },
           ],
@@ -682,24 +699,24 @@ module('Acceptance | operator mode tests', function (hooks) {
       // creates a recent search
       localStorage.setItem(
         'recent-cards',
-        JSON.stringify(['http://test-realm/test/Person/fadhlan']),
+        JSON.stringify([`${testRealmURL}Person/fadhlan`]),
       );
 
       let operatorModeStateParam = stringify({
         stacks: [
           [
             {
-              id: 'http://test-realm/test/Person/fadhlan',
+              id: `${testRealmURL}Person/fadhlan`,
               format: 'isolated',
             },
           ],
           [
             {
-              id: 'http://test-realm/test/index',
+              id: `${testRealmURL}index`,
               format: 'isolated',
             },
             {
-              id: 'http://test-realm/test/Pet/mango',
+              id: `${testRealmURL}Pet/mango`,
               format: 'isolated',
             },
           ],
@@ -720,9 +737,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
 
       // Click on a recent search
-      await click(
-        '[data-test-search-result="http://test-realm/test/Person/fadhlan"]',
-      );
+      await click(`[data-test-search-result="${testRealmURL}Person/fadhlan"]`);
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
@@ -753,13 +768,13 @@ module('Acceptance | operator mode tests', function (hooks) {
         stacks: [
           [
             {
-              id: 'http://test-realm/test/Person/fadhlan',
+              id: `${testRealmURL}Person/fadhlan`,
               format: 'isolated',
             },
           ],
           [
             {
-              id: 'http://test-realm/test/Pet/mango',
+              id: `${testRealmURL}Pet/mango`,
               format: 'isolated',
             },
           ],
@@ -787,19 +802,21 @@ module('Acceptance | operator mode tests', function (hooks) {
             stacks: [
               [
                 {
-                  id: 'http://test-realm/test/Person/fadhlan',
+                  id: `${testRealmURL}Person/fadhlan`,
                   format: 'isolated',
                 },
               ],
               [
                 {
-                  id: 'http://test-realm/test/Pet/mango',
+                  id: `${testRealmURL}Pet/mango`,
                   format: 'isolated',
                 },
               ],
             ],
             submode: 'code',
-            codePath: 'http://test-realm/test/Pet/mango.json',
+            codePath: `${testRealmURL}Pet/mango.json`,
+            fileView: 'inheritance',
+            openDirs: [],
           })!,
         )}`,
       );
@@ -819,18 +836,20 @@ module('Acceptance | operator mode tests', function (hooks) {
             stacks: [
               [
                 {
-                  id: 'http://test-realm/test/Person/fadhlan',
+                  id: `${testRealmURL}Person/fadhlan`,
                   format: 'isolated',
                 },
               ],
               [
                 {
-                  id: 'http://test-realm/test/Pet/mango',
+                  id: `${testRealmURL}Pet/mango`,
                   format: 'isolated',
                 },
               ],
             ],
             submode: 'interact',
+            fileView: 'inheritance',
+            openDirs: [],
           })!,
         )}`,
       );
@@ -841,13 +860,13 @@ module('Acceptance | operator mode tests', function (hooks) {
         stacks: [
           [
             {
-              id: 'http://test-realm/test/Person/fadhlan',
+              id: `${testRealmURL}Person/fadhlan`,
               format: 'isolated',
             },
           ],
         ],
         submode: 'code',
-        codePath: `http://test-realm/test/Person/fadhlan.json`,
+        codePath: `${testRealmURL}Person/fadhlan.json`,
       })!;
 
       await visit(
@@ -884,6 +903,171 @@ module('Acceptance | operator mode tests', function (hooks) {
         .dom('[data-test-code-mode-card-preview-body ] .edit-card')
         .exists();
     });
+
+    test('card inheritance panel will show json instance definition and module definition when is set to code', async function (assert) {
+      let operatorModeStateParam = stringify({
+        stacks: [
+          [
+            {
+              id: 'http://test-realm/test/Person/fadhlan',
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        codePath: `http://test-realm/test/Person/fadhlan.json`,
+      })!;
+
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam,
+        )}`,
+      );
+
+      await waitUntil(() => find('[data-test-card-inheritance-panel]'));
+      await waitUntil(() => find('[data-test-card-module-definition]'));
+      await waitUntil(() => find('[data-test-card-instance-definition]'));
+
+      assert.dom('[data-test-card-module-definition]').includesText('Person');
+      assert
+        .dom(
+          '[data-test-card-module-definition] [data-test-definition-file-extension]',
+        )
+        .includesText('.GTS');
+      assert
+        .dom(
+          '[data-test-card-module-definition] [data-test-definition-realm-name]',
+        )
+        .includesText('Test Workspace B');
+      assert
+        .dom('[data-test-card-module-definition]')
+        .doesNotHaveClass('active');
+      assert
+        .dom('[data-test-card-instance-definition]')
+        .includesText('Fadhlan');
+      assert
+        .dom(
+          '[data-test-card-instance-definition] [data-test-definition-file-extension]',
+        )
+        .includesText('.JSON');
+      assert
+        .dom(
+          '[data-test-card-instance-definition] [data-test-definition-realm-name]',
+        )
+        .includesText('Test Workspace B');
+      assert
+        .dom(
+          '[data-test-card-instance-definition] [data-test-definition-info-text]',
+        )
+        .includesText('Last saved was a few seconds ago');
+
+      assert.dom('[data-test-card-instance-definition]').hasClass('active');
+    });
+
+    test('clicking on listed card definition in the inheritance panel will display new definition and update card url', async function (assert) {
+      let operatorModeStateParam = stringify({
+        stacks: [
+          [
+            {
+              id: 'http://test-realm/test/Person/fadhlan',
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        codePath: `http://test-realm/test/Person/fadhlan.json`,
+      })!;
+
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam,
+        )}`,
+      );
+
+      await waitUntil(() => find('[data-test-card-inheritance-panel]'));
+      await waitUntil(() => find('[data-test-card-module-definition]'));
+      await waitUntil(() => find('[data-test-card-instance-definition]'));
+
+      assert.dom('[data-test-card-module-definition]').includesText('Person');
+      assert
+        .dom(
+          '[data-test-card-module-definition] [data-test-definition-file-extension]',
+        )
+        .includesText('.GTS');
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(`${testRealmURL}Person/fadhlan.json`);
+      await click('[data-test-card-module-definition]');
+      await waitUntil(() => find('[data-test-card-module-definition]'));
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(`${testRealmURL}person.gts`);
+      assert.dom('[data-test-card-module-definition]').includesText('Person');
+      assert.dom('[data-test-card-instance-definition]').doesNotExist();
+    });
+  });
+
+  test<TestContextWithSSE>('stack item live updates when index changes', async function (assert) {
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Person/fadhlan`],
+        },
+      },
+    ];
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    })!;
+    let operatorModeStateService = this.owner.lookup(
+      'service:operator-mode-state-service',
+    ) as OperatorModeStateService;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    assert
+      .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
+      .hasText('Fadhlan');
+    await this.expectEvents(
+      assert,
+      realm,
+      adapter,
+      expectedEvents,
+      async () => {
+        await realm.write(
+          'Person/fadhlan.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'FadhlanXXX',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
+                },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+      },
+    );
+    await waitUntil(() => operatorModeStateService.reloadItem.isIdle);
+    assert
+      .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
+      .hasText('FadhlanXXX');
   });
 
   test<TestContextWithSSE>('card preview live updates when index changes', async function (assert) {
@@ -900,13 +1084,13 @@ module('Acceptance | operator mode tests', function (hooks) {
       stacks: [
         [
           {
-            id: 'http://test-realm/test/Person/fadhlan',
+            id: `${testRealmURL}Person/fadhlan`,
             format: 'isolated',
           },
         ],
       ],
       submode: 'code',
-      codePath: `http://test-realm/test/Person/fadhlan.json`,
+      codePath: `${testRealmURL}Person/fadhlan.json`,
     })!;
     await visit(
       `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
@@ -950,6 +1134,390 @@ module('Acceptance | operator mode tests', function (hooks) {
       .includesText('FadhlanXXX');
   });
 
+  test('card instance JSON displayed in monaco editor', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Pet/mango`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}Pet/mango.json`,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitUntil(() => find('[data-test-editor]'));
+    assert.deepEqual(JSON.parse(getMonacoContent()), {
+      data: {
+        attributes: {
+          name: 'Mango',
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}pet`,
+            name: 'Pet',
+          },
+        },
+      },
+    });
+    await waitForSyntaxHighlighting('"Pet"', 'rgb(4, 81, 165)');
+    await percySnapshot(assert);
+  });
+
+  test<TestContextWithSave>('card instance change made in monaco editor is auto-saved', async function (assert) {
+    assert.expect(1);
+
+    let expected: LooseSingleCardDocument = {
+      data: {
+        attributes: {
+          name: 'MangoXXX',
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}pet`,
+            name: 'Pet',
+          },
+        },
+      },
+    };
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Pet/mango`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}Pet/mango.json`,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitUntil(() => find('[data-test-editor]'));
+
+    this.onSave((json) => {
+      assert.strictEqual(json.data.attributes?.name, 'MangoXXX');
+    });
+
+    setMonacoContent(JSON.stringify(expected));
+
+    await waitFor('[data-test-save-idle]');
+  });
+
+  test<TestContextWithSave>('invalid JSON card instance change made in monaco editor is NOT auto-saved', async function (assert) {
+    assert.expect(1);
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Pet/mango`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}Pet/mango.json`,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitUntil(() => find('[data-test-editor]'));
+
+    this.onSave(() => {
+      assert.ok(false, `save should never happen`);
+    });
+    setMonacoContent(`{ this is not actual JSON }`);
+
+    // autosave happens 500ms after inactivity, so we wait 1s to make sure save
+    // doesn't occur
+    await new Promise((res) => setTimeout(res, 1000));
+
+    assert.strictEqual(getMonacoContent(), `{ this is not actual JSON }`);
+  });
+
+  test<
+    TestContextWithSave & TestContextWithSSE
+  >('card definition change made in monaco editor is auto-saved', async function (assert) {
+    assert.expect(2);
+
+    let expected = `
+      import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Pet extends CardDef {
+        static displayName = 'PetXXX';  // this is the change
+        @field name = contains(StringCard);
+        @field title = contains(StringCard, {
+          computeVia: function (this: Pet) {
+            return this.name;
+          },
+        });
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <h3 data-test-pet={{@model.name}}>
+              <@fields.name/>
+            </h3>
+          </template>
+        }
+      }
+    `;
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [
+            `${testRealmURL}pet.gts`,
+            `${testRealmURL}Pet/mango`,
+            `${testRealmURL}Pet/vangogh`,
+            `${testRealmURL}Person/fadhlan`,
+            `${testRealmURL}person`,
+          ],
+        },
+      },
+    ];
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Pet/mango`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}pet.gts`,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitUntil(() => find('[data-test-editor]'));
+
+    await this.expectEvents(
+      assert,
+      realm,
+      adapter,
+      expectedEvents,
+      async () => {
+        setMonacoContent(expected);
+        await waitFor('[data-test-save-idle]');
+      },
+    );
+
+    let fileRef = await adapter.openFile('pet.gts');
+    if (!fileRef) {
+      throw new Error('file not found');
+    }
+    assert.deepEqual(
+      fileRef.content as string,
+      expected,
+      'pet.gts changes were saved',
+    );
+  });
+
+  test<TestContextWithSSE>('Can delete a card instance from code mode with no recent files to fall back on', async function (assert) {
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Pet/vangogh`],
+        },
+      },
+    ];
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+          {
+            id: `${testRealmURL}Pet/vangogh`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    })!;
+    localStorage.setItem(
+      'recent-cards',
+      JSON.stringify([
+        `${testRealmURL}Pet/vangogh`,
+        `${testRealmURL}Person/fadhlan`,
+      ]),
+    );
+    localStorage.setItem(
+      'recent-files',
+      JSON.stringify([`${testRealmURL}Pet/vangogh.json`]),
+    );
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"`)
+      .exists();
+    assert.dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"`).exists();
+
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    await waitUntil(() => find('[data-test-editor]'));
+    assert.strictEqual(
+      localStorage.getItem('recent-files'),
+      JSON.stringify([`${testRealmURL}Pet/vangogh.json`]),
+    );
+
+    await waitFor(`[data-test-action-button="Delete"]`);
+    await click('[data-test-action-button="Delete"]');
+    await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/vangogh"]`);
+    await percySnapshot(assert);
+    await this.expectEvents(
+      assert,
+      realm,
+      adapter,
+      expectedEvents,
+      async () => {
+        await click('[data-test-confirm-delete-button]');
+      },
+    );
+    await waitUntil(() => find('[data-test-empty-code-mode]'));
+    await percySnapshot(
+      'Acceptance | operator mode tests | Can delete a card instance from code mode with no recent files - empty code mode',
+    );
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Interact"]');
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"`)
+      .exists();
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"`)
+      .doesNotExist('stack item removed');
+    assert.deepEqual(
+      localStorage.getItem('recent-cards'),
+      JSON.stringify([`${testRealmURL}Person/fadhlan`]),
+      'the deleted card has been removed from recent cards',
+    );
+    assert.deepEqual(
+      localStorage.getItem('recent-files'),
+      '[]',
+      'the deleted card has been removed from recent files',
+    );
+
+    let notFound = await adapter.openFile('Pet/vangogh.json');
+    assert.strictEqual(notFound, undefined, 'file ref does not exist');
+  });
+
+  test<TestContextWithSSE>('Can delete a card instance from code mode and fall back to recent file', async function (assert) {
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Pet/vangogh`],
+        },
+      },
+    ];
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+          {
+            id: `${testRealmURL}Pet/vangogh`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    })!;
+    localStorage.setItem(
+      'recent-files',
+      JSON.stringify([
+        `${testRealmURL}Pet/vangogh.json`,
+        `${testRealmURL}Pet/mango.json`,
+      ]),
+    );
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"`)
+      .exists();
+    assert.dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"`).exists();
+
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    await waitUntil(() => find('[data-test-editor]'));
+    assert.strictEqual(
+      localStorage.getItem('recent-files'),
+      JSON.stringify([
+        `${testRealmURL}Pet/vangogh.json`,
+        `${testRealmURL}Pet/mango.json`,
+      ]),
+    );
+
+    await waitFor(`[data-test-action-button="Delete"]`);
+    await click('[data-test-action-button="Delete"]');
+    await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/vangogh"]`);
+    await this.expectEvents(
+      assert,
+      realm,
+      adapter,
+      expectedEvents,
+      async () => {
+        await click('[data-test-confirm-delete-button]');
+      },
+    );
+    await waitUntil(() => find('[data-test-editor]'));
+    // TODO make an assertion around the URL bar when the bug for
+    // updating the URL bar correctly is fixed
+    assert.dom('[data-test-definition-name]').hasText('Pet');
+    assert.deepEqual(JSON.parse(getMonacoContent()), {
+      data: {
+        attributes: {
+          name: 'Mango',
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}pet`,
+            name: 'Pet',
+          },
+        },
+      },
+    });
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Interact"]');
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"`)
+      .exists();
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"`)
+      .doesNotExist('stack item removed');
+    assert.deepEqual(
+      localStorage.getItem('recent-files'),
+      JSON.stringify([`${testRealmURL}Pet/mango.json`]),
+      'the deleted card has been removed from recent files',
+    );
+  });
+
   module('0 stacks', function () {
     test('Clicking card in search panel opens card on a new stack', async function (assert) {
       let operatorModeStateParam = stringify({
@@ -974,14 +1542,10 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       assert.dom('[data-test-search-sheet]').hasClass('results'); // Search open
 
-      await waitFor(
-        '[data-test-search-result="http://test-realm/test/Pet/mango"]',
-      );
+      await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
 
       // Click on search result
-      await click(
-        '[data-test-search-result="http://test-realm/test/Pet/mango"]',
-      );
+      await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
 
       assert.dom('[data-test-search-sheet]').doesNotHaveClass('results'); // Search closed
 

@@ -1,17 +1,16 @@
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 import { BoxelInput } from '@cardstack/boxel-ui';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { type RealmInfo } from '@cardstack/runtime-common';
-import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import URLBarResource, {
+  urlBarResource,
+} from '@cardstack/host/resources/url-bar';
 
 interface Signature {
   Element: HTMLElement;
   Args: {
-    onEnterPressed: (url: URL) => void;
     loadFileError: string | null;
     resetLoadFileError: () => void;
     realmInfo: RealmInfo | null;
@@ -35,19 +34,20 @@ export default class CardURLBar extends Component<Signature> {
         {{svgJar 'icon-globe' width='22px' height='22px'}}
         <BoxelInput
           class='url-input'
-          @value={{this.url}}
-          @onInput={{this.onInput}}
-          @onKeyPress={{this.onKeyPress}}
-          @onFocus={{this.toggleFocus}}
-          @onBlur={{this.toggleFocus}}
+          @value={{this.urlBar.url}}
+          @onInput={{this.urlBar.onInput}}
+          @onKeyPress={{this.urlBar.onKeyPress}}
+          @onBlur={{this.urlBar.onBlur}}
+          @onFocus={{this.urlBar.onFocus}}
           data-test-card-url-bar-input
         />
       </div>
-      {{#if this.showErrorMessage}}
+      {{#if this.urlBar.showErrorMessage}}
         <div class='error-message' data-test-card-url-bar-error>
-          <span>{{this.errorMessage}}</span>
+          <span>{{this.urlBar.errorMessage}}</span>
         </div>
       {{/if}}
+
     </div>
     <style>
       :global(:root) {
@@ -115,15 +115,18 @@ export default class CardURLBar extends Component<Signature> {
   </template>
 
   @service declare operatorModeStateService: OperatorModeStateService;
-  @service declare cardService: CardService;
-  @tracked url: string | null = null;
-  @tracked isFocused = false;
-  @tracked isInvalidURL = false;
 
-  constructor(args: any, owner: any) {
-    super(args, owner);
+  urlBar: URLBarResource = urlBarResource(this, () => ({
+    getValue: () => this.codePath,
+    setValue: (url: string) => {
+      this.operatorModeStateService.updateCodePath(new URL(url));
+    },
+    setValueError: this.args.loadFileError,
+    resetValueError: this.args.resetLoadFileError,
+  }));
 
-    this.url = this.operatorModeStateService.state.codePath
+  get codePath() {
+    return this.operatorModeStateService.state.codePath
       ? this.operatorModeStateService.state.codePath.toString()
       : null;
   }
@@ -136,56 +139,13 @@ export default class CardURLBar extends Component<Signature> {
     return this.args.realmInfo?.name;
   }
 
-  get showErrorMessage() {
-    return this.isInvalidURL || this.args.loadFileError;
-  }
-
-  get errorMessage() {
-    if (this.isInvalidURL) {
-      return 'Not a valid URL';
-    } else {
-      return this.args.loadFileError;
-    }
-  }
-
   get cssClasses() {
-    if (this.showErrorMessage) {
+    if (this.urlBar.showErrorMessage) {
       return 'card-url-bar error';
-    } else if (this.isFocused) {
+    } else if (this.urlBar.isFocused) {
       return 'card-url-bar focused';
     } else {
       return 'card-url-bar';
     }
-  }
-
-  @action
-  onInput(url: string) {
-    this.url = url;
-    this.isInvalidURL = false;
-    this.args.resetLoadFileError();
-  }
-
-  @action
-  onKeyPress(event: KeyboardEvent) {
-    if (event.key !== 'Enter' || !this.url) {
-      return;
-    }
-
-    let url;
-    try {
-      url = new URL(this.url);
-    } catch (e) {
-      this.isInvalidURL = true;
-    }
-
-    if (url) {
-      this.operatorModeStateService.updateCodePath(url);
-      this.args.onEnterPressed(url);
-    }
-  }
-
-  @action
-  toggleFocus() {
-    this.isFocused = !this.isFocused;
   }
 }

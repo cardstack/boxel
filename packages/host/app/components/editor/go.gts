@@ -14,10 +14,11 @@ import {
   logger,
 } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
-import merge from 'lodash/merge';
+import MonacoService from '@cardstack/host/services/monaco-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type CardService from '@cardstack/host/services/card-service';
 import type MessageService from '@cardstack/host/services/message-service';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import { file, FileResource, isReady } from '@cardstack/host/resources/file';
 import CardEditor from '@cardstack/host/components/card-editor';
 import Module from './module';
@@ -31,8 +32,14 @@ import type {
   MonacoSDK,
   IStandaloneCodeEditor,
 } from '@cardstack/host/services/monaco-service';
-import type { OpenFiles } from '@cardstack/host/controllers/code';
 import { maybe } from '@cardstack/host/resources/maybe';
+import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+import {
+  chooseCard,
+  catalogEntryRef,
+  createNewCard,
+} from '@cardstack/runtime-common';
+import { AddButton, Tooltip } from '@cardstack/boxel-ui';
 import { registerDestructor } from '@ember/destroyable';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
@@ -43,7 +50,6 @@ const waiter = buildWaiter('code-route:load-card-waiter');
 
 interface Signature {
   Args: {
-    openFiles: OpenFiles;
     monaco: MonacoSDK;
     onEditorSetup?(editor: IStandaloneCodeEditor): void;
   };
@@ -53,7 +59,15 @@ export default class Go extends Component<Signature> {
   <template>
     <div class='main' data-test-isLoadIdle={{this.loadCard.isIdle}}>
       <div class='main-column'>
-        <FileTree @url={{ownRealmURL}} @openFiles={{@openFiles}} />
+        <FileTree @url={{ownRealmURL}} />
+        <Tooltip @placement='left'>
+          <:trigger>
+            <AddButton {{on 'click' this.createNew}} />
+          </:trigger>
+          <:content>
+            Create a new card
+          </:content>
+        </Tooltip>
         <RecentFiles />
       </div>
       {{#if (isReady this.openFile.current)}}
@@ -145,6 +159,8 @@ export default class Go extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
+  @service declare operatorModeStateService: OperatorModeStateService;
+  @service declare monacoService: MonacoService;
   @tracked jsonError: string | undefined;
   @tracked card: CardDef | undefined;
   // note this is only subscribed to events from our own realm
@@ -211,17 +227,17 @@ export default class Go extends Component<Signature> {
     try {
       return JSON.parse(content);
     } catch (err) {
-      log.warn(
-        `content for ${this.args.openFiles.path} is not valid JSON, skipping write`,
-      );
+      log.warn(`content ${content} is not valid JSON, skipping write`);
       return;
     }
   }
 
   get language(): string | undefined {
-    if (this.args.openFiles.path) {
+    if (this.operatorModeStateService.state.codePath) {
       const editorLanguages = this.args.monaco.languages.getLanguages();
-      let extension = '.' + this.args.openFiles.path.split('.').pop();
+      let extension =
+        '.' +
+        this.operatorModeStateService.state.codePath.pathname.split('.').pop();
       let language = editorLanguages.find((lang) =>
         lang.extensions?.find((ext) => ext === extension),
       );
@@ -231,14 +247,15 @@ export default class Go extends Component<Signature> {
   }
 
   openFile = maybe(this, (context) => {
-    const relativePath = this.args.openFiles.path;
+    const relativePath =
+      this.operatorModeStateService.state.codePath?.toString();
     if (relativePath) {
       return file(context, () => ({
-        relativePath,
-        realmURL: new RealmPaths(this.cardService.defaultURL).url,
+        url: new RealmPaths(this.cardService.defaultURL).fileURL(relativePath)
+          .href,
         onStateChange: (state) => {
           if (state === 'not-found') {
-            this.args.openFiles.path = undefined;
+            this.operatorModeStateService.state.codePath = null;
           }
         },
       }));
@@ -256,11 +273,25 @@ export default class Go extends Component<Signature> {
 
   async saveFileSerializedCard(json: SingleCardDocument) {
     let realmPath = new RealmPaths(this.cardService.defaultURL);
-    let url = realmPath.fileURL(
-      this.args.openFiles.path!.replace(/\.json$/, ''),
-    );
+    let openPath = this.operatorModeStateService.state.codePath;
+    if (!openPath) {
+      return;
+    }
 
-    let doc = this.reverseFileSerialization(json, url.href);
+    let url = realmPath.fileURL(openPath.toString()!.replace(/\.json$/, ''));
+    if (this.openFile.current?.state !== 'ready') {
+      throw new Error(`Cannot save, ${url} is not open`);
+    }
+    let realmURL = this.openFile.current.realmURL;
+    if (!realmURL) {
+      throw new Error(`Cannot determine realm for ${url}`);
+    }
+
+    let doc = this.monacoService.reverseFileSerialization(
+      json,
+      url.href,
+      realmURL,
+    );
     let card: CardDef | undefined;
     try {
       card = await this.cardService.createFromSerialized(doc.data, doc, url);
@@ -331,11 +362,11 @@ export default class Go extends Component<Signature> {
   }
 
   get path() {
-    return this.args.openFiles.path ?? '/';
+    return this.operatorModeStateService.state.codePath ?? '/';
   }
 
   get isRunnable(): boolean {
-    let filename = this.path;
+    let filename = this.path.toString();
     return ['.gjs', '.js', '.gts', '.ts'].some((extension) =>
       filename.endsWith(extension),
     );
@@ -367,38 +398,32 @@ export default class Go extends Component<Signature> {
     }
   });
 
-  // File serialization is a special type of card serialization that the host would
-  // otherwise not encounter, but it does here since it's using the accept header
-  // application/vnd.card+source to load the file that we see in monaco. This is
-  // the only place that we use this accept header for loading card instances--everywhere
-  // else we use application/vnd.card+json. Because of this the resulting JSON has
-  // different semantics than the host would normally encounter--for instance, this
-  // file serialization format is always missing an ID (because the ID is the filename).
-  // Whereas for card isntances obtained via application/vnd.card+json, a missing ID
-  // means that the card is not saved.
-  //
-  // In order to prevent confusion around which type of serialization you are dealing
-  // with, we convert the file serialization back to the form the host is accustomed
-  // to (application/vnd.card+json) as soon as possible so that the semantics around
-  // file serialization don't leak outside of where they are immediately used.
-  private reverseFileSerialization(
-    fileSerializationJSON: SingleCardDocument,
-    id: string,
-  ): SingleCardDocument {
-    let realmURL = this.cardService.getRealmURLFor(new URL(id))?.href;
-    if (!realmURL) {
-      throw new Error(`Could not determine realm for url ${id}`);
-    }
-    return merge({}, fileSerializationJSON, {
-      data: {
-        id,
-        type: 'card',
-        meta: {
-          realmURL,
-        },
+  @action
+  async createNew() {
+    this.createNewCard.perform();
+  }
+
+  private createNewCard = restartableTask(async () => {
+    let card = await chooseCard<CatalogEntry>({
+      filter: {
+        on: catalogEntryRef,
+        eq: { isPrimitive: false },
       },
     });
-  }
+    if (!card) {
+      return;
+    }
+    let newCard = await createNewCard(card.ref, new URL(card.id));
+    if (!newCard) {
+      throw new Error(
+        `bug: could not create new card from catalog entry ${JSON.stringify(
+          catalogEntryRef,
+        )}`,
+      );
+    }
+    let path = `${newCard.id.slice(ownRealmURL.length)}.json`;
+    this.operatorModeStateService.state.codePath = new URL(path);
+  });
 }
 
 declare module '@glint/environment-ember-loose/registry' {

@@ -109,7 +109,7 @@ async function sendMessage(
   content: string,
   previous: string | undefined,
 ) {
-  console.log('Sending', content);
+  log.info('Sending', content);
   if (content.startsWith('option>')) {
     content = content.replace('option>', '');
   }
@@ -161,7 +161,6 @@ async function sendOption(client: MatrixClient, room: Room, content: string) {
   return await client.sendEvent(room.roomId, 'm.room.message', messageObject);
 }
 
-// TODO: make this yield events to send rather than sending them directly
 async function sendStream(
   stream: AsyncIterable<ChatCompletionChunk>,
   client: MatrixClient,
@@ -279,7 +278,7 @@ async function getResponse(history: IRoomEvent[]) {
           log.info('Auto-joined %s', member.roomId);
         })
         .catch(function (err) {
-          console.log(
+          log.info(
             'Error joining this room, typically happens when a user invites then leaves before this is joined',
             err,
           );
@@ -294,7 +293,7 @@ async function getResponse(history: IRoomEvent[]) {
       if (!room) {
         return;
       }
-      console.log(
+      log.info(
         '(%s) %s :: %s',
         room?.name,
         event.getSender(),

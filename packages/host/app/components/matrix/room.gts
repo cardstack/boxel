@@ -15,6 +15,7 @@ import {
 import { getRoom } from '../../resources/room';
 import { TrackedMap } from 'tracked-built-ins';
 import {
+  isMatrixCardError,
   chooseCard,
   baseCardRef,
   catalogEntryRef,
@@ -84,7 +85,17 @@ export default class Room extends Component<RoomArgs> {
     {{/if}}
 
     {{#if this.objective}}
-      <div class='room__objective'> <this.objectiveComponent /> </div>
+      <div class='room__objective'>
+        {{#if this.objectiveError}}
+          <div data-test-objective-error class='error'>
+            Error: cannot render card
+            {{this.objectiveError.id}}:
+            {{this.objectiveError.error.message}}
+          </div>
+        {{else}}
+          <this.objectiveComponent />
+        {{/if}}
+      </div>
     {{/if}}
 
     <div
@@ -262,6 +273,11 @@ export default class Room extends Component<RoomArgs> {
       .invite-btn {
         margin-top: var(--boxel-sp-xs);
       }
+
+      .error {
+        color: var(--boxel-danger);
+        font-weight: 'bold';
+      }
     </style>
   </template>
 
@@ -297,6 +313,13 @@ export default class Room extends Component<RoomArgs> {
 
   private get objective() {
     return this.matrixService.roomObjectives.get(this.args.roomId);
+  }
+
+  private get objectiveError() {
+    if (isMatrixCardError(this.objective)) {
+      return this.objective;
+    }
+    return;
   }
 
   private patchCard = (cardId: string, attributes: any) => {
@@ -350,7 +373,7 @@ export default class Room extends Component<RoomArgs> {
   }
 
   private get objectiveComponent() {
-    if (this.objective) {
+    if (this.objective && !isMatrixCardError(this.objective)) {
       return this.objective.constructor.getComponent(
         this.objective,
         'embedded',

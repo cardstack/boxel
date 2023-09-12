@@ -1,6 +1,34 @@
 import { IRoomEvent } from 'matrix-js-sdk';
 
+type ChatCompletion = {
+  choices: Array<{
+    delta?: {
+      content?: string | null | undefined;
+    };
+  }>;
+};
+
+export enum ParsingMode {
+  Text,
+  Command,
+}
+
+export type Message = {
+  type: ParsingMode;
+  content: string;
+};
+
 export function constructHistory(history: IRoomEvent[]) {
+  /**
+   * We send a lot of events to create messages,
+   * as we stream updates to the UI. This works by
+   * sending a new event with the full content and
+   * information about which event it should replace
+   *
+   * This function is to construct the chat as a user
+   * would see it - with only the latest event for each
+   * message.
+   */
   const latestEventsMap = new Map<string, IRoomEvent>();
   for (let event of history) {
     let content = event.content;
@@ -24,17 +52,14 @@ export function constructHistory(history: IRoomEvent[]) {
   return latestEvents;
 }
 
-type ChatCompletion = {
-  choices: Array<{
-    delta?: {
-      content?: string | null | undefined;
-    };
-  }>;
-};
-
 export async function* extractContentFromStream(
   iterable: AsyncIterable<ChatCompletion>,
 ) {
+  /**
+   * The OpenAI API returns a stream of updates, which
+   * have extra details that we don't need, this function
+   * extracts out just the content from the stream.
+   */
   for await (const part of iterable) {
     if (part.choices[0]?.delta?.content) {
       yield part.choices[0].delta.content;
@@ -42,17 +67,19 @@ export async function* extractContentFromStream(
   }
 }
 
-export enum ParsingMode {
-  Text,
-  Command,
-}
-
-export type Message = {
-  type: ParsingMode;
-  content: string;
-};
-
 export async function* processStream(stream: AsyncIterable<string>) {
+  /**
+   * The stream of tokens from GPT is a mix of text and structured data.
+   * The text data should be yielded token by token so that the users
+   * can see the text as it is generated.
+   *
+   * However we need to also detect structured content and extract that
+   * out so that we can batch it up and send it to the server as one
+   * message.
+   *
+   * TODO: This is fragile, and will be replace with a proper parser
+   * as we remove the <option> format of messages.
+   */
   let content = '';
   let currentParsingMode: ParsingMode = ParsingMode.Text;
   for await (const token of stream) {

@@ -122,7 +122,6 @@ module('processStream', () => {
       '1',
       ':',
       '\n',
-      '```',
       '<option',
       '>\n',
       '{',
@@ -168,27 +167,30 @@ module('processStream', () => {
       '</',
       'option',
       '>',
-      '```',
     ];
     const expectedResult = [
       {
-        type: 0,
+        type: ParsingMode.Text,
         content: 'Certainly',
       },
       {
-        type: 0,
-        content: 'Certainly: \n\nOption',
+        type: ParsingMode.Text,
+        content: 'Certainly:',
       },
       {
-        type: 0,
-        content: 'Certainly: \n\nOption 1',
+        type: ParsingMode.Text,
+        content: 'Certainly:\n\nOption',
       },
       {
-        type: 0,
-        content: 'Certainly: \n\nOption 1:',
+        type: ParsingMode.Text,
+        content: 'Certainly:\n\nOption 1',
       },
       {
-        type: 1,
+        type: ParsingMode.Text,
+        content: 'Certainly:\n\nOption 1:',
+      },
+      {
+        type: ParsingMode.Command,
         content:
           '\n{  \n  "id": "http://localhost:4201/drafts/Pet/2",  \n  "patch": {    \n    "firstName": "ModifiedName"  \n  }\n}\n',
       },

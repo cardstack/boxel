@@ -28,6 +28,7 @@ import {
   blur,
   triggerEvent,
   triggerKeyEvent,
+  typeIn,
 } from '@ember/test-helpers';
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -749,6 +750,104 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor('[data-test-person="Fadhlan"]');
     assert.dom('[data-test-person]').hasText('Fadhlan');
+  });
+
+  test('it can handle an error in a card attached to a matrix message', async function (assert) {
+    this.owner.register('service:matrixService', MockMatrixService);
+    let matrixService = this.owner.lookup(
+      'service:matrixService',
+    ) as MockMatrixService;
+    matrixService.cardAPI = cardApi;
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    let operatorModeStateService = this.owner.lookup(
+      'service:operator-mode-state-service',
+    ) as OperatorModeStateService;
+
+    await operatorModeStateService.restore({
+      stacks: [[]],
+    });
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await click('[data-test-open-chat]');
+    matrixService.createAndJoinRoom('testroom');
+    addRoomEvent(matrixService, {
+      event_id: 'event1',
+      room_id: 'testroom',
+      state_key: 'state',
+      type: 'm.room.message',
+      origin_server_ts: Date.now(),
+      content: {
+        body: 'card with error',
+        formatted_body: 'card with error',
+        msgtype: 'org.boxel.card',
+        instance: {
+          data: {
+            id: 'http://this-is-not-a-real-card.com',
+            type: 'card',
+            attributes: {
+              firstName: 'Boom',
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://not-a-real-card.com',
+                name: 'Boom',
+              },
+            },
+          },
+        },
+      },
+    });
+    await waitFor('[data-test-enter-room="test_a"]');
+    await click('[data-test-enter-room="test_a"]');
+    await waitFor('[data-test-card-error]');
+    assert
+      .dom('[data-test-card-error]')
+      .hasText(
+        'Error: cannot render card http://this-is-not-a-real-card.com: Failed to fetch',
+      );
+  });
+
+  test('it can handle an error in a room objective card', async function (assert) {
+    this.owner.register('service:matrixService', MockMatrixService);
+    let matrixService = this.owner.lookup(
+      'service:matrixService',
+    ) as MockMatrixService;
+    matrixService.roomObjectives.set('testroom', {
+      error: new Error('error rendering room objective'),
+    });
+    matrixService.cardAPI = cardApi;
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    let operatorModeStateService = this.owner.lookup(
+      'service:operator-mode-state-service',
+    ) as OperatorModeStateService;
+
+    await operatorModeStateService.restore({
+      stacks: [[]],
+    });
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await click('[data-test-open-chat]');
+    matrixService.createAndJoinRoom('testroom');
+    await waitFor('[data-test-enter-room="test_a"]');
+    await click('[data-test-enter-room="test_a"]');
+    await waitFor('[data-test-objective-error]');
+    assert
+      .dom('[data-test-objective-error]')
+      .hasText('Error: cannot render card : error rendering room objective');
   });
 
   test('it loads a card and renders its isolated view', async function (assert) {
@@ -1903,7 +2002,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await fillIn(`[data-test-search-input] input`, `pet`);
     assert.dom(`[data-test-search-input] input`).hasValue('pet');
-    await waitFor('[data-test-card-catalog-item]', { count: 2 });
+    await waitFor('[data-test-card-catalog-item]');
     await click(`[data-test-select="${testRealmURL}CatalogEntry/pet-room"]`);
     assert
       .dom(
@@ -2254,6 +2353,8 @@ module('Integration | operator-mode', function (hooks) {
       'keypress',
       'Enter',
     );
+
+    await waitFor('[data-test-card-url-bar-error]');
     assert.dom('[data-test-card-url-bar-error]').hasText('File is not found');
 
     await fillIn('[data-test-card-url-bar-input]', `Wrong URL`);
@@ -2263,5 +2364,102 @@ module('Integration | operator-mode', function (hooks) {
       'Enter',
     );
     assert.dom('[data-test-card-url-bar-error]').hasText('Not a valid URL');
+  });
+
+  test(`card url bar URL reacts to external changes of code path when user is not editing`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    assert.dom('[data-test-submode-switcher]').exists();
+    assert.dom('[data-test-submode-switcher]').hasText('Interact');
+
+    await click(
+      '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
+    );
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    assert.dom('[data-test-submode-switcher]').hasText('Code');
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-card-url-bar-realm-info]')
+        ?.textContent?.includes('Operator Mode Workspace'),
+    );
+
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}BlogPost/1.json`);
+
+    let operatorModeStateService = this.owner.lookup(
+      'service:operator-mode-state-service',
+    ) as OperatorModeStateService;
+    operatorModeStateService.updateCodePath(
+      new URL(`${testRealmURL}person.gts`),
+    );
+    console.log(operatorModeStateService.state.codePath);
+
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-card-url-bar-realm-info]')
+        ?.textContent?.includes('Operator Mode Workspace'),
+    );
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}person.gts`);
+  });
+
+  test(`card url bar URL does not react to external changes when user is editing`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    assert.dom('[data-test-submode-switcher]').exists();
+    assert.dom('[data-test-submode-switcher]').hasText('Interact');
+
+    await click(
+      '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
+    );
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    assert.dom('[data-test-submode-switcher]').hasText('Code');
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-card-url-bar-realm-info]')
+        ?.textContent?.includes('Operator Mode Workspace'),
+    );
+
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}BlogPost/1.json`);
+
+    let someRandomText = 'I am still typing a url';
+    await typeIn('[data-test-card-url-bar-input]', someRandomText);
+
+    let operatorModeStateService = this.owner.lookup(
+      'service:operator-mode-state-service',
+    ) as OperatorModeStateService;
+    operatorModeStateService.updateCodePath(
+      new URL(`${testRealmURL}person.gts`),
+    );
+
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}BlogPost/1.json${someRandomText}`);
+
+    blur('[data-test-card-url-bar-input]');
+
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}BlogPost/1.json${someRandomText}`);
   });
 });
