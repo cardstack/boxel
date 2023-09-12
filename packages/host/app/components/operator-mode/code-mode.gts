@@ -432,7 +432,6 @@ export default class CodeMode extends Component<Signature> {
       @loadFileError={{this.loadFileError}}
       @resetLoadFileError={{this.resetLoadFileError}}
       @realmInfo={{this.realmInfo}}
-      @openFile={{this.openFile}}
       class='card-url-bar'
     />
     <div

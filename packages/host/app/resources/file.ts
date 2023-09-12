@@ -7,6 +7,7 @@ import { logger } from '@cardstack/runtime-common';
 import LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
 import type CodeService from '@cardstack/host/services/code-service';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 const log = logger('resource:file');
 
@@ -14,7 +15,6 @@ interface Args {
   named: {
     url: string;
     onStateChange?: (state: FileResource['state']) => void;
-    onUrlRedirect?: () => void;
   };
 }
 
@@ -56,6 +56,7 @@ class _FileResource extends Resource<Args> {
   @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
   @service declare codeService: CodeService;
+  @service declare operatorModeStateService: OperatorModeStateService;
 
   constructor(owner: unknown) {
     super(owner);
@@ -101,6 +102,9 @@ class _FileResource extends Resource<Args> {
     }
     if (newState.state === 'ready') {
       this.codeService.addRecentFile(newState.url);
+      if (this._url != newState.url) {
+        this.operatorModeStateService.updateCodePath(new URL(newState.url));
+      }
     }
   }
 
