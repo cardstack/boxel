@@ -1,5 +1,5 @@
 import { module, test } from 'qunit';
-import { visit, click, waitFor } from '@ember/test-helpers';
+import { visit, click, waitFor, find, waitUntil } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { baseRealm } from '@cardstack/runtime-common';
 import {
@@ -137,21 +137,22 @@ module('Acceptance | code mode tests', function (hooks) {
   });
 
   test('defaults to inheritance view and can toggle to file view', async function (assert) {
-    let codeModeStateParam = stringify({
+    let operatorModeStateParam = stringify({
       stacks: [
         [
           {
-            id: 'http://test-realm/test/index',
+            id: 'http://test-realm/test/Person/1',
             format: 'isolated',
           },
         ],
       ],
       submode: 'code',
+      codePath: `http://test-realm/test/Person/1.json`,
     })!;
 
     await visit(
       `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        codeModeStateParam,
+        operatorModeStateParam,
       )}`,
     );
 
@@ -160,6 +161,8 @@ module('Acceptance | code mode tests', function (hooks) {
       .hasAttribute('aria-label', 'Inheritance');
     assert.dom('[data-test-inheritance-toggle]').hasClass('active');
     assert.dom('[data-test-file-browser-toggle]').doesNotHaveClass('active');
+
+    await waitUntil(() => find('[data-test-card-inheritance-panel]'));
 
     assert.dom('[data-test-card-inheritance-panel]').exists();
     assert.dom('[data-test-file]').doesNotExist();
@@ -183,13 +186,14 @@ module('Acceptance | code mode tests', function (hooks) {
       stacks: [
         [
           {
-            id: 'http://test-realm/test/index',
+            id: 'http://test-realm/test/Person/1',
             format: 'isolated',
           },
         ],
       ],
       submode: 'code',
       fileView: 'browser',
+      codePath: `http://test-realm/test/Person/1.json`,
     })!;
 
     await visit(
@@ -197,6 +201,7 @@ module('Acceptance | code mode tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
+
     await waitFor('[data-test-file]');
 
     assert
@@ -226,12 +231,14 @@ module('Acceptance | code mode tests', function (hooks) {
       stacks: [
         [
           {
-            id: 'http://test-realm/test/index',
+            id: 'http://test-realm/test/Person/1',
             format: 'isolated',
           },
         ],
       ],
       submode: 'code',
+      fileView: 'browser',
+      codePath: `http://test-realm/test/Person/1.json`,
     })!;
 
     await visit(
@@ -239,11 +246,12 @@ module('Acceptance | code mode tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
-    await click('[data-test-file-browser-toggle]');
-    await waitFor('[data-test-file]');
+
+    await waitFor('[data-test-file="person.gts"]');
 
     await click('[data-test-file="person.gts"]');
 
+    await waitFor('[data-test-file="person.gts"]');
     assert.dom('[data-test-file="person.gts"]').hasClass('selected');
 
     await click('[data-test-directory="Person/"]');
@@ -257,13 +265,14 @@ module('Acceptance | code mode tests', function (hooks) {
       stacks: [
         [
           {
-            id: 'http://test-realm/test/index',
+            id: 'http://test-realm/test/Person/1',
             format: 'isolated',
           },
         ],
       ],
       submode: 'code',
       fileView: 'browser',
+      codePath: `http://test-realm/test/Person/1.json`,
       openDirs: ['Person/'],
     })!;
 
