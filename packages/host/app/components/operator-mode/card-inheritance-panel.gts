@@ -17,7 +17,6 @@ import {
 } from './definition-container';
 import { isReady, FileResource } from '@cardstack/host/resources/file';
 import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import moment from 'moment';
 import { type ImportResource } from '@cardstack/host/resources/import';
@@ -25,6 +24,7 @@ import { hash, array, fn } from '@ember/helper';
 import CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import { Ready } from '@cardstack/host/resources/file';
+import { action } from '@ember/object';
 
 interface Args {
   Element: HTMLElement;
@@ -34,6 +34,7 @@ interface Args {
     openFile: { current: FileResource | undefined };
     cardInstance: CardDef | null;
     importedModule?: ImportResource;
+    delete: () => void;
   };
 }
 
@@ -42,11 +43,6 @@ export default class CardInheritancePanel extends Component<Args> {
   @tracked module: ModuleSyntax | undefined;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare cardService: CardService;
-
-  @action
-  notImplemented() {
-    console.log('running action button');
-  }
 
   @action
   updateCodePath(url: URL | undefined) {
@@ -100,12 +96,24 @@ export default class CardInheritancePanel extends Component<Args> {
               @cardInstance this.args.openFile.current
             )}}
             @actions={{array
-              (hash
-                label='Delete' handler=this.notImplemented icon='icon-trash'
-              )
+              (hash label='Delete' handler=@delete icon='icon-trash')
             }}
           />
-        {{/if}}
+        {{/each}}
+      {{/if}}
+      {{#if @cardInstance}}
+        <InstanceDefinitionContainer
+          @title={{'Card Instance'}}
+          @name={{@cardInstance.title}}
+          @fileExtension='.JSON'
+          @realmInfo={{@realmInfo}}
+          @realmIconURL={{@realmIconURL}}
+          @infoText={{this.lastModified}}
+          @isActive={{true}}
+          @actions={{array
+            (hash label='Delete' handler=@delete icon='icon-trash')
+          }}
+        />
       {{/if}}
     </div>
     <style>
@@ -115,6 +123,8 @@ export default class CardInheritancePanel extends Component<Args> {
         gap: var(--boxel-sp-xs);
       }
     </style>
+
+
   </template>
 
   get lastModified() {

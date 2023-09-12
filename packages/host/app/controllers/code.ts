@@ -16,16 +16,5 @@ export default class CodeController extends Controller {
 
   openPath(newPath: string | undefined) {
     this.openFile = newPath;
-
-    if (newPath) {
-      const existingIndex = this.codeService.recentFiles.indexOf(newPath);
-
-      if (existingIndex > -1) {
-        this.codeService.recentFiles.splice(existingIndex, 1);
-      }
-
-      this.codeService.recentFiles.unshift(newPath);
-      this.codeService.persistRecentFiles();
-    }
   }
 }
