@@ -105,6 +105,21 @@ export const maxLinkDepth = 5;
 export const assetsDir = '__boxel/';
 export const boxelUIAssetsDir = '@cardstack/boxel-ui/';
 
+export interface MatrixCardError {
+  id?: string;
+  error: Error;
+}
+
+export function isMatrixCardError(
+  maybeError: any,
+): maybeError is MatrixCardError {
+  return (
+    typeof maybeError === 'object' &&
+    'error' in maybeError &&
+    maybeError.error instanceof Error
+  );
+}
+
 export type CreateNewCard = (
   ref: CodeRef,
   relativeTo: URL | undefined,

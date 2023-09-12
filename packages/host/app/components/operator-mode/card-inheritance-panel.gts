@@ -16,12 +16,12 @@ import {
 } from './definition-container';
 import { isReady, FileResource } from '@cardstack/host/resources/file';
 import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import moment from 'moment';
 import { type ImportResource } from '@cardstack/host/resources/import';
 import { hash, array, fn } from '@ember/helper';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import { action } from '@ember/object';
 
 interface Args {
   Element: HTMLElement;
@@ -31,6 +31,7 @@ interface Args {
     openFile: { current: FileResource | undefined };
     cardInstance: CardDef | null;
     importedModule?: ImportResource;
+    delete: () => void;
   };
 }
 
@@ -38,11 +39,6 @@ export default class CardInheritancePanel extends Component<Args> {
   @tracked cardInstance: CardDef | undefined;
   @tracked module: ModuleSyntax | undefined;
   @service declare operatorModeStateService: OperatorModeStateService;
-
-  @action
-  notImplemented() {
-    console.log('running action button');
-  }
 
   @action
   updateCodePath(url: URL | undefined) {
@@ -65,17 +61,7 @@ export default class CardInheritancePanel extends Component<Args> {
             @onSelectDefinition={{fn this.updateCodePath (this.moduleUrl card)}}
             @url={{this.moduleUrl card}}
             @actions={{array
-              (hash
-                label='Delete' handler=this.notImplemented icon='icon-trash'
-              )
-              (hash
-                label='Create Instance'
-                handler=this.notImplemented
-                icon='icon-plus'
-              )
-              (hash
-                label='Inherit' handler=this.notImplemented icon='icon-inherit'
-              )
+              (hash label='Delete' handler=@delete icon='icon-trash')
             }}
           />
         {{/each}}
@@ -90,7 +76,7 @@ export default class CardInheritancePanel extends Component<Args> {
           @infoText={{this.lastModified}}
           @isActive={{true}}
           @actions={{array
-            (hash label='Delete' handler=this.notImplemented icon='icon-trash')
+            (hash label='Delete' handler=@delete icon='icon-trash')
           }}
         />
       {{/if}}
