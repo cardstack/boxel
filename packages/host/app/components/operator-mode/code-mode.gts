@@ -3,6 +3,7 @@ import { tracked } from '@glimmer/tracking';
 import { service } from '@ember/service';
 import { action } from '@ember/object';
 import MonacoService from '@cardstack/host/services/monaco-service';
+import type CodeService from '../../services/code-service';
 import { htmlSafe } from '@ember/template';
 import FileTree from '../editor/file-tree';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
@@ -49,7 +50,9 @@ import ResizablePanelGroup, {
 import ResizablePanel from '@cardstack/boxel-ui/components/resizable-panel/resizable-panel';
 
 interface Signature {
-  Args: {};
+  Args: {
+    delete: (card: CardDef, afterDelete?: () => void) => void;
+  };
 }
 const log = logger('component:code-mode');
 
@@ -57,6 +60,7 @@ type PanelWidths = {
   rightPanel: string;
   codeEditorPanel: string;
   leftPanel: string;
+  emptyCodeModePanel: string;
 };
 
 const CodeModePanelWidths = 'code-mode-panel-widths';
@@ -64,6 +68,7 @@ const defaultPanelWidths: PanelWidths = {
   leftPanel: '20%',
   codeEditorPanel: '48%',
   rightPanel: '32%',
+  emptyCodeModePanel: '80%',
 };
 
 export default class CodeMode extends Component<Signature> {
@@ -71,6 +76,7 @@ export default class CodeMode extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
   @service declare operatorModeStateService: OperatorModeStateService;
+  @service declare codeService: CodeService;
   @tracked private loadFileError: string | null = null;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
   private panelWidths: PanelWidths;
@@ -405,6 +411,21 @@ export default class CodeMode extends Component<Signature> {
     localStorage.setItem(CodeModePanelWidths, JSON.stringify(this.panelWidths));
   }
 
+  @action
+  private delete() {
+    if (this.cardResource.value) {
+      this.args.delete(this.cardResource.value, () => {
+        let previousFile = this.codeService.recentFiles[0] as
+          | string
+          | undefined;
+        let url = previousFile ? new URL(previousFile) : null;
+        this.operatorModeStateService.updateCodePath(url);
+      });
+    } else {
+      throw new Error(`TODO: non-card instance deletes are not yet supported`);
+    }
+  }
+
   <template>
     <div class='code-mode-background' style={{this.backgroundURLStyle}}></div>
     <CardURLBar
@@ -461,6 +482,7 @@ export default class CodeMode extends Component<Signature> {
                         @realmInfo={{this.realmInfo}}
                         @realmIconURL={{this.realmIconURL}}
                         @importedModule={{this.importedModule}}
+                        @delete={{this.delete}}
                         data-test-card-inheritance-panel
                       />
                     </section>
@@ -481,48 +503,60 @@ export default class CodeMode extends Component<Signature> {
             </aside>
           </div>
         </ResizablePanel>
-        <ResizablePanel
-          @defaultWidth={{defaultPanelWidths.codeEditorPanel}}
-          @width={{this.panelWidths.codeEditorPanel}}
-          @minWidth='300px'
-          @panelGroupApi={{pg.api}}
-        >
-          <div class='inner-container'>
-            {{#if this.isReady}}
-              <div
-                class='monaco-container'
-                data-test-editor
-                {{monacoModifier
-                  content=this.readyFile.content
-                  contentChanged=(perform this.contentChangedTask)
-                  monacoSDK=this.monacoSDK
-                  language=this.language
-                }}
-              ></div>
-            {{else if this.isLoading}}
-              <div class='loading'>
-                <LoadingIndicator />
-              </div>
-            {{/if}}
-          </div>
-        </ResizablePanel>
-        <ResizablePanel
-          @defaultWidth={{defaultPanelWidths.rightPanel}}
-          @width={{this.panelWidths.rightPanel}}
-          @panelGroupApi={{pg.api}}
-        >
-          <div class='inner-container'>
-            {{#if this.cardResource.value}}
-              <CardPreviewPanel
-                @card={{this.cardResource.value}}
-                @realmIconURL={{this.realmIconURL}}
-                data-test-card-resource-loaded
-              />
-            {{else if this.cardResource.error}}
-              {{this.cardResource.error.message}}
-            {{/if}}
-          </div>
-        </ResizablePanel>
+        {{#if this.codePath}}
+          <ResizablePanel
+            @defaultWidth={{defaultPanelWidths.codeEditorPanel}}
+            @width={{this.panelWidths.codeEditorPanel}}
+            @minWidth='300px'
+            @panelGroupApi={{pg.api}}
+          >
+            <div class='inner-container'>
+              {{#if this.isReady}}
+                <div
+                  class='monaco-container'
+                  data-test-editor
+                  {{monacoModifier
+                    content=this.readyFile.content
+                    contentChanged=(perform this.contentChangedTask)
+                    monacoSDK=this.monacoSDK
+                    language=this.language
+                  }}
+                ></div>
+              {{else if this.isLoading}}
+                <div class='loading'>
+                  <LoadingIndicator />
+                </div>
+              {{/if}}
+            </div>
+          </ResizablePanel>
+          <ResizablePanel
+            @defaultWidth={{defaultPanelWidths.rightPanel}}
+            @width={{this.panelWidths.rightPanel}}
+            @panelGroupApi={{pg.api}}
+          >
+            <div class='inner-container'>
+              {{#if this.cardResource.value}}
+                <CardPreviewPanel
+                  @card={{this.cardResource.value}}
+                  @realmIconURL={{this.realmIconURL}}
+                  data-test-card-resource-loaded
+                />
+              {{else if this.cardResource.error}}
+                {{this.cardResource.error.message}}
+              {{/if}}
+            </div>
+          </ResizablePanel>
+        {{else}}
+          <ResizablePanel
+            @defaultWidth={{defaultPanelWidths.emptyCodeModePanel}}
+            @width={{this.panelWidths.emptyCodeModePanel}}
+            @panelGroupApi={{pg.api}}
+          >
+            <div class='inner-container' data-test-empty-code-mode>
+              <h3>TODO: implement ticket CS-5863: Empty code mode</h3>
+            </div>
+          </ResizablePanel>
+        {{/if}}
       </ResizablePanelGroup>
     </div>
 
