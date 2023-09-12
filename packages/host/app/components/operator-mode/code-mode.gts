@@ -31,6 +31,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import CardService from '@cardstack/host/services/card-service';
+import RecentFilesService from '@cardstack/host/services/recent-files-service';
 import { task, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { registerDestructor } from '@ember/destroyable';
@@ -76,6 +77,8 @@ export default class CodeMode extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
   @service declare operatorModeStateService: OperatorModeStateService;
+  @service declare recentFilesService: RecentFilesService;
+
   @tracked private loadFileError: string | null = null;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
   private panelWidths: PanelWidths;
@@ -414,7 +417,7 @@ export default class CodeMode extends Component<Signature> {
   private delete() {
     if (this.cardResource.value) {
       this.args.delete(this.cardResource.value, () => {
-        let previousFile = this.cardService.recentFiles[0] as
+        let previousFile = this.recentFilesService.recentFiles[0] as
           | string
           | undefined;
         let url = previousFile ? new URL(previousFile) : null;

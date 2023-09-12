@@ -25,7 +25,6 @@ import type {
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
 import { TrackedArray } from 'tracked-built-ins';
-import window from 'ember-window-mock';
 
 export type CardSaveSubscriber = (json: SingleCardDocument) => void;
 const { ownRealmURL, otherRealmURLs } = ENV;
@@ -35,50 +34,6 @@ export default class CardService extends Service {
   @tracked recentFiles = new TrackedArray<string>([]);
   private subscriber: CardSaveSubscriber | undefined;
   private indexCards: Map<string, CardDef> = new Map();
-
-  constructor(properties: object) {
-    super(properties);
-
-    let recentFilesString = window.localStorage.getItem('recent-files');
-
-    if (recentFilesString) {
-      try {
-        this.recentFiles = new TrackedArray(JSON.parse(recentFilesString));
-      } catch (e) {
-        console.log('Error restoring recent files', e);
-      }
-    }
-  }
-
-  removeRecentFile(file: string) {
-    let index = this.recentFiles.findIndex((f) => f === file);
-    if (index === -1) {
-      return;
-    }
-    while (index !== -1) {
-      this.recentFiles.splice(index, 1);
-      index = this.recentFiles.findIndex((f) => f === file);
-    }
-    this.persistRecentFiles();
-  }
-
-  addRecentFile(file: string) {
-    const existingIndex = this.recentFiles.indexOf(file);
-
-    if (existingIndex > -1) {
-      this.recentFiles.splice(existingIndex, 1);
-    }
-
-    this.recentFiles.unshift(file);
-    this.persistRecentFiles();
-  }
-
-  persistRecentFiles() {
-    window.localStorage.setItem(
-      'recent-files',
-      JSON.stringify(this.recentFiles),
-    );
-  }
 
   private apiModule = importResource(
     this,

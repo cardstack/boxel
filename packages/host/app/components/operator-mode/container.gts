@@ -39,6 +39,7 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import OperatorModeStack from './stack';
 import type MatrixService from '../../services/matrix-service';
 import type MessageService from '../../services/message-service';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import ChatSidebar from '../matrix/chat-sidebar';
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
@@ -86,6 +87,8 @@ export default class OperatorModeContainer extends Component<Signature> {
   @service declare messageService: MessageService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
+  @service declare recentFilesService: RecentFilesService;
+
   @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
   @tracked searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked isChatVisible = false;
@@ -283,7 +286,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       this.operatorModeStateService.trimItemsFromStack(item);
     }
     this.operatorModeStateService.removeRecentCard(card.id);
-    this.cardService.removeRecentFile(`${card.id}.json`);
+    this.recentFilesService.removeRecentFile(`${card.id}.json`);
 
     await this.withTestWaiters(async () => {
       await this.cardService.deleteCard(card);

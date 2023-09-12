@@ -6,6 +6,7 @@ import Service from '@ember/service';
 import type CardService from '../services/card-service';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 import type MessageService from '@cardstack/host/services/message-service';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
@@ -57,6 +58,8 @@ export default class OperatorModeStateService extends Service {
   @tracked recentCards = new TrackedArray<CardDef>([]);
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
+  @service declare recentFilesService: RecentFilesService;
+
   private subscription: { url: string; unsubscribe: () => void } | undefined;
 
   constructor(properties: object) {
@@ -243,7 +246,7 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
 
     if (codePath) {
-      this.cardService.addRecentFile(codePath.toString());
+      this.recentFilesService.addRecentFile(codePath.toString());
     }
   }
 

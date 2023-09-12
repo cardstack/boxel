@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import type CardService from '../../services/card-service';
+import type RecentFilesService from '../../services/recent-files-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
@@ -14,6 +15,7 @@ interface Args {
 
 export default class RecentFiles extends Component<Args> {
   @service declare cardService: CardService;
+  @service declare recentFilesService: RecentFilesService;
   @service declare operatorModeStateService: OperatorModeStateService;
 
   @action
@@ -22,7 +24,7 @@ export default class RecentFiles extends Component<Args> {
   }
 
   get recentFilesInRealm() {
-    return this.cardService.recentFiles.filter((file) =>
+    return this.recentFilesService.recentFiles.filter((file) =>
       this.realmPaths.inRealm(new URL(file)),
     );
   }
