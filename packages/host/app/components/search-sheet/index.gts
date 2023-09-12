@@ -232,7 +232,7 @@ export default class SearchSheet extends Component<Signature> {
       id='search-sheet'
       class='search-sheet {{this.sheetSize}}'
       data-test-search-sheet={{@mode}}
-      {{onClickOutside @onBlur}}
+      {{onClickOutside @onBlur exceptSelector='.add-card-to-neighbor-stack'}}
     >
       <SearchInput
         @variant={{if (eq @mode 'closed') 'default' 'large'}}
