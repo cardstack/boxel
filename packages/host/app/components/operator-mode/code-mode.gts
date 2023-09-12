@@ -31,6 +31,7 @@ import {
   PanelContext,
 } from '@cardstack/boxel-ui';
 import cn from '@cardstack/boxel-ui/helpers/cn';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
@@ -197,45 +198,12 @@ export default class CodeMode extends Component<Signature> {
   }
 
   @use private realmInfoResource = resource(() => {
-    if (
-      this.openFile.current?.state === 'ready' &&
-      this.openFile.current.realmURL
-    ) {
-      let realmURL = this.openFile.current.realmURL;
+    let realmURL =
+      this.openFile.current?.state === 'ready'
+        ? this.openFile.current.realmURL
+        : this.cardService.defaultURL;
 
-      const state: {
-        isLoading: boolean;
-        value: RealmInfo | null;
-        error: Error | undefined;
-        load: () => Promise<void>;
-      } = new TrackedObject({
-        isLoading: true,
-        value: this._cachedRealmInfo,
-        error: undefined,
-        load: async () => {
-          state.isLoading = true;
-
-          try {
-            let realmInfo = await this.cardService.getRealmInfoByRealmURL(
-              new URL(realmURL),
-            );
-
-            if (realmInfo) {
-              this._cachedRealmInfo = realmInfo;
-            }
-
-            state.value = realmInfo;
-          } catch (error: any) {
-            state.error = error;
-          } finally {
-            state.isLoading = false;
-          }
-        },
-      });
-
-      state.load();
-      return state;
-    } else {
+    if (!realmURL) {
       return new TrackedObject({
         error: null,
         isLoading: false,
@@ -243,6 +211,39 @@ export default class CodeMode extends Component<Signature> {
         load: () => Promise<void>,
       });
     }
+
+    const state: {
+      isLoading: boolean;
+      value: RealmInfo | null;
+      error: Error | undefined;
+      load: () => Promise<void>;
+    } = new TrackedObject({
+      isLoading: true,
+      value: this._cachedRealmInfo,
+      error: undefined,
+      load: async () => {
+        state.isLoading = true;
+
+        try {
+          let realmInfo = await this.cardService.getRealmInfoByRealmURL(
+            new URL(realmURL),
+          );
+
+          if (realmInfo) {
+            this._cachedRealmInfo = realmInfo;
+          }
+
+          state.value = realmInfo;
+        } catch (error: any) {
+          state.error = error;
+        } finally {
+          state.isLoading = false;
+        }
+      },
+    });
+
+    state.load();
+    return state;
   });
 
   private openFile = maybe(this, (context) => {
@@ -301,10 +302,13 @@ export default class CodeMode extends Component<Signature> {
       load: async () => {
         state.isLoading = true;
         try {
-          let currentlyOpenedFile = this.openFile.current as any;
-          let cardDoc = JSON.parse(currentlyOpenedFile.content);
+          let currentlyOpenedFile = this.openFile.current;
+          if (!currentlyOpenedFile) {
+            return undefined;
+          }
+          let cardDoc = JSON.parse((currentlyOpenedFile as Ready).content);
           if (isCardDocument(cardDoc)) {
-            let url = currentlyOpenedFile.url.replace(/\.json$/, '');
+            let url = (currentlyOpenedFile as Ready).url.replace(/\.json$/, '');
             state.value = await this.cardService.loadModel(url);
           }
         } catch (error: any) {
@@ -417,9 +421,9 @@ export default class CodeMode extends Component<Signature> {
 
   @action
   private onListPanelContextChange(listPanelContext: PanelContext[]) {
-    this.panelWidths.leftPanel = listPanelContext[0].width;
-    this.panelWidths.codeEditorPanel = listPanelContext[1].width;
-    this.panelWidths.rightPanel = listPanelContext[2].width;
+    this.panelWidths.leftPanel = listPanelContext[0]?.width;
+    this.panelWidths.codeEditorPanel = listPanelContext[1]?.width;
+    this.panelWidths.rightPanel = listPanelContext[2]?.width;
 
     localStorage.setItem(CodeModePanelWidths, JSON.stringify(this.panelWidths));
   }
@@ -521,6 +525,8 @@ export default class CodeMode extends Component<Signature> {
                   {{else}}
                     <FileTree @url={{this.readyFile.realmURL}} />
                   {{/if}}
+                {{else}}
+                  <FileTree @url={{this.cardService.defaultURL.href}} />
                 {{/if}}
               </section>
             </div>
@@ -584,8 +590,14 @@ export default class CodeMode extends Component<Signature> {
             @width={{this.panelWidths.emptyCodeModePanel}}
             @panelGroupApi={{pg.api}}
           >
-            <div class='inner-container' data-test-empty-code-mode>
-              <h3>TODO: implement ticket CS-5863: Empty code mode</h3>
+            <div
+              class='inner-container inner-container--empty'
+              data-test-empty-code-mode
+            >
+              {{svgJar 'file' width='40' height='40' role='presentation'}}
+              <h3 class='choose-file-prompt'>
+                Choose a file on the left to open it
+              </h3>
             </div>
           </ResizablePanel>
         {{/if}}
@@ -668,6 +680,21 @@ export default class CodeMode extends Component<Signature> {
         padding: var(--boxel-sp-xxs) var(--boxel-sp-xs) var(--boxel-sp-sm);
         overflow-y: auto;
       }
+      .inner-container--empty {
+        background-color: var(--boxel-light-100);
+        align-items: center;
+        justify-content: center;
+      }
+      .inner-container--empty > :deep(svg) {
+        --icon-color: var(--boxel-highlight);
+      }
+
+      .choose-file-prompt {
+        margin: 0;
+        padding: var(--boxel-sp);
+        font: 700 var(--boxel-font);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
 
       .file-view__header {
         display: flex;
@@ -682,6 +709,7 @@ export default class CodeMode extends Component<Signature> {
         --boxel-button-min-width: 6rem;
         --boxel-button-padding: 0;
         border-radius: var(--boxel-border-radius);
+        flex: 1;
       }
       .file-view__header-btn:hover {
         border-color: var(--boxel-dark);
