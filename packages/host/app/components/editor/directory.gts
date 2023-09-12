@@ -193,7 +193,7 @@ class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModifierSignature> {
       this.#didSetup = true;
 
       if (shouldScrollIntoView) {
-        this.element.scrollIntoView();
+        this.element.scrollIntoView({ block: 'center' });
       }
     }
   }
