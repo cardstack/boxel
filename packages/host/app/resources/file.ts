@@ -110,23 +110,17 @@ class _FileResource extends Resource<Args> {
     });
 
     if (!response.ok) {
-      response = await this.loaderService.loader.fetch(this._url, {
-        headers: { Accept: SupportedMimeType.CardJson },
-      });
-
-      if (!response.ok) {
-        log.error(
-          `Could not get file ${this._url}, status ${response.status}: ${
-            response.statusText
-          } - ${await response.text()}`,
-        );
-        if (response.status === 404) {
-          this.updateState({ state: 'not-found', url: this._url });
-        } else {
-          this.updateState({ state: 'server-error', url: this._url });
-        }
-        return;
+      log.error(
+        `Could not get file ${this._url}, status ${response.status}: ${
+          response.statusText
+        } - ${await response.text()}`,
+      );
+      if (response.status === 404) {
+        this.updateState({ state: 'not-found', url: this._url });
+      } else {
+        this.updateState({ state: 'server-error', url: this._url });
       }
+      return;
     }
 
     let lastModified = response.headers.get('last-modified') || undefined;

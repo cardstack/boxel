@@ -92,8 +92,7 @@ export default class UrlSearch extends Component<Signature> {
   }
 
   private getCard = restartableTask(async (searchKey: string) => {
-    let search = searchKey.replace(/\.json$/, '');
-    let response = await this.loaderService.loader.fetch(search, {
+    let response = await this.loaderService.loader.fetch(searchKey, {
       headers: { Accept: SupportedMimeType.CardJson },
     });
     if (response.ok) {
