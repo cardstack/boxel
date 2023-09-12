@@ -129,17 +129,20 @@ async function sendMessage(
   return await client.sendEvent(room.roomId, 'm.room.message', messageObject);
 }
 
-async function sendOption(client: MatrixClient, room: Room, content: string) {
+async function sendOption(
+  client: MatrixClient,
+  room: Room,
+  content: Map<string, any>,
+) {
   log.info('sending option', content);
-  let parsedContent = JSON.parse(content);
-  let patch = parsedContent['patch'];
+  let patch = content.get('patch');
   if (patch['attributes']) {
     patch = patch['attributes'];
   }
-  let id = parsedContent['id'];
+  let id = content.get('id');
 
   let messageObject = {
-    body: content,
+    body: 'patch',
     msgtype: 'org.boxel.command',
     formatted_body: 'A patch',
     format: 'org.matrix.custom.html',
@@ -249,7 +252,7 @@ async function getResponse(history: IRoomEvent[]) {
   messages = messages.concat(historical_messages);
   log.info(messages);
   return await openai.chat.completions.create({
-    model: 'gpt-4-0613',
+    model: 'gpt-4',
     messages: messages,
     stream: true,
   });
