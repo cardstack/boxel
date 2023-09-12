@@ -347,6 +347,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .exists({ count: 1 })
       .containsText('index.json');
 
+    await waitFor('[data-test-file="person.gts"]');
     await click('[data-test-file="person.gts"]');
 
     assert
