@@ -147,8 +147,14 @@ export default class CodeMode extends Component<Signature> {
     this.operatorModeStateService.updateFileView(view);
   }
 
+  get isEmptyState() {
+    return !this.codePath;
+  }
+
   get fileView() {
-    return this.operatorModeStateService.state.fileView;
+    return this.isEmptyState
+      ? 'browser'
+      : this.operatorModeStateService.state.fileView;
   }
 
   get fileViewTitle() {
@@ -478,6 +484,7 @@ export default class CodeMode extends Component<Signature> {
                 data-test-file-view-header
               >
                 <Button
+                  @disabled={{this.isEmptyState}}
                   @kind={{if
                     (eq this.fileView 'inheritance')
                     'primary-dark'
@@ -525,7 +532,7 @@ export default class CodeMode extends Component<Signature> {
                   {{else}}
                     <FileTree @url={{this.readyFile.realmURL}} />
                   {{/if}}
-                {{else}}
+                {{else if this.isEmptyState}}
                   <FileTree @url={{this.cardService.defaultURL.href}} />
                 {{/if}}
               </section>
@@ -584,7 +591,7 @@ export default class CodeMode extends Component<Signature> {
               {{/if}}
             </div>
           </ResizablePanel>
-        {{else}}
+        {{else if this.isEmptyState}}
           <ResizablePanel
             @defaultWidth={{defaultPanelWidths.emptyCodeModePanel}}
             @width={{this.panelWidths.emptyCodeModePanel}}
@@ -711,7 +718,7 @@ export default class CodeMode extends Component<Signature> {
         border-radius: var(--boxel-border-radius);
         flex: 1;
       }
-      .file-view__header-btn:hover {
+      .file-view__header-btn:hover:not(:disabled) {
         border-color: var(--boxel-dark);
       }
       .file-view__header-btn.active {
