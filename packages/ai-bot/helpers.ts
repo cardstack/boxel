@@ -90,8 +90,7 @@ export async function* extractContentFromStream(
 export class CheckpointedAsyncGenerator<T> {
   private generator: AsyncGenerator<T>;
   private buffer: T[] = [];
-  private checkpointed: boolean = false;
-  private bufferIndex: number = 0;
+  private bufferIndex = 0;
 
   constructor(generator: AsyncGenerator<T>) {
     this.generator = generator;
@@ -108,7 +107,7 @@ export class CheckpointedAsyncGenerator<T> {
   }
 
   async next(): Promise<IteratorResult<T>> {
-    // If we're in rewind mode and haven't exhausted the buffer, return the next buffered item.
+    // If we're in the past and haven't exhausted the buffer, return the next buffered item.
     if (this.bufferIndex < this.buffer.length) {
       return { value: this.buffer[this.bufferIndex++], done: false };
     }
@@ -117,7 +116,7 @@ export class CheckpointedAsyncGenerator<T> {
     const result = await this.generator.next();
 
     // If we're checkpointed, add the item to the buffer.
-    if (this.checkpointed && !result.done) {
+    if (!result.done) {
       this.buffer.push(result.value);
       this.bufferIndex++;
     }
@@ -140,8 +139,6 @@ export class CheckpointedAsyncGenerator<T> {
   }
 
   checkpoint(): void {
-    console.log('Checkpointing', this.bufferIndex, this.buffer);
-    this.checkpointed = true;
     // Cut the buffer to hold from buffer index to the end
     if (this.bufferIndex < this.buffer.length) {
       this.buffer = this.buffer.slice(this.bufferIndex);
@@ -150,15 +147,9 @@ export class CheckpointedAsyncGenerator<T> {
     }
 
     this.bufferIndex = 0;
-    console.log('Checkpointed', this.bufferIndex, this.buffer);
   }
 
   restore(): void {
-    if (!this.checkpointed) {
-      throw new Error(
-        'Cannot restore a generator that has not been checkpointed',
-      );
-    }
     this.bufferIndex = 0;
   }
 }
@@ -172,29 +163,26 @@ async function* prependedStream<T>(prepend: T, stream: AsyncIterable<T>) {
 
 export async function* processStream(stream: AsyncGenerator<string>) {
   let tokenStream = new CheckpointedAsyncGenerator(stream);
-  tokenStream.checkpoint();
   let currentMessage = '';
   for await (const part of tokenStream) {
-    console.log('Part in iterator:', part);
     // If we see an opening brace, we *might* be looking at JSON
     // Optimistically start parsing it, and if we hit an error
     // then roll back to the last checkpoint
     if (part == '{') {
-      // Optimistically yield the current message assuming
-      // we're looking at JSON now.
       let commands: string[] = [];
       const pipeline = chain([
         Readable.from(prependedStream(part, tokenStream)), // We need to prepend the { back on
         parser({ jsonStreaming: true }),
         streamValues(),
       ]);
+
+      // Setup this promise so we can await the json parsing to complete
       const endOfStream = new Promise((resolve, reject) => {
         pipeline.on('end', resolve);
         pipeline.on('error', reject);
       });
 
       pipeline.on('data', (x) => {
-        console.log('JSON', x.value);
         commands.push(x.value);
         // We've found some JSON so we don't want to
         // keep building up the text
@@ -206,15 +194,17 @@ export async function* processStream(stream: AsyncGenerator<string>) {
 
       try {
         await endOfStream;
-        console.log('Stream ended');
       } catch (error) {
         // We've hit an error parsing something, so let's roll
         // back to the last checkpoint so we don't lose the
         // processed tokens
-        console.log("Let's roll back");
         tokenStream.restore();
       } finally {
-        // Either
+        // We've either finished parsing the stream and have
+        // one or more JSON objects, or we've hit an error.
+        // The error may occur after successfully parsing a
+        // JSON object, so we need to yield any commands
+        // we've found.
         for (let command of commands) {
           yield {
             type: ParsingMode.Command,
@@ -228,7 +218,6 @@ export async function* processStream(stream: AsyncGenerator<string>) {
         type: ParsingMode.Text,
         content: currentMessage,
       };
-      console.log('Text:', part);
     }
     // Checkpoint before we start processing the next token
     tokenStream.checkpoint();
