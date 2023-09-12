@@ -7,6 +7,7 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import URLBarResource, {
   urlBarResource,
 } from '@cardstack/host/resources/url-bar';
+import { isReady, FileResource } from '@cardstack/host/resources/file';
 
 interface Signature {
   Element: HTMLElement;
@@ -14,6 +15,7 @@ interface Signature {
     loadFileError: string | null;
     resetLoadFileError: () => void;
     realmInfo: RealmInfo | null;
+    openFile: { current: FileResource | undefined };
   };
 }
 
@@ -117,13 +119,21 @@ export default class CardURLBar extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
 
   urlBar: URLBarResource = urlBarResource(this, () => ({
-    getValue: () => this.codePath,
+    getValue: () => this.url,
     setValue: (url: string) => {
       this.operatorModeStateService.updateCodePath(new URL(url));
     },
     setValueError: this.args.loadFileError,
     resetValueError: this.args.resetLoadFileError,
   }));
+
+  get url() {
+    if (isReady(this.args.openFile.current)) {
+      return this.args.openFile.current.url;
+    } else {
+      return this.codePath;
+    }
+  }
 
   get codePath() {
     return this.operatorModeStateService.state.codePath

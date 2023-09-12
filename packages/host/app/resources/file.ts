@@ -14,6 +14,7 @@ interface Args {
   named: {
     url: string;
     onStateChange?: (state: FileResource['state']) => void;
+    onUrlRedirect?: () => void;
   };
 }
 
@@ -98,7 +99,6 @@ class _FileResource extends Resource<Args> {
     if (this.onStateChange && this.innerState.state !== prevState.state) {
       this.onStateChange(this.innerState.state);
     }
-
     if (newState.state === 'ready') {
       this.codeService.addRecentFile(newState.url);
     }
@@ -143,14 +143,15 @@ class _FileResource extends Resource<Args> {
 
     let content = await response.text();
     let self = this;
+    let url = response.url;
 
     this.updateState({
       state: 'ready',
       lastModified,
       realmURL,
       content,
-      name: this._url.split('/').pop()!,
-      url: this._url,
+      name: url.split('/').pop()!,
+      url: url,
       write(content: string, flushLoader?: true) {
         self.writeTask.perform(this, content, flushLoader);
       },
