@@ -478,7 +478,7 @@ export default class CodeMode extends Component<Signature> {
                     <section class='inner-container__content'>
                       <CardInheritancePanel
                         @cardInstance={{this.cardResource.value}}
-                        @openFile={{this.openFile}}
+                        @readyFile={{this.readyFile}}
                         @realmInfo={{this.realmInfo}}
                         @realmIconURL={{this.realmIconURL}}
                         @importedModule={{this.importedModule}}

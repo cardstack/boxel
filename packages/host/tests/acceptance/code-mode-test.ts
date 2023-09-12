@@ -1,5 +1,5 @@
 import { module, test } from 'qunit';
-import { visit, click, waitFor, find, waitUntil } from '@ember/test-helpers';
+import { visit, click, waitFor, waitUntil, find } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { baseRealm } from '@cardstack/runtime-common';
 import {
@@ -7,6 +7,7 @@ import {
   TestRealmAdapter,
   setupLocalIndexing,
   setupMockMessageService,
+  testRealmURL,
 } from '../helpers';
 import stringify from 'safe-stable-stringify';
 import { Realm } from '@cardstack/runtime-common/realm';
@@ -125,6 +126,12 @@ module('Acceptance | code mode tests', function (hooks) {
           },
         },
       },
+      '.realm.json': {
+        name: 'Test Workspace B',
+        backgroundURL:
+          'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+        iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+      },
     });
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
@@ -141,13 +148,13 @@ module('Acceptance | code mode tests', function (hooks) {
       stacks: [
         [
           {
-            id: 'http://test-realm/test/Person/1',
+            id: `${testRealmURL}Person/1`,
             format: 'isolated',
           },
         ],
       ],
       submode: 'code',
-      codePath: `http://test-realm/test/Person/1.json`,
+      codePath: `${testRealmURL}Person/1.json`,
     })!;
 
     await visit(
@@ -186,14 +193,14 @@ module('Acceptance | code mode tests', function (hooks) {
       stacks: [
         [
           {
-            id: 'http://test-realm/test/Person/1',
+            id: `${testRealmURL}Person/1`,
             format: 'isolated',
           },
         ],
       ],
       submode: 'code',
       fileView: 'browser',
-      codePath: `http://test-realm/test/Person/1.json`,
+      codePath: `${testRealmURL}Person/1.json`,
     })!;
 
     await visit(
@@ -231,14 +238,14 @@ module('Acceptance | code mode tests', function (hooks) {
       stacks: [
         [
           {
-            id: 'http://test-realm/test/Person/1',
+            id: `${testRealmURL}Person/1`,
             format: 'isolated',
           },
         ],
       ],
       submode: 'code',
       fileView: 'browser',
-      codePath: `http://test-realm/test/Person/1.json`,
+      codePath: `${testRealmURL}Person/1.json`,
     })!;
 
     await visit(
@@ -265,14 +272,14 @@ module('Acceptance | code mode tests', function (hooks) {
       stacks: [
         [
           {
-            id: 'http://test-realm/test/Person/1',
+            id: `${testRealmURL}Person/1`,
             format: 'isolated',
           },
         ],
       ],
       submode: 'code',
       fileView: 'browser',
-      codePath: `http://test-realm/test/Person/1.json`,
+      codePath: `${testRealmURL}Person/1.json`,
       openDirs: ['Person/'],
     })!;
 
@@ -284,5 +291,103 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-file]');
 
     assert.dom('[data-test-directory="Person/"] .icon').hasClass('open');
+  });
+
+  test('card inheritance panel will show json instance definition and module definition', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}Person/1.json`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitUntil(() => find('[data-test-card-inheritance-panel]'));
+    await waitUntil(() => find('[data-test-card-module-definition]'));
+    await waitUntil(() => find('[data-test-card-instance-definition]'));
+
+    assert.dom('[data-test-card-module-definition]').includesText('Card');
+    assert
+      .dom(
+        '[data-test-card-module-definition] [data-test-definition-file-extension]',
+      )
+      .includesText('.GTS');
+    assert
+      .dom(
+        '[data-test-card-module-definition] [data-test-definition-realm-name]',
+      )
+      .includesText('Test Workspace B');
+    assert.dom('[data-test-card-module-definition]').doesNotHaveClass('active');
+    assert
+      .dom('[data-test-card-instance-definition]')
+      .includesText('Hassan Abdel-Rahman');
+    assert
+      .dom(
+        '[data-test-card-instance-definition] [data-test-definition-file-extension]',
+      )
+      .includesText('.JSON');
+    assert
+      .dom(
+        '[data-test-card-instance-definition] [data-test-definition-realm-name]',
+      )
+      .includesText('Test Workspace B');
+    assert
+      .dom(
+        '[data-test-card-instance-definition] [data-test-definition-info-text]',
+      )
+      .includesText('Last saved was a few seconds ago');
+
+    assert.dom('[data-test-card-instance-definition]').hasClass('active');
+  });
+
+  test('card inheritance panel will show module definition', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitUntil(() => find('[data-test-card-inheritance-panel]'));
+    await waitUntil(() => find('[data-test-card-module-definition]'));
+
+    assert.dom('[data-test-card-module-definition]').includesText('Card');
+
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}person.gts`);
+
+    assert.dom('[data-test-card-module-definition]').hasClass('active');
+    assert
+      .dom(
+        '[data-test-card-module-definition] [data-test-definition-file-extension]',
+      )
+      .includesText('.GTS');
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}person.gts`);
+    assert.dom('[data-test-card-module-definition]').includesText('Card');
+    assert
+      .dom(
+        '[data-test-card-module-definition] [data-test-definition-realm-name]',
+      )
+      .includesText('Test Workspace B');
+    assert.dom('[data-test-card-instance-definition]').doesNotExist();
   });
 });
