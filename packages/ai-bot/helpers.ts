@@ -67,6 +67,74 @@ export async function* extractContentFromStream(
   }
 }
 
+export class CheckpointedAsyncGenerator<T> {
+  private generator: AsyncGenerator<T>;
+  private buffer: T[] = [];
+  private checkpointed: boolean = false;
+  private bufferIndex: number = 0;
+
+  constructor(generator: AsyncGenerator<T>) {
+    this.generator = generator;
+  }
+
+  async *[Symbol.asyncIterator]() {
+    while (true) {
+      const next = await this.next();
+      if (next.done) {
+        return;
+      }
+      yield next.value;
+    }
+  }
+
+  async next(): Promise<IteratorResult<T>> {
+    // If we're in rewind mode and haven't exhausted the buffer, return the next buffered item.
+    if (this.bufferIndex < this.buffer.length) {
+      return { value: this.buffer[this.bufferIndex++], done: false };
+    }
+
+    // Otherwise, get the next item from the generator.
+    const result = await this.generator.next();
+
+    // If we're checkpointed, add the item to the buffer.
+    if (this.checkpointed && !result.done) {
+      this.buffer.push(result.value);
+      this.bufferIndex++;
+    }
+
+    return result;
+  }
+
+  async return(value?: any): Promise<IteratorResult<T>> {
+    if (this.generator.return) {
+      return await this.generator.return(value);
+    }
+    return { value, done: true };
+  }
+
+  async throw(error?: any): Promise<IteratorResult<T>> {
+    if (this.generator.throw) {
+      return await this.generator.throw(error);
+    }
+    throw error;
+  }
+
+  checkpoint(): void {
+    this.checkpointed = true;
+    this.buffer = [];
+    this.bufferIndex = 0;
+  }
+
+  restore(): void {
+    if (!this.checkpointed) {
+      throw new Error(
+        'Cannot restore a generator that has not been checkpointed',
+      );
+    }
+    this.bufferIndex = 0;
+  }
+}
+
 export async function* processStream(stream: AsyncIterable<string>) {
   /**
    * The stream of tokens from GPT is a mix of text and structured data.
