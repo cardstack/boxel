@@ -1,4 +1,8 @@
 import { IRoomEvent } from 'matrix-js-sdk';
+import { chain } from 'stream-chain';
+import { parser } from 'stream-json';
+import { streamValues } from 'stream-json/streamers/StreamValues';
+import { Readable } from 'node:stream';
 
 type ChatCompletion = {
   choices: Array<{
@@ -13,10 +17,17 @@ export enum ParsingMode {
   Command,
 }
 
-export type Message = {
-  type: ParsingMode;
+type CommandMessage = {
+  type: ParsingMode.Command;
+  content: any;
+};
+
+type TextMessage = {
+  type: ParsingMode.Text;
   content: string;
 };
+
+export type Message = CommandMessage | TextMessage;
 
 export function constructHistory(history: IRoomEvent[]) {
   /**
@@ -129,9 +140,17 @@ export class CheckpointedAsyncGenerator<T> {
   }
 
   checkpoint(): void {
+    console.log('Checkpointing', this.bufferIndex, this.buffer);
     this.checkpointed = true;
-    this.buffer = [];
+    // Cut the buffer to hold from buffer index to the end
+    if (this.bufferIndex < this.buffer.length) {
+      this.buffer = this.buffer.slice(this.bufferIndex);
+    } else {
+      this.buffer = [];
+    }
+
     this.bufferIndex = 0;
+    console.log('Checkpointed', this.bufferIndex, this.buffer);
   }
 
   restore(): void {
@@ -144,84 +163,74 @@ export class CheckpointedAsyncGenerator<T> {
   }
 }
 
-export async function* processStream(stream: AsyncIterable<string>) {
-  /**
-   * The stream of tokens from GPT is a mix of text and structured data.
-   * The text data should be yielded token by token so that the users
-   * can see the text as it is generated.
-   *
-   * However we need to also detect structured content and extract that
-   * out so that we can batch it up and send it to the server as one
-   * message.
-   *
-   * TODO: This is fragile, and will be replace with a proper parser
-   * as we remove the <option> format of messages.
-   */
-  let content = '';
-  let currentParsingMode: ParsingMode = ParsingMode.Text;
-  for await (const token of stream) {
-    // The parsing here has to deal with a streaming response that
-    // alternates between sections of text (to stream back to the client)
-    // and structured data (to batch and send in one block)
-    if (currentParsingMode === ParsingMode.Command) {
-      // If we're currently parsing a command, and we hit what looks like the end of the command
-      // then we need to start cleaning up the command and yield it.
-      if (token.includes('</')) {
-        // Content is the text we have built up so far
-        if (content.startsWith('option>')) {
-          content = content.replace('option>', '');
-        }
-        if (content.startsWith('>')) {
-          content = content.replace('>', '');
-        }
-        if (content.endsWith('>')) {
-          content = content.replace('>', '');
-        }
-        content += token.split('</')[0];
-        // We have the whole patch, so we can yield it
-        yield {
-          type: ParsingMode.Command,
-          content: content,
-        };
-        content = '';
-        currentParsingMode = ParsingMode.Text;
-      } else {
-        // We are in command mode, and haven't detected the end of the the command
-        // so we will just keep building up the command
-        content += token;
-      }
-    } else if (currentParsingMode === ParsingMode.Text) {
-      // Be explicit about the state we're in for readability
-      if (token.includes('<')) {
-        // Send the last update
-        let beforeTag = token.split('<')[0];
-        if (beforeTag) {
+async function* prependedStream<T>(prepend: T, stream: AsyncIterable<T>) {
+  yield prepend;
+  for await (const part of stream) {
+    yield part;
+  }
+}
+
+export async function* processStream(stream: AsyncGenerator<string>) {
+  let tokenStream = new CheckpointedAsyncGenerator(stream);
+  tokenStream.checkpoint();
+  let currentMessage = '';
+  for await (const part of tokenStream) {
+    console.log('Part in iterator:', part);
+    // If we see an opening brace, we *might* be looking at JSON
+    // Optimistically start parsing it, and if we hit an error
+    // then roll back to the last checkpoint
+    if (part == '{') {
+      // Optimistically yield the current message assuming
+      // we're looking at JSON now.
+      let commands: string[] = [];
+      const pipeline = chain([
+        Readable.from(prependedStream(part, tokenStream)), // We need to prepend the { back on
+        parser({ jsonStreaming: true }),
+        streamValues(),
+      ]);
+      const endOfStream = new Promise((resolve, reject) => {
+        pipeline.on('end', resolve);
+        pipeline.on('error', reject);
+      });
+
+      pipeline.on('data', (x) => {
+        console.log('JSON', x.value);
+        commands.push(x.value);
+        // We've found some JSON so we don't want to
+        // keep building up the text
+        currentMessage = '';
+        // If we've seen a command, bump the checkpoint
+        // of the stream to the current position
+        tokenStream.checkpoint();
+      });
+
+      try {
+        await endOfStream;
+        console.log('Stream ended');
+      } catch (error) {
+        // We've hit an error parsing something, so let's roll
+        // back to the last checkpoint so we don't lose the
+        // processed tokens
+        console.log("Let's roll back");
+        tokenStream.restore();
+      } finally {
+        // Either
+        for (let command of commands) {
           yield {
-            type: ParsingMode.Text,
-            content: (content + beforeTag).trim(),
+            type: ParsingMode.Command,
+            content: command,
           };
         }
-        // Move into command mode.
-        // TODO: make this more robust against seeing < in the middle of a token
-        // when it later turns out not to be in a command
-        currentParsingMode = ParsingMode.Command;
-        content = '';
-      } else {
-        content += token;
-        if (token.trim()) {
-          // These are at the beginning, they don't need to happen on every token
-          content = content.replace(/^option/, '');
-          content = content.replace(/^>/, '');
-          content = content.replace(/^`.*/, '');
-          content = content.replace(/`.*$/, '');
-          if (content.trim()) {
-            yield {
-              type: ParsingMode.Text,
-              content: content.trim(),
-            };
-          }
-        }
       }
+    } else {
+      currentMessage += part;
+      yield {
+        type: ParsingMode.Text,
+        content: currentMessage,
+      };
+      console.log('Text:', part);
     }
+    // Checkpoint before we start processing the next token
+    tokenStream.checkpoint();
   }
 }

@@ -2,11 +2,15 @@
   "name": "@cardstack/ai-bot",
   "devDependencies": {
     "@cardstack/runtime-common": "workspace:^",
+    "@types/stream-chain": "^2.0.1",
+    "@types/stream-json": "^1.7.3",
     "matrix-js-sdk": "^25.0.0",
-    "ts-node": "^10.9.1",
-    "typescript": "^5.1.6",
     "openai": "4.0.0-beta.4",
-    "qunit": "^2.18.0"
+    "qunit": "^2.18.0",
+    "stream-chain": "^2.2.5",
+    "stream-json": "^1.8.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.1.6"
   },
   "scripts": {
     "lint": "eslint . --cache --ext ts",
