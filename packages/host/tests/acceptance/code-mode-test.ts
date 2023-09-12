@@ -304,12 +304,13 @@ module('Acceptance | code mode tests', function (hooks) {
       stacks: [
         [
           {
-            id: 'http://test-realm/test/index',
+            id: `${testRealmURL}Person/1`,
             format: 'isolated',
           },
         ],
       ],
       submode: 'code',
+      codePath: `${testRealmURL}Person/1.json`,
       fileView: 'browser',
       openDirs: [],
     })!;
@@ -327,7 +328,10 @@ module('Acceptance | code mode tests', function (hooks) {
       .containsText('index.json');
 
     await click('[data-test-file="index.json"]');
-    assert.dom('[data-test-recent-file]').doesNotExist();
+    assert
+      .dom('[data-test-recent-file]')
+      .exists({ count: 1 })
+      .containsText('Person/1.json');
 
     await click('[data-test-directory="Person/"]');
     await waitFor('[data-test-file="Person/1.json"]');
