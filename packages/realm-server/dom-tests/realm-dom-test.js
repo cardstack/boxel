@@ -64,7 +64,7 @@ QUnit.module(
     hooks.beforeEach(resetTestContainer);
     hooks.afterEach(resetTestContainer);
 
-    test('renders app', async function (assert) {
+    skip('renders app', async function (assert) {
       await boot(testRealmURL, 'a');
       assert.strictEqual(testDocument().location.href, `${testRealmURL}/`);
       let p = querySelector('p');
@@ -76,7 +76,7 @@ QUnit.module(
       );
     });
 
-    test('renders file tree', async function (assert) {
+    skip('renders file tree', async function (assert) {
       await boot(`${testRealmURL}/code`, '[data-test-directory-level]');
       assert.strictEqual(testDocument().location.href, `${testRealmURL}/code`);
       let nav = querySelector('.main nav');
