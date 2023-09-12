@@ -28,6 +28,7 @@ import flatMap from 'lodash/flatMap';
 import { TrackedArray } from 'tracked-built-ins';
 import ENV from '@cardstack/host/config/environment';
 import UrlSearch from '../url-search';
+import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 
 const { otherRealmURLs } = ENV;
 
@@ -45,6 +46,7 @@ interface Signature {
     mode: SearchSheetMode;
     onCancel: () => void;
     onFocus: () => void;
+    onBlur: () => void;
     onSearch: (term: string) => void;
     onCardSelect: (card: CardDef) => void;
   };
@@ -226,7 +228,12 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   <template>
-    <div class='search-sheet {{this.sheetSize}}' data-test-search-sheet>
+    <div
+      id='search-sheet'
+      class='search-sheet {{this.sheetSize}}'
+      data-test-search-sheet={{@mode}}
+      {{onClickOutside @onBlur exceptSelector='.add-card-to-neighbor-stack'}}
+    >
       <SearchInput
         @variant={{if (eq @mode 'closed') 'default' 'large'}}
         @bottomTreatment={{this.inputBottomTreatment}}
