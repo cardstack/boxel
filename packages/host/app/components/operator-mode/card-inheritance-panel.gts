@@ -67,19 +67,7 @@ export default class CardInheritancePanel extends Component<Args> {
               @infoText={{this.lastModified}}
               @url={{moduleUrl card}}
               @actions={{array
-                (hash
-                  label='Delete' handler=this.notImplemented icon='icon-trash'
-                )
-                (hash
-                  label='Create Instance'
-                  handler=this.notImplemented
-                  icon='icon-plus'
-                )
-                (hash
-                  label='Inherit'
-                  handler=this.notImplemented
-                  icon='icon-inherit'
-                )
+                (hash label='Delete' handler=@delete icon='icon-trash')
               }}
             />
           {{/each}}
@@ -99,21 +87,7 @@ export default class CardInheritancePanel extends Component<Args> {
               (hash label='Delete' handler=@delete icon='icon-trash')
             }}
           />
-        {{/each}}
-      {{/if}}
-      {{#if @cardInstance}}
-        <InstanceDefinitionContainer
-          @title={{'Card Instance'}}
-          @name={{@cardInstance.title}}
-          @fileExtension='.JSON'
-          @realmInfo={{@realmInfo}}
-          @realmIconURL={{@realmIconURL}}
-          @infoText={{this.lastModified}}
-          @isActive={{true}}
-          @actions={{array
-            (hash label='Delete' handler=@delete icon='icon-trash')
-          }}
-        />
+        {{/if}}
       {{/if}}
     </div>
     <style>
@@ -123,8 +97,6 @@ export default class CardInheritancePanel extends Component<Args> {
         gap: var(--boxel-sp-xs);
       }
     </style>
-
-
   </template>
 
   get lastModified() {
