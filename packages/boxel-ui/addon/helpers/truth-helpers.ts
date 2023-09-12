@@ -10,7 +10,7 @@ export function gt<T>(a: T, b: T): boolean {
   return a > b;
 }
 
-export function and<T>(...args: [T | any, T | any, ...T[]]): boolean {
+export function and<T>(...args: [T, T, ...T[]]): boolean {
   for (let i = 0; i < args.length; i++) {
     if (!args[i] || args[i] === false) {
       return false;

@@ -16,7 +16,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { Query, Filter } from '@cardstack/runtime-common/query';
 import { Button, SearchInput } from '@cardstack/boxel-ui';
-import { and, eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { and, bool, eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
@@ -68,7 +68,7 @@ const DEFAULT_CHOOOSE_CARD_TITLE = 'Choose a Card';
 
 export default class CardCatalogModal extends Component<Signature> {
   <template>
-    {{#if (and this.state.request (not this.state.dismissModal))}}
+    {{#if (and (bool this.state.request) (not this.state.dismissModal))}}
       <ModalContainer
         @title={{this.state.chooseCardTitle}}
         @onClose={{fn this.pick undefined}}
@@ -254,7 +254,7 @@ export default class CardCatalogModal extends Component<Signature> {
     this.onSearchFieldUpdated();
   }
 
-  private resetstateState() {
+  private resetState() {
     this.state.searchKey = '';
     this.state.searchResults = this.availableRealms;
     this.state.cardURL = '';
@@ -308,13 +308,9 @@ export default class CardCatalogModal extends Component<Signature> {
 
   @action
   setSearchKey(searchKey: string) {
-    if (!this.state) {
-      return;
-    }
-
     this.state.searchKey = searchKey;
     if (!this.state.searchKey) {
-      this.resetstateState();
+      this.resetState();
     } else {
       this.debouncedSearchFieldUpdate();
     }
@@ -323,18 +319,12 @@ export default class CardCatalogModal extends Component<Signature> {
   debouncedSearchFieldUpdate = debounce(() => this.onSearchFieldUpdated(), 500);
 
   @action setCardURL(cardURL: string) {
-    if (!this.state) {
-      return;
-    }
-
     this.state.selectedCard = undefined;
     this.state.cardURL = cardURL;
   }
 
   @action setSelectedCard(card: CardDef | undefined) {
-    if (this.state) {
-      this.state.selectedCard = card;
-    }
+    this.state.selectedCard = card;
   }
 
   @action
@@ -347,7 +337,7 @@ export default class CardCatalogModal extends Component<Signature> {
   @action
   onSearchFieldUpdated() {
     if (!this.state.searchKey && !this.state.selectedRealms.length) {
-      return this.resetstateState();
+      return this.resetState();
     }
     let results: RealmCards[] = [];
     for (let { url, realmInfo, cards } of this.displayedRealms) {
@@ -365,15 +355,10 @@ export default class CardCatalogModal extends Component<Signature> {
         });
       }
     }
-    if (this.state) {
-      this.state.searchResults = results;
-    }
+    this.state.searchResults = results;
   }
 
   @action toggleSelect(card?: CardDef): void {
-    if (!this.state) {
-      return;
-    }
     this.state.cardURL = '';
     if (this.state.selectedCard?.id === card?.id) {
       this.state.selectedCard = undefined;
