@@ -877,6 +877,14 @@ module('Realm Server serving from root', function (hooks) {
                 kind: 'file',
               },
             },
+            'person.json': {
+              links: {
+                related: `${testRealmHref}person.json`,
+              },
+              meta: {
+                kind: 'file',
+              },
+            },
             'unused-card.gts': {
               links: {
                 related: `${testRealmHref}unused-card.gts`,
