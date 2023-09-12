@@ -11,7 +11,12 @@ import type {
 } from 'https://cardstack.com/base/room';
 import type { RoomObjectiveField } from 'https://cardstack.com/base/room-objective';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { type LooseCardResource, baseRealm } from '@cardstack/runtime-common';
+import {
+  type LooseCardResource,
+  type MatrixCardError,
+  baseRealm,
+  isMatrixCardError,
+} from '@cardstack/runtime-common';
 import type LoaderService from '../../services/loader-service';
 
 export * as Membership from './membership';
@@ -40,7 +45,7 @@ export interface EventSendingContext {
 }
 
 export interface Context extends EventSendingContext {
-  roomObjectives: Map<string, RoomObjectiveField>;
+  roomObjectives: Map<string, RoomObjectiveField | MatrixCardError>;
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[];
@@ -106,7 +111,7 @@ export async function addRoomEvent(context: EventSendingContext, event: Event) {
 export async function recomputeRoomObjective(context: Context, roomId: string) {
   let room = await context.rooms.get(roomId);
   let objective = context.roomObjectives.get(roomId);
-  if (objective && room) {
+  if (objective && room && !isMatrixCardError(objective)) {
     objective.room = room;
   }
 }
