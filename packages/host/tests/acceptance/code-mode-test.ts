@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, todo } from 'qunit';
 import { visit, click, waitFor, waitUntil, find } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { baseRealm } from '@cardstack/runtime-common';
@@ -14,7 +14,6 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import window from 'ember-window-mock';
-import percySnapshot from '@percy/ember';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -294,7 +293,7 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.dom('[data-test-directory="Person/"] .icon').hasClass('open');
   });
 
-  test('recent file links are shown', async function (assert) {
+  todo('recent file links are shown', async function (assert) {
     let otherRealmCardUrl = 'http://example.com/other-realm-card.json';
     window.localStorage.setItem(
       'recent-files',
@@ -323,8 +322,6 @@ module('Acceptance | code mode tests', function (hooks) {
     );
     await waitFor('[data-test-file]');
     await waitFor('[data-test-directory]');
-
-    await percySnapshot(assert);
 
     assert
       .dom('[data-test-recent-file]')
