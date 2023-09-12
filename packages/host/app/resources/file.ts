@@ -7,7 +7,7 @@ import { logger } from '@cardstack/runtime-common';
 import LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
 import type CodeService from '@cardstack/host/services/code-service';
-import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 const log = logger('resource:file');
 
