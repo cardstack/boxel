@@ -148,7 +148,7 @@ module('Acceptance | code mode tests', function (hooks) {
       stacks: [
         [
           {
-            id: `${testRealmURL}/test/index`,
+            id: `${testRealmURL}index`,
             format: 'isolated',
           },
         ],
@@ -190,7 +190,7 @@ module('Acceptance | code mode tests', function (hooks) {
       stacks: [
         [
           {
-            id: `${testRealmURL}/test/index`,
+            id: `${testRealmURL}index`,
             format: 'isolated',
           },
         ],
@@ -233,7 +233,7 @@ module('Acceptance | code mode tests', function (hooks) {
       stacks: [
         [
           {
-            id: `${testRealmURL}/test/index`,
+            id: `${testRealmURL}index`,
             format: 'isolated',
           },
         ],
@@ -264,7 +264,7 @@ module('Acceptance | code mode tests', function (hooks) {
       stacks: [
         [
           {
-            id: `${testRealmURL}/test/index`,
+            id: `${testRealmURL}index`,
             format: 'isolated',
           },
         ],
