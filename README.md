@@ -86,7 +86,7 @@ The realm server uses the request accept header to determine the type of request
 
 | Accept Header | URL rules | Description |
 |---------------|-------------------|-------------|
-| `application/vnd.card+json`| Card instance URL's should not include the `.json` file extension. This is considered a 404 | Used to request card instances for normal consumption|
+| `application/vnd.card+json`| If card instance URL includes the `.json` extension, the server will redirect to the URL without the extension.| Used to request card instances for normal consumption|
 | `application/vnd.card+source`| For code modules we support node-like resolution, which means that the extension is optional. If the extension is not provided the server will redirect to the URL with the extension.| Used to request source file format for code modules or card instances (note that card instances are returned using file serialization which notably contains no `id` property)|
 | `application/vnd.api+json` | Directory listing requests need to have their URL's end with a `/` character| Used to request a directory listing or to get realm info|
 | `text/event-stream`| only `<REALM_URL>/_messages` is supported |Used to subscribe to realm events via Server Sent Events|
