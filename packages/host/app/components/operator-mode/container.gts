@@ -39,6 +39,7 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import OperatorModeStack from './stack';
 import type MatrixService from '../../services/matrix-service';
 import type MessageService from '../../services/message-service';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import ChatSidebar from '../matrix/chat-sidebar';
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
@@ -86,6 +87,8 @@ export default class OperatorModeContainer extends Component<Signature> {
   @service declare messageService: MessageService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
+  @service declare recentFilesService: RecentFilesService;
+
   @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
   @tracked searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked isChatVisible = false;
@@ -97,6 +100,7 @@ export default class OperatorModeContainer extends Component<Signature> {
 
     this.messageService.register();
     (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
+    this.constructRecentCards.perform();
     registerDestructor(this, () => {
       delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
       this.operatorModeStateService.clearStacks();
@@ -138,6 +142,11 @@ export default class OperatorModeContainer extends Component<Signature> {
     if (this.operatorModeStateService.recentCards.length === 0) {
       this.constructRecentCards.perform();
     }
+  }
+
+  @action onBlurSearchInput() {
+    this.searchSheetTrigger = null;
+    this.searchSheetMode = SearchSheetMode.Closed;
   }
 
   @action onSearch(_term: string) {
@@ -242,7 +251,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   });
 
   // dropTask will ignore any subsequent delete requests until the one in progress is done
-  delete = dropTask(async (card: CardDef) => {
+  delete = dropTask(async (card: CardDef, afterDelete?: () => void) => {
     if (!card.id) {
       // the card isn't actually saved yet, so do nothing
       return;
@@ -282,11 +291,16 @@ export default class OperatorModeContainer extends Component<Signature> {
       this.operatorModeStateService.trimItemsFromStack(item);
     }
     this.operatorModeStateService.removeRecentCard(card.id);
+    this.recentFilesService.removeRecentFile(`${card.id}.json`);
 
     await this.withTestWaiters(async () => {
       await this.cardService.deleteCard(card);
       deferred!.fulfill();
     });
+
+    if (afterDelete) {
+      afterDelete();
+    }
   });
 
   // we debounce saves in the stack item--by the time they reach
@@ -629,7 +643,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         />
 
         {{#if this.isCodeMode}}
-          <CodeMode />
+          <CodeMode @delete={{perform this.delete}} />
         {{else}}
           <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
             {{#if (eq this.allStackItems.length 0)}}
@@ -672,7 +686,6 @@ export default class OperatorModeContainer extends Component<Signature> {
                 @copy={{fn (perform this.copy)}}
                 @isCopying={{this.copy.isRunning}}
               />
-              <DeleteModal @onCreate={{this.setupDeleteModal}} />
             {{/if}}
 
             {{#if this.canCreateNeighborStack}}
@@ -719,6 +732,9 @@ export default class OperatorModeContainer extends Component<Signature> {
             {{/if}}
           </div>
         {{/if}}
+
+        <DeleteModal @onCreate={{this.setupDeleteModal}} />
+
         {{#if APP.experimentalAIEnabled}}
           {{#if this.isChatVisible}}
             <div class='container__chat-sidebar'>
@@ -741,6 +757,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         @mode={{this.searchSheetMode}}
         @onCancel={{this.onCancelSearchSheet}}
         @onFocus={{this.onFocusSearchInput}}
+        @onBlur={{this.onBlurSearchInput}}
         @onSearch={{this.onSearch}}
         @onCardSelect={{this.onCardSelectFromSearch}}
       />
@@ -752,6 +769,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         --boxel-modal-max-width: 100%;
         --container-button-size: var(--boxel-icon-lg);
         --operator-mode-min-width: 20.5rem;
+        --operator-mode-left-column: 14rem;
       }
       :global(.operator-mode .boxel-modal__inner) {
         display: block;

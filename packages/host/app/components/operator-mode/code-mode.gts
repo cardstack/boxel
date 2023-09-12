@@ -1,14 +1,16 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { service } from '@ember/service';
-import { action } from '@ember/object';
-import MonacoService from '@cardstack/host/services/monaco-service';
-import { htmlSafe } from '@ember/template';
-import ENV from '@cardstack/host/config/environment';
-import FileTree from '../editor/file-tree';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { on } from '@ember/modifier';
+import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import { service } from '@ember/service';
+import { htmlSafe } from '@ember/template';
+import { task, restartableTask, timeout } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
+import { use, resource } from 'ember-resources';
+import { TrackedObject } from 'tracked-built-ins';
+
 import {
   type RealmInfo,
   type SingleCardDocument,
@@ -20,38 +22,51 @@ import {
   identifyCard,
   moduleFrom,
 } from '@cardstack/runtime-common';
-import { LoadingIndicator } from '@cardstack/boxel-ui';
-import { maybe } from '@cardstack/host/resources/maybe';
+
+import {
+  LoadingIndicator,
+  Button,
+  ResizablePanelGroup,
+  ResizablePanel,
+  PanelContext,
+} from '@cardstack/boxel-ui';
+import cn from '@cardstack/boxel-ui/helpers/cn';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
+import { CardDef } from 'https://cardstack.com/base/card-api';
+
+// host components
+import FileTree from '../editor/file-tree';
+import CardInheritancePanel from './card-inheritance-panel';
+import CardPreviewPanel from './card-preview-panel';
+import CardURLBar from './card-url-bar';
+import RecentFiles from '@cardstack/host/components/editor/recent-files';
+
+import monacoModifier from '@cardstack/host/modifiers/monaco';
+
+// host resources
 import {
   Ready,
   file,
   isReady,
   type FileResource,
 } from '@cardstack/host/resources/file';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
-import type MessageService from '@cardstack/host/services/message-service';
-import CardService from '@cardstack/host/services/card-service';
-import { task, restartableTask, timeout } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
-import { registerDestructor } from '@ember/destroyable';
-import CardURLBar from '@cardstack/host/components/operator-mode/card-url-bar';
-const { ownRealmURL } = ENV;
-import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-preview-panel';
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import { use, resource } from 'ember-resources';
-import { TrackedObject } from 'tracked-built-ins';
-import monacoModifier from '@cardstack/host/modifiers/monaco';
-import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
-import CardInheritancePanel from '@cardstack/host/components/operator-mode/card-inheritance-panel';
 import { importResource } from '@cardstack/host/resources/import';
-import ResizablePanelGroup, {
-  PanelContext,
-} from '@cardstack/boxel-ui/components/resizable-panel/resizable-panel-group';
-import ResizablePanel from '@cardstack/boxel-ui/components/resizable-panel/resizable-panel';
+import { maybe } from '@cardstack/host/resources/maybe';
+
+// host services
+import type CardService from '@cardstack/host/services/card-service';
+import type MessageService from '@cardstack/host/services/message-service';
+import type MonacoService from '@cardstack/host/services/monaco-service';
+import RecentFilesService from '@cardstack/host/services/recent-files-service';
+import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 interface Signature {
-  Args: {};
+  Args: {
+    delete: (card: CardDef, afterDelete?: () => void) => void;
+  };
 }
 const log = logger('component:code-mode');
 
@@ -59,13 +74,15 @@ type PanelWidths = {
   rightPanel: string;
   codeEditorPanel: string;
   leftPanel: string;
+  emptyCodeModePanel: string;
 };
 
 const CodeModePanelWidths = 'code-mode-panel-widths';
 const defaultPanelWidths: PanelWidths = {
-  leftPanel: '20%',
+  leftPanel: 'var(--operator-mode-left-column)',
   codeEditorPanel: '48%',
   rightPanel: '32%',
+  emptyCodeModePanel: '80%',
 };
 
 export default class CodeMode extends Component<Signature> {
@@ -73,6 +90,8 @@ export default class CodeMode extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
   @service declare operatorModeStateService: OperatorModeStateService;
+  @service declare recentFilesService: RecentFilesService;
+
   @tracked private loadFileError: string | null = null;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
   private panelWidths: PanelWidths;
@@ -407,6 +426,21 @@ export default class CodeMode extends Component<Signature> {
     localStorage.setItem(CodeModePanelWidths, JSON.stringify(this.panelWidths));
   }
 
+  @action
+  private delete() {
+    if (this.cardResource.value) {
+      this.args.delete(this.cardResource.value, () => {
+        let previousFile = this.recentFilesService.recentFiles[0] as
+          | string
+          | undefined;
+        let url = previousFile ? new URL(previousFile) : null;
+        this.operatorModeStateService.updateCodePath(url);
+      });
+    } else {
+      throw new Error(`TODO: non-card instance deletes are not yet supported`);
+    }
+  }
+
   <template>
     <div class='code-mode-background' style={{this.backgroundURLStyle}}></div>
     <CardURLBar
@@ -427,7 +461,7 @@ export default class CodeMode extends Component<Signature> {
       >
         <ResizablePanel
           @defaultWidth={{defaultPanelWidths.leftPanel}}
-          @width={{this.panelWidths.leftPanel}}
+          @width='var(--operator-mode-left-column)'
           @panelGroupApi={{pg.api}}
         >
           <div class='column'>
@@ -437,36 +471,58 @@ export default class CodeMode extends Component<Signature> {
                 {{if (eq this.fileView "browser") "file-browser"}}'
             >
               <header
+                class='file-view__header'
                 aria-label={{this.fileViewTitle}}
                 data-test-file-view-header
               >
-                <button
-                  class='{{if (eq this.fileView "inheritance") "active"}}'
+                <Button
+                  @kind={{if
+                    (eq this.fileView 'inheritance')
+                    'primary-dark'
+                    'secondary'
+                  }}
+                  @size='extra-small'
+                  class={{cn
+                    'file-view__header-btn'
+                    active=(eq this.fileView 'inheritance')
+                  }}
                   {{on 'click' (fn this.setFileView 'inheritance')}}
                   data-test-inheritance-toggle
                 >
-                  Inheritance</button>
-                <button
-                  class='{{if (eq this.fileView "browser") "active"}}'
+                  Inheritance</Button>
+                <Button
+                  @kind={{if
+                    (eq this.fileView 'browser')
+                    'primary-dark'
+                    'secondary'
+                  }}
+                  @size='extra-small'
+                  class={{cn
+                    'file-view__header-btn'
+                    active=(eq this.fileView 'browser')
+                  }}
                   {{on 'click' (fn this.setFileView 'browser')}}
                   data-test-file-browser-toggle
                 >
-                  File Browser</button>
+                  File Browser</Button>
               </header>
               <section class='inner-container__content'>
-                {{#if (eq this.fileView 'inheritance')}}
-                  <section class='inner-container__content'>
-                    <CardInheritancePanel
-                      @cardInstance={{this.cardResource.value}}
-                      @openFile={{this.openFile}}
-                      @realmInfo={{this.realmInfo}}
-                      @realmIconURL={{this.realmIconURL}}
-                      @importedModule={{this.importedModule}}
-                      data-test-card-inheritance-panel
-                    />
-                  </section>
-                {{else}}
-                  <FileTree @url={{ownRealmURL}} />
+                {{#if this.isReady}}
+                  {{#if (eq this.fileView 'inheritance')}}
+                    <section class='inner-container__content'>
+                      <CardInheritancePanel
+                        @cardInstance={{this.cardResource.value}}
+                        @readyFile={{this.readyFile}}
+                        @realmInfo={{this.realmInfo}}
+                        @realmIconURL={{this.realmIconURL}}
+                        @importedModule={{this.importedModule}}
+                        @delete={{this.delete}}
+                        data-test-card-inheritance-panel
+                      />
+                    </section>
+                  {{else}}
+                    <FileTree @url={{this.readyFile.realmURL}} />
+                  {{/if}}
                 {{/if}}
               </section>
             </div>
@@ -477,52 +533,66 @@ export default class CodeMode extends Component<Signature> {
               >
                 Recent Files
               </header>
-              <section class='inner-container__content'></section>
+              <section class='inner-container__content'>
+                <RecentFiles />
+              </section>
             </aside>
           </div>
         </ResizablePanel>
-        <ResizablePanel
-          @defaultWidth={{defaultPanelWidths.codeEditorPanel}}
-          @width={{this.panelWidths.codeEditorPanel}}
-          @minWidth='300px'
-          @panelGroupApi={{pg.api}}
-        >
-          <div class='inner-container'>
-            {{#if this.isReady}}
-              <div
-                class='monaco-container'
-                data-test-editor
-                {{monacoModifier
-                  content=this.readyFile.content
-                  contentChanged=(perform this.contentChangedTask)
-                  monacoSDK=this.monacoSDK
-                  language=this.language
-                }}
-              ></div>
-            {{else if this.isLoading}}
-              <div class='loading'>
-                <LoadingIndicator />
-              </div>
-            {{/if}}
-          </div>
-        </ResizablePanel>
-        <ResizablePanel
-          @defaultWidth={{defaultPanelWidths.rightPanel}}
-          @width={{this.panelWidths.rightPanel}}
-          @panelGroupApi={{pg.api}}
-        >
-          <div class='inner-container'>
-            {{#if this.cardResource.value}}
-              <CardPreviewPanel
-                @card={{this.cardResource.value}}
-                @realmIconURL={{this.realmIconURL}}
-                data-test-card-resource-loaded
-              />
-            {{else if this.cardResource.error}}
-              {{this.cardResource.error.message}}
-            {{/if}}
-          </div>
-        </ResizablePanel>
+        {{#if this.codePath}}
+          <ResizablePanel
+            @defaultWidth={{defaultPanelWidths.codeEditorPanel}}
+            @width={{this.panelWidths.codeEditorPanel}}
+            @minWidth='300px'
+            @panelGroupApi={{pg.api}}
+          >
+            <div class='inner-container'>
+              {{#if this.isReady}}
+                <div
+                  class='monaco-container'
+                  data-test-editor
+                  {{monacoModifier
+                    content=this.readyFile.content
+                    contentChanged=(perform this.contentChangedTask)
+                    monacoSDK=this.monacoSDK
+                    language=this.language
+                  }}
+                ></div>
+              {{else if this.isLoading}}
+                <div class='loading'>
+                  <LoadingIndicator />
+                </div>
+              {{/if}}
+            </div>
+          </ResizablePanel>
+          <ResizablePanel
+            @defaultWidth={{defaultPanelWidths.rightPanel}}
+            @width={{this.panelWidths.rightPanel}}
+            @panelGroupApi={{pg.api}}
+          >
+            <div class='inner-container'>
+              {{#if this.cardResource.value}}
+                <CardPreviewPanel
+                  @card={{this.cardResource.value}}
+                  @realmIconURL={{this.realmIconURL}}
+                  data-test-card-resource-loaded
+                />
+              {{else if this.cardResource.error}}
+                {{this.cardResource.error.message}}
+              {{/if}}
+            </div>
+          </ResizablePanel>
+        {{else}}
+          <ResizablePanel
+            @defaultWidth={{defaultPanelWidths.emptyCodeModePanel}}
+            @width={{this.panelWidths.emptyCodeModePanel}}
+            @panelGroupApi={{pg.api}}
+          >
+            <div class='inner-container' data-test-empty-code-mode>
+              <h3>TODO: implement ticket CS-5863: Empty code mode</h3>
+            </div>
+          </ResizablePanel>
+        {{/if}}
       </ResizablePanelGroup>
     </div>
 
@@ -578,7 +648,6 @@ export default class CodeMode extends Component<Signature> {
       }
       .column:first-child > *:first-child {
         max-height: 50%;
-        background-color: var(--boxel-200);
       }
       .column:first-child > *:last-child {
         max-height: calc(50% - var(--boxel-sp));
@@ -604,26 +673,26 @@ export default class CodeMode extends Component<Signature> {
         overflow-y: auto;
       }
 
-      .file-view header {
-        margin: var(--boxel-sp-sm);
+      .file-view__header {
         display: flex;
-        gap: var(--boxel-sp-sm);
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs);
+        background-color: var(--boxel-200);
       }
-
-      .file-view header button {
-        padding: var(--boxel-sp-xxxs) var(--boxel-sp-lg);
-        font-weight: 700;
-        background: transparent;
-        color: var(--boxel-dark);
-        border-radius: var(--boxel-border-radius-sm);
-        border: 1px solid var(--boxel-400);
-        flex: 1;
+      .file-view__header-btn {
+        --boxel-button-border: 1px solid var(--boxel-400);
+        --boxel-button-font: 700 var(--boxel-font-xs);
+        --boxel-button-letter-spacing: var(--boxel-lsp-xs);
+        --boxel-button-min-width: 6rem;
+        --boxel-button-padding: 0;
+        border-radius: var(--boxel-border-radius);
       }
-
-      .file-view header button.active {
-        background: var(--boxel-dark);
-        color: var(--boxel-highlight);
+      .file-view__header-btn:hover {
         border-color: var(--boxel-dark);
+      }
+      .file-view__header-btn.active {
+        border-color: var(--boxel-dark);
+        --boxel-button-text-color: var(--boxel-highlight);
       }
 
       .file-view.file-browser .inner-container__content {

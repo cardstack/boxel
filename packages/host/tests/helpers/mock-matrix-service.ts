@@ -4,6 +4,7 @@ import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type { RoomField } from 'https://cardstack.com/base/room';
 import type { RoomObjectiveField } from 'https://cardstack.com/base/room-objective';
+import { type MatrixCardError } from '@cardstack/runtime-common';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 
@@ -21,7 +22,8 @@ export class MockMatrixService extends Service {
   cardAPI!: typeof cardApi;
   // These will be empty in the tests, but we need to define them to satisfy the interface
   rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
-  roomObjectives: TrackedMap<string, RoomObjectiveField> = new TrackedMap();
+  roomObjectives: TrackedMap<string, RoomObjectiveField | MatrixCardError> =
+    new TrackedMap();
 
   async start(_auth?: any) {}
 

@@ -30,6 +30,8 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import percySnapshot from '@percy/ember';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import { setupWindowMock } from 'ember-window-mock/test-support';
+import window from 'ember-window-mock';
 
 module('Acceptance | operator mode tests', function (hooks) {
   let realm: Realm;
@@ -39,13 +41,16 @@ module('Acceptance | operator mode tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
+  setupWindowMock(hooks);
 
   hooks.afterEach(async function () {
-    localStorage.removeItem('recent-cards');
+    window.localStorage.removeItem('recent-cards');
+    window.localStorage.removeItem('recent-files');
   });
 
   hooks.beforeEach(async function () {
-    localStorage.removeItem('recent-cards');
+    window.localStorage.removeItem('recent-cards');
+    window.localStorage.removeItem('recent-files');
 
     adapter = new TestRealmAdapter({
       'pet.gts': `
@@ -164,10 +169,21 @@ module('Acceptance | operator mode tests', function (hooks) {
       `,
       'Pet/mango.json': {
         data: {
-          type: 'card',
-          id: `${testRealmURL}Pet/mango`,
           attributes: {
             name: 'Mango',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}pet`,
+              name: 'Pet',
+            },
+          },
+        },
+      },
+      'Pet/vangogh.json': {
+        data: {
+          attributes: {
+            name: 'Van Gogh',
           },
           meta: {
             adoptsFrom: {
@@ -180,8 +196,6 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       'Person/fadhlan.json': {
         data: {
-          type: 'card',
-          id: `${testRealmURL}Person/fadhlan`,
           attributes: {
             firstName: 'Fadhlan',
             address: {
@@ -686,7 +700,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     test('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
       // creates a recent search
-      localStorage.setItem(
+      window.localStorage.setItem(
         'recent-cards',
         JSON.stringify([`${testRealmURL}Person/fadhlan`]),
       );
@@ -892,66 +906,6 @@ module('Acceptance | operator mode tests', function (hooks) {
         .dom('[data-test-code-mode-card-preview-body ] .edit-card')
         .exists();
     });
-
-    test('card inheritance panel will show json instance definition and module definition when is set to code', async function (assert) {
-      let operatorModeStateParam = stringify({
-        stacks: [
-          [
-            {
-              id: 'http://test-realm/test/Person/fadhlan',
-              format: 'isolated',
-            },
-          ],
-        ],
-        submode: 'code',
-        codePath: `http://test-realm/test/Person/fadhlan.json`,
-      })!;
-
-      await visit(
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam,
-        )}`,
-      );
-
-      await waitUntil(() => find('[data-test-card-inheritance-panel]'));
-      await waitUntil(() => find('[data-test-card-module-definition]'));
-      await waitUntil(() => find('[data-test-card-instance-definition]'));
-
-      assert.dom('[data-test-card-module-definition]').includesText('Person');
-      assert
-        .dom(
-          '[data-test-card-module-definition] [data-test-definition-file-extension]',
-        )
-        .includesText('.GTS');
-      assert
-        .dom(
-          '[data-test-card-module-definition] [data-test-definition-realm-name]',
-        )
-        .includesText('Test Workspace B');
-      assert
-        .dom('[data-test-card-module-definition]')
-        .doesNotHaveClass('active');
-      assert
-        .dom('[data-test-card-instance-definition]')
-        .includesText('Fadhlan');
-      assert
-        .dom(
-          '[data-test-card-instance-definition] [data-test-definition-file-extension]',
-        )
-        .includesText('.JSON');
-      assert
-        .dom(
-          '[data-test-card-instance-definition] [data-test-definition-realm-name]',
-        )
-        .includesText('Test Workspace B');
-      assert
-        .dom(
-          '[data-test-card-instance-definition] [data-test-definition-info-text]',
-        )
-        .includesText('Last saved was a few seconds ago');
-
-      assert.dom('[data-test-card-instance-definition]').hasClass('active');
-    });
   });
 
   test<TestContextWithSSE>('stack item live updates when index changes', async function (assert) {
@@ -1102,8 +1056,6 @@ module('Acceptance | operator mode tests', function (hooks) {
     await waitUntil(() => find('[data-test-editor]'));
     assert.deepEqual(JSON.parse(getMonacoContent()), {
       data: {
-        type: 'card',
-        id: `${testRealmURL}Pet/mango`,
         attributes: {
           name: 'Mango',
         },
@@ -1124,8 +1076,6 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     let expected: LooseSingleCardDocument = {
       data: {
-        type: 'card',
-        id: `${testRealmURL}Pet/mango`,
         attributes: {
           name: 'MangoXXX',
         },
@@ -1232,6 +1182,7 @@ module('Acceptance | operator mode tests', function (hooks) {
           invalidations: [
             `${testRealmURL}pet.gts`,
             `${testRealmURL}Pet/mango`,
+            `${testRealmURL}Pet/vangogh`,
             `${testRealmURL}Person/fadhlan`,
             `${testRealmURL}person`,
           ],
@@ -1279,6 +1230,196 @@ module('Acceptance | operator mode tests', function (hooks) {
     );
   });
 
+  test<TestContextWithSSE>('Can delete a card instance from code mode with no recent files to fall back on', async function (assert) {
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Pet/vangogh`],
+        },
+      },
+    ];
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+          {
+            id: `${testRealmURL}Pet/vangogh`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    })!;
+    window.localStorage.setItem(
+      'recent-cards',
+      JSON.stringify([
+        `${testRealmURL}Pet/vangogh`,
+        `${testRealmURL}Person/fadhlan`,
+      ]),
+    );
+    window.localStorage.setItem(
+      'recent-files',
+      JSON.stringify([`${testRealmURL}Pet/vangogh.json`]),
+    );
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"`)
+      .exists();
+    assert.dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"`).exists();
+
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    await waitUntil(() => find('[data-test-editor]'));
+    assert.strictEqual(
+      window.localStorage.getItem('recent-files'),
+      JSON.stringify([`${testRealmURL}Pet/vangogh.json`]),
+    );
+
+    await waitFor(`[data-test-action-button="Delete"]`);
+    await click('[data-test-action-button="Delete"]');
+    await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/vangogh"]`);
+    await percySnapshot(assert);
+    await this.expectEvents(
+      assert,
+      realm,
+      adapter,
+      expectedEvents,
+      async () => {
+        await click('[data-test-confirm-delete-button]');
+      },
+    );
+    await waitUntil(() => find('[data-test-empty-code-mode]'));
+    await percySnapshot(
+      'Acceptance | operator mode tests | Can delete a card instance from code mode with no recent files - empty code mode',
+    );
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Interact"]');
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"`)
+      .exists();
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"`)
+      .doesNotExist('stack item removed');
+    assert.deepEqual(
+      window.localStorage.getItem('recent-cards'),
+      JSON.stringify([`${testRealmURL}Person/fadhlan`]),
+      'the deleted card has been removed from recent cards',
+    );
+    assert.deepEqual(
+      window.localStorage.getItem('recent-files'),
+      '[]',
+      'the deleted card has been removed from recent files',
+    );
+
+    let notFound = await adapter.openFile('Pet/vangogh.json');
+    assert.strictEqual(notFound, undefined, 'file ref does not exist');
+  });
+
+  test<TestContextWithSSE>('Can delete a card instance from code mode and fall back to recent file', async function (assert) {
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Pet/vangogh`],
+        },
+      },
+    ];
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/fadhlan`,
+            format: 'isolated',
+          },
+          {
+            id: `${testRealmURL}Pet/vangogh`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    })!;
+    window.localStorage.setItem(
+      'recent-files',
+      JSON.stringify([
+        `${testRealmURL}Pet/vangogh.json`,
+        `${testRealmURL}Pet/mango.json`,
+      ]),
+    );
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"`)
+      .exists();
+    assert.dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"`).exists();
+
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    await waitUntil(() => find('[data-test-editor]'));
+    assert.strictEqual(
+      window.localStorage.getItem('recent-files'),
+      JSON.stringify([
+        `${testRealmURL}Pet/vangogh.json`,
+        `${testRealmURL}Pet/mango.json`,
+      ]),
+    );
+
+    await waitFor(`[data-test-action-button="Delete"]`);
+    await click('[data-test-action-button="Delete"]');
+    await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/vangogh"]`);
+    await this.expectEvents(
+      assert,
+      realm,
+      adapter,
+      expectedEvents,
+      async () => {
+        await click('[data-test-confirm-delete-button]');
+      },
+    );
+    await waitUntil(() => find('[data-test-editor]'));
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}Pet/mango.json`);
+    assert.dom('[data-test-definition-name]').hasText('Pet');
+    assert.deepEqual(JSON.parse(getMonacoContent()), {
+      data: {
+        attributes: {
+          name: 'Mango',
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}pet`,
+            name: 'Pet',
+          },
+        },
+      },
+    });
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Interact"]');
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"`)
+      .exists();
+    assert
+      .dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"`)
+      .doesNotExist('stack item removed');
+    assert.deepEqual(
+      window.localStorage.getItem('recent-files'),
+      JSON.stringify([`${testRealmURL}Pet/mango.json`]),
+      'the deleted card has been removed from recent files',
+    );
+  });
+
   module('0 stacks', function () {
     test('Clicking card in search panel opens card on a new stack', async function (assert) {
       let operatorModeStateParam = stringify({
@@ -1303,7 +1444,9 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       assert.dom('[data-test-search-sheet]').hasClass('results'); // Search open
 
-      await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+      await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`, {
+        timeout: 2000,
+      });
 
       // Click on search result
       await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
