@@ -59,10 +59,19 @@ export async function* extractContentFromStream(
    * The OpenAI API returns a stream of updates, which
    * have extra details that we don't need, this function
    * extracts out just the content from the stream.
+   *
+   * It also splits the content around { and } so that
+   * we can parse JSON more cleanly
    */
   for await (const part of iterable) {
-    if (part.choices[0]?.delta?.content) {
-      yield part.choices[0].delta.content;
+    let content = part.choices[0]?.delta?.content;
+    if (content) {
+      // Regex splits keep the delimiters
+      for (let token of content.split(/([{}])/)) {
+        if (token) {
+          yield token;
+        }
+      }
     }
   }
 }

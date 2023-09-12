@@ -1,10 +1,29 @@
 import { module, test, assert } from 'qunit';
-import { processStream, ParsingMode, Message } from '../helpers';
+import {
+  processStream,
+  ParsingMode,
+  Message,
+  extractContentFromStream,
+} from '../helpers';
 
 async function* streamGenerator(stream: string[]) {
   for (const chunk of stream) {
     yield chunk;
   }
+}
+
+async function* chatCompletionGenerator(stream: string[]) {
+  for (const chunk of stream) {
+    yield { choices: [{ delta: { content: chunk } }] };
+  }
+}
+
+async function streamToArray(stream: AsyncIterable<string>) {
+  const result = [];
+  for await (const chunk of stream) {
+    result.push(chunk);
+  }
+  return result;
 }
 
 async function assertProcessedStreamContains(
@@ -196,5 +215,56 @@ module('processStream', () => {
       },
     ];
     await assertProcessedStreamContains(stream, expectedResult);
+  });
+
+  test('should split responses around { and }', async () => {
+    const stream = chatCompletionGenerator(['this is { "a": "json"}']);
+    const expectedResult: string[] = ['this is ', '{', ' "a": "json"', '}'];
+    const result: string[] = await streamToArray(
+      extractContentFromStream(stream),
+    );
+
+    assert.deepEqual(result, expectedResult);
+  });
+
+  test('should split responses around { and } even if they are on their own', async () => {
+    const stream = chatCompletionGenerator([
+      'this is ',
+      '{',
+      ' "a": "json"',
+      '}',
+    ]);
+    const expectedResult: string[] = ['this is ', '{', ' "a": "json"', '}'];
+    const result: string[] = await streamToArray(
+      extractContentFromStream(stream),
+    );
+
+    assert.deepEqual(result, expectedResult);
+  });
+
+  test('whitespace is not lost with splitting the tokens', async () => {
+    const stream = chatCompletionGenerator([
+      'this is   ',
+      '  {',
+      ' "a": "json"',
+      '}  ',
+      '  ',
+      '  \n',
+    ]);
+    const expectedResult: string[] = [
+      'this is   ',
+      '  ',
+      '{',
+      ' "a": "json"',
+      '}',
+      '  ',
+      '  ',
+      '  \n',
+    ];
+    const result: string[] = await streamToArray(
+      extractContentFromStream(stream),
+    );
+
+    assert.deepEqual(result, expectedResult);
   });
 });
