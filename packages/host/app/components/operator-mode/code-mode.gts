@@ -473,20 +473,22 @@ export default class CodeMode extends Component<Signature> {
                   File Browser</button>
               </header>
               <section class='inner-container__content'>
-                {{#if (eq this.fileView 'inheritance')}}
-                  <section class='inner-container__content'>
-                    <CardInheritancePanel
-                      @cardInstance={{this.cardResource.value}}
-                      @openFile={{this.openFile}}
-                      @realmInfo={{this.realmInfo}}
-                      @realmIconURL={{this.realmIconURL}}
-                      @importedModule={{this.importedModule}}
-                      @delete={{this.delete}}
-                      data-test-card-inheritance-panel
-                    />
-                  </section>
-                {{else}}
-                  <FileTree @url={{this.cardService.defaultURL.href}} />
+                {{#if this.isReady}}
+                  {{#if (eq this.fileView 'inheritance')}}
+                    <section class='inner-container__content'>
+                      <CardInheritancePanel
+                        @cardInstance={{this.cardResource.value}}
+                        @readyFile={{this.readyFile}}
+                        @realmInfo={{this.realmInfo}}
+                        @realmIconURL={{this.realmIconURL}}
+                        @importedModule={{this.importedModule}}
+                        @delete={{this.delete}}
+                        data-test-card-inheritance-panel
+                      />
+                    </section>
+                  {{else}}
+                    <FileTree @url={{this.readyFile.realmURL}} />
+                  {{/if}}
                 {{/if}}
               </section>
             </div>

@@ -23,12 +23,14 @@ import {
   Loader,
   SupportedMimeType,
   Deferred,
+  isMatrixCardError,
   type LooseSingleCardDocument,
   type SingleCardDocument,
   type CodeRef,
+  type MatrixCardError,
 } from '@cardstack/runtime-common';
 
-const attachedCards = new Map<string, Promise<CardDef>>();
+const attachedCards = new Map<string, Promise<CardDef | MatrixCardError>>();
 
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember({
@@ -186,12 +188,27 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
       {{{@model.formattedMessage}}}
 
       {{#if this.attachedCard}}
-        <this.cardComponent />
+        {{#if this.cardError}}
+          <div data-test-card-error class='error'>
+            Error: cannot render card
+            {{this.cardError.id}}:
+            {{this.cardError.error.message}}
+          </div>
+        {{else}}
+          <this.cardComponent />
+        {{/if}}
       {{/if}}
     </BoxelMessage>
+
+    <style>
+      .error {
+        color: var(--boxel-danger);
+        font-weight: 'bold';
+      }
+    </style>
   </template>
 
-  @tracked attachedCard: CardDef | undefined;
+  @tracked attachedCard: CardDef | MatrixCardError | undefined;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
@@ -206,13 +223,20 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
   }
 
   get cardComponent() {
-    if (!this.attachedCard) {
+    if (!this.attachedCard || isMatrixCardError(this.attachedCard)) {
       return;
     }
     return this.attachedCard.constructor.getComponent(
       this.attachedCard,
       'isolated',
     );
+  }
+
+  get cardError() {
+    if (isMatrixCardError(this.attachedCard)) {
+      return this.attachedCard;
+    }
+    return;
   }
 
   loadAttachedCard = restartableTask(async () => {
@@ -224,30 +248,44 @@ class EmbeddedMessageField extends Component<typeof MessageField> {
       this.attachedCard = await cached;
       return;
     }
-    let deferred = new Deferred<CardDef>();
+    let deferred = new Deferred<CardDef | MatrixCardError>();
     attachedCards.set(this.args.model.attachedCardId, deferred.promise);
-    let response = await fetch(this.args.model.attachedCardId, {
-      headers: { Accept: SupportedMimeType.CardJson },
-    });
-    if (!response.ok) {
-      throw new Error(
-        `status: ${response.status} -
+    let cardOrError: CardDef | MatrixCardError;
+    let doc: SingleCardDocument | undefined;
+    try {
+      let response = await fetch(this.args.model.attachedCardId, {
+        headers: { Accept: SupportedMimeType.CardJson },
+      });
+      if (!response.ok) {
+        throw new Error(
+          `status: ${response.status} -
         ${response.statusText}. ${await response.text()}`,
+        );
+      }
+      doc = await response.json();
+      if (!doc) {
+        throw new Error(
+          `No document exists for ${this.args.model.attachedCardId}`,
+        );
+      }
+      let loader = Loader.getLoaderFor(createFromSerialized);
+      if (!loader) {
+        throw new Error('Could not obtain a loader');
+      }
+      cardOrError = await createFromSerialized<typeof CardDef>(
+        doc.data,
+        doc,
+        new URL(doc.data.id),
+        loader,
       );
+    } catch (error: any) {
+      cardOrError = {
+        id: this.args.model.attachedCardId,
+        error,
+      } as MatrixCardError;
     }
-    let doc: SingleCardDocument = await response.json();
-    let loader = Loader.getLoaderFor(createFromSerialized);
-    if (!loader) {
-      throw new Error('Could not obtain a loader');
-    }
-    let card = await createFromSerialized<typeof CardDef>(
-      doc.data,
-      doc,
-      new URL(doc.data.id),
-      loader,
-    );
-    this.attachedCard = card;
-    deferred.fulfill(card);
+    this.attachedCard = cardOrError;
+    deferred.fulfill(cardOrError);
   });
 }
 
@@ -305,7 +343,10 @@ export class RoomField extends FieldDef {
   static getAttachedCard(id: string) {
     return attachedCards.get(id);
   }
-  static setAttachedCard(id: string, cardPromise: Promise<CardDef>) {
+  static setAttachedCard(
+    id: string,
+    cardPromise: Promise<CardDef | MatrixCardError>,
+  ) {
     attachedCards.set(id, cardPromise);
   }
 

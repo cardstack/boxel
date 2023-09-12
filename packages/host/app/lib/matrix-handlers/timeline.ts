@@ -9,7 +9,11 @@ import {
 import { eventDebounceMs } from '../matrix-utils';
 import { type MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
 import { type RoomObjectiveField } from 'https://cardstack.com/base/room-objective';
-import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
+import {
+  type LooseSingleCardDocument,
+  type MatrixCardError,
+  isMatrixCardError,
+} from '@cardstack/runtime-common';
 
 export function onTimeline(context: Context) {
   return (e: MatrixEvent) => {
@@ -62,13 +66,23 @@ async function processDecryptedEvent(context: Context, event: Event) {
         },
       } as LooseSingleCardDocument;
       let room = await context.rooms.get(roomId);
-      if (!room) {
-        throw new Error(`could not get room card for room '${roomId}'`);
+      let objective: RoomObjectiveField | MatrixCardError;
+      try {
+        if (!room) {
+          throw new Error(`could not get room card for room '${roomId}'`);
+        }
+        objective = await context.cardAPI.createFromSerialized<
+          typeof RoomObjectiveField
+        >(doc.data, doc, undefined, context.loaderService.loader);
+      } catch (error: any) {
+        objective = {
+          id: doc.data.id,
+          error,
+        } as MatrixCardError;
       }
-      objective = await context.cardAPI.createFromSerialized<
-        typeof RoomObjectiveField
-      >(doc.data, doc, undefined, context.loaderService.loader);
-      objective.room = room;
+      if (!isMatrixCardError(objective) && room) {
+        objective.room = room;
+      }
       context.roomObjectives.set(roomId, objective);
     }
   }
