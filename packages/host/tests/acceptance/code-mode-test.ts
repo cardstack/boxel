@@ -14,7 +14,6 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import window from 'ember-window-mock';
-import percySnapshot from '@percy/ember';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -324,8 +323,6 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-file]');
     await waitFor('[data-test-directory]');
 
-    await percySnapshot(assert);
-
     assert
       .dom('[data-test-recent-file]')
       .exists({ count: 1 })
@@ -337,7 +334,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .exists({ count: 1 })
       .containsText('Person/1.json');
 
-    await click('[data-test-directory="Person/"]');
+    await click('[data-test-directory]');
     await waitFor('[data-test-file="Person/1.json"]');
 
     await click('[data-test-file="Person/1.json"]');
