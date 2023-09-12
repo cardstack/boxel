@@ -321,6 +321,7 @@ module('Acceptance | code mode tests', function (hooks) {
       )}`,
     );
     await waitFor('[data-test-file]');
+    await waitFor('[data-test-directory]');
 
     assert
       .dom('[data-test-recent-file]')
