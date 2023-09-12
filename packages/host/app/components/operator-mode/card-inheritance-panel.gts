@@ -15,7 +15,7 @@ import {
   InstanceDefinitionContainer,
   ModuleDefinitionContainer,
 } from './definition-container';
-import { isReady, FileResource } from '@cardstack/host/resources/file';
+import { Ready } from '@cardstack/host/resources/file';
 import { tracked } from '@glimmer/tracking';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import moment from 'moment';
@@ -23,7 +23,6 @@ import { type ImportResource } from '@cardstack/host/resources/import';
 import { hash, array, fn } from '@ember/helper';
 import CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import { Ready } from '@cardstack/host/resources/file';
 import { action } from '@ember/object';
 
 interface Args {
@@ -31,7 +30,7 @@ interface Args {
   Args: {
     realmInfo: RealmInfo | null;
     realmIconURL: string | null | undefined;
-    openFile: { current: FileResource | undefined };
+    readyFile: Ready;
     cardInstance: CardDef | null;
     importedModule?: ImportResource;
     delete: () => void;
@@ -53,41 +52,37 @@ export default class CardInheritancePanel extends Component<Args> {
 
   <template>
     <div class='container' ...attributes>
-      {{#if (isReady this.args.openFile.current)}}
-        {{#if @importedModule.module}}
-          {{#each (cardsFromModule @importedModule.module) as |card|}}
-            <ModuleDefinitionContainer
-              @title={{'Card Definition'}}
-              @name={{getCardTypeDisplayName card}}
-              @fileExtension='.GTS'
-              @realmInfo={{@realmInfo}}
-              @realmIconURL={{@realmIconURL}}
-              @isActive={{(isModuleActive card this.args.openFile.current)}}
-              @onSelectDefinition={{fn this.updateCodePath (moduleUrl card)}}
-              @infoText={{this.lastModified}}
-              @url={{moduleUrl card}}
-              @actions={{array
-                (hash label='Delete' handler=@delete icon='icon-trash')
-              }}
-            />
-          {{/each}}
-        {{/if}}
-        {{#if @cardInstance}}
-          <InstanceDefinitionContainer
-            @title={{'Card Instance'}}
-            @name={{@cardInstance.title}}
-            @fileExtension='.JSON'
+      {{#if @importedModule.module}}
+        {{#each (cardsFromModule @importedModule.module) as |card|}}
+          <ModuleDefinitionContainer
+            @title={{'Card Definition'}}
+            @name={{getCardTypeDisplayName card}}
+            @fileExtension='.GTS'
             @realmInfo={{@realmInfo}}
             @realmIconURL={{@realmIconURL}}
+            @isActive={{(isModuleActive card @readyFile)}}
+            @onSelectDefinition={{fn this.updateCodePath (moduleUrl card)}}
             @infoText={{this.lastModified}}
-            @isActive={{(isInstanceActive
-              @cardInstance this.args.openFile.current
-            )}}
+            @url={{moduleUrl card}}
             @actions={{array
               (hash label='Delete' handler=@delete icon='icon-trash')
             }}
           />
-        {{/if}}
+        {{/each}}
+      {{/if}}
+      {{#if @cardInstance}}
+        <InstanceDefinitionContainer
+          @title={{'Card Instance'}}
+          @name={{@cardInstance.title}}
+          @fileExtension='.JSON'
+          @realmInfo={{@realmInfo}}
+          @realmIconURL={{@realmIconURL}}
+          @infoText={{this.lastModified}}
+          @isActive={{(isInstanceActive @cardInstance @readyFile)}}
+          @actions={{array
+            (hash label='Delete' handler=@delete icon='icon-trash')
+          }}
+        />
       {{/if}}
     </div>
     <style>
@@ -100,12 +95,9 @@ export default class CardInheritancePanel extends Component<Args> {
   </template>
 
   get lastModified() {
-    if (
-      isReady(this.args.openFile.current) &&
-      this.args.openFile.current?.lastModified != undefined
-    ) {
+    if (this.args.readyFile.lastModified != undefined) {
       return `Last saved was ${moment(
-        this.args.openFile.current?.lastModified,
+        this.args.readyFile.lastModified,
       ).fromNow()}`;
     }
     return;
