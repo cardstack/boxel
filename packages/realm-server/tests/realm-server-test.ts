@@ -368,7 +368,7 @@ module('Realm Server', function (hooks) {
     assert.ok(response.headers['location'], '/person.gts');
   });
 
-  test('serves a card instance GET request that results in redirect', async function (assert) {
+  test('serves a card instance GET request with card-source accept header that results in redirect', async function (assert) {
     let response = await request
       .get('/person-1')
       .set('Accept', 'application/vnd.card+source');
@@ -380,6 +380,20 @@ module('Realm Server', function (hooks) {
       'realm url header is correct',
     );
     assert.ok(response.headers['location'], '/person-1.json');
+  });
+
+  test('serves a card instance GET request with a .json extension and json accept header that results in redirect', async function (assert) {
+    let response = await request
+      .get('/person.json')
+      .set('Accept', 'application/vnd.card+json');
+
+    assert.strictEqual(response.status, 302, 'HTTP 302 status');
+    assert.strictEqual(
+      response.get('X-boxel-realm-url'),
+      testRealmURL.href,
+      'realm url header is correct',
+    );
+    assert.ok(response.headers['location'], '/person.json');
   });
 
   test('serves a card-source DELETE request', async function (assert) {

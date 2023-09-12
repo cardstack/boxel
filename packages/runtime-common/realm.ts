@@ -822,7 +822,8 @@ export class Realm {
     if (localPath === '') {
       localPath = 'index';
     }
-    let url = this.paths.fileURL(localPath);
+
+    let url = this.paths.fileURL(localPath.replace(/\.json$/, ''));
     let maybeError = await this.#searchIndex.card(url, { loadLinks: true });
     if (!maybeError) {
       return notFound(this.url, request);
@@ -835,6 +836,15 @@ export class Realm {
     }
     let { doc: card } = maybeError;
     card.data.links = { self: url.href };
+
+    let foundPath = this.paths.local(url);
+    if (localPath !== foundPath) {
+      return createResponse(this.url, JSON.stringify(card, null, 2), {
+        status: 302,
+        headers: { Location: `${new URL(this.url).pathname}${foundPath}` },
+      });
+    }
+
     return createResponse(this.url, JSON.stringify(card, null, 2), {
       headers: {
         'last-modified': formatRFC7231(card.data.meta.lastModified!),
