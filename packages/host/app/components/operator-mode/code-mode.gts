@@ -1,14 +1,16 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { service } from '@ember/service';
-import { action } from '@ember/object';
-import MonacoService from '@cardstack/host/services/monaco-service';
-import type CodeService from '../../services/code-service';
-import { htmlSafe } from '@ember/template';
-import FileTree from '../editor/file-tree';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { on } from '@ember/modifier';
+import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import { service } from '@ember/service';
+import { htmlSafe } from '@ember/template';
+import { task, restartableTask, timeout } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
+import { use, resource } from 'ember-resources';
+import { TrackedObject } from 'tracked-built-ins';
+
 import {
   type RealmInfo,
   type SingleCardDocument,
@@ -20,34 +22,45 @@ import {
   identifyCard,
   moduleFrom,
 } from '@cardstack/runtime-common';
-import { LoadingIndicator } from '@cardstack/boxel-ui';
-import { maybe } from '@cardstack/host/resources/maybe';
+
+import {
+  LoadingIndicator,
+  Button,
+  ResizablePanelGroup,
+  ResizablePanel,
+  PanelContext,
+} from '@cardstack/boxel-ui';
+import cn from '@cardstack/boxel-ui/helpers/cn';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
+import { CardDef } from 'https://cardstack.com/base/card-api';
+
+// host components
+import FileTree from '../editor/file-tree';
+import CardInheritancePanel from './card-inheritance-panel';
+import CardPreviewPanel from './card-preview-panel';
+import CardURLBar from './card-url-bar';
+
+import monacoModifier from '@cardstack/host/modifiers/monaco';
+
+// host resources
 import {
   Ready,
   file,
   isReady,
   type FileResource,
 } from '@cardstack/host/resources/file';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
-import type MessageService from '@cardstack/host/services/message-service';
-import CardService from '@cardstack/host/services/card-service';
-import { task, restartableTask, timeout } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
-import { registerDestructor } from '@ember/destroyable';
-import CardURLBar from '@cardstack/host/components/operator-mode/card-url-bar';
-import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-preview-panel';
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import { use, resource } from 'ember-resources';
-import { TrackedObject } from 'tracked-built-ins';
-import monacoModifier from '@cardstack/host/modifiers/monaco';
-import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
-import CardInheritancePanel from '@cardstack/host/components/operator-mode/card-inheritance-panel';
 import { importResource } from '@cardstack/host/resources/import';
-import ResizablePanelGroup, {
-  PanelContext,
-} from '@cardstack/boxel-ui/components/resizable-panel/resizable-panel-group';
-import ResizablePanel from '@cardstack/boxel-ui/components/resizable-panel/resizable-panel';
+import { maybe } from '@cardstack/host/resources/maybe';
+
+// host services
+import type CardService from '@cardstack/host/services/card-service';
+import type CodeService from '@cardstack/host/services/code-service';
+import type MessageService from '@cardstack/host/services/message-service';
+import type MonacoService from '@cardstack/host/services/monaco-service';
+import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 interface Signature {
   Args: {
@@ -65,7 +78,7 @@ type PanelWidths = {
 
 const CodeModePanelWidths = 'code-mode-panel-widths';
 const defaultPanelWidths: PanelWidths = {
-  leftPanel: '20%',
+  leftPanel: 'var(--operator-mode-left-column)',
   codeEditorPanel: '48%',
   rightPanel: '32%',
   emptyCodeModePanel: '80%',
@@ -446,7 +459,7 @@ export default class CodeMode extends Component<Signature> {
       >
         <ResizablePanel
           @defaultWidth={{defaultPanelWidths.leftPanel}}
-          @width={{this.panelWidths.leftPanel}}
+          @width='var(--operator-mode-left-column)'
           @panelGroupApi={{pg.api}}
         >
           <div class='column'>
@@ -456,21 +469,40 @@ export default class CodeMode extends Component<Signature> {
                 {{if (eq this.fileView "browser") "file-browser"}}'
             >
               <header
+                class='file-view__header'
                 aria-label={{this.fileViewTitle}}
                 data-test-file-view-header
               >
-                <button
-                  class='{{if (eq this.fileView "inheritance") "active"}}'
+                <Button
+                  @kind={{if
+                    (eq this.fileView 'inheritance')
+                    'primary-dark'
+                    'secondary'
+                  }}
+                  @size='extra-small'
+                  class={{cn
+                    'file-view__header-btn'
+                    active=(eq this.fileView 'inheritance')
+                  }}
                   {{on 'click' (fn this.setFileView 'inheritance')}}
                   data-test-inheritance-toggle
                 >
-                  Inheritance</button>
-                <button
-                  class='{{if (eq this.fileView "browser") "active"}}'
+                  Inheritance</Button>
+                <Button
+                  @kind={{if
+                    (eq this.fileView 'browser')
+                    'primary-dark'
+                    'secondary'
+                  }}
+                  @size='extra-small'
+                  class={{cn
+                    'file-view__header-btn'
+                    active=(eq this.fileView 'browser')
+                  }}
                   {{on 'click' (fn this.setFileView 'browser')}}
                   data-test-file-browser-toggle
                 >
-                  File Browser</button>
+                  File Browser</Button>
               </header>
               <section class='inner-container__content'>
                 {{#if this.isReady}}
@@ -612,7 +644,6 @@ export default class CodeMode extends Component<Signature> {
       }
       .column:first-child > *:first-child {
         max-height: 50%;
-        background-color: var(--boxel-200);
       }
       .column:first-child > *:last-child {
         max-height: calc(50% - var(--boxel-sp));
@@ -638,26 +669,26 @@ export default class CodeMode extends Component<Signature> {
         overflow-y: auto;
       }
 
-      .file-view header {
-        margin: var(--boxel-sp-sm);
+      .file-view__header {
         display: flex;
-        gap: var(--boxel-sp-sm);
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs);
+        background-color: var(--boxel-200);
       }
-
-      .file-view header button {
-        padding: var(--boxel-sp-xxxs) var(--boxel-sp-lg);
-        font-weight: 700;
-        background: transparent;
-        color: var(--boxel-dark);
-        border-radius: var(--boxel-border-radius-sm);
-        border: 1px solid var(--boxel-400);
-        flex: 1;
+      .file-view__header-btn {
+        --boxel-button-border: 1px solid var(--boxel-400);
+        --boxel-button-font: 700 var(--boxel-font-xs);
+        --boxel-button-letter-spacing: var(--boxel-lsp-xs);
+        --boxel-button-min-width: 6rem;
+        --boxel-button-padding: 0;
+        border-radius: var(--boxel-border-radius);
       }
-
-      .file-view header button.active {
-        background: var(--boxel-dark);
-        color: var(--boxel-highlight);
+      .file-view__header-btn:hover {
         border-color: var(--boxel-dark);
+      }
+      .file-view__header-btn.active {
+        border-color: var(--boxel-dark);
+        --boxel-button-text-color: var(--boxel-highlight);
       }
 
       .file-view.file-browser .inner-container__content {
