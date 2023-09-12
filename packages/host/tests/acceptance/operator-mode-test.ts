@@ -1487,8 +1487,9 @@ module('Acceptance | operator mode tests', function (hooks) {
       },
     );
     await waitUntil(() => find('[data-test-editor]'));
-    // TODO make an assertion around the URL bar when the bug for
-    // updating the URL bar correctly is fixed
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}Pet/mango.json`);
     assert.dom('[data-test-definition-name]').hasText('Pet');
     assert.deepEqual(JSON.parse(getMonacoContent()), {
       data: {
