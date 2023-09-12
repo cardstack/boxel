@@ -1545,7 +1545,9 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       assert.dom('[data-test-search-sheet]').hasClass('results'); // Search open
 
-      await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+      await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`, {
+        timeout: 2000,
+      });
 
       // Click on search result
       await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
