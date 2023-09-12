@@ -58,7 +58,7 @@ export async function readFileAsText(
 ): Promise<{ content: string; lastModified: number } | undefined> {
   let ref: FileRef | undefined;
   if (opts.withFallbacks) {
-    ref = await getFileWithFallbacks(path, openFile);
+    ref = await getFileWithFallbacks(path, openFile, executableExtensions);
   } else {
     ref = await openFile(path);
   }
@@ -75,13 +75,14 @@ export async function readFileAsText(
 export async function getFileWithFallbacks(
   path: LocalPath,
   openFile: (path: string) => Promise<FileRef | undefined>,
+  fallbackExtensions: string[],
 ): Promise<FileRef | undefined> {
   let result = await openFile(path);
   if (result) {
     return result;
   }
 
-  for (let extension of executableExtensions) {
+  for (let extension of fallbackExtensions) {
     result = await openFile(path + extension);
     if (result) {
       return result;

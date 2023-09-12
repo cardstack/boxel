@@ -440,7 +440,10 @@ export class Realm {
     } else {
       let url = new URL(request.url);
       let localPath = this.paths.local(url);
-      let maybeHandle = await this.getFileWithFallbacks(localPath);
+      let maybeHandle = await this.getFileWithFallbacks(
+        localPath,
+        executableExtensions,
+      );
 
       if (!maybeHandle) {
         return notFound(this.url, request, `${request.url} not found`);
@@ -540,7 +543,10 @@ export class Realm {
     request: Request,
   ): Promise<ResponseWithNodeStream> {
     let localName = this.paths.local(request.url);
-    let handle = await this.getFileWithFallbacks(localName);
+    let handle = await this.getFileWithFallbacks(localName, [
+      ...executableExtensions,
+      '.json',
+    ]);
     if (!handle) {
       return notFound(this.url, request, `${localName} not found`);
     }
@@ -556,7 +562,10 @@ export class Realm {
 
   private async removeCardSource(request: Request): Promise<Response> {
     let localName = this.paths.local(request.url);
-    let handle = await this.getFileWithFallbacks(localName);
+    let handle = await this.getFileWithFallbacks(
+      localName,
+      executableExtensions,
+    );
     if (!handle) {
       return notFound(this.url, request, `${localName} not found`);
     }
@@ -632,10 +641,12 @@ export class Realm {
   // explicit file extensions in your source code
   private async getFileWithFallbacks(
     path: LocalPath,
+    fallbackExtensions: string[],
   ): Promise<FileRef | undefined> {
     return getFileWithFallbacks(
       path,
       this.#adapter.openFile.bind(this.#adapter),
+      fallbackExtensions,
     );
   }
 
