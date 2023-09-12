@@ -143,7 +143,11 @@ class _FileResource extends Resource<Args> {
 
     let content = await response.text();
     let self = this;
-    let url = response.url;
+    // Inside test, The loader occasionally doesn't do a network request and creates Response object manually
+    // This means that reading response.url will give url = '' and we cannot manually alter the url in Response
+    // The below condition is a workaround
+    // TODO: CS-5982
+    let url = response.url == '' ? this._url : response.url;
 
     this.updateState({
       state: 'ready',
