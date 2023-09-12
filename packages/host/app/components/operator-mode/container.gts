@@ -5,6 +5,7 @@ import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { trackedFunction } from 'ember-resources/util/function';
 import CardCatalogModal from '../card-catalog/modal';
+import type CardService from '../../services/card-service';
 import get from 'lodash/get';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import ENV from '@cardstack/host/config/environment';
@@ -38,7 +39,6 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import OperatorModeStack from './stack';
 import type MatrixService from '../../services/matrix-service';
 import type MessageService from '../../services/message-service';
-import type CardService from '../../services/card-service';
 import ChatSidebar from '../matrix/chat-sidebar';
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
