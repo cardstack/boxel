@@ -40,6 +40,7 @@ import FileTree from '../editor/file-tree';
 import CardInheritancePanel from './card-inheritance-panel';
 import CardPreviewPanel from './card-preview-panel';
 import CardURLBar from './card-url-bar';
+import RecentFiles from '@cardstack/host/components/editor/recent-files';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 
@@ -55,9 +56,9 @@ import { maybe } from '@cardstack/host/resources/maybe';
 
 // host services
 import type CardService from '@cardstack/host/services/card-service';
-import type CodeService from '@cardstack/host/services/code-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
+import RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -89,7 +90,8 @@ export default class CodeMode extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
   @service declare operatorModeStateService: OperatorModeStateService;
-  @service declare codeService: CodeService;
+  @service declare recentFilesService: RecentFilesService;
+
   @tracked private loadFileError: string | null = null;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
   private panelWidths: PanelWidths;
@@ -428,7 +430,7 @@ export default class CodeMode extends Component<Signature> {
   private delete() {
     if (this.cardResource.value) {
       this.args.delete(this.cardResource.value, () => {
-        let previousFile = this.codeService.recentFiles[0] as
+        let previousFile = this.recentFilesService.recentFiles[0] as
           | string
           | undefined;
         let url = previousFile ? new URL(previousFile) : null;
@@ -531,7 +533,9 @@ export default class CodeMode extends Component<Signature> {
               >
                 Recent Files
               </header>
-              <section class='inner-container__content'></section>
+              <section class='inner-container__content'>
+                <RecentFiles />
+              </section>
             </aside>
           </div>
         </ResizablePanel>

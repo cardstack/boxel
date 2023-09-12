@@ -3,11 +3,11 @@ import { tracked } from '@glimmer/tracking';
 import { TrackedArray } from 'tracked-built-ins';
 import window from 'ember-window-mock';
 
-export default class CodeService extends Service {
+export default class RecentFilesService extends Service {
   @tracked recentFiles = new TrackedArray<string>([]);
 
-  constructor() {
-    super();
+  constructor(properties: object) {
+    super(properties);
 
     let recentFilesString = window.localStorage.getItem('recent-files');
 
@@ -43,7 +43,7 @@ export default class CodeService extends Service {
     this.persistRecentFiles();
   }
 
-  private persistRecentFiles() {
+  persistRecentFiles() {
     window.localStorage.setItem(
       'recent-files',
       JSON.stringify(this.recentFiles),

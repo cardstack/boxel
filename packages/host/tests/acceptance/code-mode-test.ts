@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, todo } from 'qunit';
 import { visit, click, waitFor, waitUntil, find } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { baseRealm } from '@cardstack/runtime-common';
@@ -291,6 +291,89 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-file]');
 
     assert.dom('[data-test-directory="Person/"] .icon').hasClass('open');
+  });
+
+  todo('recent file links are shown', async function (assert) {
+    let otherRealmCardUrl = 'http://example.com/other-realm-card.json';
+    window.localStorage.setItem(
+      'recent-files',
+      JSON.stringify([`${testRealmURL}index.json`, otherRealmCardUrl]),
+    );
+
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}Person/1.json`,
+      fileView: 'browser',
+      openDirs: [],
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-file]');
+    await waitFor('[data-test-directory]');
+
+    assert
+      .dom('[data-test-recent-file]')
+      .exists({ count: 1 })
+      .containsText('index.json');
+
+    await click('[data-test-file="index.json"]');
+    assert
+      .dom('[data-test-recent-file]')
+      .exists({ count: 1 })
+      .containsText('Person/1.json');
+
+    await click('[data-test-directory]');
+    await waitFor('[data-test-file="Person/1.json"]');
+
+    await click('[data-test-file="Person/1.json"]');
+
+    assert
+      .dom('[data-test-recent-file]')
+      .exists({ count: 1 })
+      .containsText('index.json');
+
+    await waitFor('[data-test-file="person.gts"]');
+    await click('[data-test-file="person.gts"]');
+
+    assert
+      .dom('[data-test-recent-file]:first-child')
+      .containsText('Person/1.json')
+      .doesNotContainText(testRealmURL, 'expected realm root to be hidden');
+    assert
+      .dom('[data-test-recent-file]:nth-child(2)')
+      .containsText('index.json');
+
+    await click('[data-test-recent-file]:nth-child(2)');
+    assert.dom('[data-test-index-card]').exists('index card is rendered');
+
+    assert
+      .dom('[data-test-recent-file]:first-child')
+      .containsText('person.gts');
+    assert
+      .dom('[data-test-recent-file]:nth-child(2)')
+      .containsText('Person/1.json');
+
+    assert.deepEqual(
+      JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
+      [
+        `${testRealmURL}index.json`,
+        `${testRealmURL}person.gts`,
+        `${testRealmURL}Person/1.json`,
+        otherRealmCardUrl,
+      ],
+    );
   });
 
   test('card inheritance panel will show json instance definition and module definition', async function (assert) {
