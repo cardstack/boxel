@@ -1,5 +1,4 @@
 import Service, { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
 import { stringify } from 'qs';
 import type LoaderService from './loader-service';
 import {
@@ -24,14 +23,12 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import ENV from '@cardstack/host/config/environment';
-import { TrackedArray } from 'tracked-built-ins';
 
 export type CardSaveSubscriber = (json: SingleCardDocument) => void;
 const { ownRealmURL, otherRealmURLs } = ENV;
 
 export default class CardService extends Service {
   @service declare loaderService: LoaderService;
-  @tracked recentFiles = new TrackedArray<string>([]);
   private subscriber: CardSaveSubscriber | undefined;
   private indexCards: Map<string, CardDef> = new Map();
 
