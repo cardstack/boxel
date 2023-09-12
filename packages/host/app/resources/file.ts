@@ -8,6 +8,7 @@ import LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
 import type CodeService from '@cardstack/host/services/code-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import config from '@cardstack/host/config/environment';
 
 const log = logger('resource:file');
 
@@ -151,7 +152,12 @@ class _FileResource extends Resource<Args> {
     // This means that reading response.url will give url = '' and we cannot manually alter the url in Response
     // The below condition is a workaround
     // TODO: CS-5982
-    let url = response.url == '' ? this._url : response.url;
+    let url: string;
+    if (config.environment === 'test') {
+      url = response.url === '' ? this._url : response.url;
+    } else {
+      url = response.url;
+    }
 
     this.updateState({
       state: 'ready',
