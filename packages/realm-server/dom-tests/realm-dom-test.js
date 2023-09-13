@@ -77,9 +77,31 @@ QUnit.module(
     });
 
     test('renders file tree', async function (assert) {
-      await boot(`${testRealmURL}/code`, '[data-test-directory-level]');
-      assert.strictEqual(testDocument().location.href, `${testRealmURL}/code`);
-      let nav = querySelector('.main nav');
+      let codeModeStateParam = JSON.stringify({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}/person-1`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        fileView: 'browser',
+        codePath: `${testRealmURL}/person-1.json`,
+      });
+
+      let path = `?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`;
+
+      await boot(`${testRealmURL}/${path}`, '[data-test-directory-level]');
+      assert.strictEqual(
+        testDocument().location.href,
+        `${testRealmURL}/${path}`,
+      );
+
+      let nav = querySelector('nav');
       assert.ok(nav, '<nav> element exists');
       let dirContents = nav.textContent;
       assert.ok(dirContents.includes('a.js'));
