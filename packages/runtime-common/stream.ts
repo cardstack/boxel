@@ -102,7 +102,7 @@ export async function writeToStream(
       writer = stream.getWriter();
       writers.set(stream, writer);
     }
-    return writer.write(chunk);
+    return writer.write(chunk).catch(console.error);
   } else {
     if (!isNode) {
       throw new Error(`cannot handle node-streams when not in node`);
