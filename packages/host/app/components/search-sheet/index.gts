@@ -113,10 +113,7 @@ export default class SearchSheet extends Component<Signature> {
           maybeCardDoc,
           new URL(maybeCardDoc.data.id),
         );
-        this.args.onCardSelect(card);
-        this.resetState();
-        this.args.onCancel();
-        return;
+        this.handleCardSelect(card);
       }
     }
   });
@@ -125,6 +122,11 @@ export default class SearchSheet extends Component<Signature> {
   onCancel() {
     this.resetState();
     this.args.onCancel();
+  }
+
+  @action handleCardSelect(card: CardDef) {
+    this.resetState();
+    this.args.onCardSelect(card);
   }
 
   @action
@@ -264,7 +266,7 @@ export default class SearchSheet extends Component<Signature> {
                   <SearchResult
                     @card={{card}}
                     @compact={{eq this.sheetSize 'prompt'}}
-                    {{on 'click' (fn @onCardSelect card)}}
+                    {{on 'click' (fn this.handleCardSelect card)}}
                     data-test-search-sheet-search-result={{i}}
                   />
                 {{/each}}
@@ -281,7 +283,7 @@ export default class SearchSheet extends Component<Signature> {
                   <SearchResult
                     @card={{card}}
                     @compact={{eq this.sheetSize 'prompt'}}
-                    {{on 'click' (fn @onCardSelect card)}}
+                    {{on 'click' (fn this.handleCardSelect card)}}
                     data-test-search-sheet-recent-card={{i}}
                   />
                 {{/each}}
@@ -294,7 +296,7 @@ export default class SearchSheet extends Component<Signature> {
         <UrlSearch
           @cardURL={{this.cardURL}}
           @setCardURL={{this.setCardURL}}
-          @setSelectedCard={{@onCardSelect}}
+          @setSelectedCard={{this.handleCardSelect}}
         />
         <div class='buttons'>
           <Button
