@@ -94,6 +94,11 @@ jobs:
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
         working-directory: packages/host
+      - name: Publish test results
+        uses: EnricoMi/publish-unit-test-result-action@v2.9.0
+        if: always()
+        with:
+          junit_files: junit/host.xml
 
   matrix-client-test:
     name: Matrix Client Tests
