@@ -106,9 +106,6 @@ class _FileResource extends Resource<Args> {
 
     if (newState.state === 'ready') {
       this.recentFilesService.addRecentFile(newState.url);
-      if (this._url != newState.url) {
-        this.operatorModeStateService.updateCodePath(new URL(newState.url));
-      }
     }
   }
 
