@@ -92,7 +92,7 @@ QUnit.module(
     });
 
     test('renders file tree', async function (assert) {
-      await boot('person-1.json', '[data-test-directory-level]');
+      await bootToCodeModeFile('person-1.json', '[data-test-directory-level]');
 
       let nav = querySelector('nav');
       assert.ok(nav, '<nav> element exists');
