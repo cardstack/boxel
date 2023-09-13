@@ -5,7 +5,9 @@
       "firstName": "Hassan",
       "lastName": "Abdel-Rahman",
       "isCool": false,
-      "isHuman": true
+      "isHuman": true,
+      "description": null,
+      "thumbnailURL": null
     },
     "relationships": {
       "pet": {
