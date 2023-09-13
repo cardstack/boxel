@@ -106,6 +106,9 @@ importers:
       openai:
         specifier: 4.0.0-beta.4
         version: 4.0.0-beta.4
+      qunit:
+        specifier: ^2.18.0
+        version: 2.19.4
       ts-node:
         specifier: ^10.9.1
         version: 10.9.1(@types/node@18.15.13)(typescript@5.1.6)
@@ -870,6 +873,9 @@ importers:
       ember-async-data:
         specifier: ^1.0.1
         version: 1.0.1(ember-source@4.12.0)
+      ember-click-outside:
+        specifier: ^6.0.1
+        version: 6.0.1(ember-source@4.12.0)
     devDependencies:
       '@babel/core':
         specifier: ^7.17.8
@@ -13160,6 +13166,16 @@ packages:
       - walrus
       - whiskers
     dev: true
+
+  /ember-click-outside@6.0.1(ember-source@4.12.0):
+    resolution: {integrity: sha512-1aI0vaggymp8JR2gARy7kgDnJ0Bk+ZDcjOzT+Cgtr2cRCBYFuJeU0OMKJW8c7pRm2LwIDZgzdTRK+AaKQbt9mw==}
+    dependencies:
+      '@embroider/addon-shim': 1.8.5
+      ember-modifier: 4.1.0(ember-source@4.12.0)
+    transitivePeerDependencies:
+      - ember-source
+      - supports-color
+    dev: false
 
   /ember-compatibility-helpers@1.2.6(@babel/core@7.20.2):
     resolution: {integrity: sha512-2UBUa5SAuPg8/kRVaiOfTwlXdeVweal1zdNPibwItrhR0IvPrXpaqwJDlEZnWKEoB+h33V0JIfiWleSG6hGkkA==}

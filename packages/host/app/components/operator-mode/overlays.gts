@@ -4,7 +4,7 @@ import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type { MiddlewareState } from '@floating-ui/dom';
-import { TrackedWeakMap, type TrackedArray } from 'tracked-built-ins';
+import { type TrackedArray } from 'tracked-built-ins';
 import { velcro } from 'ember-velcro';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
@@ -25,6 +25,8 @@ interface Signature {
     selectedCards?: TrackedArray<CardDef>;
   };
 }
+
+let boundRenderedCardElement = new WeakSet<HTMLElement>();
 
 export default class OperatorModeOverlays extends Component<Signature> {
   isEmbeddedCard(renderedCard: RenderedCardForOverlayActions) {
@@ -177,10 +179,6 @@ export default class OperatorModeOverlays extends Component<Signature> {
   </template>
 
   @tracked currentlyHoveredCard: RenderedCardForOverlayActions | null = null;
-  areEventsRegistered = new TrackedWeakMap<
-    RenderedCardForOverlayActions,
-    boolean
-  >();
 
   offset = {
     name: 'offset',
@@ -208,7 +206,10 @@ export default class OperatorModeOverlays extends Component<Signature> {
   get renderedCardsForOverlayActionsWithEvents() {
     let renderedCards = this.args.renderedCardsForOverlayActions;
     for (const renderedCard of renderedCards) {
-      if (this.areEventsRegistered.get(renderedCard)) continue;
+      if (boundRenderedCardElement.has(renderedCard.element)) {
+        continue;
+      }
+      boundRenderedCardElement.add(renderedCard.element);
       renderedCard.element.addEventListener(
         'mouseenter',
         (_e: MouseEvent) => (this.currentlyHoveredCard = renderedCard),

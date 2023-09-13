@@ -17,6 +17,10 @@ export default class SearchSheetUsage extends Component {
     }
   }
 
+  @action onBlur() {
+    this.mode = SearchSheetMode.Closed;
+  }
+
   @action onCancel() {
     this.mode = SearchSheetMode.Closed;
   }
@@ -40,6 +44,7 @@ export default class SearchSheetUsage extends Component {
             @mode={{this.mode}}
             @onCancel={{this.onCancel}}
             @onFocus={{this.onFocus}}
+            @onBlur={{this.onBlur}}
             @onSearch={{this.onSearch}}
             @onCardSelect={{this.onCardSelect}}
           />

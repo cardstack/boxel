@@ -39,7 +39,7 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import OperatorModeStack from './stack';
 import type MatrixService from '../../services/matrix-service';
 import type MessageService from '../../services/message-service';
-import type CodeService from '../../services/code-service';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import ChatSidebar from '../matrix/chat-sidebar';
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
@@ -87,7 +87,8 @@ export default class OperatorModeContainer extends Component<Signature> {
   @service declare messageService: MessageService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
-  @service declare codeService: CodeService;
+  @service declare recentFilesService: RecentFilesService;
+
   @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
   @tracked searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked isChatVisible = false;
@@ -141,6 +142,11 @@ export default class OperatorModeContainer extends Component<Signature> {
     if (this.operatorModeStateService.recentCards.length === 0) {
       this.constructRecentCards.perform();
     }
+  }
+
+  @action onBlurSearchInput() {
+    this.searchSheetTrigger = null;
+    this.searchSheetMode = SearchSheetMode.Closed;
   }
 
   @action onSearch(_term: string) {
@@ -285,7 +291,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       this.operatorModeStateService.trimItemsFromStack(item);
     }
     this.operatorModeStateService.removeRecentCard(card.id);
-    this.codeService.removeRecentFile(`${card.id}.json`);
+    this.recentFilesService.removeRecentFile(`${card.id}.json`);
 
     await this.withTestWaiters(async () => {
       await this.cardService.deleteCard(card);
@@ -608,7 +614,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       case Submode.Code:
         let codePath = this.lastCardInRightMostStack
           ? new URL(this.lastCardInRightMostStack.id + '.json')
-          : new URL(this.cardService.defaultURL + 'index.json');
+          : null;
         this.operatorModeStateService.updateCodePath(codePath);
         break;
       default:
@@ -751,6 +757,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         @mode={{this.searchSheetMode}}
         @onCancel={{this.onCancelSearchSheet}}
         @onFocus={{this.onFocusSearchInput}}
+        @onBlur={{this.onBlurSearchInput}}
         @onSearch={{this.onSearch}}
         @onCardSelect={{this.onCardSelectFromSearch}}
       />
@@ -762,6 +769,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         --boxel-modal-max-width: 100%;
         --container-button-size: var(--boxel-icon-lg);
         --operator-mode-min-width: 20.5rem;
+        --operator-mode-left-column: 14rem;
       }
       :global(.operator-mode .boxel-modal__inner) {
         display: block;

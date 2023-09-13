@@ -192,64 +192,6 @@ module('Acceptance | basic tests', function (hooks) {
       .doesNotExist('Person/1.json file entry is not rendered');
   });
 
-  test('recent file links are shown', async function (assert) {
-    window.localStorage.setItem(
-      'recent-files',
-      JSON.stringify([`${testRealmURL}index.json`]),
-    );
-
-    console.log('visiting code');
-    await visit('/code');
-
-    await waitFor('[data-test-file]');
-
-    assert
-      .dom('[data-test-recent-file]')
-      .exists({ count: 1 })
-      .containsText('index.json');
-
-    await click('[data-test-file="index.json"]');
-    assert.dom('[data-test-recent-file]').doesNotExist();
-
-    await click('[data-test-directory="Person/"]');
-    await waitFor('[data-test-file="Person/1.json"]');
-
-    await click('[data-test-file="Person/1.json"]');
-
-    assert
-      .dom('[data-test-recent-file]')
-      .exists({ count: 1 })
-      .containsText(`${testRealmURL}index.json`);
-
-    await click('[data-test-file="person.gts"]');
-
-    assert
-      .dom('[data-test-recent-file]:first-child')
-      .containsText('Person/1.json');
-    assert
-      .dom('[data-test-recent-file]:nth-child(2)')
-      .containsText('index.json');
-
-    await click('[data-test-recent-file]:nth-child(2)');
-    assert.dom('[data-test-index-card]').exists('index card is rendered');
-
-    assert
-      .dom('[data-test-recent-file]:first-child')
-      .containsText('person.gts');
-    assert
-      .dom('[data-test-recent-file]:nth-child(2)')
-      .containsText('Person/1.json');
-
-    assert.deepEqual(
-      JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
-      [
-        `${testRealmURL}index.json`,
-        `${testRealmURL}person.gts`,
-        `${testRealmURL}Person/1.json`,
-      ],
-    );
-  });
-
   skip('Can view a card instance', async function (assert) {
     await visit('/code');
     await waitFor('[data-test-file]');

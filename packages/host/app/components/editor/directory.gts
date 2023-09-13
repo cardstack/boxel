@@ -130,9 +130,7 @@ export default class Directory extends Component<Args> {
 
   @action
   openFile(entryPath: LocalPath) {
-    let fileUrl = new RealmPaths(this.cardService.defaultURL).fileURL(
-      entryPath,
-    );
+    let fileUrl = new RealmPaths(this.args.realmURL).fileURL(entryPath);
     this.operatorModeStateService.updateCodePath(fileUrl);
   }
 
