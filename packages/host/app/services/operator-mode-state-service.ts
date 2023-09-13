@@ -17,6 +17,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import { registerDestructor } from '@ember/destroyable';
 import window from 'ember-window-mock';
+import type RouterService from '@ember/routing/router-service';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
@@ -59,6 +60,7 @@ export default class OperatorModeStateService extends Service {
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
   @service declare recentFilesService: RecentFilesService;
+  @service declare router: RouterService;
 
   private subscription: { url: string; unsubscribe: () => void } | undefined;
 
@@ -248,6 +250,16 @@ export default class OperatorModeStateService extends Service {
     if (codePath) {
       this.recentFilesService.addRecentFile(codePath.toString());
     }
+  }
+
+  replaceCodePath(codePath: URL | null) {
+    // replace history explicitly
+    this.state.codePath = codePath;
+    this.router.replaceWith('card', {
+      queryParams: {
+        operatorModeState: this.serialize(),
+      },
+    });
   }
 
   updateFileView(fileView: FileView) {
