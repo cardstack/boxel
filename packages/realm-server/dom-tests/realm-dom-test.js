@@ -54,14 +54,7 @@ async function boot(url, waitForSelector) {
 
 async function bootToCodeModeFile(pathToFile, waitForSelector) {
   let codeModeStateParam = JSON.stringify({
-    stacks: [
-      [
-        {
-          id: `${testRealmURL}/person-2`,
-          format: 'isolated',
-        },
-      ],
-    ],
+    stacks: [[]],
     submode: 'code',
     fileView: 'browser',
     codePath: `${testRealmURL}/${pathToFile}`,
