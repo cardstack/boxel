@@ -32,7 +32,7 @@ import {
 } from '@cardstack/boxel-ui';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -149,18 +149,20 @@ export default class CodeMode extends Component<Signature> {
     this.operatorModeStateService.updateFileView(view);
   }
 
-  get isEmptyState() {
-    return !this.codePath;
-  }
-
   get fileView() {
-    return this.isEmptyState
-      ? 'browser'
-      : this.operatorModeStateService.state.fileView;
+    return this.isReady
+      ? this.operatorModeStateService.state.fileView
+      : 'browser';
   }
 
   get fileViewTitle() {
     return this.fileView === 'inheritance' ? 'Inheritance' : 'File Browser';
+  }
+
+  private get realmURL() {
+    return this.isReady
+      ? this.readyFile.realmURL
+      : this.cardService.defaultURL.href;
   }
 
   private get realmIconURL() {
@@ -206,12 +208,7 @@ export default class CodeMode extends Component<Signature> {
   }
 
   @use private realmInfoResource = resource(() => {
-    let realmURL =
-      this.openFile.current?.state === 'ready'
-        ? this.openFile.current.realmURL
-        : this.cardService.defaultURL;
-
-    if (!realmURL) {
+    if (!this.realmURL) {
       return new TrackedObject({
         error: null,
         isLoading: false,
@@ -234,7 +231,7 @@ export default class CodeMode extends Component<Signature> {
 
         try {
           let realmInfo = await this.cardService.getRealmInfoByRealmURL(
-            new URL(realmURL),
+            new URL(this.realmURL),
           );
 
           if (realmInfo) {
@@ -486,7 +483,7 @@ export default class CodeMode extends Component<Signature> {
                 data-test-file-view-header
               >
                 <Button
-                  @disabled={{this.isEmptyState}}
+                  @disabled={{not this.isReady}}
                   @kind={{if
                     (eq this.fileView 'inheritance')
                     'primary-dark'
@@ -518,24 +515,20 @@ export default class CodeMode extends Component<Signature> {
                   File Browser</Button>
               </header>
               <section class='inner-container__content'>
-                {{#if this.isReady}}
-                  {{#if (eq this.fileView 'inheritance')}}
-                    <section class='inner-container__content'>
-                      <CardInheritancePanel
-                        @cardInstance={{this.cardResource.value}}
-                        @readyFile={{this.readyFile}}
-                        @realmInfo={{this.realmInfo}}
-                        @realmIconURL={{this.realmIconURL}}
-                        @importedModule={{this.importedModule}}
-                        @delete={{this.delete}}
-                        data-test-card-inheritance-panel
-                      />
-                    </section>
-                  {{else}}
-                    <FileTree @url={{this.readyFile.realmURL}} />
-                  {{/if}}
-                {{else if this.isEmptyState}}
-                  <FileTree @url={{this.cardService.defaultURL.href}} />
+                {{#if (eq this.fileView 'inheritance')}}
+                  <section class='inner-container__content'>
+                    <CardInheritancePanel
+                      @cardInstance={{this.cardResource.value}}
+                      @readyFile={{this.readyFile}}
+                      @realmInfo={{this.realmInfo}}
+                      @realmIconURL={{this.realmIconURL}}
+                      @importedModule={{this.importedModule}}
+                      @delete={{this.delete}}
+                      data-test-card-inheritance-panel
+                    />
+                  </section>
+                {{else}}
+                  <FileTree @url={{this.realmURL}} />
                 {{/if}}
               </section>
             </div>
@@ -595,7 +588,7 @@ export default class CodeMode extends Component<Signature> {
               {{/if}}
             </div>
           </ResizablePanel>
-        {{else if this.isEmptyState}}
+        {{else}}
           <ResizablePanel
             @defaultWidth={{defaultPanelWidths.emptyCodeModePanel}}
             @width={{this.panelWidths.emptyCodeModePanel}}
