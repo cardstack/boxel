@@ -343,6 +343,10 @@ export default class SearchSheet extends Component<Signature> {
         width: var(--search-sheet-closed-width);
       }
 
+      .search-sheet.closed .search-sheet-content {
+        display: none;
+      }
+
       .prompt {
         height: var(--search-sheet-prompt-height);
       }
