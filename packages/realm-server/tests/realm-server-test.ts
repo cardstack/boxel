@@ -338,6 +338,31 @@ module('Realm Server', function (hooks) {
     assert.strictEqual(existsSync(cardFile), false, 'card json does not exist');
   });
 
+  test('serves a card DELETE request with .json extension in the url', async function (assert) {
+    let entry = 'person-1.json';
+    let expected = [
+      {
+        type: 'incremental',
+        invalidations: [`${testRealmURL}person-1`],
+      },
+    ];
+
+    let response = await expectEvent(assert, expected, async () => {
+      return await request
+        .delete('/person-1.json')
+        .set('Accept', 'application/vnd.card+json');
+    });
+
+    assert.strictEqual(response.status, 204, 'HTTP 204 status');
+    assert.strictEqual(
+      response.get('X-boxel-realm-url'),
+      testRealmURL.href,
+      'realm url header is correct',
+    );
+    let cardFile = join(dir.name, entry);
+    assert.strictEqual(existsSync(cardFile), false, 'card json does not exist');
+  });
+
   test('serves a card-source GET request', async function (assert) {
     let response = await request
       .get('/person.gts')
@@ -421,6 +446,34 @@ module('Realm Server', function (hooks) {
       existsSync(cardFile),
       false,
       'card module does not exist',
+    );
+  });
+
+  test('serves a card-source DELETE request for a card instance', async function (assert) {
+    let entry = 'person-1';
+    let expected = [
+      {
+        type: 'incremental',
+        invalidations: [`${testRealmURL}person-1`],
+      },
+    ];
+    let response = await expectEvent(assert, expected, async () => {
+      return await request
+        .delete('/person-1')
+        .set('Accept', 'application/vnd.card+source');
+    });
+
+    assert.strictEqual(response.status, 204, 'HTTP 204 status');
+    assert.strictEqual(
+      response.get('X-boxel-realm-url'),
+      testRealmURL.href,
+      'realm url header is correct',
+    );
+    let cardFile = join(dir.name, entry);
+    assert.strictEqual(
+      existsSync(cardFile),
+      false,
+      'card instance does not exist',
     );
   });
 

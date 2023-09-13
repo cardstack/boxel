@@ -233,7 +233,7 @@ export class Realm {
         this.getCard.bind(this),
       )
       .delete(
-        '/.+(?<!.json)',
+        '/|/.+(?<!.json)',
         SupportedMimeType.CardJson,
         this.removeCard.bind(this),
       )
@@ -562,10 +562,10 @@ export class Realm {
 
   private async removeCardSource(request: Request): Promise<Response> {
     let localName = this.paths.local(request.url);
-    let handle = await this.getFileWithFallbacks(
-      localName,
-      executableExtensions,
-    );
+    let handle = await this.getFileWithFallbacks(localName, [
+      ...executableExtensions,
+      '.json',
+    ]);
     if (!handle) {
       return notFound(this.url, request, `${localName} not found`);
     }
@@ -839,7 +839,7 @@ export class Realm {
 
     let foundPath = this.paths.local(url);
     if (localPath !== foundPath) {
-      return createResponse(this.url, JSON.stringify(card, null, 2), {
+      return createResponse(this.url, null, {
         status: 302,
         headers: { Location: `${new URL(this.url).pathname}${foundPath}` },
       });
@@ -855,8 +855,9 @@ export class Realm {
   }
 
   private async removeCard(request: Request): Promise<Response> {
+    let reqURL = request.url.replace(/\.json$/, '');
     // strip off query params
-    let url = new URL(new URL(request.url).pathname, request.url);
+    let url = new URL(new URL(reqURL).pathname, reqURL);
     let result = await this.#searchIndex.card(url);
     if (!result) {
       return notFound(this.url, request);
