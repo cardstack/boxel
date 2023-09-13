@@ -983,6 +983,13 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-stack-card-index="2"] [data-test-field="authorBio"]')
       .exists();
 
+    // Update the blog post card first to trigger auto-save.
+    // This allows us to simulate a scenario where the non-top item in the card-catalog-modal stack is saved before the top item.
+    await fillIn(
+      '[data-test-stack-card-index="2"] [data-test-field="title"] [data-test-boxel-input]',
+      'Mad As a Hatter',
+    );
+
     await click(
       '[data-test-stack-card-index="2"] [data-test-field="authorBio"] [data-test-add-new]',
     );
@@ -1013,10 +1020,6 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-stack-card-index="2"] [data-test-field="authorBio"]')
       .containsText('Alice Enwunder');
 
-    await fillIn(
-      '[data-test-stack-card-index="2"] [data-test-field="title"] [data-test-boxel-input]',
-      'Mad As a Hatter',
-    );
     await click('[data-test-stack-card-index="2"] [data-test-close-button]');
     await waitFor('[data-test-stack-card-index="2"]', { count: 0 });
     await waitFor(

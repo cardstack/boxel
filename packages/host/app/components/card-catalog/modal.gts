@@ -16,7 +16,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { Query, Filter } from '@cardstack/runtime-common/query';
 import { Button, SearchInput } from '@cardstack/boxel-ui';
-import { and, bool, eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { and, eq, gt, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
@@ -54,7 +54,8 @@ type Request = {
 };
 
 type State = {
-  request?: Request;
+  id: number;
+  request: Request;
   selectedCard?: CardDef;
   selectedRealms: RealmCards[];
   searchKey: string;
@@ -68,7 +69,7 @@ const DEFAULT_CHOOOSE_CARD_TITLE = 'Choose a Card';
 
 export default class CardCatalogModal extends Component<Signature> {
   <template>
-    {{#if (and (bool this.state.request) (not this.state.dismissModal))}}
+    {{#if (and (gt this.stateStack.length 0) (not this.state.dismissModal))}}
       <ModalContainer
         @title={{this.state.chooseCardTitle}}
         @onClose={{fn this.pick undefined}}
@@ -92,7 +93,7 @@ export default class CardCatalogModal extends Component<Signature> {
           />
         </:header>
         <:content>
-          {{#if this.request.search.isLoading}}
+          {{#if this.state.request.search.isLoading}}
             Loading...
           {{else}}
             {{! The getter for availableRealms is necessary because
@@ -112,14 +113,14 @@ export default class CardCatalogModal extends Component<Signature> {
         <:footer>
           <div class='footer'>
             <div class='footer__actions-left'>
-              {{#if this.request.opts.offerToCreate}}
+              {{#if this.state.request.opts.offerToCreate}}
                 <Button
                   @kind='secondary-light'
                   @size='tall'
                   class='create-new-button'
                   {{on
                     'click'
-                    (fn this.createNew this.request.opts.offerToCreate)
+                    (fn this.createNew this.state.request.opts.offerToCreate)
                   }}
                   data-test-card-catalog-create-new-button
                 >
@@ -144,7 +145,7 @@ export default class CardCatalogModal extends Component<Signature> {
                 @kind='secondary-light'
                 @size='tall'
                 class='footer-button'
-                {{on 'click' (fn this.pick undefined)}}
+                {{on 'click' (fn this.pick undefined undefined)}}
                 data-test-card-catalog-cancel-button
               >
                 Cancel
@@ -154,7 +155,7 @@ export default class CardCatalogModal extends Component<Signature> {
                 @size='tall'
                 @disabled={{eq this.state.selectedCard undefined}}
                 class='footer-button'
-                {{on 'click' (fn this.pick this.state.selectedCard)}}
+                {{on 'click' (fn this.pick this.state.selectedCard undefined)}}
                 data-test-card-catalog-go-button
               >
                 Go
@@ -189,6 +190,7 @@ export default class CardCatalogModal extends Component<Signature> {
   </template>
 
   stateStack: State[] = new TrackedArray<State>();
+  stateId = 0;
   @tracked zIndex = 20;
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
@@ -204,7 +206,7 @@ export default class CardCatalogModal extends Component<Signature> {
   get cardRefName() {
     return (
       (
-        this.request?.opts?.offerToCreate as {
+        this.state.request.opts?.offerToCreate as {
           module: string;
           name: string;
         }
@@ -216,10 +218,10 @@ export default class CardCatalogModal extends Component<Signature> {
     // returns all available realms and their cards that match a certain type criteria
     // realm filters and search key filter these groups of cards
     // filters dropdown menu will always display all available realms
-    if (this.request?.search.instancesByRealm.length) {
-      this.state.searchResults = this.request?.search.instancesByRealm;
+    if (this.state.request.search.instancesByRealm.length) {
+      this.state.searchResults = this.state.request.search.instancesByRealm;
     }
-    return this.request?.search.instancesByRealm ?? [];
+    return this.state.request.search.instancesByRealm ?? [];
   }
 
   get displayedRealms(): RealmCards[] {
@@ -229,15 +231,7 @@ export default class CardCatalogModal extends Component<Signature> {
       : this.availableRealms;
   }
 
-  get request(): Request | undefined {
-    return this.state.request;
-  }
-
   get state(): State {
-    if (this.stateStack.length <= 0) {
-      return {} as State;
-    }
-
     return this.stateStack[this.stateStack.length - 1];
   }
 
@@ -280,6 +274,7 @@ export default class CardCatalogModal extends Component<Signature> {
       query: Query,
       opts: { offerToCreate?: CodeRef; multiSelect?: boolean } = {},
     ) => {
+      this.stateId++;
       let title = chooseCardTitle(query.filter, opts?.multiSelect);
       let request = new TrackedObject<Request>({
         search: getSearchResults(this, () => query),
@@ -287,6 +282,7 @@ export default class CardCatalogModal extends Component<Signature> {
         opts,
       });
       let cardCatalogState = new TrackedObject<State>({
+        id: this.stateId,
         request,
         chooseCardTitle: title,
         searchKey: '',
@@ -367,11 +363,21 @@ export default class CardCatalogModal extends Component<Signature> {
     this.state.selectedCard = card;
   }
 
-  @action pick(card?: CardDef) {
-    if (this.request) {
-      this.request.deferred.fulfill(card);
+  @action pick(card?: CardDef, state?: State) {
+    let request = state ? state.request : this.state.request;
+    if (request) {
+      request.deferred.fulfill(card);
     }
-    this.stateStack.pop();
+
+    // In the 'createNewCard' case, auto-save doesn't follow any specific order,
+    // so we cannot guarantee that the outer 'createNewCard' process (the top item in the stack) will be saved before the inner one.
+    // That's why we use state ID to remove state from the stack.
+    if (state) {
+      let stateIndex = this.stateStack.findIndex((s) => s.id === state.id);
+      this.stateStack.splice(stateIndex, 1);
+    } else {
+      this.stateStack.pop();
+    }
   }
 
   @action createNew(ref: CodeRef) {
@@ -381,14 +387,19 @@ export default class CardCatalogModal extends Component<Signature> {
   createNewTask = task(async (ref: CodeRef) => {
     let newCard;
     this.state.dismissModal = true;
-    if (this.request?.opts?.createNewCard) {
-      newCard = await this.request?.opts?.createNewCard(ref, undefined, {
+
+    // We need to store the current state in a variable
+    // because there is a possibility that in createNewCard,
+    // users will open the card catalog modal and insert a new state into the stack.
+    let currentState = this.state;
+    if (this.state.request.opts?.createNewCard) {
+      newCard = await this.state.request.opts?.createNewCard(ref, undefined, {
         isLinkedCard: true,
       });
     } else {
       newCard = await createNewCard(ref, undefined);
     }
-    this.pick(newCard);
+    this.pick(newCard, currentState);
   });
 }
 
