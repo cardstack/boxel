@@ -201,7 +201,7 @@ module('CheckpointedAsyncGenerator', () => {
     assert.true(isReturnCalled);
   });
 
-  test('should error if restored but not checkpointed', async () => {
+  test('should restore to the first item if not explicitly checkpointed', async () => {
     const generator = async function* () {
       yield 1;
       yield 2;
@@ -213,8 +213,9 @@ module('CheckpointedAsyncGenerator', () => {
     const result1 = await checkpointedGenerator.next();
     assert.deepEqual(result1, { value: 1, done: false });
 
-    assert.throws(() => {
-      checkpointedGenerator.restore();
-    }, Error);
+    checkpointedGenerator.restore();
+
+    const result2 = await checkpointedGenerator.next();
+    assert.deepEqual(result2, { value: 1, done: false });
   });
 });

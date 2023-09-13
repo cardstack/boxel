@@ -129,17 +129,13 @@ async function sendMessage(
   return await client.sendEvent(room.roomId, 'm.room.message', messageObject);
 }
 
-async function sendOption(
-  client: MatrixClient,
-  room: Room,
-  content: Map<string, any>,
-) {
+async function sendOption(client: MatrixClient, room: Room, content: any) {
   log.info('sending option', content);
-  let patch = content.get('patch');
+  let patch = content['patch'];
   if (patch['attributes']) {
     patch = patch['attributes'];
   }
-  let id = content.get('id');
+  let id = content['id'];
 
   let messageObject = {
     body: 'patch',

@@ -19,7 +19,7 @@ export enum ParsingMode {
 
 type CommandMessage = {
   type: ParsingMode.Command;
-  content: Map<string, any>;
+  content: any;
 };
 
 type TextMessage = {
