@@ -291,6 +291,8 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-file]');
 
     assert.dom('[data-test-directory="Person/"] .icon').hasClass('open');
+
+    assert.ok(false, 'this should fail');
   });
 
   todo('recent file links are shown', async function (assert) {
