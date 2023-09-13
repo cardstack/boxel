@@ -106,6 +106,9 @@ importers:
       openai:
         specifier: 4.0.0-beta.4
         version: 4.0.0-beta.4
+      qunit:
+        specifier: ^2.18.0
+        version: 2.19.4
       ts-node:
         specifier: ^10.9.1
         version: 10.9.1(@types/node@18.15.13)(typescript@5.1.6)
