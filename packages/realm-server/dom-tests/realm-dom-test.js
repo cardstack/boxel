@@ -186,9 +186,27 @@ QUnit.module(
       );
     });
 
-    skip('can change routes', async function (assert) {
-      await boot(`${testRealmURL}/code`, '[data-test-directory-level]');
-      let files = querySelectorAll('.main nav .file');
+    test('can change routes', async function (assert) {
+      let codeModeStateParam = JSON.stringify({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}/person-2`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        fileView: 'browser',
+        codePath: `${testRealmURL}/person.gts`,
+      });
+
+      let path = `?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`;
+
+      await boot(`${testRealmURL}/${path}`, '[data-test-directory-level]');
+      let files = querySelectorAll('nav .file');
       let instance = [...files].find(
         (file) => cleanWhiteSpace(file.textContent) === 'person-1.json',
       );
@@ -196,10 +214,6 @@ QUnit.module(
       instance.click();
 
       await waitFor('[data-test-card]');
-      assert.strictEqual(
-        testDocument().location.href,
-        `${testRealmURL}/code?openFile=person-1.json`,
-      );
       let card = querySelector('[data-test-card]');
       assert.strictEqual(
         cleanWhiteSpace(card.textContent),
