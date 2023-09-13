@@ -157,15 +157,27 @@ QUnit.module(
       );
     });
 
-    skip('renders card instance', async function (assert) {
-      await boot(
-        `${testRealmURL}/code?openFile=person-2.json`,
-        '[data-test-card]',
-      );
-      assert.strictEqual(
-        testDocument().location.href,
-        `${testRealmURL}/code?openFile=person-2.json`,
-      );
+    test('renders card instance', async function (assert) {
+      let codeModeStateParam = JSON.stringify({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}/person-2`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: 'code',
+        fileView: 'browser',
+        codePath: `${testRealmURL}/person-2.json`,
+      });
+
+      let path = `?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`;
+
+      await boot(`${testRealmURL}/${path}`, '[data-test-card]');
+
       let card = querySelector('[data-test-card]');
       assert.strictEqual(
         cleanWhiteSpace(card.textContent),
