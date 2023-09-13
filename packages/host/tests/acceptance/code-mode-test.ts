@@ -186,6 +186,8 @@ module('Acceptance | code mode tests', function (hooks) {
 
     assert.dom('[data-test-inheritance-placeholder]').doesNotExist();
     assert.dom('[data-test-file]').exists();
+
+    assert.dom('[data-test-file]');
   });
 
   test('can navigate file tree, file view mode is persisted in query parameter', async function (assert) {
