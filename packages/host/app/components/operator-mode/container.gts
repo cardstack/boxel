@@ -614,7 +614,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       case Submode.Code:
         let codePath = this.lastCardInRightMostStack
           ? new URL(this.lastCardInRightMostStack.id + '.json')
-          : new URL(this.cardService.defaultURL + 'index.json');
+          : null;
         this.operatorModeStateService.updateCodePath(codePath);
         break;
       default:

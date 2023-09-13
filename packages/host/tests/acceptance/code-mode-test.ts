@@ -473,4 +473,38 @@ module('Acceptance | code mode tests', function (hooks) {
       .includesText('Test Workspace B');
     assert.dom('[data-test-card-instance-definition]').doesNotExist();
   });
+
+  test('empty state displays default realm info', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: null,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-file]');
+
+    assert.dom('[data-test-file]').exists();
+    assert.dom('[data-test-file-browser-toggle]').hasClass('active');
+    assert.dom('[data-test-card-inheritance-panel]').doesNotExist();
+    assert
+      .dom('[data-test-file-view-header]')
+      .hasAttribute('aria-label', 'File Browser');
+    assert.dom('[data-test-inheritance-toggle]').isDisabled();
+
+    assert.dom('[data-test-empty-code-mode]').exists();
+    assert
+      .dom('[data-test-empty-code-mode]')
+      .containsText('Choose a file on the left to open it');
+
+    assert.dom('[data-test-card-url-bar-input]').hasValue('');
+    assert
+      .dom('[data-test-card-url-bar-realm-info]')
+      .containsText('in Test Workspace B');
+  });
 });
