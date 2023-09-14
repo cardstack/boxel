@@ -1,4 +1,4 @@
-import { module, skip, test } from 'qunit';
+import { module, test } from 'qunit';
 import { visit, click, waitFor, waitUntil, find } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { baseRealm } from '@cardstack/runtime-common';
@@ -380,7 +380,7 @@ module('Acceptance | code mode tests', function (hooks) {
     );
   });
 
-  skip('recent file links are shown', async function (assert) {
+  test('recent file links are shown', async function (assert) {
     let otherRealmCardUrl = 'http://example.com/other-realm-card.json';
     window.localStorage.setItem(
       'recent-files',
