@@ -254,6 +254,9 @@ export default class OperatorModeStateService extends Service {
 
   replaceCodePath(codePath: URL | null) {
     // replace history explicitly
+    // typically used when, serving a redirect in the code path
+    // solve UX issues with back button referring back to request url of redirect
+    // when it should refer back to the previous code path
     this.state.codePath = codePath;
     this.router.replaceWith('card', {
       queryParams: {

@@ -106,6 +106,9 @@ class _FileResource extends Resource<Args> {
 
     if (newState.state === 'ready') {
       this.recentFilesService.addRecentFile(newState.url);
+      // code below handles redirect returned by the realm server
+      // this updates code path to be in-sync with the file.url
+      // For example, when inputting `drafts/author` will redirect to `drafts/author.gts`
       if (this._url != newState.url) {
         this.operatorModeStateService.replaceCodePath(new URL(newState.url));
       }
