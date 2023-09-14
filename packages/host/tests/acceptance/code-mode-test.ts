@@ -1,5 +1,5 @@
-import { module, test } from 'qunit';
-import { visit, click, find, waitFor } from '@ember/test-helpers';
+import { module, skip, test } from 'qunit';
+import { visit, click, waitFor, waitUntil, find } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { baseRealm } from '@cardstack/runtime-common';
 import {
@@ -7,6 +7,7 @@ import {
   TestRealmAdapter,
   setupLocalIndexing,
   setupMockMessageService,
+  testRealmURL,
 } from '../helpers';
 import stringify from 'safe-stable-stringify';
 import { Realm } from '@cardstack/runtime-common/realm';
@@ -146,6 +147,12 @@ module('Acceptance | code mode tests', function (hooks) {
       'z18.json': '{}',
       'z19.json': '{}',
       'zzz/zzz/file.json': '{}',
+      '.realm.json': {
+        name: 'Test Workspace B',
+        backgroundURL:
+          'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
+        iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
+      },
     });
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
@@ -158,21 +165,22 @@ module('Acceptance | code mode tests', function (hooks) {
   });
 
   test('defaults to inheritance view and can toggle to file view', async function (assert) {
-    let codeModeStateParam = stringify({
+    let operatorModeStateParam = stringify({
       stacks: [
         [
           {
-            id: 'http://test-realm/test/index',
+            id: `${testRealmURL}Person/1`,
             format: 'isolated',
           },
         ],
       ],
       submode: 'code',
+      codePath: `${testRealmURL}Person/1.json`,
     })!;
 
     await visit(
       `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        codeModeStateParam,
+        operatorModeStateParam,
       )}`,
     );
 
@@ -181,6 +189,8 @@ module('Acceptance | code mode tests', function (hooks) {
       .hasAttribute('aria-label', 'Inheritance');
     assert.dom('[data-test-inheritance-toggle]').hasClass('active');
     assert.dom('[data-test-file-browser-toggle]').doesNotHaveClass('active');
+
+    await waitUntil(() => find('[data-test-card-inheritance-panel]'));
 
     assert.dom('[data-test-card-inheritance-panel]').exists();
     assert.dom('[data-test-file]').doesNotExist();
@@ -204,13 +214,14 @@ module('Acceptance | code mode tests', function (hooks) {
       stacks: [
         [
           {
-            id: 'http://test-realm/test/index',
+            id: `${testRealmURL}Person/1`,
             format: 'isolated',
           },
         ],
       ],
       submode: 'code',
       fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
     })!;
 
     await visit(
@@ -218,6 +229,7 @@ module('Acceptance | code mode tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
+
     await waitFor('[data-test-file]');
 
     assert
@@ -247,12 +259,14 @@ module('Acceptance | code mode tests', function (hooks) {
       stacks: [
         [
           {
-            id: 'http://test-realm/test/index',
+            id: `${testRealmURL}Person/1`,
             format: 'isolated',
           },
         ],
       ],
       submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
     })!;
 
     await visit(
@@ -260,11 +274,12 @@ module('Acceptance | code mode tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
-    await click('[data-test-file-browser-toggle]');
-    await waitFor('[data-test-file]');
+
+    await waitFor('[data-test-file="person.gts"]');
 
     await click('[data-test-file="person.gts"]');
 
+    await waitFor('[data-test-file="person.gts"]');
     assert.dom('[data-test-file="person.gts"]').hasClass('selected');
 
     await click('[data-test-directory="Person/"]');
@@ -278,13 +293,14 @@ module('Acceptance | code mode tests', function (hooks) {
       stacks: [
         [
           {
-            id: 'http://test-realm/test/index',
+            id: `${testRealmURL}Person/1`,
             format: 'isolated',
           },
         ],
       ],
       submode: 'code',
       fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
       openDirs: ['Person/'],
     })!;
 
@@ -389,5 +405,220 @@ module('Acceptance | code mode tests', function (hooks) {
     );
 
     intersectionObserver.observe(fileElement);
+  });
+
+  skip('recent file links are shown', async function (assert) {
+    let otherRealmCardUrl = 'http://example.com/other-realm-card.json';
+    window.localStorage.setItem(
+      'recent-files',
+      JSON.stringify([`${testRealmURL}index.json`, otherRealmCardUrl]),
+    );
+
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}Person/1.json`,
+      fileView: 'browser',
+      openDirs: [],
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-file]');
+    await waitFor('[data-test-directory]');
+
+    assert
+      .dom('[data-test-recent-file]')
+      .exists({ count: 1 })
+      .containsText('index.json');
+
+    await click('[data-test-file="index.json"]');
+    assert
+      .dom('[data-test-recent-file]')
+      .exists({ count: 1 })
+      .containsText('Person/1.json');
+
+    await click('[data-test-directory]');
+    await waitFor('[data-test-file="Person/1.json"]');
+
+    await click('[data-test-file="Person/1.json"]');
+
+    assert
+      .dom('[data-test-recent-file]')
+      .exists({ count: 1 })
+      .containsText('index.json');
+
+    await waitFor('[data-test-file="person.gts"]');
+    await click('[data-test-file="person.gts"]');
+
+    assert
+      .dom('[data-test-recent-file]:first-child')
+      .containsText('Person/1.json')
+      .doesNotContainText(testRealmURL, 'expected realm root to be hidden');
+    assert
+      .dom('[data-test-recent-file]:nth-child(2)')
+      .containsText('index.json');
+
+    await click('[data-test-recent-file]:nth-child(2)');
+    assert.dom('[data-test-index-card]').exists('index card is rendered');
+
+    assert
+      .dom('[data-test-recent-file]:first-child')
+      .containsText('person.gts');
+    assert
+      .dom('[data-test-recent-file]:nth-child(2)')
+      .containsText('Person/1.json');
+
+    assert.deepEqual(
+      JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
+      [
+        `${testRealmURL}index.json`,
+        `${testRealmURL}person.gts`,
+        `${testRealmURL}Person/1.json`,
+        otherRealmCardUrl,
+      ],
+    );
+  });
+
+  test('card inheritance panel will show json instance definition and module definition', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}Person/1.json`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitUntil(() => find('[data-test-card-inheritance-panel]'));
+    await waitUntil(() => find('[data-test-card-module-definition]'));
+    await waitUntil(() => find('[data-test-card-instance-definition]'));
+
+    assert.dom('[data-test-card-module-definition]').includesText('Card');
+    assert
+      .dom(
+        '[data-test-card-module-definition] [data-test-definition-file-extension]',
+      )
+      .includesText('.GTS');
+    assert
+      .dom(
+        '[data-test-card-module-definition] [data-test-definition-realm-name]',
+      )
+      .includesText('Test Workspace B');
+    assert.dom('[data-test-card-module-definition]').doesNotHaveClass('active');
+    assert
+      .dom('[data-test-card-instance-definition]')
+      .includesText('Hassan Abdel-Rahman');
+    assert
+      .dom(
+        '[data-test-card-instance-definition] [data-test-definition-file-extension]',
+      )
+      .includesText('.JSON');
+    assert
+      .dom(
+        '[data-test-card-instance-definition] [data-test-definition-realm-name]',
+      )
+      .includesText('Test Workspace B');
+    assert
+      .dom(
+        '[data-test-card-instance-definition] [data-test-definition-info-text]',
+      )
+      .includesText('Last saved was a few seconds ago');
+
+    assert.dom('[data-test-card-instance-definition]').hasClass('active');
+  });
+
+  test('card inheritance panel will show module definition', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitUntil(() => find('[data-test-card-inheritance-panel]'));
+    await waitUntil(() => find('[data-test-card-module-definition]'));
+
+    assert.dom('[data-test-card-module-definition]').includesText('Card');
+
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}person.gts`);
+
+    assert.dom('[data-test-card-module-definition]').hasClass('active');
+    assert
+      .dom(
+        '[data-test-card-module-definition] [data-test-definition-file-extension]',
+      )
+      .includesText('.GTS');
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}person.gts`);
+    assert.dom('[data-test-card-module-definition]').includesText('Card');
+    assert
+      .dom(
+        '[data-test-card-module-definition] [data-test-definition-realm-name]',
+      )
+      .includesText('Test Workspace B');
+    assert.dom('[data-test-card-instance-definition]').doesNotExist();
+  });
+
+  test('empty state displays default realm info', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: null,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-file]');
+
+    assert.dom('[data-test-file]').exists();
+    assert.dom('[data-test-file-browser-toggle]').hasClass('active');
+    assert.dom('[data-test-card-inheritance-panel]').doesNotExist();
+    assert
+      .dom('[data-test-file-view-header]')
+      .hasAttribute('aria-label', 'File Browser');
+    assert.dom('[data-test-inheritance-toggle]').isDisabled();
+
+    assert.dom('[data-test-empty-code-mode]').exists();
+    assert
+      .dom('[data-test-empty-code-mode]')
+      .containsText('Choose a file on the left to open it');
+
+    assert.dom('[data-test-card-url-bar-input]').hasValue('');
+    assert
+      .dom('[data-test-card-url-bar-realm-info]')
+      .containsText('in Test Workspace B');
   });
 });

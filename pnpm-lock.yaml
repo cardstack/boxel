@@ -106,6 +106,9 @@ importers:
       openai:
         specifier: 4.0.0-beta.4
         version: 4.0.0-beta.4
+      qunit:
+        specifier: ^2.18.0
+        version: 2.19.4
       ts-node:
         specifier: ^10.9.1
         version: 10.9.1(@types/node@18.15.13)(typescript@5.1.6)
@@ -870,6 +873,9 @@ importers:
       ember-async-data:
         specifier: ^1.0.1
         version: 1.0.1(ember-source@4.12.0)
+      ember-click-outside:
+        specifier: ^6.0.1
+        version: 6.0.1(ember-source@4.12.0)
     devDependencies:
       '@babel/core':
         specifier: ^7.17.8
@@ -1138,6 +1144,9 @@ importers:
       eslint-plugin-qunit:
         specifier: ^7.3.4
         version: 7.3.4(eslint@8.41.0)
+      eslint-plugin-qunit-dom:
+        specifier: mainmatter/eslint-plugin-qunit-dom#d66c841
+        version: github.com/mainmatter/eslint-plugin-qunit-dom/d66c841(eslint@8.41.0)
       ethers:
         specifier: ^6.6.2
         version: 6.6.2
@@ -1207,6 +1216,12 @@ importers:
       stream-browserify:
         specifier: ^3.0.0
         version: 3.0.0
+      testem:
+        specifier: 3.10.1
+        version: 3.10.1(lodash@4.17.21)
+      testem-multi-reporter:
+        specifier: ^1.2.0
+        version: 1.2.0
       tracked-built-ins:
         specifier: ^3.1.1
         version: 3.1.1
@@ -10931,6 +10946,7 @@ packages:
   /consolidate@0.16.0(lodash@4.17.21)(mustache@4.2.0):
     resolution: {integrity: sha512-Nhl1wzCslqXYTJVDyJCu3ODohy9OfBMB5uD2BiBTzd7w+QY0lBzafkR8y8755yMYHAaMD4NuzbAw03/xzfw+eQ==}
     engines: {node: '>= 0.10.0'}
+    deprecated: Please upgrade to consolidate v1.0.0+ as it has been modernized with several long-awaited fixes implemented. Maintenance is supported by Forward Email at https://forwardemail.net ; follow/watch https://github.com/ladjs/consolidate for updates and release changelog
     peerDependencies:
       arc-templates: ^0.5.3
       atpl: '>=0.7.6'
@@ -12935,7 +12951,7 @@ packages:
       sort-package-json: 1.57.0
       symlink-or-copy: 1.3.1
       temp: 0.9.4
-      testem: 3.9.0
+      testem: 3.10.1(lodash@4.17.21)
       tiny-lr: 2.0.0
       tree-sync: 2.1.0
       uuid: 8.3.2
@@ -13160,6 +13176,16 @@ packages:
       - walrus
       - whiskers
     dev: true
+
+  /ember-click-outside@6.0.1(ember-source@4.12.0):
+    resolution: {integrity: sha512-1aI0vaggymp8JR2gARy7kgDnJ0Bk+ZDcjOzT+Cgtr2cRCBYFuJeU0OMKJW8c7pRm2LwIDZgzdTRK+AaKQbt9mw==}
+    dependencies:
+      '@embroider/addon-shim': 1.8.5
+      ember-modifier: 4.1.0(ember-source@4.12.0)
+    transitivePeerDependencies:
+      - ember-source
+      - supports-color
+    dev: false
 
   /ember-compatibility-helpers@1.2.6(@babel/core@7.20.2):
     resolution: {integrity: sha512-2UBUa5SAuPg8/kRVaiOfTwlXdeVweal1zdNPibwItrhR0IvPrXpaqwJDlEZnWKEoB+h33V0JIfiWleSG6hGkkA==}
@@ -23838,101 +23864,12 @@ packages:
       commander: 2.20.3
       source-map-support: 0.5.21
 
-  /testem@3.10.1(lodash@4.17.21):
-    resolution: {integrity: sha512-42c4e7qlAelwMd8O3ogtVGRbgbr6fJnX6H51ACOIG1V1IjsKPlcQtxPyOwaL4iikH22Dfh+EyIuJnMG4yxieBQ==}
-    engines: {node: '>= 7.*'}
-    hasBin: true
-    dependencies:
-      '@xmldom/xmldom': 0.8.6
-      backbone: 1.4.1
-      bluebird: 3.7.2
-      charm: 1.0.2
-      commander: 2.20.3
-      compression: 1.7.4
-      consolidate: 0.16.0(lodash@4.17.21)(mustache@4.2.0)
-      execa: 1.0.0
-      express: 4.18.2
-      fireworm: 0.7.2
-      glob: 7.2.3
-      http-proxy: 1.18.1
-      js-yaml: 3.14.1
-      lodash.assignin: 4.2.0
-      lodash.castarray: 4.4.0
-      lodash.clonedeep: 4.5.0
-      lodash.find: 4.6.0
-      lodash.uniqby: 4.7.0
-      mkdirp: 1.0.4
-      mustache: 4.2.0
-      node-notifier: 10.0.1
-      npmlog: 6.0.2
-      printf: 0.6.1
-      rimraf: 3.0.2
-      socket.io: 4.5.3
-      spawn-args: 0.2.0
-      styled_string: 0.0.1
-      tap-parser: 7.0.0
-      tmp: 0.0.33
-    transitivePeerDependencies:
-      - arc-templates
-      - atpl
-      - babel-core
-      - bracket-template
-      - bufferutil
-      - coffee-script
-      - debug
-      - dot
-      - dust
-      - dustjs-helpers
-      - dustjs-linkedin
-      - eco
-      - ect
-      - ejs
-      - haml-coffee
-      - hamlet
-      - hamljs
-      - handlebars
-      - hogan.js
-      - htmling
-      - jade
-      - jazz
-      - jqtpl
-      - just
-      - liquid-node
-      - liquor
-      - lodash
-      - marko
-      - mote
-      - nunjucks
-      - plates
-      - pug
-      - qejs
-      - ractive
-      - razor-tmpl
-      - react
-      - react-dom
-      - slm
-      - squirrelly
-      - supports-color
-      - swig
-      - swig-templates
-      - teacup
-      - templayed
-      - then-jade
-      - then-pug
-      - tinyliquid
-      - toffee
-      - twig
-      - twing
-      - underscore
-      - utf-8-validate
-      - vash
-      - velocityjs
-      - walrus
-      - whiskers
+  /testem-multi-reporter@1.2.0:
+    resolution: {integrity: sha512-ttIds/wpU0njpRBQsDl+tcPOy8jvafad6MCEIy21+BpNEcpCBZWrYuNva8TtxaZcoLuFTW0B8FsWl6XuJfH3rQ==}
     dev: true
 
-  /testem@3.9.0:
-    resolution: {integrity: sha512-YTxCYKj0cc8uUSKEziJtSC5T/pw4fQnY0ZXNOyvAFgrijfsN9NxmncJZOHLhPgFOuhbRd5i+DBQxw0Cpe0SEFg==}
+  /testem@3.10.1(lodash@4.17.21):
+    resolution: {integrity: sha512-42c4e7qlAelwMd8O3ogtVGRbgbr6fJnX6H51ACOIG1V1IjsKPlcQtxPyOwaL4iikH22Dfh+EyIuJnMG4yxieBQ==}
     engines: {node: '>= 7.*'}
     hasBin: true
     dependencies:
@@ -26589,6 +26526,18 @@ packages:
       - '@babel/core'
       - supports-color
     dev: false
+
+  github.com/mainmatter/eslint-plugin-qunit-dom/d66c841(eslint@8.41.0):
+    resolution: {tarball: https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c841}
+    id: github.com/mainmatter/eslint-plugin-qunit-dom/d66c841
+    name: eslint-plugin-qunit-dom
+    version: 0.2.0
+    engines: {node: 12.* || 14.* || >= 16.*}
+    peerDependencies:
+      eslint: ^7.11.0 || ^8.0.0
+    dependencies:
+      eslint: 8.41.0
+    dev: true
 
 settings:
   autoInstallPeers: true

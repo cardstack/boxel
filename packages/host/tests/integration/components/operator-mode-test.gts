@@ -752,6 +752,104 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-person]').hasText('Fadhlan');
   });
 
+  test('it can handle an error in a card attached to a matrix message', async function (assert) {
+    this.owner.register('service:matrixService', MockMatrixService);
+    let matrixService = this.owner.lookup(
+      'service:matrixService',
+    ) as MockMatrixService;
+    matrixService.cardAPI = cardApi;
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    let operatorModeStateService = this.owner.lookup(
+      'service:operator-mode-state-service',
+    ) as OperatorModeStateService;
+
+    await operatorModeStateService.restore({
+      stacks: [[]],
+    });
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await click('[data-test-open-chat]');
+    matrixService.createAndJoinRoom('testroom');
+    addRoomEvent(matrixService, {
+      event_id: 'event1',
+      room_id: 'testroom',
+      state_key: 'state',
+      type: 'm.room.message',
+      origin_server_ts: Date.now(),
+      content: {
+        body: 'card with error',
+        formatted_body: 'card with error',
+        msgtype: 'org.boxel.card',
+        instance: {
+          data: {
+            id: 'http://this-is-not-a-real-card.com',
+            type: 'card',
+            attributes: {
+              firstName: 'Boom',
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'http://not-a-real-card.com',
+                name: 'Boom',
+              },
+            },
+          },
+        },
+      },
+    });
+    await waitFor('[data-test-enter-room="test_a"]');
+    await click('[data-test-enter-room="test_a"]');
+    await waitFor('[data-test-card-error]');
+    assert
+      .dom('[data-test-card-error]')
+      .hasText(
+        'Error: cannot render card http://this-is-not-a-real-card.com: Failed to fetch',
+      );
+  });
+
+  test('it can handle an error in a room objective card', async function (assert) {
+    this.owner.register('service:matrixService', MockMatrixService);
+    let matrixService = this.owner.lookup(
+      'service:matrixService',
+    ) as MockMatrixService;
+    matrixService.roomObjectives.set('testroom', {
+      error: new Error('error rendering room objective'),
+    });
+    matrixService.cardAPI = cardApi;
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    let operatorModeStateService = this.owner.lookup(
+      'service:operator-mode-state-service',
+    ) as OperatorModeStateService;
+
+    await operatorModeStateService.restore({
+      stacks: [[]],
+    });
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await click('[data-test-open-chat]');
+    matrixService.createAndJoinRoom('testroom');
+    await waitFor('[data-test-enter-room="test_a"]');
+    await click('[data-test-enter-room="test_a"]');
+    await waitFor('[data-test-objective-error]');
+    assert
+      .dom('[data-test-objective-error]')
+      .hasText('Error: cannot render card : error rendering room objective');
+  });
+
   test('it loads a card and renders its isolated view', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
@@ -974,7 +1072,9 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
       .exists();
 
-    await click('[data-test-create-new]');
+    await click('[data-test-add-new]');
+    await waitFor(`[data-test-card-catalog-modal]`);
+    await click(`[data-test-card-catalog-create-new-button]`);
 
     await waitFor(`[data-test-stack-card-index="2"]`);
     assert.dom('[data-test-stack-card-index]').exists({ count: 3 });
@@ -982,9 +1082,19 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-stack-card-index="2"] [data-test-field="authorBio"]')
       .exists();
 
-    await click(
-      '[data-test-stack-card-index="2"] [data-test-field="authorBio"] [data-test-create-new]',
+    // Update the blog post card first to trigger auto-save.
+    // This allows us to simulate a scenario where the non-top item in the card-catalog-modal stack is saved before the top item.
+    await fillIn(
+      '[data-test-stack-card-index="2"] [data-test-field="title"] [data-test-boxel-input]',
+      'Mad As a Hatter',
     );
+
+    await click(
+      '[data-test-stack-card-index="2"] [data-test-field="authorBio"] [data-test-add-new]',
+    );
+    await waitFor(`[data-test-card-catalog-modal]`);
+    await click(`[data-test-card-catalog-create-new-button]`);
+
     await waitFor(`[data-test-stack-card-index="3"]`);
 
     assert
@@ -1009,10 +1119,6 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-stack-card-index="2"] [data-test-field="authorBio"]')
       .containsText('Alice Enwunder');
 
-    await fillIn(
-      '[data-test-stack-card-index="2"] [data-test-field="title"] [data-test-boxel-input]',
-      'Mad As a Hatter',
-    );
     await click('[data-test-stack-card-index="2"] [data-test-close-button]');
     await waitFor('[data-test-stack-card-index="2"]', { count: 0 });
     await waitFor(
@@ -1054,15 +1160,17 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/1"]`);
     await click('[data-test-edit-button]');
+
     assert.dom('[data-test-field="authorBio"]').containsText('Alien Bob');
-    assert.dom('[data-test-choose-card]').doesNotExist();
-    assert.dom('[data-test-create-new]').doesNotExist();
+    assert.dom('[data-test-add-new]').doesNotExist();
 
     await click('[data-test-remove-card]');
-    assert.dom('[data-test-choose-card]').exists();
-    assert.dom('[data-test-create-new]').exists();
+    assert.dom('[data-test-add-new]').exists();
+    await click('[data-test-add-new]');
+    await waitFor(`[data-test-card-catalog-modal]`);
+    await click(`[data-test-card-catalog-create-new-button]`);
 
-    await click('[data-test-choose-card]');
+    await click('[data-test-add-new]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
     await click(`[data-test-select="${testRealmURL}Author/2"]`);
     assert
@@ -1098,10 +1206,9 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
     await click('[data-test-edit-button]');
-    assert.dom('[data-test-choose-card]').exists();
-    assert.dom('[data-test-create-new]').exists();
+    assert.dom('[data-test-add-new]').exists();
 
-    await click('[data-test-choose-card]');
+    await click('[data-test-add-new]');
     await waitFor(`[data-test-card-catalog-item="${testRealmURL}Author/2"]`);
     await click(`[data-test-select="${testRealmURL}Author/2"]`);
     await click('[data-test-card-catalog-go-button]');
@@ -1130,10 +1237,11 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
     await click('[data-test-edit-button]');
-    assert.dom('[data-test-choose-card]').exists();
-    assert.dom('[data-test-create-new]').exists();
+    assert.dom('[data-test-add-new]').exists();
 
-    await click('[data-test-create-new]');
+    await click('[data-test-add-new]');
+    await waitFor(`[data-test-card-catalog-modal]`);
+    await click(`[data-test-card-catalog-create-new-button]`);
     await waitFor('[data-test-stack-card-index="1"]');
 
     assert
@@ -1150,8 +1258,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await click('[data-test-stack-card-index="1"] [data-test-close-button]');
     await waitFor('[data-test-stack-card-index="1"]', { count: 0 });
-    assert.dom('[data-test-choose-card]').doesNotExist();
-    assert.dom('[data-test-create-new]').doesNotExist();
+    assert.dom('[data-test-add-new]').doesNotExist();
     assert.dom('[data-test-field="authorBio"]').containsText('Alice');
 
     await click('[data-test-stack-card-index="0"] [data-test-edit-button]');
@@ -1527,7 +1634,6 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-search-label]`).containsText('Searching for "Ma"');
 
     await waitFor(`[data-test-search-sheet-search-result]`);
-    // Keep in mind that any test data created drafts or published realms will show up here too...
     assert
       .dom(`[data-test-search-result-label]`)
       .containsText('2 Results for "Ma"');
@@ -1742,7 +1848,7 @@ module('Integration | operator-mode', function (hooks) {
       `[data-test-stack-card="${testRealmURL}BlogPost/2"] [data-test-edit-button]`,
     );
     await waitFor(`[data-test-field="authorBio"]`);
-    await click('[data-test-choose-card]');
+    await click('[data-test-add-new]');
 
     await waitFor('[data-test-card-catalog-item]');
     assert
@@ -1904,7 +2010,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await fillIn(`[data-test-search-input] input`, `pet`);
     assert.dom(`[data-test-search-input] input`).hasValue('pet');
-    await waitFor('[data-test-card-catalog-item]');
+    await waitFor('[data-test-card-catalog-item]', { count: 2 });
     await click(`[data-test-select="${testRealmURL}CatalogEntry/pet-room"]`);
     assert
       .dom(
@@ -1940,7 +2046,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     await waitFor(`[data-test-stack-card="${testRealmURL}BlogPost/2"]`);
     await click('[data-test-edit-button]');
-    await click(`[data-test-field="authorBio"] [data-test-choose-card]`);
+    await click(`[data-test-field="authorBio"] [data-test-add-new]`);
 
     await waitFor('[data-test-card-catalog-modal]');
     await waitFor('[data-test-card-catalog-item]', { count: 3 });
@@ -1958,10 +2064,10 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-card-catalog]', { count: 0 });
 
     assert
-      .dom(`[data-test-field="authorBio"] [data-test-choose-card]`)
+      .dom(`[data-test-field="authorBio"] [data-test-add-new]`)
       .exists('no card is chosen');
 
-    await click(`[data-test-field="authorBio"] [data-test-choose-card]`);
+    await click(`[data-test-field="authorBio"] [data-test-add-new]`);
     assert
       .dom(`[data-test-search-input] input`)
       .hasNoValue('Field picker state is reset');
@@ -2255,8 +2361,6 @@ module('Integration | operator-mode', function (hooks) {
       'keypress',
       'Enter',
     );
-
-    await waitFor('[data-test-card-url-bar-error]');
     assert.dom('[data-test-card-url-bar-error]').hasText('File is not found');
 
     await fillIn('[data-test-card-url-bar-input]', `Wrong URL`);
@@ -2363,5 +2467,39 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}BlogPost/1.json${someRandomText}`);
+  });
+
+  test(`can open and close search sheet`, async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+
+    await focus(`[data-test-search-input] input`);
+    assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
+
+    await click(`[data-test-search-sheet] .search-sheet-content`);
+    assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
+
+    await fillIn(`[data-test-search-input] input`, 'A');
+    await click(
+      `[data-test-search-sheet] .search-sheet-content .search-result-section`,
+    );
+    assert.dom(`[data-test-search-sheet="search-results"]`).exists();
+
+    await click(
+      `[data-test-search-sheet] .search-sheet-content .search-result-section`,
+    );
+    assert.dom(`[data-test-search-sheet="search-results"]`).exists();
+
+    await click(`[data-test-operator-mode-stack]`);
+    assert.dom(`[data-test-search-sheet="closed"]`).exists();
   });
 });

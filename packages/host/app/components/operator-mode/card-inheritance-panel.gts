@@ -9,17 +9,19 @@ import {
   cardTypeDisplayName,
   identifyCard,
   moduleFrom,
+  trimExecutableExtension,
 } from '@cardstack/runtime-common';
 import {
   InstanceDefinitionContainer,
   ModuleDefinitionContainer,
 } from './definition-container';
-import { isReady, FileResource } from '@cardstack/host/resources/file';
+import { Ready } from '@cardstack/host/resources/file';
 import { tracked } from '@glimmer/tracking';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import moment from 'moment';
 import { type ImportResource } from '@cardstack/host/resources/import';
 import { hash, array, fn } from '@ember/helper';
+import CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import { action } from '@ember/object';
 
@@ -28,7 +30,7 @@ interface Args {
   Args: {
     realmInfo: RealmInfo | null;
     realmIconURL: string | null | undefined;
-    openFile: { current: FileResource | undefined };
+    readyFile: Ready;
     cardInstance: CardDef | null;
     importedModule?: ImportResource;
     delete: () => void;
@@ -39,6 +41,7 @@ export default class CardInheritancePanel extends Component<Args> {
   @tracked cardInstance: CardDef | undefined;
   @tracked module: ModuleSyntax | undefined;
   @service declare operatorModeStateService: OperatorModeStateService;
+  @service declare cardService: CardService;
 
   @action
   updateCodePath(url: URL | undefined) {
@@ -53,13 +56,14 @@ export default class CardInheritancePanel extends Component<Args> {
         {{#each (cardsFromModule @importedModule.module) as |card|}}
           <ModuleDefinitionContainer
             @title={{'Card Definition'}}
-            @name={{this.getCardTypeDisplayName card}}
+            @name={{getCardTypeDisplayName card}}
             @fileExtension='.GTS'
             @realmInfo={{@realmInfo}}
             @realmIconURL={{@realmIconURL}}
-            @isActive={{false}}
-            @onSelectDefinition={{fn this.updateCodePath (this.moduleUrl card)}}
-            @url={{this.moduleUrl card}}
+            @isActive={{(isModuleActive card @readyFile)}}
+            @onSelectDefinition={{fn this.updateCodePath (moduleUrl card)}}
+            @infoText={{this.lastModified}}
+            @url={{moduleUrl card}}
             @actions={{array
               (hash label='Delete' handler=@delete icon='icon-trash')
             }}
@@ -74,7 +78,7 @@ export default class CardInheritancePanel extends Component<Args> {
           @realmInfo={{@realmInfo}}
           @realmIconURL={{@realmIconURL}}
           @infoText={{this.lastModified}}
-          @isActive={{true}}
+          @isActive={{(isInstanceActive @cardInstance @readyFile)}}
           @actions={{array
             (hash label='Delete' handler=@delete icon='icon-trash')
           }}
@@ -91,32 +95,29 @@ export default class CardInheritancePanel extends Component<Args> {
   </template>
 
   get lastModified() {
-    if (
-      isReady(this.args.openFile.current) &&
-      this.args.openFile.current?.lastModified != undefined
-    ) {
+    if (this.args.readyFile.lastModified != undefined) {
       return `Last saved was ${moment(
-        this.args.openFile.current?.lastModified,
+        this.args.readyFile.lastModified,
       ).fromNow()}`;
     }
     return;
   }
+}
 
-  getCardTypeDisplayName(t: typeof BaseDef) {
-    let card = new t();
-    return cardTypeDisplayName(card);
-  }
+function getCardTypeDisplayName(t: typeof BaseDef) {
+  let card = new t();
+  return cardTypeDisplayName(card);
+}
 
-  moduleUrl(t: typeof BaseDef | undefined) {
-    if (t) {
-      let ref = identifyCard(t);
-      if (ref) {
-        return new URL(moduleFrom(ref) + '.gts'); //TODO CS-5830: Consolidate hardcoded .gts extensions
-      }
-      throw new Error('Could not identify card');
+function moduleUrl(t: typeof BaseDef | undefined) {
+  if (t) {
+    let ref = identifyCard(t);
+    if (ref) {
+      return new URL(moduleFrom(ref)); //TODO CS-5830: Consolidate hardcoded .gts extensions
     }
-    return;
+    throw new Error('Could not identify card');
   }
+  return;
 }
 
 function cardsFromModule(
@@ -126,4 +127,17 @@ function cardsFromModule(
   return Object.values(module).filter(
     (maybeCard) => typeof maybeCard === 'function' && 'baseDef' in maybeCard,
   );
+}
+
+function isInstanceActive(cardInstance: CardDef, f: Ready) {
+  return cardInstance.id === f.url.replace(/\.json$/, '');
+}
+
+function isModuleActive(card: typeof BaseDef, f: Ready) {
+  let url = moduleUrl(card);
+  if (url) {
+    return url.href === trimExecutableExtension(new URL(f.url)).href;
+  } else {
+    return false;
+  }
 }

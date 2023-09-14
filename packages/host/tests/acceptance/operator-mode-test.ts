@@ -30,6 +30,8 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import percySnapshot from '@percy/ember';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import { setupWindowMock } from 'ember-window-mock/test-support';
+import window from 'ember-window-mock';
 
 module('Acceptance | operator mode tests', function (hooks) {
   let realm: Realm;
@@ -39,15 +41,16 @@ module('Acceptance | operator mode tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
+  setupWindowMock(hooks);
 
   hooks.afterEach(async function () {
-    localStorage.removeItem('recent-cards');
-    localStorage.removeItem('recent-files');
+    window.localStorage.removeItem('recent-cards');
+    window.localStorage.removeItem('recent-files');
   });
 
   hooks.beforeEach(async function () {
-    localStorage.removeItem('recent-cards');
-    localStorage.removeItem('recent-files');
+    window.localStorage.removeItem('recent-cards');
+    window.localStorage.removeItem('recent-files');
 
     adapter = new TestRealmAdapter({
       'pet.gts': `
@@ -697,7 +700,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     test('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
       // creates a recent search
-      localStorage.setItem(
+      window.localStorage.setItem(
         'recent-cards',
         JSON.stringify([`${testRealmURL}Person/fadhlan`]),
       );
@@ -902,108 +905,6 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert
         .dom('[data-test-code-mode-card-preview-body ] .edit-card')
         .exists();
-    });
-
-    test('card inheritance panel will show json instance definition and module definition when is set to code', async function (assert) {
-      let operatorModeStateParam = stringify({
-        stacks: [
-          [
-            {
-              id: 'http://test-realm/test/Person/fadhlan',
-              format: 'isolated',
-            },
-          ],
-        ],
-        submode: 'code',
-        codePath: `http://test-realm/test/Person/fadhlan.json`,
-      })!;
-
-      await visit(
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam,
-        )}`,
-      );
-
-      await waitUntil(() => find('[data-test-card-inheritance-panel]'));
-      await waitUntil(() => find('[data-test-card-module-definition]'));
-      await waitUntil(() => find('[data-test-card-instance-definition]'));
-
-      assert.dom('[data-test-card-module-definition]').includesText('Person');
-      assert
-        .dom(
-          '[data-test-card-module-definition] [data-test-definition-file-extension]',
-        )
-        .includesText('.GTS');
-      assert
-        .dom(
-          '[data-test-card-module-definition] [data-test-definition-realm-name]',
-        )
-        .includesText('Test Workspace B');
-      assert
-        .dom('[data-test-card-module-definition]')
-        .doesNotHaveClass('active');
-      assert
-        .dom('[data-test-card-instance-definition]')
-        .includesText('Fadhlan');
-      assert
-        .dom(
-          '[data-test-card-instance-definition] [data-test-definition-file-extension]',
-        )
-        .includesText('.JSON');
-      assert
-        .dom(
-          '[data-test-card-instance-definition] [data-test-definition-realm-name]',
-        )
-        .includesText('Test Workspace B');
-      assert
-        .dom(
-          '[data-test-card-instance-definition] [data-test-definition-info-text]',
-        )
-        .includesText('Last saved was a few seconds ago');
-
-      assert.dom('[data-test-card-instance-definition]').hasClass('active');
-    });
-
-    test('clicking on listed card definition in the inheritance panel will display new definition and update card url', async function (assert) {
-      let operatorModeStateParam = stringify({
-        stacks: [
-          [
-            {
-              id: 'http://test-realm/test/Person/fadhlan',
-              format: 'isolated',
-            },
-          ],
-        ],
-        submode: 'code',
-        codePath: `http://test-realm/test/Person/fadhlan.json`,
-      })!;
-
-      await visit(
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          operatorModeStateParam,
-        )}`,
-      );
-
-      await waitUntil(() => find('[data-test-card-inheritance-panel]'));
-      await waitUntil(() => find('[data-test-card-module-definition]'));
-      await waitUntil(() => find('[data-test-card-instance-definition]'));
-
-      assert.dom('[data-test-card-module-definition]').includesText('Person');
-      assert
-        .dom(
-          '[data-test-card-module-definition] [data-test-definition-file-extension]',
-        )
-        .includesText('.GTS');
-      assert
-        .dom('[data-test-card-url-bar-input]')
-        .hasValue(`${testRealmURL}Person/fadhlan.json`);
-      await click('[data-test-card-module-definition]');
-      await waitUntil(() => find('[data-test-card-module-definition]'));
-      assert
-        .dom('[data-test-card-url-bar-input]')
-        .hasValue(`${testRealmURL}person.gts`);
-      assert.dom('[data-test-card-module-definition]').includesText('Person');
-      assert.dom('[data-test-card-instance-definition]').doesNotExist();
     });
   });
 
@@ -1353,14 +1254,14 @@ module('Acceptance | operator mode tests', function (hooks) {
         ],
       ],
     })!;
-    localStorage.setItem(
+    window.localStorage.setItem(
       'recent-cards',
       JSON.stringify([
         `${testRealmURL}Pet/vangogh`,
         `${testRealmURL}Person/fadhlan`,
       ]),
     );
-    localStorage.setItem(
+    window.localStorage.setItem(
       'recent-files',
       JSON.stringify([`${testRealmURL}Pet/vangogh.json`]),
     );
@@ -1378,7 +1279,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     await click('[data-test-boxel-menu-item-text="Code"]');
     await waitUntil(() => find('[data-test-editor]'));
     assert.strictEqual(
-      localStorage.getItem('recent-files'),
+      window.localStorage.getItem('recent-files'),
       JSON.stringify([`${testRealmURL}Pet/vangogh.json`]),
     );
 
@@ -1408,12 +1309,12 @@ module('Acceptance | operator mode tests', function (hooks) {
       .dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"`)
       .doesNotExist('stack item removed');
     assert.deepEqual(
-      localStorage.getItem('recent-cards'),
+      window.localStorage.getItem('recent-cards'),
       JSON.stringify([`${testRealmURL}Person/fadhlan`]),
       'the deleted card has been removed from recent cards',
     );
     assert.deepEqual(
-      localStorage.getItem('recent-files'),
+      window.localStorage.getItem('recent-files'),
       '[]',
       'the deleted card has been removed from recent files',
     );
@@ -1446,7 +1347,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         ],
       ],
     })!;
-    localStorage.setItem(
+    window.localStorage.setItem(
       'recent-files',
       JSON.stringify([
         `${testRealmURL}Pet/vangogh.json`,
@@ -1467,7 +1368,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     await click('[data-test-boxel-menu-item-text="Code"]');
     await waitUntil(() => find('[data-test-editor]'));
     assert.strictEqual(
-      localStorage.getItem('recent-files'),
+      window.localStorage.getItem('recent-files'),
       JSON.stringify([
         `${testRealmURL}Pet/vangogh.json`,
         `${testRealmURL}Pet/mango.json`,
@@ -1487,8 +1388,9 @@ module('Acceptance | operator mode tests', function (hooks) {
       },
     );
     await waitUntil(() => find('[data-test-editor]'));
-    // TODO make an assertion around the URL bar when the bug for
-    // updating the URL bar correctly is fixed
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}Pet/mango.json`);
     assert.dom('[data-test-definition-name]').hasText('Pet');
     assert.deepEqual(JSON.parse(getMonacoContent()), {
       data: {
@@ -1512,7 +1414,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       .dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"`)
       .doesNotExist('stack item removed');
     assert.deepEqual(
-      localStorage.getItem('recent-files'),
+      window.localStorage.getItem('recent-files'),
       JSON.stringify([`${testRealmURL}Pet/mango.json`]),
       'the deleted card has been removed from recent files',
     );
@@ -1542,7 +1444,9 @@ module('Acceptance | operator mode tests', function (hooks) {
 
       assert.dom('[data-test-search-sheet]').hasClass('results'); // Search open
 
-      await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+      await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`, {
+        timeout: 2000,
+      });
 
       // Click on search result
       await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);

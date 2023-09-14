@@ -1,14 +1,16 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { service } from '@ember/service';
-import { action } from '@ember/object';
-import MonacoService from '@cardstack/host/services/monaco-service';
-import type CodeService from '../../services/code-service';
-import { htmlSafe } from '@ember/template';
-import FileTree from '../editor/file-tree';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { on } from '@ember/modifier';
+import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import { service } from '@ember/service';
+import { htmlSafe } from '@ember/template';
+import { task, restartableTask, timeout } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
+import { use, resource } from 'ember-resources';
+import { TrackedObject } from 'tracked-built-ins';
+
 import {
   type RealmInfo,
   type SingleCardDocument,
@@ -20,34 +22,47 @@ import {
   identifyCard,
   moduleFrom,
 } from '@cardstack/runtime-common';
-import { LoadingIndicator } from '@cardstack/boxel-ui';
-import { maybe } from '@cardstack/host/resources/maybe';
+
+import {
+  LoadingIndicator,
+  Button,
+  ResizablePanelGroup,
+  ResizablePanel,
+  PanelContext,
+} from '@cardstack/boxel-ui';
+import cn from '@cardstack/boxel-ui/helpers/cn';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
+import { CardDef } from 'https://cardstack.com/base/card-api';
+
+// host components
+import FileTree from '../editor/file-tree';
+import CardInheritancePanel from './card-inheritance-panel';
+import CardPreviewPanel from './card-preview-panel';
+import CardURLBar from './card-url-bar';
+import RecentFiles from '@cardstack/host/components/editor/recent-files';
+
+import monacoModifier from '@cardstack/host/modifiers/monaco';
+
+// host resources
 import {
   Ready,
   file,
   isReady,
   type FileResource,
 } from '@cardstack/host/resources/file';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
-import type MessageService from '@cardstack/host/services/message-service';
-import CardService from '@cardstack/host/services/card-service';
-import { task, restartableTask, timeout } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
-import { registerDestructor } from '@ember/destroyable';
-import CardURLBar from '@cardstack/host/components/operator-mode/card-url-bar';
-import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-preview-panel';
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import { use, resource } from 'ember-resources';
-import { TrackedObject } from 'tracked-built-ins';
-import monacoModifier from '@cardstack/host/modifiers/monaco';
-import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
-import CardInheritancePanel from '@cardstack/host/components/operator-mode/card-inheritance-panel';
 import { importResource } from '@cardstack/host/resources/import';
-import ResizablePanelGroup, {
-  PanelContext,
-} from '@cardstack/boxel-ui/components/resizable-panel/resizable-panel-group';
-import ResizablePanel from '@cardstack/boxel-ui/components/resizable-panel/resizable-panel';
+import { maybe } from '@cardstack/host/resources/maybe';
+
+// host services
+import type CardService from '@cardstack/host/services/card-service';
+import type MessageService from '@cardstack/host/services/message-service';
+import type MonacoService from '@cardstack/host/services/monaco-service';
+import RecentFilesService from '@cardstack/host/services/recent-files-service';
+import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 interface Signature {
   Args: {
@@ -65,7 +80,7 @@ type PanelWidths = {
 
 const CodeModePanelWidths = 'code-mode-panel-widths';
 const defaultPanelWidths: PanelWidths = {
-  leftPanel: '20%',
+  leftPanel: 'var(--operator-mode-left-column)',
   codeEditorPanel: '48%',
   rightPanel: '32%',
   emptyCodeModePanel: '80%',
@@ -76,7 +91,8 @@ export default class CodeMode extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
   @service declare operatorModeStateService: OperatorModeStateService;
-  @service declare codeService: CodeService;
+  @service declare recentFilesService: RecentFilesService;
+
   @tracked private loadFileError: string | null = null;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
   private panelWidths: PanelWidths;
@@ -133,8 +149,14 @@ export default class CodeMode extends Component<Signature> {
     this.operatorModeStateService.updateFileView(view);
   }
 
+  get isEmptyState() {
+    return !this.codePath;
+  }
+
   get fileView() {
-    return this.operatorModeStateService.state.fileView;
+    return this.isEmptyState
+      ? 'browser'
+      : this.operatorModeStateService.state.fileView;
   }
 
   get fileViewTitle() {
@@ -184,45 +206,12 @@ export default class CodeMode extends Component<Signature> {
   }
 
   @use private realmInfoResource = resource(() => {
-    if (
-      this.openFile.current?.state === 'ready' &&
-      this.openFile.current.realmURL
-    ) {
-      let realmURL = this.openFile.current.realmURL;
+    let realmURL =
+      this.openFile.current?.state === 'ready'
+        ? this.openFile.current.realmURL
+        : this.cardService.defaultURL;
 
-      const state: {
-        isLoading: boolean;
-        value: RealmInfo | null;
-        error: Error | undefined;
-        load: () => Promise<void>;
-      } = new TrackedObject({
-        isLoading: true,
-        value: this._cachedRealmInfo,
-        error: undefined,
-        load: async () => {
-          state.isLoading = true;
-
-          try {
-            let realmInfo = await this.cardService.getRealmInfoByRealmURL(
-              new URL(realmURL),
-            );
-
-            if (realmInfo) {
-              this._cachedRealmInfo = realmInfo;
-            }
-
-            state.value = realmInfo;
-          } catch (error: any) {
-            state.error = error;
-          } finally {
-            state.isLoading = false;
-          }
-        },
-      });
-
-      state.load();
-      return state;
-    } else {
+    if (!realmURL) {
       return new TrackedObject({
         error: null,
         isLoading: false,
@@ -230,6 +219,39 @@ export default class CodeMode extends Component<Signature> {
         load: () => Promise<void>,
       });
     }
+
+    const state: {
+      isLoading: boolean;
+      value: RealmInfo | null;
+      error: Error | undefined;
+      load: () => Promise<void>;
+    } = new TrackedObject({
+      isLoading: true,
+      value: this._cachedRealmInfo,
+      error: undefined,
+      load: async () => {
+        state.isLoading = true;
+
+        try {
+          let realmInfo = await this.cardService.getRealmInfoByRealmURL(
+            new URL(realmURL),
+          );
+
+          if (realmInfo) {
+            this._cachedRealmInfo = realmInfo;
+          }
+
+          state.value = realmInfo;
+        } catch (error: any) {
+          state.error = error;
+        } finally {
+          state.isLoading = false;
+        }
+      },
+    });
+
+    state.load();
+    return state;
   });
 
   private openFile = maybe(this, (context) => {
@@ -288,10 +310,13 @@ export default class CodeMode extends Component<Signature> {
       load: async () => {
         state.isLoading = true;
         try {
-          let currentlyOpenedFile = this.openFile.current as any;
-          let cardDoc = JSON.parse(currentlyOpenedFile.content);
+          let currentlyOpenedFile = this.openFile.current;
+          if (!currentlyOpenedFile) {
+            return undefined;
+          }
+          let cardDoc = JSON.parse((currentlyOpenedFile as Ready).content);
           if (isCardDocument(cardDoc)) {
-            let url = currentlyOpenedFile.url.replace(/\.json$/, '');
+            let url = (currentlyOpenedFile as Ready).url.replace(/\.json$/, '');
             state.value = await this.cardService.loadModel(url);
           }
         } catch (error: any) {
@@ -404,9 +429,9 @@ export default class CodeMode extends Component<Signature> {
 
   @action
   private onListPanelContextChange(listPanelContext: PanelContext[]) {
-    this.panelWidths.leftPanel = listPanelContext[0].width;
-    this.panelWidths.codeEditorPanel = listPanelContext[1].width;
-    this.panelWidths.rightPanel = listPanelContext[2].width;
+    this.panelWidths.leftPanel = listPanelContext[0]?.width;
+    this.panelWidths.codeEditorPanel = listPanelContext[1]?.width;
+    this.panelWidths.rightPanel = listPanelContext[2]?.width;
 
     localStorage.setItem(CodeModePanelWidths, JSON.stringify(this.panelWidths));
   }
@@ -415,7 +440,7 @@ export default class CodeMode extends Component<Signature> {
   private delete() {
     if (this.cardResource.value) {
       this.args.delete(this.cardResource.value, () => {
-        let previousFile = this.codeService.recentFiles[0] as
+        let previousFile = this.recentFilesService.recentFiles[0] as
           | string
           | undefined;
         let url = previousFile ? new URL(previousFile) : null;
@@ -446,7 +471,7 @@ export default class CodeMode extends Component<Signature> {
       >
         <ResizablePanel
           @defaultWidth={{defaultPanelWidths.leftPanel}}
-          @width={{this.panelWidths.leftPanel}}
+          @width='var(--operator-mode-left-column)'
           @panelGroupApi={{pg.api}}
         >
           <div class='column'>
@@ -456,36 +481,60 @@ export default class CodeMode extends Component<Signature> {
                 {{if (eq this.fileView "browser") "file-browser"}}'
             >
               <header
+                class='file-view__header'
                 aria-label={{this.fileViewTitle}}
                 data-test-file-view-header
               >
-                <button
-                  class='{{if (eq this.fileView "inheritance") "active"}}'
+                <Button
+                  @disabled={{this.isEmptyState}}
+                  @kind={{if
+                    (eq this.fileView 'inheritance')
+                    'primary-dark'
+                    'secondary'
+                  }}
+                  @size='extra-small'
+                  class={{cn
+                    'file-view__header-btn'
+                    active=(eq this.fileView 'inheritance')
+                  }}
                   {{on 'click' (fn this.setFileView 'inheritance')}}
                   data-test-inheritance-toggle
                 >
-                  Inheritance</button>
-                <button
-                  class='{{if (eq this.fileView "browser") "active"}}'
+                  Inspector</Button>
+                <Button
+                  @kind={{if
+                    (eq this.fileView 'browser')
+                    'primary-dark'
+                    'secondary'
+                  }}
+                  @size='extra-small'
+                  class={{cn
+                    'file-view__header-btn'
+                    active=(eq this.fileView 'browser')
+                  }}
                   {{on 'click' (fn this.setFileView 'browser')}}
                   data-test-file-browser-toggle
                 >
-                  File Browser</button>
+                  File Tree</Button>
               </header>
               <section class='inner-container__content'>
-                {{#if (eq this.fileView 'inheritance')}}
-                  <section class='inner-container__content'>
-                    <CardInheritancePanel
-                      @cardInstance={{this.cardResource.value}}
-                      @openFile={{this.openFile}}
-                      @realmInfo={{this.realmInfo}}
-                      @realmIconURL={{this.realmIconURL}}
-                      @importedModule={{this.importedModule}}
-                      @delete={{this.delete}}
-                      data-test-card-inheritance-panel
-                    />
-                  </section>
-                {{else}}
+                {{#if this.isReady}}
+                  {{#if (eq this.fileView 'inheritance')}}
+                    <section class='inner-container__content'>
+                      <CardInheritancePanel
+                        @cardInstance={{this.cardResource.value}}
+                        @readyFile={{this.readyFile}}
+                        @realmInfo={{this.realmInfo}}
+                        @realmIconURL={{this.realmIconURL}}
+                        @importedModule={{this.importedModule}}
+                        @delete={{this.delete}}
+                        data-test-card-inheritance-panel
+                      />
+                    </section>
+                  {{else}}
+                    <FileTree @url={{this.readyFile.realmURL}} />
+                  {{/if}}
+                {{else if this.isEmptyState}}
                   <FileTree @url={{this.cardService.defaultURL.href}} />
                 {{/if}}
               </section>
@@ -497,7 +546,9 @@ export default class CodeMode extends Component<Signature> {
               >
                 Recent Files
               </header>
-              <section class='inner-container__content'></section>
+              <section class='inner-container__content'>
+                <RecentFiles />
+              </section>
             </aside>
           </div>
         </ResizablePanel>
@@ -544,14 +595,20 @@ export default class CodeMode extends Component<Signature> {
               {{/if}}
             </div>
           </ResizablePanel>
-        {{else}}
+        {{else if this.isEmptyState}}
           <ResizablePanel
             @defaultWidth={{defaultPanelWidths.emptyCodeModePanel}}
             @width={{this.panelWidths.emptyCodeModePanel}}
             @panelGroupApi={{pg.api}}
           >
-            <div class='inner-container' data-test-empty-code-mode>
-              <h3>TODO: implement ticket CS-5863: Empty code mode</h3>
+            <div
+              class='inner-container inner-container--empty'
+              data-test-empty-code-mode
+            >
+              {{svgJar 'file' width='40' height='40' role='presentation'}}
+              <h3 class='choose-file-prompt'>
+                Choose a file on the left to open it
+              </h3>
             </div>
           </ResizablePanel>
         {{/if}}
@@ -610,7 +667,6 @@ export default class CodeMode extends Component<Signature> {
       }
       .column:first-child > *:first-child {
         max-height: 50%;
-        background-color: var(--boxel-200);
       }
       .column:first-child > *:last-child {
         max-height: calc(50% - var(--boxel-sp));
@@ -635,27 +691,43 @@ export default class CodeMode extends Component<Signature> {
         padding: var(--boxel-sp-xxs) var(--boxel-sp-xs) var(--boxel-sp-sm);
         overflow-y: auto;
       }
-
-      .file-view header {
-        margin: var(--boxel-sp-sm);
-        display: flex;
-        gap: var(--boxel-sp-sm);
+      .inner-container--empty {
+        background-color: var(--boxel-light-100);
+        align-items: center;
+        justify-content: center;
+      }
+      .inner-container--empty > :deep(svg) {
+        --icon-color: var(--boxel-highlight);
       }
 
-      .file-view header button {
-        padding: var(--boxel-sp-xxxs) var(--boxel-sp-lg);
-        font-weight: 700;
-        background: transparent;
-        color: var(--boxel-dark);
-        border-radius: var(--boxel-border-radius-sm);
-        border: 1px solid var(--boxel-400);
+      .choose-file-prompt {
+        margin: 0;
+        padding: var(--boxel-sp);
+        font: 700 var(--boxel-font);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+
+      .file-view__header {
+        display: flex;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs);
+        background-color: var(--boxel-200);
+      }
+      .file-view__header-btn {
+        --boxel-button-border: 1px solid var(--boxel-400);
+        --boxel-button-font: 700 var(--boxel-font-xs);
+        --boxel-button-letter-spacing: var(--boxel-lsp-xs);
+        --boxel-button-min-width: 6rem;
+        --boxel-button-padding: 0;
+        border-radius: var(--boxel-border-radius);
         flex: 1;
       }
-
-      .file-view header button.active {
-        background: var(--boxel-dark);
-        color: var(--boxel-highlight);
+      .file-view__header-btn:hover:not(:disabled) {
         border-color: var(--boxel-dark);
+      }
+      .file-view__header-btn.active {
+        border-color: var(--boxel-dark);
+        --boxel-button-text-color: var(--boxel-highlight);
       }
 
       .file-view.file-browser .inner-container__content {

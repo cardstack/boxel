@@ -14,7 +14,6 @@ import type CardService from '@cardstack/host/services/card-service';
 import OperatorModeStateService, {
   SerializedState as OperatorModeSerializedState,
 } from '@cardstack/host/services/operator-mode-state-service';
-import type CodeService from '@cardstack/host/services/code-service';
 import { Submode } from '@cardstack/host/components/submode-switcher';
 
 export default class CardController extends Controller {
@@ -26,7 +25,6 @@ export default class CardController extends Controller {
   @service declare cardService: CardService;
   @service declare router: RouterService;
   @service declare operatorModeStateService: OperatorModeStateService;
-  @service declare codeService: CodeService;
 
   @tracked operatorModeEnabled = false;
   @tracked model: Model | undefined;

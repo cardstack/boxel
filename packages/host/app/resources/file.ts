@@ -6,7 +6,10 @@ import { registerDestructor } from '@ember/destroyable';
 import { logger } from '@cardstack/runtime-common';
 import LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
-import type CodeService from '@cardstack/host/services/code-service';
+import type CardService from '@cardstack/host/services/card-service';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import config from '@cardstack/host/config/environment';
 
 const log = logger('resource:file');
 
@@ -37,7 +40,7 @@ export interface Ready {
   name: string;
   url: string;
   lastModified: string | undefined;
-  realmURL: string | undefined;
+  realmURL: string;
   write(content: string, flushLoader?: boolean): void;
 }
 
@@ -54,7 +57,9 @@ class _FileResource extends Resource<Args> {
 
   @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
-  @service declare codeService: CodeService;
+  @service declare cardService: CardService;
+  @service declare recentFilesService: RecentFilesService;
+  @service declare operatorModeStateService: OperatorModeStateService;
 
   constructor(owner: unknown) {
     super(owner);
@@ -100,7 +105,10 @@ class _FileResource extends Resource<Args> {
     }
 
     if (newState.state === 'ready') {
-      this.codeService.addRecentFile(newState.url);
+      this.recentFilesService.addRecentFile(newState.url);
+      if (this._url != newState.url) {
+        this.operatorModeStateService.updateCodePath(new URL(newState.url));
+      }
     }
   }
 
@@ -143,14 +151,24 @@ class _FileResource extends Resource<Args> {
 
     let content = await response.text();
     let self = this;
+    // Inside test, The loader occasionally doesn't do a network request and creates Response object manually
+    // This means that reading response.url will give url = '' and we cannot manually alter the url in Response
+    // The below condition is a workaround
+    // TODO: CS-5982
+    let url: string;
+    if (config.environment === 'test') {
+      url = response.url === '' ? this._url : response.url;
+    } else {
+      url = response.url;
+    }
 
     this.updateState({
       state: 'ready',
       lastModified,
       realmURL,
       content,
-      name: this._url.split('/').pop()!,
-      url: this._url,
+      name: url.split('/').pop()!,
+      url: url,
       write(content: string, flushLoader?: true) {
         self.writeTask.perform(this, content, flushLoader);
       },

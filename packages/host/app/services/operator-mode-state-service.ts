@@ -6,6 +6,7 @@ import Service from '@ember/service';
 import type CardService from '../services/card-service';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 import type MessageService from '@cardstack/host/services/message-service';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
@@ -16,6 +17,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import { registerDestructor } from '@ember/destroyable';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
+import window from 'ember-window-mock';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
@@ -57,6 +59,8 @@ export default class OperatorModeStateService extends Service {
   @tracked recentCards = new TrackedArray<CardDef>([]);
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
+  @service declare recentFilesService: RecentFilesService;
+
   private subscription: { url: string; unsubscribe: () => void } | undefined;
 
   constructor(properties: object) {
@@ -246,6 +250,10 @@ export default class OperatorModeStateService extends Service {
   updateCodePath(codePath: URL | null) {
     this.state.codePath = codePath;
     this.schedulePersist();
+
+    if (codePath) {
+      this.recentFilesService.addRecentFile(codePath.toString());
+    }
   }
 
   updateFileView(fileView: FileView) {
@@ -346,7 +354,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   async constructRecentCards() {
-    const recentCardIdsString = localStorage.getItem('recent-cards');
+    const recentCardIdsString = window.localStorage.getItem('recent-cards');
     if (!recentCardIdsString) {
       return;
     }
@@ -373,7 +381,7 @@ export default class OperatorModeStateService extends Service {
     const recentCardIds = this.recentCards
       .map((recentCard) => recentCard.id)
       .filter(Boolean); // don't include cards that don't have an ID
-    localStorage.setItem('recent-cards', JSON.stringify(recentCardIds));
+    window.localStorage.setItem('recent-cards', JSON.stringify(recentCardIds));
   }
 
   removeRecentCard(id: string) {
@@ -385,7 +393,7 @@ export default class OperatorModeStateService extends Service {
       this.recentCards.splice(index, 1);
       index = this.recentCards.findIndex((c) => c.id === id);
     }
-    localStorage.setItem(
+    window.localStorage.setItem(
       'recent-cards',
       JSON.stringify(this.recentCards.map((c) => c.id)),
     );
