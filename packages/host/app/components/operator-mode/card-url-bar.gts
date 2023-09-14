@@ -84,6 +84,9 @@ export default class CardURLBar extends Component<Signature> {
       }
       .realm-info img {
         width: 22px;
+        -webkit-filter: drop-shadow(1px 1px 1px white)
+          drop-shadow(-1px -1px 1px white);
+        filter: drop-shadow(1px 1px 1px white) drop-shadow(-1px -1px 1px white);
       }
       .input {
         display: flex;
