@@ -1,4 +1,4 @@
-import { module, skip, test } from 'qunit';
+import { module, test } from 'qunit';
 import { visit, click, waitFor, waitUntil, find } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { baseRealm } from '@cardstack/runtime-common';
@@ -407,7 +407,74 @@ module('Acceptance | code mode tests', function (hooks) {
     intersectionObserver.observe(fileElement);
   });
 
-  skip('recent file links are shown', async function (assert) {
+  test('opening another file preserves the scroll position', async function (assert) {
+    let openFilename = 'person.gts';
+    let filenameToOpen = 'z19.json';
+
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: 'http://test-realm/test/index',
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `http://test-realm/test/${openFilename}`,
+      fileView: 'browser',
+      openDirs: ['Person/'],
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-file]');
+
+    let openFileSelector = `[data-test-file="${openFilename}"]`;
+    let openFileElement = find(openFileSelector)!;
+    assert.ok(
+      await elementIsVisible(openFileElement),
+      'expected near-top file to be visible',
+    );
+
+    let fileToOpenSelector = `[data-test-file="${filenameToOpen}"]`;
+    let fileToOpenElement = find(fileToOpenSelector)!;
+    assert.notOk(
+      await elementIsVisible(fileToOpenElement),
+      'expected near-bottom file to not be visible',
+    );
+
+    fileToOpenElement.scrollIntoView({ block: 'center' });
+
+    assert.notOk(
+      await elementIsVisible(openFileElement),
+      'expected near-top file to not be visible after scrolling to near bottom',
+    );
+    assert.ok(
+      await elementIsVisible(fileToOpenElement),
+      'expected near-bottom file to be visible after scrolling to near bottom',
+    );
+
+    await click(fileToOpenElement);
+    await waitFor(openFileSelector);
+
+    openFileElement = find(openFileSelector)!;
+    fileToOpenElement = find(fileToOpenSelector)!;
+
+    assert.notOk(
+      await elementIsVisible(openFileElement),
+      'expected near-top file to not be visible after opening near-bottom file',
+    );
+    assert.ok(
+      await elementIsVisible(fileToOpenElement),
+      'expected near-bottom file to be visible after opening it',
+    );
+  });
+
+  test('recent file links are shown', async function (assert) {
     let otherRealmCardUrl = 'http://example.com/other-realm-card.json';
     window.localStorage.setItem(
       'recent-files',
@@ -654,3 +721,15 @@ module('Acceptance | code mode tests', function (hooks) {
       .containsText('in Test Workspace B');
   });
 });
+
+async function elementIsVisible(element: Element) {
+  return new Promise((resolve) => {
+    let intersectionObserver = new IntersectionObserver(function (entries) {
+      intersectionObserver.unobserve(element);
+
+      resolve(entries[0].isIntersecting);
+    });
+
+    intersectionObserver.observe(element);
+  });
+}
