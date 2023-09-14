@@ -13,7 +13,7 @@ const log = logger('resource:file');
 interface Args {
   named: {
     url: string;
-    onStateChange?: (state: FileResource['state']) => void;
+    onStateChange?: (state: FileResource['state'], f: FileResource) => void;
     onRedirect?: (url: string) => void;
   };
 }
@@ -46,7 +46,9 @@ export type FileResource = Loading | ServerError | NotFound | Ready;
 
 class _FileResource extends Resource<Args> {
   private declare _url: string;
-  private onStateChange?: ((state: FileResource['state']) => void) | undefined;
+  private onStateChange?:
+    | ((state: FileResource['state'], f: FileResource) => void)
+    | undefined;
   private onRedirect?: ((url: string) => void) | undefined;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
 
@@ -98,7 +100,7 @@ class _FileResource extends Resource<Args> {
     let prevState = this.innerState;
     this.innerState = newState;
     if (this.onStateChange && this.innerState.state !== prevState.state) {
-      this.onStateChange(this.innerState.state);
+      this.onStateChange(this.innerState.state, this.innerState);
     }
     // code below handles redirect returned by the realm server
     // this updates code path to be in-sync with the file.url
