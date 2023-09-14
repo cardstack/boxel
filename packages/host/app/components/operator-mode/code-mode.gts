@@ -205,11 +205,14 @@ export default class CodeMode extends Component<Signature> {
     this.loadFileError = null;
   }
 
+  get realmURL() {
+    return this.openFile.current?.state === 'ready'
+      ? this.openFile.current.realmURL
+      : this.cardService.defaultURL.toString();
+  }
+
   @use private realmInfoResource = resource(() => {
-    let realmURL =
-      this.openFile.current?.state === 'ready'
-        ? this.openFile.current.realmURL
-        : this.cardService.defaultURL;
+    let realmURL = this.realmURL;
 
     if (!realmURL) {
       return new TrackedObject({
@@ -518,24 +521,26 @@ export default class CodeMode extends Component<Signature> {
                   File Tree</Button>
               </header>
               <section class='inner-container__content'>
-                {{#if this.isReady}}
-                  {{#if (eq this.fileView 'inheritance')}}
-                    <section class='inner-container__content'>
-                      <CardInheritancePanel
-                        @cardInstance={{this.cardResource.value}}
-                        @readyFile={{this.readyFile}}
-                        @realmInfo={{this.realmInfo}}
-                        @realmIconURL={{this.realmIconURL}}
-                        @importedModule={{this.importedModule}}
-                        @delete={{this.delete}}
-                        data-test-card-inheritance-panel
-                      />
-                    </section>
-                  {{else}}
-                    <FileTree @url={{this.readyFile.realmURL}} />
-                  {{/if}}
-                {{else if this.isEmptyState}}
+                {{#if this.isEmptyState}}
                   <FileTree @url={{this.cardService.defaultURL.href}} />
+                {{else}}
+                  {{#if (eq this.fileView 'inheritance')}}
+                    {{#if this.isReady}}
+                      <section class='inner-container__content'>
+                        <CardInheritancePanel
+                          @cardInstance={{this.cardResource.value}}
+                          @readyFile={{this.readyFile}}
+                          @realmInfo={{this.realmInfo}}
+                          @realmIconURL={{this.realmIconURL}}
+                          @importedModule={{this.importedModule}}
+                          @delete={{this.delete}}
+                          data-test-card-inheritance-panel
+                        />
+                      </section>
+                    {{/if}}
+                  {{else}}
+                    <FileTree @url={{this.realmURL}} />
+                  {{/if}}
                 {{/if}}
               </section>
             </div>
