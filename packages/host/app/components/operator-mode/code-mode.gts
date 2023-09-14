@@ -266,6 +266,9 @@ export default class CodeMode extends Component<Signature> {
           this.loadFileError = 'File is not found';
         }
       },
+      onRedirect: (url: string) => {
+        this.operatorModeStateService.replaceCodePath(new URL(url));
+      },
     }));
   });
 

@@ -6,9 +6,6 @@ import { registerDestructor } from '@ember/destroyable';
 import { logger } from '@cardstack/runtime-common';
 import LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
-import type CardService from '@cardstack/host/services/card-service';
-import type RecentFilesService from '@cardstack/host/services/recent-files-service';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import config from '@cardstack/host/config/environment';
 
 const log = logger('resource:file');
@@ -16,7 +13,8 @@ const log = logger('resource:file');
 interface Args {
   named: {
     url: string;
-    onStateChange?: (state: FileResource['state']) => void;
+    onStateChange?: (state: FileResource['state'], f: FileResource) => void;
+    onRedirect?: (url: string) => void;
   };
 }
 
@@ -48,7 +46,10 @@ export type FileResource = Loading | ServerError | NotFound | Ready;
 
 class _FileResource extends Resource<Args> {
   private declare _url: string;
-  private onStateChange?: ((state: FileResource['state']) => void) | undefined;
+  private onStateChange?:
+    | ((state: FileResource['state'], f: FileResource) => void)
+    | undefined;
+  private onRedirect?: ((url: string) => void) | undefined;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
 
   @tracked private innerState: FileResource = {
@@ -57,9 +58,6 @@ class _FileResource extends Resource<Args> {
 
   @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
-  @service declare cardService: CardService;
-  @service declare recentFilesService: RecentFilesService;
-  @service declare operatorModeStateService: OperatorModeStateService;
 
   constructor(owner: unknown) {
     super(owner);
@@ -90,10 +88,11 @@ class _FileResource extends Resource<Args> {
   }
 
   modify(_positional: never[], named: Args['named']) {
-    let { url, onStateChange } = named;
+    let { url, onStateChange, onRedirect } = named;
 
     this._url = url;
     this.onStateChange = onStateChange;
+    this.onRedirect = onRedirect;
     this.read.perform();
   }
 
@@ -101,16 +100,14 @@ class _FileResource extends Resource<Args> {
     let prevState = this.innerState;
     this.innerState = newState;
     if (this.onStateChange && this.innerState.state !== prevState.state) {
-      this.onStateChange(this.innerState.state);
+      this.onStateChange(this.innerState.state, this.innerState);
     }
-
-    if (newState.state === 'ready') {
-      this.recentFilesService.addRecentFile(newState.url);
-      // code below handles redirect returned by the realm server
-      // this updates code path to be in-sync with the file.url
-      // For example, when inputting `drafts/author` will redirect to `drafts/author.gts`
-      if (this._url != newState.url) {
-        this.operatorModeStateService.replaceCodePath(new URL(newState.url));
+    // code below handles redirect returned by the realm server
+    // this updates code path to be in-sync with the file.url
+    // For example, when inputting `drafts/author` will redirect to `drafts/author.gts`
+    if (this.innerState.state === 'ready') {
+      if (this.onRedirect && this._url != this.innerState.url) {
+        this.onRedirect(this.innerState.url);
       }
     }
   }
