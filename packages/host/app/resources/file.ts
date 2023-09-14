@@ -46,9 +46,7 @@ export type FileResource = Loading | ServerError | NotFound | Ready;
 
 class _FileResource extends Resource<Args> {
   private declare _url: string;
-  private onStateChange?:
-    | ((state: FileResource['state'], f: FileResource) => void)
-    | undefined;
+  private onStateChange?: ((state: FileResource['state']) => void) | undefined;
   private onRedirect?: ((url: string) => void) | undefined;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
 
