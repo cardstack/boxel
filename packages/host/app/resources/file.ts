@@ -98,7 +98,7 @@ class _FileResource extends Resource<Args> {
     let prevState = this.innerState;
     this.innerState = newState;
     if (this.onStateChange && this.innerState.state !== prevState.state) {
-      this.onStateChange(this.innerState.state, this.innerState);
+      this.onStateChange(this.innerState.state);
     }
     // code below handles redirect returned by the realm server
     // this updates code path to be in-sync with the file.url
