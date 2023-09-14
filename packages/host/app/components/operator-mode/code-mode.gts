@@ -32,7 +32,7 @@ import {
 } from '@cardstack/boxel-ui';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -150,9 +150,7 @@ export default class CodeMode extends Component<Signature> {
   }
 
   get fileView() {
-    return this.isReady
-      ? this.operatorModeStateService.state.fileView
-      : 'browser';
+    return this.operatorModeStateService.state.fileView;
   }
 
   get fileViewTitle() {
@@ -177,6 +175,10 @@ export default class CodeMode extends Component<Signature> {
 
   private get isReady() {
     return this.maybeMonacoSDK && this.openFile.current?.state === 'ready';
+  }
+
+  private get emptyOrNotFound() {
+    return !this.codePath || this.openFile.current?.state === 'not-found';
   }
 
   private loadMonaco = task(async () => {
@@ -253,6 +255,7 @@ export default class CodeMode extends Component<Signature> {
 
   private openFile = maybe(this, (context) => {
     if (!this.codePath) {
+      this.setFileView('browser');
       return undefined;
     }
 
@@ -261,6 +264,7 @@ export default class CodeMode extends Component<Signature> {
       onStateChange: (state) => {
         if (state === 'not-found') {
           this.loadFileError = 'File is not found';
+          this.setFileView('browser');
         }
       },
     }));
@@ -483,7 +487,7 @@ export default class CodeMode extends Component<Signature> {
                 data-test-file-view-header
               >
                 <Button
-                  @disabled={{not this.isReady}}
+                  @disabled={{this.emptyOrNotFound}}
                   @kind={{if
                     (eq this.fileView 'inheritance')
                     'primary-dark'
@@ -517,15 +521,19 @@ export default class CodeMode extends Component<Signature> {
               <section class='inner-container__content'>
                 {{#if (eq this.fileView 'inheritance')}}
                   <section class='inner-container__content'>
-                    <CardInheritancePanel
-                      @cardInstance={{this.cardResource.value}}
-                      @readyFile={{this.readyFile}}
-                      @realmInfo={{this.realmInfo}}
-                      @realmIconURL={{this.realmIconURL}}
-                      @importedModule={{this.importedModule}}
-                      @delete={{this.delete}}
-                      data-test-card-inheritance-panel
-                    />
+                    {{#if this.isReady}}
+                      <CardInheritancePanel
+                        @cardInstance={{this.cardResource.value}}
+                        @readyFile={{this.readyFile}}
+                        @realmInfo={{this.realmInfo}}
+                        @realmIconURL={{this.realmIconURL}}
+                        @importedModule={{this.importedModule}}
+                        @delete={{this.delete}}
+                        data-test-card-inheritance-panel
+                      />
+                    {{else if this.emptyOrNotFound}}
+                      Inspector is not available
+                    {{/if}}
                   </section>
                 {{else}}
                   <FileTree @url={{this.realmURL}} />
