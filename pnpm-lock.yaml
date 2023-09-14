@@ -1144,6 +1144,9 @@ importers:
       eslint-plugin-qunit:
         specifier: ^7.3.4
         version: 7.3.4(eslint@8.41.0)
+      eslint-plugin-qunit-dom:
+        specifier: mainmatter/eslint-plugin-qunit-dom#d66c841
+        version: github.com/mainmatter/eslint-plugin-qunit-dom/d66c841(eslint@8.41.0)
       ethers:
         specifier: ^6.6.2
         version: 6.6.2
@@ -26605,6 +26608,18 @@ packages:
       - '@babel/core'
       - supports-color
     dev: false
+
+  github.com/mainmatter/eslint-plugin-qunit-dom/d66c841(eslint@8.41.0):
+    resolution: {tarball: https://codeload.github.com/mainmatter/eslint-plugin-qunit-dom/tar.gz/d66c841}
+    id: github.com/mainmatter/eslint-plugin-qunit-dom/d66c841
+    name: eslint-plugin-qunit-dom
+    version: 0.2.0
+    engines: {node: 12.* || 14.* || >= 16.*}
+    peerDependencies:
+      eslint: ^7.11.0 || ^8.0.0
+    dependencies:
+      eslint: 8.41.0
+    dev: true
 
 settings:
   autoInstallPeers: true
