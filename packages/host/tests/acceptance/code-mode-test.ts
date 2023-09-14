@@ -315,7 +315,6 @@ module('Acceptance | code mode tests', function (hooks) {
   });
 
   test('open file is within view when the file browser renders', async function (assert) {
-    let done = assert.async();
     let openFilename = 'z19.json';
 
     let codeModeStateParam = stringify({
@@ -341,24 +340,13 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-file]');
 
     let fileElement = find(`[data-test-file="${openFilename}"]`)!;
-    let intersectionObserver = new IntersectionObserver(
-      function (entries) {
-        assert.ok(
-          entries[0].isIntersecting,
-          'expected element to be intersecting',
-        );
-
-        intersectionObserver.unobserve(fileElement);
-        done();
-      },
-      { threshold: [0] },
+    assert.ok(
+      await elementIsVisible(fileElement),
+      'expected open file to be scrolled into view',
     );
-
-    intersectionObserver.observe(fileElement);
   });
 
   test('open file is within view even when its parent directory is not stored as open', async function (assert) {
-    let done = assert.async();
     let openFilename = 'zzz/zzz/file.json';
 
     let codeModeStateParam = stringify({
@@ -387,24 +375,12 @@ module('Acceptance | code mode tests', function (hooks) {
 
     if (!fileElement) {
       assert.ok(fileElement, 'file element should exist');
-      done();
-      return;
+    } else {
+      assert.ok(
+        await elementIsVisible(fileElement),
+        'expected open file to be scrolled into view',
+      );
     }
-
-    let intersectionObserver = new IntersectionObserver(
-      function (entries) {
-        assert.ok(
-          entries[0].isIntersecting,
-          'expected element to be intersecting',
-        );
-
-        intersectionObserver.unobserve(fileElement);
-        done();
-      },
-      { threshold: [0] },
-    );
-
-    intersectionObserver.observe(fileElement);
   });
 
   test('opening another file preserves the scroll position', async function (assert) {
