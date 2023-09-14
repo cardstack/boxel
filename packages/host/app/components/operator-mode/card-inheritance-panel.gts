@@ -20,7 +20,7 @@ import { tracked } from '@glimmer/tracking';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import moment from 'moment';
 import { type ImportResource } from '@cardstack/host/resources/import';
-import { hash, array, fn } from '@ember/helper';
+import { hash, array } from '@ember/helper';
 import CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import { action } from '@ember/object';
