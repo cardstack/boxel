@@ -149,18 +149,18 @@ export default class CodeMode extends Component<Signature> {
     this.operatorModeStateService.updateFileView(view);
   }
 
-  get isEmptyState() {
-    return !this.codePath;
-  }
-
   get fileView() {
-    return this.isEmptyState
-      ? 'browser'
-      : this.operatorModeStateService.state.fileView;
+    return this.operatorModeStateService.state.fileView;
   }
 
   get fileViewTitle() {
     return this.fileView === 'inheritance' ? 'Inheritance' : 'File Browser';
+  }
+
+  private get realmURL() {
+    return this.isReady
+      ? this.readyFile.realmURL
+      : this.cardService.defaultURL.href;
   }
 
   private get realmIconURL() {
@@ -175,6 +175,10 @@ export default class CodeMode extends Component<Signature> {
 
   private get isReady() {
     return this.maybeMonacoSDK && this.openFile.current?.state === 'ready';
+  }
+
+  private get emptyOrNotFound() {
+    return !this.codePath || this.openFile.current?.state === 'not-found';
   }
 
   private loadMonaco = task(async () => {
@@ -205,16 +209,8 @@ export default class CodeMode extends Component<Signature> {
     this.loadFileError = null;
   }
 
-  get realmURL() {
-    return this.openFile.current?.state === 'ready'
-      ? this.openFile.current.realmURL
-      : this.cardService.defaultURL.toString();
-  }
-
   @use private realmInfoResource = resource(() => {
-    let realmURL = this.realmURL;
-
-    if (!realmURL) {
+    if (!this.realmURL) {
       return new TrackedObject({
         error: null,
         isLoading: false,
@@ -237,7 +233,7 @@ export default class CodeMode extends Component<Signature> {
 
         try {
           let realmInfo = await this.cardService.getRealmInfoByRealmURL(
-            new URL(realmURL),
+            new URL(this.realmURL),
           );
 
           if (realmInfo) {
@@ -259,6 +255,7 @@ export default class CodeMode extends Component<Signature> {
 
   private openFile = maybe(this, (context) => {
     if (!this.codePath) {
+      this.setFileView('browser');
       return undefined;
     }
 
@@ -267,6 +264,7 @@ export default class CodeMode extends Component<Signature> {
       onStateChange: (state) => {
         if (state === 'not-found') {
           this.loadFileError = 'File is not found';
+          this.setFileView('browser');
         }
       },
     }));
@@ -357,7 +355,7 @@ export default class CodeMode extends Component<Signature> {
     } else if (!isJSON || validJSON) {
       // writes source code and non-card instance valid JSON,
       // then updates the state of the file resource
-      await this.writeSourceCodeToFile(this.openFile.current, content);
+      this.writeSourceCodeToFile(this.openFile.current, content);
     }
   });
 
@@ -489,7 +487,7 @@ export default class CodeMode extends Component<Signature> {
                 data-test-file-view-header
               >
                 <Button
-                  @disabled={{this.isEmptyState}}
+                  @disabled={{this.emptyOrNotFound}}
                   @kind={{if
                     (eq this.fileView 'inheritance')
                     'primary-dark'
@@ -521,26 +519,24 @@ export default class CodeMode extends Component<Signature> {
                   File Tree</Button>
               </header>
               <section class='inner-container__content'>
-                {{#if this.isEmptyState}}
-                  <FileTree @url={{this.cardService.defaultURL.href}} />
-                {{else}}
-                  {{#if (eq this.fileView 'inheritance')}}
+                {{#if (eq this.fileView 'inheritance')}}
+                  <section class='inner-container__content'>
                     {{#if this.isReady}}
-                      <section class='inner-container__content'>
-                        <CardInheritancePanel
-                          @cardInstance={{this.cardResource.value}}
-                          @readyFile={{this.readyFile}}
-                          @realmInfo={{this.realmInfo}}
-                          @realmIconURL={{this.realmIconURL}}
-                          @importedModule={{this.importedModule}}
-                          @delete={{this.delete}}
-                          data-test-card-inheritance-panel
-                        />
-                      </section>
+                      <CardInheritancePanel
+                        @cardInstance={{this.cardResource.value}}
+                        @readyFile={{this.readyFile}}
+                        @realmInfo={{this.realmInfo}}
+                        @realmIconURL={{this.realmIconURL}}
+                        @importedModule={{this.importedModule}}
+                        @delete={{this.delete}}
+                        data-test-card-inheritance-panel
+                      />
+                    {{else if this.emptyOrNotFound}}
+                      Inspector is not available
                     {{/if}}
-                  {{else}}
-                    <FileTree @url={{this.realmURL}} />
-                  {{/if}}
+                  </section>
+                {{else}}
+                  <FileTree @url={{this.realmURL}} />
                 {{/if}}
               </section>
             </div>
@@ -600,7 +596,7 @@ export default class CodeMode extends Component<Signature> {
               {{/if}}
             </div>
           </ResizablePanel>
-        {{else if this.isEmptyState}}
+        {{else}}
           <ResizablePanel
             @defaultWidth={{defaultPanelWidths.emptyCodeModePanel}}
             @width={{this.panelWidths.emptyCodeModePanel}}

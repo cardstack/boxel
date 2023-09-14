@@ -111,6 +111,7 @@ QUnit.module(
       assert.ok(dirContents.includes('person-1.json'));
       assert.ok(dirContents.includes('person-2.json'));
       assert.ok(dirContents.includes('person.gts'));
+      assert.ok(dirContents.includes('person.json'));
       assert.ok(dirContents.includes('unused-card.gts'));
     });
 
