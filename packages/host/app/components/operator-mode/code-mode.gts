@@ -354,7 +354,7 @@ export default class CodeMode extends Component<Signature> {
     } else if (!isJSON || validJSON) {
       // writes source code and non-card instance valid JSON,
       // then updates the state of the file resource
-      await this.writeSourceCodeToFile(this.openFile.current, content);
+      this.writeSourceCodeToFile(this.openFile.current, content);
     }
   });
 
