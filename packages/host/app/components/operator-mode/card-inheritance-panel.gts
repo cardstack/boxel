@@ -61,7 +61,7 @@ export default class CardInheritancePanel extends Component<Args> {
             @realmInfo={{@realmInfo}}
             @realmIconURL={{@realmIconURL}}
             @isActive={{(isModuleActive card @readyFile)}}
-            @onSelectDefinition={{fn this.updateCodePath (moduleUrl card)}}
+            @onSelectDefinition={{this.updateCodePath}}
             @infoText={{this.lastModified}}
             @url={{moduleUrl card}}
             @actions={{array
