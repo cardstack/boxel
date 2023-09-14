@@ -364,7 +364,7 @@ export default class CodeMode extends Component<Signature> {
     } else if (!isJSON || validJSON) {
       // writes source code and non-card instance valid JSON,
       // then updates the state of the file resource
-      await this.writeSourceCodeToFile(this.openFile.current, content);
+      this.writeSourceCodeToFile(this.openFile.current, content);
     }
     this.isSourceStale = false;
   });
@@ -511,7 +511,7 @@ export default class CodeMode extends Component<Signature> {
                   {{on 'click' (fn this.setFileView 'inheritance')}}
                   data-test-inheritance-toggle
                 >
-                  Inheritance</Button>
+                  Inspector</Button>
                 <Button
                   @kind={{if
                     (eq this.fileView 'browser')
@@ -526,7 +526,7 @@ export default class CodeMode extends Component<Signature> {
                   {{on 'click' (fn this.setFileView 'browser')}}
                   data-test-file-browser-toggle
                 >
-                  File Browser</Button>
+                  File Tree</Button>
               </header>
               <section class='inner-container__content'>
                 {{#if this.isReady}}

@@ -90,14 +90,14 @@ module('Integration | card-copy', function (hooks) {
 
       let stacks = [
         leftCards.map((url) => ({
-          type: 'card' as 'card',
+          type: 'card' as const,
           id: url,
-          format: 'isolated' as 'isolated',
+          format: 'isolated' as const,
         })),
         rightCards.map((url) => ({
-          type: 'card' as 'card',
+          type: 'card' as const,
           id: url,
-          format: 'isolated' as 'isolated',
+          format: 'isolated' as const,
         })),
       ].filter((a) => a.length > 0);
       await operatorModeStateService.restore({ stacks });

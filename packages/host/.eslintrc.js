@@ -19,6 +19,7 @@ module.exports = {
     'plugin:ember/recommended',
     'plugin:@typescript-eslint/recommended',
     'plugin:prettier/recommended',
+    'plugin:qunit-dom/recommended',
   ],
   env: {
     browser: true,
