@@ -250,6 +250,12 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   });
 
+  saveSource = task(async (url: URL, content: string) => {
+    await this.withTestWaiters(async () => {
+      await this.cardService.saveSource(url, content);
+    });
+  });
+
   // dropTask will ignore any subsequent delete requests until the one in progress is done
   delete = dropTask(async (card: CardDef, afterDelete?: () => void) => {
     if (!card.id) {
@@ -643,7 +649,10 @@ export default class OperatorModeContainer extends Component<Signature> {
         />
 
         {{#if this.isCodeMode}}
-          <CodeMode @delete={{perform this.delete}} />
+          <CodeMode
+            @delete={{perform this.delete}}
+            @saveSourceOnClose={{perform this.saveSource}}
+          />
         {{else}}
           <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
             {{#if (eq this.allStackItems.length 0)}}

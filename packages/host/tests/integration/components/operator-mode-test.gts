@@ -691,6 +691,9 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor('[data-test-command-apply]');
     this.onSave((json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
       assert.strictEqual(json.data.attributes?.firstName, 'Dave');
     });
     await click('[data-test-command-apply]');
@@ -892,6 +895,9 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-person]');
     await click('[data-test-edit-button]');
     this.onSave((json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
       assert.strictEqual(json.data.attributes?.firstName, 'EditedName');
     });
     await fillIn('[data-test-boxel-input]', 'EditedName');
@@ -1125,6 +1131,9 @@ module('Integration | operator-mode', function (hooks) {
       .containsText('Mad As a Hatter by Alice Enwunder');
 
     this.onSave((json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
       assert.strictEqual(
         json.data.attributes!.socialBlurb,
         `Everyone knows that Alice ran the show in the Brady household. But when Alice’s past comes to light, things get rather topsy turvy…`,

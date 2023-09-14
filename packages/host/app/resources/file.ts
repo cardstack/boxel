@@ -179,21 +179,10 @@ class _FileResource extends Resource<Args> {
 
   writeTask = restartableTask(
     async (state: Ready, content: string, flushLoader?: true) => {
-      let response = await this.loaderService.loader.fetch(this._url, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/vnd.card+source',
-        },
-        body: content,
-      });
-
-      if (!response.ok) {
-        let errorMessage = `Could not write file ${this._url}, status ${
-          response.status
-        }: ${response.statusText} - ${await response.text()}`;
-        log.error(errorMessage);
-        throw new Error(errorMessage);
-      }
+      let response = await this.cardService.saveSource(
+        new URL(this._url),
+        content,
+      );
       if (this.innerState.state === 'not-found') {
         // TODO think about the "unauthorized" scenario
         throw new Error(
