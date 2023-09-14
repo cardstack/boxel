@@ -13,7 +13,7 @@ const log = logger('resource:file');
 interface Args {
   named: {
     url: string;
-    onStateChange?: (state: FileResource['state'], f: FileResource) => void;
+    onStateChange?: (state: FileResource['state']) => void;
     onRedirect?: (url: string) => void;
   };
 }
