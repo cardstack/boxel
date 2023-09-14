@@ -500,7 +500,7 @@ export default class CodeMode extends Component<Signature> {
                   {{on 'click' (fn this.setFileView 'inheritance')}}
                   data-test-inheritance-toggle
                 >
-                  Inheritance</Button>
+                  Inspector</Button>
                 <Button
                   @kind={{if
                     (eq this.fileView 'browser')
@@ -515,7 +515,7 @@ export default class CodeMode extends Component<Signature> {
                   {{on 'click' (fn this.setFileView 'browser')}}
                   data-test-file-browser-toggle
                 >
-                  File Browser</Button>
+                  File Tree</Button>
               </header>
               <section class='inner-container__content'>
                 {{#if this.isReady}}
