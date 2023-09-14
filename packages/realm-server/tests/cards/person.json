@@ -1,0 +1,14 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Mango 2"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./person.gts",
+        "name": "Person"
+      }
+    }
+  }
+}

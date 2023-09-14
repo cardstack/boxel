@@ -8,7 +8,10 @@ import type CardService from '../services/card-service';
 import type LoaderService from '../services/loader-service';
 import { BoxelInputValidationState } from '@cardstack/boxel-ui';
 import { type InputValidationState } from '@cardstack/boxel-ui/components/input/validation-state';
-import { isSingleCardDocument } from '@cardstack/runtime-common';
+import {
+  isSingleCardDocument,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
@@ -90,9 +93,7 @@ export default class UrlSearch extends Component<Signature> {
 
   private getCard = restartableTask(async (searchKey: string) => {
     let response = await this.loaderService.loader.fetch(searchKey, {
-      headers: {
-        Accept: 'application/vnd.card+json',
-      },
+      headers: { Accept: SupportedMimeType.CardJson },
     });
     if (response.ok) {
       let maybeCardDoc = await response.json();
