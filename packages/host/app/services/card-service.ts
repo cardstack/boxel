@@ -199,9 +199,7 @@ export default class CardService extends Service {
       console.error(errorMessage);
       throw new Error(errorMessage);
     }
-    if (this.subscriber) {
-      this.subscriber(content);
-    }
+    this.subscriber?.(content);
     return response;
   }
 

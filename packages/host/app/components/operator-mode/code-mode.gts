@@ -773,8 +773,6 @@ export default class CodeMode extends Component<Signature> {
   </template>
 }
 
-export async function saveCodeSource() {}
-
 function getMonacoContent() {
   return (window as any).monaco.editor.getModels()[0].getValue();
 }
