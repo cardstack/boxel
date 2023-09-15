@@ -19,7 +19,8 @@ import {
   chooseCard,
   type Actions,
   type CodeRef,
-  LooseSingleCardDocument,
+  type LooseSingleCardDocument,
+  type SingleCardDocument,
 } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type LoaderService from '../../services/loader-service';
@@ -248,6 +249,17 @@ export default class OperatorModeContainer extends Component<Signature> {
         }
       }
     }
+  });
+
+  saveCardDocument = task(async (doc: SingleCardDocument) => {
+    await this.withTestWaiters(async () => {
+      let card = await this.cardService.createFromSerialized(
+        doc.data,
+        doc,
+        new URL(doc.data.id),
+      );
+      await this.cardService.saveModel(card);
+    });
   });
 
   saveSource = task(async (url: URL, content: string) => {
@@ -652,6 +664,7 @@ export default class OperatorModeContainer extends Component<Signature> {
           <CodeMode
             @delete={{perform this.delete}}
             @saveSourceOnClose={{perform this.saveSource}}
+            @saveCardDocOnClose={{perform this.saveCardDocument}}
           />
         {{else}}
           <div class='operator-mode__main' style={{this.backgroundImageStyle}}>

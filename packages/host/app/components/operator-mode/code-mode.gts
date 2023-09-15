@@ -10,6 +10,8 @@ import { task, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
+import config from '@cardstack/host/config/environment';
+import isEqual from 'lodash/isEqual';
 
 import {
   type RealmInfo,
@@ -20,6 +22,7 @@ import {
   logger,
   isSingleCardDocument,
   identifyCard,
+  SupportedMimeType,
   moduleFrom,
 } from '@cardstack/runtime-common';
 
@@ -57,6 +60,7 @@ import { maybe } from '@cardstack/host/resources/maybe';
 
 // host services
 import type CardService from '@cardstack/host/services/card-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import RecentFilesService from '@cardstack/host/services/recent-files-service';
@@ -68,9 +72,11 @@ interface Signature {
   Args: {
     delete: (card: CardDef, afterDelete?: () => void) => void;
     saveSourceOnClose: (url: URL, content: string) => void;
+    saveCardDocOnClose: (doc: SingleCardDocument) => void;
   };
 }
 const log = logger('component:code-mode');
+let { autoSaveDelayMs } = config;
 
 type PanelWidths = {
   rightPanel: string;
@@ -93,13 +99,26 @@ export default class CodeMode extends Component<Signature> {
   @service declare messageService: MessageService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare recentFilesService: RecentFilesService;
+  @service declare loaderService: LoaderService;
 
   @tracked private loadFileError: string | null = null;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
-  private isSourceStale = false;
+  private hasUnsavedSourceChanges = false;
+  private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
-  private subscription: { url: string; unsubscribe: () => void } | undefined;
-  private _cachedRealmInfo: RealmInfo | null = null; // This is to cache realm info during reload after code path change so that realm assets don't produce a flicker when code patch changes and the realm is the same
+  private realmSubscription:
+    | { url: string; unsubscribe: () => void }
+    | undefined;
+  // This is to cache realm info during reload after code path change so
+  // that realm assets don't produce a flicker when code patch changes and
+  // the realm is the same
+  private staleRealmInfo: RealmInfo | null = null;
+  private staleCard: CardDef | undefined;
+  // w use the serialized card to save any card changes on close. the quirk is
+  // that we do not have access to resources in the destructor. So we keep this
+  // live serialized form of the card available so that if there are unsaved
+  // changes when this component is closed we can perform that save in the destructor.
+  private serializedCard: SingleCardDocument | undefined;
 
   constructor(args: any, owner: any) {
     super(args, owner);
@@ -109,7 +128,7 @@ export default class CodeMode extends Component<Signature> {
       : defaultPanelWidths;
 
     let url = `${this.cardService.defaultURL}_message`;
-    this.subscription = {
+    this.realmSubscription = {
       url,
       unsubscribe: this.messageService.subscribe(
         url,
@@ -124,7 +143,7 @@ export default class CodeMode extends Component<Signature> {
           }
           let invalidations = data.invalidations as string[];
           if (invalidations.includes(card.id)) {
-            this.reloadCard.perform();
+            this.maybeReloadCard.perform(card.id);
           }
         },
       ),
@@ -134,12 +153,15 @@ export default class CodeMode extends Component<Signature> {
       // which is async, we leverage an EC task that is running in a
       // parent component (EC task lifetimes are bound to their context)
       // that is not being destroyed.
-      if (this.codePath && this.isSourceStale) {
-        // TODO need to reconcile any usaved differences between
-        // monaco and card editor: CS-5981. For now monaco wins...
+      if (this.codePath && this.hasUnsavedSourceChanges) {
+        // we let the monaco changes win if there are unsaved changes both
+        // monaco and the card preview. since the monaco save delay is much
+        // smaller than the card save delay--so it will be more up-to-date
         this.args.saveSourceOnClose(this.codePath, getMonacoContent());
+      } else if (this.hasUnsavedCardChanges && this.serializedCard) {
+        this.args.saveCardDocOnClose(this.serializedCard);
       }
-      this.subscription?.unsubscribe();
+      this.realmSubscription?.unsubscribe();
     });
     this.loadMonaco.perform();
   }
@@ -225,7 +247,7 @@ export default class CodeMode extends Component<Signature> {
       return new TrackedObject({
         error: null,
         isLoading: false,
-        value: this._cachedRealmInfo,
+        value: this.staleRealmInfo,
         load: () => Promise<void>,
       });
     }
@@ -237,7 +259,7 @@ export default class CodeMode extends Component<Signature> {
       load: () => Promise<void>;
     } = new TrackedObject({
       isLoading: true,
-      value: this._cachedRealmInfo,
+      value: this.staleRealmInfo,
       error: undefined,
       load: async () => {
         state.isLoading = true;
@@ -248,7 +270,7 @@ export default class CodeMode extends Component<Signature> {
           );
 
           if (realmInfo) {
-            this._cachedRealmInfo = realmInfo;
+            this.staleRealmInfo = realmInfo;
           }
 
           state.value = realmInfo;
@@ -299,8 +321,36 @@ export default class CodeMode extends Component<Signature> {
     }
   });
 
-  private reloadCard = restartableTask(async () => {
-    await this.cardResource.load();
+  private maybeReloadCard = restartableTask(async (id: string) => {
+    // we need to be careful that we are not responding to our own echo.
+    // first test to see if the card is actually different by comparing
+    // the serializations
+    debugger;
+    if (this.cardResource.value?.id === id) {
+      // TODO move this into card-service
+      let response = await this.loaderService.loader.fetch(id, {
+        headers: { Accept: SupportedMimeType.CardJson },
+      });
+      if (!response.ok) {
+        throw new Error(
+          `status: ${response.status} -
+        ${response.statusText}. ${await response.text()}`,
+        );
+      }
+      let incomingDoc = await response.json();
+      delete incomingDoc.included;
+      delete incomingDoc.data.links;
+      delete incomingDoc.data.meta;
+      let currentDoc = (await this.cardService.serializeCard(
+        this.cardResource.value,
+      )) as any;
+      delete currentDoc.included;
+      delete currentDoc.data.links;
+      delete currentDoc.data.meta;
+      if (!isEqual(incomingDoc, currentDoc)) {
+        await this.cardResource.load();
+      }
+    }
   });
 
   @use private cardResource = resource(() => {
@@ -314,12 +364,13 @@ export default class CodeMode extends Component<Signature> {
       load: () => Promise<void>;
     } = new TrackedObject({
       isLoading: isFileReady,
-      value: null,
+      value: this.staleCard ?? null,
       error:
         this.openFile.current?.state == 'not-found'
           ? new Error('File not found')
           : undefined,
       load: async () => {
+        debugger;
         state.isLoading = true;
         try {
           let currentlyOpenedFile = this.openFile.current;
@@ -329,7 +380,18 @@ export default class CodeMode extends Component<Signature> {
           let cardDoc = JSON.parse((currentlyOpenedFile as Ready).content);
           if (isCardDocument(cardDoc)) {
             let url = (currentlyOpenedFile as Ready).url.replace(/\.json$/, '');
+            if (this.staleCard) {
+              this.cardService.unsubscribe(this.staleCard, this.onCardChange);
+            }
             state.value = await this.cardService.loadModel(url);
+            this.cardService.subscribe(state.value!, this.onCardChange);
+            this.staleCard = state.value!;
+          } else {
+            if (this.staleCard) {
+              this.cardService.unsubscribe(this.staleCard, this.onCardChange);
+            }
+            this.staleCard = undefined;
+            this.serializedCard = undefined;
           }
         } catch (error: any) {
           state.error = error;
@@ -345,8 +407,26 @@ export default class CodeMode extends Component<Signature> {
     return state;
   });
 
+  private onCardChange = () => {
+    this.doWhenCardChanges.perform();
+  };
+
+  private doWhenCardChanges = restartableTask(async () => {
+    if (this.cardResource.value) {
+      this.hasUnsavedCardChanges = true;
+      this.serializedCard = (await this.cardService.serializeCard(
+        this.cardResource.value,
+      )) as SingleCardDocument; // this will always have an ID
+      console.log('card changed');
+      await timeout(autoSaveDelayMs);
+      await this.cardService.saveModel(this.cardResource.value);
+      console.log('card saved');
+      this.hasUnsavedCardChanges = false;
+    }
+  });
+
   private contentChangedTask = restartableTask(async (content: string) => {
-    this.isSourceStale = true;
+    this.hasUnsavedSourceChanges = true;
     await timeout(500);
     if (
       !isReady(this.openFile.current) ||
@@ -368,7 +448,7 @@ export default class CodeMode extends Component<Signature> {
       // then updates the state of the file resource
       this.writeSourceCodeToFile(this.openFile.current, content);
     }
-    this.isSourceStale = false;
+    this.hasUnsavedSourceChanges = false;
   });
 
   // We use this to write non-cards to the realm--so it doesn't make
@@ -422,7 +502,7 @@ export default class CodeMode extends Component<Signature> {
 
     try {
       await this.cardService.saveModel(card);
-      await this.reloadCard.perform();
+      await this.maybeReloadCard.perform(card.id);
     } catch (e) {
       console.error('Failed to save single card document', e);
     }
