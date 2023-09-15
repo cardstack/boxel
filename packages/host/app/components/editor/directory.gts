@@ -186,8 +186,7 @@ function fileWithinDirectoryIsOpen(
   operatorModeStateService: OperatorModeStateService,
 ) {
   return Boolean(
-    operatorModeStateService.state.codePath &&
-      operatorModeStateService.codePathRelativeToRealm.startsWith(path),
+    operatorModeStateService.codePathRelativeToRealm?.startsWith(path),
   );
 }
 
