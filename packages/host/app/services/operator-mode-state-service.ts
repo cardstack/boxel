@@ -250,10 +250,6 @@ export default class OperatorModeStateService extends Service {
   updateCodePath(codePath: URL | null) {
     this.state.codePath = codePath;
     this.schedulePersist();
-
-    if (codePath) {
-      this.recentFilesService.addRecentFile(codePath.toString());
-    }
   }
 
   updateFileView(fileView: FileView) {

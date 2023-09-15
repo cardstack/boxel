@@ -1,5 +1,13 @@
 import { module, test } from 'qunit';
-import { visit, click, waitFor, waitUntil, find } from '@ember/test-helpers';
+import {
+  visit,
+  click,
+  waitFor,
+  waitUntil,
+  find,
+  fillIn,
+  triggerKeyEvent,
+} from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { baseRealm } from '@cardstack/runtime-common';
 import {
@@ -454,7 +462,11 @@ module('Acceptance | code mode tests', function (hooks) {
     let otherRealmCardUrl = 'http://example.com/other-realm-card.json';
     window.localStorage.setItem(
       'recent-files',
-      JSON.stringify([`${testRealmURL}index.json`, otherRealmCardUrl]),
+      JSON.stringify([
+        `${testRealmURL}index.json`,
+        otherRealmCardUrl,
+        'a-non-url-to-ignore',
+      ]),
     );
 
     let codeModeStateParam = stringify({
@@ -695,6 +707,69 @@ module('Acceptance | code mode tests', function (hooks) {
     assert
       .dom('[data-test-card-url-bar-realm-info]')
       .containsText('in Test Workspace B');
+  });
+
+  test('recent files section does not list files not-found', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-card-module-definition]');
+
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}person.gts`);
+    assert.dom('[data-test-card-url-bar-error]').doesNotExist();
+    assert.dom('[data-test-recent-files]').exists();
+    assert.dom('[data-test-recent-file]').doesNotExist();
+
+    await fillIn('[data-test-card-url-bar-input]', `${testRealmURL}pers`);
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    await waitFor('[data-test-card-module-definition]', { count: 0 });
+
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}pers`);
+    assert
+      .dom('[data-test-card-url-bar-error]')
+      .containsText('File is not found');
+    assert.dom('[data-test-recent-file]').exists({ count: 1 });
+    assert.dom(`[data-test-recent-file="${testRealmURL}person.gts"]`).exists();
+    assert
+      .dom(`[data-test-recent-file]:first-child`)
+      .containsText('person.gts');
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `${testRealmURL}Person/1.json`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}Person/1.json`);
+    assert.dom('[data-test-card-url-bar-error]').doesNotExist();
+    assert.dom('[data-test-recent-file]').exists({ count: 1 });
+    assert.dom(`[data-test-recent-file="${testRealmURL}pers"]`).doesNotExist();
+    assert
+      .dom(`[data-test-recent-file]:first-child`)
+      .containsText('person.gts');
   });
 });
 
