@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "SampleCard from http://localhost:4201/drafts/sample-card",
+      "description": "Catalog entry for SampleCard from http://localhost:4201/drafts/sample-card",
+      "ref": {
+        "module": "http://localhost:4201/drafts/sample-card",
+        "name": "SampleCard"
+      },
+      "demo": {
+        "name": null,
+        "phone": {
+          "country": null,
+          "area": null,
+          "number": null
+        },
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "demo": {
+          "adoptsFrom": {
+            "module": "http://localhost:4201/drafts/sample-card",
+            "name": "SampleCard"
+          }
+        }
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}

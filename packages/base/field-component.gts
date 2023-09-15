@@ -8,7 +8,7 @@ import {
   type BaseDefComponent,
   CardContext,
   isCard,
-  isSaved,
+  isCompoundField,
 } from './card-api';
 import { getField } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
@@ -51,32 +51,42 @@ export function getBoxComponent(
     };
 
   let component: ComponentLike<{ Args: {}; Blocks: {} }> = <template>
-    {{#if (isCard model.value)}}
-      <CardContainer
-        @displayBoundaries={{true}}
+    {{#if (isCompoundField model.value)}}
+      <div
+        class='compound-field {{format}}-compound-field'
+        data-test-compound-field
         {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
         ...attributes
       >
-        <div
-          class='field-component-card
-            {{format}}-card
-            {{if (isSaved model.value) "saved" "not-saved"}}'
-          {{cardComponentModifier
-            card=model.value
-            format=format
-            fieldType=field.fieldType
-            fieldName=field.name
-          }}
-          data-test-field-component-card
-        >
-          <Implementation
-            @model={{model.value}}
-            @fields={{internalFields}}
-            @set={{model.set}}
-            @fieldName={{model.name}}
-            @context={{context}}
-          />
-        </div>
+        <Implementation
+          @model={{model.value}}
+          @fields={{internalFields}}
+          @set={{model.set}}
+          @fieldName={{model.name}}
+          @context={{context}}
+        />
+      </div>
+    {{else if (isCard model.value)}}
+      <CardContainer
+        @displayBoundaries={{true}}
+        class='card {{format}}-card'
+        {{cardComponentModifier
+          card=model.value
+          format=format
+          fieldType=field.fieldType
+          fieldName=field.name
+        }}
+        data-test-field-component-card
+        {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
+        ...attributes
+      >
+        <Implementation
+          @model={{model.value}}
+          @fields={{internalFields}}
+          @set={{model.set}}
+          @fieldName={{model.name}}
+          @context={{context}}
+        />
       </CardContainer>
     {{else}}
       <Implementation
@@ -88,25 +98,15 @@ export function getBoxComponent(
       />
     {{/if}}
     <style>
-      .field-component-card {
+      .card {
         padding: var(--boxel-sp);
       }
-
       .isolated-card {
         padding: var(--boxel-sp-xl);
       }
-
-      .edit-card.saved {
+      .edit-card {
         padding: var(--boxel-sp-xl) var(--boxel-sp-xxl) var(--boxel-sp-xl)
           var(--boxel-sp-xl);
-      }
-
-      /* Add some padding to accomodate for overlaid header for embedded cards in operator mode */
-      .operator-mode-stack .embedded-card,
-      .operator-mode-stack .edit-card.not-saved {
-        padding-top: calc(
-          var(--overlay-embedded-card-header-height) + var(--boxel-sp-lg)
-        );
       }
     </style>
   </template>;

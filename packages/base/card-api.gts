@@ -1597,14 +1597,18 @@ export function isCard(card: any): card is CardDef {
   return card && typeof card === 'object' && isBaseInstance in card;
 }
 
+export function isCompoundField(maybeField: any): maybeField is FieldDef {
+  return maybeField?.constructor?.isFieldDef && isBaseInstance in maybeField;
+}
+
 class DefaultCardDefTemplate extends GlimmerComponent<{
   Args: {
-    model: BaseDef;
+    model: CardDef;
     fields: Record<string, new () => GlimmerComponent>;
   };
 }> {
   <template>
-    <div class='default-card-template'>
+    <div class='default-card-def-template'>
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
           <FieldContainer
@@ -1618,7 +1622,7 @@ class DefaultCardDefTemplate extends GlimmerComponent<{
       {{/each-in}}
     </div>
     <style>
-      .default-card-template {
+      .default-card-def-template {
         display: grid;
         gap: var(--boxel-sp-lg);
       }
@@ -1628,12 +1632,12 @@ class DefaultCardDefTemplate extends GlimmerComponent<{
 
 class FieldDefEditTemplate extends GlimmerComponent<{
   Args: {
-    model: BaseDef;
+    model: FieldDef;
     fields: Record<string, new () => GlimmerComponent>;
   };
 }> {
   <template>
-    <div class='default-card-template'>
+    <div class='field-def-edit-template'>
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
           <FieldContainer
@@ -1648,7 +1652,7 @@ class FieldDefEditTemplate extends GlimmerComponent<{
       {{/each-in}}
     </div>
     <style>
-      .default-card-template {
+      .field-def-edit-template {
         display: grid;
         gap: var(--boxel-sp-lg);
       }
