@@ -76,11 +76,14 @@ class ContainsManyEditor extends GlimmerComponent<Signature> {
         padding: 0;
         margin: 0 0 var(--boxel-sp);
       }
-      .list > li + li {
-        margin-top: var(--boxel-sp);
-      }
       .editor {
         position: relative;
+        cursor: pointer;
+        padding: var(--boxel-sp) var(--boxel-sp-xs);
+        border-radius: var(--boxel-form-control-border-radius);
+      }
+      .editor:hover {
+        background-color: var(--boxel-light-100);
       }
       .remove-button-container {
         position: absolute;
