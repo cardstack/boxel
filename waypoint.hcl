@@ -5,7 +5,9 @@ app "realm-demo" {
 
   build {
     use "docker" {
-      context = "./"
+      context  = "./"
+      buildkit = true
+      platform = "linux/amd64"
 
       build_args = {
         realm_server_script = "start:staging"
@@ -26,6 +28,7 @@ app "realm-demo" {
       region              = "us-east-1"
       memory              = 4096
       cpu                 = 2048                                                     # 2 vCPU's
+      architecture        = "x86_64"
       cluster             = "realm-demo-staging"
       count               = 1
       subnets             = ["subnet-099d721ad678d073a", "subnet-0d1196fa815f3d057"]
