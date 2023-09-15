@@ -1521,6 +1521,7 @@ module('Acceptance | operator mode tests', function (hooks) {
           '[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"]',
         )
         .doesNotExist();
+      assert.dom('[data-test-search-input] input').hasValue('');
     });
   });
 });

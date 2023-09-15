@@ -109,8 +109,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
           return (
             entry.meta.format === 'data' ||
             entry.meta.fieldType === 'linksTo' ||
-            entry.meta.fieldType === 'linksToMany' ||
-            entry.meta.fieldType === 'contains'
+            entry.meta.fieldType === 'linksToMany'
           );
         })
         // this mapping could probably be eliminated or simplified if we refactor OperatorModeOverlays to accept our type

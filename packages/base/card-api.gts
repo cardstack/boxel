@@ -1597,7 +1597,7 @@ export function isCard(card: any): card is CardDef {
   return card && typeof card === 'object' && isBaseInstance in card;
 }
 
-class DefaultTemplate extends GlimmerComponent<{
+class DefaultCardDefTemplate extends GlimmerComponent<{
   Args: {
     model: BaseDef;
     fields: Record<string, new () => GlimmerComponent>;
@@ -1610,6 +1610,36 @@ class DefaultTemplate extends GlimmerComponent<{
           <FieldContainer
             {{! @glint-ignore (glint is arriving at an incorrect type signature for 'startCase') }}
             @label={{startCase key}}
+            data-test-field={{key}}
+          >
+            <Field />
+          </FieldContainer>
+        {{/unless}}
+      {{/each-in}}
+    </div>
+    <style>
+      .default-card-template {
+        display: grid;
+        gap: var(--boxel-sp-lg);
+      }
+    </style>
+  </template>
+}
+
+class FieldDefEditTemplate extends GlimmerComponent<{
+  Args: {
+    model: BaseDef;
+    fields: Record<string, new () => GlimmerComponent>;
+  };
+}> {
+  <template>
+    <div class='default-card-template'>
+      {{#each-in @fields as |key Field|}}
+        {{#unless (eq key 'id')}}
+          <FieldContainer
+            {{! @glint-ignore (glint is arriving at an incorrect type signature for 'startCase') }}
+            @label={{startCase key}}
+            @vertical={{true}}
             data-test-field={{key}}
           >
             <Field />
@@ -1655,7 +1685,7 @@ export class FieldDef extends BaseDef {
       <!-- Inherited from FieldDef embedded view. Did your field forget to specify its embedded component? -->
     </template>
   };
-  static edit: BaseDefComponent = DefaultTemplate;
+  static edit: BaseDefComponent = FieldDefEditTemplate;
 }
 
 class IDField extends FieldDef {
@@ -1730,8 +1760,8 @@ export class CardDef extends BaseDef {
       <!-- Inherited from CardDef embedded view. Did your card forget to specify its embedded component? -->
     </template>
   };
-  static isolated: BaseDefComponent = DefaultTemplate;
-  static edit: BaseDefComponent = DefaultTemplate;
+  static isolated: BaseDefComponent = DefaultCardDefTemplate;
+  static edit: BaseDefComponent = DefaultCardDefTemplate;
 }
 
 export type BaseDefConstructor = typeof BaseDef;
