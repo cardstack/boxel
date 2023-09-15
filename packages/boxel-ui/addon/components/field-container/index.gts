@@ -64,6 +64,9 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
     .vertical {
       grid-template-rows: auto 1fr;
     }
+    .vertical .label {
+      --boxel-label-font: 700 var(--boxel-font-xs);
+    }
 
     .centered-display {
       justify-items: center;
@@ -84,6 +87,8 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
     }
 
     .label {
+      --boxel-label-letter-spacing: var(--boxel-lsp-xs);
+
       display: flex;
       align-items: var(--boxel-field-label-align);
       padding-top: var(--boxel-field-label-padding-top);
