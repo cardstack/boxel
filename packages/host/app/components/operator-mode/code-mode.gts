@@ -261,12 +261,9 @@ export default class CodeMode extends Component<Signature> {
 
     return file(context, () => ({
       url: this.codePath!.href,
-      onStateChange: (state, newStateObj) => {
+      onStateChange: (state) => {
         if (state === 'not-found') {
           this.loadFileError = 'File is not found';
-        }
-        if (state === 'ready' && isReady(newStateObj)) {
-          this.recentFilesService.addRecentFile(newStateObj.url);
         }
       },
       onRedirect: (url: string) => {
