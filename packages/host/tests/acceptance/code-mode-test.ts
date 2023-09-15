@@ -389,6 +389,13 @@ module('Acceptance | code mode tests', function (hooks) {
         'expected open file to be scrolled into view',
       );
     }
+
+    assert
+      .dom('[data-test-directory="zzz/"]')
+      .isDisabled('expected the ancestor directory to be uncloseable');
+    assert
+      .dom('[data-test-directory="zzz/zzz/"]')
+      .isDisabled('expected the containing directory to be unclosable');
   });
 
   test('opening another file preserves the scroll position', async function (assert) {

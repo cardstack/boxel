@@ -44,6 +44,10 @@ export default class Directory extends Component<Args> {
             <button
               data-test-directory={{entryPath}}
               {{on 'click' (fn this.toggleDirectory entryPath)}}
+              disabled={{fileWithinDirectoryIsOpen
+                entryPath
+                this.operatorModeStateService
+              }}
               class='directory'
             >
               {{svgJar
@@ -117,6 +121,18 @@ export default class Directory extends Component<Args> {
         transform: rotate(-90deg);
       }
 
+      .directory[disabled] {
+        color: var(--boxel-dark);
+      }
+
+      .directory[disabled]:hover {
+        background: transparent;
+      }
+
+      .directory[disabled] :deep(.icon) {
+        --icon-color: var(--boxel-light-600);
+      }
+
       .file {
         padding-left: calc(var(--icon-length) + var(--icon-margin));
       }
@@ -162,11 +178,20 @@ function isOpen(
     operatorModeStateService.state.openDirs ?? []
   ).find((item) => item.startsWith(path));
 
-  let fileWithinDirectoryIsOpen =
-    operatorModeStateService.state.codePath &&
-    operatorModeStateService.codePathRelativeToRealm.startsWith(path);
+  return (
+    directoryIsPersistedOpen ||
+    fileWithinDirectoryIsOpen(path, operatorModeStateService)
+  );
+}
 
-  return directoryIsPersistedOpen || fileWithinDirectoryIsOpen;
+function fileWithinDirectoryIsOpen(
+  path: string,
+  operatorModeStateService: OperatorModeStateService,
+) {
+  return Boolean(
+    operatorModeStateService.state.codePath &&
+      operatorModeStateService.codePathRelativeToRealm.startsWith(path),
+  );
 }
 
 interface ScrollIntoViewModifierArgs {
