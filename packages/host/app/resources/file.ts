@@ -3,7 +3,7 @@ import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { registerDestructor } from '@ember/destroyable';
-import { logger } from '@cardstack/runtime-common';
+import { SupportedMimeType, logger } from '@cardstack/runtime-common';
 import LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
@@ -115,9 +115,7 @@ class _FileResource extends Resource<Args> {
 
   private read = restartableTask(async () => {
     let response = await this.loaderService.loader.fetch(this._url, {
-      headers: {
-        Accept: 'application/vnd.card+source',
-      },
+      headers: { Accept: SupportedMimeType.CardSource },
     });
 
     if (!response.ok) {
