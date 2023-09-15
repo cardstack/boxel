@@ -7,6 +7,7 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import URLBarResource, {
   urlBarResource,
 } from '@cardstack/host/resources/url-bar';
+import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 
 interface Signature {
   Element: HTMLElement;
@@ -26,7 +27,12 @@ export default class CardURLBar extends Component<Signature> {
       ...attributes
     >
       <div class='realm-info' data-test-card-url-bar-realm-info>
-        <img src={{this.realmIcon}} alt='realm-icon' />
+        <div
+          class='realm-icon'
+          style={{cssVar card-url-bar-realm-icon=this.realmBackgroundUrl}}
+        >
+          <img src={{this.realmIcon}} alt='realm-icon' />
+        </div>
         <span>in
           {{if this.realmName this.realmName 'Unknown Workspace'}}</span>
       </div>
@@ -82,11 +88,18 @@ export default class CardURLBar extends Component<Signature> {
 
         white-space: nowrap;
       }
-      .realm-info img {
-        width: 22px;
-        -webkit-filter: drop-shadow(1px 1px 1px white)
-          drop-shadow(-1px -1px 1px white);
-        filter: drop-shadow(1px 1px 1px white) drop-shadow(-1px -1px 1px white);
+      .realm-icon {
+        display: flex;
+        align-items: center;
+        background-color: var(--boxel-black);
+        background-image: var(--card-url-bar-realm-icon);
+        height: 100%;
+
+        border: 2px solid var(--boxel-border-color);
+        border-radius: var(--boxel-border-radius-xs);
+      }
+      .realm-icon img {
+        width: 20px;
       }
       .input {
         display: flex;
@@ -140,6 +153,10 @@ export default class CardURLBar extends Component<Signature> {
 
   get realmName() {
     return this.args.realmInfo?.name;
+  }
+
+  get realmBackgroundUrl() {
+    return `url(${this.args.realmInfo?.backgroundURL})`;
   }
 
   get cssClasses() {
