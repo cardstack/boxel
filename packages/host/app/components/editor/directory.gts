@@ -163,6 +163,7 @@ function isOpen(
   ).find((item) => item.startsWith(path));
 
   let fileWithinDirectoryIsOpen =
+    operatorModeStateService.state.codePath &&
     operatorModeStateService.codePathRelativeToRealm.startsWith(path);
 
   return directoryIsPersistedOpen || fileWithinDirectoryIsOpen;
