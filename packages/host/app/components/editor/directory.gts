@@ -164,10 +164,7 @@ function fileIsSelected(
   localPath: string,
   operatorModeStateService: OperatorModeStateService,
 ) {
-  return (
-    operatorModeStateService.state.codePath?.pathname.endsWith(localPath) ||
-    false
-  );
+  return operatorModeStateService.codePathRelativeToRealm === localPath;
 }
 
 function isOpen(

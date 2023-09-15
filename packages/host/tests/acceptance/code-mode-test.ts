@@ -87,6 +87,7 @@ module('Acceptance | code mode tests', function (hooks) {
     // from the global loader
     adapter = new TestRealmAdapter({
       'index.gts': indexCardSource,
+      'pet-person.gts': personCardSource,
       'person.gts': personCardSource,
       'person-entry.json': {
         data: {
@@ -283,12 +284,13 @@ module('Acceptance | code mode tests', function (hooks) {
       )}`,
     );
 
-    await waitFor('[data-test-file="person.gts"]');
+    await waitFor('[data-test-file="pet-person.gts"]');
 
-    await click('[data-test-file="person.gts"]');
+    await click('[data-test-file="pet-person.gts"]');
 
-    await waitFor('[data-test-file="person.gts"]');
-    assert.dom('[data-test-file="person.gts"]').hasClass('selected');
+    await waitFor('[data-test-file="pet-person.gts"]');
+    assert.dom('[data-test-file="pet-person.gts"]').hasClass('selected');
+    assert.dom('[data-test-file="person.gts"]').doesNotHaveClass('selected');
 
     await click('[data-test-directory="Person/"]');
     await click('[data-test-file="Person/1.json"]');
