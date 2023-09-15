@@ -230,7 +230,7 @@ module('Acceptance | code mode tests', function (hooks) {
       ],
       submode: 'code',
       fileView: 'browser',
-      codePath: `${testRealmURL}Person/1.json`,
+      codePath: `${testRealmURL}person.gts`,
     })!;
 
     await visit(
