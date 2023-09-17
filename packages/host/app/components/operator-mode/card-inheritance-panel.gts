@@ -169,15 +169,9 @@ function cardsOrFieldsFromModule(
   module: Record<string, any>,
   _never?: never, // glint insists that w/o this last param that there are actually no params
 ): (typeof BaseDef)[] {
-  return Object.values(module).filter(
-    (maybeCard) => typeof maybeCard === 'function' && 'baseDef' in maybeCard,
-  );
+  return Object.values(module).filter(isCardOrField);
 }
 
 export function isCardOrField(cardOrField: any): cardOrField is typeof BaseDef {
   return typeof cardOrField === 'function' && 'baseDef' in cardOrField;
-}
-
-export function isCard(card: any): card is typeof BaseDef {
-  return typeof card === 'function' && 'baseDef' in card;
 }
