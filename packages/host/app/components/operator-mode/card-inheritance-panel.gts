@@ -9,7 +9,6 @@ import {
   cardTypeDisplayName,
   identifyCard,
   moduleFrom,
-  trimExecutableExtension,
 } from '@cardstack/runtime-common';
 import {
   InstanceDefinitionContainer,
