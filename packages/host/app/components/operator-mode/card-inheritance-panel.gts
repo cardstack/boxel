@@ -9,6 +9,7 @@ import {
   cardTypeDisplayName,
   identifyCard,
   moduleFrom,
+  getAncestor,
 } from '@cardstack/runtime-common';
 import {
   InstanceDefinitionContainer,
@@ -72,21 +73,21 @@ export default class CardInheritancePanel extends Component<Args> {
         />
       {{else}}
         {{! Module case when visting, eg author.gts }}
-        <ModuleDefinitionContainer
-          @name='some module'
-          @fileExtension={{this.fileExtension}}
-          @realmInfo={{@realmInfo}}
-          @realmIconURL={{@realmIconURL}}
-          @isActive={{true}}
-          @actions={{array
-            (hash label='Delete' handler=@delete icon='icon-trash')
-          }}
-        />
-        <div>Inherits from</div>
         {{#if @importedModule.module}}
           {{#each (cardsOrFieldsFromModule @importedModule.module) as |card|}}
-            <ClickableModuleDefinitionContainer
+            <ModuleDefinitionContainer
               @name={{getCardTypeDisplayName card}}
+              @fileExtension={{this.fileExtension}}
+              @realmInfo={{@realmInfo}}
+              @realmIconURL={{@realmIconURL}}
+              @isActive={{true}}
+              @actions={{array
+                (hash label='Delete' handler=@delete icon='icon-trash')
+              }}
+            />
+            <div>Inherits from</div>
+            <ClickableModuleDefinitionContainer
+              @name={{getAncestorDisplayName card}}
               @fileExtension={{this.fileExtension}}
               @realmInfo={{@realmInfo}}
               @realmIconURL={{@realmIconURL}}
@@ -126,6 +127,14 @@ export default class CardInheritancePanel extends Component<Args> {
       return '';
     }
   }
+}
+
+function getAncestorDisplayName(t: typeof BaseDef) {
+  let ancestor = getAncestor(t);
+  if (ancestor) {
+    return getCardTypeDisplayName(ancestor);
+  }
+  return 'No name found';
 }
 
 function getCardTypeDisplayName(t: typeof BaseDef) {
