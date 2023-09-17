@@ -92,7 +92,7 @@ export default class CardInheritancePanel extends Component<Args> {
               @realmInfo={{@realmInfo}}
               @realmIconURL={{@realmIconURL}}
               @onSelectDefinition={{this.updateCodePath}}
-              @url={{moduleUrl card}}
+              @url={{moduleUrlOfAncestor card}}
             />
           {{/each}}
         {{/if}}
@@ -152,6 +152,10 @@ function getModuleUrlOfInstance(instance: CardDef) {
   let cardType = Reflect.getPrototypeOf(instance)
     ?.constructor as typeof BaseDef;
   return moduleUrl(cardType);
+}
+
+function moduleUrlOfAncestor(t: typeof BaseDef) {
+  return moduleUrl(getAncestor(t));
 }
 
 function moduleUrl(t: typeof BaseDef | undefined) {
