@@ -392,7 +392,11 @@ module('Acceptance | code mode tests', function (hooks) {
     let otherRealmCardUrl = 'http://example.com/other-realm-card.json';
     window.localStorage.setItem(
       'recent-files',
-      JSON.stringify([`${testRealmURL}index.json`, otherRealmCardUrl]),
+      JSON.stringify([
+        `${testRealmURL}index.json`,
+        otherRealmCardUrl,
+        'a-non-url-to-ignore',
+      ]),
     );
 
     let codeModeStateParam = stringify({
