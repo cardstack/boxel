@@ -158,7 +158,7 @@ function moduleUrl(t: typeof BaseDef | undefined) {
   if (t) {
     let ref = identifyCard(t);
     if (ref) {
-      return new URL(moduleFrom(ref)); //TODO CS-5830: Consolidate hardcoded .gts extensions
+      return new URL(moduleFrom(ref));
     }
     throw new Error('Could not identify card');
   }
