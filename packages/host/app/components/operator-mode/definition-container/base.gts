@@ -3,7 +3,6 @@ import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { Button } from '@cardstack/boxel-ui';
-import { action } from '@ember/object';
 import { type RealmInfo } from '@cardstack/runtime-common';
 
 interface Action {
@@ -11,8 +10,7 @@ interface Action {
   handler: () => void;
   icon: string;
 }
-
-interface BaseArgs {
+export interface BaseArgs {
   title: string | undefined;
   name: string | undefined;
   fileExtension: string;
@@ -25,12 +23,11 @@ interface BaseSignature {
   Element: HTMLElement;
   Args: BaseArgs;
   Blocks: {
-    actions: [];
-    default: [];
+    activeContent: [];
   };
 }
 
-class BaseDefinitionContainer extends Component<BaseSignature> {
+export class BaseDefinitionContainer extends Component<BaseSignature> {
   get realmName(): string | undefined {
     return this.args.realmInfo?.name;
   }
@@ -55,9 +52,7 @@ class BaseDefinitionContainer extends Component<BaseSignature> {
           <div data-test-definition-name class='definition-name'>{{@name}}</div>
         </div>
         {{#if @isActive}}
-          {{yield to='actions'}}
-        {{else}}
-          {{yield}}
+          {{yield to='activeContent'}}
         {{/if}}
       </div>
 
@@ -132,139 +127,7 @@ class BaseDefinitionContainer extends Component<BaseSignature> {
   </template>
 }
 
-interface InstanceArgs
-  extends Omit<BaseArgs, 'title' | 'isActive'>,
-    ActiveArgs {}
-
-interface InstanceSignature {
-  Element: HTMLElement;
-  Args: InstanceArgs;
-}
-
-export class InstanceDefinitionContainer extends Component<InstanceSignature> {
-  <template>
-    <BaseDefinitionContainer
-      @title='Card Instance'
-      @fileExtension='.JSON'
-      @name={{@name}}
-      @realmInfo={{@realmInfo}}
-      @realmIconURL={{@realmIconURL}}
-      @isActive={{true}}
-      data-test-card-instance-definition
-    >
-      <:actions>
-        <Active @actions={{@actions}} @infoText={{@infoText}} />
-      </:actions>
-    </BaseDefinitionContainer>
-  </template>
-}
-interface ClickableModuleArgs
-  extends Omit<BaseArgs, 'title' | 'infoText' | 'isActive'>,
-    ClickableArgs {}
-
-interface ClickableModuleSignature {
-  Element: HTMLElement;
-  Args: ClickableModuleArgs;
-}
-
-export class ClickableModuleDefinitionConainer extends Component<ClickableModuleSignature> {
-  <template>
-    <Clickable
-      @onSelectDefinition={{@onSelectDefinition}}
-      @url={{@url}}
-      data-test-definition-container
-    >
-      <BaseDefinitionContainer
-        @title='Card Definition'
-        @name={{@name}}
-        @fileExtension={{@fileExtension}}
-        @realmInfo={{@realmInfo}}
-        @realmIconURL={{@realmIconURL}}
-        @isActive={{false}}
-        data-test-card-module-definition
-      />
-    </Clickable>
-  </template>
-}
-
-interface ModuleArgs extends Omit<BaseArgs, 'title'>, ActiveArgs {}
-
-interface ModuleSignature {
-  Element: HTMLElement;
-  Args: ModuleArgs;
-}
-
-export class ModuleDefinitionContainer extends Component<ModuleSignature> {
-  <template>
-    <BaseDefinitionContainer
-      @title='Card Definition'
-      @name={{@name}}
-      @fileExtension={{@fileExtension}}
-      @realmInfo={{@realmInfo}}
-      @realmIconURL={{@realmIconURL}}
-      @isActive={{@isActive}}
-      data-test-card-module-definition
-    >
-      <:actions>
-        <Active @actions={{@actions}} @infoText={{@infoText}} />
-      </:actions>
-    </BaseDefinitionContainer>
-  </template>
-}
-
-interface ClickableArgs {
-  onSelectDefinition?: (newUrl: URL | undefined) => void;
-  url?: URL | undefined;
-}
-
-interface ClickableSignature {
-  Element: HTMLElement;
-  Args: ClickableArgs;
-  Blocks: {
-    default: [];
-  };
-}
-
-class Clickable extends Component<ClickableSignature> {
-  @action
-  handleClick() {
-    if (this.args.onSelectDefinition && this.args.url) {
-      this.args.onSelectDefinition(this.args.url);
-    }
-  }
-  <template>
-    <button
-      type='button'
-      {{on 'click' this.handleClick}}
-      class='clickable-button'
-      ...attributes
-    >
-      {{yield}}
-    </button>
-    <style>
-      .clickable-button {
-        background: none;
-        border: none;
-        padding: 0;
-        margin: 0;
-        cursor: pointer;
-        width: 100%;
-        height: 100%;
-        appearance: none;
-        -webkit-appearance: none;
-        -moz-appearance: none;
-        border-radius: var(--boxel-border-radius);
-        text-align: inherit;
-      }
-
-      .clickable-button:hover {
-        outline: 2px solid var(--boxel-highlight);
-      }
-    </style>
-  </template>
-}
-
-interface ActiveArgs {
+export interface ActiveArgs {
   actions: Action[];
   infoText?: string;
 }

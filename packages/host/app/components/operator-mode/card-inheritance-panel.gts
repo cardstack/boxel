@@ -14,7 +14,7 @@ import {
 import {
   InstanceDefinitionContainer,
   ModuleDefinitionContainer,
-  ClickableModuleDefinitionConainer,
+  ClickableModuleDefinitionContainer,
 } from './definition-container';
 import { Ready } from '@cardstack/host/resources/file';
 import { tracked } from '@glimmer/tracking';
@@ -65,7 +65,7 @@ export default class CardInheritancePanel extends Component<Args> {
           }}
         />
         <div>Adopts from</div>
-        <ClickableModuleDefinitionConainer
+        <ClickableModuleDefinitionContainer
           @name={{getCardTypeDisplayNameFromInstance @cardInstance}}
           @fileExtension={{this.fileExtension}}
           @realmInfo={{@realmInfo}}
@@ -88,7 +88,7 @@ export default class CardInheritancePanel extends Component<Args> {
         <div>Inherits from</div>
         {{#if @importedModule.module}}
           {{#each (cardsOrFieldsFromModule @importedModule.module) as |card|}}
-            <ClickableModuleDefinitionConainer
+            <ClickableModuleDefinitionContainer
               @name={{getCardTypeDisplayName card}}
               @fileExtension={{this.fileExtension}}
               @realmInfo={{@realmInfo}}
@@ -145,7 +145,6 @@ function getCardTypeDisplayNameFromInstance(instance: CardDef) {
 }
 
 function getModuleUrlOfInstance(instance: CardDef) {
-  debugger;
   let cardType = Reflect.getPrototypeOf(instance)
     ?.constructor as typeof BaseDef;
   return moduleUrl(cardType);
