@@ -14,13 +14,13 @@ import {
 import {
   InstanceDefinitionContainer,
   ModuleDefinitionContainer,
+  ClickableModuleDefinitionContainer,
 } from './definition-container';
 import { Ready } from '@cardstack/host/resources/file';
 import { tracked } from '@glimmer/tracking';
-import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import moment from 'moment';
 import { type ImportResource } from '@cardstack/host/resources/import';
-import { hash, array, fn } from '@ember/helper';
+import { hash, array } from '@ember/helper';
 import CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import { action } from '@ember/object';
@@ -39,7 +39,6 @@ interface Args {
 
 export default class CardInheritancePanel extends Component<Args> {
   @tracked cardInstance: CardDef | undefined;
-  @tracked module: ModuleSyntax | undefined;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare cardService: CardService;
 
@@ -52,37 +51,53 @@ export default class CardInheritancePanel extends Component<Args> {
 
   <template>
     <div class='container' ...attributes>
-      {{#if @importedModule.module}}
-        {{#each (cardsFromModule @importedModule.module) as |card|}}
-          <ModuleDefinitionContainer
-            @title={{'Card Definition'}}
-            @name={{getCardTypeDisplayName card}}
-            @fileExtension='.GTS'
-            @realmInfo={{@realmInfo}}
-            @realmIconURL={{@realmIconURL}}
-            @isActive={{(isModuleActive card @readyFile)}}
-            @onSelectDefinition={{fn this.updateCodePath (moduleUrl card)}}
-            @infoText={{this.lastModified}}
-            @url={{moduleUrl card}}
-            @actions={{array
-              (hash label='Delete' handler=@delete icon='icon-trash')
-            }}
-          />
-        {{/each}}
-      {{/if}}
+
       {{#if @cardInstance}}
+        {{! JSON case when visting, eg Author/1.json }}
         <InstanceDefinitionContainer
-          @title={{'Card Instance'}}
           @name={{@cardInstance.title}}
           @fileExtension='.JSON'
           @realmInfo={{@realmInfo}}
           @realmIconURL={{@realmIconURL}}
           @infoText={{this.lastModified}}
-          @isActive={{(isInstanceActive @cardInstance @readyFile)}}
           @actions={{array
             (hash label='Delete' handler=@delete icon='icon-trash')
           }}
         />
+        <div>Adopts from</div>
+        <ClickableModuleDefinitionContainer
+          @name={{getCardTypeDisplayNameFromInstance @cardInstance}}
+          @fileExtension={{this.fileExtension}}
+          @realmInfo={{@realmInfo}}
+          @realmIconURL={{@realmIconURL}}
+          @onSelectDefinition={{this.updateCodePath}}
+          @url={{getModuleUrlOfInstance @cardInstance}}
+        />
+      {{else}}
+        {{! Module case when visting, eg author.gts }}
+        <ModuleDefinitionContainer
+          @name='some module'
+          @fileExtension={{this.fileExtension}}
+          @realmInfo={{@realmInfo}}
+          @realmIconURL={{@realmIconURL}}
+          @isActive={{true}}
+          @actions={{array
+            (hash label='Delete' handler=@delete icon='icon-trash')
+          }}
+        />
+        <div>Inherits from</div>
+        {{#if @importedModule.module}}
+          {{#each (cardsOrFieldsFromModule @importedModule.module) as |card|}}
+            <ClickableModuleDefinitionContainer
+              @name={{getCardTypeDisplayName card}}
+              @fileExtension={{this.fileExtension}}
+              @realmInfo={{@realmInfo}}
+              @realmIconURL={{@realmIconURL}}
+              @onSelectDefinition={{this.updateCodePath}}
+              @url={{moduleUrl card}}
+            />
+          {{/each}}
+        {{/if}}
       {{/if}}
     </div>
     <style>
@@ -94,6 +109,10 @@ export default class CardInheritancePanel extends Component<Args> {
     </style>
   </template>
 
+  get inheritsFrom() {
+    return this.args.cardInstance ? 'Adopts From' : 'Inherits From';
+  }
+
   get lastModified() {
     if (this.args.readyFile.lastModified != undefined) {
       return `Last saved was ${moment(
@@ -102,11 +121,31 @@ export default class CardInheritancePanel extends Component<Args> {
     }
     return;
   }
+
+  get fileExtension() {
+    if (!this.args.cardInstance) {
+      return '.' + this.args.readyFile.url.split('.').pop() || '';
+    } else {
+      return '';
+    }
+  }
 }
 
 function getCardTypeDisplayName(t: typeof BaseDef) {
   let card = new t();
   return cardTypeDisplayName(card);
+}
+
+function getCardTypeDisplayNameFromInstance(instance: CardDef) {
+  let cardType = Reflect.getPrototypeOf(instance)
+    ?.constructor as typeof BaseDef;
+  return getCardTypeDisplayName(cardType);
+}
+
+function getModuleUrlOfInstance(instance: CardDef) {
+  let cardType = Reflect.getPrototypeOf(instance)
+    ?.constructor as typeof BaseDef;
+  return moduleUrl(cardType);
 }
 
 function moduleUrl(t: typeof BaseDef | undefined) {
@@ -120,24 +159,30 @@ function moduleUrl(t: typeof BaseDef | undefined) {
   return;
 }
 
-function cardsFromModule(
+function cardsOrFieldsFromModule(
   module: Record<string, any>,
   _never?: never, // glint insists that w/o this last param that there are actually no params
 ): (typeof BaseDef)[] {
   return Object.values(module).filter(
     (maybeCard) => typeof maybeCard === 'function' && 'baseDef' in maybeCard,
   );
-}
 
-function isInstanceActive(cardInstance: CardDef, f: Ready) {
-  return cardInstance.id === f.url.replace(/\.json$/, '');
+  return o;
 }
 
 function isModuleActive(card: typeof BaseDef, f: Ready) {
-  let url = moduleUrl(card);
-  if (url) {
-    return url.href === trimExecutableExtension(new URL(f.url)).href;
+  let moduleIdentity = moduleUrl(card);
+  if (moduleIdentity) {
+    return moduleIdentity.href === trimExecutableExtension(new URL(f.url)).href;
   } else {
     return false;
   }
+}
+
+export function isCardOrField(cardOrField: any): cardOrField is typeof BaseDef {
+  return typeof cardOrField === 'function' && 'baseDef' in cardOrField;
+}
+
+export function isCard(card: any): card is typeof BaseDef {
+  return typeof card === 'function' && 'baseDef' in card;
 }
