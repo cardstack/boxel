@@ -21,7 +21,6 @@ import { tracked } from '@glimmer/tracking';
 import moment from 'moment';
 import { type ImportResource } from '@cardstack/host/resources/import';
 import { hash, array } from '@ember/helper';
-import CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import { action } from '@ember/object';
 
@@ -40,7 +39,6 @@ interface Args {
 export default class CardInheritancePanel extends Component<Args> {
   @tracked cardInstance: CardDef | undefined;
   @service declare operatorModeStateService: OperatorModeStateService;
-  @service declare cardService: CardService;
 
   @action
   updateCodePath(url: URL | undefined) {
