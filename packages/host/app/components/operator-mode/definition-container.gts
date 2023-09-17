@@ -1,8 +1,10 @@
 import Label from '@cardstack/boxel-ui/components/label';
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
+import { not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { Button } from '@cardstack/boxel-ui';
+import { action } from '@ember/object';
 import { type RealmInfo } from '@cardstack/runtime-common';
 
 interface Action {
@@ -10,24 +12,26 @@ interface Action {
   handler: () => void;
   icon: string;
 }
-export interface BaseArgs {
+
+interface BaseArgs {
   title: string | undefined;
   name: string | undefined;
   fileExtension: string;
   realmInfo: RealmInfo | null;
   realmIconURL: string | null | undefined;
   isActive: boolean;
+  actions: Action[];
+  url?: URL;
+  onSelectDefinition?: (newUrl: URL | undefined) => void;
+  infoText?: string;
 }
 
 interface BaseSignature {
   Element: HTMLElement;
   Args: BaseArgs;
-  Blocks: {
-    activeContent: [];
-  };
 }
 
-export class BaseDefinitionContainer extends Component<BaseSignature> {
+class BaseDefinitionContainer extends Component<BaseSignature> {
   get realmName(): string | undefined {
     return this.args.realmInfo?.name;
   }
@@ -52,10 +56,24 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
           <div data-test-definition-name class='definition-name'>{{@name}}</div>
         </div>
         {{#if @isActive}}
-          {{yield to='activeContent'}}
+          <div class='action-buttons'>
+            {{#each @actions as |actionButton|}}
+              <Button
+                data-test-action-button='{{actionButton.label}}'
+                class='action-button'
+                {{on 'click' actionButton.handler}}
+              >
+                {{svgJar actionButton.icon width='24px' height='24px'}}
+                {{actionButton.label}}
+              </Button>
+            {{/each}}
+
+          </div>
+          <div class='info-footer' data-test-definition-info-text>
+            <div class='message'>{{@infoText}}</div>
+          </div>
         {{/if}}
       </div>
-
     </div>
 
     <style>
@@ -123,38 +141,12 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
         font-size: var(--boxel-font-size);
         font-weight: bold;
       }
-    </style>
-  </template>
-}
 
-export interface ActiveArgs {
-  actions: Action[];
-  infoText?: string;
-}
+      .info-footer .message {
+        color: #919191;
+        font-weight: 200;
+      }
 
-interface ActiveSignature {
-  Element: HTMLElement;
-  Args: ActiveArgs;
-}
-
-export class Active extends Component<ActiveSignature> {
-  <template>
-    <div class='action-buttons'>
-      {{#each @actions as |actionButton|}}
-        <Button
-          data-test-action-button='{{actionButton.label}}'
-          class='action-button'
-          {{on 'click' actionButton.handler}}
-        >
-          {{svgJar actionButton.icon width='24px' height='24px'}}
-          {{actionButton.label}}
-        </Button>
-      {{/each}}
-      <div class='info-footer' data-test-definition-info-text>
-        <div class='message'>{{@infoText}}</div>
-      </div>
-    </div>
-    <style>
       .action-buttons {
         display: flex;
         flex-direction: column;
@@ -169,9 +161,107 @@ export class Active extends Component<ActiveSignature> {
         gap: var(--boxel-sp-xs);
         align-self: flex-start;
       }
-      .info-footer .message {
-        color: #919191;
-        font-weight: 200;
+    </style>
+  </template>
+}
+
+export class InstanceDefinitionContainer extends Component<BaseSignature> {
+  <template>
+    <BaseDefinitionContainer
+      @title={{@title}}
+      @name={{@name}}
+      @fileExtension={{@fileExtension}}
+      @realmInfo={{@realmInfo}}
+      @realmIconURL={{@realmIconURL}}
+      @isActive={{@isActive}}
+      @infoText={{@infoText}}
+      @actions={{@actions}}
+      data-test-card-instance-definition
+    />
+  </template>
+}
+
+export class ModuleDefinitionContainer extends Component<BaseSignature> {
+  <template>
+    {{#if (not @isActive)}}
+      <Clickable
+        @onSelectDefinition={{@onSelectDefinition}}
+        @url={{@url}}
+        data-test-definition-container
+      >
+        <BaseDefinitionContainer
+          @title={{@title}}
+          @name={{@name}}
+          @fileExtension={{@fileExtension}}
+          @realmInfo={{@realmInfo}}
+          @realmIconURL={{@realmIconURL}}
+          @isActive={{@isActive}}
+          @infoText={{@infoText}}
+          @actions={{@actions}}
+          data-test-card-module-definition
+        />
+      </Clickable>
+    {{else}}
+      <BaseDefinitionContainer
+        @title={{@title}}
+        @name={{@name}}
+        @fileExtension={{@fileExtension}}
+        @realmInfo={{@realmInfo}}
+        @realmIconURL={{@realmIconURL}}
+        @isActive={{@isActive}}
+        @infoText={{@infoText}}
+        @actions={{@actions}}
+        data-test-card-module-definition
+      />
+    {{/if}}
+  </template>
+}
+
+interface ClickableSignature {
+  Element: HTMLElement;
+  Args: {
+    onSelectDefinition?: (newUrl: URL | undefined) => void;
+    url?: URL | undefined;
+  };
+  Blocks: {
+    default: [];
+  };
+}
+
+class Clickable extends Component<ClickableSignature> {
+  @action
+  handleClick() {
+    if (this.args.onSelectDefinition && this.args.url) {
+      this.args.onSelectDefinition(this.args.url);
+    }
+  }
+  <template>
+    <button
+      type='button'
+      {{on 'click' this.handleClick}}
+      class='clickable-button'
+      ...attributes
+    >
+      {{yield}}
+    </button>
+    <style>
+      .clickable-button {
+        background: none;
+        border: none;
+        padding: 0;
+        margin: 0;
+        cursor: pointer;
+        width: 100%;
+        height: 100%;
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        border-radius: var(--boxel-border-radius);
+        text-align: inherit;
+      }
+
+      .clickable-button:hover {
+        outline: 2px solid var(--boxel-highlight);
       }
     </style>
   </template>
