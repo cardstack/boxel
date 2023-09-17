@@ -129,8 +129,6 @@ export default class CardInheritancePanel extends Component<Args> {
   }
 }
 
-//card-type munging
-
 function getCardTypeDisplayName(t: typeof BaseDef) {
   let card = new t();
   return cardTypeDisplayName(card);
@@ -166,15 +164,6 @@ function cardsOrFieldsFromModule(
   return Object.values(module).filter(
     (maybeCard) => typeof maybeCard === 'function' && 'baseDef' in maybeCard,
   );
-}
-
-function isModuleActive(card: typeof BaseDef, f: Ready) {
-  let moduleIdentity = moduleUrl(card);
-  if (moduleIdentity) {
-    return moduleIdentity.href === trimExecutableExtension(new URL(f.url)).href;
-  } else {
-    return false;
-  }
 }
 
 export function isCardOrField(cardOrField: any): cardOrField is typeof BaseDef {
