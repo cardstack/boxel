@@ -1,16 +1,7 @@
 import Component from '@glimmer/component';
 import { service } from '@ember/service';
-import {
-  type CardDef,
-  type BaseDef,
-} from 'https://cardstack.com/base/card-api';
-import {
-  type RealmInfo,
-  cardTypeDisplayName,
-  identifyCard,
-  moduleFrom,
-  getAncestor,
-} from '@cardstack/runtime-common';
+import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { type RealmInfo } from '@cardstack/runtime-common';
 import {
   InstanceDefinitionContainer,
   ModuleDefinitionContainer,
@@ -19,7 +10,7 @@ import {
 import { Ready } from '@cardstack/host/resources/file';
 import { tracked } from '@glimmer/tracking';
 import moment from 'moment';
-import { type ImportResource } from '@cardstack/host/resources/import';
+import { type AdoptionChainResource } from '@cardstack/host/resources/adoption-chain';
 import { hash, array } from '@ember/helper';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import { action } from '@ember/object';
@@ -31,7 +22,7 @@ interface Args {
     realmIconURL: string | null | undefined;
     readyFile: Ready;
     cardInstance: CardDef | null;
-    importedModule?: ImportResource;
+    adoptionChain?: AdoptionChainResource;
     delete: () => void;
   };
 }
@@ -47,55 +38,60 @@ export default class CardInheritancePanel extends Component<Args> {
     }
   }
 
+  get adoptionChainTypes() {
+    return this.args.adoptionChain?.types;
+  }
+
   <template>
     <div class='container' ...attributes>
 
       {{#if @cardInstance}}
         {{! JSON case when visting, eg Author/1.json }}
-        <InstanceDefinitionContainer
-          @name={{@cardInstance.title}}
-          @fileExtension='.JSON'
-          @realmInfo={{@realmInfo}}
-          @realmIconURL={{@realmIconURL}}
-          @infoText={{this.lastModified}}
-          @actions={{array
-            (hash label='Delete' handler=@delete icon='icon-trash')
-          }}
-        />
-        <div>Adopts from</div>
-        <ClickableModuleDefinitionContainer
-          @name={{getCardTypeDisplayNameFromInstance @cardInstance}}
-          @fileExtension={{this.fileExtension}}
-          @realmInfo={{@realmInfo}}
-          @realmIconURL={{@realmIconURL}}
-          @onSelectDefinition={{this.updateCodePath}}
-          @url={{getModuleUrlOfInstance @cardInstance}}
-        />
+        {{#each this.adoptionChainTypes as |t|}}
+          <InstanceDefinitionContainer
+            @name={{@cardInstance.title}}
+            @fileExtension='.JSON'
+            @realmInfo={{@realmInfo}}
+            @realmIconURL={{@realmIconURL}}
+            @infoText={{this.lastModified}}
+            @actions={{array
+              (hash label='Delete' handler=@delete icon='icon-trash')
+            }}
+          />
+          <div>Adopts from</div>
+
+          <ClickableModuleDefinitionContainer
+            @name={{t.displayName}}
+            @fileExtension={{this.fileExtension}}
+            @realmInfo={{@realmInfo}}
+            @realmIconURL={{@realmIconURL}}
+            @onSelectDefinition={{this.updateCodePath}}
+            @url={{t.module}}
+          />
+        {{/each}}
       {{else}}
         {{! Module case when visting, eg author.gts }}
-        {{#if @importedModule.module}}
-          {{#each (cardsOrFieldsFromModule @importedModule.module) as |card|}}
-            <ModuleDefinitionContainer
-              @name={{getCardTypeDisplayName card}}
-              @fileExtension={{this.fileExtension}}
-              @realmInfo={{@realmInfo}}
-              @realmIconURL={{@realmIconURL}}
-              @isActive={{true}}
-              @actions={{array
-                (hash label='Delete' handler=@delete icon='icon-trash')
-              }}
-            />
-            <div>Inherits from</div>
-            <ClickableModuleDefinitionContainer
-              @name={{getAncestorDisplayName card}}
-              @fileExtension={{this.fileExtension}}
-              @realmInfo={{@realmInfo}}
-              @realmIconURL={{@realmIconURL}}
-              @onSelectDefinition={{this.updateCodePath}}
-              @url={{moduleUrlOfAncestor card}}
-            />
-          {{/each}}
-        {{/if}}
+        {{#each this.adoptionChainTypes as |t|}}
+          <ModuleDefinitionContainer
+            @name={{t.displayName}}
+            @fileExtension={{this.fileExtension}}
+            @realmInfo={{@realmInfo}}
+            @realmIconURL={{@realmIconURL}}
+            @isActive={{true}}
+            @actions={{array
+              (hash label='Delete' handler=@delete icon='icon-trash')
+            }}
+          />
+          <div>Inherits from</div>
+          <ClickableModuleDefinitionContainer
+            @name={{t.super.displayName}}
+            @fileExtension={{this.fileExtension}}
+            @realmInfo={{@realmInfo}}
+            @realmIconURL={{@realmIconURL}}
+            @onSelectDefinition={{this.updateCodePath}}
+            @url={{t.super.module}}
+          />
+        {{/each}}
       {{/if}}
     </div>
     <style>
@@ -106,10 +102,6 @@ export default class CardInheritancePanel extends Component<Args> {
       }
     </style>
   </template>
-
-  get inheritsFrom() {
-    return this.args.cardInstance ? 'Adopts From' : 'Inherits From';
-  }
 
   get lastModified() {
     if (this.args.readyFile.lastModified != undefined) {
@@ -127,55 +119,4 @@ export default class CardInheritancePanel extends Component<Args> {
       return '';
     }
   }
-}
-
-function getAncestorDisplayName(t: typeof BaseDef) {
-  let ancestor = getAncestor(t);
-  if (ancestor) {
-    return getCardTypeDisplayName(ancestor);
-  }
-  return 'No name found';
-}
-
-function getCardTypeDisplayName(t: typeof BaseDef) {
-  let card = new t();
-  return cardTypeDisplayName(card);
-}
-
-function getCardTypeDisplayNameFromInstance(instance: CardDef) {
-  let cardType = Reflect.getPrototypeOf(instance)
-    ?.constructor as typeof BaseDef;
-  return getCardTypeDisplayName(cardType);
-}
-
-function getModuleUrlOfInstance(instance: CardDef) {
-  let cardType = Reflect.getPrototypeOf(instance)
-    ?.constructor as typeof BaseDef;
-  return moduleUrl(cardType);
-}
-
-function moduleUrlOfAncestor(t: typeof BaseDef) {
-  return moduleUrl(getAncestor(t));
-}
-
-function moduleUrl(t: typeof BaseDef | undefined) {
-  if (t) {
-    let ref = identifyCard(t);
-    if (ref) {
-      return new URL(moduleFrom(ref));
-    }
-    throw new Error('Could not identify card');
-  }
-  return;
-}
-
-function cardsOrFieldsFromModule(
-  module: Record<string, any>,
-  _never?: never, // glint insists that w/o this last param that there are actually no params
-): (typeof BaseDef)[] {
-  return Object.values(module).filter(isCardOrField);
-}
-
-export function isCardOrField(cardOrField: any): cardOrField is typeof BaseDef {
-  return typeof cardOrField === 'function' && 'baseDef' in cardOrField;
 }

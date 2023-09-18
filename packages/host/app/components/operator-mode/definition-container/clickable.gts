@@ -4,7 +4,7 @@ import { on } from '@ember/modifier';
 
 export interface ClickableArgs {
   onSelectDefinition?: (newUrl: URL | undefined) => void;
-  url?: URL | undefined;
+  url?: string | undefined;
 }
 
 interface ClickableSignature {
@@ -19,7 +19,7 @@ export class Clickable extends Component<ClickableSignature> {
   @action
   handleClick() {
     if (this.args.onSelectDefinition && this.args.url) {
-      this.args.onSelectDefinition(this.args.url);
+      this.args.onSelectDefinition(new URL(this.args.url));
     }
   }
   <template>

@@ -63,6 +63,7 @@ import RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import { adoptionChainResource } from '@cardstack/host/resources/adoption-chain';
 
 interface Signature {
   Args: {
@@ -281,7 +282,7 @@ export default class CodeMode extends Component<Signature> {
     }));
   });
 
-  @use private importedModule = resource(() => {
+  @use importedModule = resource(() => {
     if (isReady(this.openFile.current)) {
       let f: Ready = this.openFile.current;
       if (f.url.endsWith('.json')) {
@@ -294,6 +295,14 @@ export default class CodeMode extends Component<Signature> {
       } else {
         return importResource(this, () => f.url);
       }
+    } else {
+      return undefined;
+    }
+  });
+
+  @use adoptionChain = resource(() => {
+    if (this.importedModule) {
+      return adoptionChainResource(this, this.importedModule);
     } else {
       return undefined;
     }
@@ -539,7 +548,7 @@ export default class CodeMode extends Component<Signature> {
                         @readyFile={{this.readyFile}}
                         @realmInfo={{this.realmInfo}}
                         @realmIconURL={{this.realmIconURL}}
-                        @importedModule={{this.importedModule}}
+                        @adoptionChain={{this.adoptionChain}}
                         @delete={{this.delete}}
                         data-test-card-inheritance-panel
                       />
