@@ -13,6 +13,7 @@ import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
 import config from '@cardstack/host/config/environment';
 import isEqual from 'lodash/isEqual';
+import { and } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import {
   type RealmInfo,
@@ -24,6 +25,7 @@ import {
   isSingleCardDocument,
   identifyCard,
   moduleFrom,
+  hasExecutableExtension,
 } from '@cardstack/runtime-common';
 
 import {
@@ -318,12 +320,11 @@ export default class CodeMode extends Component<Signature> {
         } else {
           return;
         }
-      } else {
+      } else if (hasExecutableExtension(f.url)) {
         return importResource(this, () => f.url);
       }
-    } else {
-      return undefined;
     }
+    return undefined;
   });
 
   private maybeReloadCard = restartableTask(async (id: string) => {
@@ -577,7 +578,11 @@ export default class CodeMode extends Component<Signature> {
     <div
       class='code-mode'
       data-test-code-mode
-      data-test-save-idle={{this.contentChangedTask.isIdle}}
+      data-test-save-idle={{and
+        this.contentChangedTask.isIdle
+        this.maybeReloadCard.isIdle
+        this.doWhenCardChanges.isIdle
+      }}
     >
       <ResizablePanelGroup
         @onListPanelContextChange={{this.onListPanelContextChange}}
