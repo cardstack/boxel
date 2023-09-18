@@ -31,8 +31,8 @@ export class AdoptionChainResource extends Resource<AdoptionChainResourceArgs> {
     }
   }
 
-  get cardTypes() {
-    return this._cardTypes;
+  get types() {
+    return this._cardTypes.map((t) => t.type);
   }
 }
 
