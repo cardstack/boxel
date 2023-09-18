@@ -556,7 +556,6 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}person.gts`);
 
-    debugger;
     assert.dom('[data-test-card-module-definition]').hasClass('active');
     assert
       .dom(
