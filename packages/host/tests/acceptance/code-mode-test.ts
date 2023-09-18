@@ -369,8 +369,7 @@ module('Acceptance | code mode tests', function (hooks) {
         ],
       ],
       submode: 'code',
-      codePath: `http://test-realm/test/${openFilename}`,
-      fileView: 'browser',
+      codePath: `http://test-realm/test/index`,
       openDirs: ['Person/'],
     })!;
 
@@ -379,6 +378,18 @@ module('Acceptance | code mode tests', function (hooks) {
         codeModeStateParam,
       )}`,
     );
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `${testRealmURL}${openFilename}`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+
+    await click('[data-test-file-browser-toggle]');
     await waitFor(`[data-test-file="${openFilename}"]`);
 
     let fileElement = find(`[data-test-file="${openFilename}"]`)!;
@@ -392,12 +403,8 @@ module('Acceptance | code mode tests', function (hooks) {
       );
     }
 
-    assert
-      .dom('[data-test-directory="zzz/"]')
-      .isDisabled('expected the ancestor directory to be uncloseable');
-    assert
-      .dom('[data-test-directory="zzz/zzz/"]')
-      .isDisabled('expected the containing directory to be unclosable');
+    await click('[data-test-directory="zzz/"]');
+    assert.dom(`[data-test-file="${openFilename}"]`).doesNotExist();
   });
 
   test('opening another file preserves the scroll position', async function (assert) {

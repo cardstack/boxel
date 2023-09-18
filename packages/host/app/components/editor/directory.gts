@@ -44,10 +44,6 @@ export default class Directory extends Component<Args> {
             <button
               data-test-directory={{entryPath}}
               {{on 'click' (fn this.toggleDirectory entryPath)}}
-              disabled={{fileWithinDirectoryIsOpen
-                entryPath
-                this.operatorModeStateService
-              }}
               class='directory'
             >
               {{svgJar
@@ -175,19 +171,7 @@ function isOpen(
     operatorModeStateService.state.openDirs ?? []
   ).find((item) => item.startsWith(path));
 
-  return (
-    directoryIsPersistedOpen ||
-    fileWithinDirectoryIsOpen(path, operatorModeStateService)
-  );
-}
-
-function fileWithinDirectoryIsOpen(
-  path: string,
-  operatorModeStateService: OperatorModeStateService,
-) {
-  return Boolean(
-    operatorModeStateService.codePathRelativeToRealm?.startsWith(path),
-  );
+  return directoryIsPersistedOpen;
 }
 
 interface ScrollIntoViewModifierArgs {

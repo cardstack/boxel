@@ -253,6 +253,21 @@ export default class OperatorModeStateService extends Service {
 
   updateCodePath(codePath: URL | null) {
     this.state.codePath = codePath;
+
+    let localPath = this.codePathRelativeToRealm;
+
+    if (localPath) {
+      let containingDirectory = localPath.split('/').slice(0, -1).join('/');
+
+      if (containingDirectory) {
+        containingDirectory += '/';
+
+        if (!this.openDirs.includes(containingDirectory)) {
+          this.toggleOpenDir(containingDirectory);
+        }
+      }
+    }
+
     this.schedulePersist();
   }
 
