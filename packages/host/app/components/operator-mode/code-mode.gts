@@ -78,7 +78,7 @@ interface Signature {
   Args: {
     delete: (card: CardDef, afterDelete?: () => void) => void;
     saveSourceOnClose: (url: URL, content: string) => void;
-    saveCardDocOnClose: (doc: SingleCardDocument) => void;
+    saveCardOnClose: (card: CardDef) => void;
   };
 }
 const log = logger('component:code-mode');
@@ -122,11 +122,6 @@ export default class CodeMode extends Component<Signature> {
   // that realm assets don't produce a flicker when code patch changes and
   // the realm is the same
   private staleRealmInfo: RealmInfo | null = null;
-  // w use the serialized card to save any card changes on close. the quirk is
-  // that we do not have access to resources in the destructor. So we keep this
-  // live serialized form of the card available so that if there are unsaved
-  // changes when this component is closed we can perform that save in the destructor.
-  private serializedCard: SingleCardDocument | undefined;
 
   constructor(args: any, owner: any) {
     super(args, owner);
@@ -166,8 +161,8 @@ export default class CodeMode extends Component<Signature> {
         // monaco and the card preview. since the monaco save delay is much
         // smaller than the card save delay--so it will be more up-to-date
         this.args.saveSourceOnClose(this.codePath, getMonacoContent());
-      } else if (this.hasUnsavedCardChanges && this.serializedCard) {
-        this.args.saveCardDocOnClose(this.serializedCard);
+      } else if (this.hasUnsavedCardChanges && this.card) {
+        this.args.saveCardOnClose(this.card);
       }
       this.realmSubscription?.unsubscribe();
     });
@@ -433,9 +428,6 @@ export default class CodeMode extends Component<Signature> {
   private doWhenCardChanges = restartableTask(async () => {
     if (this.card) {
       this.hasUnsavedCardChanges = true;
-      this.serializedCard = (await this.cardService.serializeCard(
-        this.card,
-      )) as SingleCardDocument; // this will always have an ID
       await timeout(autoSaveDelayMs);
       await this.cardService.saveModel(this.card);
       this.hasUnsavedCardChanges = false;
