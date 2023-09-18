@@ -9,6 +9,7 @@ import BooleanCard from 'https://cardstack.com/base/boolean';
 import StringCard from 'https://cardstack.com/base/string';
 import { Pet } from './pet';
 import { GridContainer } from '@cardstack/boxel-ui';
+import { Address } from './address';
 
 export class Person extends CardDef {
   static displayName = 'Person';
@@ -16,6 +17,7 @@ export class Person extends CardDef {
   @field lastName = contains(StringCard);
   @field isCool = contains(BooleanCard);
   @field isHuman = contains(BooleanCard);
+  @field address = contains(Address);
   @field pet = linksTo(Pet);
   @field title = contains(StringCard, {
     computeVia: function (this: Person) {

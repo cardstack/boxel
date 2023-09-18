@@ -3,7 +3,7 @@ import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { registerDestructor } from '@ember/destroyable';
-import { logger } from '@cardstack/runtime-common';
+import { SupportedMimeType, logger } from '@cardstack/runtime-common';
 import LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
 import type CardService from '@cardstack/host/services/card-service';
@@ -114,9 +114,7 @@ class _FileResource extends Resource<Args> {
 
   private read = restartableTask(async () => {
     let response = await this.loaderService.loader.fetch(this._url, {
-      headers: {
-        Accept: 'application/vnd.card+source',
-      },
+      headers: { Accept: SupportedMimeType.CardSource },
     });
 
     if (!response.ok) {
@@ -179,21 +177,10 @@ class _FileResource extends Resource<Args> {
 
   writeTask = restartableTask(
     async (state: Ready, content: string, flushLoader?: true) => {
-      let response = await this.loaderService.loader.fetch(this._url, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/vnd.card+source',
-        },
-        body: content,
-      });
-
-      if (!response.ok) {
-        let errorMessage = `Could not write file ${this._url}, status ${
-          response.status
-        }: ${response.statusText} - ${await response.text()}`;
-        log.error(errorMessage);
-        throw new Error(errorMessage);
-      }
+      let response = await this.cardService.saveSource(
+        new URL(this._url),
+        content,
+      );
       if (this.innerState.state === 'not-found') {
         // TODO think about the "unauthorized" scenario
         throw new Error(

@@ -67,6 +67,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 interface Signature {
   Args: {
     delete: (card: CardDef, afterDelete?: () => void) => void;
+    saveSourceOnClose: (url: URL, content: string) => void;
   };
 }
 const log = logger('component:code-mode');
@@ -95,6 +96,7 @@ export default class CodeMode extends Component<Signature> {
 
   @tracked private loadFileError: string | null = null;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
+  private isSourceStale = false;
   private panelWidths: PanelWidths;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
   private _cachedRealmInfo: RealmInfo | null = null; // This is to cache realm info during reload after code path change so that realm assets don't produce a flicker when code patch changes and the realm is the same
@@ -128,6 +130,15 @@ export default class CodeMode extends Component<Signature> {
       ),
     };
     registerDestructor(this, () => {
+      // destructor functons are called synchronously. in order to save,
+      // which is async, we leverage an EC task that is running in a
+      // parent component (EC task lifetimes are bound to their context)
+      // that is not being destroyed.
+      if (this.codePath && this.isSourceStale) {
+        // TODO need to reconcile any usaved differences between
+        // monaco and card editor: CS-5981. For now monaco wins...
+        this.args.saveSourceOnClose(this.codePath, getMonacoContent());
+      }
       this.subscription?.unsubscribe();
     });
     this.loadMonaco.perform();
@@ -149,18 +160,18 @@ export default class CodeMode extends Component<Signature> {
     this.operatorModeStateService.updateFileView(view);
   }
 
-  get isEmptyState() {
-    return !this.codePath;
-  }
-
   get fileView() {
-    return this.isEmptyState
-      ? 'browser'
-      : this.operatorModeStateService.state.fileView;
+    return this.operatorModeStateService.state.fileView;
   }
 
   get fileViewTitle() {
     return this.fileView === 'inheritance' ? 'Inheritance' : 'File Browser';
+  }
+
+  private get realmURL() {
+    return this.isReady
+      ? this.readyFile.realmURL
+      : this.cardService.defaultURL.href;
   }
 
   private get realmIconURL() {
@@ -174,7 +185,11 @@ export default class CodeMode extends Component<Signature> {
   }
 
   private get isReady() {
-    return this.maybeMonacoSDK && this.openFile.current?.state === 'ready';
+    return this.maybeMonacoSDK && isReady(this.openFile.current);
+  }
+
+  private get emptyOrNotFound() {
+    return !this.codePath || this.openFile.current?.state === 'not-found';
   }
 
   private loadMonaco = task(async () => {
@@ -182,7 +197,7 @@ export default class CodeMode extends Component<Signature> {
   });
 
   private get readyFile() {
-    if (this.openFile.current?.state === 'ready') {
+    if (isReady(this.openFile.current)) {
       return this.openFile.current;
     }
     throw new Error(
@@ -206,12 +221,7 @@ export default class CodeMode extends Component<Signature> {
   }
 
   @use private realmInfoResource = resource(() => {
-    let realmURL =
-      this.openFile.current?.state === 'ready'
-        ? this.openFile.current.realmURL
-        : this.cardService.defaultURL;
-
-    if (!realmURL) {
+    if (!this.realmURL) {
       return new TrackedObject({
         error: null,
         isLoading: false,
@@ -234,7 +244,7 @@ export default class CodeMode extends Component<Signature> {
 
         try {
           let realmInfo = await this.cardService.getRealmInfoByRealmURL(
-            new URL(realmURL),
+            new URL(this.realmURL),
           );
 
           if (realmInfo) {
@@ -256,6 +266,7 @@ export default class CodeMode extends Component<Signature> {
 
   private openFile = maybe(this, (context) => {
     if (!this.codePath) {
+      this.setFileView('browser');
       return undefined;
     }
 
@@ -264,6 +275,7 @@ export default class CodeMode extends Component<Signature> {
       onStateChange: (state) => {
         if (state === 'not-found') {
           this.loadFileError = 'File is not found';
+          this.setFileView('browser');
         }
       },
     }));
@@ -272,7 +284,7 @@ export default class CodeMode extends Component<Signature> {
   @use private importedModule = resource(() => {
     if (isReady(this.openFile.current)) {
       let f: Ready = this.openFile.current;
-      if (f.name.endsWith('.json')) {
+      if (f.url.endsWith('.json')) {
         let ref = identifyCard(this.cardResource.value?.constructor);
         if (ref !== undefined) {
           return importResource(this, () => moduleFrom(ref as CodeRef));
@@ -293,7 +305,7 @@ export default class CodeMode extends Component<Signature> {
 
   @use private cardResource = resource(() => {
     let isFileReady =
-      this.openFile.current?.state === 'ready' &&
+      isReady(this.openFile.current) &&
       this.openFile.current.name.endsWith('.json');
     const state: {
       isLoading: boolean;
@@ -334,9 +346,10 @@ export default class CodeMode extends Component<Signature> {
   });
 
   private contentChangedTask = restartableTask(async (content: string) => {
+    this.isSourceStale = true;
     await timeout(500);
     if (
-      this.openFile.current?.state !== 'ready' ||
+      !isReady(this.openFile.current) ||
       content === this.openFile.current?.content
     ) {
       return;
@@ -350,12 +363,12 @@ export default class CodeMode extends Component<Signature> {
       // writes json instance but doesn't update state of the file resource
       // relies on message service subscription to update state
       await this.saveFileSerializedCard.perform(validJSON);
-      return;
     } else if (!isJSON || validJSON) {
       // writes source code and non-card instance valid JSON,
       // then updates the state of the file resource
-      await this.writeSourceCodeToFile(this.openFile.current, content);
+      this.writeSourceCodeToFile(this.openFile.current, content);
     }
+    this.isSourceStale = false;
   });
 
   // We use this to write non-cards to the realm--so it doesn't make
@@ -486,7 +499,7 @@ export default class CodeMode extends Component<Signature> {
                 data-test-file-view-header
               >
                 <Button
-                  @disabled={{this.isEmptyState}}
+                  @disabled={{this.emptyOrNotFound}}
                   @kind={{if
                     (eq this.fileView 'inheritance')
                     'primary-dark'
@@ -500,7 +513,7 @@ export default class CodeMode extends Component<Signature> {
                   {{on 'click' (fn this.setFileView 'inheritance')}}
                   data-test-inheritance-toggle
                 >
-                  Inheritance</Button>
+                  Inspector</Button>
                 <Button
                   @kind={{if
                     (eq this.fileView 'browser')
@@ -515,12 +528,12 @@ export default class CodeMode extends Component<Signature> {
                   {{on 'click' (fn this.setFileView 'browser')}}
                   data-test-file-browser-toggle
                 >
-                  File Browser</Button>
+                  File Tree</Button>
               </header>
               <section class='inner-container__content'>
-                {{#if this.isReady}}
-                  {{#if (eq this.fileView 'inheritance')}}
-                    <section class='inner-container__content'>
+                {{#if (eq this.fileView 'inheritance')}}
+                  <section class='inner-container__content'>
+                    {{#if this.isReady}}
                       <CardInheritancePanel
                         @cardInstance={{this.cardResource.value}}
                         @readyFile={{this.readyFile}}
@@ -530,12 +543,12 @@ export default class CodeMode extends Component<Signature> {
                         @delete={{this.delete}}
                         data-test-card-inheritance-panel
                       />
-                    </section>
-                  {{else}}
-                    <FileTree @url={{this.readyFile.realmURL}} />
-                  {{/if}}
-                {{else if this.isEmptyState}}
-                  <FileTree @url={{this.cardService.defaultURL.href}} />
+                    {{else if this.emptyOrNotFound}}
+                      Inspector is not available
+                    {{/if}}
+                  </section>
+                {{else}}
+                  <FileTree @url={{this.realmURL}} />
                 {{/if}}
               </section>
             </div>
@@ -595,7 +608,7 @@ export default class CodeMode extends Component<Signature> {
               {{/if}}
             </div>
           </ResizablePanel>
-        {{else if this.isEmptyState}}
+        {{else}}
           <ResizablePanel
             @defaultWidth={{defaultPanelWidths.emptyCodeModePanel}}
             @width={{this.panelWidths.emptyCodeModePanel}}
@@ -760,4 +773,8 @@ export default class CodeMode extends Component<Signature> {
       }
     </style>
   </template>
+}
+
+function getMonacoContent() {
+  return (window as any).monaco.editor.getModels()[0].getValue();
 }
