@@ -121,7 +121,7 @@ export default class CodeMode extends Component<Signature> {
   // This is to cache realm info during reload after code path change so
   // that realm assets don't produce a flicker when code patch changes and
   // the realm is the same
-  private staleRealmInfo: RealmInfo | null = null;
+  private cachedRealmInfo: RealmInfo | null = null;
 
   constructor(args: any, owner: any) {
     super(args, owner);
@@ -139,14 +139,13 @@ export default class CodeMode extends Component<Signature> {
           if (type !== 'index') {
             return;
           }
-          let card = this.card;
           let data = JSON.parse(dataStr);
-          if (!card || data.type !== 'incremental') {
+          if (!this.card || data.type !== 'incremental') {
             return;
           }
           let invalidations = data.invalidations as string[];
-          if (invalidations.includes(card.id)) {
-            this.maybeReloadCard.perform(card.id);
+          if (invalidations.includes(this.card.id)) {
+            this.maybeReloadCard.perform(this.card.id);
           }
         },
       ),
@@ -158,8 +157,7 @@ export default class CodeMode extends Component<Signature> {
       // that is not being destroyed.
       if (this.codePath && this.hasUnsavedSourceChanges) {
         // we let the monaco changes win if there are unsaved changes both
-        // monaco and the card preview. since the monaco save delay is much
-        // smaller than the card save delay--so it will be more up-to-date
+        // monaco and the card preview (an arbitrary choice)
         this.args.saveSourceOnClose(this.codePath, getMonacoContent());
       } else if (this.hasUnsavedCardChanges && this.card) {
         this.args.saveCardOnClose(this.card);
@@ -250,7 +248,7 @@ export default class CodeMode extends Component<Signature> {
       return new TrackedObject({
         error: null,
         isLoading: false,
-        value: this.staleRealmInfo,
+        value: this.cachedRealmInfo,
         load: () => Promise<void>,
       });
     }
@@ -262,7 +260,7 @@ export default class CodeMode extends Component<Signature> {
       load: () => Promise<void>;
     } = new TrackedObject({
       isLoading: true,
-      value: this.staleRealmInfo,
+      value: this.cachedRealmInfo,
       error: undefined,
       load: async () => {
         state.isLoading = true;
@@ -273,7 +271,7 @@ export default class CodeMode extends Component<Signature> {
           );
 
           if (realmInfo) {
-            this.staleRealmInfo = realmInfo;
+            this.cachedRealmInfo = realmInfo;
           }
 
           state.value = realmInfo;
@@ -400,15 +398,15 @@ export default class CodeMode extends Component<Signature> {
   }
 
   private loadIfDifferent = restartableTask(
-    async (url: URL, ifDifferentThan?: SingleCardDocument) => {
+    async (url: URL, incomingDoc?: SingleCardDocument) => {
       await this.withTestWaiters(async () => {
         let card = await this.cardService.loadModel(url);
-        if (this.card && ifDifferentThan) {
-          let incomingDoc = comparableSerialization(ifDifferentThan);
-          let currentDoc = comparableSerialization(
+        if (this.card && incomingDoc) {
+          let incoming = comparableSerialization(incomingDoc);
+          let current = comparableSerialization(
             await this.cardService.serializeCard(this.card),
           );
-          if (isEqual(incomingDoc, currentDoc)) {
+          if (isEqual(incoming, current)) {
             return;
           }
         }
