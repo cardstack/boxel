@@ -79,7 +79,7 @@ class ContainsManyEditor extends GlimmerComponent<Signature> {
       .editor {
         position: relative;
         cursor: pointer;
-        padding: var(--boxel-sp) var(--boxel-sp-xs);
+        padding: var(--boxel-sp);
         border-radius: var(--boxel-form-control-border-radius);
       }
       .editor:hover {
