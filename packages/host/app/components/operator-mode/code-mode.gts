@@ -328,13 +328,20 @@ export default class CodeMode extends Component<Signature> {
 
   private maybeReloadCard = restartableTask(async (id: string) => {
     if (this.card?.id === id) {
-      await this.loadIfDifferent.perform(
-        new URL(id),
-        // we need to be careful that we are not responding to our own echo.
-        // first test to see if the card is actually different by comparing
-        // the serializations
-        (await this.cardService.fetchJSON(id)) as SingleCardDocument,
-      );
+      try {
+        await this.loadIfDifferent.perform(
+          new URL(id),
+          // we need to be careful that we are not responding to our own echo.
+          // first test to see if the card is actually different by comparing
+          // the serializations
+          (await this.cardService.fetchJSON(id)) as SingleCardDocument,
+        );
+      } catch (e: any) {
+        if ('status' in e && e.status === 404) {
+          return; // card has been deleted
+        }
+        throw e;
+      }
     }
   });
 
