@@ -253,7 +253,11 @@ export default class OperatorModeStateService extends Service {
 
   updateCodePath(codePath: URL | null) {
     this.state.codePath = codePath;
+    this.updateOpenDirsForNestedPath();
+    this.schedulePersist();
+  }
 
+  private updateOpenDirsForNestedPath() {
     let localPath = this.codePathRelativeToRealm;
 
     if (localPath) {
@@ -267,8 +271,6 @@ export default class OperatorModeStateService extends Service {
         }
       }
     }
-
-    this.schedulePersist();
   }
 
   updateFileView(fileView: FileView) {
