@@ -1,5 +1,6 @@
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+//@ts-expect-error cached type not available yet
+import { cached, tracked } from '@glimmer/tracking';
 import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -16,13 +17,12 @@ import isEqual from 'lodash/isEqual';
 import {
   type RealmInfo,
   type SingleCardDocument,
+  type LooseSingleCardDocument,
   type CodeRef,
   RealmPaths,
-  isCardDocument,
   logger,
   isSingleCardDocument,
   identifyCard,
-  SupportedMimeType,
   moduleFrom,
 } from '@cardstack/runtime-common';
 
@@ -68,6 +68,9 @@ import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import { buildWaiter } from '@ember/test-waiters';
+import { isTesting } from '@embroider/macros';
+
 interface Signature {
   Args: {
     delete: (card: CardDef, afterDelete?: () => void) => void;
@@ -76,6 +79,7 @@ interface Signature {
   };
 }
 const log = logger('component:code-mode');
+const waiter = buildWaiter('code-mode:load-card-waiter');
 let { autoSaveDelayMs } = config;
 
 type PanelWidths = {
@@ -103,6 +107,8 @@ export default class CodeMode extends Component<Signature> {
 
   @tracked private loadFileError: string | null = null;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
+  @tracked private card: CardDef | undefined;
+  @tracked cardError: Error | undefined;
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
@@ -113,7 +119,6 @@ export default class CodeMode extends Component<Signature> {
   // that realm assets don't produce a flicker when code patch changes and
   // the realm is the same
   private staleRealmInfo: RealmInfo | null = null;
-  private staleCard: CardDef | undefined;
   // w use the serialized card to save any card changes on close. the quirk is
   // that we do not have access to resources in the destructor. So we keep this
   // live serialized form of the card available so that if there are unsaved
@@ -136,7 +141,7 @@ export default class CodeMode extends Component<Signature> {
           if (type !== 'index') {
             return;
           }
-          let card = this.cardResource.value;
+          let card = this.card;
           let data = JSON.parse(dataStr);
           if (!card || data.type !== 'incremental') {
             return;
@@ -307,7 +312,7 @@ export default class CodeMode extends Component<Signature> {
     if (isReady(this.openFile.current)) {
       let f: Ready = this.openFile.current;
       if (f.name.endsWith('.json')) {
-        let ref = identifyCard(this.cardResource.value?.constructor);
+        let ref = identifyCard(this.card?.constructor);
         if (ref !== undefined) {
           return importResource(this, () => moduleFrom(ref as CodeRef));
         } else {
@@ -322,112 +327,107 @@ export default class CodeMode extends Component<Signature> {
   });
 
   private maybeReloadCard = restartableTask(async (id: string) => {
-    // we need to be careful that we are not responding to our own echo.
-    // first test to see if the card is actually different by comparing
-    // the serializations
-    debugger;
-    if (this.cardResource.value?.id === id) {
-      // TODO move this into card-service
-      let response = await this.loaderService.loader.fetch(id, {
-        headers: { Accept: SupportedMimeType.CardJson },
-      });
-      if (!response.ok) {
-        throw new Error(
-          `status: ${response.status} -
-        ${response.statusText}. ${await response.text()}`,
-        );
-      }
-      let incomingDoc = await response.json();
-      delete incomingDoc.included;
-      delete incomingDoc.data.links;
-      delete incomingDoc.data.meta;
-      let currentDoc = (await this.cardService.serializeCard(
-        this.cardResource.value,
-      )) as any;
-      delete currentDoc.included;
-      delete currentDoc.data.links;
-      delete currentDoc.data.meta;
-      if (!isEqual(incomingDoc, currentDoc)) {
-        await this.cardResource.load();
-      }
+    if (this.card?.id === id) {
+      await this.loadIfDifferent.perform(
+        new URL(id),
+        // we need to be careful that we are not responding to our own echo.
+        // first test to see if the card is actually different by comparing
+        // the serializations
+        (await this.cardService.fetchJSON(id)) as SingleCardDocument,
+      );
     }
   });
 
-  @use private cardResource = resource(() => {
-    let isFileReady =
-      isReady(this.openFile.current) &&
-      this.openFile.current.name.endsWith('.json');
-    const state: {
-      isLoading: boolean;
-      value: CardDef | null;
-      error: Error | undefined;
-      load: () => Promise<void>;
-    } = new TrackedObject({
-      isLoading: isFileReady,
-      value: this.staleCard ?? null,
-      error:
-        this.openFile.current?.state == 'not-found'
-          ? new Error('File not found')
-          : undefined,
-      load: async () => {
-        debugger;
-        state.isLoading = true;
-        try {
-          let currentlyOpenedFile = this.openFile.current;
-          if (!currentlyOpenedFile) {
-            return undefined;
-          }
-          let cardDoc = JSON.parse((currentlyOpenedFile as Ready).content);
-          if (isCardDocument(cardDoc)) {
-            let url = (currentlyOpenedFile as Ready).url.replace(/\.json$/, '');
-            if (this.staleCard) {
-              this.cardService.unsubscribe(this.staleCard, this.onCardChange);
-            }
-            state.value = await this.cardService.loadModel(url);
-            this.cardService.subscribe(state.value!, this.onCardChange);
-            this.staleCard = state.value!;
-          } else {
-            if (this.staleCard) {
-              this.cardService.unsubscribe(this.staleCard, this.onCardChange);
-            }
-            this.staleCard = undefined;
-            this.serializedCard = undefined;
-          }
-        } catch (error: any) {
-          state.error = error;
-        } finally {
-          state.isLoading = false;
+  // We are actually loading cards using a side-effect of this cached getter
+  // instead of a resource because with a resource it becomes impossible
+  // to ignore our own auto-save echoes, since the act of auto-saving triggers
+  // the openFile resource to update which would otherwise trigger a card
+  // resource to update (and hence invalidate components can consume this card
+  // resource.) By using this side effect we can prevent invalidations when the
+  // card isn't actually different and we are just seeing SSE events in response
+  // to our own activity.
+  @cached
+  get openFileCardJSON() {
+    this.cardError = undefined;
+    if (
+      this.openFile.current?.state === 'ready' &&
+      this.openFile.current.name.endsWith('.json')
+    ) {
+      let maybeCard: any;
+      try {
+        maybeCard = JSON.parse(this.openFile.current.content);
+      } catch (err: any) {
+        this.cardError = err;
+        return undefined;
+      }
+      if (isSingleCardDocument(maybeCard)) {
+        let url = this.openFile.current.url.replace(/\.json$/, '');
+        if (!url) {
+          return undefined;
         }
-      },
-    });
-
-    if (isFileReady) {
-      state.load();
+        this.loadIfDifferent.perform(new URL(url), maybeCard);
+        return maybeCard;
+      }
     }
-    return state;
-  });
+    return undefined;
+  }
+
+  private get cardIsLoaded() {
+    return (
+      isReady(this.openFile.current) &&
+      this.openFileCardJSON &&
+      this.card?.id === this.openFile.current.url.replace(/\.json$/, '')
+    );
+  }
+
+  private get loadedCard() {
+    if (!this.card) {
+      throw new Error(`bug: card ${this.codePath} is not loaded`);
+    }
+    return this.card;
+  }
+
+  private loadIfDifferent = restartableTask(
+    async (url: URL, ifDifferentThan?: SingleCardDocument) => {
+      await this.withTestWaiters(async () => {
+        let card = await this.cardService.loadModel(url);
+        if (this.card && ifDifferentThan) {
+          let incomingDoc = comparableSerialization(ifDifferentThan);
+          let currentDoc = comparableSerialization(
+            await this.cardService.serializeCard(this.card),
+          );
+          if (isEqual(incomingDoc, currentDoc)) {
+            return;
+          }
+        }
+        if (this.card) {
+          this.cardService.unsubscribe(this.card, this.onCardChange);
+        }
+        this.card = card;
+        this.cardService.subscribe(this.card, this.onCardChange);
+      });
+    },
+  );
 
   private onCardChange = () => {
     this.doWhenCardChanges.perform();
   };
 
   private doWhenCardChanges = restartableTask(async () => {
-    if (this.cardResource.value) {
+    if (this.card) {
       this.hasUnsavedCardChanges = true;
       this.serializedCard = (await this.cardService.serializeCard(
-        this.cardResource.value,
+        this.card,
       )) as SingleCardDocument; // this will always have an ID
-      console.log('card changed');
       await timeout(autoSaveDelayMs);
-      await this.cardService.saveModel(this.cardResource.value);
-      console.log('card saved');
+      await this.cardService.saveModel(this.card);
       this.hasUnsavedCardChanges = false;
     }
   });
 
   private contentChangedTask = restartableTask(async (content: string) => {
     this.hasUnsavedSourceChanges = true;
-    await timeout(500);
+    await timeout(autoSaveDelayMs);
     if (
       !isReady(this.openFile.current) ||
       content === this.openFile.current?.content
@@ -531,8 +531,8 @@ export default class CodeMode extends Component<Signature> {
 
   @action
   private delete() {
-    if (this.cardResource.value) {
-      this.args.delete(this.cardResource.value, () => {
+    if (this.card) {
+      this.args.delete(this.card, () => {
         let previousFile = this.recentFilesService.recentFiles[0] as
           | string
           | undefined;
@@ -541,6 +541,21 @@ export default class CodeMode extends Component<Signature> {
       });
     } else {
       throw new Error(`TODO: non-card instance deletes are not yet supported`);
+    }
+  }
+
+  private async withTestWaiters<T>(cb: () => Promise<T>) {
+    let token = waiter.beginAsync();
+    try {
+      let result = await cb();
+      // only do this in test env--this makes sure that we also wait for any
+      // interior card instance async as part of our ember-test-waiters
+      if (isTesting()) {
+        await this.cardService.cardsSettled();
+      }
+      return result;
+    } finally {
+      waiter.endAsync(token);
     }
   }
 
@@ -615,7 +630,7 @@ export default class CodeMode extends Component<Signature> {
                   <section class='inner-container__content'>
                     {{#if this.isReady}}
                       <CardInheritancePanel
-                        @cardInstance={{this.cardResource.value}}
+                        @cardInstance={{this.card}}
                         @readyFile={{this.readyFile}}
                         @realmInfo={{this.realmInfo}}
                         @realmIconURL={{this.realmIconURL}}
@@ -677,14 +692,14 @@ export default class CodeMode extends Component<Signature> {
             @panelGroupApi={{pg.api}}
           >
             <div class='inner-container'>
-              {{#if this.cardResource.value}}
+              {{#if this.cardIsLoaded}}
                 <CardPreviewPanel
-                  @card={{this.cardResource.value}}
+                  @card={{this.loadedCard}}
                   @realmIconURL={{this.realmIconURL}}
                   data-test-card-resource-loaded
                 />
-              {{else if this.cardResource.error}}
-                {{this.cardResource.error.message}}
+              {{else if this.cardError}}
+                {{this.cardError.message}}
               {{/if}}
             </div>
           </ResizablePanel>
@@ -857,4 +872,16 @@ export default class CodeMode extends Component<Signature> {
 
 function getMonacoContent() {
   return (window as any).monaco.editor.getModels()[0].getValue();
+}
+
+function comparableSerialization(doc: LooseSingleCardDocument) {
+  delete doc.included;
+  delete doc.data.links;
+  delete (doc.data as any).meta;
+  delete doc.data.type;
+  delete doc.data.id;
+  for (let rel of Object.keys(doc.data.relationships ?? {})) {
+    delete doc.data.relationships?.[rel].data;
+  }
+  return doc;
 }
