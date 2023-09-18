@@ -1,7 +1,5 @@
 import { ImportResource } from './import';
 import { Resource } from 'ember-resources';
-//@ts-ignore cached not available yet in definitely typed
-import { cached } from '@glimmer/tracking';
 import { tracked } from '@glimmer/tracking';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { getOwner } from '@ember/application';
