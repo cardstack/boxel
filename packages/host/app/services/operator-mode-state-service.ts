@@ -16,6 +16,7 @@ import stringify from 'safe-stable-stringify';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import { registerDestructor } from '@ember/destroyable';
+import { RealmPaths } from '@cardstack/runtime-common/paths';
 import window from 'ember-window-mock';
 import type RouterService from '@ember/routing/router-service';
 
@@ -243,8 +244,18 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
+  get codePathRelativeToRealm() {
+    if (this.state.codePath) {
+      let realmPath = new RealmPaths(this.cardService.defaultURL.href);
+      return realmPath.local(this.state.codePath!);
+    } else {
+      return undefined;
+    }
+  }
+
   updateCodePath(codePath: URL | null) {
     this.state.codePath = codePath;
+    this.updateOpenDirsForNestedPath();
     this.schedulePersist();
   }
 
@@ -259,6 +270,22 @@ export default class OperatorModeStateService extends Service {
         operatorModeState: this.serialize(),
       },
     });
+  }
+
+  private updateOpenDirsForNestedPath() {
+    let localPath = this.codePathRelativeToRealm;
+
+    if (localPath) {
+      let containingDirectory = localPath.split('/').slice(0, -1).join('/');
+
+      if (containingDirectory) {
+        containingDirectory += '/';
+
+        if (!this.openDirs.includes(containingDirectory)) {
+          this.toggleOpenDir(containingDirectory);
+        }
+      }
+    }
   }
 
   updateFileView(fileView: FileView) {
