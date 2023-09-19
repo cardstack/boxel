@@ -301,6 +301,9 @@ export default class CodeMode extends Component<Signature> {
           this.setFileView('browser');
         }
       },
+      onRedirect: (url: string) => {
+        this.operatorModeStateService.replaceCodePath(new URL(url));
+      },
     }));
   });
 
