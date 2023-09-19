@@ -20,12 +20,13 @@ import type {
 import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { SupportedMimeType } from '@cardstack/runtime-common';
+import type CardService from '@cardstack/host/services/card-service';
+import { service } from '@ember/service';
 
 interface Args {
   named: {
     definition: typeof BaseDef;
     loader: Loader;
-    getRealmInfo: (url: URL) => Promise<RealmInfo>;
   };
 }
 export interface Type {
@@ -42,14 +43,13 @@ export interface Type {
 
 export class CardType extends Resource<Args> {
   @tracked type: Type | undefined;
+  @service declare cardService: CardService;
   declare loader: Loader;
-  declare getRealmInfo: (url: URL) => Promise<RealmInfo>;
   typeCache: Map<string, Type> = new Map();
 
   modify(_positional: never[], named: Args['named']) {
-    let { definition, loader, getRealmInfo } = named;
+    let { definition, loader } = named;
     this.loader = loader;
-    this.getRealmInfo = getRealmInfo;
     this.assembleType.perform(definition);
   }
 
@@ -138,7 +138,7 @@ export class CardType extends Resource<Args> {
     if (realmURL === null) {
       throw new Error(`Could not get realm url for ${url.href}`);
     }
-    let realmInfo = await this.getRealmInfo(new URL(realmURL));
+    let realmInfo = await this.cardService.getRealmInfoByRealmURL(url);
     return {
       realmInfo,
       extension: '.' + response.url.split('.').pop() || '',
@@ -146,15 +146,10 @@ export class CardType extends Resource<Args> {
   };
 }
 
-export function getCardType(
-  parent: object,
-  card: () => typeof BaseDef,
-  getRealmInfo: (url: URL) => Promise<RealmInfo>,
-) {
+export function getCardType(parent: object, card: () => typeof BaseDef) {
   return CardType.from(parent, () => ({
     named: {
       definition: card(),
-      getRealmInfo: getRealmInfo,
       loader: (
         (getOwner(parent) as any).lookup(
           'service:loader-service',

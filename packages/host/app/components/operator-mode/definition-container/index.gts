@@ -16,7 +16,6 @@ export class ModuleDefinitionContainer extends Component<ModuleSignature> {
       @name={{@name}}
       @fileExtension={{@fileExtension}}
       @realmInfo={{@realmInfo}}
-      @realmIconURL={{@realmIconURL}}
       @isActive={{@isActive}}
       data-test-card-module-definition
     >
@@ -43,7 +42,6 @@ export class InstanceDefinitionContainer extends Component<InstanceSignature> {
       @fileExtension='.JSON'
       @name={{@name}}
       @realmInfo={{@realmInfo}}
-      @realmIconURL={{@realmIconURL}}
       @isActive={{true}}
       data-test-card-instance-definition
     >
@@ -75,7 +73,6 @@ export class ClickableModuleDefinitionContainer extends Component<ClickableModul
         @name={{@name}}
         @fileExtension={{@fileExtension}}
         @realmInfo={{@realmInfo}}
-        @realmIconURL={{@realmIconURL}}
         @isActive={{false}}
         data-test-card-module-definition
       />
