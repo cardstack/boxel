@@ -62,6 +62,7 @@ import RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
 
 interface Signature {
   Args: {
@@ -465,7 +466,6 @@ export default class CodeMode extends Component<Signature> {
           @panelGroupApi={{pg.api}}
         >
           <div class='column'>
-            {{! Move each container and styles to separate component }}
             <div
               class='inner-container file-view
                 {{if (eq this.fileView "browser") "file-browser"}}'
@@ -571,6 +571,15 @@ export default class CodeMode extends Component<Signature> {
             @panelGroupApi={{pg.api}}
           >
             <div class='inner-container'>
+              {{#if this.isReady}}
+                {{#if this.importedModule.module}}
+                  <CardAdoptionChain
+                    @file={{this.readyFile}}
+                    @importedModule={{this.importedModule.module}}
+                  />
+                {{/if}}
+              {{/if}}
+
               {{#if this.cardResource.value}}
                 <CardPreviewPanel
                   @card={{this.cardResource.value}}
