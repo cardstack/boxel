@@ -97,7 +97,7 @@ export default class ChatSidebar extends Component<Args> {
   @service declare matrixService: MatrixService;
   @tracked isRegistrationMode = false;
 
-  constructor(owner: Owner, args: any) {
+  constructor(owner: Owner, args: Args['Args']) {
     super(owner, args);
     this.loadMatrix.perform();
   }

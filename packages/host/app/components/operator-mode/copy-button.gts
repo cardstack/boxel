@@ -96,7 +96,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     </style>
   </template>
 
-  constructor(owner: Owner, args: any) {
+  constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.loadCardService.perform();
   }

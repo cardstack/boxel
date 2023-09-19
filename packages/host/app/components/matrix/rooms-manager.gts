@@ -231,7 +231,7 @@ export default class RoomsManager extends Component {
   @tracked private currentRoomId: string | undefined;
   private currentRoomResource = getRoom(this, () => this.currentRoomId);
 
-  constructor(owner: Owner, args: any) {
+  constructor(owner: Owner, args: {}) {
     super(owner, args);
     this.loadRooms.perform();
   }

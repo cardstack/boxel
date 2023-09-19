@@ -295,7 +295,7 @@ export default class Room extends Component<RoomArgs> {
     new TrackedMap();
   private roomResource = getRoom(this, () => this.args.roomId);
 
-  constructor(owner: Owner, args: any) {
+  constructor(owner: Owner, args: RoomArgs['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
 

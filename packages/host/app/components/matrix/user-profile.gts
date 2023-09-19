@@ -88,7 +88,7 @@ export default class UserProfile extends Component {
   @tracked private isEditMode = false;
   @tracked private displayName: string | undefined;
 
-  constructor(owner: Owner, args: any) {
+  constructor(owner: Owner, args: {}) {
     super(owner, args);
     if (!this.matrixService.isLoggedIn) {
       throw new Error(

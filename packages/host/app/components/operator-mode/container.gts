@@ -96,7 +96,7 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   private deleteModal: DeleteModal | undefined;
 
-  constructor(owner: Owner, args: any) {
+  constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
 
     this.messageService.register();

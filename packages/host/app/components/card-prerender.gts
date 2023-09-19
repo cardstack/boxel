@@ -26,7 +26,7 @@ export default class CardPrerender extends Component {
   @service declare fastboot: { isFastBoot: boolean };
   @service declare localIndexer: LocalIndexer;
 
-  constructor(owner: Owner, args: any) {
+  constructor(owner: Owner, args: {}) {
     super(owner, args);
     if (this.fastboot.isFastBoot) {
       try {

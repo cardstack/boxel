@@ -92,7 +92,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     fieldName: string | undefined;
   }>();
 
-  constructor(owner: Owner, args: any) {
+  constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.subscribeToCard.perform();
     this.subscribedCard = this.card;
