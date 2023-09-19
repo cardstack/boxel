@@ -40,13 +40,17 @@ jobs:
 
   realm-server-efs-config:
     name: EFS Config
+    needs: [build-realm-server]
     uses: ./.github/workflows/realm-server-efs-config.yml
     with:
       environment: ${{ inputs.environment }}
 
   deploy-realm-server:
     name: Deploy realm server to staging
-    needs: [build-host, build-realm-server]
+    needs:
+      - build-host
+      - build-realm-server
+      - realm-server-efs-config
     uses: cardstack/gh-actions/.github/workflows/waypoint-deploy.yml@main
     secrets: inherit
     with:
