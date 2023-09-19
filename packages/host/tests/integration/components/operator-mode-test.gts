@@ -1704,7 +1704,9 @@ module('Integration | operator-mode', function (hooks) {
     );
     await click(`[data-test-card-catalog-go-button]`);
     assert
-      .dom(`[data-test-stack-card-index="1"] [data-test-field-component-card]`)
+      .dom(
+        `[data-test-stack-card-index="1"] > [data-test-boxel-card-container]`,
+      )
       .containsText('Objective', 'the card is rendered in the stack');
   });
 
