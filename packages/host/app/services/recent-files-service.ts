@@ -13,7 +13,22 @@ export default class RecentFilesService extends Service {
 
     if (recentFilesString) {
       try {
-        this.recentFiles = new TrackedArray(JSON.parse(recentFilesString));
+        this.recentFiles = new TrackedArray(
+          JSON.parse(recentFilesString).reduce(function (
+            recentFiles: string[],
+            fileString: string,
+          ) {
+            try {
+              new URL(fileString);
+              recentFiles.push(fileString);
+            } catch (e) {
+              console.log(
+                `Ignoring non-URL recent file from storage: ${fileString}`,
+              );
+            }
+            return recentFiles;
+          }, []),
+        );
       } catch (e) {
         console.log('Error restoring recent files', e);
       }

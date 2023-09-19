@@ -3,7 +3,9 @@ project = "cardstack"
 app "boxel-ai-bot" {
   build {
     use "docker" {
-      context = "../../"
+      context  = "../../"
+      buildkit = true
+      platform = "linux/amd64"
     }
 
     registry {
@@ -20,6 +22,7 @@ app "boxel-ai-bot" {
       count               = 1
       cpu                 = 256
       memory              = 512
+      architecture        = "x86_64"
       cluster             = "staging"
       task_role_name      = "boxel-ai-bot-staging-ecs-task"
       execution_role_name = "boxel-ai-bot-staging-ecs-task-execution"

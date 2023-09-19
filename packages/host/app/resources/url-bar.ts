@@ -37,6 +37,10 @@ export default class URLBarResource extends Resource<Args> {
   }
 
   get showErrorMessage() {
+    if (!this.url) {
+      // do not show error message before user has typed anything
+      return false;
+    }
     return !this.validate(this.url) || !!this.setValueError;
   }
 

@@ -90,14 +90,14 @@ module('Integration | card-copy', function (hooks) {
 
       let stacks = [
         leftCards.map((url) => ({
-          type: 'card' as 'card',
+          type: 'card' as const,
           id: url,
-          format: 'isolated' as 'isolated',
+          format: 'isolated' as const,
         })),
         rightCards.map((url) => ({
-          type: 'card' as 'card',
+          type: 'card' as const,
           id: url,
-          format: 'isolated' as 'isolated',
+          format: 'isolated' as const,
         })),
       ].filter((a) => a.length > 0);
       await operatorModeStateService.restore({ stacks });
@@ -611,6 +611,9 @@ module('Integration | card-copy', function (hooks) {
       },
     );
     this.onSave((json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
       assert.strictEqual(json.data.id, `${testRealm2URL}Pet/1`);
       assert.strictEqual(json.data.attributes?.firstName, 'Mango');
       assert.deepEqual(json.data.meta.adoptsFrom, {
@@ -710,6 +713,9 @@ module('Integration | card-copy', function (hooks) {
     );
     let savedCards: SingleCardDocument[] = [];
     this.onSave((json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
       savedCards.push(json);
     });
     await this.expectEvents(
@@ -807,6 +813,9 @@ module('Integration | card-copy', function (hooks) {
     };
 
     this.onSave((json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
       assert.strictEqual(json.data.id, `${testRealm2URL}Person/1`);
       assert.strictEqual(json.data.attributes?.firstName, 'Hassan');
       assert.deepEqual(json.data.meta.adoptsFrom, {
@@ -912,6 +921,9 @@ module('Integration | card-copy', function (hooks) {
       }
     };
     this.onSave((json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
       assert.strictEqual(json.data.id, `${testRealm2URL}Person/1`);
       assert.strictEqual(json.data.attributes?.firstName, 'Sakura');
       assert.deepEqual(json.data.meta.adoptsFrom, {

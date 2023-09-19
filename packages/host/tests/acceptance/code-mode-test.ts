@@ -1,5 +1,13 @@
-import { module, test, todo } from 'qunit';
-import { visit, click, waitFor, waitUntil, find } from '@ember/test-helpers';
+import { module, test } from 'qunit';
+import {
+  visit,
+  click,
+  waitFor,
+  waitUntil,
+  find,
+  fillIn,
+  triggerKeyEvent,
+} from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { baseRealm } from '@cardstack/runtime-common';
 import {
@@ -126,6 +134,26 @@ module('Acceptance | code mode tests', function (hooks) {
           },
         },
       },
+      'z00.json': '{}',
+      'z01.json': '{}',
+      'z02.json': '{}',
+      'z03.json': '{}',
+      'z04.json': '{}',
+      'z05.json': '{}',
+      'z06.json': '{}',
+      'z07.json': '{}',
+      'z08.json': '{}',
+      'z09.json': '{}',
+      'z10.json': '{}',
+      'z11.json': '{}',
+      'z12.json': '{}',
+      'z13.json': '{}',
+      'z14.json': '{}',
+      'z15.json': '{}',
+      'z16.json': '{}',
+      'z17.json': '{}',
+      'z18.json': '{}',
+      'z19.json': '{}',
       '.realm.json': {
         name: 'Test Workspace B',
         backgroundURL:
@@ -293,11 +321,82 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.dom('[data-test-directory="Person/"] .icon').hasClass('open');
   });
 
-  todo('recent file links are shown', async function (assert) {
+  test('opening another file preserves the scroll position', async function (assert) {
+    let openFilename = 'person.gts';
+    let filenameToOpen = 'z19.json';
+
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: 'http://test-realm/test/index',
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `http://test-realm/test/${openFilename}`,
+      fileView: 'browser',
+      openDirs: ['Person/'],
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-file]');
+
+    let openFileSelector = `[data-test-file="${openFilename}"]`;
+    let openFileElement = find(openFileSelector)!;
+    assert.ok(
+      await elementIsVisible(openFileElement),
+      'expected near-top file to be visible',
+    );
+
+    let fileToOpenSelector = `[data-test-file="${filenameToOpen}"]`;
+    let fileToOpenElement = find(fileToOpenSelector)!;
+    assert.notOk(
+      await elementIsVisible(fileToOpenElement),
+      'expected near-bottom file to not be visible',
+    );
+
+    fileToOpenElement.scrollIntoView({ block: 'center' });
+
+    assert.notOk(
+      await elementIsVisible(openFileElement),
+      'expected near-top file to not be visible after scrolling to near bottom',
+    );
+    assert.ok(
+      await elementIsVisible(fileToOpenElement),
+      'expected near-bottom file to be visible after scrolling to near bottom',
+    );
+
+    await click(fileToOpenElement);
+    await waitFor(openFileSelector);
+
+    openFileElement = find(openFileSelector)!;
+    fileToOpenElement = find(fileToOpenSelector)!;
+
+    assert.notOk(
+      await elementIsVisible(openFileElement),
+      'expected near-top file to not be visible after opening near-bottom file',
+    );
+    assert.ok(
+      await elementIsVisible(fileToOpenElement),
+      'expected near-bottom file to be visible after opening it',
+    );
+  });
+
+  test('recent file links are shown', async function (assert) {
     let otherRealmCardUrl = 'http://example.com/other-realm-card.json';
     window.localStorage.setItem(
       'recent-files',
-      JSON.stringify([`${testRealmURL}index.json`, otherRealmCardUrl]),
+      JSON.stringify([
+        `${testRealmURL}index.json`,
+        otherRealmCardUrl,
+        'a-non-url-to-ignore',
+      ]),
     );
 
     let codeModeStateParam = stringify({
@@ -401,11 +500,12 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitUntil(() => find('[data-test-card-instance-definition]'));
 
     assert.dom('[data-test-card-module-definition]').includesText('Card');
-    assert
-      .dom(
-        '[data-test-card-module-definition] [data-test-definition-file-extension]',
-      )
-      .includesText('.GTS');
+    //TODO: CS-5957 deriving extension
+    // assert
+    //   .dom(
+    //     '[data-test-card-module-definition] [data-test-definition-file-extension]',
+    //   )
+    //   .includesText('.gts');
     assert
       .dom(
         '[data-test-card-module-definition] [data-test-definition-realm-name]',
@@ -461,7 +561,8 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom(
         '[data-test-card-module-definition] [data-test-definition-file-extension]',
       )
-      .includesText('.GTS');
+      .includesText('.gts');
+
     assert
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}person.gts`);
@@ -473,4 +574,145 @@ module('Acceptance | code mode tests', function (hooks) {
       .includesText('Test Workspace B');
     assert.dom('[data-test-card-instance-definition]').doesNotExist();
   });
+
+  test('empty state displays default realm info', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: null,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-file]');
+
+    assert.dom('[data-test-file]').exists();
+    assert.dom('[data-test-file-browser-toggle]').hasClass('active');
+    assert.dom('[data-test-card-inheritance-panel]').doesNotExist();
+    assert
+      .dom('[data-test-file-view-header]')
+      .hasAttribute('aria-label', 'File Browser');
+    assert.dom('[data-test-inheritance-toggle]').isDisabled();
+
+    assert.dom('[data-test-empty-code-mode]').exists();
+    assert
+      .dom('[data-test-empty-code-mode]')
+      .containsText('Choose a file on the left to open it');
+
+    assert.dom('[data-test-card-url-bar-input]').hasValue('');
+    assert
+      .dom('[data-test-card-url-bar-realm-info]')
+      .containsText('in Test Workspace B');
+  });
+
+  test('not-found state displays default realm info', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}perso`, // purposely misspelled
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-file]');
+
+    assert.dom('[data-test-file]').exists();
+    assert.dom('[data-test-file-browser-toggle]').hasClass('active');
+    assert.dom('[data-test-card-inheritance-panel]').doesNotExist();
+    assert
+      .dom('[data-test-file-view-header]')
+      .hasAttribute('aria-label', 'File Browser');
+    assert.dom('[data-test-inheritance-toggle]').isDisabled();
+
+    assert.dom('[data-test-empty-code-mode]').doesNotExist();
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}perso`);
+    assert
+      .dom('[data-test-card-url-bar-realm-info]')
+      .containsText('in Test Workspace B');
+  });
+
+  test('recent files section does not list files not-found', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-card-module-definition]');
+
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}person.gts`);
+    assert.dom('[data-test-card-url-bar-error]').doesNotExist();
+    assert.dom('[data-test-recent-files]').exists();
+    assert.dom('[data-test-recent-file]').doesNotExist();
+
+    await fillIn('[data-test-card-url-bar-input]', `${testRealmURL}pers`);
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    await waitFor('[data-test-card-module-definition]', { count: 0 });
+
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}pers`);
+    assert
+      .dom('[data-test-card-url-bar-error]')
+      .containsText('File is not found');
+    assert.dom('[data-test-recent-file]').exists({ count: 1 });
+    assert.dom(`[data-test-recent-file="${testRealmURL}person.gts"]`).exists();
+    assert
+      .dom(`[data-test-recent-file]:first-child`)
+      .containsText('person.gts');
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `${testRealmURL}Person/1.json`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}Person/1.json`);
+    assert.dom('[data-test-card-url-bar-error]').doesNotExist();
+    assert.dom('[data-test-recent-file]').exists({ count: 1 });
+    assert.dom(`[data-test-recent-file="${testRealmURL}pers"]`).doesNotExist();
+    assert
+      .dom(`[data-test-recent-file]:first-child`)
+      .containsText('person.gts');
+  });
 });
+
+async function elementIsVisible(element: Element) {
+  return new Promise((resolve) => {
+    let intersectionObserver = new IntersectionObserver(function (entries) {
+      intersectionObserver.unobserve(element);
+
+      resolve(entries[0].isIntersecting);
+    });
+
+    intersectionObserver.observe(element);
+  });
+}

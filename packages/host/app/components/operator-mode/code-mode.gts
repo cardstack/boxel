@@ -31,6 +31,7 @@ import {
   PanelContext,
 } from '@cardstack/boxel-ui';
 import cn from '@cardstack/boxel-ui/helpers/cn';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
@@ -62,11 +63,14 @@ import RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
+import { adoptionChainResource } from '@cardstack/host/resources/adoption-chain';
 import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
 
 interface Signature {
   Args: {
     delete: (card: CardDef, afterDelete?: () => void) => void;
+    saveSourceOnClose: (url: URL, content: string) => void;
   };
 }
 const log = logger('component:code-mode');
@@ -95,6 +99,7 @@ export default class CodeMode extends Component<Signature> {
 
   @tracked private loadFileError: string | null = null;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
+  private isSourceStale = false;
   private panelWidths: PanelWidths;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
   private _cachedRealmInfo: RealmInfo | null = null; // This is to cache realm info during reload after code path change so that realm assets don't produce a flicker when code patch changes and the realm is the same
@@ -128,6 +133,15 @@ export default class CodeMode extends Component<Signature> {
       ),
     };
     registerDestructor(this, () => {
+      // destructor functons are called synchronously. in order to save,
+      // which is async, we leverage an EC task that is running in a
+      // parent component (EC task lifetimes are bound to their context)
+      // that is not being destroyed.
+      if (this.codePath && this.isSourceStale) {
+        // TODO need to reconcile any usaved differences between
+        // monaco and card editor: CS-5981. For now monaco wins...
+        this.args.saveSourceOnClose(this.codePath, getMonacoContent());
+      }
       this.subscription?.unsubscribe();
     });
     this.loadMonaco.perform();
@@ -157,6 +171,12 @@ export default class CodeMode extends Component<Signature> {
     return this.fileView === 'inheritance' ? 'Inheritance' : 'File Browser';
   }
 
+  private get realmURL() {
+    return this.isReady
+      ? this.readyFile.realmURL
+      : this.cardService.defaultURL.href;
+  }
+
   private get realmIconURL() {
     return this.realmInfo?.iconURL;
   }
@@ -168,7 +188,11 @@ export default class CodeMode extends Component<Signature> {
   }
 
   private get isReady() {
-    return this.maybeMonacoSDK && this.openFile.current?.state === 'ready';
+    return this.maybeMonacoSDK && isReady(this.openFile.current);
+  }
+
+  private get emptyOrNotFound() {
+    return !this.codePath || this.openFile.current?.state === 'not-found';
   }
 
   private loadMonaco = task(async () => {
@@ -176,7 +200,7 @@ export default class CodeMode extends Component<Signature> {
   });
 
   private get readyFile() {
-    if (this.openFile.current?.state === 'ready') {
+    if (isReady(this.openFile.current)) {
       return this.openFile.current;
     }
     throw new Error(
@@ -200,45 +224,7 @@ export default class CodeMode extends Component<Signature> {
   }
 
   @use private realmInfoResource = resource(() => {
-    if (
-      this.openFile.current?.state === 'ready' &&
-      this.openFile.current.realmURL
-    ) {
-      let realmURL = this.openFile.current.realmURL;
-
-      const state: {
-        isLoading: boolean;
-        value: RealmInfo | null;
-        error: Error | undefined;
-        load: () => Promise<void>;
-      } = new TrackedObject({
-        isLoading: true,
-        value: this._cachedRealmInfo,
-        error: undefined,
-        load: async () => {
-          state.isLoading = true;
-
-          try {
-            let realmInfo = await this.cardService.getRealmInfoByRealmURL(
-              new URL(realmURL),
-            );
-
-            if (realmInfo) {
-              this._cachedRealmInfo = realmInfo;
-            }
-
-            state.value = realmInfo;
-          } catch (error: any) {
-            state.error = error;
-          } finally {
-            state.isLoading = false;
-          }
-        },
-      });
-
-      state.load();
-      return state;
-    } else {
+    if (!this.realmURL) {
       return new TrackedObject({
         error: null,
         isLoading: false,
@@ -246,10 +232,44 @@ export default class CodeMode extends Component<Signature> {
         load: () => Promise<void>,
       });
     }
+
+    const state: {
+      isLoading: boolean;
+      value: RealmInfo | null;
+      error: Error | undefined;
+      load: () => Promise<void>;
+    } = new TrackedObject({
+      isLoading: true,
+      value: this._cachedRealmInfo,
+      error: undefined,
+      load: async () => {
+        state.isLoading = true;
+
+        try {
+          let realmInfo = await this.cardService.getRealmInfoByRealmURL(
+            new URL(this.realmURL),
+          );
+
+          if (realmInfo) {
+            this._cachedRealmInfo = realmInfo;
+          }
+
+          state.value = realmInfo;
+        } catch (error: any) {
+          state.error = error;
+        } finally {
+          state.isLoading = false;
+        }
+      },
+    });
+
+    state.load();
+    return state;
   });
 
   private openFile = maybe(this, (context) => {
     if (!this.codePath) {
+      this.setFileView('browser');
       return undefined;
     }
 
@@ -258,15 +278,16 @@ export default class CodeMode extends Component<Signature> {
       onStateChange: (state) => {
         if (state === 'not-found') {
           this.loadFileError = 'File is not found';
+          this.setFileView('browser');
         }
       },
     }));
   });
 
-  @use private importedModule = resource(() => {
+  @use importedModule = resource(() => {
     if (isReady(this.openFile.current)) {
       let f: Ready = this.openFile.current;
-      if (f.name.endsWith('.json')) {
+      if (f.url.endsWith('.json')) {
         let ref = identifyCard(this.cardResource.value?.constructor);
         if (ref !== undefined) {
           return importResource(this, () => moduleFrom(ref as CodeRef));
@@ -281,13 +302,21 @@ export default class CodeMode extends Component<Signature> {
     }
   });
 
+  @use adoptionChain = resource(() => {
+    if (this.importedModule) {
+      return adoptionChainResource(this, this.importedModule);
+    } else {
+      return undefined;
+    }
+  });
+
   private reloadCard = restartableTask(async () => {
     await this.cardResource.load();
   });
 
   @use private cardResource = resource(() => {
     let isFileReady =
-      this.openFile.current?.state === 'ready' &&
+      isReady(this.openFile.current) &&
       this.openFile.current.name.endsWith('.json');
     const state: {
       isLoading: boolean;
@@ -304,10 +333,13 @@ export default class CodeMode extends Component<Signature> {
       load: async () => {
         state.isLoading = true;
         try {
-          let currentlyOpenedFile = this.openFile.current as any;
-          let cardDoc = JSON.parse(currentlyOpenedFile.content);
+          let currentlyOpenedFile = this.openFile.current;
+          if (!currentlyOpenedFile) {
+            return undefined;
+          }
+          let cardDoc = JSON.parse((currentlyOpenedFile as Ready).content);
           if (isCardDocument(cardDoc)) {
-            let url = currentlyOpenedFile.url.replace(/\.json$/, '');
+            let url = (currentlyOpenedFile as Ready).url.replace(/\.json$/, '');
             state.value = await this.cardService.loadModel(url);
           }
         } catch (error: any) {
@@ -325,9 +357,10 @@ export default class CodeMode extends Component<Signature> {
   });
 
   private contentChangedTask = restartableTask(async (content: string) => {
+    this.isSourceStale = true;
     await timeout(500);
     if (
-      this.openFile.current?.state !== 'ready' ||
+      !isReady(this.openFile.current) ||
       content === this.openFile.current?.content
     ) {
       return;
@@ -341,12 +374,12 @@ export default class CodeMode extends Component<Signature> {
       // writes json instance but doesn't update state of the file resource
       // relies on message service subscription to update state
       await this.saveFileSerializedCard.perform(validJSON);
-      return;
     } else if (!isJSON || validJSON) {
       // writes source code and non-card instance valid JSON,
       // then updates the state of the file resource
-      await this.writeSourceCodeToFile(this.openFile.current, content);
+      this.writeSourceCodeToFile(this.openFile.current, content);
     }
+    this.isSourceStale = false;
   });
 
   // We use this to write non-cards to the realm--so it doesn't make
@@ -420,9 +453,9 @@ export default class CodeMode extends Component<Signature> {
 
   @action
   private onListPanelContextChange(listPanelContext: PanelContext[]) {
-    this.panelWidths.leftPanel = listPanelContext[0].width;
-    this.panelWidths.codeEditorPanel = listPanelContext[1].width;
-    this.panelWidths.rightPanel = listPanelContext[2].width;
+    this.panelWidths.leftPanel = listPanelContext[0]?.width;
+    this.panelWidths.codeEditorPanel = listPanelContext[1]?.width;
+    this.panelWidths.rightPanel = listPanelContext[2]?.width;
 
     localStorage.setItem(CodeModePanelWidths, JSON.stringify(this.panelWidths));
   }
@@ -476,6 +509,7 @@ export default class CodeMode extends Component<Signature> {
                 data-test-file-view-header
               >
                 <Button
+                  @disabled={{this.emptyOrNotFound}}
                   @kind={{if
                     (eq this.fileView 'inheritance')
                     'primary-dark'
@@ -489,7 +523,7 @@ export default class CodeMode extends Component<Signature> {
                   {{on 'click' (fn this.setFileView 'inheritance')}}
                   data-test-inheritance-toggle
                 >
-                  Inheritance</Button>
+                  Inspector</Button>
                 <Button
                   @kind={{if
                     (eq this.fileView 'browser')
@@ -504,25 +538,27 @@ export default class CodeMode extends Component<Signature> {
                   {{on 'click' (fn this.setFileView 'browser')}}
                   data-test-file-browser-toggle
                 >
-                  File Browser</Button>
+                  File Tree</Button>
               </header>
               <section class='inner-container__content'>
-                {{#if this.isReady}}
-                  {{#if (eq this.fileView 'inheritance')}}
-                    <section class='inner-container__content'>
+                {{#if (eq this.fileView 'inheritance')}}
+                  <section class='inner-container__content'>
+                    {{#if this.isReady}}
                       <CardInheritancePanel
                         @cardInstance={{this.cardResource.value}}
                         @readyFile={{this.readyFile}}
                         @realmInfo={{this.realmInfo}}
                         @realmIconURL={{this.realmIconURL}}
-                        @importedModule={{this.importedModule}}
+                        @adoptionChain={{this.adoptionChain}}
                         @delete={{this.delete}}
                         data-test-card-inheritance-panel
                       />
-                    </section>
-                  {{else}}
-                    <FileTree @url={{this.readyFile.realmURL}} />
-                  {{/if}}
+                    {{else if this.emptyOrNotFound}}
+                      Inspector is not available
+                    {{/if}}
+                  </section>
+                {{else}}
+                  <FileTree @url={{this.realmURL}} />
                 {{/if}}
               </section>
             </div>
@@ -597,8 +633,14 @@ export default class CodeMode extends Component<Signature> {
             @width={{this.panelWidths.emptyCodeModePanel}}
             @panelGroupApi={{pg.api}}
           >
-            <div class='inner-container' data-test-empty-code-mode>
-              <h3>TODO: implement ticket CS-5863: Empty code mode</h3>
+            <div
+              class='inner-container inner-container--empty'
+              data-test-empty-code-mode
+            >
+              {{svgJar 'file' width='40' height='40' role='presentation'}}
+              <h3 class='choose-file-prompt'>
+                Choose a file on the left to open it
+              </h3>
             </div>
           </ResizablePanel>
         {{/if}}
@@ -681,6 +723,21 @@ export default class CodeMode extends Component<Signature> {
         padding: var(--boxel-sp-xxs) var(--boxel-sp-xs) var(--boxel-sp-sm);
         overflow-y: auto;
       }
+      .inner-container--empty {
+        background-color: var(--boxel-light-100);
+        align-items: center;
+        justify-content: center;
+      }
+      .inner-container--empty > :deep(svg) {
+        --icon-color: var(--boxel-highlight);
+      }
+
+      .choose-file-prompt {
+        margin: 0;
+        padding: var(--boxel-sp);
+        font: 700 var(--boxel-font);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
 
       .file-view__header {
         display: flex;
@@ -695,8 +752,9 @@ export default class CodeMode extends Component<Signature> {
         --boxel-button-min-width: 6rem;
         --boxel-button-padding: 0;
         border-radius: var(--boxel-border-radius);
+        flex: 1;
       }
-      .file-view__header-btn:hover {
+      .file-view__header-btn:hover:not(:disabled) {
         border-color: var(--boxel-dark);
       }
       .file-view__header-btn.active {
@@ -734,4 +792,8 @@ export default class CodeMode extends Component<Signature> {
       }
     </style>
   </template>
+}
+
+function getMonacoContent() {
+  return (window as any).monaco.editor.getModels()[0].getValue();
 }
