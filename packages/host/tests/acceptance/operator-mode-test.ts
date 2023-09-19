@@ -167,6 +167,7 @@ module('Acceptance | operator mode tests', function (hooks) {
           }
         }
       `,
+      'README.txt': `Hello World`,
       'Pet/mango.json': {
         data: {
           attributes: {
@@ -1107,12 +1108,67 @@ module('Acceptance | operator mode tests', function (hooks) {
     await waitUntil(() => find('[data-test-editor]'));
 
     this.onSave((json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
       assert.strictEqual(json.data.attributes?.name, 'MangoXXX');
     });
 
     setMonacoContent(JSON.stringify(expected));
 
     await waitFor('[data-test-save-idle]');
+  });
+
+  test<TestContextWithSave>('non-card instance change made in monaco editor is auto-saved', async function (assert) {
+    assert.expect(1);
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}README.txt`,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitUntil(() => find('[data-test-editor]'));
+
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error('expected string save data');
+      }
+      assert.strictEqual(content, 'Hello Mars');
+    });
+
+    setMonacoContent('Hello Mars');
+
+    await waitFor('[data-test-save-idle]');
+  });
+
+  test<TestContextWithSave>('unsaved changes made in monaco editor are saved when switching out of code mode', async function (assert) {
+    assert.expect(1);
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}README.txt`,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitUntil(() => find('[data-test-editor]'));
+
+    this.onSave((content) => {
+      if (typeof content !== 'string') {
+        throw new Error('expected string save data');
+      }
+      assert.strictEqual(content, 'Hello Mars');
+    });
+
+    setMonacoContent('Hello Mars');
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Interact"]');
   });
 
   test<TestContextWithSave>('invalid JSON card instance change made in monaco editor is NOT auto-saved', async function (assert) {
@@ -1391,7 +1447,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}Pet/mango.json`);
-    assert.dom('[data-test-definition-name]').hasText('Pet');
+    assert.dom('[data-test-definition-name]').hasText('Mango');
     assert.deepEqual(JSON.parse(getMonacoContent()), {
       data: {
         attributes: {

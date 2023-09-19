@@ -63,10 +63,12 @@ import RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import { adoptionChainResource } from '@cardstack/host/resources/adoption-chain';
 
 interface Signature {
   Args: {
     delete: (card: CardDef, afterDelete?: () => void) => void;
+    saveSourceOnClose: (url: URL, content: string) => void;
   };
 }
 const log = logger('component:code-mode');
@@ -95,6 +97,7 @@ export default class CodeMode extends Component<Signature> {
 
   @tracked private loadFileError: string | null = null;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
+  private isSourceStale = false;
   private panelWidths: PanelWidths;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
   private _cachedRealmInfo: RealmInfo | null = null; // This is to cache realm info during reload after code path change so that realm assets don't produce a flicker when code patch changes and the realm is the same
@@ -128,6 +131,15 @@ export default class CodeMode extends Component<Signature> {
       ),
     };
     registerDestructor(this, () => {
+      // destructor functons are called synchronously. in order to save,
+      // which is async, we leverage an EC task that is running in a
+      // parent component (EC task lifetimes are bound to their context)
+      // that is not being destroyed.
+      if (this.codePath && this.isSourceStale) {
+        // TODO need to reconcile any usaved differences between
+        // monaco and card editor: CS-5981. For now monaco wins...
+        this.args.saveSourceOnClose(this.codePath, getMonacoContent());
+      }
       this.subscription?.unsubscribe();
     });
     this.loadMonaco.perform();
@@ -174,7 +186,7 @@ export default class CodeMode extends Component<Signature> {
   }
 
   private get isReady() {
-    return this.maybeMonacoSDK && this.openFile.current?.state === 'ready';
+    return this.maybeMonacoSDK && isReady(this.openFile.current);
   }
 
   private get emptyOrNotFound() {
@@ -186,7 +198,7 @@ export default class CodeMode extends Component<Signature> {
   });
 
   private get readyFile() {
-    if (this.openFile.current?.state === 'ready') {
+    if (isReady(this.openFile.current)) {
       return this.openFile.current;
     }
     throw new Error(
@@ -273,10 +285,10 @@ export default class CodeMode extends Component<Signature> {
     }));
   });
 
-  @use private importedModule = resource(() => {
+  @use importedModule = resource(() => {
     if (isReady(this.openFile.current)) {
       let f: Ready = this.openFile.current;
-      if (f.name.endsWith('.json')) {
+      if (f.url.endsWith('.json')) {
         let ref = identifyCard(this.cardResource.value?.constructor);
         if (ref !== undefined) {
           return importResource(this, () => moduleFrom(ref as CodeRef));
@@ -291,13 +303,21 @@ export default class CodeMode extends Component<Signature> {
     }
   });
 
+  @use adoptionChain = resource(() => {
+    if (this.importedModule) {
+      return adoptionChainResource(this, this.importedModule);
+    } else {
+      return undefined;
+    }
+  });
+
   private reloadCard = restartableTask(async () => {
     await this.cardResource.load();
   });
 
   @use private cardResource = resource(() => {
     let isFileReady =
-      this.openFile.current?.state === 'ready' &&
+      isReady(this.openFile.current) &&
       this.openFile.current.name.endsWith('.json');
     const state: {
       isLoading: boolean;
@@ -338,9 +358,10 @@ export default class CodeMode extends Component<Signature> {
   });
 
   private contentChangedTask = restartableTask(async (content: string) => {
+    this.isSourceStale = true;
     await timeout(500);
     if (
-      this.openFile.current?.state !== 'ready' ||
+      !isReady(this.openFile.current) ||
       content === this.openFile.current?.content
     ) {
       return;
@@ -354,12 +375,12 @@ export default class CodeMode extends Component<Signature> {
       // writes json instance but doesn't update state of the file resource
       // relies on message service subscription to update state
       await this.saveFileSerializedCard.perform(validJSON);
-      return;
     } else if (!isJSON || validJSON) {
       // writes source code and non-card instance valid JSON,
       // then updates the state of the file resource
       this.writeSourceCodeToFile(this.openFile.current, content);
     }
+    this.isSourceStale = false;
   });
 
   // We use this to write non-cards to the realm--so it doesn't make
@@ -530,7 +551,7 @@ export default class CodeMode extends Component<Signature> {
                         @readyFile={{this.readyFile}}
                         @realmInfo={{this.realmInfo}}
                         @realmIconURL={{this.realmIconURL}}
-                        @importedModule={{this.importedModule}}
+                        @adoptionChain={{this.adoptionChain}}
                         @delete={{this.delete}}
                         data-test-card-inheritance-panel
                       />
@@ -764,4 +785,8 @@ export default class CodeMode extends Component<Signature> {
       }
     </style>
   </template>
+}
+
+function getMonacoContent() {
+  return (window as any).monaco.editor.getModels()[0].getValue();
 }
