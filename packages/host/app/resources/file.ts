@@ -6,7 +6,9 @@ import { registerDestructor } from '@ember/destroyable';
 import { SupportedMimeType, logger } from '@cardstack/runtime-common';
 import LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
+import type CardService from '@cardstack/host/services/card-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import config from '@cardstack/host/config/environment';
 
 const log = logger('resource:file');
@@ -57,7 +59,9 @@ class _FileResource extends Resource<Args> {
 
   @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
+  @service declare cardService: CardService;
   @service declare recentFilesService: RecentFilesService;
+  @service declare operatorModeStateService: OperatorModeStateService;
 
   constructor(owner: unknown) {
     super(owner);
