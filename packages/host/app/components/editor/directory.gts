@@ -117,18 +117,6 @@ export default class Directory extends Component<Args> {
         transform: rotate(-90deg);
       }
 
-      .directory[disabled] {
-        color: var(--boxel-dark);
-      }
-
-      .directory[disabled]:hover {
-        background: transparent;
-      }
-
-      .directory[disabled] :deep(.icon) {
-        --icon-color: var(--boxel-light-600);
-      }
-
       .file {
         padding-left: calc(var(--icon-length) + var(--icon-margin));
       }
