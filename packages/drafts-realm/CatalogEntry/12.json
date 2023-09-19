@@ -2,11 +2,11 @@
   "data": {
     "type": "card",
     "attributes": {
-      "title": "SampleCard from http://localhost:4201/drafts/sample-card",
-      "description": "Catalog entry for SampleCard from http://localhost:4201/drafts/sample-card",
+      "title": "ContactCard",
+      "description": "Catalog entry for ContactCard",
       "ref": {
-        "module": "http://localhost:4201/drafts/sample-card",
-        "name": "SampleCard"
+        "module": "../contact-card",
+        "name": "ContactCard"
       },
       "demo": {
         "name": null,
@@ -23,8 +23,8 @@
       "fields": {
         "demo": {
           "adoptsFrom": {
-            "module": "http://localhost:4201/drafts/sample-card",
-            "name": "SampleCard"
+            "module": "../contact-card",
+            "name": "ContactCard"
           }
         }
       },

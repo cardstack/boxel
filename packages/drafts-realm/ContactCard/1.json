@@ -22,8 +22,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../sample-card",
-        "name": "SampleCard"
+        "module": "../contact-card",
+        "name": "ContactCard"
       }
     }
   }
