@@ -21,7 +21,7 @@ interface Args {
     realmInfo: RealmInfo | null;
     realmIconURL: string | null | undefined;
     readyFile: Ready;
-    cardInstance: CardDef | null;
+    cardInstance: CardDef | undefined;
     adoptionChain?: AdoptionChainResource;
     delete: () => void;
   };

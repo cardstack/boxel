@@ -1073,7 +1073,7 @@ module('Acceptance | operator mode tests', function (hooks) {
   });
 
   test<TestContextWithSave>('card instance change made in monaco editor is auto-saved', async function (assert) {
-    assert.expect(1);
+    assert.expect(2);
 
     let expected: LooseSingleCardDocument = {
       data: {
@@ -1117,6 +1117,84 @@ module('Acceptance | operator mode tests', function (hooks) {
     setMonacoContent(JSON.stringify(expected));
 
     await waitFor('[data-test-save-idle]');
+
+    assert
+      .dom('[data-test-code-mode-card-preview-body] [data-test-field="name"]')
+      .containsText('MangoXXX');
+  });
+
+  test<
+    TestContextWithSave & TestContextWithSSE
+  >('card instance change made in card editor is auto-saved', async function (assert) {
+    assert.expect(3);
+
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Pet/mango`],
+        },
+      },
+    ];
+    let expected: LooseSingleCardDocument = {
+      data: {
+        type: 'card',
+        attributes: {
+          name: 'MangoXXX',
+          description: null,
+          thumbnailURL: null,
+        },
+        meta: {
+          adoptsFrom: {
+            module: `../pet`,
+            name: 'Pet',
+          },
+        },
+      },
+    };
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Pet/mango`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}Pet/mango.json`,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitUntil(() => find('[data-test-editor]'));
+
+    this.onSave((json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
+      assert.strictEqual(json.data.attributes?.name, 'MangoXXX');
+    });
+
+    await click('[data-test-preview-card-footer-button-edit]');
+    await this.expectEvents(
+      assert,
+      realm,
+      adapter,
+      expectedEvents,
+      async () => {
+        await fillIn('[data-test-field="name"] input', 'MangoXXX');
+      },
+    );
+    await waitFor('[data-test-save-idle]');
+    assert.strictEqual(
+      getMonacoContent(),
+      JSON.stringify(expected, null, 2),
+      'monaco content has updated',
+    );
   });
 
   test<TestContextWithSave>('non-card instance change made in monaco editor is auto-saved', async function (assert) {
@@ -1167,6 +1245,41 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
 
     setMonacoContent('Hello Mars');
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Interact"]');
+  });
+
+  test<TestContextWithSave>('unsaved changes made in card editor are saved when switching out of code mode', async function (assert) {
+    assert.expect(2); // the test waiters permit a normal auto-save to sneak in. the 2nd save is the save on close.
+
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Pet/mango`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}Pet/mango.json`,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitUntil(() => find('[data-test-editor]'));
+
+    this.onSave((json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
+      assert.strictEqual(json.data.attributes?.name, 'MangoXXX');
+    });
+
+    await click('[data-test-preview-card-footer-button-edit]');
+    await fillIn('[data-test-field="name"] input', 'MangoXXX');
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Interact"]');
   });

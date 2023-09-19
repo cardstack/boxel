@@ -69,23 +69,26 @@ export default class CardService extends Service {
     this.subscriber = undefined;
   }
 
-  private async fetchJSON(
+  async fetchJSON(
     url: string | URL,
     args?: RequestInit,
-  ): Promise<CardDocument | void> {
+  ): Promise<CardDocument | undefined> {
     let response = await this.loaderService.loader.fetch(url, {
       headers: { Accept: SupportedMimeType.CardJson },
       ...args,
     });
     if (!response.ok) {
-      throw new Error(
+      let err = new Error(
         `status: ${response.status} -
         ${response.statusText}. ${await response.text()}`,
       );
+      (err as any).status = response.status;
+      throw err;
     }
     if (response.status !== 204) {
       return await response.json();
     }
+    return;
   }
 
   async createFromSerialized(
