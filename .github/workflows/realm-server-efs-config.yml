@@ -34,16 +34,16 @@ jobs:
           } >> "$GITHUB_OUTPUT"
         env:
           STAGING_CONFIG: |
-            - name: "realm-server-storage"
-              id: "fs-07b96c537c8c42381"
-              access-point: "fsap-05f6f7e465f171f43"
+            - name: "storage"
+              id: "fs-08120fae21cb098c1"
+              access-point: "fsap-00a08611102ade9bd"
               mounts:
                 - container: "boxel-realm-server"
                   path: "/persistent"
           PRODUCTION_CONFIG: |
-            - name: "realm-server-storage"
-              id: "fs-01beb05ea57cb4894"
-              access-point: "fsap-0e1180270a9526966"
+            - name: "storage"
+              id: ""
+              access-point: ""
               mounts:
                 - container: "boxel-realm-server"
                   path: "/persistent"
