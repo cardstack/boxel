@@ -64,6 +64,7 @@ import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import { adoptionChainResource } from '@cardstack/host/resources/adoption-chain';
+import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
 
 interface Signature {
   Args: {
@@ -473,6 +474,13 @@ export default class CodeMode extends Component<Signature> {
     }
   }
 
+  get isInstance() {
+    return (
+      isReady(this.openFile.current) &&
+      this.openFile.current.name.endsWith('.json')
+    );
+  }
+
   <template>
     <div class='code-mode-background' style={{this.backgroundURLStyle}}></div>
     <CardURLBar
@@ -606,14 +614,26 @@ export default class CodeMode extends Component<Signature> {
             @panelGroupApi={{pg.api}}
           >
             <div class='inner-container'>
-              {{#if this.cardResource.value}}
-                <CardPreviewPanel
-                  @card={{this.cardResource.value}}
-                  @realmIconURL={{this.realmIconURL}}
-                  data-test-card-resource-loaded
-                />
-              {{else if this.cardResource.error}}
-                {{this.cardResource.error.message}}
+              {{#if this.isReady}}
+                {{#if this.isInstance}}
+                  {{#if this.cardResource.value}}
+                    <CardPreviewPanel
+                      @card={{this.cardResource.value}}
+                      @realmIconURL={{this.realmIconURL}}
+                      data-test-card-resource-loaded
+                    />
+
+                  {{else if this.cardResource.error}}
+                    {{this.cardResource.error.message}}
+                  {{/if}}
+                {{else}}
+                  {{#if this.importedModule.module}}
+                    <CardAdoptionChain
+                      @file={{this.readyFile}}
+                      @importedModule={{this.importedModule.module}}
+                    />
+                  {{/if}}
+                {{/if}}
               {{/if}}
             </div>
           </ResizablePanel>
