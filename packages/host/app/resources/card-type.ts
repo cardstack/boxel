@@ -138,7 +138,9 @@ export class CardType extends Resource<Args> {
     if (realmURL === null) {
       throw new Error(`Could not get realm url for ${url.href}`);
     }
-    let realmInfo = await this.cardService.getRealmInfoByRealmURL(url);
+    let realmInfo = await this.cardService.getRealmInfoByRealmURL(
+      new URL(realmURL),
+    );
     return {
       realmInfo,
       extension: '.' + response.url.split('.').pop() || '',
