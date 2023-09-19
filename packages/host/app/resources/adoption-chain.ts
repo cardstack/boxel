@@ -10,6 +10,8 @@ import {
   getCardType,
   type CardType,
 } from '@cardstack/host/resources/card-type';
+import { restartableTask } from 'ember-concurrency';
+import type CardService from '@cardstack/host/services/card-service';
 
 interface AdoptionChainResourceArgs {
   named: { module: ImportResource | undefined; loader: Loader };
@@ -17,21 +19,31 @@ interface AdoptionChainResourceArgs {
 
 export class AdoptionChainResource extends Resource<AdoptionChainResourceArgs> {
   @service declare loaderService: LoaderService;
+  @service declare cardService: CardService;
   @tracked cards: (typeof BaseDef)[] = [];
   @tracked _cardTypes: CardType[] = [];
 
   modify(_positional: never[], named: AdoptionChainResourceArgs['named']) {
     let importResource = named['module'];
     if (importResource && importResource.module) {
-      let module = importResource.module;
-      this.cards = cardsOrFieldsFromModule(module);
-      this._cardTypes = this.cards.map((c) => getCardType(this, () => c));
+      this.load.perform(importResource.module);
     }
   }
 
   get types() {
     return this._cardTypes.map((t) => t.type);
   }
+
+  private load = restartableTask(async (module: object) => {
+    this.cards = cardsOrFieldsFromModule(module);
+    this._cardTypes = this.cards.map((c) =>
+      getCardType(
+        this,
+        () => c,
+        (url: URL) => this.cardService.getRealmInfoByRealmURL(url),
+      ),
+    );
+  });
 }
 
 function cardsOrFieldsFromModule(

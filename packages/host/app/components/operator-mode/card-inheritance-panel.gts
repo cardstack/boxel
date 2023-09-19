@@ -11,15 +11,14 @@ import { Ready } from '@cardstack/host/resources/file';
 import { tracked } from '@glimmer/tracking';
 import moment from 'moment';
 import { type AdoptionChainResource } from '@cardstack/host/resources/adoption-chain';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import { hash, array } from '@ember/helper';
-import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import { action } from '@ember/object';
 
-interface Args {
+interface Signature {
   Element: HTMLElement;
   Args: {
     realmInfo: RealmInfo | null;
-    realmIconURL: string | null | undefined;
     readyFile: Ready;
     cardInstance: CardDef | null;
     adoptionChain?: AdoptionChainResource;
@@ -27,19 +26,19 @@ interface Args {
   };
 }
 
-export default class CardInheritancePanel extends Component<Args> {
+export default class CardInheritancePanel extends Component<Signature> {
   @tracked cardInstance: CardDef | undefined;
   @service declare operatorModeStateService: OperatorModeStateService;
+
+  get adoptionChainTypes() {
+    return this.args.adoptionChain?.types;
+  }
 
   @action
   updateCodePath(url: URL | undefined) {
     if (url) {
       this.operatorModeStateService.updateCodePath(url);
     }
-  }
-
-  get adoptionChainTypes() {
-    return this.args.adoptionChain?.types;
   }
 
   <template>
@@ -51,8 +50,7 @@ export default class CardInheritancePanel extends Component<Args> {
           <InstanceDefinitionContainer
             @name={{@cardInstance.title}}
             @fileExtension='.JSON'
-            @realmInfo={{@realmInfo}}
-            @realmIconURL={{@realmIconURL}}
+            @realmInfo={{this.args.realmInfo}}
             @infoText={{this.lastModified}}
             @actions={{array
               (hash label='Delete' handler=@delete icon='icon-trash')
@@ -62,21 +60,21 @@ export default class CardInheritancePanel extends Component<Args> {
 
           <ClickableModuleDefinitionContainer
             @name={{t.displayName}}
-            @fileExtension={{this.fileExtension}}
-            @realmInfo={{@realmInfo}}
-            @realmIconURL={{@realmIconURL}}
+            @fileExtension={{t.moduleMeta.extension}}
+            @realmInfo={{t.moduleMeta.realmInfo}}
             @onSelectDefinition={{this.updateCodePath}}
             @url={{t.module}}
           />
         {{/each}}
       {{else}}
+
         {{! Module case when visting, eg author.gts }}
         {{#each this.adoptionChainTypes as |t|}}
+
           <ModuleDefinitionContainer
             @name={{t.displayName}}
-            @fileExtension={{this.fileExtension}}
-            @realmInfo={{@realmInfo}}
-            @realmIconURL={{@realmIconURL}}
+            @fileExtension={{t.moduleMeta.extension}}
+            @realmInfo={{t.moduleMeta.realmInfo}}
             @isActive={{true}}
             @actions={{array
               (hash label='Delete' handler=@delete icon='icon-trash')
@@ -85,9 +83,8 @@ export default class CardInheritancePanel extends Component<Args> {
           <div>Inherits from</div>
           <ClickableModuleDefinitionContainer
             @name={{t.super.displayName}}
-            @fileExtension={{this.fileExtension}}
-            @realmInfo={{@realmInfo}}
-            @realmIconURL={{@realmIconURL}}
+            @fileExtension={{t.super.moduleMeta.extension}}
+            @realmInfo={{t.super.moduleMeta.realmInfo}}
             @onSelectDefinition={{this.updateCodePath}}
             @url={{t.super.module}}
           />
