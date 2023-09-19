@@ -21,17 +21,6 @@ interface Signature {
 }
 
 export default class CardAdoptionChain extends Component<Signature> {
-  @service declare loaderService: LoaderService;
-  @tracked cardInheritanceChain: {
-    cardType: Type;
-    card: any;
-  }[] = [];
-
-  constructor(owner: unknown, args: Signature['Args']) {
-    super(owner, args);
-    this.loadInheritanceChain();
-  }
-
   <template>
     <style>
       .card-adoption-chain {
@@ -55,6 +44,17 @@ export default class CardAdoptionChain extends Component<Signature> {
       {{/each}}
     </div>
   </template>
+
+  @service declare loaderService: LoaderService;
+  @tracked cardInheritanceChain: {
+    cardType: Type;
+    card: any;
+  }[] = [];
+
+  constructor(owner: unknown, args: Signature['Args']) {
+    super(owner, args);
+    this.loadInheritanceChain();
+  }
 
   @cached
   get moduleSyntax() {

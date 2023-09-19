@@ -82,11 +82,14 @@ export default class CardSchemaEditor extends Component<Signature> {
       }
 
       .field-type {
-        color: var(--boxel-gray-500);
+        color: #949494;
       }
     </style>
 
-    <div class='schema-editor-container'>
+    <div
+      class='schema-editor-container'
+      data-test-card-schema={{@cardType.displayName}}
+    >
       <div class='pill'>
         <span class='realm-icon'>
           🟦
@@ -97,7 +100,7 @@ export default class CardSchemaEditor extends Component<Signature> {
       <div class='card-fields'>
         {{#each @cardType.fields as |field|}}
           {{#if (this.isOwnField field.name)}}
-            <div class='card-field'>
+            <div class='card-field' data-test-field-name={{field.name}}>
               <div class='left'>
                 <div class='field-name'>
                   {{field.name}}
@@ -107,11 +110,17 @@ export default class CardSchemaEditor extends Component<Signature> {
                 </div>
               </div>
               <div class='right'>
+
                 <div class='pill'>
                   <span class='realm-icon'>
                     🟪
                   </span>
-                  {{capitalize (this.cleanupCardType (cardId field.card))}}
+                  {{#let
+                    (capitalize (this.cleanupCardType (cardId field.card)))
+                    as |cardType|
+                  }}
+                    <span data-test-card-type={{cardType}}>{{cardType}}</span>
+                  {{/let}}
                 </div>
               </div>
             </div>
@@ -124,13 +133,19 @@ export default class CardSchemaEditor extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
 
-  // Temporary
   cleanupCardType(value: string) {
-    let path = new URL(value).pathname; // Ecamples: "/base/string/default", "/drafts/pet/Pet"
+    let path = new URL(value).pathname; // Examples of pathname: "/base/string/default", "/drafts/pet/Pet"
+
     if (path.endsWith('/default')) {
       path = path.slice(0, -'/default'.length);
     }
-    return path.split('/').pop();
+
+    let cardType = path.split('/').pop();
+    if (!cardType) {
+      throw new Error(`Could not parse card type from ${value}`);
+    } else {
+      return cardType;
+    }
   }
 
   @action
