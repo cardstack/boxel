@@ -49,7 +49,6 @@ jobs:
     name: Deploy realm server
     needs:
       - build-host
-      - build-realm-server
       - realm-server-efs-config
     uses: cardstack/gh-actions/.github/workflows/waypoint-deploy.yml@main
     secrets: inherit

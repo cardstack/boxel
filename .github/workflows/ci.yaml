@@ -242,7 +242,6 @@ jobs:
       - host-test
       - realm-server-test
       - build-host
-      - build-realm-server
       - realm-server-efs-config
     uses: cardstack/gh-actions/.github/workflows/waypoint-deploy.yml@main
     secrets: inherit
