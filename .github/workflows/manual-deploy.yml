@@ -46,7 +46,7 @@ jobs:
       environment: ${{ inputs.environment }}
 
   deploy-realm-server:
-    name: Deploy realm server to staging
+    name: Deploy realm server
     needs:
       - build-host
       - build-realm-server
