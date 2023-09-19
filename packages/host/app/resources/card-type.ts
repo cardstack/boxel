@@ -46,6 +46,8 @@ export class CardType extends Resource<Args> {
   @service declare cardService: CardService;
   declare loader: Loader;
   typeCache: Map<string, Type> = new Map();
+  moduleMetaCache: Map<string, { extension: string; realmInfo: RealmInfo }> =
+    new Map();
 
   modify(_positional: never[], named: Args['named']) {
     let { definition, loader } = named;
@@ -109,7 +111,10 @@ export class CardType extends Resource<Args> {
     );
 
     let moduleIdentifier = moduleFrom(ref);
-    let moduleMeta = await this.moduleMeta(new URL(moduleIdentifier));
+    let moduleMeta =
+      this.moduleMetaCache.get(moduleIdentifier) ??
+      (await this.moduleMeta(new URL(moduleIdentifier)));
+    this.moduleMetaCache.set(moduleIdentifier, moduleMeta);
     let type: Type = {
       id,
       module: moduleIdentifier,
