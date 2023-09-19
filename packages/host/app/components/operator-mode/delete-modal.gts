@@ -5,6 +5,7 @@ import { Deferred } from '@cardstack/runtime-common';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { Modal, BoxelButton } from '@cardstack/boxel-ui';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -89,7 +90,7 @@ export default class DeleteModal extends Component<Signature> {
     </style>
   </template>
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: any) {
     super(owner, args);
     this.args.onCreate(this);
   }

@@ -15,6 +15,7 @@ import type RenderService from '../services/render-service';
 import type LoaderService from '../services/loader-service';
 import type LocalIndexer from '../services/local-indexer';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
+import type Owner from '@ember/owner';
 
 // This component is used in a node/Fastboot context to perform
 // server-side rendering for indexing as well as by the TestRealm
@@ -25,7 +26,7 @@ export default class CardPrerender extends Component {
   @service declare fastboot: { isFastBoot: boolean };
   @service declare localIndexer: LocalIndexer;
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: any) {
     super(owner, args);
     if (this.fastboot.isFastBoot) {
       try {

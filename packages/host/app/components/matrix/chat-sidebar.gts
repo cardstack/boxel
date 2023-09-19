@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { on } from '@ember/modifier';
 import UserProfile from './user-profile';
 import Login from './login';
@@ -96,7 +97,7 @@ export default class ChatSidebar extends Component<Args> {
   @service declare matrixService: MatrixService;
   @tracked isRegistrationMode = false;
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: any) {
     super(owner, args);
     this.loadMatrix.perform();
   }

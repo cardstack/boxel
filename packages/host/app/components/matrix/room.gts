@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { on } from '@ember/modifier';
 //@ts-expect-error the types don't recognize the cached export
 import { tracked, cached } from '@glimmer/tracking';
@@ -294,7 +295,7 @@ export default class Room extends Component<RoomArgs> {
     new TrackedMap();
   private roomResource = getRoom(this, () => this.args.roomId);
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: any) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
 
