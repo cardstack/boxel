@@ -228,6 +228,12 @@ jobs:
     with:
       environment: "staging"
 
+  realm-server-efs-config:
+    name: EFS Config
+    uses: ./.github/workflows/realm-server-efs-config.yml
+    with:
+      environment: "staging"
+
   deploy-realm-server:
     name: Deploy realm server to staging
     needs:
@@ -242,6 +248,7 @@ jobs:
       app: "boxel-realm-server"
       environment: "staging"
       working-directory: "packages/realm-server"
+      efs-config: ${{ needs.realm-server-efs-config.outputs.config }}
       retain: "0"
 
   deploy-ai-bot:

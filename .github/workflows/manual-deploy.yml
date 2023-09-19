@@ -38,6 +38,12 @@ jobs:
     with:
       environment: ${{ inputs.environment }}
 
+  realm-server-efs-config:
+    name: EFS Config
+    uses: ./.github/workflows/realm-server-efs-config.yml
+    with:
+      environment: ${{ inputs.environment }}
+
   deploy-realm-server:
     name: Deploy realm server to staging
     needs: [build-host, build-realm-server]
@@ -47,4 +53,5 @@ jobs:
       app: "boxel-realm-server"
       environment: ${{ inputs.environment }}
       working-directory: "packages/realm-server"
+      efs-config: ${{ needs.realm-server-efs-config.outputs.config }}
       retain: "0"
