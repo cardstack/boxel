@@ -5,6 +5,7 @@ import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import { task, restartableTask, timeout } from 'ember-concurrency';
@@ -123,8 +124,8 @@ export default class CodeMode extends Component<Signature> {
   // the realm is the same
   private cachedRealmInfo: RealmInfo | null = null;
 
-  constructor(args: any, owner: any) {
-    super(args, owner);
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
     this.panelWidths = localStorage.getItem(CodeModePanelWidths)
       ? // @ts-ignore Type 'null' is not assignable to type 'string'
         JSON.parse(localStorage.getItem(CodeModePanelWidths))
