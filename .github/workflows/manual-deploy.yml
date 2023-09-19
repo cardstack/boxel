@@ -25,9 +25,10 @@ jobs:
     uses: cardstack/gh-actions/.github/workflows/waypoint-build.yml@main
     secrets: inherit
     with:
-      app: "realm-demo"
+      app: "boxel-realm-server"
       environment: ${{ inputs.environment }}
       restore-mtime: true
+      working-directory: "packages/realm-server"
 
   deploy-host:
     name: Deploy host
@@ -43,5 +44,7 @@ jobs:
     uses: cardstack/gh-actions/.github/workflows/waypoint-deploy.yml@main
     secrets: inherit
     with:
-      app: "realm-demo"
+      app: "boxel-realm-server"
       environment: ${{ inputs.environment }}
+      working-directory: "packages/realm-server"
+      retain: "0"

@@ -199,9 +199,10 @@ jobs:
     uses: cardstack/gh-actions/.github/workflows/waypoint-build.yml@main
     secrets: inherit
     with:
-      app: "realm-demo"
+      app: "boxel-realm-server"
       environment: "staging"
       restore-mtime: true
+      working-directory: "packages/realm-server"
 
   build-ai-bot:
     name: Build ai-bot
@@ -238,13 +239,15 @@ jobs:
     uses: cardstack/gh-actions/.github/workflows/waypoint-deploy.yml@main
     secrets: inherit
     with:
-      app: "realm-demo"
+      app: "boxel-realm-server"
       environment: "staging"
+      working-directory: "packages/realm-server"
+      retain: "0"
 
   deploy-ai-bot:
     name: Deploy ai-bot to staging
     needs:
-      - ai-bot-test 
+      - ai-bot-test
       - build-ai-bot
     uses: cardstack/gh-actions/.github/workflows/waypoint-deploy.yml@main
     secrets: inherit

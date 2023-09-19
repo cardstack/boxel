@@ -1,0 +1,49 @@
+name: EFS Config [realm-server]
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+    outputs:
+      config:
+        value: ${{ jobs.config.outputs.config }}
+
+jobs:
+  config:
+    name: Output config
+    runs-on: ubuntu-latest
+    outputs:
+      config: ${{ steps.config.outputs.config }}
+    steps:
+      - id: config
+        run: |
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            echo "$PRODUCTION_CONFIG" > config.yaml
+          elif [ "${{ inputs.environment }}" = "staging" ]; then
+            echo "$STAGING_CONFIG" > config.yaml
+          else
+            echo "unrecognized environment"
+            exit 1;
+          fi
+          {
+            echo "config<<EOF"
+            cat config.yaml
+            echo EOF
+          } >> "$GITHUB_OUTPUT"
+        env:
+          STAGING_CONFIG: |
+            - name: "realm-server-storage"
+              id: "fs-07b96c537c8c42381"
+              access-point: "fsap-05f6f7e465f171f43"
+              mounts:
+                - container: "boxel-realm-server"
+                  path: "/persistent"
+          PRODUCTION_CONFIG: |
+            - name: "realm-server-storage"
+              id: "fs-01beb05ea57cb4894"
+              access-point: "fsap-0e1180270a9526966"
+              mounts:
+                - container: "boxel-realm-server"
+                  path: "/persistent"
