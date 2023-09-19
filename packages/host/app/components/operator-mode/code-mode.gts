@@ -547,7 +547,6 @@ export default class CodeMode extends Component<Signature> {
                         @cardInstance={{this.cardResource.value}}
                         @readyFile={{this.readyFile}}
                         @realmInfo={{this.realmInfo}}
-                        @realmIconURL={{this.realmIconURL}}
                         @adoptionChain={{this.adoptionChain}}
                         @delete={{this.delete}}
                         data-test-card-inheritance-panel
