@@ -35,7 +35,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
         <AddButton
           class='add-new'
           @variant='full-width'
-          @hideIcon='true'
+          @hideIcon={{true}}
           {{on 'click' this.add}}
           data-test-add-new
         >

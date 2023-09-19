@@ -7,7 +7,7 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     variant?: 'full-width';
-    hideIcon: boolean;
+    hideIcon?: boolean;
   };
   Blocks: {
     default: [];
