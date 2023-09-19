@@ -30,13 +30,13 @@ app "boxel-realm-server" {
       region              = "us-east-1"
       cluster             = "staging"
       subnets             = ["subnet-03791d3b2b429e0cf", "subnet-068197c72e4e1fad2"]
-      task_role_name      = "boxel-realm-staging-ecs-task"
-      execution_role_name = "boxel-realm-staging-ecs-task-execution"
-      security_group_ids  = ["sg-081ca7969f2a67f42"]
+      task_role_name      = "boxel-realm-server-staging-ecs-task"
+      execution_role_name = "boxel-realm-server-staging-ecs-task-execution"
+      security_group_ids  = ["sg-08360e3c225e8c5a9"]
 
       alb {
         subnets           = ["subnet-08897ea4379ab8c3e", "subnet-0b9b4c967b070590f"]
-        load_balancer_arn = "arn:aws:elasticloadbalancing:us-east-1:680542703984:loadbalancer/app/waypoint-ecs-boxel-realm-staging/30dfa5ad88ce652d"
+        load_balancer_arn = "arn:aws:elasticloadbalancing:us-east-1:680542703984:loadbalancer/app/waypoint-ecs-boxel-realm-server/b37f9ee479fa2da5"
         certificate       = "arn:aws:acm:us-east-1:680542703984:certificate/739f0700-d97e-495d-9947-6b497eb578c6"
       }
 
