@@ -29,14 +29,14 @@ app "boxel-realm-server" {
       architecture        = "x86_64"
       region              = "us-east-1"
       cluster             = "production"
-      subnets             = []
-      task_role_name      = ""
-      execution_role_name = ""
-      security_group_ids  = [""]
+      subnets             = ["subnet-0464e7c634d7d2bb8", "subnet-0a03d794786fca955", "subnet-0e7de528f9d7cd414"]
+      task_role_name      = "boxel-realm-server-production-ecs-task"
+      execution_role_name = "boxel-realm-server-production-ecs-task-execution"
+      security_group_ids  = ["sg-062749d2e257fb537"]
 
       alb {
-        subnets           = []
-        load_balancer_arn = ""
+        subnets           = ["subnet-05b7ef803ba833852", "subnet-09ceeebe1c07bbf29", "subnet-0f9605892633c55be"]
+        load_balancer_arn = "arn:aws:elasticloadbalancing:us-east-1:120317779495:loadbalancer/app/waypoint-ecs-boxel-realm-server/29e02ba86af26414"
         certificate       = "arn:aws:acm:us-east-1:120317779495:certificate/55a995ef-6f98-4834-a953-e1517cc74fb7"
       }
 

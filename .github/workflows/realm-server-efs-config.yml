@@ -42,8 +42,8 @@ jobs:
                   path: "/persistent"
           PRODUCTION_CONFIG: |
             - name: "storage"
-              id: ""
-              access-point: ""
+              id: "fs-0451294483caa76b4"
+              access-point: "fsap-0aa8fc8d6604ef16c"
               mounts:
                 - container: "boxel-realm-server"
                   path: "/persistent"
