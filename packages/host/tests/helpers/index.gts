@@ -8,6 +8,7 @@ import {
   createResponse,
   RealmInfo,
   Deferred,
+  executableExtensions,
 } from '@cardstack/runtime-common';
 import GlimmerComponent from '@glimmer/component';
 import { type TestContext, visit } from '@ember/test-helpers';
@@ -450,10 +451,12 @@ export class TestRealmAdapter implements RealmAdapter {
         throw new Error(`tried to use file as directory`);
       }
       this.#lastModified.set(this.#paths.fileURL(path).href, now);
-      if (typeof content === 'string') {
-        dir[last] = content;
-      } else {
-        dir[last] = JSON.stringify(content);
+      content = typeof content === 'string' ? content : JSON.stringify(content);
+      dir[last] = content;
+      // for handling redirects
+      let [lastWithoutExtension, extension] = last.split('.');
+      if (executableExtensions.includes(extension)) {
+        dir[lastWithoutExtension] = content;
       }
     }
   }
