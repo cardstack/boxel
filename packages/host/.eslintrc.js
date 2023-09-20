@@ -72,22 +72,12 @@ module.exports = {
             group: 'builtin',
           },
           {
-            pattern: '@cardstack/boxel-ui',
+            pattern: '@cardstack/boxel-ui{*,/**}',
             group: 'internal',
             position: 'before',
           },
           {
-            pattern: '@cardstack/boxel-ui/**',
-            group: 'internal',
-            position: 'before',
-          },
-          {
-            pattern: '@cardstack/realm-server**',
-            group: 'internal',
-            position: 'before',
-          },
-          {
-            pattern: '@cardstack/runtime-common',
+            pattern: '@cardstack/runtime-common{*,/**}',
             group: 'internal',
             position: 'before',
           },

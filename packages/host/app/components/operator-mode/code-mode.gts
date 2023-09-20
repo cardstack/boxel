@@ -25,7 +25,6 @@ import {
   ResizablePanel,
   PanelContext,
 } from '@cardstack/boxel-ui';
-
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { and, eq } from '@cardstack/boxel-ui/helpers/truth-helpers';

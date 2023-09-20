@@ -8,7 +8,6 @@ import { velcro } from 'ember-velcro';
 import { type TrackedArray } from 'tracked-built-ins';
 
 import { IconButton, BoxelDropdown, Menu } from '@cardstack/boxel-ui';
-
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
 import { and, bool, eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
