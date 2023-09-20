@@ -36,7 +36,6 @@ export default class CardInheritancePanel extends Component<Args> {
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
-    this.calculateLastModified();
     this.refreshSaveMsg = setInterval(
       () => this.calculateLastModified(),
       10 * 1000,
