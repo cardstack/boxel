@@ -26,7 +26,6 @@ import {
   identifyCard,
   moduleFrom,
   hasExecutableExtension,
-  isCardDocument,
 } from '@cardstack/runtime-common';
 
 import {

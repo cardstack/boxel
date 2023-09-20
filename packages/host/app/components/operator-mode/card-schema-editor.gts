@@ -10,7 +10,6 @@ import type CardService from '@cardstack/host/services/card-service';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import type { Ready } from '@cardstack/host/resources/file';
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
-import { capitalize } from '@ember/string';
 
 interface Signature {
   Args: {
