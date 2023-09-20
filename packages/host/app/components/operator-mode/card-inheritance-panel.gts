@@ -8,12 +8,14 @@ import {
   ClickableModuleDefinitionContainer,
 } from './definition-container';
 import { Ready } from '@cardstack/host/resources/file';
-import { tracked } from '@glimmer/tracking';
+// @ts-expect-error chaged doesn't have type yet
+import { tracked, cached } from '@glimmer/tracking';
 import moment from 'moment';
 import { type AdoptionChainResource } from '@cardstack/host/resources/adoption-chain';
 import { hash, array } from '@ember/helper';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import { action } from '@ember/object';
+import { registerDestructor } from '@ember/destroyable';
 
 interface Args {
   Element: HTMLElement;
@@ -28,8 +30,21 @@ interface Args {
 }
 
 export default class CardInheritancePanel extends Component<Args> {
-  @tracked cardInstance: CardDef | undefined;
-  @service declare operatorModeStateService: OperatorModeStateService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
+  @tracked private lastModified: string | undefined;
+  private refreshSaveMsg: number | undefined;
+
+  constructor(owner: unknown, args: any) {
+    super(owner, args);
+    this.calculateLastModified();
+    this.refreshSaveMsg = setInterval(
+      () => this.calculateLastModified(),
+      10 * 1000,
+    ) as unknown as number;
+    registerDestructor(this, () => {
+      clearInterval(this.refreshSaveMsg);
+    });
+  }
 
   @action
   updateCodePath(url: URL | undefined) {
@@ -42,8 +57,42 @@ export default class CardInheritancePanel extends Component<Args> {
     return this.args.adoptionChain?.types;
   }
 
+  @cached
+  get lastModifiedConsumer() {
+    this.args.readyFile.lastModified;
+    this.calculateLastModified();
+    return;
+  }
+
+  private calculateLastModified() {
+    if (this.args.readyFile.lastModified != undefined) {
+      if (
+        Date.now() / 1000 - moment(this.args.readyFile.lastModified).unix() <
+        10
+      ) {
+        this.lastModified = 'Last saved just now';
+      } else {
+        this.lastModified = `Last saved ${moment(
+          this.args.readyFile.lastModified,
+        ).fromNow()}`;
+      }
+    } else {
+      this.lastModified = undefined;
+    }
+  }
+
+  private get fileExtension() {
+    if (!this.args.cardInstance) {
+      return '.' + this.args.readyFile.url.split('.').pop() || '';
+    } else {
+      return '';
+    }
+  }
+
   <template>
     <div class='container' ...attributes>
+      {{! this consumes the last modified date so we can recalcuate it when it invalidates}}
+      {{this.lastModifiedConsumer}}
 
       {{#if @cardInstance}}
         {{! JSON case when visting, eg Author/1.json }}
@@ -103,19 +152,4 @@ export default class CardInheritancePanel extends Component<Args> {
       }
     </style>
   </template>
-
-  get lastModified() {
-    if (this.args.readyFile.lastModified != undefined) {
-      return `Last saved ${moment(this.args.readyFile.lastModified).fromNow()}`;
-    }
-    return;
-  }
-
-  get fileExtension() {
-    if (!this.args.cardInstance) {
-      return '.' + this.args.readyFile.url.split('.').pop() || '';
-    } else {
-      return '';
-    }
-  }
 }
