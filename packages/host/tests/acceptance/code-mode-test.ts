@@ -88,6 +88,7 @@ module('Acceptance | code mode tests', function (hooks) {
     // from the global loader
     adapter = new TestRealmAdapter({
       'index.gts': indexCardSource,
+      'pet-person.gts': personCardSource,
       'person.gts': personCardSource,
       'person-entry.json': {
         data: {
@@ -155,6 +156,7 @@ module('Acceptance | code mode tests', function (hooks) {
       'z17.json': '{}',
       'z18.json': '{}',
       'z19.json': '{}',
+      'zzz/zzz/file.json': '{}',
       '.realm.json': {
         name: 'Test Workspace B',
         backgroundURL:
@@ -229,7 +231,7 @@ module('Acceptance | code mode tests', function (hooks) {
       ],
       submode: 'code',
       fileView: 'browser',
-      codePath: `${testRealmURL}Person/1.json`,
+      codePath: `${testRealmURL}person.gts`,
     })!;
 
     await visit(
@@ -283,12 +285,13 @@ module('Acceptance | code mode tests', function (hooks) {
       )}`,
     );
 
-    await waitFor('[data-test-file="person.gts"]');
+    await waitFor('[data-test-file="pet-person.gts"]');
 
-    await click('[data-test-file="person.gts"]');
+    await click('[data-test-file="pet-person.gts"]');
 
-    await waitFor('[data-test-file="person.gts"]');
-    assert.dom('[data-test-file="person.gts"]').hasClass('selected');
+    await waitFor('[data-test-file="pet-person.gts"]');
+    assert.dom('[data-test-file="pet-person.gts"]').hasClass('selected');
+    assert.dom('[data-test-file="person.gts"]').doesNotHaveClass('selected');
 
     await click('[data-test-directory="Person/"]');
     await click('[data-test-file="Person/1.json"]');
@@ -320,6 +323,89 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-file]');
 
     assert.dom('[data-test-directory="Person/"] .icon').hasClass('open');
+  });
+
+  test('open file is within view when the file browser renders', async function (assert) {
+    let openFilename = 'z19.json';
+
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: 'http://test-realm/test/index',
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `http://test-realm/test/${openFilename}`,
+      fileView: 'browser',
+      openDirs: ['Person/'],
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-file]');
+
+    let fileElement = find(`[data-test-file="${openFilename}"]`)!;
+    assert.ok(
+      await elementIsVisible(fileElement),
+      'expected open file to be scrolled into view',
+    );
+  });
+
+  test('open file is within view even when its parent directory is not stored as open', async function (assert) {
+    let openFilename = 'zzz/zzz/file.json';
+
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: 'http://test-realm/test/index',
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `http://test-realm/test/index`,
+      openDirs: ['Person/'],
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `${testRealmURL}${openFilename}`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+
+    await click('[data-test-file-browser-toggle]');
+    await waitFor(`[data-test-file="${openFilename}"]`);
+
+    let fileElement = find(`[data-test-file="${openFilename}"]`)!;
+
+    if (!fileElement) {
+      assert.ok(fileElement, 'file element should exist');
+    } else {
+      assert.ok(
+        await elementIsVisible(fileElement),
+        'expected open file to be scrolled into view',
+      );
+    }
+
+    await click('[data-test-directory="zzz/"]');
+    assert.dom(`[data-test-file="${openFilename}"]`).doesNotExist();
   });
 
   test('opening another file preserves the scroll position', async function (assert) {

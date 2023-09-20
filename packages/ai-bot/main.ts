@@ -55,34 +55,31 @@ Return up to 3 options for the user to select from, exploring a range of things 
 ```\
 Explanatory text\
 Option 1: Description\
-<option>\
 {\
   "id": "originalCardID",\
   "patch": {\
     ...\
   }\
 }\
-</option>\
+\
 Option 2: Description\
-<option>\
 {\
   "id": "originalCardID",\
   "patch": {\
     ...\
   }\
 }\
-</option>\
+\
 Option 3: Description\
-<option>\
+\
 {\
   "id": "originalCardID",\
   "patch": {\
     ...\
   }\
 }\
-</option>\
 ```\
-The data in the option block will be used to update things for the user behind a button so they will not see the content directly - you must give a short text summary before the option block. The option block should not contain the description. Make sure you use the option xml tags.\
+The data in the option block will be used to update things for the user behind a button so they will not see the content directly - you must give a short text summary before the option block.\
 Return only JSON inside each option block, in a compatible format with the one you receive. The contents of any field will be automatically replaced with your changes, and must follow a subset of the same format - you may miss out fields but cannot add new ones. Do not add new nested components, it will fail validation.\
 Modify only the parts you are asked to. Only return modified fields.\
 You must not return any fields that you do not see in the input data.\
@@ -109,10 +106,8 @@ async function sendMessage(
   content: string,
   previous: string | undefined,
 ) {
+  content = content.replace('```', '');
   log.info('Sending', content);
-  if (content.startsWith('option>')) {
-    content = content.replace('option>', '');
-  }
   let messageObject: IContent = {
     body: content,
     msgtype: 'm.text',
@@ -134,17 +129,16 @@ async function sendMessage(
   return await client.sendEvent(room.roomId, 'm.room.message', messageObject);
 }
 
-async function sendOption(client: MatrixClient, room: Room, content: string) {
+async function sendOption(client: MatrixClient, room: Room, content: any) {
   log.info('sending option', content);
-  let parsedContent = JSON.parse(content);
-  let patch = parsedContent['patch'];
+  let patch = content['patch'];
   if (patch['attributes']) {
     patch = patch['attributes'];
   }
-  let id = parsedContent['id'];
+  let id = content['id'];
 
   let messageObject = {
-    body: content,
+    body: 'patch',
     msgtype: 'org.boxel.command',
     formatted_body: 'A patch',
     format: 'org.matrix.custom.html',
@@ -190,7 +184,6 @@ async function sendStream(
       if (unsent > 20) {
         await sendMessage(client, room, message.content, append_to);
         unsent = 0;
-        lastUnsentMessage = undefined;
       } else {
         lastUnsentMessage = message;
         unsent += 1;
@@ -255,7 +248,7 @@ async function getResponse(history: IRoomEvent[]) {
   messages = messages.concat(historical_messages);
   log.info(messages);
   return await openai.chat.completions.create({
-    model: 'gpt-4-0613',
+    model: 'gpt-4',
     messages: messages,
     stream: true,
   });

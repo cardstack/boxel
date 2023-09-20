@@ -19,7 +19,7 @@ import {
   chooseCard,
   type Actions,
   type CodeRef,
-  LooseSingleCardDocument,
+  type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type LoaderService from '../../services/loader-service';
@@ -248,6 +248,12 @@ export default class OperatorModeContainer extends Component<Signature> {
         }
       }
     }
+  });
+
+  saveCard = task(async (card: CardDef) => {
+    await this.withTestWaiters(async () => {
+      await this.cardService.saveModel(card);
+    });
   });
 
   saveSource = task(async (url: URL, content: string) => {
@@ -652,6 +658,7 @@ export default class OperatorModeContainer extends Component<Signature> {
           <CodeMode
             @delete={{perform this.delete}}
             @saveSourceOnClose={{perform this.saveSource}}
+            @saveCardOnClose={{perform this.saveCard}}
           />
         {{else}}
           <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
