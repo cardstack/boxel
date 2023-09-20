@@ -474,11 +474,20 @@ export default class CodeMode extends Component<Signature> {
     }
   }
 
-  get isInstance() {
-    return (
-      isReady(this.openFile.current) &&
-      this.openFile.current.name.endsWith('.json')
-    );
+  get isCardInstance() {
+    if (
+      !isReady(this.openFile.current) ||
+      !this.openFile.current.name.endsWith('.json')
+    ) {
+      return false;
+    }
+
+    try {
+      let cardDoc = JSON.parse(this.readyFile.content);
+      return isCardDocument(cardDoc);
+    } catch (e) {
+      throw new Error('Unparsable JSON file');
+    }
   }
 
   <template>
@@ -615,7 +624,7 @@ export default class CodeMode extends Component<Signature> {
           >
             <div class='inner-container'>
               {{#if this.isReady}}
-                {{#if this.isInstance}}
+                {{#if this.isCardInstance}}
                   {{#if this.cardResource.value}}
                     <CardPreviewPanel
                       @card={{this.cardResource.value}}
