@@ -55,6 +55,11 @@ export default class RecentFilesService extends Service {
     }
 
     this.recentFiles.unshift(file);
+
+    if (this.recentFiles.length > 100) {
+      this.recentFiles.pop();
+    }
+
     this.persistRecentFiles();
   }
 
