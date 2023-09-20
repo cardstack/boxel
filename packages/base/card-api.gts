@@ -1601,6 +1601,14 @@ export function isCard(card: any): card is CardDef {
   return isCardOrField(card) && !('isFieldDef' in card.constructor);
 }
 
+export function isCompoundField(card: any) {
+  return (
+    isCardOrField(card) &&
+    'isFieldDef' in card.constructor &&
+    !(primitive in card)
+  );
+}
+
 class DefaultCardDefTemplate extends GlimmerComponent<{
   Args: {
     model: CardDef;

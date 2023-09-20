@@ -8,6 +8,7 @@ import {
   type BaseDefComponent,
   CardContext,
   isCard,
+  isCompoundField,
 } from './card-api';
 import { getField } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
@@ -72,6 +73,20 @@ export function getBoxComponent(
           @context={{context}}
         />
       </CardContainer>
+    {{else if (isCompoundField model.value)}}
+      <div
+        data-test-compound-field-component
+        {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
+        ...attributes
+      >
+        <Implementation
+          @model={{model.value}}
+          @fields={{internalFields}}
+          @set={{model.set}}
+          @fieldName={{model.name}}
+          @context={{context}}
+        />
+      </div>
     {{else}}
       <Implementation
         @model={{model.value}}
