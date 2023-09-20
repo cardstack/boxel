@@ -114,10 +114,12 @@ export default class CardSchemaEditor extends Component<Signature> {
                     🟪
                   </span>
                   {{#let
-                    (capitalize (this.cleanupCardType (cardId field.card)))
-                    as |cardType|
+                    (this.fieldCardDisplayName field.card)
+                    as |cardDisplayName|
                   }}
-                    <span data-test-card-type={{cardType}}>{{cardType}}</span>
+                    <span
+                      data-test-card-display-name={{cardDisplayName}}
+                    >{{cardDisplayName}}</span>
                   {{/let}}
                 </div>
               </div>
@@ -131,33 +133,17 @@ export default class CardSchemaEditor extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
 
-  cleanupCardType(value: string) {
-    let path = new URL(value).pathname; // Examples of pathname: "/base/string/default", "/drafts/pet/Pet"
-
-    if (path.endsWith('/default')) {
-      path = path.slice(0, -'/default'.length);
-    }
-
-    let cardType = path.split('/').pop();
-    if (!cardType) {
-      throw new Error(`Could not parse card type from ${value}`);
-    } else {
-      return cardType;
-    }
-  }
-
   @action
   isOwnField(fieldName: string): boolean {
     return Object.keys(
       Object.getOwnPropertyDescriptors(this.args.card.prototype),
     ).includes(fieldName);
   }
-}
 
-function cardId(card: Type | CodeRef): string {
-  if (isCodeRef(card)) {
-    return internalKeyFor(card, undefined);
-  } else {
-    return card.id;
+  fieldCardDisplayName(card: Type | CodeRef): string {
+    if (isCodeRef(card)) {
+      return internalKeyFor(card, undefined);
+    }
+    return card.displayName;
   }
 }
