@@ -906,6 +906,9 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert
         .dom('[data-test-code-mode-card-preview-body ] .edit-card')
         .exists();
+
+      // Only preview is shown in the right column when viewing an instance, no schema editor
+      assert.dom('[data-test-card-schema]').doesNotExist();
     });
   });
 

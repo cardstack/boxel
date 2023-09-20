@@ -59,6 +59,7 @@ class Edit extends Component<typeof BigIntegerField> {
 }
 
 export default class BigIntegerField extends FieldDef {
+  static displayName = 'BigInteger';
   static [primitive]: bigint;
   static [serialize](val: bigint) {
     return _serialize(val);
