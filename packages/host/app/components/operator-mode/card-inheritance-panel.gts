@@ -57,6 +57,7 @@ export default class CardInheritancePanel extends Component<Signature> {
         {{#if @adoptionChainManager.loadingAllChains}}
           <div>Loading...</div>
         {{else}}
+          <h3>Inheritance Panel</h3>
           <div class='inheritance-chain'>
             <InstanceDefinitionContainer
               @name={{@cardInstance.title}}
@@ -79,8 +80,8 @@ export default class CardInheritancePanel extends Component<Signature> {
           </div>
         {{/if}}
       {{else}}
-
         {{! Module case when visting, eg author.gts }}
+        <h3>In This File</h3>
         {{#if @adoptionChainManager.loadingAllChains}}
           <div>Loading...</div>
         {{else}}
@@ -89,28 +90,29 @@ export default class CardInheritancePanel extends Component<Signature> {
               class='inheritance-chain
                 {{if (@adoptionChainManager.isSelected ct) "selected"}}'
             >
-
-              <ModuleDefinitionContainer
-                @name={{ct.type.displayName}}
-                @fileExtension={{ct.type.moduleMeta.extension}}
-                @realmInfo={{ct.type.moduleMeta.realmInfo}}
-                @isActive={{true}}
-                @actions={{array
-                  (hash label='Delete' handler=@delete icon='icon-trash')
-                }}
-              />
-              {{#if ct.type.super}}
-                <div>Inherits from</div>
-                <ClickableModuleDefinitionContainer
-                  @name={{ct.type.super.displayName}}
-                  @fileExtension={{ct.type.super.moduleMeta.extension}}
-                  @realmInfo={{ct.type.super.moduleMeta.realmInfo}}
-                  @onSelectDefinition={{this.updateCodePath}}
-                  @url={{ct.type.super.module}}
-                />
-              {{/if}}
+              <div>{{ct.type.displayName}}</div>
             </div>
           {{/each}}
+        {{/if}}
+        <h3>Inheritance Panel</h3>
+        <ModuleDefinitionContainer
+          @name={{this.cardType.type.displayName}}
+          @fileExtension={{this.cardType.type.moduleMeta.extension}}
+          @realmInfo={{this.cardType.type.moduleMeta.realmInfo}}
+          @isActive={{true}}
+          @actions={{array
+            (hash label='Delete' handler=@delete icon='icon-trash')
+          }}
+        />
+        {{#if this.cardType.type.super}}
+          <div>Inherits from</div>
+          <ClickableModuleDefinitionContainer
+            @name={{this.cardType.type.super.displayName}}
+            @fileExtension={{this.cardType.type.super.moduleMeta.extension}}
+            @realmInfo={{this.cardType.type.super.moduleMeta.realmInfo}}
+            @onSelectDefinition={{this.updateCodePath}}
+            @url={{this.cardType.type.super.module}}
+          />
         {{/if}}
       {{/if}}
     </div>
