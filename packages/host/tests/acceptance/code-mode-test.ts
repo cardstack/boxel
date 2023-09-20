@@ -90,7 +90,6 @@ module('Acceptance | code mode tests', function (hooks) {
       'index.gts': indexCardSource,
       'pet-person.gts': personCardSource,
       'person.gts': personCardSource,
-      person: personCardSource, //TODO:CS-5982
       'person-entry.json': {
         data: {
           type: 'card',
@@ -588,11 +587,11 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitUntil(() => find('[data-test-card-instance-definition]'));
 
     assert.dom('[data-test-card-module-definition]').includesText('Card');
-    // assert
-    //   .dom(
-    //     '[data-test-card-module-definition] [data-test-definition-file-extension]',
-    //   )
-    //   .includesText('.gts'); //TODO:CS-5982
+    assert
+      .dom(
+        '[data-test-card-module-definition] [data-test-definition-file-extension]',
+      )
+      .includesText('.gts');
     assert
       .dom(
         '[data-test-card-module-definition] [data-test-definition-realm-name]',
