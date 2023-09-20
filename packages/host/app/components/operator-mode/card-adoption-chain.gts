@@ -11,6 +11,7 @@ import { service } from '@ember/service';
 import { getCardType } from '@cardstack/host/resources/card-type';
 import { tracked } from '@glimmer/tracking';
 import { type Type } from '@cardstack/host/resources/card-type';
+import { restartableTask } from 'ember-concurrency';
 
 interface Signature {
   Args: {
@@ -52,7 +53,7 @@ export default class CardAdoptionChain extends Component<Signature> {
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
-    this.loadInheritanceChain();
+    this.loadInheritanceChain.perform();
   }
 
   @cached
@@ -60,7 +61,7 @@ export default class CardAdoptionChain extends Component<Signature> {
     return new ModuleSyntax(this.args.file.content);
   }
 
-  async loadInheritanceChain() {
+  loadInheritanceChain = restartableTask(async () => {
     let fileUrl = this.args.file.url;
     let module = this.args.importedModule;
 
