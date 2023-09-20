@@ -36,35 +36,32 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
   }
 
   <template>
-    {{#if @realmInfo}}
-      <div class='container {{if @isActive "active"}}' ...attributes>
-        <div class='banner'>
-          <Label class='banner-title'>
-            {{@title}}</Label>
-          <span
-            class='banner-title'
-            data-test-definition-file-extension
-          >{{@fileExtension}}</span>
-        </div>
-        <div class='content'>
-          <div class='definition-info'>
+    <div class='container {{if @isActive "active"}}' ...attributes>
+      <div class='banner'>
+        <Label class='banner-title'>
+          {{@title}}</Label>
+        <span
+          class='banner-title'
+          data-test-definition-file-extension
+        >{{@fileExtension}}</span>
+      </div>
+      <div class='content'>
+        <div class='definition-info'>
+          {{#if @realmInfo}}
             <div class='realm-info'>
               <img src={{this.realmIcon}} alt='realm-icon' />
               <Label class='realm-name' data-test-definition-realm-name>in
                 {{this.realmName}}</Label>
             </div>
-            <div
-              data-test-definition-name
-              class='definition-name'
-            >{{@name}}</div>
-          </div>
-          {{#if @isActive}}
-            {{yield to='activeContent'}}
           {{/if}}
+          <div data-test-definition-name class='definition-name'>{{@name}}</div>
         </div>
-
+        {{#if @isActive}}
+          {{yield to='activeContent'}}
+        {{/if}}
       </div>
-    {{/if}}
+
+    </div>
     <style>
       .container {
         background-color: var(--boxel-light);
