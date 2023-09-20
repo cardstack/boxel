@@ -16,13 +16,21 @@ interface AdoptionChainManagerArgs {
   named: { importResource: ImportResource | undefined; loader: Loader };
 }
 
+type ElementInFile = CardInFile;
+
+// There should be a more generic interface to this
+interface CardInFile {
+  cardType: CardType;
+  card: typeof BaseDef;
+}
+
 // forwards the card type resource (doesn't care about the card type resource)
 export class AdoptionChainManager extends Resource<AdoptionChainManagerArgs> {
   importResource: ImportResource | undefined;
   @tracked cards: (typeof BaseDef)[] = [];
-  @tracked _cardTypes: CardType[] = []; // all cards exported in module
   ready: Promise<void> | undefined;
-  selections = new TrackedMap<CardType, boolean>();
+  @tracked elementsInFile: ElementInFile[] = [];
+  selections = new TrackedMap<ElementInFile, boolean>();
 
   modify(_positional: never[], named: AdoptionChainManagerArgs['named']) {
     this.importResource = named['importResource'];
@@ -33,32 +41,20 @@ export class AdoptionChainManager extends Resource<AdoptionChainManagerArgs> {
     return this.load.isRunning;
   }
 
-  isSelected(cardType: CardType | undefined) {
-    if (cardType === undefined) {
+  isSelected(elementsInFile: CardInFile | undefined) {
+    if (elementsInFile === undefined) {
       return false;
     }
-    return this.selections.get(cardType) || false;
+    return this.selections.get(elementsInFile) || false;
   }
 
-  get cardTypes() {
-    return this._cardTypes;
-  }
-
-  get types() {
-    return this._cardTypes.map((t) => t.type);
-  }
-
-  get selectedCardType() {
-    for (let [type, selected] of this.selections.entries()) {
+  get selectedElement() {
+    for (let [el, selected] of this.selections.entries()) {
       if (selected) {
-        return type;
+        return el;
       }
     }
     return undefined;
-  }
-
-  get loadingAllChains() {
-    return this._cardTypes.some((t) => t.loading);
   }
 
   private load = restartableTask(async () => {
@@ -67,11 +63,15 @@ export class AdoptionChainManager extends Resource<AdoptionChainManagerArgs> {
     if (module === undefined) {
       throw new Error('module is undefined');
     }
-    this.cards = cardsOrFieldsFromModule(module);
-    this._cardTypes = this.cards.map((c) => getCardType(this, () => c));
-    //setting default card type
-    if (this._cardTypes.length > 0) {
-      this.selections.set(this._cardTypes[0], true);
+    let cards = cardsOrFieldsFromModule(module);
+    cards.map((card) => {
+      this.elementsInFile.push({
+        cardType: getCardType(this, () => card),
+        card: card,
+      });
+    });
+    if (this.elementsInFile.length > 0) {
+      this.selections.set(this.elementsInFile[0], true);
     }
   });
 }

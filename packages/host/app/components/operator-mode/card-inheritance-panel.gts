@@ -1,7 +1,7 @@
 import Component from '@glimmer/component';
 import { service } from '@ember/service';
-import { type CardDef } from 'https://cardstack.com/base/card-api';
-import { type RealmInfo } from '@cardstack/runtime-common';
+import { BaseDef, type CardDef } from 'https://cardstack.com/base/card-api';
+import { cardTypeDisplayName, type RealmInfo } from '@cardstack/runtime-common';
 import {
   InstanceDefinitionContainer,
   ModuleDefinitionContainer,
@@ -30,16 +30,16 @@ export default class CardInheritancePanel extends Component<Signature> {
   @tracked cardInstance: CardDef | undefined;
   @service declare operatorModeStateService: OperatorModeStateService;
 
-  get adoptionChainTypes() {
-    return this.args.adoptionChainManager?.types;
-  }
-
   get cardType() {
-    return this.args.adoptionChainManager?.selectedCardType;
+    return this.args.adoptionChainManager?.selectedElement?.cardType;
   }
 
-  get cardTypes() {
-    return this.args.adoptionChainManager?.cardTypes;
+  get elementsInFile() {
+    return this.args.adoptionChainManager?.elementsInFile;
+  }
+
+  get isLoading() {
+    return this.args.adoptionChainManager?.loading || this.cardType?.loading;
   }
 
   @action
@@ -51,12 +51,11 @@ export default class CardInheritancePanel extends Component<Signature> {
 
   <template>
     <div class='container' ...attributes>
-
-      {{#if @cardInstance}}
-        {{! JSON case when visting, eg Author/1.json }}
-        {{#if @adoptionChainManager.loadingAllChains}}
-          <div>Loading...</div>
-        {{else}}
+      {{#if this.isLoading}}
+        <div>Loading...</div>
+      {{else}}
+        {{#if @cardInstance}}
+          {{! JSON case when visting, eg Author/1.json }}
           <h3>Inheritance Panel</h3>
           <div class='inheritance-chain'>
             <InstanceDefinitionContainer
@@ -78,41 +77,37 @@ export default class CardInheritancePanel extends Component<Signature> {
               @url={{this.cardType.type.module}}
             />
           </div>
-        {{/if}}
-      {{else}}
-        {{! Module case when visting, eg author.gts }}
-        <h3>In This File</h3>
-        {{#if @adoptionChainManager.loadingAllChains}}
-          <div>Loading...</div>
         {{else}}
-          {{#each this.cardTypes as |ct|}}
+          {{! Module case when visting, eg author.gts }}
+          <h3>In This File</h3>
+          {{#each this.elementsInFile as |el|}}
             <div
               class='inheritance-chain
-                {{if (@adoptionChainManager.isSelected ct) "selected"}}'
+                {{if (@adoptionChainManager.isSelected el) "selected"}}'
             >
-              <div>{{ct.type.displayName}}</div>
+              <div>{{this.getCardTypeDisplayName el.card}}</div>
             </div>
           {{/each}}
-        {{/if}}
-        <h3>Inheritance Panel</h3>
-        <ModuleDefinitionContainer
-          @name={{this.cardType.type.displayName}}
-          @fileExtension={{this.cardType.type.moduleMeta.extension}}
-          @realmInfo={{this.cardType.type.moduleMeta.realmInfo}}
-          @isActive={{true}}
-          @actions={{array
-            (hash label='Delete' handler=@delete icon='icon-trash')
-          }}
-        />
-        {{#if this.cardType.type.super}}
-          <div>Inherits from</div>
-          <ClickableModuleDefinitionContainer
-            @name={{this.cardType.type.super.displayName}}
-            @fileExtension={{this.cardType.type.super.moduleMeta.extension}}
-            @realmInfo={{this.cardType.type.super.moduleMeta.realmInfo}}
-            @onSelectDefinition={{this.updateCodePath}}
-            @url={{this.cardType.type.super.module}}
+          <h3>Inheritance Panel</h3>
+          <ModuleDefinitionContainer
+            @name={{this.cardType.type.displayName}}
+            @fileExtension={{this.cardType.type.moduleMeta.extension}}
+            @realmInfo={{this.cardType.type.moduleMeta.realmInfo}}
+            @isActive={{true}}
+            @actions={{array
+              (hash label='Delete' handler=@delete icon='icon-trash')
+            }}
           />
+          {{#if this.cardType.type.super}}
+            <div>Inherits from</div>
+            <ClickableModuleDefinitionContainer
+              @name={{this.cardType.type.super.displayName}}
+              @fileExtension={{this.cardType.type.super.moduleMeta.extension}}
+              @realmInfo={{this.cardType.type.super.moduleMeta.realmInfo}}
+              @onSelectDefinition={{this.updateCodePath}}
+              @url={{this.cardType.type.super.module}}
+            />
+          {{/if}}
         {{/if}}
       {{/if}}
     </div>
@@ -146,5 +141,10 @@ export default class CardInheritancePanel extends Component<Signature> {
     } else {
       return '';
     }
+  }
+
+  getCardTypeDisplayName(t: typeof BaseDef) {
+    let card = new t();
+    return cardTypeDisplayName(card);
   }
 }
