@@ -724,28 +724,28 @@ module('Acceptance | code mode tests', function (hooks) {
 
     assert
       .dom(
-        `[data-test-card-schema="Person"] [data-test-field-name="firstName"] [data-test-card-type="String"]`,
+        `[data-test-card-schema="Person"] [data-test-field-name="firstName"] [data-test-card-display-name="String"]`,
       )
       .exists();
     assert
       .dom(
-        `[data-test-card-schema="Person"] [data-test-field-name="lastName"] [data-test-card-type="String"]`,
+        `[data-test-card-schema="Person"] [data-test-field-name="lastName"] [data-test-card-display-name="String"]`,
       )
       .exists();
 
     assert
       .dom(
-        `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-card-type="String"]`,
+        `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-card-display-name="String"]`,
       )
       .exists();
     assert
       .dom(
-        `[data-test-card-schema="Card"] [data-test-field-name="description"] [data-test-card-type="String"]`,
+        `[data-test-card-schema="Card"] [data-test-field-name="description"] [data-test-card-display-name="String"]`,
       )
       .exists();
     assert
       .dom(
-        `[data-test-card-schema="Card"] [data-test-field-name="thumbnailURL"] [data-test-card-type="String"]`,
+        `[data-test-card-schema="Card"] [data-test-field-name="thumbnailURL"] [data-test-card-display-name="String"]`,
       )
       .exists();
 
