@@ -20,7 +20,7 @@ interface Signature {
   Args: {
     realmInfo: RealmInfo | null;
     readyFile: Ready;
-    cardInstance: CardDef | null;
+    cardInstance: CardDef | undefined;
     adoptionChainManager?: AdoptionChainManager;
     delete: () => void;
   };

@@ -6,6 +6,7 @@ import type RouterService from '@ember/routing/router-service';
 import { RealmPaths, type LocalPath } from '@cardstack/runtime-common/paths';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
+import Modifier, { PositionalArgs } from 'ember-modifier';
 import { fn } from '@ember/helper';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { directory } from '@cardstack/host/resources/directory';
@@ -28,6 +29,9 @@ export default class Directory extends Component<Args> {
             <button
               data-test-file={{entryPath}}
               {{on 'click' (fn this.openFile entryPath)}}
+              {{ScrollIntoViewModifier
+                (fileIsSelected entryPath this.operatorModeStateService)
+              }}
               class='file
                 {{if
                   (fileIsSelected entryPath this.operatorModeStateService)
@@ -144,14 +148,45 @@ function fileIsSelected(
   localPath: string,
   operatorModeStateService: OperatorModeStateService,
 ) {
-  return operatorModeStateService.state.codePath?.pathname.endsWith(localPath);
+  return operatorModeStateService.codePathRelativeToRealm === localPath;
 }
 
 function isOpen(
   path: string,
   operatorModeStateService: OperatorModeStateService,
 ) {
-  return (operatorModeStateService.state.openDirs ?? []).find((item) =>
-    item.startsWith(path),
-  );
+  let directoryIsPersistedOpen = (
+    operatorModeStateService.state.openDirs ?? []
+  ).find((item) => item.startsWith(path));
+
+  return directoryIsPersistedOpen;
+}
+
+interface ScrollIntoViewModifierArgs {
+  Positional: [boolean];
+}
+
+interface ScrollIntoViewModifierSignature {
+  Element: Element;
+  Args: ScrollIntoViewModifierArgs;
+}
+
+class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModifierSignature> {
+  element!: Element;
+  #didSetup = false;
+
+  modify(
+    element: Element,
+    [shouldScrollIntoView]: PositionalArgs<ScrollIntoViewModifierSignature>,
+  ): void {
+    this.element = element;
+
+    if (!this.#didSetup) {
+      this.#didSetup = true;
+
+      if (shouldScrollIntoView) {
+        this.element.scrollIntoView({ block: 'center' });
+      }
+    }
+  }
 }
