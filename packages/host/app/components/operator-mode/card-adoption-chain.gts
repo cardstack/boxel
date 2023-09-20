@@ -99,13 +99,7 @@ export default class CardAdoptionChain extends Component<Signature> {
     }
 
     this.cardInheritanceChain = cardInheritanceChain;
-
-    // TODO: module export must come from the export selection in the left column - above where we get the card
-    // TODO: base card should be showing title - is that a bug? Bug in syntax analysis?
-    // TODO: Base unites fields and cards - should we even show it? Discuss with the team
-    // TODO: For realm icons - need to make a separate request to .gts and extract the header (just  a normal fetch request)
-    // TODO: Make a ticket for globally cached realm assets
-  }
+  });
 }
 
 function cardsFromModule(
