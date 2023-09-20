@@ -49,6 +49,7 @@ function _serialize(val: number): string {
 }
 
 export default class NumberField extends FieldDef {
+  static displayName = 'Number';
   static [primitive]: number;
   static [useIndexBasedKey]: never;
   static async [deserialize]<T extends BaseDefConstructor>(

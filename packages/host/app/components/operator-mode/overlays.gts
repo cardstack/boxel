@@ -32,7 +32,8 @@ export default class OperatorModeOverlays extends Component<Signature> {
   isEmbeddedCard(renderedCard: RenderedCardForOverlayActions) {
     return (
       renderedCard.fieldType === 'contains' ||
-      renderedCard.fieldType === 'linksTo'
+      renderedCard.fieldType === 'linksTo' ||
+      renderedCard.fieldType === 'linksToMany'
     );
   }
 

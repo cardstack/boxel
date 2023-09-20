@@ -26,6 +26,7 @@ const Format = new Intl.DateTimeFormat('en-US', {
 const datetimeFormat = `yyyy-MM-dd'T'HH:mm`;
 
 export default class DatetimeField extends FieldDef {
+  static displayName = 'DateTime';
   static [primitive]: Date;
   static [serialize](date: Date) {
     return date.toISOString();

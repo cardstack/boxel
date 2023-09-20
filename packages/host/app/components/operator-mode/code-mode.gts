@@ -70,6 +70,7 @@ import RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
 
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
@@ -709,6 +710,11 @@ export default class CodeMode extends Component<Signature> {
                   @card={{this.loadedCard}}
                   @realmIconURL={{this.realmIconURL}}
                   data-test-card-resource-loaded
+                />
+              {{else if this.importedModule.module}}
+                <CardAdoptionChain
+                  @file={{this.readyFile}}
+                  @importedModule={{this.importedModule.module}}
                 />
               {{else if this.cardError}}
                 {{this.cardError.message}}

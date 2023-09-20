@@ -13,6 +13,7 @@ function toHtml(markdown: string | null) {
 }
 
 export default class MarkdownField extends FieldDef {
+  static displayName = 'Markdown';
   static [primitive]: string;
   static [useIndexBasedKey]: never;
 

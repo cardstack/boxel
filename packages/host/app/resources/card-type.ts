@@ -39,6 +39,7 @@ export interface Type {
     extension: string;
     realmInfo: RealmInfo;
   };
+  codeRef: CodeRef;
 }
 
 export class CardType extends Resource<Args> {
@@ -127,6 +128,7 @@ export class CardType extends Resource<Args> {
       displayName: card.prototype.constructor.displayName || 'Card',
       fields: fieldTypes,
       moduleMeta,
+      codeRef: ref,
     };
     this.typeCache.set(id, type);
     return type;
