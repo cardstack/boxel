@@ -1713,6 +1713,7 @@ class IDField extends FieldDef {
 }
 
 export class StringField extends FieldDef {
+  static displayName = 'String';
   static [primitive]: string;
   static [useIndexBasedKey]: never;
   static embedded = class Embedded extends Component<typeof this> {

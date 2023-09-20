@@ -10,6 +10,7 @@ import { registerDestructor } from '@ember/destroyable';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { enqueueTask } from 'ember-concurrency';
 import { service } from '@ember/service';
+import type Owner from '@ember/owner';
 import type CardService from '../services/card-service';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import CardEditor from './card-editor';
@@ -42,7 +43,7 @@ export default class CreateCardModal extends Component {
     | undefined = undefined;
   @tracked zIndex = 20;
 
-  constructor(owner: unknown, args: {}) {
+  constructor(owner: Owner, args: {}) {
     super(owner, args);
     (globalThis as any)._CARDSTACK_CREATE_NEW_CARD = this;
     registerDestructor(this, () => {

@@ -5,6 +5,7 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
 import { task } from 'ember-concurrency';
 import debounce from 'lodash/debounce';
 import type { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
@@ -195,7 +196,7 @@ export default class CardCatalogModal extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
 
-  constructor(owner: unknown, args: {}) {
+  constructor(owner: Owner, args: {}) {
     super(owner, args);
     (globalThis as any)._CARDSTACK_CARD_CHOOSER = this;
     registerDestructor(this, () => {

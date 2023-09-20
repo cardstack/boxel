@@ -16,7 +16,9 @@ import stringify from 'safe-stable-stringify';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import { registerDestructor } from '@ember/destroyable';
+import { RealmPaths } from '@cardstack/runtime-common/paths';
 import window from 'ember-window-mock';
+import type RouterService from '@ember/routing/router-service';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
@@ -59,6 +61,7 @@ export default class OperatorModeStateService extends Service {
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
   @service declare recentFilesService: RecentFilesService;
+  @service declare router: RouterService;
 
   private subscription: { url: string; unsubscribe: () => void } | undefined;
 
@@ -241,9 +244,48 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
+  get codePathRelativeToRealm() {
+    if (this.state.codePath) {
+      let realmPath = new RealmPaths(this.cardService.defaultURL.href);
+      return realmPath.local(this.state.codePath!);
+    } else {
+      return undefined;
+    }
+  }
+
   updateCodePath(codePath: URL | null) {
     this.state.codePath = codePath;
+    this.updateOpenDirsForNestedPath();
     this.schedulePersist();
+  }
+
+  replaceCodePath(codePath: URL | null) {
+    // replace history explicitly
+    // typically used when, serving a redirect in the code path
+    // solve UX issues with back button referring back to request url of redirect
+    // when it should refer back to the previous code path
+    this.state.codePath = codePath;
+    this.router.replaceWith('card', {
+      queryParams: {
+        operatorModeState: this.serialize(),
+      },
+    });
+  }
+
+  private updateOpenDirsForNestedPath() {
+    let localPath = this.codePathRelativeToRealm;
+
+    if (localPath) {
+      let containingDirectory = localPath.split('/').slice(0, -1).join('/');
+
+      if (containingDirectory) {
+        containingDirectory += '/';
+
+        if (!this.openDirs.includes(containingDirectory)) {
+          this.toggleOpenDir(containingDirectory);
+        }
+      }
+    }
   }
 
   updateFileView(fileView: FileView) {

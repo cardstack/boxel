@@ -7,6 +7,7 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     variant?: 'full-width';
+    hideIcon?: boolean;
   };
   Blocks: {
     default: [];
@@ -16,7 +17,7 @@ interface Signature {
 const AddButton: TemplateOnlyComponent<Signature> = <template>
   {{#if (eq @variant 'full-width')}}
     <button class='add-button--full-width' ...attributes>
-      {{svgJar 'icon-plus' width='20px' height='20px'}}
+      {{unless @hideIcon (svgJar 'icon-plus' width='20px' height='20px')}}
       {{yield}}
     </button>
   {{else}}

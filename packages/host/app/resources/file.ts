@@ -17,6 +17,7 @@ interface Args {
   named: {
     url: string;
     onStateChange?: (state: FileResource['state']) => void;
+    onRedirect?: (url: string) => void;
   };
 }
 
@@ -49,6 +50,7 @@ export type FileResource = Loading | ServerError | NotFound | Ready;
 class _FileResource extends Resource<Args> {
   private declare _url: string;
   private onStateChange?: ((state: FileResource['state']) => void) | undefined;
+  private onRedirect?: ((url: string) => void) | undefined;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
 
   @tracked private innerState: FileResource = {
@@ -90,10 +92,11 @@ class _FileResource extends Resource<Args> {
   }
 
   modify(_positional: never[], named: Args['named']) {
-    let { url, onStateChange } = named;
+    let { url, onStateChange, onRedirect } = named;
 
     this._url = url;
     this.onStateChange = onStateChange;
+    this.onRedirect = onRedirect;
     this.read.perform();
   }
 
@@ -103,11 +106,13 @@ class _FileResource extends Resource<Args> {
     if (this.onStateChange && this.innerState.state !== prevState.state) {
       this.onStateChange(this.innerState.state);
     }
-
-    if (newState.state === 'ready') {
-      this.recentFilesService.addRecentFile(newState.url);
-      if (this._url != newState.url) {
-        this.operatorModeStateService.updateCodePath(new URL(newState.url));
+    if (this.innerState.state === 'ready') {
+      this.recentFilesService.addRecentFile(this.innerState.url);
+      if (this.onRedirect && this._url != this.innerState.url) {
+        // code below handles redirect returned by the realm server
+        // this updates code path to be in-sync with the file.url
+        // For example, when inputting `drafts/author` will redirect to `drafts/author.gts`
+        this.onRedirect(this.innerState.url);
       }
     }
   }

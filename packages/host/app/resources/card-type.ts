@@ -31,17 +31,19 @@ export interface Type {
   displayName: string;
   super: Type | undefined;
   fields: { name: string; card: Type | CodeRef; type: FieldType }[];
+  codeRef: CodeRef;
 }
 
 export class CardType extends Resource<Args> {
   @tracked type: Type | undefined;
   declare loader: Loader;
   typeCache: Map<string, Type> = new Map();
-
+  ready: Promise<void> | undefined;
   modify(_positional: never[], named: Args['named']) {
     let { definition, loader } = named;
     this.loader = loader;
     this.assembleType.perform(definition);
+    this.ready = this.assembleType.perform(definition);
   }
 
   private assembleType = restartableTask(async (card: typeof BaseDef) => {
@@ -52,7 +54,7 @@ export class CardType extends Resource<Args> {
     this.type = maybeType;
   });
 
-  async toType(
+  private async toType(
     card: typeof BaseDef,
     stack: (typeof BaseDef)[] = [],
   ): Promise<Type | CodeRef> {
@@ -104,6 +106,7 @@ export class CardType extends Resource<Args> {
       super: superType,
       displayName: card.prototype.constructor.displayName || 'Card',
       fields: fieldTypes,
+      codeRef: ref,
     };
     this.typeCache.set(id, type);
     return type;

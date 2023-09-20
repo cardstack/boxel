@@ -338,6 +338,7 @@ const roomMemberCache = new WeakMap<RoomField, Map<string, RoomMemberField>>();
 const roomStateCache = new WeakMap<RoomField, RoomState>();
 
 export class RoomField extends FieldDef {
+  static displayName = 'Room';
   // This can be used  to get the attached `cardInstance` like:
   //   Reflect.getProtypeOf(roomFieldInstance).constructor.getAttachedCard(cardInstance);
   static getAttachedCard(id: string) {

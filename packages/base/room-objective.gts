@@ -51,6 +51,7 @@ class View extends Component<typeof RoomObjectiveField> {
 }
 
 export class RoomObjectiveField extends FieldDef {
+  static displayName = 'RoomObjective';
   @field room = contains(RoomField);
   @field usersThatFinishedTask = containsMany(RoomMemberField, {
     computeVia: function (this: RoomObjectiveField) {
