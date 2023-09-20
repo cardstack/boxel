@@ -10,7 +10,6 @@ import {
   type CardType,
 } from '@cardstack/host/resources/card-type';
 import { restartableTask } from 'ember-concurrency';
-import { TrackedMap } from 'tracked-built-ins';
 
 interface AdoptionChainManagerArgs {
   named: { importResource: ImportResource | undefined; loader: Loader };
@@ -27,10 +26,9 @@ interface CardInFile {
 // forwards the card type resource (doesn't care about the card type resource)
 export class AdoptionChainManager extends Resource<AdoptionChainManagerArgs> {
   importResource: ImportResource | undefined;
-  @tracked cards: (typeof BaseDef)[] = [];
   ready: Promise<void> | undefined;
   @tracked elementsInFile: ElementInFile[] = [];
-  selections = new TrackedMap<ElementInFile, boolean>();
+  @tracked selected: ElementInFile | undefined;
 
   modify(_positional: never[], named: AdoptionChainManagerArgs['named']) {
     this.importResource = named['importResource'];
@@ -41,20 +39,12 @@ export class AdoptionChainManager extends Resource<AdoptionChainManagerArgs> {
     return this.load.isRunning;
   }
 
-  isSelected(elementsInFile: CardInFile | undefined) {
-    if (elementsInFile === undefined) {
-      return false;
-    }
-    return this.selections.get(elementsInFile) || false;
+  get selectedElement() {
+    return this.selected;
   }
 
-  get selectedElement() {
-    for (let [el, selected] of this.selections.entries()) {
-      if (selected) {
-        return el;
-      }
-    }
-    return undefined;
+  isSelected(el: ElementInFile) {
+    return el == this.selected;
   }
 
   private load = restartableTask(async () => {
@@ -71,7 +61,7 @@ export class AdoptionChainManager extends Resource<AdoptionChainManagerArgs> {
       });
     });
     if (this.elementsInFile.length > 0) {
-      this.selections.set(this.elementsInFile[0], true);
+      this.selected = this.elementsInFile[0];
     }
   });
 }
