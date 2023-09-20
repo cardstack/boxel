@@ -35,7 +35,7 @@ export class AdoptionChainManager extends Resource<AdoptionChainManagerArgs> {
     this.ready = this.load.perform();
   }
 
-  get loading() {
+  get isLoading() {
     return this.load.isRunning;
   }
 

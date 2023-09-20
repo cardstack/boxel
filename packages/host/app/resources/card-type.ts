@@ -56,7 +56,7 @@ export class CardType extends Resource<Args> {
     this.ready = this.assembleType.perform(definition);
   }
 
-  get loading() {
+  get isLoading() {
     return this.assembleType.isRunning;
   }
 

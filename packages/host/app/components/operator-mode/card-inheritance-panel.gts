@@ -44,7 +44,9 @@ export default class CardInheritancePanel extends Component<Signature> {
   }
 
   get isLoading() {
-    return this.args.adoptionChainManager?.loading || this.cardType?.loading;
+    return (
+      this.args.adoptionChainManager?.isLoading || this.cardType?.isLoading
+    );
   }
 
   @action
