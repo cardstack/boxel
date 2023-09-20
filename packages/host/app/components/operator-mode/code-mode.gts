@@ -7,7 +7,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
-import { task, restartableTask, timeout } from 'ember-concurrency';
+import { task, restartableTask, timeout, all } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
@@ -461,8 +461,17 @@ export default class CodeMode extends Component<Signature> {
       // writes source code and non-card instance valid JSON,
       // then updates the state of the file resource
       this.writeSourceCodeToFile(this.openFile.current, content);
+      this.waitForSourceCodeWrite.perform();
     }
     this.hasUnsavedSourceChanges = false;
+  });
+
+  // these saves can happen so fast that we'll make sure to wait at
+  // least 500ms for human consumption
+  private waitForSourceCodeWrite = restartableTask(async () => {
+    if (isReady(this.openFile.current)) {
+      await all([this.openFile.current.writing, timeout(500)]);
+    }
   });
 
   // We use this to write non-cards to the realm--so it doesn't make
@@ -536,7 +545,7 @@ export default class CodeMode extends Component<Signature> {
 
   private get isSaving() {
     return (
-      (isReady(this.openFile.current) && this.openFile.current.isWriting) ||
+      this.waitForSourceCodeWrite.isRunning ||
       this.saveFileSerializedCard.isRunning ||
       this.saveCard.isRunning
     );
