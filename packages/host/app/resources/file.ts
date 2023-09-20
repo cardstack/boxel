@@ -43,6 +43,7 @@ export interface Ready {
   lastModified: string | undefined;
   realmURL: string;
   write(content: string, flushLoader?: boolean): void;
+  isWriting?: boolean;
 }
 
 export type FileResource = Loading | ServerError | NotFound | Ready;
@@ -71,6 +72,10 @@ class _FileResource extends Resource<Args> {
         this.subscription = undefined;
       }
     });
+  }
+
+  get isWriting() {
+    return this.writeTask.isRunning;
   }
 
   private setSubscription(

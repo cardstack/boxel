@@ -430,9 +430,13 @@ export default class CodeMode extends Component<Signature> {
     if (this.card) {
       this.hasUnsavedCardChanges = true;
       await timeout(autoSaveDelayMs);
-      await this.cardService.saveModel(this.card);
+      await this.saveCard.perform(this.card);
       this.hasUnsavedCardChanges = false;
     }
+  });
+
+  private saveCard = restartableTask(async (card: CardDef) => {
+    await this.cardService.saveModel(card);
   });
 
   private contentChangedTask = restartableTask(async (content: string) => {
@@ -528,6 +532,14 @@ export default class CodeMode extends Component<Signature> {
       return language?.id ?? 'plaintext';
     }
     return undefined;
+  }
+
+  private get isSaving() {
+    return (
+      (isReady(this.openFile.current) && this.openFile.current.isWriting) ||
+      this.saveFileSerializedCard.isRunning ||
+      this.saveCard.isRunning
+    );
   }
 
   @action
@@ -693,6 +705,19 @@ export default class CodeMode extends Component<Signature> {
                     language=this.language
                   }}
                 ></div>
+                <div class='save-indicator {{if this.isSaving "visible"}}'>
+                  {{#if this.isSaving}}
+                    <span class='saving-msg'>
+                      Now Saving
+                    </span>
+                    <LoadingIndicator />
+                  {{else}}
+                    <span class='saved-msg'>
+                      Saved
+                    </span>
+                    {{svgJar 'check-mark-teal' width='27' height='27'}}
+                  {{/if}}
+                </div>
               {{else if this.isLoading}}
                 <div class='loading'>
                   <LoadingIndicator />
@@ -797,6 +822,7 @@ export default class CodeMode extends Component<Signature> {
 
       .inner-container {
         height: 100%;
+        position: relative;
         display: flex;
         flex-direction: column;
         background-color: var(--boxel-light);
@@ -879,6 +905,34 @@ export default class CodeMode extends Component<Signature> {
 
       .loading {
         margin: 40vh auto;
+      }
+
+      .save-indicator {
+        position: absolute;
+        display: flex;
+        align-items: center;
+        height: 2.5rem;
+        width: 140px;
+        bottom: 0;
+        right: 0;
+        background-color: var(--boxel-200);
+        padding: 0 var(--boxel-sp-xxs) 0 var(--boxel-sp-sm);
+        border-top-left-radius: var(--boxel-border-radius);
+        font: var(--boxel-font-sm);
+        font-weight: 500;
+        transform: translateX(140px);
+        transition: all var(--boxel-transition);
+        transition-delay: 5s;
+      }
+      .save-indicator.visible {
+        transform: translateX(0px);
+        transition-delay: 0s;
+      }
+      .saving-msg {
+        margin-right: var(--boxel-sp-sm);
+      }
+      .saved-msg {
+        margin-right: var(--boxel-sp-xxs);
       }
     </style>
   </template>
