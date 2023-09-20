@@ -74,27 +74,6 @@ module('Acceptance | operator mode tests', function (hooks) {
           }
         }
       `,
-      pet: `
-      import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-      import StringCard from "https://cardstack.com/base/string";
-
-      export class Pet extends CardDef {
-        static displayName = 'Pet';
-        @field name = contains(StringCard);
-        @field title = contains(StringCard, {
-          computeVia: function (this: Pet) {
-            return this.name;
-          },
-        });
-        static embedded = class Embedded extends Component<typeof this> {
-          <template>
-            <h3 data-test-pet={{@model.name}}>
-              <@fields.name/>
-            </h3>
-          </template>
-        }
-      }
-    `,
       'shipping-info.gts': `
         import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
