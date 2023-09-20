@@ -43,6 +43,10 @@ export class AdoptionChainManager extends Resource<AdoptionChainManagerArgs> {
     return this.selected;
   }
 
+  get selectedCardType() {
+    return this.selected?.cardType;
+  }
+
   isSelected(el: ElementInFile) {
     return el == this.selected;
   }
