@@ -1195,6 +1195,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       JSON.stringify(expected, null, 2),
       'monaco content has updated',
     );
+    await percySnapshot(assert);
   });
 
   test<TestContextWithSave>('non-card instance change made in monaco editor is auto-saved', async function (assert) {
@@ -1221,6 +1222,8 @@ module('Acceptance | operator mode tests', function (hooks) {
     setMonacoContent('Hello Mars');
 
     await waitFor('[data-test-save-idle]');
+
+    await percySnapshot(assert);
   });
 
   test<TestContextWithSave>('unsaved changes made in monaco editor are saved when switching out of code mode', async function (assert) {
@@ -1387,6 +1390,8 @@ module('Acceptance | operator mode tests', function (hooks) {
         await waitFor('[data-test-save-idle]');
       },
     );
+
+    await percySnapshot(assert);
 
     let fileRef = await adapter.openFile('pet.gts');
     if (!fileRef) {

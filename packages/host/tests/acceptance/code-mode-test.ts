@@ -615,7 +615,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom(
         '[data-test-card-instance-definition] [data-test-definition-info-text]',
       )
-      .includesText('Last saved was a few seconds ago');
+      .includesText('Last saved just now');
 
     assert.dom('[data-test-card-instance-definition]').hasClass('active');
   });
