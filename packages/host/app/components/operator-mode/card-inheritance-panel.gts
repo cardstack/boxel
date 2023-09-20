@@ -77,6 +77,7 @@ export default class CardInheritancePanel extends Component<Args> {
             @fileExtension={{this.fileExtension}}
             @realmInfo={{@realmInfo}}
             @realmIconURL={{@realmIconURL}}
+            @infoText={{this.lastModified}}
             @isActive={{true}}
             @actions={{array
               (hash label='Delete' handler=@delete icon='icon-trash')
@@ -105,9 +106,7 @@ export default class CardInheritancePanel extends Component<Args> {
 
   get lastModified() {
     if (this.args.readyFile.lastModified != undefined) {
-      return `Last saved was ${moment(
-        this.args.readyFile.lastModified,
-      ).fromNow()}`;
+      return `Last saved ${moment(this.args.readyFile.lastModified).fromNow()}`;
     }
     return;
   }
