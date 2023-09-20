@@ -48,11 +48,16 @@ export class CardType extends Resource<Args> {
   typeCache: Map<string, Type> = new Map();
   moduleMetaCache: Map<string, { extension: string; realmInfo: RealmInfo }> =
     new Map();
+  ready: Promise<void> | undefined;
 
   modify(_positional: never[], named: Args['named']) {
     let { definition, loader } = named;
     this.loader = loader;
-    this.assembleType.perform(definition);
+    this.ready = this.assembleType.perform(definition);
+  }
+
+  get loading() {
+    return this.assembleType.isRunning;
   }
 
   private assembleType = restartableTask(async (card: typeof BaseDef) => {
@@ -63,7 +68,7 @@ export class CardType extends Resource<Args> {
     this.type = maybeType;
   });
 
-  async toType(
+  private async toType(
     card: typeof BaseDef,
     stack: (typeof BaseDef)[] = [],
   ): Promise<Type | CodeRef> {

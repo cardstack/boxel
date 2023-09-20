@@ -54,6 +54,7 @@ import {
 } from '@cardstack/host/resources/file';
 import { importResource } from '@cardstack/host/resources/import';
 import { maybe } from '@cardstack/host/resources/maybe';
+import { adoptionChainManager } from '@cardstack/host/resources/adoption-chain-manager';
 
 // host services
 import type CardService from '@cardstack/host/services/card-service';
@@ -63,7 +64,6 @@ import RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import { adoptionChainResource } from '@cardstack/host/resources/adoption-chain';
 
 interface Signature {
   Args: {
@@ -300,9 +300,9 @@ export default class CodeMode extends Component<Signature> {
     }
   });
 
-  @use adoptionChain = resource(() => {
+  @use adoptionChainManager = resource(() => {
     if (this.importedModule) {
-      return adoptionChainResource(this, this.importedModule);
+      return adoptionChainManager(this, this.importedModule);
     } else {
       return undefined;
     }
@@ -547,7 +547,7 @@ export default class CodeMode extends Component<Signature> {
                         @cardInstance={{this.cardResource.value}}
                         @readyFile={{this.readyFile}}
                         @realmInfo={{this.realmInfo}}
-                        @adoptionChain={{this.adoptionChain}}
+                        @adoptionChainManager={{this.adoptionChainManager}}
                         @delete={{this.delete}}
                         data-test-card-inheritance-panel
                       />

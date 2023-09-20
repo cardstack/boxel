@@ -10,7 +10,7 @@ import {
 import { Ready } from '@cardstack/host/resources/file';
 import { tracked } from '@glimmer/tracking';
 import moment from 'moment';
-import { type AdoptionChainResource } from '@cardstack/host/resources/adoption-chain';
+import { type AdoptionChainManager } from '@cardstack/host/resources/adoption-chain-manager';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import { hash, array } from '@ember/helper';
 import { action } from '@ember/object';
@@ -21,7 +21,7 @@ interface Signature {
     realmInfo: RealmInfo | null;
     readyFile: Ready;
     cardInstance: CardDef | null;
-    adoptionChain?: AdoptionChainResource;
+    adoptionChainManager?: AdoptionChainManager;
     delete: () => void;
   };
 }
@@ -31,7 +31,11 @@ export default class CardInheritancePanel extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
 
   get adoptionChainTypes() {
-    return this.args.adoptionChain?.types;
+    return this.args.adoptionChainManager?.types;
+  }
+
+  get defaultType() {
+    return this.args.adoptionChainManager?.defaultType;
   }
 
   @action
@@ -46,7 +50,9 @@ export default class CardInheritancePanel extends Component<Signature> {
 
       {{#if @cardInstance}}
         {{! JSON case when visting, eg Author/1.json }}
-        {{#each this.adoptionChainTypes as |t|}}
+        {{#if @adoptionChainManager.loadingAllChains}}
+          <div>Loading...</div>
+        {{else}}
           <InstanceDefinitionContainer
             @name={{@cardInstance.title}}
             @fileExtension='.JSON'
@@ -59,36 +65,40 @@ export default class CardInheritancePanel extends Component<Signature> {
           <div>Adopts from</div>
 
           <ClickableModuleDefinitionContainer
-            @name={{t.displayName}}
-            @fileExtension={{t.moduleMeta.extension}}
-            @realmInfo={{t.moduleMeta.realmInfo}}
+            @name={{this.defaultType.displayName}}
+            @fileExtension={{this.defaultType.moduleMeta.extension}}
+            @realmInfo={{this.defaultType.moduleMeta.realmInfo}}
             @onSelectDefinition={{this.updateCodePath}}
-            @url={{t.module}}
+            @url={{this.defaultType.module}}
           />
-        {{/each}}
+        {{/if}}
       {{else}}
 
         {{! Module case when visting, eg author.gts }}
-        {{#each this.adoptionChainTypes as |t|}}
+        {{#if @adoptionChainManager.loadingAllChains}}
+          <div>Loading...</div>
+        {{else}}
+          {{#each this.adoptionChainTypes as |t|}}
 
-          <ModuleDefinitionContainer
-            @name={{t.displayName}}
-            @fileExtension={{t.moduleMeta.extension}}
-            @realmInfo={{t.moduleMeta.realmInfo}}
-            @isActive={{true}}
-            @actions={{array
-              (hash label='Delete' handler=@delete icon='icon-trash')
-            }}
-          />
-          <div>Inherits from</div>
-          <ClickableModuleDefinitionContainer
-            @name={{t.super.displayName}}
-            @fileExtension={{t.super.moduleMeta.extension}}
-            @realmInfo={{t.super.moduleMeta.realmInfo}}
-            @onSelectDefinition={{this.updateCodePath}}
-            @url={{t.super.module}}
-          />
-        {{/each}}
+            <ModuleDefinitionContainer
+              @name={{t.displayName}}
+              @fileExtension={{t.moduleMeta.extension}}
+              @realmInfo={{t.moduleMeta.realmInfo}}
+              @isActive={{true}}
+              @actions={{array
+                (hash label='Delete' handler=@delete icon='icon-trash')
+              }}
+            />
+            <div>Inherits from</div>
+            <ClickableModuleDefinitionContainer
+              @name={{t.super.displayName}}
+              @fileExtension={{t.super.moduleMeta.extension}}
+              @realmInfo={{t.super.moduleMeta.realmInfo}}
+              @onSelectDefinition={{this.updateCodePath}}
+              @url={{t.super.module}}
+            />
+          {{/each}}
+        {{/if}}
       {{/if}}
     </div>
     <style>
