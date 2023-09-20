@@ -1,20 +1,25 @@
-import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type { MiddlewareState } from '@floating-ui/dom';
-import { type TrackedArray } from 'tracked-built-ins';
-import { velcro } from 'ember-velcro';
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
-import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
+import { velcro } from 'ember-velcro';
+import { type TrackedArray } from 'tracked-built-ins';
+
 import { IconButton, BoxelDropdown, Menu } from '@cardstack/boxel-ui';
-import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
+
 import cn from '@cardstack/boxel-ui/helpers/cn';
+import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
 import { and, bool, eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
+import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
+
 import OperatorModeOverlayItemHeader from './overlay-item-header';
 import { RenderedCardForOverlayActions } from './stack-item';
+
+import type { MiddlewareState } from '@floating-ui/dom';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
