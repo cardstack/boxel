@@ -62,7 +62,7 @@ export default class CardInheritancePanel extends Component<Signature> {
             <InstanceDefinitionContainer
               @name={{@cardInstance.title}}
               @fileExtension='.JSON'
-              @realmInfo={{this.args.realmInfo}}
+              @realmInfo={{@realmInfo}}
               @infoText={{this.lastModified}}
               @actions={{array
                 (hash label='Delete' handler=@delete icon='icon-trash')
