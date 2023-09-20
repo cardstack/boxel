@@ -16,9 +16,8 @@ interface AdoptionChainManagerArgs {
   named: { importResource: ImportResource | undefined; loader: Loader };
 }
 
-export type ElementInFile = CardInFile;
+export type ElementInFile = CardInFile; // can add more types here
 
-// There should be a more generic interface to this
 interface CardInFile {
   cardType: CardType;
   card: typeof BaseDef;
