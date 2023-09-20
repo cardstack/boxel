@@ -10,6 +10,7 @@ import {
   type CardType,
 } from '@cardstack/host/resources/card-type';
 import { restartableTask } from 'ember-concurrency';
+import { TrackedMap } from 'tracked-built-ins';
 
 interface AdoptionChainManagerArgs {
   named: { importResource: ImportResource | undefined; loader: Loader };
@@ -21,6 +22,7 @@ export class AdoptionChainManager extends Resource<AdoptionChainManagerArgs> {
   @tracked cards: (typeof BaseDef)[] = [];
   @tracked _cardTypes: CardType[] = []; // all cards exported in module
   ready: Promise<void> | undefined;
+  selections = new TrackedMap<CardType, boolean>();
 
   modify(_positional: never[], named: AdoptionChainManagerArgs['named']) {
     this.importResource = named['importResource'];
@@ -31,6 +33,13 @@ export class AdoptionChainManager extends Resource<AdoptionChainManagerArgs> {
     return this.load.isRunning;
   }
 
+  isSelected(cardType: CardType | undefined) {
+    if (cardType === undefined) {
+      return false;
+    }
+    return this.selections.get(cardType) || false;
+  }
+
   get cardTypes() {
     return this._cardTypes;
   }
@@ -39,8 +48,13 @@ export class AdoptionChainManager extends Resource<AdoptionChainManagerArgs> {
     return this._cardTypes.map((t) => t.type);
   }
 
-  get defaultType() {
-    return this.types[0];
+  get selectedCardType() {
+    for (let [type, selected] of this.selections.entries()) {
+      if (selected) {
+        return type;
+      }
+    }
+    return undefined;
   }
 
   get loadingAllChains() {
@@ -55,6 +69,10 @@ export class AdoptionChainManager extends Resource<AdoptionChainManagerArgs> {
     }
     this.cards = cardsOrFieldsFromModule(module);
     this._cardTypes = this.cards.map((c) => getCardType(this, () => c));
+    //setting default card type
+    if (this._cardTypes.length > 0) {
+      this.selections.set(this._cardTypes[0], true);
+    }
   });
 }
 

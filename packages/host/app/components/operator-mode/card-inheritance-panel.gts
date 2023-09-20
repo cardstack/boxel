@@ -34,8 +34,12 @@ export default class CardInheritancePanel extends Component<Signature> {
     return this.args.adoptionChainManager?.types;
   }
 
-  get defaultType() {
-    return this.args.adoptionChainManager?.defaultType;
+  get cardType() {
+    return this.args.adoptionChainManager?.selectedCardType;
+  }
+
+  get cardTypes() {
+    return this.args.adoptionChainManager?.cardTypes;
   }
 
   @action
@@ -53,24 +57,26 @@ export default class CardInheritancePanel extends Component<Signature> {
         {{#if @adoptionChainManager.loadingAllChains}}
           <div>Loading...</div>
         {{else}}
-          <InstanceDefinitionContainer
-            @name={{@cardInstance.title}}
-            @fileExtension='.JSON'
-            @realmInfo={{this.args.realmInfo}}
-            @infoText={{this.lastModified}}
-            @actions={{array
-              (hash label='Delete' handler=@delete icon='icon-trash')
-            }}
-          />
-          <div>Adopts from</div>
+          <div class='inheritance-chain'>
+            <InstanceDefinitionContainer
+              @name={{@cardInstance.title}}
+              @fileExtension='.JSON'
+              @realmInfo={{this.args.realmInfo}}
+              @infoText={{this.lastModified}}
+              @actions={{array
+                (hash label='Delete' handler=@delete icon='icon-trash')
+              }}
+            />
+            <div>Adopts from</div>
 
-          <ClickableModuleDefinitionContainer
-            @name={{this.defaultType.displayName}}
-            @fileExtension={{this.defaultType.moduleMeta.extension}}
-            @realmInfo={{this.defaultType.moduleMeta.realmInfo}}
-            @onSelectDefinition={{this.updateCodePath}}
-            @url={{this.defaultType.module}}
-          />
+            <ClickableModuleDefinitionContainer
+              @name={{this.cardType.type.displayName}}
+              @fileExtension={{this.cardType.type.moduleMeta.extension}}
+              @realmInfo={{this.cardType.type.moduleMeta.realmInfo}}
+              @onSelectDefinition={{this.updateCodePath}}
+              @url={{this.cardType.type.module}}
+            />
+          </div>
         {{/if}}
       {{else}}
 
@@ -78,25 +84,32 @@ export default class CardInheritancePanel extends Component<Signature> {
         {{#if @adoptionChainManager.loadingAllChains}}
           <div>Loading...</div>
         {{else}}
-          {{#each this.adoptionChainTypes as |t|}}
+          {{#each this.cardTypes as |ct|}}
+            <div
+              class='inheritance-chain
+                {{if (@adoptionChainManager.isSelected ct) "selected"}}'
+            >
 
-            <ModuleDefinitionContainer
-              @name={{t.displayName}}
-              @fileExtension={{t.moduleMeta.extension}}
-              @realmInfo={{t.moduleMeta.realmInfo}}
-              @isActive={{true}}
-              @actions={{array
-                (hash label='Delete' handler=@delete icon='icon-trash')
-              }}
-            />
-            <div>Inherits from</div>
-            <ClickableModuleDefinitionContainer
-              @name={{t.super.displayName}}
-              @fileExtension={{t.super.moduleMeta.extension}}
-              @realmInfo={{t.super.moduleMeta.realmInfo}}
-              @onSelectDefinition={{this.updateCodePath}}
-              @url={{t.super.module}}
-            />
+              <ModuleDefinitionContainer
+                @name={{ct.type.displayName}}
+                @fileExtension={{ct.type.moduleMeta.extension}}
+                @realmInfo={{ct.type.moduleMeta.realmInfo}}
+                @isActive={{true}}
+                @actions={{array
+                  (hash label='Delete' handler=@delete icon='icon-trash')
+                }}
+              />
+              {{#if ct.type.super}}
+                <div>Inherits from</div>
+                <ClickableModuleDefinitionContainer
+                  @name={{ct.type.super.displayName}}
+                  @fileExtension={{ct.type.super.moduleMeta.extension}}
+                  @realmInfo={{ct.type.super.moduleMeta.realmInfo}}
+                  @onSelectDefinition={{this.updateCodePath}}
+                  @url={{ct.type.super.module}}
+                />
+              {{/if}}
+            </div>
           {{/each}}
         {{/if}}
       {{/if}}
@@ -106,6 +119,12 @@ export default class CardInheritancePanel extends Component<Signature> {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xs);
+      }
+      .selected {
+        outline: 2px solid var(--boxel-highlight);
+      }
+      .inheritance-chain {
+        padding: var(--boxel-sp-sm);
       }
     </style>
   </template>
