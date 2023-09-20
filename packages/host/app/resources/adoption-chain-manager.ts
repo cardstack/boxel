@@ -10,12 +10,13 @@ import {
   type CardType,
 } from '@cardstack/host/resources/card-type';
 import { restartableTask } from 'ember-concurrency';
+import { action } from '@ember/object';
 
 interface AdoptionChainManagerArgs {
   named: { importResource: ImportResource | undefined; loader: Loader };
 }
 
-type ElementInFile = CardInFile;
+export type ElementInFile = CardInFile;
 
 // There should be a more generic interface to this
 interface CardInFile {
@@ -45,6 +46,11 @@ export class AdoptionChainManager extends Resource<AdoptionChainManagerArgs> {
 
   isSelected(el: ElementInFile) {
     return el == this.selected;
+  }
+
+  @action
+  select(el: ElementInFile) {
+    this.selected = el;
   }
 
   private load = restartableTask(async () => {

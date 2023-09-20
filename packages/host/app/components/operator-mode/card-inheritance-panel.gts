@@ -10,10 +10,15 @@ import {
 import { Ready } from '@cardstack/host/resources/file';
 import { tracked } from '@glimmer/tracking';
 import moment from 'moment';
-import { type AdoptionChainManager } from '@cardstack/host/resources/adoption-chain-manager';
+import {
+  type AdoptionChainManager,
+  type ElementInFile,
+} from '@cardstack/host/resources/adoption-chain-manager';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import { hash, array } from '@ember/helper';
 import { action } from '@ember/object';
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 
 interface Signature {
   Element: HTMLElement;
@@ -47,6 +52,11 @@ export default class CardInheritancePanel extends Component<Signature> {
     if (url) {
       this.operatorModeStateService.updateCodePath(url);
     }
+  }
+
+  @action
+  select(el: ElementInFile) {
+    this.args.adoptionChainManager?.select(el);
   }
 
   <template>
@@ -86,6 +96,7 @@ export default class CardInheritancePanel extends Component<Signature> {
                 {{if (@adoptionChainManager.isSelected el) "selected"}}'
             >
               <div>{{this.getCardTypeDisplayName el.card}}</div>
+              <button {{on 'click' (fn this.select el)}}>Select</button>
             </div>
           {{/each}}
           <h3>Inheritance Panel</h3>
