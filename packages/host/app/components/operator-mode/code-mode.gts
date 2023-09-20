@@ -556,22 +556,6 @@ export default class CodeMode extends Component<Signature> {
     }
   }
 
-  get isCardInstance() {
-    if (
-      !isReady(this.openFile.current) ||
-      !this.openFile.current.name.endsWith('.json')
-    ) {
-      return false;
-    }
-
-    try {
-      let cardDoc = JSON.parse(this.readyFile.content);
-      return isCardDocument(cardDoc);
-    } catch (e) {
-      throw new Error('Unparsable JSON file');
-    }
-  }
-
   private async withTestWaiters<T>(cb: () => Promise<T>) {
     let token = waiter.beginAsync();
     try {
