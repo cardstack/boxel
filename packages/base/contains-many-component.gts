@@ -29,53 +29,81 @@ interface Signature {
 
 class ContainsManyEditor extends GlimmerComponent<Signature> {
   <template>
-    <div data-test-contains-many={{this.args.field.name}}>
-      {{#if @arrayField.children.length}}
-        <ul class='list'>
-          {{#each @arrayField.children as |boxedElement i|}}
-            <li class='editor' data-test-item={{i}}>
-              {{#let
-                (getBoxComponent
-                  (this.args.cardTypeFor @field boxedElement)
-                  @format
-                  boxedElement
-                  @field
-                )
-                as |Item|
-              }}
-                <Item />
-              {{/let}}
-              <div class='remove-button-container'>
-                <IconButton
-                  @icon='icon-trash'
-                  @width='20px'
-                  @height='20px'
-                  class='remove'
-                  {{on 'click' (fn this.remove i)}}
-                  data-test-remove={{i}}
-                  aria-label='Remove'
-                />
-              </div>
-            </li>
-          {{/each}}
-        </ul>
-      {{/if}}
-      <AddButton
-        class='add-new'
-        @variant='full-width'
-        {{on 'click' this.add}}
-        data-test-add-new
+    {{#if this.isPrimitive}}
+      <div
+        class='primitive-contains-many-editor'
+        data-test-contains-many={{@field.name}}
       >
-        Add
-        {{getPlural @field.card.displayName}}
-      </AddButton>
-    </div>
+        {{#if @arrayField.children.length}}
+          <ul class='list'>
+            {{#each @arrayField.value as |val i|}}
+              <li data-test-item={{i}}>
+                {{val}}
+              </li>
+            {{/each}}
+          </ul>
+        {{else}}
+          <div class='empty'>None</div>
+        {{/if}}
+      </div>
+    {{else}}
+      <div data-test-contains-many={{@field.name}}>
+        {{#if @arrayField.children.length}}
+          <ul class='list'>
+            {{#each @arrayField.children as |boxedElement i|}}
+              <li class='editor' data-test-item={{i}}>
+                {{#let
+                  (getBoxComponent
+                    (this.args.cardTypeFor @field boxedElement)
+                    @format
+                    boxedElement
+                    @field
+                  )
+                  as |Item|
+                }}
+                  <Item />
+                {{/let}}
+                <div class='remove-button-container'>
+                  <IconButton
+                    @icon='icon-trash'
+                    @width='20px'
+                    @height='20px'
+                    class='remove'
+                    {{on 'click' (fn this.remove i)}}
+                    data-test-remove={{i}}
+                    aria-label='Remove'
+                  />
+                </div>
+              </li>
+            {{/each}}
+          </ul>
+        {{/if}}
+        <AddButton
+          class='add-new'
+          @variant='full-width'
+          {{on 'click' this.add}}
+          data-test-add-new
+        >
+          Add
+          {{getPlural @field.card.displayName}}
+        </AddButton>
+      </div>
+    {{/if}}
     <style>
+      .primitive-contains-many-editor {
+        padding: var(--boxel-sp-xs);
+        border: 1px solid var(--boxel-form-control-border-color);
+        border-radius: var(--boxel-form-control-border-radius);
+      }
       .list {
         list-style: none;
         padding: 0;
-        margin: 0 0 var(--boxel-sp);
+        margin: 0;
       }
+      .empty {
+        color: var(--boxel-450);
+      }
+
       .editor {
         position: relative;
         cursor: pointer;
@@ -101,6 +129,10 @@ class ContainsManyEditor extends GlimmerComponent<Signature> {
       }
     </style>
   </template>
+
+  get isPrimitive() {
+    return this.args.field.card && primitive in this.args.field.card;
+  }
 
   add = () => {
     // TODO probably each field card should have the ability to say what a new item should be

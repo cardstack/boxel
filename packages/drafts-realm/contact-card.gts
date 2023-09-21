@@ -6,6 +6,7 @@ import {
   FieldDef,
   field,
   contains,
+  containsMany,
 } from 'https://cardstack.com/base/card-api';
 
 export class PhoneCard extends FieldDef {
@@ -20,13 +21,18 @@ export class EmergencyContactCard extends FieldDef {
   @field email = contains(StringCard);
 }
 
+class Guest extends FieldDef {
+  @field name = contains(StringCard);
+  @field additionalNames = containsMany(StringCard);
+}
+
 export class ContactCard extends CardDef {
   static displayName = 'Contact';
   @field name = contains(StringCard);
   @field phone = contains(PhoneCard);
   @field emergencyContact = contains(EmergencyContactCard);
+  @field guest = contains(Guest);
   // @field aliases;
-  // @field guests;
   // @field vendor;
   // @field vendors;
   @field title = contains(StringCard, {
