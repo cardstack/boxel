@@ -1195,7 +1195,6 @@ module('Acceptance | operator mode tests', function (hooks) {
       JSON.stringify(expected, null, 2),
       'monaco content has updated',
     );
-    await percySnapshot(assert);
   });
 
   test<TestContextWithSave>('non-card instance change made in monaco editor is auto-saved', async function (assert) {
