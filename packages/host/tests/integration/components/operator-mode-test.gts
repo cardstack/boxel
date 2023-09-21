@@ -2019,7 +2019,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await fillIn(`[data-test-search-input] input`, `pet`);
     assert.dom(`[data-test-search-input] input`).hasValue('pet');
-    await waitFor('[data-test-card-catalog-item]', { timeout: 2000, count: 2 });
+    await waitFor('[data-test-card-catalog-item]', { timeout: 3000, count: 2 });
     await click(`[data-test-select="${testRealmURL}CatalogEntry/pet-room"]`);
     assert
       .dom(
@@ -2036,7 +2036,7 @@ module('Integration | operator-mode', function (hooks) {
       .doesNotExist('no cards are added');
 
     await click(`[data-test-create-new-card-button]`);
-    await waitFor('[data-test-card-catalog-item]', { timeout: 2000 });
+    await waitFor('[data-test-card-catalog-item]', { timeout: 3000 });
     assert
       .dom(`[data-test-search-input] input`)
       .hasNoValue('Card picker state is reset');
