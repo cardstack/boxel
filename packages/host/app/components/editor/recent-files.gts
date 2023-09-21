@@ -8,6 +8,7 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { RealmPaths } from '@cardstack/runtime-common';
+import { RecentFile } from '@cardstack/host/services/recent-files-service';
 
 interface Args {
   Args: {};
@@ -18,27 +19,14 @@ export default class RecentFiles extends Component<Args> {
   @service declare recentFilesService: RecentFilesService;
   @service declare operatorModeStateService: OperatorModeStateService;
 
-  @action
-  openFile(url: string) {
-    this.operatorModeStateService.updateCodePath(new URL(url));
-  }
-
   get recentFilesInRealm() {
-    return this.recentFilesService.recentFiles.filter((file) =>
-      this.realmPaths.inRealm(new URL(file)),
-    );
-  }
-
-  get realmPaths() {
-    return new RealmPaths(this.cardService.defaultURL.href);
+    return this.recentFilesService.recentFiles;
   }
 
   <template>
     <ul class='recent-files' data-test-recent-files>
       {{#each this.recentFilesInRealm as |file|}}
-        {{#unless (eq file this.operatorModeStateService.state.codePath.href)}}
-          <File @fileUrl={{file}} />
-        {{/unless}}
+        <File @recentFile={{file}} />
       {{/each}}
     </ul>
     <style>
@@ -53,7 +41,7 @@ export default class RecentFiles extends Component<Args> {
 
 interface FileArgs {
   Args: {
-    fileUrl: string;
+    recentFile: RecentFile;
   };
 }
 
@@ -62,23 +50,33 @@ class File extends Component<FileArgs> {
   @service declare operatorModeStateService: OperatorModeStateService;
 
   @action
-  openFile(url: string) {
-    this.operatorModeStateService.updateCodePath(new URL(url));
+  openFile() {
+    this.operatorModeStateService.updateCodePath(new URL(this.fullUrl));
   }
 
   get realmPaths() {
-    return new RealmPaths(this.cardService.defaultURL.href);
+    return new RealmPaths(this.args.recentFile.realmURL);
+  }
+
+  get fullUrl() {
+    return `${this.args.recentFile.realmURL}${this.args.recentFile.filePath}`;
+  }
+
+  get isSelected() {
+    return this.operatorModeStateService.state.codePath?.href === this.fullUrl;
   }
 
   <template>
-    <li
-      class='recent-file'
-      data-test-recent-file={{@fileUrl}}
-      role='button'
-      {{on 'click' (fn this.openFile @fileUrl)}}
-    >
-      {{getRelativeFilePath this.realmPaths @fileUrl}}
-    </li>
+    {{#unless this.isSelected}}
+      <li
+        class='recent-file'
+        data-test-recent-file={{this.fullUrl}}
+        role='button'
+        {{on 'click' (fn this.openFile this.fullUrl)}}
+      >
+        {{@recentFile.filePath}}
+      </li>
+    {{/unless}}
     <style>
       .recent-file {
         background: var(--boxel-light);

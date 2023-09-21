@@ -1,10 +1,22 @@
 import Service from '@ember/service';
+import { service } from '@ember/service';
+import type CardService from '@cardstack/host/services/card-service';
+import { RealmPaths } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
 import { TrackedArray } from 'tracked-built-ins';
 import window from 'ember-window-mock';
 
+type SerialRecentFile = [URL, string];
+
+export interface RecentFile {
+  realmURL: URL;
+  filePath: string;
+}
+
 export default class RecentFilesService extends Service {
-  @tracked recentFiles = new TrackedArray<string>([]);
+  @service declare cardService: CardService;
+
+  @tracked recentFiles = new TrackedArray<RecentFile>([]);
 
   constructor(properties: object) {
     super(properties);
@@ -15,15 +27,15 @@ export default class RecentFilesService extends Service {
       try {
         this.recentFiles = new TrackedArray(
           JSON.parse(recentFilesString).reduce(function (
-            recentFiles: string[],
-            fileString: string,
+            recentFiles: RecentFile[],
+            [realmUrl, filePath]: SerialRecentFile,
           ) {
             try {
-              new URL(fileString);
-              recentFiles.push(fileString);
+              let url = new URL(realmUrl);
+              recentFiles.push({ realmURL: url, filePath });
             } catch (e) {
               console.log(
-                `Ignoring non-URL recent file from storage: ${fileString}`,
+                `Ignoring non-URL recent file from storage: ${realmUrl}`,
               );
             }
             return recentFiles;
@@ -36,25 +48,39 @@ export default class RecentFilesService extends Service {
   }
 
   removeRecentFile(file: string) {
-    let index = this.recentFiles.findIndex((f) => f === file);
+    let index = this.findRecentFileIndex(file);
+
     if (index === -1) {
       return;
     }
+
     while (index !== -1) {
       this.recentFiles.splice(index, 1);
-      index = this.recentFiles.findIndex((f) => f === file);
+      index = this.findRecentFileIndex(file);
     }
+
     this.persistRecentFiles();
   }
 
+  addRecentFileUrl(url: string) {
+    console.log(`addRecentFileUrl: ${url}`);
+    let realmPaths = new RealmPaths(this.cardService.defaultURL);
+    if (realmPaths.inRealm(new URL(url))) {
+      this.addRecentFile(realmPaths.local(url));
+    }
+  }
+
   addRecentFile(file: string) {
-    const existingIndex = this.recentFiles.indexOf(file);
+    console.log(`addRecentFile: ${file}`);
+    let currentRealmUrl = this.cardService.defaultURL;
+
+    const existingIndex = this.findRecentFileIndex(file);
 
     if (existingIndex > -1) {
       this.recentFiles.splice(existingIndex, 1);
     }
 
-    this.recentFiles.unshift(file);
+    this.recentFiles.unshift({ realmURL: currentRealmUrl, filePath: file });
 
     if (this.recentFiles.length > 100) {
       this.recentFiles.pop();
@@ -64,9 +90,24 @@ export default class RecentFilesService extends Service {
   }
 
   persistRecentFiles() {
+    console.log('persisting', JSON.stringify(this.recentFiles));
     window.localStorage.setItem(
       'recent-files',
-      JSON.stringify(this.recentFiles),
+      JSON.stringify(
+        this.recentFiles.map((recentFile) => [
+          recentFile.realmURL.toString(),
+          recentFile.filePath,
+        ]),
+      ),
+    );
+  }
+
+  private findRecentFileIndex(path: string) {
+    let currentRealmUrl = this.cardService.defaultURL;
+
+    return this.recentFiles.findIndex(
+      ({ realmURL, filePath }) =>
+        realmURL.href === currentRealmUrl.href && filePath === path,
     );
   }
 }

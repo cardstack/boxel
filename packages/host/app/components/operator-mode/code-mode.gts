@@ -543,7 +543,8 @@ export default class CodeMode extends Component<Signature> {
   private delete() {
     if (this.card) {
       this.args.delete(this.card, () => {
-        let previousFile = this.recentFilesService.recentFiles[0] as
+        let recentFile = this.recentFilesService.recentFiles[0];
+        let previousFile = `${recentFile.realmURL}${recentFile.filePath}` as
           | string
           | undefined;
         let url = previousFile ? new URL(previousFile) : null;
