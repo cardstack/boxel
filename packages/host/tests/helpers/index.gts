@@ -393,7 +393,9 @@ function makeRealm(
   }
   if (manualRedirect) {
     let handler = async (req: Request) => {
-      let maybeExtension = '.' + req.url.split('.').pop();
+      let urlParts = req.url.split('.');
+      let maybeExtension =
+        urlParts.length > 1 ? '.' + urlParts.pop() : undefined;
       const hasExtension = maybeExtension
         ? ['.json', ...executableExtensions].includes(maybeExtension)
         : false;
@@ -401,8 +403,7 @@ function makeRealm(
         req.method === 'GET' &&
         req.headers.get('Accept') === SupportedMimeType.CardSource &&
         !hasExtension &&
-        req.url.includes(testRealmURL) &&
-        req.url.split('.').length === 2
+        req.url.includes(testRealmURL)
       ) {
         let r = await manualRedirectHandle(req, adapter);
         return r as Response;
