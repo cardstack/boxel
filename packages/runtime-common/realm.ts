@@ -424,6 +424,32 @@ export class Realm {
     return this.internalHandle(request, false);
   }
 
+  async fallbackHandle(request: Request) {
+    let url = new URL(request.url);
+    let localPath = this.paths.local(url);
+    let maybeHandle = await this.getFileWithFallbacks(
+      localPath,
+      executableExtensions,
+    );
+
+    if (!maybeHandle) {
+      return notFound(this.url, request, `${request.url} not found`);
+    }
+
+    let handle = maybeHandle;
+
+    if (
+      executableExtensions.some((extension) =>
+        handle.path.endsWith(extension),
+      ) &&
+      !localPath.startsWith(assetsDir)
+    ) {
+      return this.makeJS(await fileContentToText(handle), handle.path);
+    } else {
+      return await this.serveLocalFile(handle);
+    }
+  }
+
   private async internalHandle(
     request: Request,
     isLocal: boolean,
@@ -438,29 +464,7 @@ export class Realm {
     if (this.#router.handles(request)) {
       return this.#router.handle(request);
     } else {
-      let url = new URL(request.url);
-      let localPath = this.paths.local(url);
-      let maybeHandle = await this.getFileWithFallbacks(
-        localPath,
-        executableExtensions,
-      );
-
-      if (!maybeHandle) {
-        return notFound(this.url, request, `${request.url} not found`);
-      }
-
-      let handle = maybeHandle;
-
-      if (
-        executableExtensions.some((extension) =>
-          handle.path.endsWith(extension),
-        ) &&
-        !localPath.startsWith(assetsDir)
-      ) {
-        return this.makeJS(await fileContentToText(handle), handle.path);
-      } else {
-        return await this.serveLocalFile(handle);
-      }
+      return this.fallbackHandle(request);
     }
   }
 

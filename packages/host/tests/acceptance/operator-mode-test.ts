@@ -260,6 +260,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
       isAcceptanceTest: true,
+      manualRedirect: true,
     });
     await realm.ready;
   });

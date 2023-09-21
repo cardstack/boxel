@@ -1,4 +1,4 @@
-import { parse } from 'date-fns';
+import { formatRFC7231, parse } from 'date-fns';
 import {
   Kind,
   RealmAdapter,
@@ -9,7 +9,9 @@ import {
   RealmInfo,
   Deferred,
   executableExtensions,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
+import { getFileWithFallbacks } from '@cardstack/runtime-common/stream';
 import GlimmerComponent from '@glimmer/component';
 import { type TestContext, visit } from '@ember/test-helpers';
 import { LocalPath } from '@cardstack/runtime-common/paths';
@@ -127,6 +129,7 @@ interface Options {
   realmURL?: string;
   isAcceptanceTest?: true;
   onFetch?: (req: Request) => Promise<Request>;
+  manualRedirect?: boolean;
 }
 
 // We use a rendered component to facilitate our indexing (this emulates
@@ -164,7 +167,14 @@ export const TestRealm = {
     } else {
       await makeRenderer();
     }
-    return makeRealm(adapter, loader, owner, opts?.realmURL, opts?.onFetch);
+    return makeRealm(
+      adapter,
+      loader,
+      owner,
+      opts?.realmURL,
+      opts?.onFetch,
+      opts?.manualRedirect,
+    );
   },
 };
 
@@ -362,6 +372,7 @@ function makeRealm(
   owner: Owner,
   realmURL = testRealmURL,
   onFetch?: (req: Request) => Promise<Request>,
+  manualRedirect?: boolean,
 ) {
   let localIndexer = owner.lookup(
     'service:local-indexer',
@@ -379,6 +390,26 @@ function makeRealm(
       }
       return realm.maybeHandle(req);
     });
+  }
+  if (manualRedirect) {
+    let handler = async (req: Request) => {
+      let maybeExtension = '.' + req.url.split('.').pop();
+      const hasExtension = maybeExtension
+        ? ['.json', ...executableExtensions].includes(maybeExtension)
+        : false;
+      if (
+        req.method === 'GET' &&
+        req.headers.get('Accept') === SupportedMimeType.CardSource &&
+        !hasExtension &&
+        req.url.includes(testRealmURL) &&
+        req.url.split('.').length === 2
+      ) {
+        let r = await manualRedirectHandle(req, adapter);
+        return r as Response;
+      }
+      return null;
+    };
+    loader.registerURLHandler(handler);
   }
   realm = new Realm(
     realmURL,
@@ -416,6 +447,29 @@ export async function shimModule(
       m[name];
     }),
   );
+}
+async function manualRedirectHandle(request: Request, adapter: RealmAdapter) {
+  const realmPaths = new RealmPaths(testRealmURL);
+  const localPath = realmPaths.local(request.url);
+  const ref = await getFileWithFallbacks(
+    localPath,
+    adapter.openFile.bind(adapter),
+    executableExtensions,
+  );
+  if (
+    ref &&
+    (ref.content instanceof ReadableStream ||
+      ref.content instanceof Uint8Array ||
+      typeof ref.content === 'string')
+  ) {
+    let r = createResponse(testRealmURL, ref.content, {
+      headers: {
+        'last-modified': formatRFC7231(ref.lastModified),
+      },
+    });
+    return new MockRedirectedResponse(r.body, r, request.url + '.gts');
+  }
+  return null;
 }
 
 export function setupCardLogs(
@@ -670,7 +724,7 @@ export function diff(
   };
 }
 
-export class MockResponse extends Response {
+export class MockRedirectedResponse extends Response {
   private _mockUrl: string;
 
   constructor(
@@ -680,6 +734,10 @@ export class MockResponse extends Response {
   ) {
     super(body, init);
     this._mockUrl = url || '';
+  }
+
+  get redirected() {
+    return true;
   }
 
   get url() {
