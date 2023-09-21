@@ -457,6 +457,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
         gap: var(--boxel-sp-xxs);
       }
 
+      .header-icon {
+        border: 1px solid rgba(0, 0, 0, 0.15);
+        border-radius: 6px;
+      }
+
       .header--icon-hovered {
         --boxel-header-text-color: var(--boxel-highlight);
         --boxel-header-text-size: var(--boxel-font);
