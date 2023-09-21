@@ -37,14 +37,7 @@ export default class RecentFiles extends Component<Args> {
     <ul class='recent-files' data-test-recent-files>
       {{#each this.recentFilesInRealm as |file|}}
         {{#unless (eq file this.operatorModeStateService.state.codePath.href)}}
-          <li
-            class='recent-file'
-            data-test-recent-file={{file}}
-            role='button'
-            {{on 'click' (fn this.openFile file)}}
-          >
-            {{getRelativeFilePath this.realmPaths file}}
-          </li>
+          <File @fileUrl={{file}} />
         {{/unless}}
       {{/each}}
     </ul>
@@ -54,7 +47,39 @@ export default class RecentFiles extends Component<Args> {
         margin: 0;
         padding: 0;
       }
+    </style>
+  </template>
+}
 
+interface FileArgs {
+  Args: {
+    fileUrl: string;
+  };
+}
+
+class File extends Component<FileArgs> {
+  @service declare cardService: CardService;
+  @service declare operatorModeStateService: OperatorModeStateService;
+
+  @action
+  openFile(url: string) {
+    this.operatorModeStateService.updateCodePath(new URL(url));
+  }
+
+  get realmPaths() {
+    return new RealmPaths(this.cardService.defaultURL.href);
+  }
+
+  <template>
+    <li
+      class='recent-file'
+      data-test-recent-file={{@fileUrl}}
+      role='button'
+      {{on 'click' (fn this.openFile @fileUrl)}}
+    >
+      {{getRelativeFilePath this.realmPaths @fileUrl}}
+    </li>
+    <style>
       .recent-file {
         background: var(--boxel-light);
         padding: var(--boxel-sp-xs);
