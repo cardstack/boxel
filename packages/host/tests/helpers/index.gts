@@ -505,12 +505,10 @@ export class TestRealmAdapter implements RealmAdapter {
         throw new Error(`tried to use file as directory`);
       }
       this.#lastModified.set(this.#paths.fileURL(path).href, now);
-      content = typeof content === 'string' ? content : JSON.stringify(content);
-      dir[last] = content;
-      // for handling redirects
-      let [lastWithoutExtension, extension] = last.split('.');
-      if (executableExtensions.includes(extension)) {
-        dir[lastWithoutExtension] = content;
+      if (typeof content === 'string') {
+        dir[last] = content;
+      } else {
+        dir[last] = JSON.stringify(content);
       }
     }
   }
