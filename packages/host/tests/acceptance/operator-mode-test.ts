@@ -1465,7 +1465,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         await click('[data-test-confirm-delete-button]');
       },
     );
-    await waitUntil(() => find('[data-test-empty-code-mode]'));
+    await waitFor('[data-test-empty-code-mode]');
     await percySnapshot(
       'Acceptance | operator mode tests | Can delete a card instance from code mode with no recent files - empty code mode',
     );
