@@ -42,6 +42,7 @@ const personCardSource = `
   import StringCard from "https://cardstack.com/base/string";
 
   export class Person extends CardDef {
+    static displayName = 'Person';
     @field firstName = contains(StringCard);
     @field lastName = contains(StringCard);
     @field title = contains(StringCard, {
@@ -788,6 +789,53 @@ module('Acceptance | code mode tests', function (hooks) {
     assert
       .dom(`[data-test-recent-file]:first-child`)
       .containsText('person.gts');
+  });
+
+  test('schema editor lists the inheritance chain', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-card-schema]');
+
+    assert.dom('[data-test-card-schema]').exists({ count: 3 });
+
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="firstName"] [data-test-card-display-name="String"]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="lastName"] [data-test-card-display-name="String"]`,
+      )
+      .exists();
+
+    assert
+      .dom(
+        `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-card-display-name="String"]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-card-schema="Card"] [data-test-field-name="description"] [data-test-card-display-name="String"]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-card-schema="Card"] [data-test-field-name="thumbnailURL"] [data-test-card-display-name="String"]`,
+      )
+      .exists();
+
+    assert.dom(`[data-test-card-schema="Base"]`).exists();
   });
 });
 

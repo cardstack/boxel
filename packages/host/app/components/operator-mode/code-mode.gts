@@ -5,6 +5,7 @@ import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import { task, restartableTask, timeout, all } from 'ember-concurrency';
@@ -32,7 +33,6 @@ import {
   LoadingIndicator,
   Button,
   ResizablePanelGroup,
-  ResizablePanel,
   PanelContext,
 } from '@cardstack/boxel-ui';
 import cn from '@cardstack/boxel-ui/helpers/cn';
@@ -70,6 +70,7 @@ import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import { adoptionChainResource } from '@cardstack/host/resources/adoption-chain';
+import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
 
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
@@ -123,8 +124,8 @@ export default class CodeMode extends Component<Signature> {
   // the realm is the same
   private cachedRealmInfo: RealmInfo | null = null;
 
-  constructor(args: any, owner: any) {
-    super(args, owner);
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
     this.panelWidths = localStorage.getItem(CodeModePanelWidths)
       ? // @ts-ignore Type 'null' is not assignable to type 'string'
         JSON.parse(localStorage.getItem(CodeModePanelWidths))
@@ -614,12 +615,11 @@ export default class CodeMode extends Component<Signature> {
       <ResizablePanelGroup
         @onListPanelContextChange={{this.onListPanelContextChange}}
         class='columns'
-        as |pg|
+        as |ResizablePanel|
       >
         <ResizablePanel
           @defaultWidth={{defaultPanelWidths.leftPanel}}
           @width='var(--operator-mode-left-column)'
-          @panelGroupApi={{pg.api}}
         >
           <div class='column'>
             {{! Move each container and styles to separate component }}
@@ -704,7 +704,6 @@ export default class CodeMode extends Component<Signature> {
             @defaultWidth={{defaultPanelWidths.codeEditorPanel}}
             @width={{this.panelWidths.codeEditorPanel}}
             @minWidth='300px'
-            @panelGroupApi={{pg.api}}
           >
             <div class='inner-container'>
               {{#if this.isReady}}
@@ -745,7 +744,6 @@ export default class CodeMode extends Component<Signature> {
           <ResizablePanel
             @defaultWidth={{defaultPanelWidths.rightPanel}}
             @width={{this.panelWidths.rightPanel}}
-            @panelGroupApi={{pg.api}}
           >
             <div class='inner-container'>
               {{#if this.cardIsLoaded}}
@@ -753,6 +751,11 @@ export default class CodeMode extends Component<Signature> {
                   @card={{this.loadedCard}}
                   @realmIconURL={{this.realmIconURL}}
                   data-test-card-resource-loaded
+                />
+              {{else if this.importedModule.module}}
+                <CardAdoptionChain
+                  @file={{this.readyFile}}
+                  @importedModule={{this.importedModule.module}}
                 />
               {{else if this.cardError}}
                 {{this.cardError.message}}
@@ -763,7 +766,6 @@ export default class CodeMode extends Component<Signature> {
           <ResizablePanel
             @defaultWidth={{defaultPanelWidths.emptyCodeModePanel}}
             @width={{this.panelWidths.emptyCodeModePanel}}
-            @panelGroupApi={{pg.api}}
           >
             <div
               class='inner-container inner-container--empty'

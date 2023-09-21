@@ -65,6 +65,7 @@ function _serialize(val: string): string {
 }
 
 export default class EthereumAddressField extends FieldDef {
+  static displayName = 'EthereumAddress';
   static [primitive]: string;
   static [useIndexBasedKey]: never;
   static [serialize](val: string) {

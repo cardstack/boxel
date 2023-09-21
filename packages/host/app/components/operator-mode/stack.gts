@@ -99,6 +99,13 @@ export default class OperatorModeStack extends Component<Signature> {
         display: none;
       }
 
+      /* Add some padding to accomodate for overlaid header for embedded cards in operator mode */
+      .operator-mode-stack :deep(.embedded-card) {
+        padding-top: calc(
+          var(--overlay-embedded-card-header-height) + var(--boxel-sp-lg)
+        );
+      }
+
       .inner {
         height: calc(
           100% - var(--search-sheet-closed-height) - var(--boxel-sp)

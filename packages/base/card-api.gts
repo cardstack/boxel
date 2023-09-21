@@ -138,7 +138,7 @@ function isNotReadyValue(value: any): value is NotReadyValue {
       'type' in value &&
       value.type === 'not-ready' &&
       'instance' in value &&
-      isCard(value.instance) &&
+      isCardOrField(value.instance) &&
       'fieldName' in value &&
       typeof value.fieldName === 'string'
     );
@@ -1187,7 +1187,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
         if (!resource) {
           if (loadedValues && Array.isArray(loadedValues)) {
             let loadedValue = loadedValues.find(
-              (v) => isCard(v) && v.id === resourceId,
+              (v) => isCardOrField(v) && 'id' in v && v.id === resourceId,
             );
             if (loadedValue) {
               return loadedValue;
@@ -1593,13 +1593,25 @@ export class BaseDef {
   }
 }
 
-export function isCard(card: any): card is CardDef {
+export function isCardOrField(card: any): card is CardDef | FieldDef {
   return card && typeof card === 'object' && isBaseInstance in card;
+}
+
+export function isCard(card: any): card is CardDef {
+  return isCardOrField(card) && !('isFieldDef' in card.constructor);
+}
+
+export function isCompoundField(card: any) {
+  return (
+    isCardOrField(card) &&
+    'isFieldDef' in card.constructor &&
+    !(primitive in card)
+  );
 }
 
 class DefaultCardDefTemplate extends GlimmerComponent<{
   Args: {
-    model: BaseDef;
+    model: CardDef;
     fields: Record<string, new () => GlimmerComponent>;
   };
 }> {
@@ -1628,7 +1640,7 @@ class DefaultCardDefTemplate extends GlimmerComponent<{
 
 class FieldDefEditTemplate extends GlimmerComponent<{
   Args: {
-    model: BaseDef;
+    model: FieldDef;
     fields: Record<string, new () => GlimmerComponent>;
   };
 }> {
@@ -1709,6 +1721,7 @@ class IDField extends FieldDef {
 }
 
 export class StringField extends FieldDef {
+  static displayName = 'String';
   static [primitive]: string;
   static [useIndexBasedKey]: never;
   static embedded = class Embedded extends Component<typeof this> {
@@ -2490,11 +2503,11 @@ export async function recompute(
           }
           if (Array.isArray(value)) {
             for (let item of value) {
-              if (item && isCard(item) && !stack.includes(item)) {
+              if (item && isCardOrField(item) && !stack.includes(item)) {
                 await _loadModel(item, [item, ...stack]);
               }
             }
-          } else if (isCard(value) && !stack.includes(value)) {
+          } else if (isCardOrField(value) && !stack.includes(value)) {
             await _loadModel(value, [value, ...stack]);
           }
         }
@@ -2600,7 +2613,7 @@ export function getFields(
 ): { [fieldName: string]: Field<BaseDefConstructor> } {
   let obj: object | null;
   let usedFields: string[] = [];
-  if (isCard(cardInstanceOrClass)) {
+  if (isCardOrField(cardInstanceOrClass)) {
     // this is a card instance
     obj = Reflect.getPrototypeOf(cardInstanceOrClass);
     usedFields = getUsedFields(cardInstanceOrClass);
@@ -2614,7 +2627,7 @@ export function getFields(
     let currentFields = flatMap(Object.keys(descs), (maybeFieldName) => {
       if (maybeFieldName !== 'constructor') {
         let maybeField = getField(
-          (isCard(cardInstanceOrClass)
+          (isCardOrField(cardInstanceOrClass)
             ? cardInstanceOrClass.constructor
             : cardInstanceOrClass) as typeof BaseDef,
           maybeFieldName,
