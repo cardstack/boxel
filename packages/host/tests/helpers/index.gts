@@ -11,6 +11,7 @@ import {
   executableExtensions,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
+import { notFound } from '@cardstack/runtime-common/error';
 import { getFileWithFallbacks } from '@cardstack/runtime-common/stream';
 import GlimmerComponent from '@glimmer/component';
 import { type TestContext, visit } from '@ember/test-helpers';
@@ -452,6 +453,11 @@ async function manualRedirectHandle(request: Request, adapter: RealmAdapter) {
     adapter.openFile.bind(adapter),
     executableExtensions,
   );
+  let maybeExtension = ref?.path.split('.').pop();
+  let responseUrl = maybeExtension
+    ? `${request.url}.${maybeExtension}`
+    : request.url;
+
   if (
     ref &&
     (ref.content instanceof ReadableStream ||
@@ -463,7 +469,7 @@ async function manualRedirectHandle(request: Request, adapter: RealmAdapter) {
         'last-modified': formatRFC7231(ref.lastModified),
       },
     });
-    return new MockRedirectedResponse(r.body, r, request.url + '.gts');
+    return new MockRedirectedResponse(r.body, r, responseUrl);
   }
   return null;
 }
