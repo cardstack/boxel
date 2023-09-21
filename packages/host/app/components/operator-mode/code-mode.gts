@@ -719,7 +719,11 @@ export default class CodeMode extends Component<Signature> {
                     <span class='saving-msg'>
                       Now Saving
                     </span>
-                    <LoadingIndicator />
+                    <span class='save-spinner'>
+                      <span class='save-spinner-inner'>
+                        <LoadingIndicator />
+                      </span>
+                    </span>
                   {{else}}
                     <span class='saved-msg'>
                       Saved
@@ -936,6 +940,15 @@ export default class CodeMode extends Component<Signature> {
       .save-indicator.visible {
         transform: translateX(0px);
         transition-delay: 0s;
+      }
+      .save-spinner {
+        display: inline-block;
+        position: relative;
+      }
+      .save-spinner-inner {
+        display: inline-block;
+        position: absolute;
+        top: -7px;
       }
       .saving-msg {
         margin-right: var(--boxel-sp-sm);
