@@ -8,7 +8,7 @@ import {
   ClickableModuleDefinitionContainer,
 } from './definition-container';
 import { Ready } from '@cardstack/host/resources/file';
-// @ts-expect-error chaged doesn't have type yet
+// @ts-expect-error cached doesn't have type yet
 import { tracked, cached } from '@glimmer/tracking';
 import moment from 'moment';
 import { type AdoptionChainResource } from '@cardstack/host/resources/adoption-chain';
