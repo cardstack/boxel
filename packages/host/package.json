@@ -176,7 +176,6 @@
   },
   "dependencies": {
     "ember-async-data": "^1.0.1",
-    "ember-click-outside": "^6.0.1",
-    "jimp": "^0.22.10"
+    "ember-click-outside": "^6.0.1"
   }
 }

@@ -7,8 +7,6 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import URLBarResource, {
   urlBarResource,
 } from '@cardstack/host/resources/url-bar';
-import { trackedFunction } from 'ember-resources/util/function';
-import { hasTransparentBackground } from '@cardstack/host/utils/transparent-background';
 
 interface Signature {
   Element: HTMLElement;
@@ -28,7 +26,7 @@ export default class CardURLBar extends Component<Signature> {
       ...attributes
     >
       <div class='realm-info' data-test-card-url-bar-realm-info>
-        <div class={{this.realmIconStyles}}>
+        <div class='realm-icon'>
           <img src={{this.realmIcon}} alt='realm-icon' />
         </div>
         <span>in
@@ -89,17 +87,13 @@ export default class CardURLBar extends Component<Signature> {
       .realm-icon {
         display: flex;
         align-items: center;
-        background-color: var(--boxel-black);
+        background-color: var(--boxel-light);
         background-image: var(--card-url-bar-realm-icon);
         height: 100%;
 
-        border: 1px solid var(--boxel-border-color);
+        border: 1px solid var(--boxel-light);
         border-radius: var(--boxel-border-radius-xs);
         width: 20px;
-      }
-      .transparent {
-        background: var(--boxel-light);
-        padding: 2px;
       }
       .realm-icon img {
         width: 100%;
@@ -156,22 +150,6 @@ export default class CardURLBar extends Component<Signature> {
 
   get realmName() {
     return this.args.realmInfo?.name;
-  }
-
-  isRealmIconTransparent = trackedFunction(this, async () => {
-    if (!this.realmIcon) {
-      return false;
-    }
-    let result = await hasTransparentBackground(this.realmIcon);
-    return result;
-  });
-
-  get realmIconStyles() {
-    if (this.isRealmIconTransparent.value) {
-      return 'realm-icon transparent';
-    } else {
-      return 'realm-icon';
-    }
   }
 
   get cssClasses() {
