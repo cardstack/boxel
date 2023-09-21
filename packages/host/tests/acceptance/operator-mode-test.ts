@@ -7,7 +7,6 @@ import {
   triggerKeyEvent,
   waitFor,
   waitUntil,
-  find,
   fillIn,
 } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
@@ -879,7 +878,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         )}`,
       );
 
-      await waitUntil(() => find('[data-test-card-resource-loaded]'));
+      await waitFor('[data-test-card-resource-loaded]');
 
       assert.dom('[data-test-code-mode-card-preview-header]').hasText('Person');
       assert
@@ -1002,7 +1001,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitUntil(() => find('[data-test-card-resource-loaded]'));
+    await waitFor('[data-test-card-resource-loaded]');
     await this.expectEvents(
       assert,
       realm,
@@ -1057,7 +1056,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitUntil(() => find('[data-test-editor]'));
+    await waitFor('[data-test-editor]');
     assert.deepEqual(JSON.parse(getMonacoContent()), {
       data: {
         attributes: {
@@ -1108,7 +1107,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitUntil(() => find('[data-test-editor]'));
+    await waitFor('[data-test-editor]');
 
     this.onSave((json) => {
       if (typeof json === 'string') {
@@ -1173,7 +1172,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitUntil(() => find('[data-test-editor]'));
+    await waitFor('[data-test-editor]');
 
     this.onSave((json) => {
       if (typeof json === 'string') {
@@ -1212,7 +1211,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitUntil(() => find('[data-test-editor]'));
+    await waitFor('[data-test-editor]');
 
     this.onSave((content) => {
       if (typeof content !== 'string') {
@@ -1240,7 +1239,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitUntil(() => find('[data-test-editor]'));
+    await waitFor('[data-test-editor]');
 
     this.onSave((content) => {
       if (typeof content !== 'string') {
@@ -1274,7 +1273,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitUntil(() => find('[data-test-editor]'));
+    await waitFor('[data-test-editor]');
 
     this.onSave((json) => {
       if (typeof json === 'string') {
@@ -1308,7 +1307,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitUntil(() => find('[data-test-editor]'));
+    await waitFor('[data-test-editor]');
 
     this.onSave(() => {
       assert.ok(false, `save should never happen`);
@@ -1380,7 +1379,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitUntil(() => find('[data-test-editor]'));
+    await waitFor('[data-test-editor]');
 
     await this.expectEvents(
       assert,
@@ -1453,7 +1452,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    await waitUntil(() => find('[data-test-editor]'));
+    await waitFor('[data-test-editor]');
     assert.strictEqual(
       window.localStorage.getItem('recent-files'),
       JSON.stringify([`${testRealmURL}Pet/vangogh.json`]),
@@ -1472,7 +1471,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         await click('[data-test-confirm-delete-button]');
       },
     );
-    await waitUntil(() => find('[data-test-empty-code-mode]'));
+    await waitFor('[data-test-empty-code-mode]');
     await percySnapshot(
       'Acceptance | operator mode tests | Can delete a card instance from code mode with no recent files - empty code mode',
     );
@@ -1542,7 +1541,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    await waitUntil(() => find('[data-test-editor]'));
+    await waitFor('[data-test-editor]');
     assert.strictEqual(
       window.localStorage.getItem('recent-files'),
       JSON.stringify([
@@ -1563,7 +1562,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         await click('[data-test-confirm-delete-button]');
       },
     );
-    await waitUntil(() => find('[data-test-editor]'));
+    await waitFor('[data-test-editor]');
     assert
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}Pet/mango.json`);
