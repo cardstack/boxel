@@ -394,16 +394,11 @@ function makeRealm(
   if (manualRedirect) {
     let handler = async (req: Request) => {
       let urlParts = req.url.split('.');
-      let maybeExtension =
-        urlParts.length > 1 ? '.' + urlParts.pop() : undefined;
-      const hasExtension = maybeExtension
-        ? ['.json', ...executableExtensions].includes(maybeExtension)
-        : false;
       if (
         req.method === 'GET' &&
         req.headers.get('Accept') === SupportedMimeType.CardSource &&
-        !hasExtension &&
-        req.url.includes(testRealmURL)
+        req.url.includes(testRealmURL) &&
+        urlParts.length === 1 //has no extension
       ) {
         let r = await manualRedirectHandle(req, adapter);
         return r as Response;
