@@ -436,7 +436,9 @@ export default class CodeMode extends Component<Signature> {
   });
 
   private saveCard = restartableTask(async (card: CardDef) => {
-    await this.cardService.saveModel(card);
+    // these saves can happen so fast that we'll make sure to wait at
+    // least 500ms for human consumption
+    await all([this.cardService.saveModel(card), timeout(500)]);
   });
 
   private contentChangedTask = restartableTask(async (content: string) => {
@@ -524,7 +526,9 @@ export default class CodeMode extends Component<Signature> {
     }
 
     try {
-      await this.cardService.saveModel(card);
+      // these saves can happen so fast that we'll make sure to wait at
+      // least 500ms for human consumption
+      await all([this.cardService.saveModel(card), timeout(500)]);
       await this.maybeReloadCard.perform(card.id);
     } catch (e) {
       console.error('Failed to save single card document', e);
