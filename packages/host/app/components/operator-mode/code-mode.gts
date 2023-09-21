@@ -728,7 +728,7 @@ export default class CodeMode extends Component<Signature> {
                     <span class='saved-msg'>
                       Saved
                     </span>
-                    {{svgJar 'check-mark-teal' width='27' height='27'}}
+                    {{svgJar 'check-mark' width='27' height='27'}}
                   {{/if}}
                 </div>
               {{else if this.isLoading}}
@@ -921,6 +921,7 @@ export default class CodeMode extends Component<Signature> {
       }
 
       .save-indicator {
+        --icon-color: var(--boxel-highlight);
         position: absolute;
         display: flex;
         align-items: center;
