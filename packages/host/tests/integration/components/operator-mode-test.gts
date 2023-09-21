@@ -622,7 +622,9 @@ module('Integration | operator-mode', function (hooks) {
       '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
       ...Object.fromEntries(personCards),
     });
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
+      manualRedirect: true,
+    });
     await realm.ready;
 
     setCardInOperatorModeState = async (cardURL: string) => {
