@@ -1,10 +1,29 @@
 import { module, test, assert } from 'qunit';
-import { processStream, ParsingMode, Message } from '../helpers';
+import {
+  processStream,
+  ParsingMode,
+  Message,
+  extractContentFromStream,
+} from '../helpers';
 
 async function* streamGenerator(stream: string[]) {
   for (const chunk of stream) {
     yield chunk;
   }
+}
+
+async function* chatCompletionGenerator(stream: string[]) {
+  for (const chunk of stream) {
+    yield { choices: [{ delta: { content: chunk } }] };
+  }
+}
+
+async function streamToArray(stream: AsyncIterable<string>) {
+  const result = [];
+  for await (const chunk of stream) {
+    result.push(chunk);
+  }
+  return result;
 }
 
 async function assertProcessedStreamContains(
@@ -28,10 +47,12 @@ module('processStream', () => {
     await assertProcessedStreamContains(stream, expectedResult);
   });
 
-  test('should preserve whitespace but not send whitespace only updates', async () => {
+  test('should preserve multiple whitespace', async () => {
     const stream = ['Hello', ' ', ' ', 'World'];
     const expectedResult = [
       { type: ParsingMode.Text, content: 'Hello' },
+      { type: ParsingMode.Text, content: 'Hello ' },
+      { type: ParsingMode.Text, content: 'Hello  ' },
       { type: ParsingMode.Text, content: 'Hello  World' }, // Note preserving the two whitespace characters
     ];
     await assertProcessedStreamContains(stream, expectedResult);
@@ -40,21 +61,20 @@ module('processStream', () => {
   test('should extract out the option blocks', async () => {
     const stream = [
       'Hello',
-      '<option>',
       '{',
       '"some"',
       ':',
       '"thing"',
       '}',
-      '</option>',
       'there',
       ' ',
       'World',
     ];
-    const expectedResult = [
+    const expectedResult: Message[] = [
       { type: ParsingMode.Text, content: 'Hello' },
-      { type: ParsingMode.Command, content: '{"some":"thing"}' },
+      { type: ParsingMode.Command, content: { some: 'thing' } },
       { type: ParsingMode.Text, content: 'there' },
+      { type: ParsingMode.Text, content: 'there ' },
       { type: ParsingMode.Text, content: 'there World' },
     ];
     await assertProcessedStreamContains(stream, expectedResult);
@@ -62,51 +82,39 @@ module('processStream', () => {
 
   // Tests that the code correctly processes a stream containing only structured data
   test('should correctly process a stream containing only structured data', async () => {
-    const stream = [
-      '<option>',
-      '{',
-      '"some"',
-      ':',
-      '"thing"',
-      '}',
-      '</option>',
-    ];
-    const expectedResult = [
-      { type: ParsingMode.Command, content: '{"some":"thing"}' },
+    const stream = ['{', '"some"', ':', '"thing"', '}'];
+    const expectedResult: Message[] = [
+      { type: ParsingMode.Command, content: { some: 'thing' } },
     ];
     await assertProcessedStreamContains(stream, expectedResult);
   });
 
   test('should correctly handle a stream containing an empty string', async () => {
     const stream = [''];
-    const expectedResult: Message[] = [];
+    const expectedResult: Message[] = [{ type: ParsingMode.Text, content: '' }];
     await assertProcessedStreamContains(stream, expectedResult);
   });
 
   test('should handle multiple option blocks', async () => {
     const stream = [
       'Option 1',
-      '<option>',
       '{',
       '"some"',
       ':',
       '"thing"',
       '}',
-      '</option>',
       'Option 2',
-      '<option>',
       '{',
       '"some"',
       ':',
       '"thing else"',
       '}',
-      '</option>',
     ];
-    const expectedResult = [
+    const expectedResult: Message[] = [
       { type: ParsingMode.Text, content: 'Option 1' },
-      { type: ParsingMode.Command, content: '{"some":"thing"}' },
+      { type: ParsingMode.Command, content: { some: 'thing' } },
       { type: ParsingMode.Text, content: 'Option 2' },
-      { type: ParsingMode.Command, content: '{"some":"thing else"}' },
+      { type: ParsingMode.Command, content: { some: 'thing else' } },
     ];
     await assertProcessedStreamContains(stream, expectedResult);
   });
@@ -122,8 +130,6 @@ module('processStream', () => {
       '1',
       ':',
       '\n',
-      '<option',
-      '>\n',
       '{',
       '  \n',
       ' ',
@@ -164,11 +170,8 @@ module('processStream', () => {
       ' ',
       ' }\n',
       '}\n',
-      '</',
-      'option',
-      '>',
     ];
-    const expectedResult = [
+    const expectedResult: Message[] = [
       {
         type: ParsingMode.Text,
         content: 'Certainly',
@@ -179,7 +182,15 @@ module('processStream', () => {
       },
       {
         type: ParsingMode.Text,
+        content: 'Certainly:\n\n',
+      },
+      {
+        type: ParsingMode.Text,
         content: 'Certainly:\n\nOption',
+      },
+      {
+        type: ParsingMode.Text,
+        content: 'Certainly:\n\nOption ',
       },
       {
         type: ParsingMode.Text,
@@ -190,11 +201,68 @@ module('processStream', () => {
         content: 'Certainly:\n\nOption 1:',
       },
       {
+        type: ParsingMode.Text,
+        content: 'Certainly:\n\nOption 1:\n',
+      },
+      {
         type: ParsingMode.Command,
-        content:
-          '\n{  \n  "id": "http://localhost:4201/drafts/Pet/2",  \n  "patch": {    \n    "firstName": "ModifiedName"  \n  }\n}\n',
+        content: {
+          id: 'http://localhost:4201/drafts/Pet/2',
+          patch: { firstName: 'ModifiedName' },
+        },
       },
     ];
     await assertProcessedStreamContains(stream, expectedResult);
+  });
+
+  test('should split responses around { and }', async () => {
+    const stream = chatCompletionGenerator(['this is { "a": "json"}']);
+    const expectedResult: string[] = ['this is ', '{', ' "a": "json"', '}'];
+    const result: string[] = await streamToArray(
+      extractContentFromStream(stream),
+    );
+
+    assert.deepEqual(result, expectedResult);
+  });
+
+  test('should split responses around { and } even if they are on their own', async () => {
+    const stream = chatCompletionGenerator([
+      'this is ',
+      '{',
+      ' "a": "json"',
+      '}',
+    ]);
+    const expectedResult: string[] = ['this is ', '{', ' "a": "json"', '}'];
+    const result: string[] = await streamToArray(
+      extractContentFromStream(stream),
+    );
+
+    assert.deepEqual(result, expectedResult);
+  });
+
+  test('whitespace is not lost with splitting the tokens', async () => {
+    const stream = chatCompletionGenerator([
+      'this is   ',
+      '  {',
+      ' "a": "json"',
+      '}  ',
+      '  ',
+      '  \n',
+    ]);
+    const expectedResult: string[] = [
+      'this is   ',
+      '  ',
+      '{',
+      ' "a": "json"',
+      '}',
+      '  ',
+      '  ',
+      '  \n',
+    ];
+    const result: string[] = await streamToArray(
+      extractContentFromStream(stream),
+    );
+
+    assert.deepEqual(result, expectedResult);
   });
 });

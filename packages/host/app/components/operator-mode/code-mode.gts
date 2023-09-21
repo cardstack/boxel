@@ -1,26 +1,32 @@
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+//@ts-expect-error cached type not available yet
+import { cached, tracked } from '@glimmer/tracking';
 import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import { task, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
+import config from '@cardstack/host/config/environment';
+import isEqual from 'lodash/isEqual';
+import { and } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import {
   type RealmInfo,
   type SingleCardDocument,
+  type LooseSingleCardDocument,
   type CodeRef,
   RealmPaths,
-  isCardDocument,
   logger,
   isSingleCardDocument,
   identifyCard,
   moduleFrom,
+  hasExecutableExtension,
 } from '@cardstack/runtime-common';
 
 import {
@@ -57,20 +63,29 @@ import { maybe } from '@cardstack/host/resources/maybe';
 
 // host services
 import type CardService from '@cardstack/host/services/card-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import { adoptionChainResource } from '@cardstack/host/resources/adoption-chain';
+import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
+
+import { buildWaiter } from '@ember/test-waiters';
+import { isTesting } from '@embroider/macros';
 
 interface Signature {
   Args: {
     delete: (card: CardDef, afterDelete?: () => void) => void;
     saveSourceOnClose: (url: URL, content: string) => void;
+    saveCardOnClose: (card: CardDef) => void;
   };
 }
 const log = logger('component:code-mode');
+const waiter = buildWaiter('code-mode:load-card-waiter');
+let { autoSaveDelayMs } = config;
 
 type PanelWidths = {
   rightPanel: string;
@@ -93,23 +108,32 @@ export default class CodeMode extends Component<Signature> {
   @service declare messageService: MessageService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare recentFilesService: RecentFilesService;
+  @service declare loaderService: LoaderService;
 
   @tracked private loadFileError: string | null = null;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
-  private isSourceStale = false;
+  @tracked private card: CardDef | undefined;
+  @tracked cardError: Error | undefined;
+  private hasUnsavedSourceChanges = false;
+  private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
-  private subscription: { url: string; unsubscribe: () => void } | undefined;
-  private _cachedRealmInfo: RealmInfo | null = null; // This is to cache realm info during reload after code path change so that realm assets don't produce a flicker when code patch changes and the realm is the same
+  private realmSubscription:
+    | { url: string; unsubscribe: () => void }
+    | undefined;
+  // This is to cache realm info during reload after code path change so
+  // that realm assets don't produce a flicker when code patch changes and
+  // the realm is the same
+  private cachedRealmInfo: RealmInfo | null = null;
 
-  constructor(args: any, owner: any) {
-    super(args, owner);
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
     this.panelWidths = localStorage.getItem(CodeModePanelWidths)
       ? // @ts-ignore Type 'null' is not assignable to type 'string'
         JSON.parse(localStorage.getItem(CodeModePanelWidths))
       : defaultPanelWidths;
 
     let url = `${this.cardService.defaultURL}_message`;
-    this.subscription = {
+    this.realmSubscription = {
       url,
       unsubscribe: this.messageService.subscribe(
         url,
@@ -117,14 +141,13 @@ export default class CodeMode extends Component<Signature> {
           if (type !== 'index') {
             return;
           }
-          let card = this.cardResource.value;
           let data = JSON.parse(dataStr);
-          if (!card || data.type !== 'incremental') {
+          if (!this.card || data.type !== 'incremental') {
             return;
           }
           let invalidations = data.invalidations as string[];
-          if (invalidations.includes(card.id)) {
-            this.reloadCard.perform();
+          if (invalidations.includes(this.card.id)) {
+            this.maybeReloadCard.perform(this.card.id);
           }
         },
       ),
@@ -134,12 +157,14 @@ export default class CodeMode extends Component<Signature> {
       // which is async, we leverage an EC task that is running in a
       // parent component (EC task lifetimes are bound to their context)
       // that is not being destroyed.
-      if (this.codePath && this.isSourceStale) {
-        // TODO need to reconcile any usaved differences between
-        // monaco and card editor: CS-5981. For now monaco wins...
+      if (this.codePath && this.hasUnsavedSourceChanges) {
+        // we let the monaco changes win if there are unsaved changes both
+        // monaco and the card preview (an arbitrary choice)
         this.args.saveSourceOnClose(this.codePath, getMonacoContent());
+      } else if (this.hasUnsavedCardChanges && this.card) {
+        this.args.saveCardOnClose(this.card);
       }
-      this.subscription?.unsubscribe();
+      this.realmSubscription?.unsubscribe();
     });
     this.loadMonaco.perform();
   }
@@ -225,7 +250,7 @@ export default class CodeMode extends Component<Signature> {
       return new TrackedObject({
         error: null,
         isLoading: false,
-        value: this._cachedRealmInfo,
+        value: this.cachedRealmInfo,
         load: () => Promise<void>,
       });
     }
@@ -237,7 +262,7 @@ export default class CodeMode extends Component<Signature> {
       load: () => Promise<void>;
     } = new TrackedObject({
       isLoading: true,
-      value: this._cachedRealmInfo,
+      value: this.cachedRealmInfo,
       error: undefined,
       load: async () => {
         state.isLoading = true;
@@ -248,7 +273,7 @@ export default class CodeMode extends Component<Signature> {
           );
 
           if (realmInfo) {
-            this._cachedRealmInfo = realmInfo;
+            this.cachedRealmInfo = realmInfo;
           }
 
           state.value = realmInfo;
@@ -278,6 +303,9 @@ export default class CodeMode extends Component<Signature> {
           this.setFileView('browser');
         }
       },
+      onRedirect: (url: string) => {
+        this.operatorModeStateService.replaceCodePath(new URL(url));
+      },
     }));
   });
 
@@ -285,69 +313,133 @@ export default class CodeMode extends Component<Signature> {
     if (isReady(this.openFile.current)) {
       let f: Ready = this.openFile.current;
       if (f.url.endsWith('.json')) {
-        let ref = identifyCard(this.cardResource.value?.constructor);
+        let ref = identifyCard(this.card?.constructor);
         if (ref !== undefined) {
           return importResource(this, () => moduleFrom(ref as CodeRef));
         } else {
           return;
         }
-      } else {
+      } else if (hasExecutableExtension(f.url)) {
         return importResource(this, () => f.url);
       }
+    }
+    return undefined;
+  });
+
+  private maybeReloadCard = restartableTask(async (id: string) => {
+    if (this.card?.id === id) {
+      try {
+        await this.loadIfDifferent.perform(
+          new URL(id),
+          // we need to be careful that we are not responding to our own echo.
+          // first test to see if the card is actually different by comparing
+          // the serializations
+          (await this.cardService.fetchJSON(id)) as SingleCardDocument,
+        );
+      } catch (e: any) {
+        if ('status' in e && e.status === 404) {
+          return; // card has been deleted
+        }
+        throw e;
+      }
+    }
+  });
+
+  @use private adoptionChain = resource(() => {
+    if (this.importedModule) {
+      return adoptionChainResource(this, this.importedModule);
     } else {
       return undefined;
     }
   });
 
-  private reloadCard = restartableTask(async () => {
-    await this.cardResource.load();
-  });
-
-  @use private cardResource = resource(() => {
-    let isFileReady =
-      isReady(this.openFile.current) &&
-      this.openFile.current.name.endsWith('.json');
-    const state: {
-      isLoading: boolean;
-      value: CardDef | null;
-      error: Error | undefined;
-      load: () => Promise<void>;
-    } = new TrackedObject({
-      isLoading: isFileReady,
-      value: null,
-      error:
-        this.openFile.current?.state == 'not-found'
-          ? new Error('File not found')
-          : undefined,
-      load: async () => {
-        state.isLoading = true;
-        try {
-          let currentlyOpenedFile = this.openFile.current;
-          if (!currentlyOpenedFile) {
-            return undefined;
-          }
-          let cardDoc = JSON.parse((currentlyOpenedFile as Ready).content);
-          if (isCardDocument(cardDoc)) {
-            let url = (currentlyOpenedFile as Ready).url.replace(/\.json$/, '');
-            state.value = await this.cardService.loadModel(url);
-          }
-        } catch (error: any) {
-          state.error = error;
-        } finally {
-          state.isLoading = false;
+  // We are actually loading cards using a side-effect of this cached getter
+  // instead of a resource because with a resource it becomes impossible
+  // to ignore our own auto-save echoes, since the act of auto-saving triggers
+  // the openFile resource to update which would otherwise trigger a card
+  // resource to update (and hence invalidate components can consume this card
+  // resource.) By using this side effect we can prevent invalidations when the
+  // card isn't actually different and we are just seeing SSE events in response
+  // to our own activity.
+  @cached
+  private get openFileCardJSON() {
+    this.cardError = undefined;
+    if (
+      this.openFile.current?.state === 'ready' &&
+      this.openFile.current.name.endsWith('.json')
+    ) {
+      let maybeCard: any;
+      try {
+        maybeCard = JSON.parse(this.openFile.current.content);
+      } catch (err: any) {
+        this.cardError = err;
+        return undefined;
+      }
+      if (isSingleCardDocument(maybeCard)) {
+        let url = this.openFile.current.url.replace(/\.json$/, '');
+        if (!url) {
+          return undefined;
         }
-      },
-    });
-
-    if (isFileReady) {
-      state.load();
+        this.loadIfDifferent.perform(new URL(url), maybeCard);
+        return maybeCard;
+      }
     }
-    return state;
+    return undefined;
+  }
+
+  private get cardIsLoaded() {
+    return (
+      isReady(this.openFile.current) &&
+      this.openFileCardJSON &&
+      this.card?.id === this.openFile.current.url.replace(/\.json$/, '')
+    );
+  }
+
+  private get loadedCard() {
+    if (!this.card) {
+      throw new Error(`bug: card ${this.codePath} is not loaded`);
+    }
+    return this.card;
+  }
+
+  private loadIfDifferent = restartableTask(
+    async (url: URL, incomingDoc?: SingleCardDocument) => {
+      await this.withTestWaiters(async () => {
+        let card = await this.cardService.loadModel(url);
+        if (this.card && incomingDoc) {
+          let incoming = comparableSerialization(incomingDoc);
+          let current = comparableSerialization(
+            await this.cardService.serializeCard(this.card),
+          );
+          if (isEqual(incoming, current)) {
+            return;
+          }
+        }
+        if (this.card) {
+          this.cardService.unsubscribe(this.card, this.onCardChange);
+        }
+        this.card = card;
+        this.cardService.subscribe(this.card, this.onCardChange);
+      });
+    },
+  );
+
+  private onCardChange = () => {
+    this.doWhenCardChanges.perform();
+  };
+
+  private doWhenCardChanges = restartableTask(async () => {
+    if (this.card) {
+      this.hasUnsavedCardChanges = true;
+      await timeout(autoSaveDelayMs);
+      await this.cardService.saveModel(this.card);
+      this.hasUnsavedCardChanges = false;
+    }
   });
 
   private contentChangedTask = restartableTask(async (content: string) => {
-    this.isSourceStale = true;
-    await timeout(500);
+    this.hasUnsavedSourceChanges = true;
+    await timeout(autoSaveDelayMs);
     if (
       !isReady(this.openFile.current) ||
       content === this.openFile.current?.content
@@ -368,7 +460,7 @@ export default class CodeMode extends Component<Signature> {
       // then updates the state of the file resource
       this.writeSourceCodeToFile(this.openFile.current, content);
     }
-    this.isSourceStale = false;
+    this.hasUnsavedSourceChanges = false;
   });
 
   // We use this to write non-cards to the realm--so it doesn't make
@@ -422,7 +514,7 @@ export default class CodeMode extends Component<Signature> {
 
     try {
       await this.cardService.saveModel(card);
-      await this.reloadCard.perform();
+      await this.maybeReloadCard.perform(card.id);
     } catch (e) {
       console.error('Failed to save single card document', e);
     }
@@ -451,8 +543,8 @@ export default class CodeMode extends Component<Signature> {
 
   @action
   private delete() {
-    if (this.cardResource.value) {
-      this.args.delete(this.cardResource.value, () => {
+    if (this.card) {
+      this.args.delete(this.card, () => {
         let previousFile = this.recentFilesService.recentFiles[0] as
           | string
           | undefined;
@@ -461,6 +553,21 @@ export default class CodeMode extends Component<Signature> {
       });
     } else {
       throw new Error(`TODO: non-card instance deletes are not yet supported`);
+    }
+  }
+
+  private async withTestWaiters<T>(cb: () => Promise<T>) {
+    let token = waiter.beginAsync();
+    try {
+      let result = await cb();
+      // only do this in test env--this makes sure that we also wait for any
+      // interior card instance async as part of our ember-test-waiters
+      if (isTesting()) {
+        await this.cardService.cardsSettled();
+      }
+      return result;
+    } finally {
+      waiter.endAsync(token);
     }
   }
 
@@ -475,7 +582,11 @@ export default class CodeMode extends Component<Signature> {
     <div
       class='code-mode'
       data-test-code-mode
-      data-test-save-idle={{this.contentChangedTask.isIdle}}
+      data-test-save-idle={{and
+        this.contentChangedTask.isIdle
+        this.maybeReloadCard.isIdle
+        this.doWhenCardChanges.isIdle
+      }}
     >
       <ResizablePanelGroup
         @onListPanelContextChange={{this.onListPanelContextChange}}
@@ -535,11 +646,11 @@ export default class CodeMode extends Component<Signature> {
                   <section class='inner-container__content'>
                     {{#if this.isReady}}
                       <CardInheritancePanel
-                        @cardInstance={{this.cardResource.value}}
+                        @cardInstance={{this.card}}
                         @readyFile={{this.readyFile}}
                         @realmInfo={{this.realmInfo}}
                         @realmIconURL={{this.realmIconURL}}
-                        @importedModule={{this.importedModule}}
+                        @adoptionChain={{this.adoptionChain}}
                         @delete={{this.delete}}
                         data-test-card-inheritance-panel
                       />
@@ -597,14 +708,19 @@ export default class CodeMode extends Component<Signature> {
             @panelGroupApi={{pg.api}}
           >
             <div class='inner-container'>
-              {{#if this.cardResource.value}}
+              {{#if this.cardIsLoaded}}
                 <CardPreviewPanel
-                  @card={{this.cardResource.value}}
+                  @card={{this.loadedCard}}
                   @realmIconURL={{this.realmIconURL}}
                   data-test-card-resource-loaded
                 />
-              {{else if this.cardResource.error}}
-                {{this.cardResource.error.message}}
+              {{else if this.importedModule.module}}
+                <CardAdoptionChain
+                  @file={{this.readyFile}}
+                  @importedModule={{this.importedModule.module}}
+                />
+              {{else if this.cardError}}
+                {{this.cardError.message}}
               {{/if}}
             </div>
           </ResizablePanel>
@@ -777,4 +893,16 @@ export default class CodeMode extends Component<Signature> {
 
 function getMonacoContent() {
   return (window as any).monaco.editor.getModels()[0].getValue();
+}
+
+function comparableSerialization(doc: LooseSingleCardDocument) {
+  delete doc.included;
+  delete doc.data.links;
+  delete (doc.data as any).meta;
+  delete doc.data.type;
+  delete doc.data.id;
+  for (let rel of Object.keys(doc.data.relationships ?? {})) {
+    delete doc.data.relationships?.[rel].data;
+  }
+  return doc;
 }

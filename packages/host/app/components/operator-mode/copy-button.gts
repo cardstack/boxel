@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import { on } from '@ember/modifier';
+import type Owner from '@ember/owner';
 import { fn } from '@ember/helper';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { eq, gt, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
@@ -95,7 +96,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     </style>
   </template>
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.loadCardService.perform();
   }

@@ -2,6 +2,7 @@ import Component from '@glimmer/component';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { restartableTask, timeout } from 'ember-concurrency';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
@@ -164,7 +165,7 @@ export default class Go extends Component<Signature> {
   // note this is only subscribed to events from our own realm
   private subscription: { url: string; unsubscribe: () => void } | undefined;
 
-  constructor(owner: unknown, args: Signature['Args']) {
+  constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     let url = `${this.cardService.defaultURL}_message`;
     this.subscription = {

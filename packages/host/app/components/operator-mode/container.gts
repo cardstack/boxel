@@ -2,6 +2,7 @@ import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { fn } from '@ember/helper';
 import { trackedFunction } from 'ember-resources/util/function';
 import CardCatalogModal from '../card-catalog/modal';
@@ -19,7 +20,7 @@ import {
   chooseCard,
   type Actions,
   type CodeRef,
-  LooseSingleCardDocument,
+  type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type LoaderService from '../../services/loader-service';
@@ -95,7 +96,7 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   private deleteModal: DeleteModal | undefined;
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
 
     this.messageService.register();
@@ -248,6 +249,12 @@ export default class OperatorModeContainer extends Component<Signature> {
         }
       }
     }
+  });
+
+  saveCard = task(async (card: CardDef) => {
+    await this.withTestWaiters(async () => {
+      await this.cardService.saveModel(card);
+    });
   });
 
   saveSource = task(async (url: URL, content: string) => {
@@ -652,6 +659,7 @@ export default class OperatorModeContainer extends Component<Signature> {
           <CodeMode
             @delete={{perform this.delete}}
             @saveSourceOnClose={{perform this.saveSource}}
+            @saveCardOnClose={{perform this.saveCard}}
           />
         {{else}}
           <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
