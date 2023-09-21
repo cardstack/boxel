@@ -33,7 +33,6 @@ import {
   LoadingIndicator,
   Button,
   ResizablePanelGroup,
-  ResizablePanel,
   PanelContext,
 } from '@cardstack/boxel-ui';
 import cn from '@cardstack/boxel-ui/helpers/cn';
@@ -591,12 +590,11 @@ export default class CodeMode extends Component<Signature> {
       <ResizablePanelGroup
         @onListPanelContextChange={{this.onListPanelContextChange}}
         class='columns'
-        as |pg|
+        as |ResizablePanel|
       >
         <ResizablePanel
           @defaultWidth={{defaultPanelWidths.leftPanel}}
           @width='var(--operator-mode-left-column)'
-          @panelGroupApi={{pg.api}}
         >
           <div class='column'>
             {{! Move each container and styles to separate component }}
@@ -681,7 +679,6 @@ export default class CodeMode extends Component<Signature> {
             @defaultWidth={{defaultPanelWidths.codeEditorPanel}}
             @width={{this.panelWidths.codeEditorPanel}}
             @minWidth='300px'
-            @panelGroupApi={{pg.api}}
           >
             <div class='inner-container'>
               {{#if this.isReady}}
@@ -705,7 +702,6 @@ export default class CodeMode extends Component<Signature> {
           <ResizablePanel
             @defaultWidth={{defaultPanelWidths.rightPanel}}
             @width={{this.panelWidths.rightPanel}}
-            @panelGroupApi={{pg.api}}
           >
             <div class='inner-container'>
               {{#if this.cardIsLoaded}}
@@ -728,7 +724,6 @@ export default class CodeMode extends Component<Signature> {
           <ResizablePanel
             @defaultWidth={{defaultPanelWidths.emptyCodeModePanel}}
             @width={{this.panelWidths.emptyCodeModePanel}}
-            @panelGroupApi={{pg.api}}
           >
             <div
               class='inner-container inner-container--empty'

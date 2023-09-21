@@ -22,8 +22,7 @@ import BoxelButton from './components/button';
 import Tooltip from './components/tooltip';
 import ResizablePanelGroup, {
   PanelContext,
-} from './components/resizable-panel/resizable-panel-group';
-import ResizablePanel from './components/resizable-panel/resizable-panel';
+} from './components/resizable-panel-group';
 
 export {
   AddButton,
@@ -49,5 +48,4 @@ export {
   Tooltip,
   ResizablePanelGroup,
   PanelContext,
-  ResizablePanel,
 };
