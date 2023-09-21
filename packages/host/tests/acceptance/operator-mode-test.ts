@@ -1253,7 +1253,7 @@ module('Acceptance | operator mode tests', function (hooks) {
   });
 
   test<TestContextWithSave>('unsaved changes made in card editor are saved when switching out of code mode', async function (assert) {
-    assert.expect(2); // the test waiters permit a normal auto-save to sneak in. the 2nd save is the save on close.
+    assert.expect(1);
 
     let operatorModeStateParam = stringify({
       stacks: [
