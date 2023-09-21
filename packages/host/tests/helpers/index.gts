@@ -11,7 +11,6 @@ import {
   executableExtensions,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
-import { notFound } from '@cardstack/runtime-common/error';
 import { getFileWithFallbacks } from '@cardstack/runtime-common/stream';
 import GlimmerComponent from '@glimmer/component';
 import { type TestContext, visit } from '@ember/test-helpers';
