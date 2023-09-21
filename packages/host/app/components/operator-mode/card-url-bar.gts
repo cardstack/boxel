@@ -7,7 +7,8 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import URLBarResource, {
   urlBarResource,
 } from '@cardstack/host/resources/url-bar';
-import cssVar from '@cardstack/boxel-ui/helpers/css-var';
+import { trackedFunction } from 'ember-resources/util/function';
+import { hasTransparentBackground } from '@cardstack/host/utils/transparent-background';
 
 interface Signature {
   Element: HTMLElement;
@@ -27,10 +28,7 @@ export default class CardURLBar extends Component<Signature> {
       ...attributes
     >
       <div class='realm-info' data-test-card-url-bar-realm-info>
-        <div
-          class='realm-icon'
-          style={{cssVar card-url-bar-realm-icon=this.realmBackgroundUrl}}
-        >
+        <div class={{this.realmIconStyles}}>
           <img src={{this.realmIcon}} alt='realm-icon' />
         </div>
         <span>in
@@ -95,11 +93,16 @@ export default class CardURLBar extends Component<Signature> {
         background-image: var(--card-url-bar-realm-icon);
         height: 100%;
 
-        border: 2px solid var(--boxel-border-color);
+        border: 1px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius-xs);
+        width: 20px;
+      }
+      .transparent {
+        background: var(--boxel-light);
+        padding: 2px;
       }
       .realm-icon img {
-        width: 20px;
+        width: 100%;
       }
       .input {
         display: flex;
@@ -155,8 +158,20 @@ export default class CardURLBar extends Component<Signature> {
     return this.args.realmInfo?.name;
   }
 
-  get realmBackgroundUrl() {
-    return `url(${this.args.realmInfo?.backgroundURL})`;
+  isRealmIconTransparent = trackedFunction(this, async () => {
+    if (!this.realmIcon) {
+      return false;
+    }
+    let result = await hasTransparentBackground(this.realmIcon);
+    return result;
+  });
+
+  get realmIconStyles() {
+    if (this.isRealmIconTransparent.value) {
+      return 'realm-icon transparent';
+    } else {
+      return 'realm-icon';
+    }
   }
 
   get cssClasses() {
