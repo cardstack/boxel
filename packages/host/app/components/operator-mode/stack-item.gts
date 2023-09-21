@@ -250,7 +250,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private calculateLastSavedMsg() {
     this.lastSavedMsg =
       this.lastSaved != null
-        ? `Saved ${formatDistanceToNow(this.lastSaved)} ago`
+        ? `Saved ${(formatDistanceToNow(this.lastSaved), { addSuffix: true })}`
         : undefined;
   }
 

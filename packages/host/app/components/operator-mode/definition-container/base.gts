@@ -169,9 +169,13 @@ export class Active extends Component<ActiveSignature> {
         gap: var(--boxel-sp-xs);
         align-self: flex-start;
       }
+      .info-footer {
+        margin-top: var(--boxel-sp-sm);
+      }
       .info-footer .message {
-        color: #919191;
-        font-weight: 200;
+        color: var(--boxel-450);
+        font: var(--boxel-font-xs);
+        font-weight: 500;
       }
     </style>
   </template>
