@@ -627,7 +627,7 @@ module('Integration | operator-mode', function (hooks) {
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
       overridingHandlers: [
         async (req: Request) => {
-          return sourceFetchRedirectHandle(req, adapter);
+          return sourceFetchRedirectHandle(req, adapter, testRealmURL);
         },
         async (req: Request) => {
           return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));

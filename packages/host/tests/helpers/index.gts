@@ -707,7 +707,7 @@ export async function sourceFetchReturnUrlHandle(
 export async function sourceFetchRedirectHandle(
   request: Request,
   adapter: RealmAdapter,
-  realmURL: string = testRealmURL,
+  realmURL: string,
 ) {
   let urlParts = new URL(request.url).pathname.split('.');
   if (

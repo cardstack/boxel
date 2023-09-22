@@ -264,7 +264,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       isAcceptanceTest: true,
       overridingHandlers: [
         async (req: Request) => {
-          return sourceFetchRedirectHandle(req, adapter);
+          return sourceFetchRedirectHandle(req, adapter, testRealmURL);
         },
         async (req: Request) => {
           return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
