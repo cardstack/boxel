@@ -92,7 +92,7 @@ export default class CardURLBar extends Component<Signature> {
         height: 100%;
 
         border: 1px solid var(--boxel-light);
-        border-radius: var(--boxel-border-radius-xs);
+        border-radius: 4px;
         width: 20px;
       }
       .realm-icon img {

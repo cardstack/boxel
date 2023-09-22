@@ -459,7 +459,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
       .header-icon {
         border: 1px solid rgba(0, 0, 0, 0.15);
-        border-radius: 6px;
+        border-radius: 7px;
       }
 
       .header--icon-hovered {
