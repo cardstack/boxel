@@ -56,6 +56,10 @@ export default class CardInheritancePanel extends Component<Signature> {
     }
   }
 
+  get isCardInstance() {
+    return this.args.readyFile.url.endsWith('.json');
+  }
+
   @action
   select(el: ElementInFile) {
     this.args.adoptionChainManager?.select(el);
@@ -66,7 +70,7 @@ export default class CardInheritancePanel extends Component<Signature> {
       {{#if this.isLoading}}
         <div>Loading...</div>
       {{else}}
-        {{#if @cardInstance}}
+        {{#if this.isCardInstance}}
           {{! JSON case when visting, eg Author/1.json }}
           <h3>Inheritance Panel</h3>
           <div class='inheritance-chain'>
