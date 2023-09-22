@@ -393,17 +393,7 @@ function makeRealm(
   }
   if (manualRedirect) {
     let handler = async (req: Request) => {
-      let urlParts = req.url.split('.');
-      if (
-        req.method === 'GET' &&
-        req.headers.get('Accept') === SupportedMimeType.CardSource &&
-        req.url.includes(testRealmURL) &&
-        urlParts.length === 1 //has no extension
-      ) {
-        let r = await manualRedirectHandle(req, adapter);
-        return r as Response;
-      }
-      return null;
+      return (await manualRedirectHandle(req, adapter)) as Response;
     };
     loader.registerURLHandler(handler);
   }
@@ -443,34 +433,6 @@ export async function shimModule(
       m[name];
     }),
   );
-}
-async function manualRedirectHandle(request: Request, adapter: RealmAdapter) {
-  const realmPaths = new RealmPaths(testRealmURL);
-  const localPath = realmPaths.local(request.url);
-  const ref = await getFileWithFallbacks(
-    localPath,
-    adapter.openFile.bind(adapter),
-    executableExtensions,
-  );
-  let maybeExtension = ref?.path.split('.').pop();
-  let responseUrl = maybeExtension
-    ? `${request.url}.${maybeExtension}`
-    : request.url;
-
-  if (
-    ref &&
-    (ref.content instanceof ReadableStream ||
-      ref.content instanceof Uint8Array ||
-      typeof ref.content === 'string')
-  ) {
-    let r = createResponse(testRealmURL, ref.content, {
-      headers: {
-        'last-modified': formatRFC7231(ref.lastModified),
-      },
-    });
-    return new MockRedirectedResponse(r.body, r, responseUrl);
-  }
-  return null;
 }
 
 export function setupCardLogs(
@@ -721,6 +683,43 @@ export function diff(
     removed: removed.map((e) => e.path),
     changed: changed.map((e) => e.path),
   };
+}
+
+async function manualRedirectHandle(request: Request, adapter: RealmAdapter) {
+  let urlParts = request.url.split('.');
+  if (
+    request.method === 'GET' &&
+    request.headers.get('Accept') === SupportedMimeType.CardSource &&
+    request.url.includes(testRealmURL) &&
+    urlParts.length === 1 //has no extension
+  ) {
+    const realmPaths = new RealmPaths(testRealmURL);
+    const localPath = realmPaths.local(request.url);
+    const ref = await getFileWithFallbacks(
+      localPath,
+      adapter.openFile.bind(adapter),
+      executableExtensions,
+    );
+    let maybeExtension = ref?.path.split('.').pop();
+    let responseUrl = maybeExtension
+      ? `${request.url}.${maybeExtension}`
+      : request.url;
+
+    if (
+      ref &&
+      (ref.content instanceof ReadableStream ||
+        ref.content instanceof Uint8Array ||
+        typeof ref.content === 'string')
+    ) {
+      let r = createResponse(testRealmURL, ref.content, {
+        headers: {
+          'last-modified': formatRFC7231(ref.lastModified),
+        },
+      });
+      return new MockRedirectedResponse(r.body, r, responseUrl);
+    }
+  }
+  return null;
 }
 
 export class MockRedirectedResponse extends Response {

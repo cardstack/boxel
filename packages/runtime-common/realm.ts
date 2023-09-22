@@ -424,6 +424,24 @@ export class Realm {
     return this.internalHandle(request, false);
   }
 
+  private async internalHandle(
+    request: Request,
+    isLocal: boolean,
+  ): Promise<ResponseWithNodeStream> {
+    // local requests are allowed to query the realm as the index is being built up
+    if (!isLocal) {
+      await this.ready;
+    }
+    if (!this.searchIndex) {
+      return systemError(this.url, 'search index is not available');
+    }
+    if (this.#router.handles(request)) {
+      return this.#router.handle(request);
+    } else {
+      return this.fallbackHandle(request);
+    }
+  }
+
   async fallbackHandle(request: Request) {
     let url = new URL(request.url);
     let localPath = this.paths.local(url);
@@ -447,24 +465,6 @@ export class Realm {
       return this.makeJS(await fileContentToText(handle), handle.path);
     } else {
       return await this.serveLocalFile(handle);
-    }
-  }
-
-  private async internalHandle(
-    request: Request,
-    isLocal: boolean,
-  ): Promise<ResponseWithNodeStream> {
-    // local requests are allowed to query the realm as the index is being built up
-    if (!isLocal) {
-      await this.ready;
-    }
-    if (!this.searchIndex) {
-      return systemError(this.url, 'search index is not available');
-    }
-    if (this.#router.handles(request)) {
-      return this.#router.handle(request);
-    } else {
-      return this.fallbackHandle(request);
     }
   }
 
