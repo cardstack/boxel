@@ -29,6 +29,7 @@ import BoxelInput from '@cardstack/boxel-ui/components/input';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import format from 'date-fns/format';
+import percySnapshot from '@percy/ember';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
@@ -1802,6 +1803,7 @@ module('Integration | card-basics', function (hooks) {
     });
 
     await renderCard(loader, card, 'edit');
+    await percySnapshot(assert);
 
     assert.dom('[data-test-field-component-card]').exists();
     assert
@@ -1825,27 +1827,24 @@ module('Integration | card-basics', function (hooks) {
       .dom(
         '[data-test-field="guest"] [data-test-contains-many="additionalNames"]',
       )
-      .containsText('Felicity Shaw Grant Kingston Valerie Storm');
+      .doesNotExist('edit template is not rendered');
     assert
       .dom(
-        '[data-test-field="guest"] [data-test-contains-many="additionalNames"] input',
+        '[data-test-field="guest"] [data-test-plural-view="containsMany"] [data-test-plural-view-item]',
       )
-      .doesNotExist(
-        'containsMany string field inside another field is not editable',
-      );
-    assert.dom('[data-test-field="guest"] [data-test-remove]').doesNotExist();
-    assert.dom('[data-test-field="guest"] [data-test-add-new]').doesNotExist();
+      .exists({ count: 3 });
+    assert
+      .dom('[data-test-field="guest"] [data-test-plural-view="containsMany"]')
+      .containsText('Felicity Shaw Grant Kingston Valerie Storm');
 
     assert
       .dom('[data-test-field="bannedGuest"] [data-test-add-new]')
-      .doesNotExist(
-        'empty containsMany string field inside another field does NOT have an add button',
-      );
+      .doesNotExist('edit');
     assert
       .dom(
-        '[data-test-field="bannedGuest"] [data-test-contains-many="additionalNames"]',
+        '[data-test-field="bannedGuest"] [data-test-plural-view="containsMany"] [data-test-plural-view-item]',
       )
-      .containsText('None');
+      .doesNotExist();
   });
 
   test('can get a queryable value for a field', async function (assert) {

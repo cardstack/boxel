@@ -565,11 +565,21 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       fieldName,
       useIndexBasedKey in this.card,
     ) as unknown as Box<BaseDef[]>;
+
+    let renderFormat: Format | undefined = undefined;
+    if (
+      format === 'edit' &&
+      'isFieldDef' in model.value.constructor &&
+      model.value.constructor.isFieldDef
+    ) {
+      renderFormat = 'embedded';
+    }
+
     return getContainsManyComponent({
       model,
       arrayField,
       field: this,
-      format,
+      format: renderFormat ?? format,
       cardTypeFor,
     });
   }
@@ -1645,7 +1655,7 @@ class FieldDefEditTemplate extends GlimmerComponent<{
   };
 }> {
   <template>
-    <div class='default-card-template'>
+    <div class='field-def-edit-template'>
       {{#each-in @fields as |key Field|}}
         {{#unless (eq key 'id')}}
           <FieldContainer
@@ -1660,9 +1670,19 @@ class FieldDefEditTemplate extends GlimmerComponent<{
       {{/each-in}}
     </div>
     <style>
-      .default-card-template {
+      .field-def-edit-template {
         display: grid;
         gap: var(--boxel-sp-lg);
+      }
+      .field-def-edit-template :deep(.containsMany-field) {
+        padding: var(--boxel-sp-xs);
+        border: 1px solid var(--boxel-form-control-border-color);
+        border-radius: var(--boxel-form-control-border-radius);
+      }
+      .field-def-edit-template :deep(.containsMany-field.empty::after) {
+        display: block;
+        content: 'None';
+        color: var(--boxel-450);
       }
     </style>
   </template>
@@ -2786,13 +2806,6 @@ export class Box<T> {
     });
     this.prevChildren = newChildren;
     return newChildren;
-  }
-
-  get isNested(): boolean {
-    return (
-      'containingBox' in this.state &&
-      this.state.containingBox.state.type !== 'root'
-    );
   }
 }
 

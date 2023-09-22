@@ -32,6 +32,12 @@ export class EmergencyContactField extends FieldDef {
 class Guest extends FieldDef {
   @field name = contains(StringField);
   @field additionalNames = containsMany(StringField);
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <@fields.name />
+    </template>
+  };
 }
 
 export class ContactCard extends CardDef {
