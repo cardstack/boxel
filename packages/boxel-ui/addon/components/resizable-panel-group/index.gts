@@ -1,22 +1,15 @@
 import Component from '@glimmer/component';
-import { hash } from '@ember/helper';
 import { action } from '@ember/object';
 import { registerDestructor } from '@ember/destroyable';
 import { TrackedMap } from 'tracked-built-ins';
 import didResizeModifier from 'ember-resize-modifier/modifiers/did-resize';
+import ResizablePanel from './panel';
+import { WithBoundArgs } from '@glint/template';
 
 export type PanelContext = {
   width: string;
   defaultWidth: string;
   minWidth?: string;
-};
-
-export type PanelGroupApi = {
-  registerPanel: (context: PanelContext) => number;
-  panelContext: (panelId: number) => PanelContext | undefined;
-  isLastPanel: (panelId: number) => boolean;
-  onResizeHandlerMouseDown: (event: MouseEvent) => void;
-  onResizeHandlerDblClick: (event: MouseEvent) => void;
 };
 
 interface Signature {
@@ -25,7 +18,16 @@ interface Signature {
     onListPanelContextChange?: (listPanelContext: PanelContext[]) => void;
   };
   Blocks: {
-    default: [{ api: PanelGroupApi }];
+    default: [
+      WithBoundArgs<
+        typeof ResizablePanel,
+        | 'registerPanel'
+        | 'panelContext'
+        | 'isLastPanel'
+        | 'onResizeHandlerMouseDown'
+        | 'onResizeHandlerDblClick'
+      >,
+    ];
   };
 }
 
@@ -37,14 +39,13 @@ export default class ResizablePanelGroup extends Component<Signature> {
       ...attributes
     >
       {{yield
-        (hash
-          api=(hash
-            registerPanel=this.registerPanel
-            panelContext=this.panelContext
-            isLastPanel=this.isLastPanel
-            onResizeHandlerMouseDown=this.onResizeHandlerMouseDown
-            onResizeHandlerDblClick=this.onResizeHandlerDblClick
-          )
+        (component
+          ResizablePanel
+          registerPanel=this.registerPanel
+          panelContext=this.panelContext
+          isLastPanel=this.isLastPanel
+          onResizeHandlerMouseDown=this.onResizeHandlerMouseDown
+          onResizeHandlerDblClick=this.onResizeHandlerDblClick
         )
       }}
     </div>

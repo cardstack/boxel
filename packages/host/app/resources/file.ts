@@ -43,6 +43,7 @@ export interface Ready {
   lastModified: string | undefined;
   realmURL: string;
   write(content: string, flushLoader?: boolean): void;
+  writing?: Promise<void>;
 }
 
 export type FileResource = Loading | ServerError | NotFound | Ready;
@@ -52,6 +53,7 @@ class _FileResource extends Resource<Args> {
   private onStateChange?: ((state: FileResource['state']) => void) | undefined;
   private onRedirect?: ((url: string) => void) | undefined;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
+  writing: Promise<void> | undefined;
 
   @tracked private innerState: FileResource = {
     state: 'loading',
@@ -173,7 +175,7 @@ class _FileResource extends Resource<Args> {
       name: url.split('/').pop()!,
       url: url,
       write(content: string, flushLoader?: true) {
-        self.writeTask.perform(this, content, flushLoader);
+        self.writing = self.writeTask.perform(this, content, flushLoader);
       },
     });
 

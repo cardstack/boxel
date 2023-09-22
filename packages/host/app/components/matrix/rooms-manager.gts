@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
 import { service } from '@ember/service';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 //@ts-expect-error the types don't recognize the cached export
@@ -230,7 +231,7 @@ export default class RoomsManager extends Component {
   @tracked private currentRoomId: string | undefined;
   private currentRoomResource = getRoom(this, () => this.currentRoomId);
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: {}) {
     super(owner, args);
     this.loadRooms.perform();
   }
