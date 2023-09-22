@@ -47,6 +47,7 @@ export default class RecentFilesService extends Service {
     }
   }
 
+  // FIXME? LocalPath instead of string?
   removeRecentFile(file: string) {
     let index = this.findRecentFileIndex(file);
 
