@@ -9,7 +9,6 @@ import type MessageService from '../services/message-service';
 import type CardService from '@cardstack/host/services/card-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import config from '@cardstack/host/config/environment';
 
 const log = logger('resource:file');
 
@@ -154,24 +153,14 @@ class _FileResource extends Resource<Args> {
 
     let content = await response.text();
     let self = this;
-    // Inside test, The loader occasionally doesn't do a network request and creates Response object manually
-    // This means that reading response.url will give url = '' and we cannot manually alter the url in Response
-    // The below condition is a workaround
-    // TODO: CS-5982
-    let url: string;
-    if (config.environment === 'test') {
-      url = response.url === '' ? this._url : response.url;
-    } else {
-      url = response.url;
-    }
 
     this.updateState({
       state: 'ready',
       lastModified,
       realmURL,
       content,
-      name: url.split('/').pop()!,
-      url: url,
+      name: response.url.split('/').pop()!,
+      url: response.url,
       write(content: string, flushLoader?: true) {
         self.writeTask.perform(this, content, flushLoader);
       },

@@ -18,6 +18,7 @@ import {
   TestRealm,
   type TestContextWithSave,
   sourceFetchRedirectHandle,
+  sourceFetchReturnUrlHandle,
 } from '../../helpers';
 import { MockMatrixService } from '../../helpers/mock-matrix-service';
 import {
@@ -625,7 +626,12 @@ module('Integration | operator-mode', function (hooks) {
     });
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
       overridingHandlers: [
-        (req: Request) => sourceFetchRedirectHandle(req, adapter),
+        async (req: Request) => {
+          return sourceFetchRedirectHandle(req, adapter);
+        },
+        async (req: Request) => {
+          return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
+        },
       ],
     });
     await realm.ready;

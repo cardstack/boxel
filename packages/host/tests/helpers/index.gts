@@ -683,15 +683,34 @@ export function diff(
   };
 }
 
+function isCardSourceFetch(request: Request) {
+  return (
+    request.method === 'GET' &&
+    request.headers.get('Accept') === SupportedMimeType.CardSource &&
+    request.url.includes(testRealmURL)
+  );
+}
+
+export async function sourceFetchReturnUrlHandle(
+  request: Request,
+  defaultHandle: (req: Request) => Promise<Response | null>,
+) {
+  if (isCardSourceFetch(request)) {
+    let r = await defaultHandle(request);
+    if (r) {
+      return new MockRedirectedResponse(r.body, r, request.url) as Response;
+    }
+  }
+  return null;
+}
+
 export async function sourceFetchRedirectHandle(
   request: Request,
   adapter: RealmAdapter,
 ) {
   let urlParts = request.url.split('.');
   if (
-    request.method === 'GET' &&
-    request.headers.get('Accept') === SupportedMimeType.CardSource &&
-    request.url.includes(testRealmURL) &&
+    isCardSourceFetch(request) &&
     urlParts.length === 1 //has no extension
   ) {
     const realmPaths = new RealmPaths(testRealmURL);
@@ -717,7 +736,7 @@ export async function sourceFetchRedirectHandle(
           'last-modified': formatRFC7231(ref.lastModified),
         },
       });
-      return new MockRedirectedResponse(r.body, r, responseUrl);
+      return new MockRedirectedResponse(r.body, r, responseUrl) as Response;
     }
   }
   return null;
