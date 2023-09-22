@@ -18,13 +18,9 @@ export default class RecentFiles extends Component<Args> {
   @service declare recentFilesService: RecentFilesService;
   @service declare operatorModeStateService: OperatorModeStateService;
 
-  get recentFilesInRealm() {
-    return this.recentFilesService.recentFiles;
-  }
-
   <template>
     <ul class='recent-files' data-test-recent-files>
-      {{#each this.recentFilesInRealm as |file|}}
+      {{#each this.recentFilesService.recentFiles as |file|}}
         <File @recentFile={{file}} />
       {{/each}}
     </ul>
