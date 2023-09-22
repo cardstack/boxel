@@ -8,11 +8,12 @@ import { restartableTask } from 'ember-concurrency';
 
 import Button from '@cardstack/boxel-ui/components/button';
 
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+
 import FormatPicker from './format-picker';
 import Preview from './preview';
 
 import type CardService from '../services/card-service';
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {

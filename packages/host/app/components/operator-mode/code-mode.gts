@@ -14,7 +14,7 @@ import { cached, tracked } from '@glimmer/tracking';
 import { task, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { use, resource } from 'ember-resources';
-import { CardDef } from 'https://cardstack.com/base/card-api';
+
 import isEqual from 'lodash/isEqual';
 import { TrackedObject } from 'tracked-built-ins';
 
@@ -63,6 +63,8 @@ import type MonacoService from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import RecentFilesService from '@cardstack/host/services/recent-files-service';
+
+import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import FileTree from '../editor/file-tree';
 

@@ -91,9 +91,8 @@ module.exports = {
             group: 'internal',
           },
           {
-            /* FIXME can’t figure out how to match card imports! */
-            pattern: '**cardstack.com**',
-            group: 'type',
+            pattern: 'https://cardstack.com/**',
+            group: 'internal',
             position: 'after',
           },
         ],
