@@ -6,7 +6,7 @@ import { service } from '@ember/service';
 export default class RecentFilesService extends Service {
   @service declare loaderService: LoaderService;
   cachedRealmUrlsForFileUrl: Map<string, string> = new Map(); // Has the file url already been resolved to a realm url?
-  cachedRealmInfos: Map<string, RealmInfo> = new Map(); // Has the realm url already been rosolved to a realm info?
+  cachedRealmInfos: Map<string, RealmInfo> = new Map(); // Has the realm url already been resolved to a realm info?
 
   async fetchRealmUrl(fileUrl: string): Promise<string> {
     if (this.cachedRealmUrlsForFileUrl.has(fileUrl)) {
