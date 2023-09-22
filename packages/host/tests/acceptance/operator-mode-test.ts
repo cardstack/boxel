@@ -23,6 +23,7 @@ import {
   waitForSyntaxHighlighting,
   type TestContextWithSSE,
   type TestContextWithSave,
+  sourceFetchRedirectHandle,
 } from '../helpers';
 import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 import stringify from 'safe-stable-stringify';
@@ -260,7 +261,9 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
       isAcceptanceTest: true,
-      manualRedirect: true,
+      overridingHandlers: [
+        (req: Request) => sourceFetchRedirectHandle(req, adapter),
+      ],
     });
     await realm.ready;
   });

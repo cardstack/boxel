@@ -16,6 +16,7 @@ import {
   setupLocalIndexing,
   setupMockMessageService,
   testRealmURL,
+  sourceFetchRedirectHandle,
 } from '../helpers';
 import stringify from 'safe-stable-stringify';
 import { Realm } from '@cardstack/runtime-common/realm';
@@ -170,7 +171,9 @@ module('Acceptance | code mode tests', function (hooks) {
 
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
       isAcceptanceTest: true,
-      manualRedirect: true,
+      overridingHandlers: [
+        (req: Request) => sourceFetchRedirectHandle(req, adapter),
+      ],
     });
     await realm.ready;
   });

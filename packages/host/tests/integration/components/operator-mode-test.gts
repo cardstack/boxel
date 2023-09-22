@@ -17,6 +17,7 @@ import {
   TestRealmAdapter,
   TestRealm,
   type TestContextWithSave,
+  sourceFetchRedirectHandle,
 } from '../../helpers';
 import { MockMatrixService } from '../../helpers/mock-matrix-service';
 import {
@@ -623,7 +624,9 @@ module('Integration | operator-mode', function (hooks) {
       ...Object.fromEntries(personCards),
     });
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
-      manualRedirect: true,
+      overridingHandlers: [
+        (req: Request) => sourceFetchRedirectHandle(req, adapter),
+      ],
     });
     await realm.ready;
 

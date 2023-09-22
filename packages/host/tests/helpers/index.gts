@@ -11,6 +11,7 @@ import {
   executableExtensions,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
+import { type RequestHandler } from '@cardstack/runtime-common/loader';
 import { getFileWithFallbacks } from '@cardstack/runtime-common/stream';
 import GlimmerComponent from '@glimmer/component';
 import { type TestContext, visit } from '@ember/test-helpers';
@@ -129,7 +130,7 @@ interface Options {
   realmURL?: string;
   isAcceptanceTest?: true;
   onFetch?: (req: Request) => Promise<Request>;
-  manualRedirect?: boolean;
+  overridingHandlers?: RequestHandler[];
 }
 
 // We use a rendered component to facilitate our indexing (this emulates
@@ -173,7 +174,7 @@ export const TestRealm = {
       owner,
       opts?.realmURL,
       opts?.onFetch,
-      opts?.manualRedirect,
+      opts?.overridingHandlers,
     );
   },
 };
@@ -372,7 +373,7 @@ function makeRealm(
   owner: Owner,
   realmURL = testRealmURL,
   onFetch?: (req: Request) => Promise<Request>,
-  manualRedirect?: boolean,
+  overridingHandlers?: RequestHandler[],
 ) {
   let localIndexer = owner.lookup(
     'service:local-indexer',
@@ -391,11 +392,8 @@ function makeRealm(
       return realm.maybeHandle(req);
     });
   }
-  if (manualRedirect) {
-    let handler = async (req: Request) => {
-      return (await manualRedirectHandle(req, adapter)) as Response;
-    };
-    loader.registerURLHandler(handler);
+  if (overridingHandlers && overridingHandlers.length > 0) {
+    loader.prependURLHandlers(overridingHandlers);
   }
   realm = new Realm(
     realmURL,
@@ -685,7 +683,10 @@ export function diff(
   };
 }
 
-async function manualRedirectHandle(request: Request, adapter: RealmAdapter) {
+export async function sourceFetchRedirectHandle(
+  request: Request,
+  adapter: RealmAdapter,
+) {
   let urlParts = request.url.split('.');
   if (
     request.method === 'GET' &&
