@@ -21,31 +21,7 @@ export default class RecentFilesService extends Service {
 
   constructor(properties: object) {
     super(properties);
-
-    let recentFilesString = window.localStorage.getItem('recent-files');
-
-    if (recentFilesString) {
-      try {
-        this.recentFiles = new TrackedArray(
-          JSON.parse(recentFilesString).reduce(function (
-            recentFiles: RecentFile[],
-            [realmUrl, filePath]: SerialRecentFile,
-          ) {
-            try {
-              let url = new URL(realmUrl);
-              recentFiles.push({ realmURL: url, filePath });
-            } catch (e) {
-              console.log(
-                `Ignoring non-URL recent file from storage: ${realmUrl}`,
-              );
-            }
-            return recentFiles;
-          }, []),
-        );
-      } catch (e) {
-        console.log('Error restoring recent files', e);
-      }
-    }
+    this.extractRecentFilesFromStorage();
   }
 
   removeRecentFile(file: LocalPath) {
@@ -88,7 +64,7 @@ export default class RecentFilesService extends Service {
     this.persistRecentFiles();
   }
 
-  persistRecentFiles() {
+  private persistRecentFiles() {
     window.localStorage.setItem(
       'recent-files',
       JSON.stringify(
@@ -107,5 +83,32 @@ export default class RecentFilesService extends Service {
       ({ realmURL, filePath }) =>
         realmURL.href === currentRealmUrl.href && filePath === path,
     );
+  }
+
+  private extractRecentFilesFromStorage() {
+    let recentFilesString = window.localStorage.getItem('recent-files');
+
+    if (recentFilesString) {
+      try {
+        this.recentFiles = new TrackedArray(
+          JSON.parse(recentFilesString).reduce(function (
+            recentFiles: RecentFile[],
+            [realmUrl, filePath]: SerialRecentFile,
+          ) {
+            try {
+              let url = new URL(realmUrl);
+              recentFiles.push({ realmURL: url, filePath });
+            } catch (e) {
+              console.log(
+                `Ignoring non-URL recent file from storage: ${realmUrl}`,
+              );
+            }
+            return recentFiles;
+          }, []),
+        );
+      } catch (e) {
+        console.log('Error restoring recent files', e);
+      }
+    }
   }
 }
