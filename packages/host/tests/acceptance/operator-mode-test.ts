@@ -1590,7 +1590,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       .doesNotExist('stack item removed');
     assert.deepEqual(
       window.localStorage.getItem('recent-files'),
-      JSON.stringify([testRealmURL, 'Pet/mango.json']),
+      JSON.stringify([[testRealmURL, 'Pet/mango.json']]),
       'the deleted card has been removed from recent files',
     );
   });

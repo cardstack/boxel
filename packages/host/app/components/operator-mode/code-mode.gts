@@ -575,9 +575,9 @@ export default class CodeMode extends Component<Signature> {
           let recentFileUrl = `${recentFile.realmURL}${recentFile.filePath}`;
 
           this.operatorModeStateService.updateCodePath(new URL(recentFileUrl));
+        } else {
+          this.operatorModeStateService.updateCodePath(null);
         }
-
-        this.operatorModeStateService.updateCodePath(null);
       });
     } else {
       throw new Error(`TODO: non-card instance deletes are not yet supported`);
