@@ -707,13 +707,14 @@ export async function sourceFetchReturnUrlHandle(
 export async function sourceFetchRedirectHandle(
   request: Request,
   adapter: RealmAdapter,
+  realmURL: string = testRealmURL,
 ) {
   let urlParts = new URL(request.url).pathname.split('.');
   if (
     isCardSourceFetch(request) &&
     urlParts.length === 1 //has no extension
   ) {
-    const realmPaths = new RealmPaths(testRealmURL);
+    const realmPaths = new RealmPaths(realmURL);
     const localPath = realmPaths.local(request.url);
     const ref = await getFileWithFallbacks(
       localPath,
@@ -731,7 +732,7 @@ export async function sourceFetchRedirectHandle(
         ref.content instanceof Uint8Array ||
         typeof ref.content === 'string')
     ) {
-      let r = createResponse(testRealmURL, ref.content, {
+      let r = createResponse(realmURL, ref.content, {
         headers: {
           'last-modified': formatRFC7231(ref.lastModified),
         },
