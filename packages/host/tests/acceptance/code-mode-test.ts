@@ -3,7 +3,6 @@ import {
   visit,
   click,
   waitFor,
-  waitUntil,
   find,
   fillIn,
   triggerKeyEvent,
@@ -200,7 +199,7 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.dom('[data-test-inheritance-toggle]').hasClass('active');
     assert.dom('[data-test-file-browser-toggle]').doesNotHaveClass('active');
 
-    await waitUntil(() => find('[data-test-card-inheritance-panel]'));
+    await waitFor('[data-test-card-inheritance-panel]');
 
     assert.dom('[data-test-card-inheritance-panel]').exists();
     assert.dom('[data-test-file]').doesNotExist();
@@ -582,9 +581,9 @@ module('Acceptance | code mode tests', function (hooks) {
       )}`,
     );
 
-    await waitUntil(() => find('[data-test-card-inheritance-panel]'));
-    await waitUntil(() => find('[data-test-card-module-definition]'));
-    await waitUntil(() => find('[data-test-card-instance-definition]'));
+    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-card-module-definition]');
+    await waitFor('[data-test-card-instance-definition]');
 
     assert.dom('[data-test-card-module-definition]').includesText('Card');
     //TODO: CS-5957 deriving extension
@@ -616,7 +615,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom(
         '[data-test-card-instance-definition] [data-test-definition-info-text]',
       )
-      .includesText('Last saved was a few seconds ago');
+      .includesText('Last saved just now');
 
     assert.dom('[data-test-card-instance-definition]').hasClass('active');
   });
@@ -634,8 +633,8 @@ module('Acceptance | code mode tests', function (hooks) {
       )}`,
     );
 
-    await waitUntil(() => find('[data-test-card-inheritance-panel]'));
-    await waitUntil(() => find('[data-test-card-module-definition]'));
+    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-card-module-definition]');
 
     assert.dom('[data-test-card-module-definition]').includesText('Card');
 

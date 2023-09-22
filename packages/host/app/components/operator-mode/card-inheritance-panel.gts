@@ -8,10 +8,11 @@ import {
   ClickableModuleDefinitionContainer,
 } from './definition-container';
 import { Ready } from '@cardstack/host/resources/file';
-import { tracked } from '@glimmer/tracking';
-import moment from 'moment';
+// @ts-expect-error cached doesn't have type yet
+import { tracked, cached } from '@glimmer/tracking';
 import { type AdoptionChainResource } from '@cardstack/host/resources/adoption-chain';
 import { hash, array } from '@ember/helper';
+import { lastModifiedDate } from '../../resources/last-modified-date';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import { action } from '@ember/object';
 
@@ -28,8 +29,8 @@ interface Args {
 }
 
 export default class CardInheritancePanel extends Component<Args> {
-  @tracked cardInstance: CardDef | undefined;
-  @service declare operatorModeStateService: OperatorModeStateService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
+  private lastModified = lastModifiedDate(this, () => this.args.readyFile);
 
   @action
   updateCodePath(url: URL | undefined) {
@@ -42,9 +43,16 @@ export default class CardInheritancePanel extends Component<Args> {
     return this.args.adoptionChain?.types;
   }
 
+  private get fileExtension() {
+    if (!this.args.cardInstance) {
+      return '.' + this.args.readyFile.url.split('.').pop() || '';
+    } else {
+      return '';
+    }
+  }
+
   <template>
     <div class='container' ...attributes>
-
       {{#if @cardInstance}}
         {{! JSON case when visting, eg Author/1.json }}
         {{#each this.adoptionChainTypes as |t|}}
@@ -53,7 +61,7 @@ export default class CardInheritancePanel extends Component<Args> {
             @fileExtension='.JSON'
             @realmInfo={{@realmInfo}}
             @realmIconURL={{@realmIconURL}}
-            @infoText={{this.lastModified}}
+            @infoText={{this.lastModified.value}}
             @actions={{array
               (hash label='Delete' handler=@delete icon='icon-trash')
             }}
@@ -77,6 +85,7 @@ export default class CardInheritancePanel extends Component<Args> {
             @fileExtension={{this.fileExtension}}
             @realmInfo={{@realmInfo}}
             @realmIconURL={{@realmIconURL}}
+            @infoText={{this.lastModified.value}}
             @isActive={{true}}
             @actions={{array
               (hash label='Delete' handler=@delete icon='icon-trash')
@@ -102,21 +111,4 @@ export default class CardInheritancePanel extends Component<Args> {
       }
     </style>
   </template>
-
-  get lastModified() {
-    if (this.args.readyFile.lastModified != undefined) {
-      return `Last saved was ${moment(
-        this.args.readyFile.lastModified,
-      ).fromNow()}`;
-    }
-    return;
-  }
-
-  get fileExtension() {
-    if (!this.args.cardInstance) {
-      return '.' + this.args.readyFile.url.split('.').pop() || '';
-    } else {
-      return '';
-    }
-  }
 }
