@@ -2,6 +2,32 @@ import Component from '@glimmer/component';
 import { BaseDefinitionContainer, BaseArgs, Active, ActiveArgs } from './base';
 import { Clickable, ClickableArgs } from './clickable';
 
+interface FileArgs
+  extends Omit<BaseArgs, 'title' | 'name' | 'isActive'>,
+    ActiveArgs {}
+
+interface FileSignature {
+  Element: HTMLElement;
+  Args: FileArgs;
+}
+
+export class FileDefinitionContainer extends Component<FileSignature> {
+  <template>
+    <BaseDefinitionContainer
+      @title='File'
+      @name={{undefined}}
+      @fileExtension={{@fileExtension}}
+      @realmInfo={{@realmInfo}}
+      @realmIconURL={{@realmIconURL}}
+      @isActive={{true}}
+      data-test-card-module-definition
+    >
+      <:activeContent>
+        <Active @actions={{@actions}} @infoText={{@infoText}} />
+      </:activeContent>
+    </BaseDefinitionContainer>
+  </template>
+}
 interface ModuleArgs extends Omit<BaseArgs, 'title'>, ActiveArgs {}
 
 interface ModuleSignature {
@@ -28,7 +54,7 @@ export class ModuleDefinitionContainer extends Component<ModuleSignature> {
 }
 
 interface InstanceArgs
-  extends Omit<BaseArgs, 'title' | 'infoText' | 'isActive'>,
+  extends Omit<BaseArgs, 'title' | 'isActive'>,
     ActiveArgs {}
 
 interface InstanceSignature {
@@ -40,7 +66,7 @@ export class InstanceDefinitionContainer extends Component<InstanceSignature> {
   <template>
     <BaseDefinitionContainer
       @title='Card Instance'
-      @fileExtension='.JSON'
+      @fileExtension={{@fileExtension}}
       @name={{@name}}
       @realmInfo={{@realmInfo}}
       @realmIconURL={{@realmIconURL}}
