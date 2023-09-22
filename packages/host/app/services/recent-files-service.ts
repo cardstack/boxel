@@ -2,6 +2,7 @@ import Service from '@ember/service';
 import { service } from '@ember/service';
 import type CardService from '@cardstack/host/services/card-service';
 import { RealmPaths } from '@cardstack/runtime-common';
+import { LocalPath } from '@cardstack/runtime-common/paths';
 import { tracked } from '@glimmer/tracking';
 import { TrackedArray } from 'tracked-built-ins';
 import window from 'ember-window-mock';
@@ -10,7 +11,7 @@ type SerialRecentFile = [URL, string];
 
 export interface RecentFile {
   realmURL: URL;
-  filePath: string;
+  filePath: LocalPath;
 }
 
 export default class RecentFilesService extends Service {
@@ -47,8 +48,7 @@ export default class RecentFilesService extends Service {
     }
   }
 
-  // FIXME? LocalPath instead of string?
-  removeRecentFile(file: string) {
+  removeRecentFile(file: LocalPath) {
     let index = this.findRecentFileIndex(file);
 
     if (index === -1) {
@@ -71,7 +71,7 @@ export default class RecentFilesService extends Service {
     }
   }
 
-  addRecentFile(file: string) {
+  addRecentFile(file: LocalPath) {
     console.log(`addRecentFile: ${file}`);
     let currentRealmUrl = this.cardService.defaultURL;
 
@@ -103,7 +103,7 @@ export default class RecentFilesService extends Service {
     );
   }
 
-  private findRecentFileIndex(path: string) {
+  private findRecentFileIndex(path: LocalPath) {
     let currentRealmUrl = this.cardService.defaultURL;
 
     return this.recentFiles.findIndex(
