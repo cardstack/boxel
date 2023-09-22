@@ -64,7 +64,6 @@ export default class RecentFilesService extends Service {
   }
 
   addRecentFileUrl(url: string) {
-    console.log(`addRecentFileUrl: ${url}`);
     let realmPaths = new RealmPaths(this.cardService.defaultURL);
     if (realmPaths.inRealm(new URL(url))) {
       this.addRecentFile(realmPaths.local(url));
@@ -72,7 +71,6 @@ export default class RecentFilesService extends Service {
   }
 
   addRecentFile(file: LocalPath) {
-    console.log(`addRecentFile: ${file}`);
     let currentRealmUrl = this.cardService.defaultURL;
 
     const existingIndex = this.findRecentFileIndex(file);
@@ -91,7 +89,6 @@ export default class RecentFilesService extends Service {
   }
 
   persistRecentFiles() {
-    console.log('persisting', JSON.stringify(this.recentFiles));
     window.localStorage.setItem(
       'recent-files',
       JSON.stringify(
