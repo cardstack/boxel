@@ -32,12 +32,42 @@ export default class BinaryFileInfo extends Component<Signature> {
 
   <template>
     <div class='binary-info'>
-      {{svgJar 'file' width='40' height='50'}}
+      <div class='file-icon'>
+        {{svgJar 'file' width='50' height='60'}}
+      </div>
       <div class='file-name'>{{this.baseName}}</div>
-      <div class='info'>{{this.size}}</div>
+      <div class='info size'>{{this.size}}</div>
       <div class='info'>Last modified {{this.lastModified}}</div>
     </div>
 
-    <style></style>
+    <style>
+      .binary-info {
+        display: flex;
+        flex-wrap: wrap;
+        align-content: center;
+        text-align: center;
+        height: 100%;
+      }
+      .file-name {
+        margin-top: var(--boxel-sp);
+        font: var(--boxel-font-med);
+        font-weight: bold;
+        width: 100%;
+      }
+      .info {
+        font: var(--boxel-font-sm);
+        color: var(--boxel-450);
+        font-weight: 500;
+        width: 100%;
+      }
+      .size {
+        margin-top: var(--boxel-sp-xxs);
+        text-transform: uppercase;
+      }
+      .file-icon {
+        --icon-color: var(--boxel-highlight);
+        width: 100%;
+      }
+    </style>
   </template>
 }
