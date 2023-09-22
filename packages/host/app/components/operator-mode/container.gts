@@ -305,10 +305,13 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
     this.operatorModeStateService.removeRecentCard(card.id);
 
-    // TODO this assumes that the card being deleted is in the current realm!
-    let realmPaths = new RealmPaths(this.cardService.defaultURL.href);
-    let cardPath = realmPaths.local(`${card.id}.json`);
-    this.recentFilesService.removeRecentFile(cardPath);
+    let cardRealmUrl = await this.cardService.getRealmURL(card);
+
+    if (cardRealmUrl) {
+      let realmPaths = new RealmPaths(cardRealmUrl);
+      let cardPath = realmPaths.local(`${card.id}.json`);
+      this.recentFilesService.removeRecentFile(cardPath);
+    }
 
     await this.withTestWaiters(async () => {
       await this.cardService.deleteCard(card);
