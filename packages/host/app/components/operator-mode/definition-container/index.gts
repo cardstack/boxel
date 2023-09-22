@@ -20,7 +20,7 @@ export class FileDefinitionContainer extends Component<FileSignature> {
       @realmInfo={{@realmInfo}}
       @realmIconURL={{@realmIconURL}}
       @isActive={{true}}
-      data-test-card-module-definition
+      data-test-file-definition
     >
       <:activeContent>
         <Active @actions={{@actions}} @infoText={{@infoText}} />

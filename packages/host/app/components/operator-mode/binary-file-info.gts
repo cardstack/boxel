@@ -31,13 +31,14 @@ export default class BinaryFileInfo extends Component<Signature> {
   }
 
   <template>
-    <div class='binary-info'>
+    <div class='binary-info' data-test-binary-info>
       <div class='file-icon'>
         {{svgJar 'file' width='50' height='60'}}
       </div>
-      <div class='file-name'>{{this.baseName}}</div>
-      <div class='info size'>{{this.size}}</div>
-      <div class='info'>Last modified {{this.lastModified}}</div>
+      <div class='file-name' data-test-file-name>{{this.baseName}}</div>
+      <div class='info size' data-test-size>{{this.size}}</div>
+      <div class='info' data-test-last-modified>Last modified
+        {{this.lastModified}}</div>
     </div>
 
     <style>

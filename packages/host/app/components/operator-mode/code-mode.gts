@@ -775,8 +775,10 @@ export default class CodeMode extends Component<Signature> {
                 {{else if this.cardError}}
                   {{this.cardError.message}}
                 {{else if this.readyFile.isBinary}}
-                  <div class='binary-file-schema-editor'>Schema Editor cannot be
-                    used with this file type</div>
+                  <div
+                    class='binary-file-schema-editor'
+                    data-test-binary-file-schema-editor
+                  >Schema Editor cannot be used with this file type</div>
                 {{/if}}
               {{/if}}
             </div>
