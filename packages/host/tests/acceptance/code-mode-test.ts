@@ -596,7 +596,7 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.dom('[data-test-recent-file]').exists({ count: 99 });
 
     await click('[data-test-file="index.json"]');
-    assert.dom('[data-test-recent-file]').exists({ count: 99 });
+    assert.dom('[data-test-recent-file]').exists({ count: 100 });
 
     assert
       .dom('[data-test-recent-file]:nth-child(1)')
