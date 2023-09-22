@@ -29,40 +29,26 @@ interface Signature {
 
 class ContainsManyEditor extends GlimmerComponent<Signature> {
   <template>
-    {{#if this.isPrimitive}}
-      <div
-        class='primitive-contains-many-editor'
-        data-test-contains-many={{@field.name}}
-      >
-        {{#if @arrayField.children.length}}
-          <ul class='list'>
-            {{#each @arrayField.value as |val i|}}
-              <li data-test-item={{i}}>
-                {{val}}
-              </li>
-            {{/each}}
-          </ul>
-        {{else}}
-          <div class='empty'>None</div>
-        {{/if}}
-      </div>
-    {{else}}
-      <div data-test-contains-many={{@field.name}}>
-        {{#if @arrayField.children.length}}
-          <ul class='list'>
-            {{#each @arrayField.children as |boxedElement i|}}
-              <li class='editor' data-test-item={{i}}>
-                {{#let
-                  (getBoxComponent
-                    (this.args.cardTypeFor @field boxedElement)
-                    @format
-                    boxedElement
-                    @field
-                  )
-                  as |Item|
-                }}
-                  <Item />
-                {{/let}}
+    <div
+      class={{if this.isReadOnly 'read-only-contains-many-editor'}}
+      data-test-contains-many={{@field.name}}
+    >
+      {{#if @arrayField.children.length}}
+        <ul class='list'>
+          {{#each @arrayField.children as |boxedElement i|}}
+            <li class={{unless this.isReadOnly 'editor'}} data-test-item={{i}}>
+              {{#let
+                (getBoxComponent
+                  (@cardTypeFor @field boxedElement)
+                  (if this.isReadOnly 'embedded' @format)
+                  boxedElement
+                  @field
+                )
+                as |Item|
+              }}
+                <Item />
+              {{/let}}
+              {{#unless this.isReadOnly}}
                 <div class='remove-button-container'>
                   <IconButton
                     @icon='icon-trash'
@@ -74,10 +60,14 @@ class ContainsManyEditor extends GlimmerComponent<Signature> {
                     aria-label='Remove'
                   />
                 </div>
-              </li>
-            {{/each}}
-          </ul>
-        {{/if}}
+              {{/unless}}
+            </li>
+          {{/each}}
+        </ul>
+      {{else if this.isReadOnly}}
+        <span class='empty'>None</span>
+      {{/if}}
+      {{#unless this.isReadOnly}}
         <AddButton
           class='add-new'
           @variant='full-width'
@@ -87,10 +77,10 @@ class ContainsManyEditor extends GlimmerComponent<Signature> {
           Add
           {{getPlural @field.card.displayName}}
         </AddButton>
-      </div>
-    {{/if}}
+      {{/unless}}
+    </div>
     <style>
-      .primitive-contains-many-editor {
+      .read-only-contains-many-editor {
         padding: var(--boxel-sp-xs);
         border: 1px solid var(--boxel-form-control-border-color);
         border-radius: var(--boxel-form-control-border-radius);
@@ -127,11 +117,18 @@ class ContainsManyEditor extends GlimmerComponent<Signature> {
       .remove:hover {
         --icon-color: var(--boxel-error-200);
       }
+      .list + .add-new {
+        margin-top: var(--boxel-sp);
+      }
     </style>
   </template>
 
-  get isPrimitive() {
-    return this.args.field.card && primitive in this.args.field.card;
+  get isReadOnly() {
+    return (
+      this.args.arrayField.isNested &&
+      this.args.field.card &&
+      primitive in this.args.field.card
+    );
   }
 
   add = () => {

@@ -1,5 +1,5 @@
-import StringCard from 'https://cardstack.com/base/string';
-import NumberCard from 'https://cardstack.com/base/number';
+import StringField from 'https://cardstack.com/base/string';
+import NumberField from 'https://cardstack.com/base/number';
 import {
   Component,
   CardDef,
@@ -9,33 +9,42 @@ import {
   containsMany,
 } from 'https://cardstack.com/base/card-api';
 
-export class PhoneCard extends FieldDef {
-  @field country = contains(NumberCard);
-  @field area = contains(NumberCard);
-  @field number = contains(NumberCard);
+export class PhoneField extends FieldDef {
+  @field country = contains(NumberField);
+  @field area = contains(NumberField);
+  @field number = contains(NumberField);
 }
 
-export class EmergencyContactCard extends FieldDef {
-  @field name = contains(StringCard);
-  @field phoneNumber = contains(PhoneCard);
-  @field email = contains(StringCard);
+export class EmergencyContactField extends FieldDef {
+  @field name = contains(StringField);
+  @field phoneNumber = contains(PhoneField);
+  @field email = contains(StringField);
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <@fields.name />
+      <@fields.phoneNumber />
+      <@fields.email />
+    </template>
+  };
 }
 
 class Guest extends FieldDef {
-  @field name = contains(StringCard);
-  @field additionalNames = containsMany(StringCard);
+  @field name = contains(StringField);
+  @field additionalNames = containsMany(StringField);
 }
 
 export class ContactCard extends CardDef {
   static displayName = 'Contact';
-  @field name = contains(StringCard);
-  @field phone = contains(PhoneCard);
-  @field emergencyContact = contains(EmergencyContactCard);
+  @field name = contains(StringField);
+  @field phone = contains(PhoneField);
+  @field emergencyContact = contains(EmergencyContactField);
+  @field namesInvited = containsMany(StringField);
   @field guest = contains(Guest);
   // @field aliases;
   // @field vendor;
   // @field vendors;
-  @field title = contains(StringCard, {
+  @field title = contains(StringField, {
     computeVia: function (this: ContactCard) {
       return this.name;
     },
@@ -45,6 +54,9 @@ export class ContactCard extends CardDef {
     <template>
       <@fields.name />
       <@fields.phone />
+      <@fields.emergencyContact />
+      <@fields.namesInvited />
+      <@fields.guest />
     </template>
   };
 }

@@ -24,6 +24,7 @@
           },
           "email": null
         },
+        "namesInvited": [],
         "guest": {
           "name": null,
           "additionalNames": []

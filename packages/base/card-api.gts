@@ -2787,6 +2787,13 @@ export class Box<T> {
     this.prevChildren = newChildren;
     return newChildren;
   }
+
+  get isNested(): boolean {
+    return (
+      'containingBox' in this.state &&
+      this.state.containingBox.state.type !== 'root'
+    );
+  }
 }
 
 type ElementType<T> = T extends (infer V)[] ? V : never;
