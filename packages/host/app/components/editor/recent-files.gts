@@ -6,7 +6,6 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { RealmPaths } from '@cardstack/runtime-common';
 import { RecentFile } from '@cardstack/host/services/recent-files-service';
 
@@ -87,8 +86,4 @@ class File extends Component<FileArgs> {
       }
     </style>
   </template>
-}
-
-function getRelativeFilePath(realmPaths: RealmPaths, fileUrl: string) {
-  return realmPaths.local(fileUrl);
 }
