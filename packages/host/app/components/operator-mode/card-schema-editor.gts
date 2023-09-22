@@ -10,6 +10,7 @@ import type CardService from '@cardstack/host/services/card-service';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import type { Ready } from '@cardstack/host/resources/file';
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
+import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 
 interface Signature {
   Args: {
@@ -81,6 +82,11 @@ export default class CardSchemaEditor extends Component<Signature> {
       .field-type {
         color: #949494;
       }
+
+      .realm-icon > img {
+        height: 25px;
+        width: 25px;
+      }
     </style>
 
     <div
@@ -89,7 +95,11 @@ export default class CardSchemaEditor extends Component<Signature> {
     >
       <div class='pill'>
         <span class='realm-icon'>
-          🟦
+          <RealmInfoProvider @fileUrl='http://localhost:4201/drafts/asset'>
+            <:ready as |realmInfo|>
+              <img src={{realmInfo.iconURL}} alt='Realm icon' />
+            </:ready>
+          </RealmInfoProvider>
         </span>
         {{@cardType.displayName}}
       </div>
