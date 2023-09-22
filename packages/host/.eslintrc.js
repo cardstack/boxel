@@ -20,8 +20,6 @@ module.exports = {
     'plugin:@typescript-eslint/recommended',
     'plugin:prettier/recommended',
     'plugin:qunit-dom/recommended',
-    'plugin:import/recommended',
-    'plugin:import/typescript',
   ],
   env: {
     browser: true,
@@ -39,66 +37,6 @@ module.exports = {
     '@typescript-eslint/explicit-module-boundary-types': 'off',
     '@typescript-eslint/no-this-alias': 'off',
     '@typescript-eslint/no-non-null-assertion': 'off',
-    // this doesn't work well with the monorepo. Typescript already complains if you try to import something that's not found
-    'import/no-unresolved': 'off',
-    'import/order': [
-      'error',
-      {
-        'newlines-between': 'always-and-inside-groups',
-        alphabetize: {
-          order: 'asc',
-        },
-        groups: [
-          'builtin',
-          'external',
-          'internal',
-          'parent',
-          'sibling',
-          'index',
-          'object',
-          'type',
-        ],
-        pathGroups: [
-          {
-            pattern: '@ember/**',
-            group: 'builtin',
-          },
-          {
-            pattern: '@embroider/**',
-            group: 'builtin',
-          },
-          {
-            pattern: '@glimmer/**',
-            group: 'builtin',
-          },
-          {
-            pattern: '@cardstack/boxel-ui{*,/**}',
-            group: 'internal',
-            position: 'before',
-          },
-          {
-            pattern: '@cardstack/runtime-common{*,/**}',
-            group: 'internal',
-            position: 'before',
-          },
-          {
-            pattern: '@cardstack/host/**',
-            group: 'internal',
-            position: 'after',
-          },
-          {
-            pattern: '@cardstack**',
-            group: 'internal',
-          },
-          {
-            pattern: 'https://cardstack.com/**',
-            group: 'internal',
-            position: 'after',
-          },
-        ],
-        pathGroupsExcludedImportTypes: [],
-      },
-    ],
   },
   overrides: [
     // node files
@@ -144,6 +82,73 @@ module.exports = {
       files: ['**/*.ts', '**/*.gts'],
       rules: {
         'no-undef': 'off',
+      },
+    },
+    {
+      // don’t enforce import order on blueprint files
+      files: ['app/**', 'tests/**'],
+      extends: ['plugin:import/recommended', 'plugin:import/typescript'],
+      rules: {
+        // this doesn't work well with the monorepo. Typescript already complains if you try to import something that's not found
+        'import/no-unresolved': 'off',
+        'import/order': [
+          'error',
+          {
+            'newlines-between': 'always-and-inside-groups',
+            alphabetize: {
+              order: 'asc',
+            },
+            groups: [
+              'builtin',
+              'external',
+              'internal',
+              'parent',
+              'sibling',
+              'index',
+              'object',
+              'type',
+            ],
+            pathGroups: [
+              {
+                pattern: '@ember/**',
+                group: 'builtin',
+              },
+              {
+                pattern: '@embroider/**',
+                group: 'builtin',
+              },
+              {
+                pattern: '@glimmer/**',
+                group: 'builtin',
+              },
+              {
+                pattern: '@cardstack/boxel-ui{*,/**}',
+                group: 'internal',
+                position: 'before',
+              },
+              {
+                pattern: '@cardstack/runtime-common{*,/**}',
+                group: 'internal',
+                position: 'before',
+              },
+              {
+                pattern: '@cardstack/host/**',
+                group: 'internal',
+                position: 'after',
+              },
+              {
+                pattern: '@cardstack**',
+                group: 'internal',
+              },
+              {
+                pattern: 'https://cardstack.com/**',
+                group: 'internal',
+                position: 'after',
+              },
+            ],
+            pathGroupsExcludedImportTypes: [],
+          },
+        ],
       },
     },
   ],
