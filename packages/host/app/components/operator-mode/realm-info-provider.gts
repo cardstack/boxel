@@ -7,7 +7,7 @@ import { TrackedObject } from 'tracked-built-ins';
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 export interface Signature {
-  Args: { fileUrl: string };
+  Args: { realmUrl?: string; fileUrl?: string };
   Blocks: {
     ready: [RealmInfo];
     error: [Error];
@@ -40,9 +40,10 @@ export default class RealmInfoProvider extends Component<Signature> {
         state.isLoading = true;
 
         try {
-          let realmInfo = await this.realmInfoService.fetchRealmInfo(
-            this.args.fileUrl,
-          );
+          let realmInfo = await this.realmInfoService.fetchRealmInfo({
+            realmUrl: this.args.realmUrl,
+            fileUrl: this.args.fileUrl,
+          });
 
           state.value = realmInfo;
         } catch (error: any) {
@@ -60,8 +61,7 @@ export default class RealmInfoProvider extends Component<Signature> {
   <template>
     {{#if this.realmInfoResource.value}}
       {{yield this.realmInfoResource.value to='ready'}}
-    {{/if}}
-    {{#if this.realmInfoResource.error}}
+    {{else if this.realmInfoResource.error}}
       {{yield this.realmInfoResource.error to='error'}}
     {{/if}}
   </template>
