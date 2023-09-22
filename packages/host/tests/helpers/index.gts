@@ -708,7 +708,7 @@ export async function sourceFetchRedirectHandle(
   request: Request,
   adapter: RealmAdapter,
 ) {
-  let urlParts = request.url.split('.');
+  let urlParts = new URL(request.url).pathname.split('.');
   if (
     isCardSourceFetch(request) &&
     urlParts.length === 1 //has no extension
