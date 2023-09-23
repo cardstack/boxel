@@ -2,8 +2,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-import ResizablePanelGroup from './resizable-panel-group';
-import ResizablePanel from './resizable-panel';
+import ResizablePanelGroup from './index';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import {
   cssVariable,
@@ -27,11 +26,10 @@ export default class ResizablePanelUsage extends Component {
   <template>
     <FreestyleUsage @name='ThreadMessage'>
       <:example>
-        <ResizablePanelGroup as |pg|>
+        <ResizablePanelGroup as |ResizablePanel|>
           <ResizablePanel
             @defaultWidth={{this.panel1DefaultWidth}}
             @minWidth={{this.panel1MinWidth}}
-            @panelGroupApi={{pg.api}}
             style={{cssVar
               boxel-panel-resize-handler-height=this.boxelPanelResizeHandlerHeight.value
               boxel-panel-resize-handler-background-color=this.boxelPanelResizeHandlerBackgroundColor.value
@@ -42,7 +40,6 @@ export default class ResizablePanelUsage extends Component {
           <ResizablePanel
             @defaultWidth={{this.panel2DefaultWidth}}
             @minWidth={{this.panel2MinWidth}}
-            @panelGroupApi={{pg.api}}
             style={{cssVar
               boxel-panel-resize-handler-height=this.boxelPanelResizeHandlerHeight.value
               boxel-panel-resize-handler-background-color=this.boxelPanelResizeHandlerBackgroundColor.value
@@ -53,7 +50,6 @@ export default class ResizablePanelUsage extends Component {
           <ResizablePanel
             @defaultWidth={{this.panel3DefaultWidth}}
             @minWidth={{this.panel3MinWidth}}
-            @panelGroupApi={{pg.api}}
             style={{cssVar
               boxel-panel-resize-handler-height=this.boxelPanelResizeHandlerHeight.value
               boxel-panel-resize-handler-background-color=this.boxelPanelResizeHandlerBackgroundColor.value

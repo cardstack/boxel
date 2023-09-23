@@ -1,6 +1,7 @@
 import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import type {
   CardDef,
   Format,
@@ -91,7 +92,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     fieldName: string | undefined;
   }>();
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.subscribeToCard.perform();
     this.subscribedCard = this.card;
@@ -249,7 +250,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private calculateLastSavedMsg() {
     this.lastSavedMsg =
       this.lastSaved != null
-        ? `Saved ${formatDistanceToNow(this.lastSaved)} ago`
+        ? `Saved ${(formatDistanceToNow(this.lastSaved), { addSuffix: true })}`
         : undefined;
   }
 

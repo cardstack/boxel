@@ -1,6 +1,6 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { PanelGroupApi } from './resizable-panel-group';
+import { PanelContext } from './index';
 import cssVars from '@cardstack/boxel-ui/helpers/css-var';
 import { scheduleOnce } from '@ember/runloop';
 import { on } from '@ember/modifier';
@@ -8,10 +8,15 @@ import { on } from '@ember/modifier';
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    panelGroupApi: PanelGroupApi;
     defaultWidth: string;
     width?: string;
     minWidth?: string;
+    // The following arguments will be supplied by the parent ResizablePanelGroup that yields this component
+    registerPanel: (context: PanelContext) => number;
+    panelContext: (panelId: number) => PanelContext | undefined;
+    isLastPanel: (panelId: number) => boolean;
+    onResizeHandlerMouseDown: (event: MouseEvent) => void;
+    onResizeHandlerDblClick: (event: MouseEvent) => void;
   };
   Blocks: {
     default: [];
@@ -38,8 +43,8 @@ export default class Panel extends Component<Signature> {
           id={{this.resizeHandlerId}}
           class='resize-handler'
           aria-label={{this.resizeHandlerId}}
-          {{on 'mousedown' @panelGroupApi.onResizeHandlerMouseDown}}
-          {{on 'dblclick' @panelGroupApi.onResizeHandlerDblClick}}
+          {{on 'mousedown' @onResizeHandlerMouseDown}}
+          {{on 'dblclick' @onResizeHandlerDblClick}}
         ><div class={{this.arrowResizeHandlerClass}} /></button>
       </div>
     {{/unless}}
@@ -112,7 +117,7 @@ export default class Panel extends Component<Signature> {
 
     // eslint-disable-next-line ember/no-incorrect-calls-with-inline-anonymous-functions
     scheduleOnce('afterRender', this, () => {
-      this.id = this.args.panelGroupApi.registerPanel({
+      this.id = this.args.registerPanel({
         width: this.args.width ?? this.args.defaultWidth,
         defaultWidth: this.args.defaultWidth,
       });
@@ -127,7 +132,7 @@ export default class Panel extends Component<Signature> {
         minWidth: undefined,
       };
     }
-    return this.args.panelGroupApi.panelContext(this.id);
+    return this.args.panelContext(this.id);
   }
 
   get resizeHandlerId() {
@@ -135,19 +140,19 @@ export default class Panel extends Component<Signature> {
   }
 
   get isLastPanel() {
-    return this.id && this.args.panelGroupApi.isLastPanel(this.id);
+    return this.id && this.args.isLastPanel(this.id);
   }
 
   get arrowResizeHandlerClass() {
     if (
       (this.id === 1 && this.panelContext?.width !== '0px') ||
       (this.id &&
-        this.args.panelGroupApi.isLastPanel(this.id + 1) &&
-        this.args.panelGroupApi.panelContext(this.id + 1)?.width === '0px')
+        this.args.isLastPanel(this.id + 1) &&
+        this.args.panelContext(this.id + 1)?.width === '0px')
     ) {
       return 'arrow-left';
     } else if (
-      (this.id && this.args.panelGroupApi.isLastPanel(this.id + 1)) ||
+      (this.id && this.args.isLastPanel(this.id + 1)) ||
       (this.id === 1 && this.panelContext?.width === '0px')
     ) {
       return 'arrow-right';

@@ -8,14 +8,15 @@ import {
   ClickableModuleDefinitionContainer,
 } from './definition-container';
 import { Ready } from '@cardstack/host/resources/file';
-import { tracked } from '@glimmer/tracking';
-import moment from 'moment';
+// @ts-expect-error cached doesn't have type yet
+import { tracked, cached } from '@glimmer/tracking';
 import {
   type AdoptionChainManager,
   type ElementInFile,
 } from '@cardstack/host/resources/adoption-chain-manager';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import { hash, array } from '@ember/helper';
+import { lastModifiedDate } from '../../resources/last-modified-date';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -32,8 +33,8 @@ interface Signature {
 }
 
 export default class CardInheritancePanel extends Component<Signature> {
-  @tracked cardInstance: CardDef | undefined;
-  @service declare operatorModeStateService: OperatorModeStateService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
+  private lastModified = lastModifiedDate(this, () => this.args.readyFile);
 
   get cardType() {
     return this.args.adoptionChainManager?.selectedElement?.cardType;
@@ -78,7 +79,7 @@ export default class CardInheritancePanel extends Component<Signature> {
               @name={{@cardInstance.title}}
               @fileExtension='.JSON'
               @realmInfo={{@realmInfo}}
-              @infoText={{this.lastModified}}
+              @infoText={{this.lastModified.value}}
               @actions={{array
                 (hash label='Delete' handler=@delete icon='icon-trash')
               }}
@@ -110,6 +111,7 @@ export default class CardInheritancePanel extends Component<Signature> {
             @name={{this.cardType.type.displayName}}
             @fileExtension={{this.cardType.type.moduleMeta.extension}}
             @realmInfo={{this.cardType.type.moduleMeta.realmInfo}}
+            @infoText={{this.lastModified.value}}
             @isActive={{true}}
             @actions={{array
               (hash label='Delete' handler=@delete icon='icon-trash')
@@ -142,23 +144,6 @@ export default class CardInheritancePanel extends Component<Signature> {
       }
     </style>
   </template>
-
-  get lastModified() {
-    if (this.args.readyFile.lastModified != undefined) {
-      return `Last saved was ${moment(
-        this.args.readyFile.lastModified,
-      ).fromNow()}`;
-    }
-    return;
-  }
-
-  get fileExtension() {
-    if (!this.args.cardInstance) {
-      return '.' + this.args.readyFile.url.split('.').pop() || '';
-    } else {
-      return '';
-    }
-  }
 
   getCardTypeDisplayName(t: typeof BaseDef) {
     let card = new t();

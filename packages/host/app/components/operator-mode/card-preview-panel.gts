@@ -145,7 +145,7 @@ export default class CardPreviewPanel extends Component<Signature> {
         margin-left: auto;
       }
 
-      .preview-body :deep(.boxel-card-container) {
+      .preview-body > :deep(.boxel-card-container) {
         border-radius: 0;
         box-shadow: none;
       }
