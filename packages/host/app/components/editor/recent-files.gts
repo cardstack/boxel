@@ -79,6 +79,7 @@ class File extends Component<FileArgs> {
               src={{realmInfo.iconURL}}
               class='icon'
               alt=''
+              role='presentation'
               data-test-realm-icon-url={{realmInfo.iconURL}}
             />
           </:ready>
