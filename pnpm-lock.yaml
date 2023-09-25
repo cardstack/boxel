@@ -882,12 +882,6 @@ importers:
       '@glint/environment-ember-loose':
         specifier: ^1.0.0
         version: 1.0.2(@glimmer/component@1.1.2)(@glint/template@1.0.2)(ember-cli-htmlbars@6.2.0)(ember-modifier@4.1.0)
-      ember-async-data:
-        specifier: ^1.0.1
-        version: 1.0.1(ember-source@4.12.0)
-      ember-click-outside:
-        specifier: ^6.0.1
-        version: 6.0.1(ember-source@4.12.0)
     devDependencies:
       '@babel/core':
         specifier: ^7.17.8
@@ -973,6 +967,9 @@ importers:
       '@simple-dom/void-map':
         specifier: ^1.4.0
         version: 1.4.0
+      '@types/filesize':
+        specifier: ^5.0.0
+        version: 5.0.0
       '@types/flat':
         specifier: ^5.0.2
         version: 5.0.2
@@ -1030,6 +1027,9 @@ importers:
       date-fns:
         specifier: ^2.28.0
         version: 2.29.3
+      ember-async-data:
+        specifier: ^1.0.1
+        version: 1.0.1(ember-source@4.12.0)
       ember-auto-import:
         specifier: ^2.6.3
         version: 2.6.3(@glint/template@1.0.2)(webpack@5.84.0)
@@ -1081,6 +1081,9 @@ importers:
       ember-cli-typescript-blueprints:
         specifier: ^3.0.0
         version: 3.0.0
+      ember-click-outside:
+        specifier: ^6.0.1
+        version: 6.0.1(ember-source@4.12.0)
       ember-concurrency:
         specifier: ^3.1.0
         version: 3.1.0(@babel/core@7.20.2)(ember-source@4.12.0)
@@ -1168,6 +1171,9 @@ importers:
       fast-json-stable-stringify:
         specifier: ^2.1.0
         version: 2.1.0
+      filesize:
+        specifier: ^10.0.12
+        version: 10.0.12
       flat:
         specifier: ^5.0.2
         version: 5.0.2
@@ -4532,6 +4538,7 @@ packages:
       semver: 7.3.8
     transitivePeerDependencies:
       - supports-color
+    dev: true
 
   /@embroider/addon-shim@0.50.2:
     resolution: {integrity: sha512-a+pFlXZPovcCNFo05HxXBW9ole43mPyFZnkhvZlLF0f1sHEn9j0sD1Ld2BM/NCERmHcYz9eXQnX1FPNLCDoGEA==}
@@ -6530,6 +6537,13 @@ packages:
       '@types/express-serve-static-core': 4.17.31
       '@types/qs': 6.9.7
       '@types/serve-static': 1.15.0
+    dev: true
+
+  /@types/filesize@5.0.0:
+    resolution: {integrity: sha512-zgn1Kmm6VfqruG9STpwpZiSnpzHjF9hlvHVw+5hhM20xRCOIgjxnXJxOoLuZ/aWS6v/M5d6fvXFbbVQfBe4cMg==}
+    deprecated: This is a stub types definition. filesize provides its own type definitions, so you do not need this installed.
+    dependencies:
+      filesize: 10.0.12
     dev: true
 
   /@types/flat@5.0.2:
@@ -12236,6 +12250,7 @@ packages:
       ember-source: 4.12.0(@babel/core@7.20.2)(@glimmer/component@1.1.2)(@glint/template@1.0.2)(webpack@5.84.0)
     transitivePeerDependencies:
       - supports-color
+    dev: true
 
   /ember-auto-import@1.12.2:
     resolution: {integrity: sha512-gLqML2k77AuUiXxWNon1FSzuG1DV7PEPpCLCU5aJvf6fdL6rmFfElsZRh+8ELEB/qP9dT+LHjNEunVzd2dYc8A==}
@@ -13147,7 +13162,7 @@ packages:
       execa: 5.1.1
       exit: 0.1.2
       express: 4.18.2
-      filesize: 10.0.7
+      filesize: 10.0.12
       find-up: 5.0.0
       find-yarn-workspace-root: 2.0.0
       fixturify-project: 2.1.1
@@ -13267,7 +13282,7 @@ packages:
     transitivePeerDependencies:
       - ember-source
       - supports-color
-    dev: false
+    dev: true
 
   /ember-compatibility-helpers@1.2.6(@babel/core@7.20.2):
     resolution: {integrity: sha512-2UBUa5SAuPg8/kRVaiOfTwlXdeVweal1zdNPibwItrhR0IvPrXpaqwJDlEZnWKEoB+h33V0JIfiWleSG6hGkkA==}
@@ -16026,8 +16041,8 @@ packages:
     engines: {node: '>= 6'}
     dev: true
 
-  /filesize@10.0.7:
-    resolution: {integrity: sha512-iMRG7Qo9nayLoU3PNCiLizYtsy4W1ClrapeCwEgtiQelOAOuRJiw4QaLI+sSr8xr901dgHv+EYP2bCusGZgoiA==}
+  /filesize@10.0.12:
+    resolution: {integrity: sha512-6RS9gDchbn+qWmtV2uSjo5vmKizgfCQeb5jKmqx8HyzA3MoLqqyQxN+QcjkGBJt7FjJ9qFce67Auyya5rRRbpw==}
     engines: {node: '>= 10.4.0'}
     dev: true
 

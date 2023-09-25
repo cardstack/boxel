@@ -29,17 +29,14 @@ interface Signature {
 
 class ContainsManyEditor extends GlimmerComponent<Signature> {
   <template>
-    <div data-test-contains-many={{this.args.field.name}}>
+    <div data-test-contains-many={{@field.name}}>
       {{#if @arrayField.children.length}}
         <ul class='list'>
           {{#each @arrayField.children as |boxedElement i|}}
             <li class='editor' data-test-item={{i}}>
               {{#let
                 (getBoxComponent
-                  (this.args.cardTypeFor @field boxedElement)
-                  @format
-                  boxedElement
-                  @field
+                  (@cardTypeFor @field boxedElement) @format boxedElement @field
                 )
                 as |Item|
               }}

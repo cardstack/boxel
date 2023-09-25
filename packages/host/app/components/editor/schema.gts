@@ -12,8 +12,6 @@ import { cached, tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 
-import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
-import type { BaseDef, FieldType } from 'https://cardstack.com/base/card-api';
 import {
   BoxelInput,
   Button,
@@ -21,6 +19,7 @@ import {
   FieldContainer,
   Label,
 } from '@cardstack/boxel-ui';
+
 import {
   chooseCard,
   catalogEntryRef,
@@ -40,6 +39,9 @@ import type { Ready } from '@cardstack/host/resources/file';
 import type CardService from '@cardstack/host/services/card-service';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
+
+import type { BaseDef, FieldType } from 'https://cardstack.com/base/card-api';
+import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
 import CatalogEntryEditor from './catalog-entry-editor';
 

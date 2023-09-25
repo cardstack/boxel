@@ -13,43 +13,44 @@ import { tracked, cached } from '@glimmer/tracking';
 import { formatDistanceToNow } from 'date-fns';
 import { task, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+import Modifier from 'ember-modifier';
 import { trackedFunction } from 'ember-resources/util/function';
-import type {
-  CardDef,
-  Format,
-  FieldType,
-} from 'https://cardstack.com/base/card-api';
-import Preview from '../preview';
 
-import { type StackItem } from './container';
+import { TrackedArray } from 'tracked-built-ins';
 
-import OperatorModeOverlays from './overlays';
-import type CardService from '../../services/card-service';
-
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import optional from '@cardstack/boxel-ui/helpers/optional';
-import cn from '@cardstack/boxel-ui/helpers/cn';
 import {
   IconButton,
   Header,
   CardContainer,
   Tooltip,
 } from '@cardstack/boxel-ui';
-import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
-
-//@ts-expect-error cached type not available yet
-
-import { TrackedArray } from 'tracked-built-ins';
-
 import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
 import BoxelMenu from '@cardstack/boxel-ui/components/menu';
+import cn from '@cardstack/boxel-ui/helpers/cn';
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
+import optional from '@cardstack/boxel-ui/helpers/optional';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
-import ElementTracker from '../../resources/element-tracker';
+import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
 
-import Modifier from 'ember-modifier';
+import type {
+  CardDef,
+  Format,
+  FieldType,
+} from 'https://cardstack.com/base/card-api';
+
+import ElementTracker from '../../resources/element-tracker';
+import Preview from '../preview';
+
+import { type StackItem } from './container';
+
+import OperatorModeOverlays from './overlays';
+
+import type CardService from '../../services/card-service';
+
+//@ts-expect-error cached type not available yet
 
 interface Signature {
   Args: {

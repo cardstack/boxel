@@ -13,14 +13,9 @@ import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { RealmPaths, type LocalPath } from '@cardstack/runtime-common/paths';
 
 import { directory } from '@cardstack/host/resources/directory';
+
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-
-
-
-
-
-
 
 interface Args {
   Args: {

@@ -33,16 +33,15 @@ import {
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 
-
-
-import { WebMessageStream, messageCloseHandler } from './stream';
-
 import type CardService from '@cardstack/host/services/card-service';
 import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
 
 import type MessageService from '@cardstack/host/services/message-service';
+
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+
 import { renderComponent } from './render-component';
+import { WebMessageStream, messageCloseHandler } from './stream';
 
 const waiter = buildWaiter('@cardstack/host/test/helpers/index:onFetch-waiter');
 

@@ -28,28 +28,29 @@ import {
 } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
-import type MessageService from '@cardstack/host/services/message-service';
-
-import Module from './module';
-import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import { file, FileResource, isReady } from '@cardstack/host/resources/file';
 import CardEditor from '@cardstack/host/components/card-editor';
-import FileTree from './file-tree';
-
-import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import ENV from '@cardstack/host/config/environment';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
+import { file, FileResource, isReady } from '@cardstack/host/resources/file';
+import { maybe } from '@cardstack/host/resources/maybe';
+import type CardService from '@cardstack/host/services/card-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
+import type MessageService from '@cardstack/host/services/message-service';
 import type {
   MonacoSDK,
   IStandaloneCodeEditor,
 } from '@cardstack/host/services/monaco-service';
-import { maybe } from '@cardstack/host/resources/maybe';
-import type CardService from '@cardstack/host/services/card-service';
-import type LoaderService from '@cardstack/host/services/loader-service';
 import MonacoService from '@cardstack/host/services/monaco-service';
 
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+
 import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+
+import FileTree from './file-tree';
+import Module from './module';
+
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 const { ownRealmURL } = ENV;
 const log = logger('component:go');

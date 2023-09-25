@@ -9,26 +9,19 @@ import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
-import { trackedFunction } from 'ember-resources/util/function';
-import { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import { tracked } from '@glimmer/tracking';
 
-
-
-import CardCatalogModal from '../card-catalog/modal';
-
-import ChatSidebar from '../matrix/chat-sidebar';
-import SearchSheet, { SearchSheetMode } from '../search-sheet';
-
-import SubmodeSwitcher, { Submode } from '../submode-switcher';
-import CopyButton from './copy-button';
-import OperatorModeStack from './stack';
-import type CardService from '../../services/card-service';
-import get from 'lodash/get';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import ENV from '@cardstack/host/config/environment';
-import { Modal, IconButton } from '@cardstack/boxel-ui';
 import { restartableTask, task, dropTask } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
+import { trackedFunction } from 'ember-resources/util/function';
+
+import get from 'lodash/get';
+
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
+
+import { Modal, IconButton } from '@cardstack/boxel-ui';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import {
   Deferred,
@@ -38,36 +31,43 @@ import {
   type CodeRef,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
+
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
-import type LoaderService from '../../services/loader-service';
-
-import { tracked } from '@glimmer/tracking';
-
 import type { Query } from '@cardstack/runtime-common/query';
+
+import CodeMode from '@cardstack/host/components/operator-mode/code-mode';
+import ENV from '@cardstack/host/config/environment';
 
 import {
   getSearchResults,
   type Search,
 } from '@cardstack/host/resources/search';
 
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import { assertNever } from '@cardstack/host/utils/assert-never';
 
-import perform from 'ember-concurrency/helpers/perform';
+import { CardDef, Format } from 'https://cardstack.com/base/card-api';
+
+import CardCatalogModal from '../card-catalog/modal';
+
+import ChatSidebar from '../matrix/chat-sidebar';
+import SearchSheet, { SearchSheetMode } from '../search-sheet';
+
+import SubmodeSwitcher, { Submode } from '../submode-switcher';
+
+import CopyButton from './copy-button';
+import DeleteModal from './delete-modal';
+import OperatorModeStack from './stack';
+
+import type CardService from '../../services/card-service';
+
+import type LoaderService from '../../services/loader-service';
 
 import type MatrixService from '../../services/matrix-service';
 import type MessageService from '../../services/message-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-
-import type RecentFilesService from '@cardstack/host/services/recent-files-service';
-
-import DeleteModal from './delete-modal';
-
-
-
-import CodeMode from '@cardstack/host/components/operator-mode/code-mode';
-import { assertNever } from '@cardstack/host/utils/assert-never';
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
 

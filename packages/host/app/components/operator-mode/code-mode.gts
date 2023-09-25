@@ -25,7 +25,9 @@ import {
 } from '@cardstack/boxel-ui';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { and, eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { and } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import {
   type RealmInfo,
@@ -44,15 +46,13 @@ import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
 import config from '@cardstack/host/config/environment';
 
-
-
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 
 import { adoptionChainResource } from '@cardstack/host/resources/adoption-chain';
 import {
-  Ready,
   file,
   isReady,
+  type Ready,
   type FileResource,
 } from '@cardstack/host/resources/file';
 
@@ -61,26 +61,29 @@ import { importResource } from '@cardstack/host/resources/import';
 import { maybe } from '@cardstack/host/resources/maybe';
 
 import type CardService from '@cardstack/host/services/card-service';
-import { CardDef } from 'https://cardstack.com/base/card-api';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
 
 // host components
-import FileTree from '../editor/file-tree';
-import CardInheritancePanel from './card-inheritance-panel';
-import CardPreviewPanel from './card-preview-panel';
-import CardURLBar from './card-url-bar';
-
 
 // host resources
 
 // host services
-import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
-import RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import RecentFilesService from '@cardstack/host/services/recent-files-service';
 
+import { CardDef } from 'https://cardstack.com/base/card-api';
+
+import FileTree from '../editor/file-tree';
+
+import BinaryFileInfo from './binary-file-info';
+import CardPreviewPanel from './card-preview-panel';
+import CardURLBar from './card-url-bar';
+import DetailPanel from './detail-panel';
 
 interface Signature {
   Args: {
@@ -390,8 +393,17 @@ export default class CodeMode extends Component<Signature> {
         return maybeCard;
       }
     }
+    // in order to not get trapped in a glimmer invalidation cycle we need to
+    // unload the card in a different closure
+    this.unloadCard.perform();
     return undefined;
   }
+
+  private unloadCard = task(async () => {
+    await Promise.resolve();
+    this.card = undefined;
+    this.cardError = undefined;
+  });
 
   private get cardIsLoaded() {
     return (
@@ -675,7 +687,7 @@ export default class CodeMode extends Component<Signature> {
                 {{#if (eq this.fileView 'inheritance')}}
                   <section class='inner-container__content'>
                     {{#if this.isReady}}
-                      <CardInheritancePanel
+                      <DetailPanel
                         @cardInstance={{this.card}}
                         @readyFile={{this.readyFile}}
                         @realmInfo={{this.realmInfo}}
@@ -714,16 +726,20 @@ export default class CodeMode extends Component<Signature> {
           >
             <div class='inner-container'>
               {{#if this.isReady}}
-                <div
-                  class='monaco-container'
-                  data-test-editor
-                  {{monacoModifier
-                    content=this.readyFile.content
-                    contentChanged=(perform this.contentChangedTask)
-                    monacoSDK=this.monacoSDK
-                    language=this.language
-                  }}
-                ></div>
+                {{#if this.readyFile.isBinary}}
+                  <BinaryFileInfo @readyFile={{this.readyFile}} />
+                {{else}}
+                  <div
+                    class='monaco-container'
+                    data-test-editor
+                    {{monacoModifier
+                      content=this.readyFile.content
+                      contentChanged=(perform this.contentChangedTask)
+                      monacoSDK=this.monacoSDK
+                      language=this.language
+                    }}
+                  ></div>
+                {{/if}}
                 <div class='save-indicator {{if this.isSaving "visible"}}'>
                   {{#if this.isSaving}}
                     <span class='saving-msg'>
@@ -753,19 +769,26 @@ export default class CodeMode extends Component<Signature> {
             @width={{this.panelWidths.rightPanel}}
           >
             <div class='inner-container'>
-              {{#if this.cardIsLoaded}}
-                <CardPreviewPanel
-                  @card={{this.loadedCard}}
-                  @realmIconURL={{this.realmIconURL}}
-                  data-test-card-resource-loaded
-                />
-              {{else if this.importedModule.module}}
-                <CardAdoptionChain
-                  @file={{this.readyFile}}
-                  @importedModule={{this.importedModule.module}}
-                />
-              {{else if this.cardError}}
-                {{this.cardError.message}}
+              {{#if this.isReady}}
+                {{#if this.cardIsLoaded}}
+                  <CardPreviewPanel
+                    @card={{this.loadedCard}}
+                    @realmIconURL={{this.realmIconURL}}
+                    data-test-card-resource-loaded
+                  />
+                {{else if this.importedModule.module}}
+                  <CardAdoptionChain
+                    @file={{this.readyFile}}
+                    @importedModule={{this.importedModule.module}}
+                  />
+                {{else if this.cardError}}
+                  {{this.cardError.message}}
+                {{else if this.readyFile.isBinary}}
+                  <div
+                    class='binary-file-schema-editor'
+                    data-test-binary-file-schema-editor
+                  >Schema Editor cannot be used with this file type</div>
+                {{/if}}
               {{/if}}
             </div>
           </ResizablePanel>
@@ -969,6 +992,19 @@ export default class CodeMode extends Component<Signature> {
       }
       .saved-msg {
         margin-right: var(--boxel-sp-xxs);
+      }
+      .binary-file-schema-editor {
+        display: flex;
+        flex-wrap: wrap;
+        align-content: center;
+        justify-content: center;
+        text-align: center;
+        height: 100%;
+        background-color: var(--boxel-200);
+        font: var(--boxel-font-sm);
+        color: var(--boxel-450);
+        font-weight: 500;
+        padding: var(--boxel-sp-xl);
       }
     </style>
   </template>

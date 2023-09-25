@@ -82,7 +82,7 @@ class Isolated extends Component<typeof CardsGrid> {
     <style>
       .cards-grid {
         --grid-card-text-thumbnail-height: 6.25rem;
-        --grid-card-label-color: #919191;
+        --grid-card-label-color: var(--boxel-450);
         --grid-card-width: 10.125rem;
         --grid-card-height: 15.125rem;
 
