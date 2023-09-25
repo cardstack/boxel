@@ -7,10 +7,10 @@ import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 
+//@ts-ignore cached not available yet in definitely typed
 import { cached, tracked } from '@glimmer/tracking';
 
 import { restartableTask, timeout } from 'ember-concurrency';
-//@ts-ignore cached not available yet in definitely typed
 
 import momentFrom from 'ember-moment/helpers/moment-from';
 

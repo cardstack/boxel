@@ -5,6 +5,7 @@ import * as emberHelper from '@ember/helper';
 import * as emberModifier from '@ember/modifier';
 import * as emberObject from '@ember/object';
 import * as emberObjectInternals from '@ember/object/internals';
+//@ts-expect-error
 import * as emberTemplateFactory from '@ember/template-factory';
 import * as glimmerComponent from '@glimmer/component';
 //@ts-ignore no types available

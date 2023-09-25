@@ -1,12 +1,12 @@
 import { fn } from '@ember/helper';
 
-//@ts-ignore cached not available yet in definitely typed
 //@ts-ignore glint does not think this is consumed-but it is consumed in the template
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+//@ts-ignore cached not available yet in definitely typed
 import { cached, tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
