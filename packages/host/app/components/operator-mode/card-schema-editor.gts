@@ -103,7 +103,7 @@ export default class CardSchemaEditor extends Component<Signature> {
     >
       <div class='pill'>
         <div class='realm-icon'>
-          <RealmInfoProvider @fileUrl={{@cardType.module}}>
+          <RealmInfoProvider @fileURL={{@cardType.module}}>
             <:ready as |realmInfo|>
               <img
                 src={{realmInfo.iconURL}}
@@ -135,7 +135,7 @@ export default class CardSchemaEditor extends Component<Signature> {
               <div class='right'>
                 <div class='pill'>
                   <div class='realm-icon'>
-                    <RealmInfoProvider @fileUrl={{this.fieldModuleUrl field}}>
+                    <RealmInfoProvider @fileURL={{this.fieldModuleURL field}}>
                       <:ready as |realmInfo|>
                         <img
                           src={{realmInfo.iconURL}}
@@ -183,7 +183,7 @@ export default class CardSchemaEditor extends Component<Signature> {
     return card.displayName;
   }
 
-  fieldModuleUrl(field: Type['fields'][0]) {
+  fieldModuleURL(field: Type['fields'][0]) {
     return (field.card as Type).module;
   }
 }
