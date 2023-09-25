@@ -1,15 +1,21 @@
-import Component from '@glimmer/component';
-import { service } from '@ember/service';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
-import { on } from '@ember/modifier';
-import UserProfile from './user-profile';
+import { service } from '@ember/service';
+import Component from '@glimmer/component';
+
+import { tracked } from '@glimmer/tracking';
+
+import { task } from 'ember-concurrency';
+
+import { IconButton, LoadingIndicator } from '@cardstack/boxel-ui';
+
 import Login from './login';
 import RegisterUser from './register-user';
 import RoomsManager from './rooms-manager';
-import { IconButton, LoadingIndicator } from '@cardstack/boxel-ui';
-import { tracked } from '@glimmer/tracking';
-import { task } from 'ember-concurrency';
+
+import UserProfile from './user-profile';
+
 import type MatrixService from '../../services/matrix-service';
 
 interface Args {

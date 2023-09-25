@@ -1,6 +1,3 @@
-import Component from '@glimmer/component';
-//@ts-expect-error cached type not available yet
-import { cached, tracked } from '@glimmer/tracking';
 import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -8,13 +5,29 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
+import { buildWaiter } from '@ember/test-waiters';
+import { isTesting } from '@embroider/macros';
+import Component from '@glimmer/component';
+//@ts-expect-error cached type not available yet
+import { cached, tracked } from '@glimmer/tracking';
+
 import { task, restartableTask, timeout, all } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { use, resource } from 'ember-resources';
-import { TrackedObject } from 'tracked-built-ins';
-import config from '@cardstack/host/config/environment';
 import isEqual from 'lodash/isEqual';
+import { TrackedObject } from 'tracked-built-ins';
+
+import {
+  LoadingIndicator,
+  Button,
+  ResizablePanelGroup,
+  PanelContext,
+} from '@cardstack/boxel-ui';
+import cn from '@cardstack/boxel-ui/helpers/cn';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { and } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import {
   type RealmInfo,
@@ -29,52 +42,48 @@ import {
   hasExecutableExtension,
 } from '@cardstack/runtime-common';
 
-import {
-  LoadingIndicator,
-  Button,
-  ResizablePanelGroup,
-  PanelContext,
-} from '@cardstack/boxel-ui';
-import cn from '@cardstack/boxel-ui/helpers/cn';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-
-import { CardDef } from 'https://cardstack.com/base/card-api';
-
-// host components
-import FileTree from '../editor/file-tree';
-import DetailPanel from './detail-panel';
-import CardPreviewPanel from './card-preview-panel';
-import CardURLBar from './card-url-bar';
-import BinaryFileInfo from './binary-file-info';
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
+import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
+import config from '@cardstack/host/config/environment';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 
-// host resources
+import { adoptionChainResource } from '@cardstack/host/resources/adoption-chain';
 import {
   file,
   isReady,
   type Ready,
   type FileResource,
 } from '@cardstack/host/resources/file';
+
 import { importResource } from '@cardstack/host/resources/import';
+
 import { maybe } from '@cardstack/host/resources/maybe';
 
-// host services
 import type CardService from '@cardstack/host/services/card-service';
+
 import type LoaderService from '@cardstack/host/services/loader-service';
+
+// host components
+
+// host resources
+
+// host services
 import type MessageService from '@cardstack/host/services/message-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
-import RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import { adoptionChainResource } from '@cardstack/host/resources/adoption-chain';
-import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
+import RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import { buildWaiter } from '@ember/test-waiters';
-import { isTesting } from '@embroider/macros';
+import { CardDef } from 'https://cardstack.com/base/card-api';
+
+import FileTree from '../editor/file-tree';
+
+import BinaryFileInfo from './binary-file-info';
+import CardPreviewPanel from './card-preview-panel';
+import CardURLBar from './card-url-bar';
+import DetailPanel from './detail-panel';
 
 interface Signature {
   Args: {

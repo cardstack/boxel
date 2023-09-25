@@ -1,14 +1,17 @@
-import Component from '@glimmer/component';
-import { service } from '@ember/service';
-import type CardService from '../../services/card-service';
-import type RecentFilesService from '../../services/recent-files-service';
-import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { service } from '@ember/service';
+import Component from '@glimmer/component';
+
 import { RealmPaths } from '@cardstack/runtime-common';
-import { RecentFile } from '@cardstack/host/services/recent-files-service';
+
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import { RecentFile } from '@cardstack/host/services/recent-files-service';
+
+import type CardService from '../../services/card-service';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type RecentFilesService from '../../services/recent-files-service';
 
 interface Args {
   Args: {};

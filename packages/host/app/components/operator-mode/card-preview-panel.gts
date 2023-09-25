@@ -1,18 +1,26 @@
+import { fn, array } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+
 import { task } from 'ember-concurrency';
-import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
-import { action } from '@ember/object';
-import { Tooltip, IconButton, BoxelDropdown } from '@cardstack/boxel-ui';
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+
 import perform from 'ember-concurrency/helpers/perform';
+
+import { Tooltip, IconButton, BoxelDropdown } from '@cardstack/boxel-ui';
+
 import BoxelMenu from '@cardstack/boxel-ui/components/menu';
+
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
-import { array } from '@ember/helper';
-import { cardTypeDisplayName } from '@cardstack/runtime-common';
-import Preview from '@cardstack/host/components/preview';
+
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
+import { cardTypeDisplayName } from '@cardstack/runtime-common';
+
+import Preview from '@cardstack/host/components/preview';
+
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Element: HTMLElement;

@@ -1,16 +1,20 @@
-import Component from '@glimmer/component';
-import { internalKeyFor } from '@cardstack/runtime-common';
-import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
-import { type Type } from '@cardstack/host/resources/card-type';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
+import Component from '@glimmer/component';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
-import type CardService from '@cardstack/host/services/card-service';
+import { internalKeyFor } from '@cardstack/runtime-common';
+import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
+
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
-import type { Ready } from '@cardstack/host/resources/file';
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
+
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import { type Type } from '@cardstack/host/resources/card-type';
+
+import type { Ready } from '@cardstack/host/resources/file';
+import type CardService from '@cardstack/host/services/card-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
+
+import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {

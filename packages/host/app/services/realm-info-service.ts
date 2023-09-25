@@ -1,7 +1,8 @@
-import LoaderService from '@cardstack/host/services/loader-service';
-import Service from '@ember/service';
+import Service, { service } from '@ember/service';
+
 import { RealmInfo, SupportedMimeType } from '@cardstack/runtime-common';
-import { service } from '@ember/service';
+
+import LoaderService from '@cardstack/host/services/loader-service';
 
 export default class RecentFilesService extends Service {
   @service declare loaderService: LoaderService;

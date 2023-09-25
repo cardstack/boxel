@@ -1,34 +1,48 @@
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
+
+//@ts-ignore cached not available yet in definitely typed
+import { cached, tracked } from '@glimmer/tracking';
+
+import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
+import { restartableTask } from 'ember-concurrency';
+
+import debounce from 'lodash/debounce';
+
+import flatMap from 'lodash/flatMap';
+
+import { TrackedArray } from 'tracked-built-ins';
+
 import {
   Button,
   SearchInput,
   SearchInputBottomTreatment,
 } from '@cardstack/boxel-ui';
-import { on } from '@ember/modifier';
-//@ts-ignore cached not available yet in definitely typed
-import { cached, tracked } from '@glimmer/tracking';
-import { fn } from '@ember/helper';
-import { action } from '@ember/object';
-import SearchResult from './search-result';
+
 import { Label } from '@cardstack/boxel-ui';
-import { eq, gt, or } from '../../helpers/truth-helpers';
-import { service } from '@ember/service';
-import { restartableTask } from 'ember-concurrency';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type CardService from '../../services/card-service';
-import type LoaderService from '../../services/loader-service';
+
 import {
   isSingleCardDocument,
   baseRealm,
   catalogEntryRef,
 } from '@cardstack/runtime-common';
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import debounce from 'lodash/debounce';
-import flatMap from 'lodash/flatMap';
-import { TrackedArray } from 'tracked-built-ins';
+
 import ENV from '@cardstack/host/config/environment';
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
+import { CardDef } from 'https://cardstack.com/base/card-api';
+
+import { eq, gt, or } from '../../helpers/truth-helpers';
+
 import UrlSearch from '../url-search';
-import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
+
+import SearchResult from './search-result';
+
+import type CardService from '../../services/card-service';
+import type LoaderService from '../../services/loader-service';
 
 const { otherRealmURLs } = ENV;
 

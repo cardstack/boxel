@@ -1,6 +1,7 @@
-import { module, test } from 'qunit';
 import { visit } from '@ember/test-helpers';
+
 import { setupApplicationTest } from 'ember-qunit';
+import { module, test } from 'qunit';
 
 module('Acceptance | Freestyle', function (hooks) {
   setupApplicationTest(hooks);

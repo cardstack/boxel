@@ -1,16 +1,26 @@
-import { module, test } from 'qunit';
+import { waitUntil, waitFor, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
+
+import percySnapshot from '@percy/ember';
 import { setupRenderingTest } from 'ember-qunit';
+import { module, test } from 'qunit';
+
 import {
   baseRealm,
   type SingleCardDocument,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-import { Realm } from '@cardstack/runtime-common/realm';
 import { Loader } from '@cardstack/runtime-common/loader';
-import OperatorMode from '@cardstack/host/components/operator-mode/container';
+import { Realm } from '@cardstack/runtime-common/realm';
+
 import CardPrerender from '@cardstack/host/components/card-prerender';
-import { renderComponent } from '../../helpers/render-component';
+import OperatorMode from '@cardstack/host/components/operator-mode/container';
+
+import type CardService from '@cardstack/host/services/card-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
+
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
 import {
   testRealmURL,
   setupCardLogs,
@@ -22,11 +32,7 @@ import {
   type TestContextWithSave,
   type TestContextWithSSE,
 } from '../../helpers';
-import { waitUntil, waitFor, click } from '@ember/test-helpers';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type CardService from '@cardstack/host/services/card-service';
-import percySnapshot from '@percy/ember';
+import { renderComponent } from '../../helpers/render-component';
 
 const testRealm2URL = `http://test-realm/test2/`;
 let loader: Loader;

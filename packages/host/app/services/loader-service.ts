@@ -1,7 +1,9 @@
 import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-import { Loader } from '@cardstack/runtime-common/loader';
+
 import { baseRealm } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
+
 import config from '@cardstack/host/config/environment';
 import { shimExternals } from '@cardstack/host/lib/externals';
 

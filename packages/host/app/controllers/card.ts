@@ -1,20 +1,27 @@
 import Controller from '@ember/controller';
-import { withPreventDefault } from '../helpers/with-prevent-default';
-import { service } from '@ember/service';
-import type RouterService from '@ember/routing/router-service';
-import { action } from '@ember/object';
-import { tracked } from '@glimmer/tracking';
-import stringify from 'safe-stable-stringify';
-import { ComponentLike } from '@glint/template';
-import { Model } from '@cardstack/host/routes/card';
+
 import { registerDestructor } from '@ember/destroyable';
+import { action } from '@ember/object';
+import type RouterService from '@ember/routing/router-service';
+import { service } from '@ember/service';
+import { tracked } from '@glimmer/tracking';
+
+import { ComponentLike } from '@glint/template';
+import stringify from 'safe-stable-stringify';
+
 import type { Query } from '@cardstack/runtime-common/query';
-import { getSearchResults, type Search } from '../resources/search';
+
+import { Submode } from '@cardstack/host/components/submode-switcher';
+import { Model } from '@cardstack/host/routes/card';
+
 import type CardService from '@cardstack/host/services/card-service';
+
 import OperatorModeStateService, {
   SerializedState as OperatorModeSerializedState,
 } from '@cardstack/host/services/operator-mode-state-service';
-import { Submode } from '@cardstack/host/components/submode-switcher';
+
+import { withPreventDefault } from '../helpers/with-prevent-default';
+import { getSearchResults, type Search } from '../resources/search';
 
 export default class CardController extends Controller {
   queryParams = ['operatorModeState', 'operatorModeEnabled'];

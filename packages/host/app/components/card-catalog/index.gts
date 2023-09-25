@@ -1,16 +1,22 @@
-import Component from '@glimmer/component';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
+import Component from '@glimmer/component';
+
 import { TrackedArray } from 'tracked-built-ins';
-import type { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
+
 import { Button, IconButton } from '@cardstack/boxel-ui';
-import { eq, gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import cn from '@cardstack/boxel-ui/helpers/cn';
-import type CardService from '../../services/card-service';
+import { eq, gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
+import type { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
+
 import CardCatalogItem from './item';
 import CardCatalogResultsHeader from './results-header';
+
+import type CardService from '../../services/card-service';
+
 import type { RealmCards } from '../card-catalog/modal';
 
 interface Signature {

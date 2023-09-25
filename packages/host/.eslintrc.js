@@ -84,5 +84,75 @@ module.exports = {
         'no-undef': 'off',
       },
     },
+    {
+      // don’t enforce import order on blueprint files
+      files: ['app/**', 'tests/**'],
+      excludedFiles: ['app/app.ts', 'app/router.ts', 'tests/test-helper.js'],
+      extends: ['plugin:import/recommended', 'plugin:import/typescript'],
+      rules: {
+        // sufficiently covered by eslint no-duplicate-imports
+        'import/no-duplicates': 'off',
+        // this doesn't work well with the monorepo. Typescript already complains if you try to import something that's not found
+        'import/no-unresolved': 'off',
+        'import/order': [
+          'error',
+          {
+            'newlines-between': 'always-and-inside-groups',
+            alphabetize: {
+              order: 'asc',
+            },
+            groups: [
+              'builtin',
+              'external',
+              'internal',
+              'parent',
+              'sibling',
+              'index',
+              'object',
+              'type',
+            ],
+            pathGroups: [
+              {
+                pattern: '@ember/**',
+                group: 'builtin',
+              },
+              {
+                pattern: '@embroider/**',
+                group: 'builtin',
+              },
+              {
+                pattern: '@glimmer/**',
+                group: 'builtin',
+              },
+              {
+                pattern: '@cardstack/boxel-ui{*,/**}',
+                group: 'internal',
+                position: 'before',
+              },
+              {
+                pattern: '@cardstack/runtime-common{*,/**}',
+                group: 'internal',
+                position: 'before',
+              },
+              {
+                pattern: '@cardstack/host/**',
+                group: 'internal',
+                position: 'after',
+              },
+              {
+                pattern: '@cardstack**',
+                group: 'internal',
+              },
+              {
+                pattern: 'https://cardstack.com/**',
+                group: 'internal',
+                position: 'after',
+              },
+            ],
+            pathGroupsExcludedImportTypes: [],
+          },
+        ],
+      },
+    },
   ],
 };
