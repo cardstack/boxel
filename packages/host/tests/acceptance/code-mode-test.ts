@@ -22,6 +22,7 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import window from 'ember-window-mock';
+import percySnapshot from '@percy/ember';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -868,6 +869,8 @@ module('Acceptance | code mode tests', function (hooks) {
     assert
       .dom('[data-test-binary-file-schema-editor]')
       .hasText('Schema Editor cannot be used with this file type');
+
+    await percySnapshot(assert);
   });
 });
 
