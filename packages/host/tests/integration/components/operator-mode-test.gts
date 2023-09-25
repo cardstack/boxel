@@ -652,6 +652,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test<TestContextWithSave>('it allows chat commands to change cards in the stack', async function (assert) {
+    assert.expect(4);
     this.owner.register('service:matrixService', MockMatrixService);
     let matrixService = this.owner.lookup(
       'service:matrixService',
@@ -705,8 +706,8 @@ module('Integration | operator-mode', function (hooks) {
       assert.strictEqual(json.data.attributes?.firstName, 'Dave');
     });
     await click('[data-test-command-apply]');
+    await waitFor('[data-test-patch-card-idle]');
 
-    await waitFor('[data-test-person="Dave"]');
     assert.dom('[data-test-person]').hasText('Dave');
   });
 
@@ -1647,7 +1648,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
 
     await focus(`[data-test-search-input] input`);
-    await fillIn(`[data-test-search-input] input`, 'Ma');
+    await typeIn(`[data-test-search-input] input`, 'Ma');
     assert.dom(`[data-test-search-label]`).containsText('Searching for "Ma"');
 
     await waitFor(`[data-test-search-sheet-search-result]`);
@@ -1668,7 +1669,7 @@ module('Integration | operator-mode', function (hooks) {
 
     //No cards match
     await focus(`[data-test-search-input] input`);
-    await fillIn(`[data-test-search-input] input`, 'No Cards');
+    await typeIn(`[data-test-search-input] input`, 'No Cards');
     assert
       .dom(`[data-test-search-label]`)
       .containsText('Searching for "No Cards"');
@@ -1992,7 +1993,7 @@ module('Integration | operator-mode', function (hooks) {
     await click(`[data-test-create-new-card-button]`);
     await waitFor('[data-test-card-catalog-item]');
 
-    await fillIn(`[data-test-search-field] input`, `pet`);
+    await typeIn(`[data-test-search-field] input`, `pet`);
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
       { count: 0 },
@@ -2027,7 +2028,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-create-new-card-button]`);
 
-    await fillIn(`[data-test-search-input] input`, `pet`);
+    await typeIn(`[data-test-search-input] input`, `pet`);
     assert.dom(`[data-test-search-input] input`).hasValue('pet');
     await waitFor('[data-test-card-catalog-item]', { count: 2 });
     await click(`[data-test-select="${testRealmURL}CatalogEntry/pet-room"]`);
@@ -2069,7 +2070,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor('[data-test-card-catalog-modal]');
     await waitFor('[data-test-card-catalog-item]', { count: 3 });
-    await fillIn(`[data-test-search-input] input`, `bob`);
+    await typeIn(`[data-test-search-input] input`, `bob`);
     assert.dom(`[data-test-search-input] input`).hasValue('bob');
     await waitFor('[data-test-card-catalog-item]', { count: 1 });
     await click(`[data-test-select="${testRealmURL}Author/1"]`);
@@ -2507,7 +2508,7 @@ module('Integration | operator-mode', function (hooks) {
     await click(`[data-test-search-sheet] .search-sheet-content`);
     assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
 
-    await fillIn(`[data-test-search-input] input`, 'A');
+    await typeIn(`[data-test-search-input] input`, 'A');
     await click(
       `[data-test-search-sheet] .search-sheet-content .search-result-section`,
     );

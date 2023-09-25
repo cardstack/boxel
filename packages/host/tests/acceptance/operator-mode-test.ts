@@ -20,6 +20,7 @@ import stringify from 'safe-stable-stringify';
 import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 
+import config from '@cardstack/host/config/environment';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -1259,38 +1260,43 @@ module('Acceptance | operator mode tests', function (hooks) {
   });
 
   test<TestContextWithSave>('unsaved changes made in card editor are saved when switching out of code mode', async function (assert) {
-    assert.expect(1);
+    config.autoSaveDelayMs = 1000; // slowdown the auto save so it doesn't interfere with this test
+    try {
+      assert.expect(1);
 
-    let operatorModeStateParam = stringify({
-      stacks: [
-        [
-          {
-            id: `${testRealmURL}Pet/mango`,
-            format: 'isolated',
-          },
+      let operatorModeStateParam = stringify({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Pet/mango`,
+              format: 'isolated',
+            },
+          ],
         ],
-      ],
-      submode: 'code',
-      codePath: `${testRealmURL}Pet/mango.json`,
-    })!;
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
-    await waitFor('[data-test-editor]');
+        submode: 'code',
+        codePath: `${testRealmURL}Pet/mango.json`,
+      })!;
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam,
+        )}`,
+      );
+      await waitFor('[data-test-editor]');
 
-    this.onSave((json) => {
-      if (typeof json === 'string') {
-        throw new Error('expected JSON save data');
-      }
-      assert.strictEqual(json.data.attributes?.name, 'MangoXXX');
-    });
+      this.onSave((json) => {
+        if (typeof json === 'string') {
+          throw new Error('expected JSON save data');
+        }
+        assert.strictEqual(json.data.attributes?.name, 'MangoXXX');
+      });
 
-    await click('[data-test-preview-card-footer-button-edit]');
-    await fillIn('[data-test-field="name"] input', 'MangoXXX');
-    await click('[data-test-submode-switcher] button');
-    await click('[data-test-boxel-menu-item-text="Interact"]');
+      await click('[data-test-preview-card-footer-button-edit]');
+      await fillIn('[data-test-field="name"] input', 'MangoXXX');
+      await click('[data-test-submode-switcher] button');
+      await click('[data-test-boxel-menu-item-text="Interact"]');
+    } finally {
+      config.autoSaveDelayMs = 0;
+    }
   });
 
   test<TestContextWithSave>('invalid JSON card instance change made in monaco editor is NOT auto-saved', async function (assert) {
