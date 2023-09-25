@@ -2021,7 +2021,6 @@ module('Integration | operator-mode', function (hooks) {
     await click(`[data-test-create-new-card-button]`);
 
     await typeIn(`[data-test-search-input] input`, `pet`);
-
     assert.dom(`[data-test-search-input] input`).hasValue('pet');
     await waitFor('[data-test-card-catalog-item]', { count: 2 });
     await click(`[data-test-select="${testRealmURL}CatalogEntry/pet-room"]`);
