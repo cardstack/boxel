@@ -90,6 +90,8 @@ module.exports = {
       excludedFiles: ['app/app.ts', 'app/router.ts', 'tests/test-helper.js'],
       extends: ['plugin:import/recommended', 'plugin:import/typescript'],
       rules: {
+        // sufficiently covered by eslint no-duplicate-imports
+        'import/no-duplicates': 'off',
         // this doesn't work well with the monorepo. Typescript already complains if you try to import something that's not found
         'import/no-unresolved': 'off',
         'import/order': [
