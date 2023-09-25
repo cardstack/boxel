@@ -1,12 +1,15 @@
 import Service from '@ember/service';
 import { service } from '@ember/service';
-import type CardService from '@cardstack/host/services/card-service';
-import { RealmPaths } from '@cardstack/runtime-common';
-import { LocalPath } from '@cardstack/runtime-common/paths';
+
 import { tracked } from '@glimmer/tracking';
 
 import window from 'ember-window-mock';
 import { TrackedArray } from 'tracked-built-ins';
+
+import { RealmPaths } from '@cardstack/runtime-common';
+import { LocalPath } from '@cardstack/runtime-common/paths';
+
+import type CardService from '@cardstack/host/services/card-service';
 
 type SerialRecentFile = [URL, string];
 
