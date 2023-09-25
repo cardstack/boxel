@@ -1,27 +1,26 @@
 import * as emberComponent from '@ember/component';
 import * as emberComponentTemplateOnly from '@ember/component/template-only';
+import * as emberDestroyable from '@ember/destroyable';
+import * as emberHelper from '@ember/helper';
+import * as emberModifier from '@ember/modifier';
+import * as emberObject from '@ember/object';
+import * as emberObjectInternals from '@ember/object/internals';
 import * as emberTemplateFactory from '@ember/template-factory';
 import * as glimmerComponent from '@glimmer/component';
 //@ts-ignore no types available
 import * as glimmerTracking from '@glimmer/tracking';
-import * as emberObject from '@ember/object';
-import * as emberObjectInternals from '@ember/object/internals';
-import * as emberHelper from '@ember/helper';
-import * as emberModifier from '@ember/modifier';
 
 import * as dateFns from 'date-fns';
 import * as emberConcurrency from 'ember-concurrency';
 import * as emberConcurrencyAsyncArrowRuntime from 'ember-concurrency/-private/async-arrow-runtime';
-import * as emberResources from 'ember-resources';
 //@ts-ignore no types available
 import * as emberModifier2 from 'ember-modifier';
+import * as emberResources from 'ember-resources';
 import * as ethers from 'ethers';
 import * as flat from 'flat';
 import * as lodash from 'lodash';
 import * as marked from 'marked';
 import * as tracked from 'tracked-built-ins';
-import * as emberDestroyable from '@ember/destroyable';
-
 
 import * as boxelUI from '@cardstack/boxel-ui';
 import * as boxelCssVar from '@cardstack/boxel-ui/helpers/css-var';

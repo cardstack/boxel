@@ -1,3 +1,5 @@
+import { RenderingTestContext } from '@ember/test-helpers';
+
 import { setupRenderingTest } from 'ember-qunit';
 import { stringify } from 'qs';
 import { module, test } from 'qunit';
@@ -28,8 +30,6 @@ import {
 } from '../helpers';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-
-import { RenderingTestContext } from '@ember/test-helpers';
 
 let loader: Loader;
 

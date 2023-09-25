@@ -5,21 +5,19 @@ import { scheduleOnce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
-import { TrackedArray, TrackedObject } from 'tracked-built-ins';
-import type MessageService from '@cardstack/host/services/message-service';
-import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import { task } from 'ember-concurrency';
-
+import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
-
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
-import { Submode } from '@cardstack/host/components/submode-switcher';
+import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
-import window from 'ember-window-mock';
+import { Submode } from '@cardstack/host/components/submode-switcher';
+import type MessageService from '@cardstack/host/services/message-service';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
   type Stack,
