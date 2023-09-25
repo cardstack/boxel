@@ -100,6 +100,7 @@ export default class Room extends Component<RoomArgs> {
     {{/if}}
 
     <div
+      data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
       class='messages-wrapper'
       data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
       data-test-room-name={{this.room.name}}
