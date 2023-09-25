@@ -23,6 +23,7 @@ export default class Tab extends Component<Signature> {
   @cached
   get tabInfo(): TabInfo {
     return {
+      name: this.args.name,
       title: this.args.title,
       disabled: this.args.disabled,
     };

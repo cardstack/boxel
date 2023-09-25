@@ -94,8 +94,8 @@ class Panels extends Component<PanelsSignature> {
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    activeIndex: number;
-    onTabSelect: (index: number) => void;
+    activeName: string;
+    onTabSelect: (name: string) => void;
   };
   Blocks: {
     default: [
@@ -112,16 +112,39 @@ export default class ButtonTabGroup extends Component<Signature> {
   @tracked tabInfos: TabInfo[] = [];
 
   @action registerTab(tabInfo: TabInfo) {
-    this.tabInfos = this.tabInfos.concat([tabInfo]);
+    // this.tabInfos = this.tabInfos.concat([tabInfo]);
   }
 
   @action unregisterTab(tabInfo: TabInfo) {
-    this.tabInfos = this.tabInfos.filter((ti) => ti !== tabInfo);
+    // this.tabInfos = this.tabInfos.filter((ti) => ti !== tabInfo);
+  }
+
+  @action registerPanel() {
+    // this.tabInfos = this.tabInfos.concat([tabInfo]);
+  }
+
+  @action unregisterPanel() {
+    // this.tabInfos = this.tabInfos.filter((ti) => ti !== tabInfo);
   }
 
   <template>
     <div class='button-tab-group'>
-      <header
+      {{yield
+        (component
+          Tabs
+          registerTab=this.registerTab
+          unregisterTab=this.unregisterTab
+          onTabSelect=@onTabSelect
+          activeName=@activeName
+        )
+        (component
+          Panels
+          registerPanel=this.registerPanel
+          unregisterPanel=this.unregisterPanel
+          activeName=@activeName
+        )
+      }}
+      {{!-- <header
         class='header'
         aria-label={{this.currentTabTitle}}
         data-test-button-tab-group-header
@@ -149,7 +172,7 @@ export default class ButtonTabGroup extends Component<Signature> {
             unregisterTab=this.unregisterTab
           )
         }}
-      </section>
+      </section> --}}
     </div>
     <style></style>
   </template>
