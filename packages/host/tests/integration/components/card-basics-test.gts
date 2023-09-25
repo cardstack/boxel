@@ -29,6 +29,7 @@ import BoxelInput from '@cardstack/boxel-ui/components/input';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { shimExternals } from '@cardstack/host/lib/externals';
 import format from 'date-fns/format';
+import percySnapshot from '@percy/ember';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
@@ -1762,6 +1763,88 @@ module('Integration | card-basics', function (hooks) {
     assert
       .dom('[data-test-output="appointments"]')
       .hasText('2022-05-01 2021-05-30');
+  });
+
+  test('primitive containsMany field inside another field is read-only', async function (assert) {
+    let { field, contains, containsMany, CardDef, FieldDef, Component } =
+      cardApi;
+    let { default: StringField } = string;
+
+    class Guest extends FieldDef {
+      @field name = contains(StringField);
+      @field additionalNames = containsMany(StringField);
+    }
+
+    class ContactCard extends CardDef {
+      static displayName = 'Contact';
+      @field name = contains(StringField);
+      @field nickname = contains(StringField);
+      @field vip = containsMany(StringField);
+      @field banned = containsMany(StringField);
+      @field guest = contains(Guest);
+      @field bannedGuest = contains(Guest);
+
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <@fields.name />
+          <@fields.vip />
+          <@fields.guest />
+        </template>
+      };
+    }
+
+    let card = new ContactCard({
+      name: 'Marcelius Wilde',
+      vip: ['Cornelius Wilde', 'Dominique Wilde', 'Esmeralda Wilde'],
+      guest: new Guest({
+        name: 'Mama Leone',
+        additionalNames: ['Felicity Shaw', 'Grant Kingston', 'Valerie Storm'],
+      }),
+    });
+
+    await renderCard(loader, card, 'edit');
+    await percySnapshot(assert);
+
+    assert.dom('[data-test-field-component-card]').exists();
+    assert
+      .dom('[data-test-contains-many="vip"] [data-test-item]')
+      .exists({ count: 3 });
+    assert
+      .dom('[data-test-contains-many="vip"] [data-test-item="0"] input')
+      .hasValue('Cornelius Wilde');
+    assert.dom('[data-test-field="nickname"] input').hasNoValue();
+    assert
+      .dom('[data-test-contains-many="banned"] [data-test-item]')
+      .doesNotExist();
+    assert
+      .dom('[data-test-contains-many="banned"] [data-test-add-new]')
+      .exists('empty containsMany string field has an add button');
+
+    assert
+      .dom('[data-test-field="guest"] [data-test-field="name"] input')
+      .hasValue('Mama Leone');
+    assert
+      .dom(
+        '[data-test-field="guest"] [data-test-contains-many="additionalNames"]',
+      )
+      .doesNotExist('edit template is not rendered');
+    assert
+      .dom(
+        '[data-test-field="guest"] [data-test-plural-view="containsMany"] [data-test-plural-view-item]',
+      )
+      .exists({ count: 3 });
+    assert
+      .dom('[data-test-field="guest"] [data-test-plural-view="containsMany"]')
+      .containsText('Felicity Shaw Grant Kingston Valerie Storm');
+
+    assert
+      .dom('[data-test-field="bannedGuest"] [data-test-add-new]')
+      .doesNotExist('edit');
+    assert
+      .dom(
+        '[data-test-field="bannedGuest"] [data-test-plural-view="containsMany"] [data-test-plural-view-item]',
+      )
+      .doesNotExist();
   });
 
   test('can get a queryable value for a field', async function (assert) {
