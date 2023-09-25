@@ -1,3 +1,6 @@
+import Component from '@glimmer/component';
+//@ts-expect-error cached type not available yet
+import { cached, tracked } from '@glimmer/tracking';
 import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -5,29 +8,13 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
-import { buildWaiter } from '@ember/test-waiters';
-import { isTesting } from '@embroider/macros';
-import Component from '@glimmer/component';
-//@ts-expect-error cached type not available yet
-import { cached, tracked } from '@glimmer/tracking';
-
-import { task, restartableTask, timeout } from 'ember-concurrency';
+import { task, restartableTask, timeout, all } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { use, resource } from 'ember-resources';
-
-import isEqual from 'lodash/isEqual';
 import { TrackedObject } from 'tracked-built-ins';
-
-import {
-  LoadingIndicator,
-  Button,
-  ResizablePanelGroup,
-  ResizablePanel,
-  PanelContext,
-} from '@cardstack/boxel-ui';
-import cn from '@cardstack/boxel-ui/helpers/cn';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { and, eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import config from '@cardstack/host/config/environment';
+import isEqual from 'lodash/isEqual';
+import { and } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import {
   type RealmInfo,
@@ -42,11 +29,28 @@ import {
   hasExecutableExtension,
 } from '@cardstack/runtime-common';
 
+import {
+  LoadingIndicator,
+  Button,
+  ResizablePanelGroup,
+  PanelContext,
+} from '@cardstack/boxel-ui';
+import cn from '@cardstack/boxel-ui/helpers/cn';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
+import { CardDef } from 'https://cardstack.com/base/card-api';
+
+// host components
+import FileTree from '../editor/file-tree';
+import CardInheritancePanel from './card-inheritance-panel';
+import CardPreviewPanel from './card-preview-panel';
+import CardURLBar from './card-url-bar';
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
-import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
-import config from '@cardstack/host/config/environment';
+
 import monacoModifier from '@cardstack/host/modifiers/monaco';
-import { adoptionChainResource } from '@cardstack/host/resources/adoption-chain';
+
+// host resources
 import {
   Ready,
   file,
@@ -55,22 +59,21 @@ import {
 } from '@cardstack/host/resources/file';
 import { importResource } from '@cardstack/host/resources/import';
 import { maybe } from '@cardstack/host/resources/maybe';
+
+// host services
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
-import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import RecentFilesService from '@cardstack/host/services/recent-files-service';
+import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import { adoptionChainResource } from '@cardstack/host/resources/adoption-chain';
+import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
 
-import { CardDef } from 'https://cardstack.com/base/card-api';
-
-import FileTree from '../editor/file-tree';
-
-import CardInheritancePanel from './card-inheritance-panel';
-import CardPreviewPanel from './card-preview-panel';
-import CardURLBar from './card-url-bar';
+import { buildWaiter } from '@ember/test-waiters';
+import { isTesting } from '@embroider/macros';
 
 interface Signature {
   Args: {
@@ -428,9 +431,15 @@ export default class CodeMode extends Component<Signature> {
     if (this.card) {
       this.hasUnsavedCardChanges = true;
       await timeout(autoSaveDelayMs);
-      await this.cardService.saveModel(this.card);
+      await this.saveCard.perform(this.card);
       this.hasUnsavedCardChanges = false;
     }
+  });
+
+  private saveCard = restartableTask(async (card: CardDef) => {
+    // these saves can happen so fast that we'll make sure to wait at
+    // least 500ms for human consumption
+    await all([this.cardService.saveModel(card), timeout(500)]);
   });
 
   private contentChangedTask = restartableTask(async (content: string) => {
@@ -455,8 +464,17 @@ export default class CodeMode extends Component<Signature> {
       // writes source code and non-card instance valid JSON,
       // then updates the state of the file resource
       this.writeSourceCodeToFile(this.openFile.current, content);
+      this.waitForSourceCodeWrite.perform();
     }
     this.hasUnsavedSourceChanges = false;
+  });
+
+  // these saves can happen so fast that we'll make sure to wait at
+  // least 500ms for human consumption
+  private waitForSourceCodeWrite = restartableTask(async () => {
+    if (isReady(this.openFile.current)) {
+      await all([this.openFile.current.writing, timeout(500)]);
+    }
   });
 
   // We use this to write non-cards to the realm--so it doesn't make
@@ -509,7 +527,9 @@ export default class CodeMode extends Component<Signature> {
     }
 
     try {
-      await this.cardService.saveModel(card);
+      // these saves can happen so fast that we'll make sure to wait at
+      // least 500ms for human consumption
+      await all([this.cardService.saveModel(card), timeout(500)]);
       await this.maybeReloadCard.perform(card.id);
     } catch (e) {
       console.error('Failed to save single card document', e);
@@ -526,6 +546,14 @@ export default class CodeMode extends Component<Signature> {
       return language?.id ?? 'plaintext';
     }
     return undefined;
+  }
+
+  private get isSaving() {
+    return (
+      this.waitForSourceCodeWrite.isRunning ||
+      this.saveFileSerializedCard.isRunning ||
+      this.saveCard.isRunning
+    );
   }
 
   @action
@@ -587,12 +615,11 @@ export default class CodeMode extends Component<Signature> {
       <ResizablePanelGroup
         @onListPanelContextChange={{this.onListPanelContextChange}}
         class='columns'
-        as |pg|
+        as |ResizablePanel|
       >
         <ResizablePanel
           @defaultWidth={{defaultPanelWidths.leftPanel}}
           @width='var(--operator-mode-left-column)'
-          @panelGroupApi={{pg.api}}
         >
           <div class='column'>
             {{! Move each container and styles to separate component }}
@@ -677,7 +704,6 @@ export default class CodeMode extends Component<Signature> {
             @defaultWidth={{defaultPanelWidths.codeEditorPanel}}
             @width={{this.panelWidths.codeEditorPanel}}
             @minWidth='300px'
-            @panelGroupApi={{pg.api}}
           >
             <div class='inner-container'>
               {{#if this.isReady}}
@@ -691,6 +717,23 @@ export default class CodeMode extends Component<Signature> {
                     language=this.language
                   }}
                 ></div>
+                <div class='save-indicator {{if this.isSaving "visible"}}'>
+                  {{#if this.isSaving}}
+                    <span class='saving-msg'>
+                      Now Saving
+                    </span>
+                    <span class='save-spinner'>
+                      <span class='save-spinner-inner'>
+                        <LoadingIndicator />
+                      </span>
+                    </span>
+                  {{else}}
+                    <span class='saved-msg'>
+                      Saved
+                    </span>
+                    {{svgJar 'check-mark' width='27' height='27'}}
+                  {{/if}}
+                </div>
               {{else if this.isLoading}}
                 <div class='loading'>
                   <LoadingIndicator />
@@ -701,7 +744,6 @@ export default class CodeMode extends Component<Signature> {
           <ResizablePanel
             @defaultWidth={{defaultPanelWidths.rightPanel}}
             @width={{this.panelWidths.rightPanel}}
-            @panelGroupApi={{pg.api}}
           >
             <div class='inner-container'>
               {{#if this.cardIsLoaded}}
@@ -724,7 +766,6 @@ export default class CodeMode extends Component<Signature> {
           <ResizablePanel
             @defaultWidth={{defaultPanelWidths.emptyCodeModePanel}}
             @width={{this.panelWidths.emptyCodeModePanel}}
-            @panelGroupApi={{pg.api}}
           >
             <div
               class='inner-container inner-container--empty'
@@ -800,6 +841,7 @@ export default class CodeMode extends Component<Signature> {
 
       .inner-container {
         height: 100%;
+        position: relative;
         display: flex;
         flex-direction: column;
         background-color: var(--boxel-light);
@@ -882,6 +924,44 @@ export default class CodeMode extends Component<Signature> {
 
       .loading {
         margin: 40vh auto;
+      }
+
+      .save-indicator {
+        --icon-color: var(--boxel-highlight);
+        position: absolute;
+        display: flex;
+        align-items: center;
+        height: 2.5rem;
+        width: 140px;
+        bottom: 0;
+        right: 0;
+        background-color: var(--boxel-200);
+        padding: 0 var(--boxel-sp-xxs) 0 var(--boxel-sp-sm);
+        border-top-left-radius: var(--boxel-border-radius);
+        font: var(--boxel-font-sm);
+        font-weight: 500;
+        transform: translateX(140px);
+        transition: all var(--boxel-transition);
+        transition-delay: 5s;
+      }
+      .save-indicator.visible {
+        transform: translateX(0px);
+        transition-delay: 0s;
+      }
+      .save-spinner {
+        display: inline-block;
+        position: relative;
+      }
+      .save-spinner-inner {
+        display: inline-block;
+        position: absolute;
+        top: -7px;
+      }
+      .saving-msg {
+        margin-right: var(--boxel-sp-sm);
+      }
+      .saved-msg {
+        margin-right: var(--boxel-sp-xxs);
       }
     </style>
   </template>

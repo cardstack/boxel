@@ -1,0 +1,37 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "ContactCard",
+      "description": "Catalog entry for ContactCard",
+      "ref": {
+        "module": "../contact-card",
+        "name": "ContactCard"
+      },
+      "demo": {
+        "name": null,
+        "phone": {
+          "country": null,
+          "area": null,
+          "number": null
+        },
+        "description": null,
+        "thumbnailURL": null
+      }
+    },
+    "meta": {
+      "fields": {
+        "demo": {
+          "adoptsFrom": {
+            "module": "../contact-card",
+            "name": "ContactCard"
+          }
+        }
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/catalog-entry",
+        "name": "CatalogEntry"
+      }
+    }
+  }
+}
