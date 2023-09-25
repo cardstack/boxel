@@ -1,4 +1,4 @@
-import { parse } from 'date-fns';
+import { formatRFC7231, parse } from 'date-fns';
 import {
   Kind,
   RealmAdapter,
@@ -9,7 +9,10 @@ import {
   RealmInfo,
   Deferred,
   executableExtensions,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
+import { type RequestHandler } from '@cardstack/runtime-common/loader';
+import { getFileWithFallbacks } from '@cardstack/runtime-common/stream';
 import GlimmerComponent from '@glimmer/component';
 import { type TestContext, visit } from '@ember/test-helpers';
 import { LocalPath } from '@cardstack/runtime-common/paths';
@@ -127,6 +130,7 @@ interface Options {
   realmURL?: string;
   isAcceptanceTest?: true;
   onFetch?: (req: Request) => Promise<Request>;
+  overridingHandlers?: RequestHandler[];
 }
 
 // We use a rendered component to facilitate our indexing (this emulates
@@ -164,7 +168,14 @@ export const TestRealm = {
     } else {
       await makeRenderer();
     }
-    return makeRealm(adapter, loader, owner, opts?.realmURL, opts?.onFetch);
+    return makeRealm(
+      adapter,
+      loader,
+      owner,
+      opts?.realmURL,
+      opts?.onFetch,
+      opts?.overridingHandlers,
+    );
   },
 };
 
@@ -362,6 +373,7 @@ function makeRealm(
   owner: Owner,
   realmURL = testRealmURL,
   onFetch?: (req: Request) => Promise<Request>,
+  overridingHandlers?: RequestHandler[],
 ) {
   let localIndexer = owner.lookup(
     'service:local-indexer',
@@ -379,6 +391,9 @@ function makeRealm(
       }
       return realm.maybeHandle(req);
     });
+  }
+  if (overridingHandlers && overridingHandlers.length > 0) {
+    loader.prependURLHandlers(overridingHandlers);
   }
   realm = new Realm(
     realmURL,
@@ -451,12 +466,10 @@ export class TestRealmAdapter implements RealmAdapter {
         throw new Error(`tried to use file as directory`);
       }
       this.#lastModified.set(this.#paths.fileURL(path).href, now);
-      content = typeof content === 'string' ? content : JSON.stringify(content);
-      dir[last] = content;
-      // for handling redirects
-      let [lastWithoutExtension, extension] = last.split('.');
-      if (executableExtensions.includes(extension)) {
-        dir[lastWithoutExtension] = content;
+      if (typeof content === 'string') {
+        dir[last] = content;
+      } else {
+        dir[last] = JSON.stringify(content);
       }
     }
   }
@@ -670,7 +683,67 @@ export function diff(
   };
 }
 
-export class MockResponse extends Response {
+function isCardSourceFetch(request: Request) {
+  return (
+    request.method === 'GET' &&
+    request.headers.get('Accept') === SupportedMimeType.CardSource &&
+    request.url.includes(testRealmURL)
+  );
+}
+
+export async function sourceFetchReturnUrlHandle(
+  request: Request,
+  defaultHandle: (req: Request) => Promise<Response | null>,
+) {
+  if (isCardSourceFetch(request)) {
+    let r = await defaultHandle(request);
+    if (r) {
+      return new MockRedirectedResponse(r.body, r, request.url) as Response;
+    }
+  }
+  return null;
+}
+
+export async function sourceFetchRedirectHandle(
+  request: Request,
+  adapter: RealmAdapter,
+  realmURL: string,
+) {
+  let urlParts = new URL(request.url).pathname.split('.');
+  if (
+    isCardSourceFetch(request) &&
+    urlParts.length === 1 //has no extension
+  ) {
+    const realmPaths = new RealmPaths(realmURL);
+    const localPath = realmPaths.local(request.url);
+    const ref = await getFileWithFallbacks(
+      localPath,
+      adapter.openFile.bind(adapter),
+      executableExtensions,
+    );
+    let maybeExtension = ref?.path.split('.').pop();
+    let responseUrl = maybeExtension
+      ? `${request.url}.${maybeExtension}`
+      : request.url;
+
+    if (
+      ref &&
+      (ref.content instanceof ReadableStream ||
+        ref.content instanceof Uint8Array ||
+        typeof ref.content === 'string')
+    ) {
+      let r = createResponse(realmURL, ref.content, {
+        headers: {
+          'last-modified': formatRFC7231(ref.lastModified),
+        },
+      });
+      return new MockRedirectedResponse(r.body, r, responseUrl) as Response;
+    }
+  }
+  return null;
+}
+
+export class MockRedirectedResponse extends Response {
   private _mockUrl: string;
 
   constructor(
@@ -680,6 +753,10 @@ export class MockResponse extends Response {
   ) {
     super(body, init);
     this._mockUrl = url || '';
+  }
+
+  get redirected() {
+    return true;
   }
 
   get url() {

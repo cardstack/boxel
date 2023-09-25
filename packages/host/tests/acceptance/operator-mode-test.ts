@@ -22,6 +22,8 @@ import {
   waitForSyntaxHighlighting,
   type TestContextWithSSE,
   type TestContextWithSave,
+  sourceFetchRedirectHandle,
+  sourceFetchReturnUrlHandle,
 } from '../helpers';
 import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 import stringify from 'safe-stable-stringify';
@@ -259,6 +261,14 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
       isAcceptanceTest: true,
+      overridingHandlers: [
+        async (req: Request) => {
+          return sourceFetchRedirectHandle(req, adapter, testRealmURL);
+        },
+        async (req: Request) => {
+          return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
+        },
+      ],
     });
     await realm.ready;
   });

@@ -17,6 +17,8 @@ import {
   TestRealmAdapter,
   TestRealm,
   type TestContextWithSave,
+  sourceFetchRedirectHandle,
+  sourceFetchReturnUrlHandle,
 } from '../../helpers';
 import { MockMatrixService } from '../../helpers/mock-matrix-service';
 import {
@@ -622,7 +624,16 @@ module('Integration | operator-mode', function (hooks) {
       '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
       ...Object.fromEntries(personCards),
     });
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
+      overridingHandlers: [
+        async (req: Request) => {
+          return sourceFetchRedirectHandle(req, adapter, testRealmURL);
+        },
+        async (req: Request) => {
+          return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
+        },
+      ],
+    });
     await realm.ready;
 
     setCardInOperatorModeState = async (cardURL: string) => {
