@@ -6,7 +6,7 @@
     "@types/stream-json": "^1.7.3",
     "matrix-js-sdk": "^25.0.0",
     "openai": "4.0.0-beta.4",
-    "promptfoo": "github:promptfoo/promptfoo",
+    "promptfoo": "github:IanCal/promptfoo#parse-multiple-json",
     "qunit": "^2.18.0",
     "stream-chain": "^2.2.5",
     "stream-json": "^1.8.0",

@@ -1,7 +1,5 @@
 require('ts-node').register({ project: 'tsconfig.json' });
-const { getModifyPrompt } = require('./helpers.ts');
-const { aiBotUsername } = require('@cardstack/runtime-common');
-console.log(aiBotUsername);
+const { getModifyPrompt } = require('../helpers.ts');
 const fs = require('fs');
 const path = require('path');
 
