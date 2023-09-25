@@ -4,6 +4,7 @@ import { on } from '@ember/modifier';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { Button } from '@cardstack/boxel-ui';
 import { type RealmInfo } from '@cardstack/runtime-common';
+import { CardContainer } from '@cardstack/boxel-ui';
 
 interface Action {
   label: string;
@@ -36,8 +37,8 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
   }
 
   <template>
-    <div class='container {{if @isActive "active"}}' ...attributes>
-      <div class='banner'>
+    <CardContainer>
+      <div class='banner {{if @isActive "active"}}'>
         <Label class='banner-title'>
           {{@title}}</Label>
         <span
@@ -61,16 +62,16 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
         {{/if}}
       </div>
 
-    </div>
+    </CardContainer>
+
     <style>
-      .container {
-        background-color: var(--boxel-light);
-        border-radius: var(--boxel-border-radius);
-        gap: var(--boxel-sp-xxs);
+      .header {
+        --boxel-header-text-size: var(--boxel-font-size-sm);
       }
+
       .banner {
-        display: grid;
-        grid-template-columns: 1fr auto;
+        display: flex;
+        justify-content: space-between;
         align-items: center;
         padding: var(--boxel-sp-xxs) var(--boxel-sp-sm) var(--boxel-sp-xxs);
         border-top-left-radius: var(--boxel-border-radius);
@@ -84,18 +85,15 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
         letter-spacing: var(--boxel-lsp-xxl);
         text-transform: uppercase;
       }
-      .active {
-        box-shadow: var(--boxel-box-shadow-hover);
-      }
 
-      .active .banner {
+      .banner.active {
         background-color: var(--boxel-highlight);
       }
 
-      .active .banner-title {
+      .banner.active .banner-title {
         color: var(--boxel-light);
       }
-      .active .file-extension {
+      .banner.active .file-extension {
         color: var(--boxel-light);
       }
       .content {

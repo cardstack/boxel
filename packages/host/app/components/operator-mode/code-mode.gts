@@ -665,20 +665,18 @@ export default class CodeMode extends Component<Signature> {
               </header>
               <section class='inner-container__content'>
                 {{#if (eq this.fileView 'inheritance')}}
-                  <section class='inner-container__content'>
-                    {{#if this.isReady}}
-                      <CardInheritancePanel
-                        @cardInstance={{this.card}}
-                        @readyFile={{this.readyFile}}
-                        @realmInfo={{this.realmInfo}}
-                        @adoptionChainManager={{this.adoptionChainManager}}
-                        @delete={{this.delete}}
-                        data-test-card-inheritance-panel
-                      />
-                    {{else if this.emptyOrNotFound}}
-                      Inspector is not available
-                    {{/if}}
-                  </section>
+                  {{#if this.isReady}}
+                    <CardInheritancePanel
+                      @cardInstance={{this.card}}
+                      @readyFile={{this.readyFile}}
+                      @realmInfo={{this.realmInfo}}
+                      @adoptionChainManager={{this.adoptionChainManager}}
+                      @delete={{this.delete}}
+                      data-test-card-inheritance-panel
+                    />
+                  {{else if this.emptyOrNotFound}}
+                    Inspector is not available
+                  {{/if}}
                 {{else}}
                   <FileTree @url={{this.realmURL}} />
                 {{/if}}
@@ -855,6 +853,7 @@ export default class CodeMode extends Component<Signature> {
       .inner-container__content {
         padding: var(--boxel-sp-xxs) var(--boxel-sp-xs) var(--boxel-sp-sm);
         overflow-y: auto;
+        height: 100%;
       }
       .inner-container--empty {
         background-color: var(--boxel-light-100);
@@ -863,6 +862,10 @@ export default class CodeMode extends Component<Signature> {
       }
       .inner-container--empty > :deep(svg) {
         --icon-color: var(--boxel-highlight);
+      }
+
+      .file-view {
+        background-color: var(--boxel-200);
       }
 
       .choose-file-prompt {
