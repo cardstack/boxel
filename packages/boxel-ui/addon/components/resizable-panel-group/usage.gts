@@ -9,7 +9,7 @@ import {
   CSSVariableInfo,
 } from 'ember-freestyle/decorators/css-variable';
 
-export default class ResizablePanelUsage extends Component {
+export default class ResizablePanelGroupUsage extends Component {
   @tracked panel1DefaultWidth = '25%';
   @tracked panel1MinWidth = 'none';
 
@@ -24,7 +24,7 @@ export default class ResizablePanelUsage extends Component {
   @cssVariable declare boxelPanelResizeHandlerBackgroundColor: CSSVariableInfo;
 
   <template>
-    <FreestyleUsage @name='ThreadMessage'>
+    <FreestyleUsage @name='ResizablePanelGroup'>
       <:example>
         <ResizablePanelGroup as |ResizablePanel|>
           <ResizablePanel

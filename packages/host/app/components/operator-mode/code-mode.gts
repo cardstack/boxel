@@ -722,6 +722,26 @@ export default class CodeMode extends Component<Signature> {
           @defaultWidth={{defaultPanelWidths.leftPanel}}
           @width='var(--operator-mode-left-column)'
         >
+          {{!-- <ButtonTabGroup @activeTabIndex={{0}} as |Tab|>
+              <Tab @title="Inspector">
+                {{#if this.isReady}}
+                  <CardInheritancePanel
+                    @cardInstance={{this.card}}
+                    @readyFile={{this.readyFile}}
+                    @realmInfo={{this.realmInfo}}
+                    @realmIconURL={{this.realmIconURL}}
+                    @adoptionChain={{this.adoptionChain}}
+                    @delete={{this.delete}}
+                    data-test-card-inheritance-panel
+                  />
+                {{else if this.emptyOrNotFound}}
+                  Inspector is not available
+                {{/if}}
+              </Tab>
+              <Tab @title="File Tree">
+                <FileTree @url={{this.realmURL}} />
+              </Tab>
+          </ButtonTabContainer> --}}
           <div class='column'>
             {{! Move each container and styles to separate component }}
             <div
