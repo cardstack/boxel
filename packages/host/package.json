@@ -57,6 +57,7 @@
     "@percy/ember": "^4.2.0",
     "@simple-dom/interface": "^1.4.0",
     "@simple-dom/serializer": "^1.4.0",
+    "@types/filesize": "^5.0.0",
     "@simple-dom/void-map": "^1.4.0",
     "@types/flat": "^5.0.2",
     "@types/htmlbars-inline-precompile": "^3.0.0",
@@ -77,6 +78,7 @@
     "concurrently": "^8.0.1",
     "crypto-browserify": "^3.12.0",
     "date-fns": "^2.28.0",
+    "ember-async-data": "^1.0.1",
     "ember-auto-import": "^2.6.3",
     "ember-cli": "~4.12.1",
     "ember-cli-app-version": "^6.0.0",
@@ -94,6 +96,7 @@
     "ember-cli-sri": "^2.1.1",
     "ember-cli-terser": "^4.0.2",
     "ember-cli-typescript-blueprints": "^3.0.0",
+    "ember-click-outside": "^6.0.1",
     "ember-concurrency": "^3.1.0",
     "ember-css-url": "^1.0.0",
     "ember-focus-trap": "^1.0.1",
@@ -122,6 +125,7 @@
     "eslint-plugin-qunit-dom": "mainmatter/eslint-plugin-qunit-dom#d66c841",
     "ethers": "^6.6.2",
     "fast-json-stable-stringify": "^2.1.0",
+    "filesize": "^10.0.12",
     "flat": "^5.0.2",
     "glimmer-scoped-css": "^0.4.0",
     "ignore": "^5.2.0",
@@ -173,9 +177,5 @@
     "paths": [
       "lib/setup-ast-transforms"
     ]
-  },
-  "dependencies": {
-    "ember-async-data": "^1.0.1",
-    "ember-click-outside": "^6.0.1"
   }
 }

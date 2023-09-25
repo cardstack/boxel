@@ -63,6 +63,7 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
 
     .vertical {
       grid-template-rows: auto 1fr;
+      gap: var(--boxel-sp-xxs) 0;
     }
     .vertical .label {
       --boxel-label-font: 700 var(--boxel-font-xs);
