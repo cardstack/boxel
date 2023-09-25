@@ -87,6 +87,7 @@ module.exports = {
     {
       // don’t enforce import order on blueprint files
       files: ['app/**', 'tests/**'],
+      excludedFiles: ['app/app.ts', 'app/router.ts', 'tests/test-helper.js'],
       extends: ['plugin:import/recommended', 'plugin:import/typescript'],
       rules: {
         // this doesn't work well with the monorepo. Typescript already complains if you try to import something that's not found
