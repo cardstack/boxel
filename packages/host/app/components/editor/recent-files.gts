@@ -95,6 +95,7 @@ class File extends Component<FileArgs> {
         border-radius: var(--boxel-border-radius);
         display: flex;
         align-items: center;
+        overflow-wrap: anywhere;
       }
 
       .icon {
