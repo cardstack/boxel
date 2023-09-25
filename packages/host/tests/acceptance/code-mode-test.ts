@@ -21,6 +21,7 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import window from 'ember-window-mock';
+import percySnapshot from '@percy/ember';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -865,6 +866,40 @@ module('Acceptance | code mode tests', function (hooks) {
         `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-realm-icon-url]`,
       )
       .hasAttribute('data-test-realm-icon-url', realm2IconUrl);
+  });
+
+  test('code mode handles binary files', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `http://localhost:4202/test/mango.png`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-file-definition]');
+
+    assert.dom('[data-test-definition-file-extension]').hasText('.png');
+    assert
+      .dom('[data-test-definition-realm-name]')
+      .hasText('in Test Workspace B');
+    assert.dom('[data-test-definition-info-text]').containsText('Last saved');
+    assert
+      .dom('[data-test-binary-info] [data-test-file-name]')
+      .hasText('mango.png');
+    assert.dom('[data-test-binary-info] [data-test-size]').hasText('114.71 kB');
+    assert
+      .dom('[data-test-binary-info] [data-test-last-modified]')
+      .containsText('Last modified');
+    assert
+      .dom('[data-test-binary-file-schema-editor]')
+      .hasText('Schema Editor cannot be used with this file type');
+
+    await percySnapshot(assert);
   });
 });
 

@@ -3,11 +3,12 @@ import { service } from '@ember/service';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type RealmInfo } from '@cardstack/runtime-common';
 import {
+  FileDefinitionContainer,
   InstanceDefinitionContainer,
   ModuleDefinitionContainer,
   ClickableModuleDefinitionContainer,
 } from './definition-container';
-import { Ready } from '@cardstack/host/resources/file';
+import { type Ready } from '@cardstack/host/resources/file';
 // @ts-expect-error cached doesn't have type yet
 import { tracked, cached } from '@glimmer/tracking';
 import { type AdoptionChainResource } from '@cardstack/host/resources/adoption-chain';
@@ -15,6 +16,7 @@ import { hash, array } from '@ember/helper';
 import { lastModifiedDate } from '../../resources/last-modified-date';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import { action } from '@ember/object';
+import { hasExecutableExtension } from '@cardstack/runtime-common';
 
 interface Args {
   Element: HTMLElement;
@@ -28,7 +30,7 @@ interface Args {
   };
 }
 
-export default class CardInheritancePanel extends Component<Args> {
+export default class DetailPanel extends Component<Args> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   private lastModified = lastModifiedDate(this, () => this.args.readyFile);
 
@@ -41,6 +43,10 @@ export default class CardInheritancePanel extends Component<Args> {
 
   get adoptionChainTypes() {
     return this.args.adoptionChain?.types;
+  }
+
+  get isModule() {
+    return hasExecutableExtension(this.args.readyFile.url);
   }
 
   private get fileExtension() {
@@ -77,7 +83,7 @@ export default class CardInheritancePanel extends Component<Args> {
             @url={{t.module}}
           />
         {{/each}}
-      {{else}}
+      {{else if this.isModule}}
         {{! Module case when visting, eg author.gts }}
         {{#each this.adoptionChainTypes as |t|}}
           <ModuleDefinitionContainer
@@ -101,6 +107,16 @@ export default class CardInheritancePanel extends Component<Args> {
             @url={{t.super.module}}
           />
         {{/each}}
+      {{else}}
+        <FileDefinitionContainer
+          @fileExtension={{this.fileExtension}}
+          @realmInfo={{@realmInfo}}
+          @realmIconURL={{@realmIconURL}}
+          @infoText={{this.lastModified.value}}
+          @actions={{array
+            (hash label='Delete' handler=@delete icon='icon-trash')
+          }}
+        />
       {{/if}}
     </div>
     <style>
