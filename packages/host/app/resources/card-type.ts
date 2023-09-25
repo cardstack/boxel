@@ -155,7 +155,7 @@ export class CardType extends Resource<Args> {
     );
     return {
       realmInfo,
-      extension: '.' + response.url.split('.').pop() || '',
+      extension: '.' + new URL(response.url).pathname.split('.').pop() || '',
     };
   };
 }
