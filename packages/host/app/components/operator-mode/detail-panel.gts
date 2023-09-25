@@ -3,8 +3,6 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { tracked, cached } from '@glimmer/tracking';
-
 import { type RealmInfo } from '@cardstack/runtime-common';
 
 import { hasExecutableExtension } from '@cardstack/runtime-common';
@@ -22,8 +20,6 @@ import {
   ModuleDefinitionContainer,
   ClickableModuleDefinitionContainer,
 } from './definition-container';
-
-// @ts-expect-error cached doesn't have type yet
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 

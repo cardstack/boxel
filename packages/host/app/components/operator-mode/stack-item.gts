@@ -8,6 +8,7 @@ import { service } from '@ember/service';
 import { htmlSafe, SafeString } from '@ember/template';
 import Component from '@glimmer/component';
 
+//@ts-expect-error cached type not available yet
 import { tracked, cached } from '@glimmer/tracking';
 
 import { formatDistanceToNow } from 'date-fns';
@@ -49,8 +50,6 @@ import { type StackItem } from './container';
 import OperatorModeOverlays from './overlays';
 
 import type CardService from '../../services/card-service';
-
-//@ts-expect-error cached type not available yet
 
 interface Signature {
   Args: {
