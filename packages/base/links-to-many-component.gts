@@ -8,6 +8,7 @@ import {
   type Format,
   type Field,
   CardContext,
+  isCard,
 } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
 import type { ComponentLike } from '@glint/template';
@@ -40,48 +41,92 @@ interface Signature {
 class LinksToManyEditor extends GlimmerComponent<Signature> {
   <template>
     <div data-test-links-to-many={{this.args.field.name}}>
-      {{#if @arrayField.children.length}}
-        <ul class='list'>
+      {{#if (isCard @model.value)}}
+        {{#if @arrayField.children.length}}
+          <ul class='list'>
+            {{#each @arrayField.children as |boxedElement i|}}
+              <li class='editor' data-test-item={{i}}>
+                {{#let
+                  (getBoxComponent
+                    (this.args.cardTypeFor @field boxedElement)
+                    'embedded'
+                    boxedElement
+                    @field
+                    @context
+                  )
+                  as |Item|
+                }}
+                  <Item />
+                {{/let}}
+                <div class='remove-button-container'>
+                  <IconButton
+                    @variant='primary'
+                    @icon='icon-minus-circle'
+                    @width='20px'
+                    @height='20px'
+                    class='remove'
+                    {{on 'click' (fn this.remove i)}}
+                    aria-label='Remove'
+                    data-test-remove-card
+                    data-test-remove={{i}}
+                  />
+                </div>
+              </li>
+            {{/each}}
+          </ul>
+        {{/if}}
+        <AddButton
+          class='add-new'
+          @variant='full-width'
+          {{on 'click' this.add}}
+          data-test-add-new
+        >
+          Add
+          {{getPlural @field.card.displayName}}
+        </AddButton>
+      {{else}}
+        <div class='pills'>
           {{#each @arrayField.children as |boxedElement i|}}
-            <li class='editor' data-test-item={{i}}>
-              {{#let
-                (getBoxComponent
-                  (this.args.cardTypeFor @field boxedElement)
-                  'embedded'
-                  boxedElement
-                  @field
-                  @context
-                )
-                as |Item|
-              }}
-                <Item />
-              {{/let}}
-              <div class='remove-button-container'>
-                <IconButton
-                  @variant='primary'
-                  @icon='icon-minus-circle'
-                  @width='20px'
-                  @height='20px'
-                  class='remove'
-                  {{on 'click' (fn this.remove i)}}
-                  aria-label='Remove'
-                  data-test-remove-card
-                  data-test-remove={{i}}
-                />
+            <div class='pill-container'>
+              <div
+                class='pill'
+                data-test-pill-item={{i}}
+                {{@context.cardComponentModifier
+                  card=boxedElement.value
+                  format=@format
+                  fieldType=@field.fieldType
+                  fieldName=@field.name
+                }}
+              >
+                {{boxedElement.value.title}}
               </div>
-            </li>
+              <IconButton
+                @variant='primary'
+                @icon='icon-minus-circle'
+                @width='14px'
+                @height='14px'
+                class='remove-pill'
+                {{on 'click' (fn this.remove i)}}
+                aria-label='Remove'
+                data-test-remove-card
+                data-test-remove={{i}}
+              />
+            </div>
+
           {{/each}}
-        </ul>
+          <AddButton
+            class='add-new'
+            @variant='pills'
+            @iconWidth='14px'
+            @iconHeight='14px'
+            {{on 'click' this.add}}
+            data-test-add-new
+          >
+            Add
+            {{getPlural @field.card.displayName}}
+          </AddButton>
+        </div>
       {{/if}}
-      <AddButton
-        class='add-new'
-        @variant='full-width'
-        {{on 'click' this.add}}
-        data-test-add-new
-      >
-        Add
-        {{getPlural @field.card.displayName}}
-      </AddButton>
     </div>
     <style>
       .list {
@@ -109,6 +154,40 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       .remove:hover {
         --icon-bg: var(--boxel-dark);
         --icon-border: var(--boxel-dark);
+      }
+      .pills {
+        display: flex;
+        flex-wrap: wrap;
+
+        padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
+        border: 1px solid var(--boxel-form-control-border-color);
+        border-radius: var(--boxel-form-control-border-radius);
+        --boxel-add-button-pill-font: var(--boxel-font-xs);
+        gap: var(--boxel-sp-xs);
+      }
+      .pill-container {
+        position: relative;
+      }
+      .pill {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        box-sizing: border-box;
+        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
+        background-color: var(--boxel-light);
+        border: 1px solid var(--boxel-form-control-border-color);
+        border-radius: var(--boxel-form-control-border-radius);
+        color: var(--boxel-dark);
+        font: 700 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      .remove-pill {
+        position: absolute;
+        right: calc(var(--boxel-sp-xs) * -1);
+        top: calc(var(--boxel-sp-xxxs) * -1);
+        width: 24px;
+        height: 24px;
+        --icon-color: var(--boxel-light);
       }
     </style>
   </template>

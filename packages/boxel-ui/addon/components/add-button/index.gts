@@ -1,12 +1,14 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import IconButton from '../icon-button';
-import { eq } from '../../helpers/truth-helpers';
+import { eq, bool } from '../../helpers/truth-helpers';
 import { svgJar } from '../../helpers/svg-jar';
 
 interface Signature {
   Element: HTMLElement;
   Args: {
-    variant?: 'full-width';
+    variant?: 'full-width' | 'pills';
+    iconWidth?: string | number;
+    iconHeight?: string | number;
     hideIcon?: boolean;
   };
   Blocks: {
@@ -15,9 +17,23 @@ interface Signature {
 }
 
 const AddButton: TemplateOnlyComponent<Signature> = <template>
-  {{#if (eq @variant 'full-width')}}
-    <button class='add-button--full-width' ...attributes>
-      {{unless @hideIcon (svgJar 'icon-plus' width='20px' height='20px')}}
+  {{#if (bool @variant)}}
+    <button
+      class={{if
+        (eq @variant 'full-width')
+        'add-button--full-width'
+        'add-button--pill'
+      }}
+      ...attributes
+    >
+      {{unless
+        @hideIcon
+        (svgJar
+          'icon-plus'
+          width=(if @iconWidth @iconWidth '20px')
+          height=(if @iconHeight @iconHeight '20px')
+        )
+      }}
       {{yield}}
     </button>
   {{else}}
@@ -69,6 +85,23 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
     .add-button--full-width:hover:not(:disabled) {
       background-color: var(--boxel-light-200);
       cursor: pointer;
+    }
+
+    .add-button--pill {
+      --icon-color: var(--boxel-light);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: var(--boxel-sp-xxxs);
+      box-sizing: border-box;
+      padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
+      background-color: var(--boxel-highlight);
+      border: none;
+      border-radius: var(--boxel-form-control-border-radius);
+      color: var(--boxel-light);
+      font: 500 var(--boxel-add-button-pill-font, var(--boxel-font-xs));
+      letter-spacing: var(--boxel-lsp-xs);
+      transition: background-color var(--boxel-transition);
     }
   </style>
 </template>;

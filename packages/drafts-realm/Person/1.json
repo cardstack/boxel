@@ -6,6 +6,14 @@
       "lastName": "Abdel-Rahman",
       "isCool": false,
       "isHuman": true,
+      "address": {
+        "streetAddress": null,
+        "city": null,
+        "region": null,
+        "postalCode": null,
+        "poBoxNumber": null,
+        "country": null
+      },
       "description": null,
       "thumbnailURL": null
     },
