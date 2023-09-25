@@ -1,7 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import BoxelGridContainer from './index';
+import BoxelGridContainer from './index.gts';
 
 interface Signature {
   Element: HTMLElement;

@@ -10,9 +10,9 @@ import {
 } from 'ember-freestyle/decorators/css-variable';
 
 import { gt } from '../../helpers/truth-helpers.ts';
-import BoxelCardContainer from '../card-container';
-import BoxelHeader from '../header';
-import BoxelMessage from './index';
+import BoxelCardContainer from '../card-container/index.gts';
+import BoxelHeader from '../header/index.gts';
+import BoxelMessage from './index.gts';
 
 export default class MessageUsage extends Component {
   messageArray = [

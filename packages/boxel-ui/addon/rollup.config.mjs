@@ -1,6 +1,9 @@
 import { Addon } from '@embroider/addon-dev/rollup';
 import { babel } from '@rollup/plugin-babel';
 import copy from 'rollup-plugin-copy';
+import path from 'path';
+import { createHash } from 'crypto';
+import { isScopedCSSRequest, decodeScopedCSSRequest } from 'glimmer-scoped-css'
 
 const addon = new Addon({
   srcDir: 'src',
@@ -26,6 +29,7 @@ export default {
       'helpers/pick.js',
       'helpers/svg-jar.js',
       'helpers/truth-helpers.js',
+      'components/**/usage.gts',
       'index.js',
     ]),
 
@@ -58,7 +62,7 @@ export default {
 
     // addons are allowed to contain imports of .css files, which we want rollup
     // to leave alone and keep in the published output.
-    addon.keepAssets(['**/*.css']),
+    addon.keepAssets(['styles/*']),
 
     // Remove leftover build artifacts when starting a new build.
     addon.clean(),
@@ -70,5 +74,30 @@ export default {
         { src: '../LICENSE.md', dest: '.' },
       ],
     }),
+    scopedCSS('src', 'dist')
   ],
 };
+
+function scopedCSS(srcDir, destDir) {
+  return {
+    name: 'scoped-css',
+    async resolveId(source, importer, options) {
+      if (!isScopedCSSRequest(source)) {
+        return null;
+      }
+      let hash = createHash('md5');
+      let fullSrcDir = path.resolve(srcDir);
+      let localPath = path.relative(fullSrcDir, importer);
+      hash.update(localPath);
+      let cssFileName = hash.digest('hex').slice(0,10) + '.css';
+      let dir = path.dirname(localPath);
+      let css = decodeScopedCSSRequest(source);
+			this.emitFile({
+				type: 'asset',
+				fileName: path.join(dir, cssFileName),
+				source: css
+			});
+      return { id: path.resolve(destDir, dir, cssFileName), external: 'relative' };
+    }
+  }
+}

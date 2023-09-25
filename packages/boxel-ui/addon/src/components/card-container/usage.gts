@@ -3,8 +3,8 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import BoxelHeader from '../header';
-import BoxelCardContainer from './index';
+import BoxelHeader from '../header/index.gts';
+import BoxelCardContainer from './index.gts';
 
 export default class CardContainerUsage extends Component {
   @tracked displayBoundaries = true;

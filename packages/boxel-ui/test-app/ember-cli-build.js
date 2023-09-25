@@ -10,6 +10,9 @@ module.exports = function (defaults) {
     autoImport: {
       watchDependencies: ['@cardstack/boxel-ui'],
     },
+    'ember-cli-babel': {
+      enableTypeScriptTransform: true,
+    },
   });
 
   return compatBuild(app, Webpack, {
@@ -24,8 +27,16 @@ module.exports = function (defaults) {
     // staticComponents: true,
     // staticAppPaths: [],
     packagerOptions: {
-      publicAssetURL: '/boxel-ui/',
-      webpackConfig: {},
+      webpackConfig: {
+        module: {
+          rules: [
+            {
+              test: /\.ttf$/,
+              type: 'asset',
+            },
+          ],
+        },    
+      },
     },
   });
 };

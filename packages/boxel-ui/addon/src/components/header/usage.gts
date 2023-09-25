@@ -3,8 +3,8 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import BoxelButton from '../button';
-import BoxelHeader from './index';
+import BoxelButton from '../button/index.gts';
+import BoxelHeader from './index.gts';
 
 export default class HeaderUsage extends Component {
   @tracked title = 'Header';

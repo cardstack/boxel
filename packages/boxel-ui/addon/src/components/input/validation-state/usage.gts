@@ -4,7 +4,9 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import BoxelInputValidationState, { type InputValidationState } from './index';
+import BoxelInputValidationState, {
+  type InputValidationState,
+} from './index.gts';
 
 export default class BoxelInputValidationStateUsage extends Component {
   @tracked id = 'validation-input-usage-id';

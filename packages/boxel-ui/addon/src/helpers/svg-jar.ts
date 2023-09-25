@@ -10,7 +10,7 @@
   along with some type annotations that are lacking upstream.
 */
 
-import { type SafeString } from '@ember/template/-private/handlebars';
+import type { SafeString } from '@ember/template/-private/handlebars';
 import { importSync } from '@embroider/macros';
 import type { ContentValue } from '@glint/template';
 // @ts-expect-error  no upstream types

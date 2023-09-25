@@ -1,5 +1,4 @@
 import { svgJar } from '../../../helpers/svg-jar.ts';
-import { type EmptyObject } from '@ember/component/helper';
 import Component from '@glimmer/component';
 
 import BoxelInput from '../index.gts';
@@ -38,7 +37,6 @@ interface ValidationStateInputArgs {
 
 interface Signature {
   Args: ValidationStateInputArgs;
-  Blocks: EmptyObject;
   Element: HTMLDivElement;
 }
 

@@ -3,7 +3,6 @@ import element from '../../helpers/element.ts';
 import optional from '../../helpers/optional.ts';
 import pick from '../../helpers/pick.ts';
 import { and, bool, not } from '../../helpers/truth-helpers.ts';
-import { type EmptyObject } from '@ember/component/helper';
 import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
@@ -26,7 +25,6 @@ export interface Signature {
     required?: boolean;
     value: string | number | null | undefined;
   };
-  Blocks: EmptyObject;
   Element: HTMLInputElement | HTMLTextAreaElement;
 }
 

@@ -5,7 +5,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import BoxelAddButton from './index';
+import BoxelAddButton from './index.gts';
 
 export default class AddButtonUsage extends Component {
   @tracked variant?: 'full-width';

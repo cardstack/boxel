@@ -8,7 +8,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import BoxelButton from './index';
+import BoxelButton from './index.gts';
 
 export default class ButtonUsage extends Component {
   sizeVariants = ['extra-small', 'small', 'base', 'tall', 'touch'];

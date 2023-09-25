@@ -1,6 +1,6 @@
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { type MiddlewareState } from '@floating-ui/dom';
+import type { MiddlewareState } from '@floating-ui/dom';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { Velcro } from 'ember-velcro';

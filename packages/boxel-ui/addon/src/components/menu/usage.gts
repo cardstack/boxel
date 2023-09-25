@@ -3,9 +3,9 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import menuDivider from '../../helpers/menu-divider';
-import menuItem from '../../helpers/menu-item';
-import BoxelMenu from './index';
+import menuDivider from '../../helpers/menu-divider.ts';
+import menuItem from '../../helpers/menu-item.ts';
+import BoxelMenu from './index.gts';
 
 export default class MenuUsage extends Component {
   @action log(message: string): void {

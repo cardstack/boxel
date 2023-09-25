@@ -10,9 +10,9 @@ import {
   CSSVariableInfo,
 } from 'ember-freestyle/decorators/css-variable';
 
-import BoxelButton from '../button';
-import BoxelCardContainer from '../card-container';
-import BoxelModal from './index';
+import BoxelButton from '../button/index.gts';
+import BoxelCardContainer from '../card-container/index.gts';
+import BoxelModal from './index.gts';
 
 type ModalSize = 'small' | 'medium' | 'large' | 'full-screen' | undefined;
 

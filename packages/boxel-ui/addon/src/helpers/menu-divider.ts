@@ -1,9 +1,7 @@
 import { helper } from '@ember/component/helper';
-import { type EmptyObject } from '@ember/component/helper';
 
 interface Signature {
   Args: {
-    Named: EmptyObject;
     Positional: [];
   };
   Return: MenuDivider;

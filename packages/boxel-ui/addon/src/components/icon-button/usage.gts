@@ -10,7 +10,7 @@ import {
   CSSVariableInfo,
 } from 'ember-freestyle/decorators/css-variable';
 
-import BoxelIconButton from './index';
+import BoxelIconButton from './index.gts';
 
 export default class IconButtonUsage extends Component {
   @tracked icon = 'icon-plus-circle';

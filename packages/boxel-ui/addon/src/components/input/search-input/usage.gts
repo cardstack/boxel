@@ -4,8 +4,8 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import { InputValidationState } from '../validation-state/index';
-import SearchInput, { SearchInputBottomTreatment } from './index';
+import { InputValidationState } from '../validation-state/index.gts';
+import SearchInput, { SearchInputBottomTreatment } from './index.gts';
 
 const validBottomTreatments = Object.values(SearchInputBottomTreatment);
 

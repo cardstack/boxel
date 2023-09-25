@@ -8,9 +8,9 @@ import {
   CSSVariableInfo,
 } from 'ember-freestyle/decorators/css-variable';
 
-import BoxelInput from '../input';
-import BoxelInputValidationState from '../input/validation-state';
-import BoxelFieldContainer from './index';
+import BoxelInput from '../input/index.gts';
+import BoxelInputValidationState from '../input/validation-state/index.gts';
+import BoxelFieldContainer from './index.gts';
 
 export default class FieldUsage extends Component {
   @tracked label = 'Full Name of the Issuer';

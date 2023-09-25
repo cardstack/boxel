@@ -1,6 +1,6 @@
 /* eslint-disable ember/no-classic-components */
 import EmberComponent from '@ember/component';
-import { type ComponentLike } from '@glint/template';
+import type { ComponentLike } from '@glint/template';
 
 interface Signature<T extends keyof HTMLElementTagNameMap> {
   Blocks: { default: [] };

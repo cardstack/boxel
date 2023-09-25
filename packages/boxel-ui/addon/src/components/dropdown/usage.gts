@@ -3,10 +3,10 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import menuItem from '../../helpers/menu-item';
-import BoxelButton from '../button';
-import BoxelMenu from '../menu';
-import BoxelDropdown from './index';
+import menuItem from '../../helpers/menu-item.ts';
+import BoxelButton from '../button/index.gts';
+import BoxelMenu from '../menu/index.gts';
+import BoxelDropdown from './index.gts';
 
 export default class BoxelDropdownUsage extends Component {
   @action log(string: string): void {

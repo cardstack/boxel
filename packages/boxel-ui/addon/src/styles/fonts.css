@@ -1,104 +1,104 @@
 @font-face {
   font-family: 'Poppins';
-  src: url('/@cardstack/boxel-ui/fonts/Poppins-Regular.ttf');
+  src: url('./Poppins-Regular.ttf');
   font-weight: 400;
 }
 @font-face {
   font-family: 'Poppins';
-  src: url('/@cardstack/boxel-ui/fonts/Poppins-Italic.ttf');
+  src: url('./Poppins-Italic.ttf');
   font-weight: 400;
   font-style: italic;
 }
 @font-face {
   font-family: 'Poppins';
-  src: url('/@cardstack/boxel-ui/fonts/Poppins-Medium.ttf');
+  src: url('./Poppins-Medium.ttf');
   font-weight: 500;
 }
 @font-face {
   font-family: 'Poppins';
-  src: url('/@cardstack/boxel-ui/fonts/Poppins-MediumItalic.ttf');
+  src: url('./Poppins-MediumItalic.ttf');
   font-weight: 500;
   font-style: italic;
 }
 @font-face {
   font-family: 'Poppins';
-  src: url('/@cardstack/boxel-ui/fonts/Poppins-Bold.ttf');
+  src: url('./Poppins-Bold.ttf');
   font-weight: 700;
 }
 @font-face {
   font-family: 'Poppins';
-  src: url('/@cardstack/boxel-ui/fonts/Poppins-BoldItalic.ttf');
+  src: url('./Poppins-BoldItalic.ttf');
   font-weight: 700;
   font-style: italic;
 }
 
 /* Fallback fonts */
-@font-face {
+/* @font-face {
   font-family: 'Open Sans';
-  src: url('/@cardstack/boxel-ui/fonts/OpenSans-Light.ttf');
+  src: url('./OpenSans-Light.ttf');
   font-weight: 300;
-}
+} */
 
-@font-face {
+/* @font-face {
   font-family: 'Open Sans';
-  src: url('/@cardstack/boxel-ui/fonts/OpenSans-LightItalic.ttf');
+  src: url('./OpenSans-LightItalic.ttf');
   font-weight: 300;
   font-style: italic;
-}
+} */
 
 @font-face {
   font-family: 'Open Sans';
-  src: url('/@cardstack/boxel-ui/fonts/OpenSans-Regular.ttf');
+  src: url('./OpenSans-Regular.ttf');
   font-weight: 400;
 }
 
-@font-face {
+/* @font-face {
   font-family: 'Open Sans';
-  src: url('/@cardstack/boxel-ui/fonts/OpenSans-Italic.ttf');
+  src: url('./OpenSans-Italic.ttf');
   font-style: italic;
-}
+} */
 
 @font-face {
   font-family: 'Open Sans';
-  src: url('/@cardstack/boxel-ui/fonts/OpenSans-SemiBold.ttf');
+  src: url('./OpenSans-SemiBold.ttf');
   font-weight: 600;
 }
 
-@font-face {
+/* @font-face {
   font-family: 'Open Sans';
-  src: url('/@cardstack/boxel-ui/fonts/OpenSans-SemiBoldItalic.ttf');
+  src: url('./OpenSans-SemiBoldItalic.ttf');
   font-weight: 600;
   font-style: italic;
-}
+} */
 
 @font-face {
   font-family: 'Open Sans';
-  src: url('/@cardstack/boxel-ui/fonts/OpenSans-Bold.ttf');
+  src: url('./OpenSans-Bold.ttf');
   font-weight: 700;
 }
 
-@font-face {
+/* @font-face {
   font-family: 'Open Sans';
-  src: url('/@cardstack/boxel-ui/fonts/OpenSans-BoldItalic.ttf');
+  src: url('./OpenSans-BoldItalic.ttf');
   font-weight: 700;
   font-style: italic;
-}
+} */
 
-@font-face {
+/* @font-face {
   font-family: 'Open Sans';
-  src: url('/@cardstack/boxel-ui/fonts/OpenSans-ExtraBold.ttf');
+  src: url('./OpenSans-ExtraBold.ttf');
   font-weight: 800;
-}
+} */
 
-@font-face {
+/* @font-face {
   font-family: 'Open Sans';
-  src: url('/@cardstack/boxel-ui/fonts/OpenSans-ExtraBoldItalic.ttf');
+  src: url('./OpenSans-ExtraBoldItalic.ttf');
   font-weight: 800;
   font-style: italic;
-}
+} */
 
-@font-face {
+/* @font-face {
   font-family: 'Roboto Mono';
-  src: url('/@cardstack/boxel-ui/fonts/RobotoMono-Regular.ttf');
+  src: url('./RobotoMono-Regular.ttf');
   font-weight: 400;
-}
+} */

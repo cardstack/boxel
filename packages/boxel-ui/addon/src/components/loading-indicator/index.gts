@@ -1,4 +1,3 @@
-import { type EmptyObject } from '@ember/component/helper';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import cssVar from '../../helpers/css-var.ts';
@@ -8,7 +7,6 @@ interface Signature {
   Args: {
     color?: string;
   };
-  Blocks: EmptyObject;
   Element: HTMLDivElement;
 }
 

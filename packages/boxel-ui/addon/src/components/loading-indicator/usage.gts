@@ -4,7 +4,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import BoxelLoadingIndicator from './index';
+import BoxelLoadingIndicator from './index.gts';
 
 export default class LoadingIndicatorUsage extends Component {
   @tracked color = '#000';

@@ -10,7 +10,7 @@ import {
   CSSVariableInfo,
 } from 'ember-freestyle/decorators/css-variable';
 
-import BoxelInput from './index';
+import BoxelInput from './index.gts';
 
 export default class InputUsage extends Component {
   @tracked id = 'sample-input';

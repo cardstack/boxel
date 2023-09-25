@@ -3,7 +3,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import BoxelDropdownTrigger from './index';
+import BoxelDropdownTrigger from './index.gts';
 
 export default class BoxelDropdownUsage extends Component {
   @tracked icon: string | undefined = 'clock';

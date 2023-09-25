@@ -1,4 +1,3 @@
-import { type EmptyObject } from '@ember/component/helper';
 import { concat, hash } from '@ember/helper';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
@@ -42,7 +41,6 @@ interface Signature {
     trigger: [
       FunctionBasedModifier<{
         Args: {
-          Named: EmptyObject;
           Positional: unknown[];
         };
         // note: should only be used with Button, but HTMLAnchorElement is included so that the

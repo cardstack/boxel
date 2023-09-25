@@ -6,8 +6,8 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import BoxelButton from '../button/index';
-import BoxelTooltip from './index';
+import BoxelButton from '../button/index.gts';
+import BoxelTooltip from './index.gts';
 
 export default class TooltipUsage extends Component {
   @tracked placement: MiddlewareState['placement'] = 'bottom';

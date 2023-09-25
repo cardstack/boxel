@@ -1,5 +1,5 @@
 import { helper } from '@ember/component/helper';
-import { type Link } from 'ember-link';
+import type { Link } from 'ember-link';
 
 // eslint-disable-next-line @typescript-eslint/ban-types
 type ActionType = Link | Function;

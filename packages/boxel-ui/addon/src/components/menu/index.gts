@@ -1,4 +1,3 @@
-import { type EmptyObject } from '@ember/component/helper';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -8,8 +7,8 @@ import cssUrl from 'ember-css-url';
 import { Link } from 'ember-link';
 
 import cn from '../../helpers/cn.ts';
-import { type MenuDivider } from '../../helpers/menu-divider.ts';
-import { type MenuItem } from '../../helpers/menu-item.ts';
+import type { MenuDivider } from '../../helpers/menu-divider.ts';
+import type { MenuItem } from '../../helpers/menu-item.ts';
 import { svgJar } from '../../helpers/svg-jar.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
 
@@ -40,7 +39,6 @@ interface Signature {
     itemClass?: string;
     items: Array<MenuItem | MenuDivider>;
   };
-  Blocks: EmptyObject;
   Element: HTMLUListElement;
 }
 
