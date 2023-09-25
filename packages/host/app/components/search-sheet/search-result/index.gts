@@ -60,7 +60,7 @@ export default class SearchResult extends Component<Signature> {
       .search-result__display-name {
         margin: 0;
         font: 500 var(--boxel-font-xs);
-        color: #919191;
+        color: var(--boxel-450);
       }
       .search-result:not(.is-compact) .search-result__realm-name {
         display: block;

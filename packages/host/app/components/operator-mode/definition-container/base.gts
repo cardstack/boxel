@@ -74,7 +74,7 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
         background-color: var(--boxel-100);
       }
       .banner-title {
-        color: #919191;
+        color: var(--boxel-450);
         font-size: var(--boxel-font-size-sm);
         font-weight: 200;
         letter-spacing: var(--boxel-lsp-xxl);
