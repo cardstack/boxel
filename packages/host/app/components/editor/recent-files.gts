@@ -8,6 +8,7 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { RealmPaths } from '@cardstack/runtime-common';
 import { RecentFile } from '@cardstack/host/services/recent-files-service';
+import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 
 interface Args {
   Args: {};
@@ -69,6 +70,19 @@ class File extends Component<FileArgs> {
         role='button'
         {{on 'click' (fn this.openFile this.fullUrl)}}
       >
+        <RealmInfoProvider
+          @fileURL={{this.fullUrl}}
+          @realmURL={{this.args.recentFile.realmURL.href}}
+        >
+          <:ready as |realmInfo|>
+            <img
+              src={{realmInfo.iconURL}}
+              class='icon'
+              alt=''
+              data-test-realm-icon-url={{realmInfo.iconURL}}
+            />
+          </:ready>
+        </RealmInfoProvider>
         {{@recentFile.filePath}}
       </li>
     {{/unless}}
@@ -79,6 +93,14 @@ class File extends Component<FileArgs> {
         font-weight: 700;
         margin-bottom: var(--boxel-sp-xs);
         border-radius: var(--boxel-border-radius);
+        display: flex;
+        align-items: center;
+      }
+
+      .icon {
+        width: 20px;
+        height: 20px;
+        margin-right: var(--boxel-sp-xxxs);
       }
     </style>
   </template>

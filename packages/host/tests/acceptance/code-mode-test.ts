@@ -509,6 +509,11 @@ module('Acceptance | code mode tests', function (hooks) {
       .exists({ count: 1 })
       .containsText('index.json');
 
+    assert
+      .dom('[data-test-recent-file] [data-test-realm-icon-url]')
+      .hasAttribute('src', 'https://i.postimg.cc/L8yXRvws/icon.png')
+      .hasAttribute('alt', '');
+
     await click('[data-test-file="index.json"]');
     assert
       .dom('[data-test-recent-file]')
