@@ -64,6 +64,8 @@ class File extends Component<FileArgs> {
 
   <template>
     {{#unless this.isSelected}}
+      {{! RealmInfoProvider and :ready do not produce children elements }}
+      {{! template-lint-disable require-presentational-children }}
       <li
         class='recent-file'
         data-test-recent-file={{this.fullUrl}}
