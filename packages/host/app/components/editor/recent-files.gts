@@ -72,7 +72,7 @@ class File extends Component<FileArgs> {
       >
         <RealmInfoProvider
           @fileURL={{this.fullUrl}}
-          @realmURL={{this.args.recentFile.realmURL.href}}
+          @realmURL={{@recentFile.realmURL.href}}
         >
           <:ready as |realmInfo|>
             <img
