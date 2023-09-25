@@ -835,6 +835,36 @@ module('Acceptance | code mode tests', function (hooks) {
       .exists();
 
     assert.dom(`[data-test-card-schema="Base"]`).exists();
+
+    // Check that realm icons in the schema editor are correct (card and its fields)
+
+    let realm1IconUrl = 'https://i.postimg.cc/L8yXRvws/icon.png';
+    let realm2IconUrl = 'https://i.postimg.cc/d0B9qMvy/icon.png';
+
+    assert
+      .dom(`[data-test-card-schema="Person"] [data-test-realm-icon-url]`)
+      .hasAttribute('data-test-realm-icon-url', realm1IconUrl);
+
+    await waitFor(
+      '[data-test-card-schema="Person"] [data-test-field-name="firstName"] [data-test-realm-icon-url]',
+    );
+
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="firstName"] [data-test-realm-icon-url]`,
+      )
+      .hasAttribute('data-test-realm-icon-url', realm2IconUrl);
+
+    await waitFor('[data-test-card-schema="Card"] [data-test-realm-icon-url]');
+    assert
+      .dom(`[data-test-card-schema="Card"] [data-test-realm-icon-url]`)
+      .hasAttribute('data-test-realm-icon-url', realm2IconUrl);
+
+    assert
+      .dom(
+        `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-realm-icon-url]`,
+      )
+      .hasAttribute('data-test-realm-icon-url', realm2IconUrl);
   });
 });
 
