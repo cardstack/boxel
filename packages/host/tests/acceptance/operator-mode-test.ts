@@ -1,4 +1,3 @@
-import { module, test } from 'qunit';
 import {
   visit,
   currentURL,
@@ -9,7 +8,21 @@ import {
   waitUntil,
   fillIn,
 } from '@ember/test-helpers';
+
+import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
+
+import window from 'ember-window-mock';
+import { setupWindowMock } from 'ember-window-mock/test-support';
+import { module, test } from 'qunit';
+import stringify from 'safe-stable-stringify';
+
+import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { Realm } from '@cardstack/runtime-common/realm';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
 import {
   TestRealm,
   TestRealmAdapter,
@@ -23,14 +36,6 @@ import {
   type TestContextWithSSE,
   type TestContextWithSave,
 } from '../helpers';
-import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
-import stringify from 'safe-stable-stringify';
-import { Realm } from '@cardstack/runtime-common/realm';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import percySnapshot from '@percy/ember';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import { setupWindowMock } from 'ember-window-mock/test-support';
-import window from 'ember-window-mock';
 
 module('Acceptance | operator mode tests', function (hooks) {
   let realm: Realm;

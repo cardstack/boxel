@@ -1,48 +1,55 @@
-import Component from '@glimmer/component';
-import { action } from '@ember/object';
+import { registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
-import { restartableTask, timeout } from 'ember-concurrency';
+import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
+import { buildWaiter } from '@ember/test-waiters';
+import { isTesting } from '@embroider/macros';
+import Component from '@glimmer/component';
+
+import { cached, tracked } from '@glimmer/tracking';
+
+import { restartableTask, timeout } from 'ember-concurrency';
 //@ts-ignore cached not available yet in definitely typed
-import { cached } from '@glimmer/tracking';
-import { tracked } from '@glimmer/tracking';
+
+import momentFrom from 'ember-moment/helpers/moment-from';
+
+import { AddButton, Tooltip } from '@cardstack/boxel-ui';
+
 import {
   SupportedMimeType,
   SingleCardDocument,
   isCardDocument,
   isSingleCardDocument,
   logger,
+  chooseCard,
+  catalogEntryRef,
+  createNewCard,
 } from '@cardstack/runtime-common';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
-import MonacoService from '@cardstack/host/services/monaco-service';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import type CardService from '@cardstack/host/services/card-service';
+
 import type MessageService from '@cardstack/host/services/message-service';
+
+import Module from './module';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import { file, FileResource, isReady } from '@cardstack/host/resources/file';
 import CardEditor from '@cardstack/host/components/card-editor';
-import Module from './module';
 import FileTree from './file-tree';
+
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+
 import ENV from '@cardstack/host/config/environment';
-import momentFrom from 'ember-moment/helpers/moment-from';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 import type {
   MonacoSDK,
   IStandaloneCodeEditor,
 } from '@cardstack/host/services/monaco-service';
 import { maybe } from '@cardstack/host/resources/maybe';
+import type CardService from '@cardstack/host/services/card-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
+import MonacoService from '@cardstack/host/services/monaco-service';
+
 import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
-import {
-  chooseCard,
-  catalogEntryRef,
-  createNewCard,
-} from '@cardstack/runtime-common';
-import { AddButton, Tooltip } from '@cardstack/boxel-ui';
-import { registerDestructor } from '@ember/destroyable';
-import { buildWaiter } from '@ember/test-waiters';
-import { isTesting } from '@embroider/macros';
 
 const { ownRealmURL } = ENV;
 const log = logger('component:go');

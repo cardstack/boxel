@@ -1,4 +1,3 @@
-import { module, test } from 'qunit';
 import {
   visit,
   click,
@@ -7,8 +6,20 @@ import {
   fillIn,
   triggerKeyEvent,
 } from '@ember/test-helpers';
+
 import { setupApplicationTest } from 'ember-qunit';
+import window from 'ember-window-mock';
+import { setupWindowMock } from 'ember-window-mock/test-support';
+import { module, test } from 'qunit';
+
+import stringify from 'safe-stable-stringify';
+
 import { baseRealm } from '@cardstack/runtime-common';
+
+import { Realm } from '@cardstack/runtime-common/realm';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
+
 import {
   TestRealm,
   TestRealmAdapter,
@@ -16,11 +27,6 @@ import {
   setupMockMessageService,
   testRealmURL,
 } from '../helpers';
-import stringify from 'safe-stable-stringify';
-import { Realm } from '@cardstack/runtime-common/realm';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import { setupWindowMock } from 'ember-window-mock/test-support';
-import window from 'ember-window-mock';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";

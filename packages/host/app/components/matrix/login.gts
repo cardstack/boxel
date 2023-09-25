@@ -1,9 +1,13 @@
-import Component from '@glimmer/component';
-import { service } from '@ember/service';
-import { action } from '@ember/object';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import { service } from '@ember/service';
+import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+
 import { restartableTask } from 'ember-concurrency';
+
+import { type IAuthData } from 'matrix-js-sdk';
+
 import {
   BoxelHeader,
   BoxelInput,
@@ -11,9 +15,9 @@ import {
   FieldContainer,
   LoadingIndicator,
 } from '@cardstack/boxel-ui';
+
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import { type IAuthData } from 'matrix-js-sdk';
 
 export default class Login extends Component {
   <template>

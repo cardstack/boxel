@@ -1,20 +1,28 @@
-import Component from '@glimmer/component';
+import { hash, array } from '@ember/helper';
+import { action } from '@ember/object';
 import { service } from '@ember/service';
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import Component from '@glimmer/component';
+
+import { tracked, cached } from '@glimmer/tracking';
+
 import { type RealmInfo } from '@cardstack/runtime-common';
+
+import { type AdoptionChainResource } from '@cardstack/host/resources/adoption-chain';
+import { Ready } from '@cardstack/host/resources/file';
+
+import { type CardDef } from 'https://cardstack.com/base/card-api';
+
+import { lastModifiedDate } from '../../resources/last-modified-date';
+
 import {
   InstanceDefinitionContainer,
   ModuleDefinitionContainer,
   ClickableModuleDefinitionContainer,
 } from './definition-container';
-import { Ready } from '@cardstack/host/resources/file';
+
 // @ts-expect-error cached doesn't have type yet
-import { tracked, cached } from '@glimmer/tracking';
-import { type AdoptionChainResource } from '@cardstack/host/resources/adoption-chain';
-import { hash, array } from '@ember/helper';
-import { lastModifiedDate } from '../../resources/last-modified-date';
+
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import { action } from '@ember/object';
 
 interface Args {
   Element: HTMLElement;

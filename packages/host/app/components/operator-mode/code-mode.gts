@@ -1,6 +1,3 @@
-import Component from '@glimmer/component';
-//@ts-expect-error cached type not available yet
-import { cached, tracked } from '@glimmer/tracking';
 import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -8,13 +5,27 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
+import { buildWaiter } from '@ember/test-waiters';
+import { isTesting } from '@embroider/macros';
+import Component from '@glimmer/component';
+//@ts-expect-error cached type not available yet
+import { cached, tracked } from '@glimmer/tracking';
+
 import { task, restartableTask, timeout, all } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { use, resource } from 'ember-resources';
-import { TrackedObject } from 'tracked-built-ins';
-import config from '@cardstack/host/config/environment';
 import isEqual from 'lodash/isEqual';
-import { and } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { TrackedObject } from 'tracked-built-ins';
+
+import {
+  LoadingIndicator,
+  Button,
+  ResizablePanelGroup,
+  PanelContext,
+} from '@cardstack/boxel-ui';
+import cn from '@cardstack/boxel-ui/helpers/cn';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import { and, eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import {
   type RealmInfo,
@@ -29,16 +40,27 @@ import {
   hasExecutableExtension,
 } from '@cardstack/runtime-common';
 
-import {
-  LoadingIndicator,
-  Button,
-  ResizablePanelGroup,
-  PanelContext,
-} from '@cardstack/boxel-ui';
-import cn from '@cardstack/boxel-ui/helpers/cn';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import RecentFiles from '@cardstack/host/components/editor/recent-files';
+import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
+import config from '@cardstack/host/config/environment';
 
+
+
+import monacoModifier from '@cardstack/host/modifiers/monaco';
+
+import { adoptionChainResource } from '@cardstack/host/resources/adoption-chain';
+import {
+  Ready,
+  file,
+  isReady,
+  type FileResource,
+} from '@cardstack/host/resources/file';
+
+import { importResource } from '@cardstack/host/resources/import';
+
+import { maybe } from '@cardstack/host/resources/maybe';
+
+import type CardService from '@cardstack/host/services/card-service';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
 // host components
@@ -46,22 +68,11 @@ import FileTree from '../editor/file-tree';
 import CardInheritancePanel from './card-inheritance-panel';
 import CardPreviewPanel from './card-preview-panel';
 import CardURLBar from './card-url-bar';
-import RecentFiles from '@cardstack/host/components/editor/recent-files';
 
-import monacoModifier from '@cardstack/host/modifiers/monaco';
 
 // host resources
-import {
-  Ready,
-  file,
-  isReady,
-  type FileResource,
-} from '@cardstack/host/resources/file';
-import { importResource } from '@cardstack/host/resources/import';
-import { maybe } from '@cardstack/host/resources/maybe';
 
 // host services
-import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
@@ -69,11 +80,7 @@ import RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import { adoptionChainResource } from '@cardstack/host/resources/adoption-chain';
-import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
 
-import { buildWaiter } from '@ember/test-waiters';
-import { isTesting } from '@embroider/macros';
 
 interface Signature {
   Args: {

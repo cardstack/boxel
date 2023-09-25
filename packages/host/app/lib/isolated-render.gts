@@ -1,12 +1,16 @@
 import { getComponentTemplate } from '@ember/component';
-import { CardError } from '@cardstack/runtime-common/error';
-import { type ComponentLike } from '@glint/template';
-// @ts-expect-error
-import { renderMain, inTransaction } from '@glimmer/runtime';
-// @ts-expect-error
-import { createConstRef } from '@glimmer/reference';
-import type { SimpleElement } from '@simple-dom/interface';
+
 import type Owner from '@ember/owner';
+import { createConstRef } from '@glimmer/reference';
+import { renderMain, inTransaction } from '@glimmer/runtime';
+
+import { type ComponentLike } from '@glint/template';
+
+import { CardError } from '@cardstack/runtime-common/error';
+// @ts-expect-error
+// @ts-expect-error
+
+import type { SimpleElement } from '@simple-dom/interface';
 
 export function render(
   C: ComponentLike,

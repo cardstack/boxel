@@ -1,24 +1,3 @@
-import { module, test, skip } from 'qunit';
-import GlimmerComponent from '@glimmer/component';
-import { setupRenderingTest } from 'ember-qunit';
-import { baseRealm, cardTypeDisplayName } from '@cardstack/runtime-common';
-import { Realm } from '@cardstack/runtime-common/realm';
-import { Loader } from '@cardstack/runtime-common/loader';
-import OperatorMode from '@cardstack/host/components/operator-mode/container';
-import CardPrerender from '@cardstack/host/components/card-prerender';
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import { renderComponent } from '../../helpers/render-component';
-import {
-  testRealmURL,
-  setupCardLogs,
-  setupLocalIndexing,
-  setupServerSentEvents,
-  setupOnSave,
-  TestRealmAdapter,
-  TestRealm,
-  type TestContextWithSave,
-} from '../../helpers';
-import { MockMatrixService } from '../../helpers/mock-matrix-service';
 import {
   waitFor,
   waitUntil,
@@ -30,10 +9,39 @@ import {
   triggerKeyEvent,
   typeIn,
 } from '@ember/test-helpers';
-import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import GlimmerComponent from '@glimmer/component';
+
 import percySnapshot from '@percy/ember';
+import { setupRenderingTest } from 'ember-qunit';
+import { module, test, skip } from 'qunit';
+
+import { baseRealm, cardTypeDisplayName } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
+import { Realm } from '@cardstack/runtime-common/realm';
+
+import CardPrerender from '@cardstack/host/components/card-prerender';
+import OperatorMode from '@cardstack/host/components/operator-mode/container';
+
+import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
+
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
+import { CardDef } from 'https://cardstack.com/base/card-api';
+
+import {
+  testRealmURL,
+  setupCardLogs,
+  setupLocalIndexing,
+  setupServerSentEvents,
+  setupOnSave,
+  TestRealmAdapter,
+  TestRealm,
+  type TestContextWithSave,
+} from '../../helpers';
+import { MockMatrixService } from '../../helpers/mock-matrix-service';
+import { renderComponent } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 const realmName = 'Operator Mode Workspace';

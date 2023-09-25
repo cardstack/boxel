@@ -1,19 +1,24 @@
 import debounce from 'lodash/debounce';
 import { type MatrixEvent } from 'matrix-js-sdk';
+
+import {
+  type LooseSingleCardDocument,
+  type MatrixCardError,
+  isMatrixCardError,
+} from '@cardstack/runtime-common';
+
+import { type MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
+
+import { type RoomObjectiveField } from 'https://cardstack.com/base/room-objective';
+
+import { eventDebounceMs } from '../matrix-utils';
+
 import {
   type Context,
   type Event,
   addRoomEvent,
   recomputeRoomObjective,
 } from './index';
-import { eventDebounceMs } from '../matrix-utils';
-import { type MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
-import { type RoomObjectiveField } from 'https://cardstack.com/base/room-objective';
-import {
-  type LooseSingleCardDocument,
-  type MatrixCardError,
-  isMatrixCardError,
-} from '@cardstack/runtime-common';
 
 export function onTimeline(context: Context) {
   return (e: MatrixEvent) => {

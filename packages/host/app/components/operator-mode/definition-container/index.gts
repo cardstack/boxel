@@ -1,4 +1,5 @@
 import Component from '@glimmer/component';
+
 import { BaseDefinitionContainer, BaseArgs, Active, ActiveArgs } from './base';
 import { Clickable, ClickableArgs } from './clickable';
 

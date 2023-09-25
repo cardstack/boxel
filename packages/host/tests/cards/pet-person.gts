@@ -1,3 +1,5 @@
+import { GridContainer } from '@cardstack/boxel-ui';
+
 import {
   contains,
   linksTo,
@@ -7,9 +9,9 @@ import {
   CardDef,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
-import { Pet } from './pet';
+
 import { Person } from './person';
-import { GridContainer } from '@cardstack/boxel-ui';
+import { Pet } from './pet';
 
 export class PetPerson extends CardDef {
   static displayName = 'Pet Person';

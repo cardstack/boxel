@@ -1,9 +1,12 @@
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { service } from '@ember/service';
 import { use, resource } from 'ember-resources';
-import { type RealmInfo } from '@cardstack/runtime-common';
+
 import { TrackedObject } from 'tracked-built-ins';
+
+import { type RealmInfo } from '@cardstack/runtime-common';
+
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 
 export interface Signature {

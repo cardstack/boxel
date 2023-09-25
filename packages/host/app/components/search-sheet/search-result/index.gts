@@ -1,11 +1,17 @@
-import Component from '@glimmer/component';
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import { cardTypeDisplayName } from '@cardstack/runtime-common';
-import { CardContainer } from '@cardstack/boxel-ui';
-import { trackedFunction } from 'ember-resources/util/function';
-import type CardService from '../../../services/card-service';
 import { service } from '@ember/service';
+import Component from '@glimmer/component';
+
+import { trackedFunction } from 'ember-resources/util/function';
+
+import { CardContainer } from '@cardstack/boxel-ui';
+
 import cn from '@cardstack/boxel-ui/helpers/cn';
+
+import { cardTypeDisplayName } from '@cardstack/runtime-common';
+
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+
+import type CardService from '../../../services/card-service';
 
 interface Signature {
   Element: HTMLElement;

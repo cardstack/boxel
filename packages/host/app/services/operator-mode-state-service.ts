@@ -1,24 +1,32 @@
+import { getOwner } from '@ember/application';
+import { registerDestructor } from '@ember/destroyable';
+import type RouterService from '@ember/routing/router-service';
+import { scheduleOnce } from '@ember/runloop';
+import Service, { service } from '@ember/service';
+
+import { tracked } from '@glimmer/tracking';
+import { TrackedArray, TrackedObject } from 'tracked-built-ins';
+import type MessageService from '@cardstack/host/services/message-service';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+
+import { task } from 'ember-concurrency';
+
+import stringify from 'safe-stable-stringify';
+
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+
+import { Submode } from '@cardstack/host/components/submode-switcher';
+
+import { RealmPaths } from '@cardstack/runtime-common/paths';
+
+import window from 'ember-window-mock';
+
 import {
   type Stack,
   type StackItem,
 } from '../components/operator-mode/container';
-import Service from '@ember/service';
+
 import type CardService from '../services/card-service';
-import { TrackedArray, TrackedObject } from 'tracked-built-ins';
-import type MessageService from '@cardstack/host/services/message-service';
-import type RecentFilesService from '@cardstack/host/services/recent-files-service';
-import { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
-import { task } from 'ember-concurrency';
-import { getOwner } from '@ember/application';
-import { scheduleOnce } from '@ember/runloop';
-import stringify from 'safe-stable-stringify';
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import { Submode } from '@cardstack/host/components/submode-switcher';
-import { registerDestructor } from '@ember/destroyable';
-import { RealmPaths } from '@cardstack/runtime-common/paths';
-import window from 'ember-window-mock';
-import type RouterService from '@ember/routing/router-service';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).

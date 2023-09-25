@@ -1,4 +1,5 @@
 import { helper } from '@ember/component/helper';
+
 import { titleize } from '../utils/titleize';
 
 export default helper(function formatComponentName([componentPath]: [

@@ -1,21 +1,26 @@
-import Component from '@glimmer/component';
-import { didCancel, enqueueTask, dropTask } from 'ember-concurrency';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
-import { CurrentRun } from '../lib/current-run';
-import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
-import { getModulesInRealm } from '../lib/utils';
+import Component from '@glimmer/component';
+
+import { didCancel, enqueueTask, dropTask } from 'ember-concurrency';
+
 import { hasExecutableExtension, baseRealm } from '@cardstack/runtime-common';
+import type { LocalPath } from '@cardstack/runtime-common/paths';
 import {
   type EntrySetter,
   type Reader,
   type RunState,
   type RunnerOpts,
 } from '@cardstack/runtime-common/search-index';
-import type RenderService from '../services/render-service';
+import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
+
+import { CurrentRun } from '../lib/current-run';
+
+import { getModulesInRealm } from '../lib/utils';
+
 import type LoaderService from '../services/loader-service';
 import type LocalIndexer from '../services/local-indexer';
-import type { LocalPath } from '@cardstack/runtime-common/paths';
-import type Owner from '@ember/owner';
+import type RenderService from '../services/render-service';
 
 // This component is used in a node/Fastboot context to perform
 // server-side rendering for indexing as well as by the TestRealm

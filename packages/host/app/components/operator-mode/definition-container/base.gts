@@ -1,8 +1,11 @@
-import Label from '@cardstack/boxel-ui/components/label';
-import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import Component from '@glimmer/component';
+
 import { Button } from '@cardstack/boxel-ui';
+import Label from '@cardstack/boxel-ui/components/label';
+
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+
 import { type RealmInfo } from '@cardstack/runtime-common';
 
 interface Action {

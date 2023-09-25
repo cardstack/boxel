@@ -1,30 +1,17 @@
-import Component from '@glimmer/component';
-import {
-  chooseCard,
-  catalogEntryRef,
-  identifyCard,
-  internalKeyFor,
-  moduleFrom,
-} from '@cardstack/runtime-common';
-import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
-import { getCardType, type Type } from '@cardstack/host/resources/card-type';
-import { action } from '@ember/object';
-import { service } from '@ember/service';
 import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
-import { eq } from '@cardstack/host/helpers/truth-helpers';
-import { RealmPaths } from '@cardstack/runtime-common/paths';
+
 //@ts-ignore cached not available yet in definitely typed
-import { cached, tracked } from '@glimmer/tracking';
 //@ts-ignore glint does not think this is consumed-but it is consumed in the template
 import { hash } from '@ember/helper';
-import CatalogEntryEditor from './catalog-entry-editor';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import { service } from '@ember/service';
+import Component from '@glimmer/component';
+import { cached, tracked } from '@glimmer/tracking';
+
 import { restartableTask } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import type CardService from '@cardstack/host/services/card-service';
-import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
-import type { Ready } from '@cardstack/host/resources/file';
+
 import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import type { BaseDef, FieldType } from 'https://cardstack.com/base/card-api';
 import {
@@ -34,7 +21,27 @@ import {
   FieldContainer,
   Label,
 } from '@cardstack/boxel-ui';
+import {
+  chooseCard,
+  catalogEntryRef,
+  identifyCard,
+  internalKeyFor,
+  moduleFrom,
+} from '@cardstack/runtime-common';
+import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
+import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
+import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type { Filter } from '@cardstack/runtime-common/query';
+
+import { eq } from '@cardstack/host/helpers/truth-helpers';
+
+import { getCardType, type Type } from '@cardstack/host/resources/card-type';
+import type { Ready } from '@cardstack/host/resources/file';
+import type CardService from '@cardstack/host/services/card-service';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
+
+import CatalogEntryEditor from './catalog-entry-editor';
 
 interface Signature {
   Args: {

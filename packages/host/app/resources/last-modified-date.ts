@@ -1,8 +1,10 @@
-import { Resource } from 'ember-resources';
-import { tracked } from '@glimmer/tracking';
-import { formatDistanceToNow, parse } from 'date-fns';
-import { Ready as ReadyFile } from '@cardstack/host/resources/file';
 import { registerDestructor } from '@ember/destroyable';
+import { tracked } from '@glimmer/tracking';
+
+import { formatDistanceToNow, parse } from 'date-fns';
+import { Resource } from 'ember-resources';
+
+import { Ready as ReadyFile } from '@cardstack/host/resources/file';
 
 interface Args {
   named: { file: ReadyFile };

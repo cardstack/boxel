@@ -1,12 +1,16 @@
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
+
 import { BoxelInput } from '@cardstack/boxel-ui';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { service } from '@ember/service';
+
 import { type RealmInfo } from '@cardstack/runtime-common';
-import type OperatorModeStateService from '../../services/operator-mode-state-service';
+
 import URLBarResource, {
   urlBarResource,
 } from '@cardstack/host/resources/url-bar';
+
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 interface Signature {
   Element: HTMLElement;
