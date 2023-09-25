@@ -1,17 +1,21 @@
-import Component from '@glimmer/component';
-import { service } from '@ember/service';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
-import { fn } from '@ember/helper';
+import { service } from '@ember/service';
+import Component from '@glimmer/component';
+
+import { task } from 'ember-concurrency';
+
+import { BoxelButton } from '@cardstack/boxel-ui';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { eq, gt, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { task } from 'ember-concurrency';
-import { BoxelButton } from '@cardstack/boxel-ui';
-import type OperatorModeStateService from '../../services/operator-mode-state-service';
+
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+
+import type { StackItem } from './container';
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
-import type { StackItem } from './container';
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 interface Signature {
   Args: {

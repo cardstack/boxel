@@ -1,15 +1,22 @@
-import { ImportResource } from './import';
-import { Resource } from 'ember-resources';
-import { tracked } from '@glimmer/tracking';
-import { Loader } from '@cardstack/runtime-common/loader';
 import { getOwner } from '@ember/application';
-import type LoaderService from '../services/loader-service';
+
 import { service } from '@ember/service';
-import { type BaseDef } from 'https://cardstack.com/base/card-api';
+import { tracked } from '@glimmer/tracking';
+
+import { Resource } from 'ember-resources';
+
+import { Loader } from '@cardstack/runtime-common/loader';
+
 import {
   getCardType,
   type CardType,
 } from '@cardstack/host/resources/card-type';
+
+import { type BaseDef } from 'https://cardstack.com/base/card-api';
+
+import { ImportResource } from './import';
+
+import type LoaderService from '../services/loader-service';
 
 interface AdoptionChainResourceArgs {
   named: { module: ImportResource | undefined; loader: Loader };

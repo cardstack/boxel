@@ -1,6 +1,6 @@
-import Component from '@glimmer/component';
-import { action } from '@ember/object';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import Component from '@glimmer/component';
 
 export interface ClickableArgs {
   onSelectDefinition?: (newUrl: URL | undefined) => void;

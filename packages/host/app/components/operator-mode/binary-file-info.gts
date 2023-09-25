@@ -1,7 +1,10 @@
 import Component from '@glimmer/component';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { filesize } from 'filesize';
+
 import { format } from 'date-fns';
+import { filesize } from 'filesize';
+
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+
 import { type Ready } from '@cardstack/host/resources/file';
 
 interface Signature {

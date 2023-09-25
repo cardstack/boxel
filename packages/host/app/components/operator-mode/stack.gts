@@ -1,11 +1,16 @@
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
+
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import { htmlSafe } from '@ember/template';
-import OperatorModeStackItem from './stack-item';
+
 import type { Actions } from '@cardstack/runtime-common';
-import type { StackItem } from './container';
+
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+
+import OperatorModeStackItem from './stack-item';
+
+import type { StackItem } from './container';
 
 interface Signature {
   Element: HTMLElement;

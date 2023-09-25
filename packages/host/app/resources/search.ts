@@ -1,14 +1,21 @@
-import { Resource } from 'ember-resources';
-import { restartableTask } from 'ember-concurrency';
-import { tracked } from '@glimmer/tracking';
-import { baseRealm } from '@cardstack/runtime-common';
 import { service } from '@ember/service';
+import { tracked } from '@glimmer/tracking';
+
+import { restartableTask } from 'ember-concurrency';
+import { Resource } from 'ember-resources';
 import flatMap from 'lodash/flatMap';
-import ENV from '@cardstack/host/config/environment';
-import type CardService from '../services/card-service';
+
+import { baseRealm } from '@cardstack/runtime-common';
+
 import type { Query } from '@cardstack/runtime-common/query';
+
+import ENV from '@cardstack/host/config/environment';
+
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+
 import { type RealmCards } from '../components/card-catalog/modal';
+
+import type CardService from '../services/card-service';
 
 interface Args {
   named: {

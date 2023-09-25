@@ -1,4 +1,5 @@
 import ApplicationInstance from '@ember/application/instance';
+
 import config from '@cardstack/host/config/environment';
 
 export function initialize(appInstance: ApplicationInstance): void {

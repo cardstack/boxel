@@ -1,16 +1,23 @@
-import { Resource } from 'ember-resources';
-import { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
-import { restartableTask } from 'ember-concurrency';
 import { registerDestructor } from '@ember/destroyable';
-import { SupportedMimeType, logger } from '@cardstack/runtime-common';
-import LoaderService from '../services/loader-service';
-import type MessageService from '../services/message-service';
-import type CardService from '@cardstack/host/services/card-service';
-import type RecentFilesService from '@cardstack/host/services/recent-files-service';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import { service } from '@ember/service';
+
+import { tracked } from '@glimmer/tracking';
+
 import { parse } from 'date-fns';
+import { restartableTask } from 'ember-concurrency';
+import { Resource } from 'ember-resources';
+
+import { SupportedMimeType, logger } from '@cardstack/runtime-common';
+
 import config from '@cardstack/host/config/environment';
+import type CardService from '@cardstack/host/services/card-service';
+
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+
+import LoaderService from '../services/loader-service';
+
+import type MessageService from '../services/message-service';
 
 const log = logger('resource:file');
 const utf8 = new TextDecoder();

@@ -1,19 +1,26 @@
-import Component from '@glimmer/component';
 import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { trackedFunction } from 'ember-resources/util/function';
+
 import { service } from '@ember/service';
+import Component from '@glimmer/component';
+
+import { trackedFunction } from 'ember-resources/util/function';
+
+import { BoxelDropdown, IconButton, Menu } from '@cardstack/boxel-ui';
+import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
+import { cardTypeDisplayName } from '@cardstack/runtime-common';
+
 import CardService from '@cardstack/host/services/card-service';
+
 import type {
   CardDef,
   Format,
   FieldType,
 } from 'https://cardstack.com/base/card-api';
-import { cardTypeDisplayName } from '@cardstack/runtime-common';
-import { BoxelDropdown, IconButton, Menu } from '@cardstack/boxel-ui';
-import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
 import { type RenderedCardForOverlayActions } from './stack-item';
 
 interface Signature {

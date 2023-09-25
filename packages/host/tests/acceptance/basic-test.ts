@@ -1,4 +1,3 @@
-import { module, skip, test } from 'qunit';
 import {
   find,
   visit,
@@ -8,8 +7,21 @@ import {
   fillIn,
   waitUntil,
 } from '@ember/test-helpers';
+
+import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
+import window from 'ember-window-mock';
+import { setupWindowMock } from 'ember-window-mock/test-support';
+import { module, skip, test } from 'qunit';
+
 import { baseRealm } from '@cardstack/runtime-common';
+
+import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
+
+import { Realm } from '@cardstack/runtime-common/realm';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
+
 import {
   TestRealm,
   TestRealmAdapter,
@@ -20,12 +32,6 @@ import {
   waitForSyntaxHighlighting,
   type TestContextWithSSE,
 } from '../helpers';
-import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
-import { Realm } from '@cardstack/runtime-common/realm';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import percySnapshot from '@percy/ember';
-import { setupWindowMock } from 'ember-window-mock/test-support';
-import window from 'ember-window-mock';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
