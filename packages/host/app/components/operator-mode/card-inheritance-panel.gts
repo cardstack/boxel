@@ -28,6 +28,7 @@ import { CardContainer } from '@cardstack/boxel-ui';
 import { LoadingIndicator } from '@cardstack/boxel-ui';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import Label from '@cardstack/boxel-ui/components/label';
+import { not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 interface Signature {
   Element: HTMLElement;
@@ -108,30 +109,32 @@ export default class CardInheritancePanel extends Component<Signature> {
           <LoadingIndicator />
         </div>
       {{else}}
-        <div>
-          <div class='panel-header'>
-            <header
-              class='inner-container__header'
-              aria-label='In This File Header'
-            >
-              In This File
-            </header>
-            <span class='number-items'>{{this.numberOfElementsInFileString}}
-            </span>
+        {{#if (not this.isCardInstance)}}
+          <div>
+            <div class='panel-header'>
+              <header
+                class='inner-container__header'
+                aria-label='In This File Header'
+              >
+                In This File
+              </header>
+              <span class='number-items'>{{this.numberOfElementsInFileString}}
+              </span>
+            </div>
+            <div class='in-this-file-panel'>
+              <CardContainer>
+                <div class='banner'>
+                  <Label class='banner-title'>
+                    {{@readyFile.name}}</Label>
+                </div>
+                <BoxelMenu
+                  @class='in-this-file-menu'
+                  @items={{this.buildMenuItems}}
+                />
+              </CardContainer>
+            </div>
           </div>
-          <div class='in-this-file-panel'>
-            <CardContainer>
-              <div class='banner'>
-                <Label class='banner-title'>
-                  {{@readyFile.name}}</Label>
-              </div>
-              <BoxelMenu
-                @class='in-this-file-menu'
-                @items={{this.buildMenuItems}}
-              />
-            </CardContainer>
-          </div>
-        </div>
+        {{/if}}
         <div>
           <header
             class='inner-container__header'
