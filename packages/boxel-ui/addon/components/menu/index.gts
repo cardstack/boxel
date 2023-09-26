@@ -144,7 +144,6 @@ export default class Menu extends Component<Signature> {
           --boxel-menu-font: 500 var(--boxel-font-sm);
           --boxel-menu-item-gap: var(--boxel-sp-xxs);
           --boxel-menu-item-content-padding: var(--boxel-sp-xs) var(--boxel-sp);
-          --boxel-menu-item-border-radius: var(--boxel-border-radius);
           list-style-type: none;
           margin: 0;
           padding: 0;
