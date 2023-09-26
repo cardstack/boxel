@@ -26,7 +26,7 @@ runs:
     - if: ${{ steps.cache-volta.outputs.cache-hit == 'true' }}
       shell: bash
       run: |
-        echo "Hooray, the cache worked!"
+        echo "Hooray, the cache worked! New test!"
 
     - name: Run volta setup
       uses: volta-cli/action@v4
