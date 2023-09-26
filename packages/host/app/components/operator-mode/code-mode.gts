@@ -62,7 +62,6 @@ import {
 import { importResource } from '@cardstack/host/resources/import';
 
 import { maybe } from '@cardstack/host/resources/maybe';
-import { adoptionChainManager } from '@cardstack/host/resources/adoption-chain-manager';
 
 import type CardService from '@cardstack/host/services/card-service';
 
@@ -318,7 +317,6 @@ export default class CodeMode extends Component<Signature> {
   @use private elements = resource(({ on }) => {
     on.cleanup(() => {
       this.selectedElement = undefined;
-      this.selectedElement = undefined;
     });
     if (!this.importedModule) {
       return new TrackedObject({
@@ -404,14 +402,6 @@ export default class CodeMode extends Component<Signature> {
       }
     }
     return undefined;
-  });
-
-  @use adoptionChainManager = resource(() => {
-    if (this.importedModule) {
-      return adoptionChainManager(this, this.importedModule);
-    } else {
-      return undefined;
-    }
   });
 
   private maybeReloadCard = restartableTask(async (id: string) => {
