@@ -37,8 +37,12 @@ export default class OperatorModeOverlays extends Component<Signature> {
     );
   }
 
-  isPillDisplay(renderedCard: RenderedCardForOverlayActions) {
-    return renderedCard.element.classList.contains('boxel-pill');
+  @action
+  isIncludeHeader(renderedCard: RenderedCardForOverlayActions) {
+    return (
+      this.isEmbeddedCard(renderedCard) &&
+      !renderedCard.element.classList.contains('boxel-pill')
+    );
   }
 
   <template>
@@ -58,12 +62,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
           data-test-overlay-card={{card.id}}
           data-test-overlay-card-display-name={{cardTypeDisplayName card}}
         >
-          {{#if
-            (and
-              (this.isEmbeddedCard renderedCard)
-              (not (this.isPillDisplay renderedCard))
-            )
-          }}
+          {{#if (this.isIncludeHeader renderedCard)}}
             <OperatorModeOverlayItemHeader
               @item={{renderedCard}}
               @openOrSelectCard={{this.openOrSelectCard}}
