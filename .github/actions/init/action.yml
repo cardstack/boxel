@@ -8,7 +8,28 @@ runs:
       run: |
         echo "VOLTA_FEATURE_PNPM=1" >> $GITHUB_ENV
 
-    - uses: volta-cli/action@v4
+    - name: Cache volta tools
+      id: cache-volta
+      uses: actions/cache@v3
+      env:
+        cache-name: cache-volta-tools
+      with:
+        # volta tools are stored in `~/.volta` on Linux/macOS
+        path: ~/.volta
+        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('package.json') }}
+
+    - if: ${{ steps.cache-volta.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: |
+        echo "Cache miss!"
+
+    - if: ${{ steps.cache-volta.outputs.cache-hit == 'true' }}
+      shell: bash
+      run: |
+        echo "Hooray, the cache worked!"
+
+    - name: Run volta setup
+      uses: volta-cli/action@v4
 
     - name: Get pnpm store directory
       id: pnpm-cache
