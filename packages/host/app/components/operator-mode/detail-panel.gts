@@ -31,6 +31,7 @@ import { MenuItem, menuItemFunc } from '@cardstack/boxel-ui/helpers/menu-item';
 import { CardContainer, LoadingIndicator } from '@cardstack/boxel-ui';
 import Label from '@cardstack/boxel-ui/components/label';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import { not, or } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 interface Signature {
   Element: HTMLElement;
@@ -123,7 +124,7 @@ export default class DetailPanel extends Component<Signature> {
         </div>
       {{else}}
         {{#if this.isModule}}
-          <div>
+          <div class='in-this-file-panel'>
             <div class='in-this-file-panel-banner'>
               <header class='panel-header' aria-label='In This File Header'>
                 In This File
@@ -131,27 +132,25 @@ export default class DetailPanel extends Component<Signature> {
               <span class='number-items'>{{this.numberOfElementsInFileString}}
               </span>
             </div>
-            <div class='in-this-file-panel'>
-              <CardContainer>
-                <div class='banner'>
-                  <Label class='banner-title'>
-                    {{@readyFile.name}}</Label>
-                </div>
-                <BoxelMenu
-                  @class='in-this-file-menu'
-                  @items={{this.buildMenuItems}}
-                  @itemClass='in-this-file-menu-item'
-                />
-              </CardContainer>
-            </div>
+            <CardContainer>
+              <div class='banner'>
+                <Label class='banner-title'>
+                  {{@readyFile.name}}</Label>
+              </div>
+              <BoxelMenu
+                @class='in-this-file-menu'
+                @items={{this.buildMenuItems}}
+                @itemClass='in-this-file-menu-item'
+              />
+            </CardContainer>
           </div>
         {{/if}}
-        <div>
-          <header class='panel-header' aria-label='Inheritance Panel Header'>
-            Inheritance Panel
-          </header>
 
+        {{#if (or this.isCardInstance this.isModule)}}
           <div class='inheritance-panel'>
+            <header class='panel-header' aria-label='Inheritance Panel Header'>
+              Inheritance Panel
+            </header>
             {{#if this.isCardInstance}}
               {{! JSON case when visting, eg Author/1.json }}
               <InstanceDefinitionContainer
@@ -211,18 +210,25 @@ export default class DetailPanel extends Component<Signature> {
                   @url={{this.cardType.type.super.module}}
                 />
               {{/if}}
-            {{else if this.isBinary}}
-              <FileDefinitionContainer
-                @fileURL={{@readyFile.url}}
-                @fileExtension={{this.fileExtension}}
-                @infoText={{this.lastModified.value}}
-                @actions={{array
-                  (hash label='Delete' handler=@delete icon='icon-trash')
-                }}
-              />
             {{/if}}
           </div>
-        </div>
+        {{/if}}
+
+        {{#if this.isBinary}}
+          <div class='details-panel'>
+            <header class='panel-header' aria-label='Details Panel Header'>
+              Details
+            </header>
+            <FileDefinitionContainer
+              @fileURL={{@readyFile.url}}
+              @fileExtension={{this.fileExtension}}
+              @infoText={{this.lastModified.value}}
+              @actions={{array
+                (hash label='Delete' handler=@delete icon='icon-trash')
+              }}
+            />
+          </div>
+        {{/if}}
       {{/if}}
     </div>
     <style>
@@ -251,9 +257,8 @@ export default class DetailPanel extends Component<Signature> {
       .selected {
         outline: 2px solid var(--boxel-highlight);
       }
-      .in-this-file-panel {
-        padding: var(--boxel-sp-sm);
-      }
+      .in-this-file-panel,
+      .details-panel,
       .inheritance-panel {
         padding: var(--boxel-sp-sm);
         gap: var(--boxel-sp-xs);
