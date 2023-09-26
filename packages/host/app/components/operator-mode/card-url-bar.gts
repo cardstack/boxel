@@ -89,14 +89,13 @@ export default class CardURLBar extends Component<Signature> {
         align-items: center;
         background-color: var(--boxel-light);
         background-image: var(--card-url-bar-realm-icon);
-        height: 100%;
 
         border: 1px solid var(--boxel-light);
         border-radius: 4px;
-        width: 20px;
       }
       .realm-icon img {
-        width: 100%;
+        width: 20px;
+        height: 20px;
       }
       .input {
         display: flex;
