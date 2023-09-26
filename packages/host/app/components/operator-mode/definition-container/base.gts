@@ -6,7 +6,7 @@ import Label from '@cardstack/boxel-ui/components/label';
 
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
-import { type RealmInfo } from '@cardstack/runtime-common';
+import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 
 interface Action {
   label: string;
@@ -16,10 +16,9 @@ interface Action {
 export interface BaseArgs {
   title: string | undefined;
   name: string | undefined;
-  fileExtension: string;
-  realmInfo: RealmInfo | null;
-  realmIconURL: string | null | undefined;
+  fileExtension: string | undefined;
   isActive: boolean;
+  fileURL?: string;
 }
 
 interface BaseSignature {
@@ -31,10 +30,6 @@ interface BaseSignature {
 }
 
 export class BaseDefinitionContainer extends Component<BaseSignature> {
-  get realmName(): string | undefined {
-    return this.args.realmInfo?.name;
-  }
-
   <template>
     <div class='container {{if @isActive "active"}}' ...attributes>
       <div class='banner'>
@@ -47,12 +42,21 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
       </div>
       <div class='content'>
         <div class='definition-info'>
-          <div class='realm-info'>
-            <img src={{@realmIconURL}} alt='realm-icon' />
-            <Label class='realm-name' data-test-definition-realm-name>in
-              {{this.realmName}}</Label>
-          </div>
+          <RealmInfoProvider @fileURL={{@fileURL}}>
+            <:ready as |realmInfo|>
+              <div class='realm-info'>
+                <img
+                  src={{realmInfo.iconURL}}
+                  alt='realm-icon'
+                  data-test-realm-icon-url={{realmInfo.iconURL}}
+                />
+                <Label class='realm-name' data-test-definition-realm-name>in
+                  {{realmInfo.name}}</Label>
+              </div>
+            </:ready>
+          </RealmInfoProvider>
           <div data-test-definition-name class='definition-name'>{{@name}}</div>
+
         </div>
         {{#if @isActive}}
           {{yield to='activeContent'}}
@@ -60,7 +64,6 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
       </div>
 
     </div>
-
     <style>
       .container {
         background-color: var(--boxel-light);

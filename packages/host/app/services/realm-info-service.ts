@@ -4,7 +4,7 @@ import { RealmInfo, SupportedMimeType } from '@cardstack/runtime-common';
 
 import LoaderService from '@cardstack/host/services/loader-service';
 
-export default class RecentFilesService extends Service {
+export default class RealmInfoService extends Service {
   @service declare loaderService: LoaderService;
   cachedRealmURLsForFileURL: Map<string, string> = new Map(); // Has the file url already been resolved to a realm url?
   cachedRealmInfos: Map<string, RealmInfo> = new Map(); // Has the realm url already been resolved to a realm info?
@@ -14,7 +14,9 @@ export default class RecentFilesService extends Service {
       return this.cachedRealmURLsForFileURL.get(fileURL)!;
     }
 
-    let response = await this.loaderService.loader.fetch(fileURL);
+    let response = await this.loaderService.loader.fetch(fileURL, {
+      headers: { Accept: SupportedMimeType.CardSource },
+    });
     let realmURL = response.headers.get('x-boxel-realm-url');
 
     if (!realmURL) {

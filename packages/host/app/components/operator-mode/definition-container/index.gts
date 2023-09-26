@@ -18,9 +18,8 @@ export class FileDefinitionContainer extends Component<FileSignature> {
       @title='File'
       @name={{undefined}}
       @fileExtension={{@fileExtension}}
-      @realmInfo={{@realmInfo}}
-      @realmIconURL={{@realmIconURL}}
       @isActive={{true}}
+      @fileURL={{@fileURL}}
       data-test-file-definition
     >
       <:activeContent>
@@ -42,9 +41,8 @@ export class ModuleDefinitionContainer extends Component<ModuleSignature> {
       @title='Card Definition'
       @name={{@name}}
       @fileExtension={{@fileExtension}}
-      @realmInfo={{@realmInfo}}
-      @realmIconURL={{@realmIconURL}}
       @isActive={{@isActive}}
+      @fileURL={{@fileURL}}
       data-test-card-module-definition
     >
       <:activeContent>
@@ -69,9 +67,8 @@ export class InstanceDefinitionContainer extends Component<InstanceSignature> {
       @title='Card Instance'
       @fileExtension={{@fileExtension}}
       @name={{@name}}
-      @realmInfo={{@realmInfo}}
-      @realmIconURL={{@realmIconURL}}
       @isActive={{true}}
+      @fileURL={{@fileURL}}
       data-test-card-instance-definition
     >
       <:activeContent>
@@ -101,9 +98,8 @@ export class ClickableModuleDefinitionContainer extends Component<ClickableModul
         @title='Card Definition'
         @name={{@name}}
         @fileExtension={{@fileExtension}}
-        @realmInfo={{@realmInfo}}
-        @realmIconURL={{@realmIconURL}}
         @isActive={{false}}
+        @fileURL={{@fileURL}}
         data-test-card-module-definition
       />
     </Clickable>

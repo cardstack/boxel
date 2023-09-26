@@ -4,11 +4,11 @@ description: Setup common dependencies
 runs:
   using: composite
   steps:
-    - shell: bash
-      run: |
-        echo "VOLTA_FEATURE_PNPM=1" >> $GITHUB_ENV
+    - uses: actions/setup-node@v3
+      with:
+        node-version-file: "package.json"
 
-    - uses: volta-cli/action@v4
+    - uses: cardstack/gh-actions/setup-pnpm-volta@main
 
     - name: Get pnpm store directory
       id: pnpm-cache

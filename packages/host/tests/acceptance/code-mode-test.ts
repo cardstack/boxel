@@ -27,6 +27,8 @@ import {
   setupLocalIndexing,
   setupMockMessageService,
   testRealmURL,
+  sourceFetchRedirectHandle,
+  sourceFetchReturnUrlHandle,
 } from '../helpers';
 
 const indexCardSource = `
@@ -176,6 +178,14 @@ module('Acceptance | code mode tests', function (hooks) {
 
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
       isAcceptanceTest: true,
+      overridingHandlers: [
+        async (req: Request) => {
+          return sourceFetchRedirectHandle(req, adapter, testRealmURL);
+        },
+        async (req: Request) => {
+          return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
+        },
+      ],
     });
     await realm.ready;
   });
@@ -643,12 +653,11 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-card-instance-definition]');
 
     assert.dom('[data-test-card-module-definition]').includesText('Card');
-    //TODO: CS-5957 deriving extension
-    // assert
-    //   .dom(
-    //     '[data-test-card-module-definition] [data-test-definition-file-extension]',
-    //   )
-    //   .includesText('.gts');
+    assert
+      .dom(
+        '[data-test-card-module-definition] [data-test-definition-file-extension]',
+      )
+      .includesText('.gts');
     assert
       .dom(
         '[data-test-card-module-definition] [data-test-definition-realm-name]',
@@ -940,9 +949,10 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-file-definition]');
 
     assert.dom('[data-test-definition-file-extension]').hasText('.png');
+    await waitFor('[data-test-definition-realm-name]');
     assert
       .dom('[data-test-definition-realm-name]')
-      .hasText('in Test Workspace B');
+      .hasText('in Test Workspace A');
     assert.dom('[data-test-definition-info-text]').containsText('Last saved');
     assert
       .dom('[data-test-binary-info] [data-test-file-name]')
