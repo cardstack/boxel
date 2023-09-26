@@ -85,11 +85,11 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
           {{getPlural @field.card.displayName}}
         </AddButton>
       {{else}}
-        <div class='pills'>
+        <div class='boxel-pills'>
           {{#each @arrayField.children as |boxedElement i|}}
-            <div class='pill-container'>
+            <div class='boxel-pills-container'>
               <div
-                class='pill'
+                class='boxel-pill'
                 data-test-pill-item={{i}}
                 {{@context.cardComponentModifier
                   card=boxedElement.value
@@ -102,10 +102,10 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
               </div>
               <IconButton
                 @variant='primary'
-                @icon='icon-minus-circle'
+                @icon='icon-x'
                 @width='14px'
                 @height='14px'
-                class='remove-pill'
+                class='remove-item-button'
                 {{on 'click' (fn this.remove i)}}
                 aria-label='Remove'
                 data-test-remove-card
@@ -155,7 +155,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         --icon-bg: var(--boxel-dark);
         --icon-border: var(--boxel-dark);
       }
-      .pills {
+      .boxel-pills {
         display: flex;
         flex-wrap: wrap;
 
@@ -165,15 +165,16 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         --boxel-add-button-pill-font: var(--boxel-font-xs);
         gap: var(--boxel-sp-xs);
       }
-      .pill-container {
+      .boxel-pills-container {
         position: relative;
       }
-      .pill {
+      .boxel-pill {
         display: flex;
         justify-content: center;
         align-items: center;
         box-sizing: border-box;
-        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xxxs) var(--boxel-sp-lg) var(--boxel-sp-xxxs)
+          var(--boxel-sp-xs);
         background-color: var(--boxel-light);
         border: 1px solid var(--boxel-form-control-border-color);
         border-radius: var(--boxel-form-control-border-radius);
@@ -181,13 +182,13 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         font: 700 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-xs);
       }
-      .remove-pill {
+      .remove-item-button {
         position: absolute;
-        right: calc(var(--boxel-sp-xs) * -1);
-        top: calc(var(--boxel-sp-xxxs) * -1);
-        width: 24px;
+        right: var(--boxel-sp-xxs);
+        top: var(--boxel-sp-xxxs);
+        width: 14px;
         height: 24px;
-        --icon-color: var(--boxel-light);
+        --icon-color: var(--boxel-dark);
       }
     </style>
   </template>

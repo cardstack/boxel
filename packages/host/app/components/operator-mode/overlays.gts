@@ -38,7 +38,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
   }
 
   isPillDisplay(renderedCard: RenderedCardForOverlayActions) {
-    return renderedCard.element.classList.contains('pill');
+    return renderedCard.element.classList.contains('boxel-pill');
   }
 
   <template>
