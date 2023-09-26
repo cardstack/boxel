@@ -149,7 +149,7 @@ export default class DetailPanel extends Component<Signature> {
         {{#if (or this.isCardInstance this.isModule)}}
           <div class='inheritance-panel'>
             <header class='panel-header' aria-label='Inheritance Panel Header'>
-              Inheritance Panel
+              Card Inheritance
             </header>
             {{#if this.isCardInstance}}
               {{! JSON case when visting, eg Author/1.json }}
@@ -235,7 +235,7 @@ export default class DetailPanel extends Component<Signature> {
       .container {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-xs);
+        gap: var(--boxel-sp-sm);
         height: 100%;
       }
       .in-this-file-panel-banner {
@@ -260,7 +260,6 @@ export default class DetailPanel extends Component<Signature> {
       .in-this-file-panel,
       .details-panel,
       .inheritance-panel {
-        padding: var(--boxel-sp-sm);
         gap: var(--boxel-sp-xs);
         display: flex;
         flex-direction: column;
@@ -301,7 +300,7 @@ export default class DetailPanel extends Component<Signature> {
       }
       .chain {
         display: flex;
-        font-size: var(--boxel-font-size-sm);
+        font-size: var(--boxel-font-size);
         align-items: center;
         gap: var(--boxel-sp-xxxs);
         justify-content: center;

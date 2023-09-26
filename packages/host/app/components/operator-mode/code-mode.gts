@@ -318,6 +318,7 @@ export default class CodeMode extends Component<Signature> {
   @use private elements = resource(({ on }) => {
     on.cleanup(() => {
       this.selectedElement = undefined;
+      this.selectedElement = undefined;
     });
     if (!this.importedModule) {
       return new TrackedObject({
@@ -779,22 +780,20 @@ export default class CodeMode extends Component<Signature> {
               </header>
               <section class='inner-container__content'>
                 {{#if (eq this.fileView 'inheritance')}}
-                  <section class='inner-container__content'>
-                    {{#if this.isReady}}
-                      <DetailPanel
-                        @cardInstance={{this.card}}
-                        @readyFile={{this.readyFile}}
-                        @realmInfo={{this.realmInfo}}
-                        @selectedElement={{this.selectedElementInFile}}
-                        @elements={{this.elementsInFile}}
-                        @selectElement={{this.selectElementInFile}}
-                        @delete={{this.delete}}
-                        data-test-card-inheritance-panel
-                      />
-                    {{else if this.emptyOrNotFound}}
-                      Inspector is not available
-                    {{/if}}
-                  </section>
+                  {{#if this.isReady}}
+                    <DetailPanel
+                      @cardInstance={{this.card}}
+                      @readyFile={{this.readyFile}}
+                      @realmInfo={{this.realmInfo}}
+                      @selectedElement={{this.selectedElementInFile}}
+                      @elements={{this.elementsInFile}}
+                      @selectElement={{this.selectElementInFile}}
+                      @delete={{this.delete}}
+                      data-test-card-inheritance-panel
+                    />
+                  {{else if this.emptyOrNotFound}}
+                    Inspector is not available
+                  {{/if}}
                 {{else}}
                   <FileTree @url={{this.realmURL}} />
                 {{/if}}
