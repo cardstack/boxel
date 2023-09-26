@@ -1,5 +1,4 @@
-import { hash, array, fn } from '@ember/helper';
-import { on } from '@ember/modifier';
+import { hash, array } from '@ember/helper';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 
@@ -29,7 +28,6 @@ import type { ElementInFile } from './code-mode';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import BoxelMenu from '@cardstack/boxel-ui/components/menu';
 import { MenuItem, menuItemFunc } from '@cardstack/boxel-ui/helpers/menu-item';
-import { not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { CardContainer, LoadingIndicator } from '@cardstack/boxel-ui';
 import Label from '@cardstack/boxel-ui/components/label';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
@@ -124,13 +122,10 @@ export default class DetailPanel extends Component<Signature> {
           <LoadingIndicator />
         </div>
       {{else}}
-        {{#if (not this.isCardInstance)}}
+        {{#if this.isModule}}
           <div>
-            <div class='panel-header'>
-              <header
-                class='inner-container__header'
-                aria-label='In This File Header'
-              >
+            <div class='in-this-file-panel-banner'>
+              <header class='panel-header' aria-label='In This File Header'>
                 In This File
               </header>
               <span class='number-items'>{{this.numberOfElementsInFileString}}
@@ -145,16 +140,14 @@ export default class DetailPanel extends Component<Signature> {
                 <BoxelMenu
                   @class='in-this-file-menu'
                   @items={{this.buildMenuItems}}
+                  @itemClass='in-this-file-menu-item'
                 />
               </CardContainer>
             </div>
           </div>
         {{/if}}
         <div>
-          <header
-            class='inner-container__header'
-            aria-label='Inheritance Panel Header'
-          >
+          <header class='panel-header' aria-label='Inheritance Panel Header'>
             Inheritance Panel
           </header>
 
@@ -189,8 +182,6 @@ export default class DetailPanel extends Component<Signature> {
                 @url={{this.cardType.type.module}}
               />
             {{else if this.isModule}}
-              {{! Module case when visting, eg author.gts }}
-
               <ModuleDefinitionContainer
                 @fileURL={{this.cardType.type.module}}
                 @name={{this.cardType.type.displayName}}
@@ -235,20 +226,20 @@ export default class DetailPanel extends Component<Signature> {
       {{/if}}
     </div>
     <style>
-      .inner-container__header {
-        font: 700 var(--boxel-font);
-        letter-spacing: var(--boxel-lsp-xs);
-      }
       .container {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xs);
         height: 100%;
       }
-      .panel-header {
+      .in-this-file-panel-banner {
         display: flex;
         justify-content: space-between;
         align-items: center;
+      }
+      .panel-header {
+        font: 700 var(--boxel-font);
+        letter-spacing: var(--boxel-lsp-xs);
       }
       .number-items {
         color: #919191;
@@ -272,6 +263,15 @@ export default class DetailPanel extends Component<Signature> {
       .in-this-file-menu {
         padding: var(--boxel-sp-xs);
       }
+
+      :global(.in-this-file-menu-item) {
+        --boxel-menu-selected-background-color: var(--boxel-highlight);
+        --boxel-menu-selected-font-color: var(--boxel-light-100);
+      }
+      :global(.in-this-file-menu-item .check-icon) {
+        display: none;
+      }
+
       .banner {
         display: flex;
         justify-content: space-between;
@@ -301,11 +301,8 @@ export default class DetailPanel extends Component<Signature> {
         gap: var(--boxel-sp-xxxs);
         justify-content: center;
       }
-
       .chain-icon {
         --icon-color: var(--boxel-dark);
-        --icon-bg: var(--boxel-dark);
-        --icon-border: var(--boxel-dark);
       }
     </style>
   </template>
