@@ -55,10 +55,12 @@ import {
   type FileResource,
 } from '@cardstack/host/resources/file';
 
-import { importResource } from '@cardstack/host/resources/import';
+import {
+  importResource,
+  type ImportResource,
+} from '@cardstack/host/resources/import';
 
 import { maybe } from '@cardstack/host/resources/maybe';
-import { adoptionChainManager } from '@cardstack/host/resources/adoption-chain-manager';
 
 import type CardService from '@cardstack/host/services/card-service';
 
@@ -84,6 +86,12 @@ import BinaryFileInfo from './binary-file-info';
 import CardPreviewPanel from './card-preview-panel';
 import CardURLBar from './card-url-bar';
 import DetailPanel from './detail-panel';
+
+import {
+  getCardType,
+  type CardType,
+} from '@cardstack/host/resources/card-type';
+import { type BaseDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
@@ -111,6 +119,16 @@ const defaultPanelWidths: PanelWidths = {
   emptyCodeModePanel: '80%',
 };
 
+interface ExportedCard {
+  cardType: CardType;
+  card: typeof BaseDef;
+}
+
+// Element
+// - exported / unexported card or field
+// - exported class or function
+export type ElementInFile = ExportedCard; // can add more types here
+
 export default class CodeMode extends Component<Signature> {
   @service declare monacoService: MonacoService;
   @service declare cardService: CardService;
@@ -122,6 +140,7 @@ export default class CodeMode extends Component<Signature> {
   @tracked private loadFileError: string | null = null;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
   @tracked private card: CardDef | undefined;
+  @tracked private selectedElement: ElementInFile | undefined;
   @tracked cardError: Error | undefined;
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
@@ -298,6 +317,50 @@ export default class CodeMode extends Component<Signature> {
     return state;
   });
 
+  @use private elements = resource(() => {
+    if (!this.importedModule) {
+      return new TrackedObject({
+        error: null,
+        isLoading: false,
+        value: [],
+        load: () => Promise<void>,
+      });
+    }
+
+    const state: {
+      isLoading: boolean;
+      value: RealmInfo | null;
+      error: Error | undefined;
+      load: () => Promise<void>;
+    } = new TrackedObject({
+      isLoading: true,
+      value: [],
+      error: undefined,
+      load: async () => {
+        state.isLoading = true;
+        if (this.importedModule === undefined) {
+          return [];
+        }
+        await this.importedModule.loaded;
+        let module = this.importedModule?.module;
+        if (module === undefined) {
+          return [];
+        }
+        let cards = cardsOrFieldsFromModule(module);
+        let elements = cards.map((card) => {
+          return {
+            cardType: getCardType(this, () => card),
+            card: card,
+          };
+        });
+        state.value = elements;
+      },
+    });
+
+    state.load();
+    return state;
+  });
+
   private openFile = maybe(this, (context) => {
     if (!this.codePath) {
       this.setFileView('browser');
@@ -333,14 +396,6 @@ export default class CodeMode extends Component<Signature> {
       }
     }
     return undefined;
-  });
-
-  @use adoptionChainManager = resource(() => {
-    if (this.importedModule) {
-      return adoptionChainManager(this, this.importedModule);
-    } else {
-      return undefined;
-    }
   });
 
   private maybeReloadCard = restartableTask(async (id: string) => {
@@ -417,6 +472,25 @@ export default class CodeMode extends Component<Signature> {
       throw new Error(`bug: card ${this.codePath} is not loaded`);
     }
     return this.card;
+  }
+
+  private get selectedElementInFile() {
+    if (this.selectedElement) {
+      return this.selectedElement;
+    } else {
+      return this.elementsInFile.length > 0
+        ? this.elementsInFile[0]
+        : undefined;
+    }
+  }
+
+  @action
+  private selectElementInFile(el: ElementInFile) {
+    this.selectedElement = el;
+  }
+
+  get elementsInFile() {
+    return this.elements.value;
   }
 
   private loadIfDifferent = restartableTask(
@@ -690,7 +764,9 @@ export default class CodeMode extends Component<Signature> {
                         @cardInstance={{this.card}}
                         @readyFile={{this.readyFile}}
                         @realmInfo={{this.realmInfo}}
-                        @adoptionChainManager={{this.adoptionChainManager}}
+                        @selectedElement={{this.selectedElementInFile}}
+                        @elements={{this.elementsInFile}}
+                        @selectElement={{this.selectElementInFile}}
                         @delete={{this.delete}}
                         data-test-card-inheritance-panel
                       />
@@ -1022,4 +1098,15 @@ function comparableSerialization(doc: LooseSingleCardDocument) {
     delete doc.data.relationships?.[rel].data;
   }
   return doc;
+}
+
+function isCardOrField(cardOrField: any): cardOrField is typeof BaseDef {
+  return typeof cardOrField === 'function' && 'baseDef' in cardOrField;
+}
+
+function cardsOrFieldsFromModule(
+  module: Record<string, any>,
+  _never?: never, // glint insists that w/o this last param that there are actually no params
+): (typeof BaseDef)[] {
+  return Object.values(module).filter(isCardOrField);
 }

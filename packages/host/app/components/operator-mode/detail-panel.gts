@@ -20,10 +20,7 @@ import {
 } from './definition-container';
 // @ts-expect-error cached doesn't have type yet
 import { tracked, cached } from '@glimmer/tracking';
-import {
-  type AdoptionChainManager,
-  type ElementInFile,
-} from '@cardstack/host/resources/adoption-chain-manager';
+import { type ElementInFile } from '@cardstack/host/resources/adoption-chain-manager';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
@@ -33,7 +30,9 @@ interface Signature {
     realmInfo: RealmInfo | null;
     readyFile: Ready;
     cardInstance: CardDef | undefined;
-    adoptionChainManager?: AdoptionChainManager;
+    selectedElement?: ElementInFile;
+    elements: ElementInFile[];
+    selectElement: (el: ElementInFile) => void;
     delete: () => void;
   };
 }
@@ -43,17 +42,11 @@ export default class DetailPanel extends Component<Signature> {
   private lastModified = lastModifiedDate(this, () => this.args.readyFile);
 
   get cardType() {
-    return this.args.adoptionChainManager?.selectedElement?.cardType;
-  }
-
-  get elementsInFile() {
-    return this.args.adoptionChainManager?.elementsInFile;
+    return this.args.selectedElement?.cardType;
   }
 
   get isLoading() {
-    return (
-      this.args.adoptionChainManager?.isLoading || this.cardType?.isLoading
-    );
+    return this.cardType?.isLoading;
   }
 
   @action
@@ -68,8 +61,8 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   @action
-  select(el: ElementInFile) {
-    this.args.adoptionChainManager?.select(el);
+  isSelected(el: ElementInFile) {
+    return this.args.selectedElement === el;
   }
   get isModule() {
     return hasExecutableExtension(this.args.readyFile.url);
@@ -114,13 +107,14 @@ export default class DetailPanel extends Component<Signature> {
         {{else if this.isModule}}
           {{! Module case when visting, eg author.gts }}
           <h3>In This File</h3>
-          {{#each this.elementsInFile as |el|}}
+          {{#each @elements as |el|}}
             <div
-              class='inheritance-chain
-                {{if (@adoptionChainManager.isSelected el) "selected"}}'
+              class='inheritance-chain {{if (this.isSelected el) "selected"}}'
             >
               <div>{{this.getCardTypeDisplayName el.card}}</div>
-              <button {{on 'click' (fn this.select el)}}>Select</button>
+              <button
+                {{on 'click' (fn this.args.selectElement el)}}
+              >Select</button>
             </div>
           {{/each}}
           <h3>Inheritance Panel</h3>
