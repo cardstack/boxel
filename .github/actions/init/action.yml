@@ -8,7 +8,7 @@ runs:
       with:
         node-version-file: "package.json"
 
-    - uses: cardstack/gh-actions/setup-pnpm-volta@setup-pnpm-volta
+    - uses: cardstack/gh-actions/setup-pnpm-volta@main
 
     - name: Get pnpm store directory
       id: pnpm-cache
