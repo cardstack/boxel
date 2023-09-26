@@ -14,8 +14,7 @@ runs:
       env:
         cache-name: cache-volta-tools
       with:
-        # volta tools are stored in `~/.volta` on Linux/macOS
-        path: ~/.volta
+        path: /opt/hostedtoolcache/volta/
         key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('package.json') }}
 
     - if: ${{ steps.cache-volta.outputs.cache-hit != 'true' }}
