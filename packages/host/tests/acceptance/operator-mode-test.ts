@@ -1295,7 +1295,6 @@ module('Acceptance | operator mode tests', function (hooks) {
       await waitFor('[data-test-editor]');
 
       this.onSave((json) => {
-        numSaves++;
         if (typeof json === 'string') {
           throw new Error('expected JSON save data');
         }
@@ -1303,6 +1302,7 @@ module('Acceptance | operator mode tests', function (hooks) {
           // this is the auto-save--we can ignore it
         } else {
           assert.strictEqual(json.data.attributes?.name, 'MangoXXX');
+          numSaves++;
         }
       });
 
