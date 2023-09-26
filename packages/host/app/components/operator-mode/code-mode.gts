@@ -315,7 +315,10 @@ export default class CodeMode extends Component<Signature> {
     return state;
   });
 
-  @use private elements = resource(() => {
+  @use private elements = resource(({ on }) => {
+    on.cleanup(() => {
+      this.selectedElement = undefined;
+    });
     if (!this.importedModule) {
       return new TrackedObject({
         error: null,
