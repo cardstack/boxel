@@ -19,7 +19,6 @@ export class FileDefinitionContainer extends Component<FileSignature> {
       @name={{undefined}}
       @fileExtension={{@fileExtension}}
       @realmInfo={{@realmInfo}}
-      @realmIconURL={{@realmIconURL}}
       @isActive={{true}}
       data-test-file-definition
     >
@@ -43,7 +42,6 @@ export class ModuleDefinitionContainer extends Component<ModuleSignature> {
       @name={{@name}}
       @fileExtension={{@fileExtension}}
       @realmInfo={{@realmInfo}}
-      @realmIconURL={{@realmIconURL}}
       @isActive={{@isActive}}
       data-test-card-module-definition
     >
@@ -70,7 +68,6 @@ export class InstanceDefinitionContainer extends Component<InstanceSignature> {
       @fileExtension={{@fileExtension}}
       @name={{@name}}
       @realmInfo={{@realmInfo}}
-      @realmIconURL={{@realmIconURL}}
       @isActive={{true}}
       data-test-card-instance-definition
     >
@@ -102,7 +99,6 @@ export class ClickableModuleDefinitionContainer extends Component<ClickableModul
         @name={{@name}}
         @fileExtension={{@fileExtension}}
         @realmInfo={{@realmInfo}}
-        @realmIconURL={{@realmIconURL}}
         @isActive={{false}}
         data-test-card-module-definition
       />

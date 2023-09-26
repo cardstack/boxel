@@ -16,9 +16,8 @@ interface Action {
 export interface BaseArgs {
   title: string | undefined;
   name: string | undefined;
-  fileExtension: string;
-  realmInfo: RealmInfo | null;
-  realmIconURL: string | null | undefined;
+  fileExtension: string | undefined;
+  realmInfo: RealmInfo | undefined | null;
   isActive: boolean;
 }
 
@@ -35,6 +34,10 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
     return this.args.realmInfo?.name;
   }
 
+  get realmIcon(): string | undefined | null {
+    return this.args.realmInfo?.iconURL;
+  }
+
   <template>
     <div class='container {{if @isActive "active"}}' ...attributes>
       <div class='banner'>
@@ -47,11 +50,13 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
       </div>
       <div class='content'>
         <div class='definition-info'>
-          <div class='realm-info'>
-            <img src={{@realmIconURL}} alt='realm-icon' />
-            <Label class='realm-name' data-test-definition-realm-name>in
-              {{this.realmName}}</Label>
-          </div>
+          {{#if @realmInfo}}
+            <div class='realm-info'>
+              <img src={{this.realmIcon}} alt='realm-icon' />
+              <Label class='realm-name' data-test-definition-realm-name>in
+                {{this.realmName}}</Label>
+            </div>
+          {{/if}}
           <div data-test-definition-name class='definition-name'>{{@name}}</div>
         </div>
         {{#if @isActive}}
@@ -60,7 +65,6 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
       </div>
 
     </div>
-
     <style>
       .container {
         background-color: var(--boxel-light);
