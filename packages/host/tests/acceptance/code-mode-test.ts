@@ -763,7 +763,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .hasValue(`${testRealmURL}pers`);
     assert
       .dom('[data-test-card-url-bar-error]')
-      .containsText('File is not found');
+      .containsText('This resource does not exist');
     assert.dom('[data-test-recent-file]').exists({ count: 1 });
     assert.dom(`[data-test-recent-file="${testRealmURL}person.gts"]`).exists();
     assert

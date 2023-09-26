@@ -5,14 +5,14 @@ import Directory from './directory';
 
 interface Args {
   Args: {
-    url: string;
+    realmURL: string;
   };
 }
 
 export default class FileTree extends Component<Args> {
   <template>
     <nav>
-      <Directory @relativePath='' @realmURL={{@url}} />
+      <Directory @relativePath='' @realmURL={{@realmURL}} />
     </nav>
   </template>
 

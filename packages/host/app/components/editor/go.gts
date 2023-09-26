@@ -59,7 +59,7 @@ export default class Go extends Component<Signature> {
   <template>
     <div class='main' data-test-isLoadIdle={{this.loadCard.isIdle}}>
       <div class='main-column'>
-        <FileTree @url={{ownRealmURL}} />
+        <FileTree @realmURL={{ownRealmURL}} />
         <Tooltip @placement='left'>
           <:trigger>
             <AddButton {{on 'click' this.createNew}} />
