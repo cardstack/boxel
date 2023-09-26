@@ -49,6 +49,10 @@ import config from '@cardstack/host/config/environment';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 
 import {
+  getCardType,
+  type CardType,
+} from '@cardstack/host/resources/card-type';
+import {
   file,
   isReady,
   type Ready,
@@ -77,18 +81,14 @@ import RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
+import { type BaseDef } from 'https://cardstack.com/base/card-api';
+
 import FileTree from '../editor/file-tree';
 
 import BinaryFileInfo from './binary-file-info';
 import CardPreviewPanel from './card-preview-panel';
 import CardURLBar from './card-url-bar';
 import DetailPanel from './detail-panel';
-
-import {
-  getCardType,
-  type CardType,
-} from '@cardstack/host/resources/card-type';
-import { type BaseDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {

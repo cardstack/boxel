@@ -2,13 +2,19 @@ import { hash, array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
-import { BaseDef, type CardDef } from 'https://cardstack.com/base/card-api';
-import { cardTypeDisplayName, type RealmInfo } from '@cardstack/runtime-common';
+
 import Component from '@glimmer/component';
+
+// @ts-expect-error cached doesn't have type yet
+import { tracked, cached } from '@glimmer/tracking';
+
+import { cardTypeDisplayName, type RealmInfo } from '@cardstack/runtime-common';
 
 import { hasExecutableExtension } from '@cardstack/runtime-common';
 
 import { type Ready } from '@cardstack/host/resources/file';
+
+import { BaseDef, type CardDef } from 'https://cardstack.com/base/card-api';
 
 import { lastModifiedDate } from '../../resources/last-modified-date';
 
@@ -18,11 +24,9 @@ import {
   ModuleDefinitionContainer,
   ClickableModuleDefinitionContainer,
 } from './definition-container';
-// @ts-expect-error cached doesn't have type yet
-import { tracked, cached } from '@glimmer/tracking';
 
-import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type { ElementInFile } from './code-mode';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 interface Signature {
   Element: HTMLElement;
@@ -116,9 +120,7 @@ export default class DetailPanel extends Component<Signature> {
               class='inheritance-chain {{if (this.isSelected el) "selected"}}'
             >
               <div>{{this.getCardTypeDisplayName el.card}}</div>
-              <button
-                {{on 'click' (fn this.args.selectElement el)}}
-              >Select</button>
+              <button {{on 'click' (fn @selectElement el)}}>Select</button>
             </div>
           {{/each}}
           <h3>Inheritance Panel</h3>
