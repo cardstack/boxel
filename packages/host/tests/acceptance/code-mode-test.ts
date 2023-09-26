@@ -857,6 +857,9 @@ module('Acceptance | code mode tests', function (hooks) {
     let realm1IconUrl = 'https://i.postimg.cc/L8yXRvws/icon.png';
     let realm2IconUrl = 'https://i.postimg.cc/d0B9qMvy/icon.png';
 
+    await waitFor(
+      '[data-test-card-schema="Person"] [data-test-realm-icon-url]',
+    );
     assert
       .dom(`[data-test-card-schema="Person"] [data-test-realm-icon-url]`)
       .hasAttribute('data-test-realm-icon-url', realm1IconUrl);
@@ -876,6 +879,9 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom(`[data-test-card-schema="Card"] [data-test-realm-icon-url]`)
       .hasAttribute('data-test-realm-icon-url', realm2IconUrl);
 
+    await waitFor(
+      `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-realm-icon-url]`,
+    );
     assert
       .dom(
         `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-realm-icon-url]`,
