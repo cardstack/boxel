@@ -94,7 +94,7 @@ export default class DetailPanel extends Component<Signature> {
           <h3>Inheritance Panel</h3>
           <div class='inheritance-chain'>
             <InstanceDefinitionContainer
-              @fileURL={{this.args.readyFile.url}}
+              @fileURL={{@readyFile.url}}
               @name={{@cardInstance.title}}
               @fileExtension='.JSON'
               @infoText={{this.lastModified.value}}
@@ -146,7 +146,7 @@ export default class DetailPanel extends Component<Signature> {
           {{/if}}
         {{else}}
           <FileDefinitionContainer
-            @fileURL={{this.args.readyFile.url}}
+            @fileURL={{@readyFile.url}}
             @fileExtension={{this.fileExtension}}
             @infoText={{this.lastModified.value}}
             @actions={{array
