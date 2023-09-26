@@ -1,7 +1,15 @@
+import { RenderingTestContext } from '@ember/test-helpers';
+
+import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
+
+import { baseRealm } from '@cardstack/runtime-common';
+import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
-import { baseRealm } from '@cardstack/runtime-common';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
+
 import {
   testRealmURL,
   setupCardLogs,
@@ -11,10 +19,6 @@ import {
   trimCardContainer,
   setupLocalIndexing,
 } from '../helpers';
-import { RenderingTestContext } from '@ember/test-helpers';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import { setupRenderingTest } from 'ember-qunit';
-import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 
 let loader: Loader;
 

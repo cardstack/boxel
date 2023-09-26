@@ -1,8 +1,10 @@
-import { Resource } from 'ember-resources';
-import { tracked } from '@glimmer/tracking';
-import { formatDistanceToNow, parse } from 'date-fns';
-import { Ready as ReadyFile } from '@cardstack/host/resources/file';
 import { registerDestructor } from '@ember/destroyable';
+import { tracked } from '@glimmer/tracking';
+
+import { formatDistanceToNow } from 'date-fns';
+import { Resource } from 'ember-resources';
+
+import { Ready as ReadyFile } from '@cardstack/host/resources/file';
 
 interface Args {
   named: { file: ReadyFile };
@@ -26,13 +28,8 @@ export class LastModifiedDateResource extends Resource<Args> {
   }
 
   private calculate(file: ReadyFile) {
-    if (file.lastModified != undefined) {
-      // This is RFC-7321 format which is the last modified date format used in HTTP headers
-      let date = parse(
-        file.lastModified.replace(/ GMT$/, 'Z'),
-        'EEE, dd MMM yyyy HH:mm:ssX',
-        new Date(),
-      );
+    if (file.lastModifiedAsDate != undefined) {
+      let date = file.lastModifiedAsDate;
       if (Date.now() - date.getTime() < 10 * 1000) {
         this.value = 'Last saved just now';
       } else {

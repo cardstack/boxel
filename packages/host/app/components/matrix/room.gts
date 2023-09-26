@@ -1,37 +1,47 @@
-import Component from '@glimmer/component';
-import { service } from '@ember/service';
+import { registerDestructor } from '@ember/destroyable';
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
-import { on } from '@ember/modifier';
+import { service } from '@ember/service';
+import Component from '@glimmer/component';
 //@ts-expect-error the types don't recognize the cached export
 import { tracked, cached } from '@glimmer/tracking';
-import { not, and, eq } from '@cardstack/host/helpers/truth-helpers';
+
 import { restartableTask, task, timeout, all } from 'ember-concurrency';
+
+import { TrackedMap } from 'tracked-built-ins';
+
 import {
   BoxelInput,
   LoadingIndicator,
   FieldContainer,
   Button,
 } from '@cardstack/boxel-ui';
-import { getRoom } from '../../resources/room';
-import { TrackedMap } from 'tracked-built-ins';
+
 import {
   isMatrixCardError,
   chooseCard,
   baseCardRef,
   catalogEntryRef,
 } from '@cardstack/runtime-common';
-import { registerDestructor } from '@ember/destroyable';
+
+import config from '@cardstack/host/config/environment';
+import { not, and, eq } from '@cardstack/host/helpers/truth-helpers';
+
+import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import type OperatorModeStateService from '../../services/operator-mode-state-service';
+
 import {
   type CardDef,
   type FieldDef,
 } from 'https://cardstack.com/base/card-api';
-import type CardService from '@cardstack/host/services/card-service';
+
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
-import config from '@cardstack/host/config/environment';
-import { fn } from '@ember/helper';
+
+import { getRoom } from '../../resources/room';
+
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 const { environment } = config;
 
@@ -100,6 +110,7 @@ export default class Room extends Component<RoomArgs> {
     {{/if}}
 
     <div
+      data-test-patch-card-idle={{this.operatorModeStateService.patchCard.isIdle}}
       class='messages-wrapper'
       data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
       data-test-room-name={{this.room.name}}

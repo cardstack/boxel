@@ -1,48 +1,55 @@
-import Component from '@glimmer/component';
+import { registerDestructor } from '@ember/destroyable';
+import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
-import type {
-  CardDef,
-  Format,
-  FieldType,
-} from 'https://cardstack.com/base/card-api';
-import Preview from '../preview';
-import { trackedFunction } from 'ember-resources/util/function';
-import { fn, array } from '@ember/helper';
-import type CardService from '../../services/card-service';
+import { schedule } from '@ember/runloop';
+import { service } from '@ember/service';
+import { htmlSafe, SafeString } from '@ember/template';
+import Component from '@glimmer/component';
 
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import optional from '@cardstack/boxel-ui/helpers/optional';
-import cn from '@cardstack/boxel-ui/helpers/cn';
+//@ts-expect-error cached type not available yet
+import { tracked, cached } from '@glimmer/tracking';
+
+import { formatDistanceToNow } from 'date-fns';
+import { task, restartableTask, timeout } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
+import Modifier from 'ember-modifier';
+import { trackedFunction } from 'ember-resources/util/function';
+
+import { TrackedArray } from 'tracked-built-ins';
+
 import {
   IconButton,
   Header,
   CardContainer,
   Tooltip,
 } from '@cardstack/boxel-ui';
-import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
-import { task, restartableTask, timeout } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
-
-import { service } from '@ember/service';
-//@ts-expect-error cached type not available yet
-import { tracked, cached } from '@glimmer/tracking';
-import { TrackedArray } from 'tracked-built-ins';
-
 import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
 import BoxelMenu from '@cardstack/boxel-ui/components/menu';
+import cn from '@cardstack/boxel-ui/helpers/cn';
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
-import { type StackItem } from './container';
-import { registerDestructor } from '@ember/destroyable';
+import optional from '@cardstack/boxel-ui/helpers/optional';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
-import { htmlSafe, SafeString } from '@ember/template';
-import OperatorModeOverlays from './overlays';
-import ElementTracker from '../../resources/element-tracker';
+import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
+
 import config from '@cardstack/host/config/environment';
-import { formatDistanceToNow } from 'date-fns';
-import Modifier from 'ember-modifier';
-import { schedule } from '@ember/runloop';
+
+import type {
+  CardDef,
+  Format,
+  FieldType,
+} from 'https://cardstack.com/base/card-api';
+
+import ElementTracker from '../../resources/element-tracker';
+import Preview from '../preview';
+
+import { type StackItem } from './container';
+
+import OperatorModeOverlays from './overlays';
+
+import type CardService from '../../services/card-service';
 
 interface Signature {
   Args: {
@@ -455,6 +462,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
         max-width: max-content;
         min-width: 100%;
         gap: var(--boxel-sp-xxs);
+      }
+
+      .header-icon {
+        border: 1px solid rgba(0, 0, 0, 0.15);
+        border-radius: 7px;
       }
 
       .header--icon-hovered {

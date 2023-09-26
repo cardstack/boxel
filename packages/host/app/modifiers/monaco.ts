@@ -1,9 +1,11 @@
+import { registerDestructor } from '@ember/destroyable';
+import { isTesting } from '@embroider/macros';
+
+import { restartableTask, timeout } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import '@cardstack/requirejs-monaco-ember-polyfill';
-import { restartableTask, timeout } from 'ember-concurrency';
-import { registerDestructor } from '@ember/destroyable';
+
 import type * as MonacoSDK from 'monaco-editor';
-import { isTesting } from '@embroider/macros';
 
 interface Signature {
   Args: {

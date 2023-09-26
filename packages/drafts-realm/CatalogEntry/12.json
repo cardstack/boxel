@@ -15,6 +15,20 @@
           "area": null,
           "number": null
         },
+        "emergencyContact": {
+          "name": null,
+          "phoneNumber": {
+            "country": null,
+            "area": null,
+            "number": null
+          },
+          "email": null
+        },
+        "namesInvited": [],
+        "guest": {
+          "name": null,
+          "additionalNames": []
+        },
         "description": null,
         "thumbnailURL": null
       }

@@ -1,6 +1,10 @@
-import { Resource } from 'ember-resources';
-import { restartableTask } from 'ember-concurrency';
+import { getOwner } from '@ember/application';
+import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
+
+import { restartableTask } from 'ember-concurrency';
+import { Resource } from 'ember-resources';
+
 import {
   identifyCard,
   internalKeyFor,
@@ -9,19 +13,21 @@ import {
   getAncestor,
   RealmInfo,
 } from '@cardstack/runtime-common';
+import { SupportedMimeType } from '@cardstack/runtime-common';
+import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
 import { Loader } from '@cardstack/runtime-common/loader';
-import { getOwner } from '@ember/application';
-import type LoaderService from '../services/loader-service';
+
+import type CardService from '@cardstack/host/services/card-service';
+
 import type {
   BaseDef,
   Field,
   FieldType,
 } from 'https://cardstack.com/base/card-api';
-import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
+
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { SupportedMimeType } from '@cardstack/runtime-common';
-import type CardService from '@cardstack/host/services/card-service';
-import { service } from '@ember/service';
+
+import type LoaderService from '../services/loader-service';
 
 interface Args {
   named: {
@@ -155,7 +161,7 @@ export class CardType extends Resource<Args> {
     );
     return {
       realmInfo,
-      extension: '.' + response.url.split('.').pop() || '',
+      extension: '.' + new URL(response.url).pathname.split('.').pop() || '',
     };
   };
 }

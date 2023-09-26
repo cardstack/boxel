@@ -1,10 +1,13 @@
-import Label from '@cardstack/boxel-ui/components/label';
-import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import Component from '@glimmer/component';
+
 import { Button } from '@cardstack/boxel-ui';
-import { type RealmInfo } from '@cardstack/runtime-common';
 import { CardContainer } from '@cardstack/boxel-ui';
+import Label from '@cardstack/boxel-ui/components/label';
+
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+
+import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 
 interface Action {
   label: string;
@@ -15,8 +18,8 @@ export interface BaseArgs {
   title: string | undefined;
   name: string | undefined;
   fileExtension: string | undefined;
-  realmInfo: RealmInfo | undefined | null;
   isActive: boolean;
+  fileURL?: string;
 }
 
 interface BaseSignature {
@@ -28,14 +31,6 @@ interface BaseSignature {
 }
 
 export class BaseDefinitionContainer extends Component<BaseSignature> {
-  get realmName(): string | undefined {
-    return this.args.realmInfo?.name;
-  }
-
-  get realmIcon(): string | undefined | null {
-    return this.args.realmInfo?.iconURL;
-  }
-
   <template>
     <CardContainer>
       <div class='banner {{if @isActive "active"}}'>
@@ -48,14 +43,21 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
       </div>
       <div class='content'>
         <div class='definition-info'>
-          {{#if @realmInfo}}
-            <div class='realm-info'>
-              <img src={{this.realmIcon}} alt='realm-icon' />
-              <Label class='realm-name' data-test-definition-realm-name>in
-                {{this.realmName}}</Label>
-            </div>
-          {{/if}}
+          <RealmInfoProvider @fileURL={{@fileURL}}>
+            <:ready as |realmInfo|>
+              <div class='realm-info'>
+                <img
+                  src={{realmInfo.iconURL}}
+                  alt='realm-icon'
+                  data-test-realm-icon-url={{realmInfo.iconURL}}
+                />
+                <Label class='realm-name' data-test-definition-realm-name>in
+                  {{realmInfo.name}}</Label>
+              </div>
+            </:ready>
+          </RealmInfoProvider>
           <div data-test-definition-name class='definition-name'>{{@name}}</div>
+
         </div>
         {{#if @isActive}}
           {{yield to='activeContent'}}
@@ -79,7 +81,7 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
         background-color: var(--boxel-100);
       }
       .banner-title {
-        color: #919191;
+        color: var(--boxel-450);
         font-size: var(--boxel-font-size-sm);
         font-weight: 200;
         letter-spacing: var(--boxel-lsp-xxl);

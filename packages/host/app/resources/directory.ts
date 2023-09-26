@@ -1,13 +1,16 @@
-import { Resource } from 'ember-resources';
-import { tracked } from '@glimmer/tracking';
+import { registerDestructor } from '@ember/destroyable';
 import { service } from '@ember/service';
+import { tracked } from '@glimmer/tracking';
+
 import { restartableTask } from 'ember-concurrency';
+import { Resource } from 'ember-resources';
+
 import {
   logger,
   Relationship,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
-import { registerDestructor } from '@ember/destroyable';
+
 import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
 

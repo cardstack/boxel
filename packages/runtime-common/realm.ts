@@ -438,29 +438,33 @@ export class Realm {
     if (this.#router.handles(request)) {
       return this.#router.handle(request);
     } else {
-      let url = new URL(request.url);
-      let localPath = this.paths.local(url);
-      let maybeHandle = await this.getFileWithFallbacks(
-        localPath,
-        executableExtensions,
-      );
+      return this.fallbackHandle(request);
+    }
+  }
 
-      if (!maybeHandle) {
-        return notFound(this.url, request, `${request.url} not found`);
-      }
+  async fallbackHandle(request: Request) {
+    let url = new URL(request.url);
+    let localPath = this.paths.local(url);
+    let maybeHandle = await this.getFileWithFallbacks(
+      localPath,
+      executableExtensions,
+    );
 
-      let handle = maybeHandle;
+    if (!maybeHandle) {
+      return notFound(this.url, request, `${request.url} not found`);
+    }
 
-      if (
-        executableExtensions.some((extension) =>
-          handle.path.endsWith(extension),
-        ) &&
-        !localPath.startsWith(assetsDir)
-      ) {
-        return this.makeJS(await fileContentToText(handle), handle.path);
-      } else {
-        return await this.serveLocalFile(handle);
-      }
+    let handle = maybeHandle;
+
+    if (
+      executableExtensions.some((extension) =>
+        handle.path.endsWith(extension),
+      ) &&
+      !localPath.startsWith(assetsDir)
+    ) {
+      return this.makeJS(await fileContentToText(handle), handle.path);
+    } else {
+      return await this.serveLocalFile(handle);
     }
   }
 

@@ -1,37 +1,51 @@
+import { registerDestructor } from '@ember/destroyable';
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import type Owner from '@ember/owner';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
-import { action } from '@ember/object';
-import { service } from '@ember/service';
-import { registerDestructor } from '@ember/destroyable';
-import type Owner from '@ember/owner';
+
 import { task } from 'ember-concurrency';
 import debounce from 'lodash/debounce';
-import type { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
+
+import { TrackedArray, TrackedObject } from 'tracked-built-ins';
+
+import { Button, SearchInput } from '@cardstack/boxel-ui';
+
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import { and, eq, gt, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
 import {
   createNewCard,
   type CodeRef,
   type CreateNewCard,
   Deferred,
+  type RealmInfo,
 } from '@cardstack/runtime-common';
+
 import type { Query, Filter } from '@cardstack/runtime-common/query';
-import { Button, SearchInput } from '@cardstack/boxel-ui';
-import { and, eq, gt, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import type CardService from '../../services/card-service';
-import type LoaderService from '../../services/loader-service';
+
+import type { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
+
 import { getSearchResults, Search } from '../../resources/search';
+
 import {
   suggestCardChooserTitle,
   getSuggestionWithLowestDepth,
 } from '../../utils/text-suggestion';
+
 import ModalContainer from '../modal-container';
-import CardCatalog from './index';
-import CardCatalogFilters from './filters';
+
 import UrlSearch from '../url-search';
-import { type RealmInfo } from '@cardstack/runtime-common';
-import { TrackedArray, TrackedObject } from 'tracked-built-ins';
+
+import CardCatalogFilters from './filters';
+
+import CardCatalog from './index';
+
+import type CardService from '../../services/card-service';
+import type LoaderService from '../../services/loader-service';
 
 interface Signature {
   Args: {

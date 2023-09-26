@@ -1,20 +1,3 @@
-import { module, test } from 'qunit';
-import GlimmerComponent from '@glimmer/component';
-import { setupRenderingTest } from 'ember-qunit';
-import { baseRealm } from '@cardstack/runtime-common';
-import { Realm } from '@cardstack/runtime-common/realm';
-import { Loader } from '@cardstack/runtime-common/loader';
-import CardEditor from '@cardstack/host/components/card-editor';
-import { renderComponent } from '../../helpers/render-component';
-import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
-import {
-  testRealmURL,
-  setupCardLogs,
-  setupLocalIndexing,
-  TestRealmAdapter,
-  TestRealm,
-  saveCard,
-} from '../../helpers';
 import {
   waitFor,
   waitUntil,
@@ -24,11 +7,34 @@ import {
   focus,
   RenderingTestContext,
 } from '@ember/test-helpers';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import CreateCardModal from '@cardstack/host/components/create-card-modal';
+import GlimmerComponent from '@glimmer/component';
+
+import { setupRenderingTest } from 'ember-qunit';
+import { module, test } from 'qunit';
+
+import { baseRealm } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
+import { Realm } from '@cardstack/runtime-common/realm';
+
+import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
+import CardEditor from '@cardstack/host/components/card-editor';
+
 import CardPrerender from '@cardstack/host/components/card-prerender';
+import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import { shimExternals } from '@cardstack/host/lib/externals';
+import type LoaderService from '@cardstack/host/services/loader-service';
+
+import { CardDef } from 'https://cardstack.com/base/card-api';
+
+import {
+  testRealmURL,
+  setupCardLogs,
+  setupLocalIndexing,
+  TestRealmAdapter,
+  TestRealm,
+  saveCard,
+} from '../../helpers';
+import { renderComponent } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 

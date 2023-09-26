@@ -1,6 +1,3 @@
-import Component from '@glimmer/component';
-//@ts-expect-error cached type not available yet
-import { cached, tracked } from '@glimmer/tracking';
 import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
@@ -8,13 +5,29 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
+import { buildWaiter } from '@ember/test-waiters';
+import { isTesting } from '@embroider/macros';
+import Component from '@glimmer/component';
+//@ts-expect-error cached type not available yet
+import { cached, tracked } from '@glimmer/tracking';
+
 import { task, restartableTask, timeout, all } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { use, resource } from 'ember-resources';
-import { TrackedObject } from 'tracked-built-ins';
-import config from '@cardstack/host/config/environment';
 import isEqual from 'lodash/isEqual';
+import { TrackedObject } from 'tracked-built-ins';
+
+import {
+  LoadingIndicator,
+  Button,
+  ResizablePanelGroup,
+  PanelContext,
+} from '@cardstack/boxel-ui';
+import cn from '@cardstack/boxel-ui/helpers/cn';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { and } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import {
   type RealmInfo,
@@ -29,51 +42,54 @@ import {
   hasExecutableExtension,
 } from '@cardstack/runtime-common';
 
-import {
-  LoadingIndicator,
-  Button,
-  ResizablePanelGroup,
-  PanelContext,
-} from '@cardstack/boxel-ui';
-import cn from '@cardstack/boxel-ui/helpers/cn';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-
-import { CardDef } from 'https://cardstack.com/base/card-api';
-
-// host components
-import FileTree from '../editor/file-tree';
-import CardInheritancePanel from './card-inheritance-panel';
-import CardPreviewPanel from './card-preview-panel';
-import CardURLBar from './card-url-bar';
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
+import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
+import config from '@cardstack/host/config/environment';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 
-// host resources
 import {
-  Ready,
+  getCardType,
+  type CardType,
+} from '@cardstack/host/resources/card-type';
+import {
   file,
   isReady,
+  type Ready,
   type FileResource,
 } from '@cardstack/host/resources/file';
+
 import { importResource } from '@cardstack/host/resources/import';
+
 import { maybe } from '@cardstack/host/resources/maybe';
 import { adoptionChainManager } from '@cardstack/host/resources/adoption-chain-manager';
 
-// host services
 import type CardService from '@cardstack/host/services/card-service';
+
 import type LoaderService from '@cardstack/host/services/loader-service';
+
+// host components
+
+// host resources
+
+// host services
 import type MessageService from '@cardstack/host/services/message-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
-import RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
+import RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import { buildWaiter } from '@ember/test-waiters';
-import { isTesting } from '@embroider/macros';
+import { CardDef } from 'https://cardstack.com/base/card-api';
+
+import { type BaseDef } from 'https://cardstack.com/base/card-api';
+
+import FileTree from '../editor/file-tree';
+
+import BinaryFileInfo from './binary-file-info';
+import CardPreviewPanel from './card-preview-panel';
+import CardURLBar from './card-url-bar';
+import DetailPanel from './detail-panel';
 
 interface Signature {
   Args: {
@@ -101,6 +117,16 @@ const defaultPanelWidths: PanelWidths = {
   emptyCodeModePanel: '80%',
 };
 
+interface ExportedCard {
+  cardType: CardType;
+  card: typeof BaseDef;
+}
+
+// Element
+// - exported / unexported card or field
+// - exported class or function
+export type ElementInFile = ExportedCard; // can add more types here
+
 export default class CodeMode extends Component<Signature> {
   @service declare monacoService: MonacoService;
   @service declare cardService: CardService;
@@ -112,6 +138,7 @@ export default class CodeMode extends Component<Signature> {
   @tracked private loadFileError: string | null = null;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
   @tracked private card: CardDef | undefined;
+  @tracked private selectedElement: ElementInFile | undefined;
   @tracked cardError: Error | undefined;
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
@@ -288,6 +315,56 @@ export default class CodeMode extends Component<Signature> {
     return state;
   });
 
+  @use private elements = resource(() => {
+    if (!this.importedModule) {
+      return new TrackedObject({
+        error: null,
+        isLoading: false,
+        value: [],
+        load: () => Promise<void>,
+      });
+    }
+
+    const state: {
+      isLoading: boolean;
+      value: ElementInFile[] | null;
+      error: Error | undefined;
+      load: () => Promise<void>;
+    } = new TrackedObject({
+      isLoading: true,
+      value: [],
+      error: undefined,
+      load: async () => {
+        state.isLoading = true;
+        if (this.importedModule === undefined) {
+          state.value = [];
+          return;
+        }
+        try {
+          await this.importedModule.loaded;
+          let module = this.importedModule?.module;
+          if (module) {
+            let cards = cardsOrFieldsFromModule(module);
+            let elements: ElementInFile[] = cards.map((card) => {
+              return {
+                cardType: getCardType(this, () => card),
+                card: card,
+              };
+            });
+            state.value = elements;
+          }
+        } catch (error: any) {
+          state.error = error;
+        } finally {
+          state.isLoading = false;
+        }
+      },
+    });
+
+    state.load();
+    return state;
+  });
+
   private openFile = maybe(this, (context) => {
     if (!this.codePath) {
       this.setFileView('browser');
@@ -382,8 +459,17 @@ export default class CodeMode extends Component<Signature> {
         return maybeCard;
       }
     }
+    // in order to not get trapped in a glimmer invalidation cycle we need to
+    // unload the card in a different closure
+    this.unloadCard.perform();
     return undefined;
   }
+
+  private unloadCard = task(async () => {
+    await Promise.resolve();
+    this.card = undefined;
+    this.cardError = undefined;
+  });
 
   private get cardIsLoaded() {
     return (
@@ -398,6 +484,31 @@ export default class CodeMode extends Component<Signature> {
       throw new Error(`bug: card ${this.codePath} is not loaded`);
     }
     return this.card;
+  }
+
+  private get selectedElementInFile() {
+    if (this.selectedElement) {
+      return this.selectedElement;
+    } else {
+      if (this.elementsInFile === null) {
+        return;
+      }
+      return this.elementsInFile.length > 0
+        ? this.elementsInFile[0]
+        : undefined;
+    }
+  }
+
+  @action
+  private selectElementInFile(el: ElementInFile) {
+    this.selectedElement = el;
+  }
+
+  get elementsInFile() {
+    if (this.elements.value === null) {
+      return [];
+    }
+    return this.elements.value;
   }
 
   private loadIfDifferent = restartableTask(
@@ -665,18 +776,22 @@ export default class CodeMode extends Component<Signature> {
               </header>
               <section class='inner-container__content'>
                 {{#if (eq this.fileView 'inheritance')}}
-                  {{#if this.isReady}}
-                    <CardInheritancePanel
-                      @cardInstance={{this.card}}
-                      @readyFile={{this.readyFile}}
-                      @realmInfo={{this.realmInfo}}
-                      @adoptionChainManager={{this.adoptionChainManager}}
-                      @delete={{this.delete}}
-                      data-test-card-inheritance-panel
-                    />
-                  {{else if this.emptyOrNotFound}}
-                    Inspector is not available
-                  {{/if}}
+                  <section class='inner-container__content'>
+                    {{#if this.isReady}}
+                      <DetailPanel
+                        @cardInstance={{this.card}}
+                        @readyFile={{this.readyFile}}
+                        @realmInfo={{this.realmInfo}}
+                        @selectedElement={{this.selectedElementInFile}}
+                        @elements={{this.elementsInFile}}
+                        @selectElement={{this.selectElementInFile}}
+                        @delete={{this.delete}}
+                        data-test-card-inheritance-panel
+                      />
+                    {{else if this.emptyOrNotFound}}
+                      Inspector is not available
+                    {{/if}}
+                  </section>
                 {{else}}
                   <FileTree @url={{this.realmURL}} />
                 {{/if}}
@@ -703,16 +818,20 @@ export default class CodeMode extends Component<Signature> {
           >
             <div class='inner-container'>
               {{#if this.isReady}}
-                <div
-                  class='monaco-container'
-                  data-test-editor
-                  {{monacoModifier
-                    content=this.readyFile.content
-                    contentChanged=(perform this.contentChangedTask)
-                    monacoSDK=this.monacoSDK
-                    language=this.language
-                  }}
-                ></div>
+                {{#if this.readyFile.isBinary}}
+                  <BinaryFileInfo @readyFile={{this.readyFile}} />
+                {{else}}
+                  <div
+                    class='monaco-container'
+                    data-test-editor
+                    {{monacoModifier
+                      content=this.readyFile.content
+                      contentChanged=(perform this.contentChangedTask)
+                      monacoSDK=this.monacoSDK
+                      language=this.language
+                    }}
+                  ></div>
+                {{/if}}
                 <div class='save-indicator {{if this.isSaving "visible"}}'>
                   {{#if this.isSaving}}
                     <span class='saving-msg'>
@@ -742,19 +861,26 @@ export default class CodeMode extends Component<Signature> {
             @width={{this.panelWidths.rightPanel}}
           >
             <div class='inner-container'>
-              {{#if this.cardIsLoaded}}
-                <CardPreviewPanel
-                  @card={{this.loadedCard}}
-                  @realmIconURL={{this.realmIconURL}}
-                  data-test-card-resource-loaded
-                />
-              {{else if this.importedModule.module}}
-                <CardAdoptionChain
-                  @file={{this.readyFile}}
-                  @importedModule={{this.importedModule.module}}
-                />
-              {{else if this.cardError}}
-                {{this.cardError.message}}
+              {{#if this.isReady}}
+                {{#if this.cardIsLoaded}}
+                  <CardPreviewPanel
+                    @card={{this.loadedCard}}
+                    @realmIconURL={{this.realmIconURL}}
+                    data-test-card-resource-loaded
+                  />
+                {{else if this.importedModule.module}}
+                  <CardAdoptionChain
+                    @file={{this.readyFile}}
+                    @importedModule={{this.importedModule.module}}
+                  />
+                {{else if this.cardError}}
+                  {{this.cardError.message}}
+                {{else if this.readyFile.isBinary}}
+                  <div
+                    class='binary-file-schema-editor'
+                    data-test-binary-file-schema-editor
+                  >Schema Editor cannot be used with this file type</div>
+                {{/if}}
               {{/if}}
             </div>
           </ResizablePanel>
@@ -964,6 +1090,19 @@ export default class CodeMode extends Component<Signature> {
       .saved-msg {
         margin-right: var(--boxel-sp-xxs);
       }
+      .binary-file-schema-editor {
+        display: flex;
+        flex-wrap: wrap;
+        align-content: center;
+        justify-content: center;
+        text-align: center;
+        height: 100%;
+        background-color: var(--boxel-200);
+        font: var(--boxel-font-sm);
+        color: var(--boxel-450);
+        font-weight: 500;
+        padding: var(--boxel-sp-xl);
+      }
     </style>
   </template>
 }
@@ -982,4 +1121,15 @@ function comparableSerialization(doc: LooseSingleCardDocument) {
     delete doc.data.relationships?.[rel].data;
   }
   return doc;
+}
+
+function isCardOrField(cardOrField: any): cardOrField is typeof BaseDef {
+  return typeof cardOrField === 'function' && 'baseDef' in cardOrField;
+}
+
+function cardsOrFieldsFromModule(
+  module: Record<string, any>,
+  _never?: never, // glint insists that w/o this last param that there are actually no params
+): (typeof BaseDef)[] {
+  return Object.values(module).filter(isCardOrField);
 }

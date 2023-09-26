@@ -1,11 +1,15 @@
-import Component from '@glimmer/component';
-import { service } from '@ember/service';
-import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { eq } from '@cardstack/host/helpers/truth-helpers';
+import { action } from '@ember/object';
+import { service } from '@ember/service';
+import Component from '@glimmer/component';
+
 import { tracked } from '@glimmer/tracking';
-import { type IAuthData } from 'matrix-js-sdk';
+
 import { restartableTask } from 'ember-concurrency';
+
+import difference from 'lodash/difference';
+import { type IAuthData } from 'matrix-js-sdk';
+
 import {
   BoxelHeader,
   BoxelInput,
@@ -14,8 +18,9 @@ import {
   Button,
   FieldContainer,
 } from '@cardstack/boxel-ui';
+
+import { eq } from '@cardstack/host/helpers/truth-helpers';
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
-import difference from 'lodash/difference';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 const MATRIX_REGISTRATION_TYPES = {
