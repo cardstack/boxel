@@ -17,23 +17,8 @@ runs:
         path: /opt/hostedtoolcache/volta/
         key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('package.json') }}
 
-    - if: ${{ steps.cache-volta.outputs.cache-hit != 'true' }}
-      shell: bash
-      run: |
-        echo "Cache miss!"
-
-    - if: ${{ steps.cache-volta.outputs.cache-hit == 'true' }}
-      shell: bash
-      run: |
-        echo "Hooray, the cache worked! New test!"
-
     - name: Run volta setup
       uses: volta-cli/action@v4
-
-    - shell: bash
-      run: |
-        volta which node
-        echo `volta which node`
 
     - name: Get pnpm store directory
       id: pnpm-cache
