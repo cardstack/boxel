@@ -123,7 +123,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
             data-test-add-new
           >
             Add
-            {{getPlural @field.card.displayName}}
+            {{@field.card.displayName}}
           </AddButton>
         </div>
       {{/if}}
