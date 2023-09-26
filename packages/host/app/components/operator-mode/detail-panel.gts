@@ -119,7 +119,7 @@ export default class DetailPanel extends Component<Signature> {
             <div
               class='inheritance-chain {{if (this.isSelected el) "selected"}}'
             >
-              <div>{{this.getCardTypeDisplayName el.card}}</div>
+              <div>{{el.card.displayName}}</div>
               <button {{on 'click' (fn @selectElement el)}}>Select</button>
             </div>
           {{/each}}
@@ -170,9 +170,4 @@ export default class DetailPanel extends Component<Signature> {
       }
     </style>
   </template>
-
-  getCardTypeDisplayName(t: typeof BaseDef) {
-    let card = new t();
-    return cardTypeDisplayName(card);
-  }
 }
