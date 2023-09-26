@@ -1,17 +1,21 @@
-import Component from '@glimmer/component';
+import { fn, concat } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import type RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
+import Component from '@glimmer/component';
+
+import Modifier, { PositionalArgs } from 'ember-modifier';
+
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
+import { RealmPaths, type LocalPath } from '@cardstack/runtime-common/paths';
+
+import { directory } from '@cardstack/host/resources/directory';
+
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import type RouterService from '@ember/routing/router-service';
-import { RealmPaths, type LocalPath } from '@cardstack/runtime-common/paths';
-import { action } from '@ember/object';
-import { on } from '@ember/modifier';
-import Modifier, { PositionalArgs } from 'ember-modifier';
-import { fn } from '@ember/helper';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { directory } from '@cardstack/host/resources/directory';
-import { concat } from '@ember/helper';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
 interface Args {
   Args: {

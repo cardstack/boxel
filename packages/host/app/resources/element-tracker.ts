@@ -1,7 +1,8 @@
-import { TrackedArray } from 'tracked-built-ins';
-import Modifier from 'ember-modifier';
 import { registerDestructor } from '@ember/destroyable';
 import { schedule } from '@ember/runloop';
+
+import Modifier from 'ember-modifier';
+import { TrackedArray } from 'tracked-built-ins';
 
 export default class ElementTracker<Meta = unknown> {
   elements: { element: HTMLElement; meta: Meta }[] = new TrackedArray();

@@ -1,33 +1,37 @@
-import { Loader } from '@cardstack/runtime-common/loader';
-
-import * as runtime from '@cardstack/runtime-common';
-import * as boxelUI from '@cardstack/boxel-ui';
-import * as boxelCssVar from '@cardstack/boxel-ui/helpers/css-var';
-import * as boxelSvgJar from '@cardstack/boxel-ui/helpers/svg-jar';
-import * as boxelPickHelper from '@cardstack/boxel-ui/helpers/pick';
-import * as boxelTruthHelpers from '@cardstack/boxel-ui/helpers/truth-helpers';
-import * as glimmerComponent from '@glimmer/component';
 import * as emberComponent from '@ember/component';
 import * as emberComponentTemplateOnly from '@ember/component/template-only';
-//@ts-ignore no types available
-import * as emberTemplateFactory from '@ember/template-factory';
-import * as glimmerTracking from '@glimmer/tracking';
-import * as emberObject from '@ember/object';
-import * as emberObjectInternals from '@ember/object/internals';
+import * as emberDestroyable from '@ember/destroyable';
 import * as emberHelper from '@ember/helper';
 import * as emberModifier from '@ember/modifier';
-import * as emberResources from 'ember-resources';
+import * as emberObject from '@ember/object';
+import * as emberObjectInternals from '@ember/object/internals';
+//@ts-expect-error
+import * as emberTemplateFactory from '@ember/template-factory';
+import * as glimmerComponent from '@glimmer/component';
+//@ts-ignore no types available
+import * as glimmerTracking from '@glimmer/tracking';
+
+import * as dateFns from 'date-fns';
 import * as emberConcurrency from 'ember-concurrency';
 //@ts-ignore no types available
 import * as emberConcurrencyAsyncArrowRuntime from 'ember-concurrency/-private/async-arrow-runtime';
+//@ts-ignore no types available
 import * as emberModifier2 from 'ember-modifier';
+import * as emberResources from 'ember-resources';
+import * as ethers from 'ethers';
 import * as flat from 'flat';
 import * as lodash from 'lodash';
-import * as tracked from 'tracked-built-ins';
-import * as dateFns from 'date-fns';
-import * as emberDestroyable from '@ember/destroyable';
 import * as marked from 'marked';
-import * as ethers from 'ethers';
+import * as tracked from 'tracked-built-ins';
+
+import * as boxelUI from '@cardstack/boxel-ui';
+import * as boxelCssVar from '@cardstack/boxel-ui/helpers/css-var';
+import * as boxelPickHelper from '@cardstack/boxel-ui/helpers/pick';
+import * as boxelSvgJar from '@cardstack/boxel-ui/helpers/svg-jar';
+import * as boxelTruthHelpers from '@cardstack/boxel-ui/helpers/truth-helpers';
+
+import * as runtime from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
 
 export function shimExternals(loader: Loader) {
   loader.shimModule('@cardstack/runtime-common', runtime);

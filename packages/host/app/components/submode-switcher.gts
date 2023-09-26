@@ -1,12 +1,15 @@
-import Component from '@glimmer/component';
-import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { menuItemFunc, MenuItem } from '@cardstack/boxel-ui/helpers/menu-item';
-import { action } from '@ember/object';
-import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import { capitalize } from '@ember/string';
+import Component from '@glimmer/component';
+
+import { tracked } from '@glimmer/tracking';
+
 import get from 'lodash/get';
+
+import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui';
+import { menuItemFunc, MenuItem } from '@cardstack/boxel-ui/helpers/menu-item';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
 export enum Submode {
   Interact = 'interact',

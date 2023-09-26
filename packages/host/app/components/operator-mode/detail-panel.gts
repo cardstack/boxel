@@ -1,25 +1,31 @@
-import Component from '@glimmer/component';
+import { hash, array, fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { BaseDef, type CardDef } from 'https://cardstack.com/base/card-api';
 import { cardTypeDisplayName, type RealmInfo } from '@cardstack/runtime-common';
+import Component from '@glimmer/component';
+
+import { hasExecutableExtension } from '@cardstack/runtime-common';
+
+import { type Ready } from '@cardstack/host/resources/file';
+
+import { lastModifiedDate } from '../../resources/last-modified-date';
+
 import {
+  FileDefinitionContainer,
   InstanceDefinitionContainer,
   ModuleDefinitionContainer,
   ClickableModuleDefinitionContainer,
 } from './definition-container';
-import { Ready } from '@cardstack/host/resources/file';
 // @ts-expect-error cached doesn't have type yet
 import { tracked, cached } from '@glimmer/tracking';
 import {
   type AdoptionChainManager,
   type ElementInFile,
 } from '@cardstack/host/resources/adoption-chain-manager';
-import { hash, array } from '@ember/helper';
-import { lastModifiedDate } from '../../resources/last-modified-date';
+
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import { action } from '@ember/object';
-import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
 
 interface Signature {
   Element: HTMLElement;
@@ -32,7 +38,7 @@ interface Signature {
   };
 }
 
-export default class CardInheritancePanel extends Component<Signature> {
+export default class DetailPanel extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   private lastModified = lastModifiedDate(this, () => this.args.readyFile);
 
@@ -65,6 +71,17 @@ export default class CardInheritancePanel extends Component<Signature> {
   select(el: ElementInFile) {
     this.args.adoptionChainManager?.select(el);
   }
+  get isModule() {
+    return hasExecutableExtension(this.args.readyFile.url);
+  }
+
+  private get fileExtension() {
+    if (!this.args.cardInstance) {
+      return '.' + this.args.readyFile.url.split('.').pop() || '';
+    } else {
+      return '';
+    }
+  }
 
   <template>
     <div class='container' ...attributes>
@@ -94,7 +111,7 @@ export default class CardInheritancePanel extends Component<Signature> {
               @url={{this.cardType.type.module}}
             />
           </div>
-        {{else}}
+        {{else if this.isModule}}
           {{! Module case when visting, eg author.gts }}
           <h3>In This File</h3>
           {{#each this.elementsInFile as |el|}}
@@ -127,6 +144,15 @@ export default class CardInheritancePanel extends Component<Signature> {
               @url={{this.cardType.type.super.module}}
             />
           {{/if}}
+        {{else}}
+          <FileDefinitionContainer
+            @fileExtension={{this.fileExtension}}
+            @realmInfo={{@realmInfo}}
+            @infoText={{this.lastModified.value}}
+            @actions={{array
+              (hash label='Delete' handler=@delete icon='icon-trash')
+            }}
+          />
         {{/if}}
       {{/if}}
     </div>

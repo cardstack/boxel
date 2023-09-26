@@ -1,7 +1,8 @@
 import Service from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-import { TrackedArray } from 'tracked-built-ins';
+
 import window from 'ember-window-mock';
+import { TrackedArray } from 'tracked-built-ins';
 
 export default class RecentFilesService extends Service {
   @tracked recentFiles = new TrackedArray<string>([]);

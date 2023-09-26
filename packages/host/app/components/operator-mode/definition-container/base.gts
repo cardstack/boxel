@@ -1,8 +1,11 @@
-import Label from '@cardstack/boxel-ui/components/label';
-import Component from '@glimmer/component';
 import { on } from '@ember/modifier';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import Component from '@glimmer/component';
+
 import { Button } from '@cardstack/boxel-ui';
+import Label from '@cardstack/boxel-ui/components/label';
+
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+
 import { type RealmInfo } from '@cardstack/runtime-common';
 
 interface Action {
@@ -78,7 +81,7 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
         background-color: var(--boxel-100);
       }
       .banner-title {
-        color: #919191;
+        color: var(--boxel-450);
         font-size: var(--boxel-font-size-sm);
         font-weight: 200;
         letter-spacing: var(--boxel-lsp-xxl);
