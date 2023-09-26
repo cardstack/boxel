@@ -20,9 +20,9 @@ import {
 } from './definition-container';
 // @ts-expect-error cached doesn't have type yet
 import { tracked, cached } from '@glimmer/tracking';
-import { type ElementInFile } from '@cardstack/host/resources/adoption-chain-manager';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type { ElementInFile } from './code-mode';
 
 interface Signature {
   Element: HTMLElement;
@@ -46,7 +46,11 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   get isLoading() {
-    return this.cardType?.isLoading;
+    return (
+      this.args.elements.some(({ cardType }) => {
+        return cardType?.isLoading;
+      }) || this.cardType?.isLoading
+    );
   }
 
   @action

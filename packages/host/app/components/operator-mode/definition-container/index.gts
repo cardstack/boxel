@@ -19,7 +19,6 @@ export class FileDefinitionContainer extends Component<FileSignature> {
       @name={{undefined}}
       @fileExtension={{@fileExtension}}
       @realmInfo={{@realmInfo}}
-      @realmIconURL={{@realmIconURL}}
       @isActive={{true}}
       data-test-file-definition
     >

@@ -55,10 +55,7 @@ import {
   type FileResource,
 } from '@cardstack/host/resources/file';
 
-import {
-  importResource,
-  type ImportResource,
-} from '@cardstack/host/resources/import';
+import { importResource } from '@cardstack/host/resources/import';
 
 import { maybe } from '@cardstack/host/resources/maybe';
 
@@ -329,7 +326,7 @@ export default class CodeMode extends Component<Signature> {
 
     const state: {
       isLoading: boolean;
-      value: RealmInfo | null;
+      value: ElementInFile[] | null;
       error: Error | undefined;
       load: () => Promise<void>;
     } = new TrackedObject({
@@ -339,21 +336,27 @@ export default class CodeMode extends Component<Signature> {
       load: async () => {
         state.isLoading = true;
         if (this.importedModule === undefined) {
-          return [];
+          state.value = [];
+          return;
         }
-        await this.importedModule.loaded;
-        let module = this.importedModule?.module;
-        if (module === undefined) {
-          return [];
+        try {
+          await this.importedModule.loaded;
+          let module = this.importedModule?.module;
+          if (module) {
+            let cards = cardsOrFieldsFromModule(module);
+            let elements: ElementInFile[] = cards.map((card) => {
+              return {
+                cardType: getCardType(this, () => card),
+                card: card,
+              };
+            });
+            state.value = elements;
+          }
+        } catch (error: any) {
+          state.error = error;
+        } finally {
+          state.isLoading = false;
         }
-        let cards = cardsOrFieldsFromModule(module);
-        let elements = cards.map((card) => {
-          return {
-            cardType: getCardType(this, () => card),
-            card: card,
-          };
-        });
-        state.value = elements;
       },
     });
 
@@ -478,6 +481,9 @@ export default class CodeMode extends Component<Signature> {
     if (this.selectedElement) {
       return this.selectedElement;
     } else {
+      if (this.elementsInFile === null) {
+        return;
+      }
       return this.elementsInFile.length > 0
         ? this.elementsInFile[0]
         : undefined;
@@ -490,6 +496,9 @@ export default class CodeMode extends Component<Signature> {
   }
 
   get elementsInFile() {
+    if (this.elements.value === null) {
+      return [];
+    }
     return this.elements.value;
   }
 
