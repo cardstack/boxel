@@ -31,7 +31,7 @@ import { MenuItem, menuItemFunc } from '@cardstack/boxel-ui/helpers/menu-item';
 import { CardContainer, LoadingIndicator } from '@cardstack/boxel-ui';
 import Label from '@cardstack/boxel-ui/components/label';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { not, or } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { or } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 interface Signature {
   Element: HTMLElement;
@@ -271,6 +271,7 @@ export default class DetailPanel extends Component<Signature> {
       :global(.in-this-file-menu-item) {
         --boxel-menu-selected-background-color: var(--boxel-highlight);
         --boxel-menu-selected-font-color: var(--boxel-light-100);
+        --boxel-menu-selected-hover-font-color: var(--boxel-dark);
       }
       :global(.in-this-file-menu-item .check-icon) {
         display: none;

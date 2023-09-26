@@ -140,8 +140,6 @@ export default class Menu extends Component<Signature> {
           --boxel-menu-color: var(--boxel-light);
           --boxel-menu-current-color: var(--boxel-light-100);
           --boxel-menu-selected-color: var(--boxel-highlight);
-          --boxel-menu-selected-background-color: var(--boxel-highlight);
-          --boxel-menu-selected-font-color: var(--boxel-light-100);
           --boxel-menu-disabled-color: var(--boxel-highlight);
           --boxel-menu-font: 500 var(--boxel-font-sm);
           --boxel-menu-item-gap: var(--boxel-sp-xxs);
@@ -165,7 +163,7 @@ export default class Menu extends Component<Signature> {
         }
 
         .boxel-menu__item--selected:hover {
-          color: var(--boxel-menu-current-font-color);
+          color: var(--boxel-menu-selected-hover-font-color);
         }
 
         .boxel-menu__item:hover {
