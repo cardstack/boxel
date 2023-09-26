@@ -1,3 +1,10 @@
+// TODO make sure to remove this from @cardstack/runtime-common deps
+import ignore, { Ignore } from 'ignore';
+
+import flatMap from 'lodash/flatMap';
+import isEqual from 'lodash/isEqual';
+import merge from 'lodash/merge';
+
 import {
   Loader,
   baseRealm,
@@ -13,27 +20,22 @@ import {
   type RealmInfo,
 } from '@cardstack/runtime-common';
 import {
+  type SingleCardDocument,
+  type Relationship,
+} from '@cardstack/runtime-common/card-document';
+import {
   loadCard,
   identifyCard,
   isCard,
   moduleFrom,
 } from '@cardstack/runtime-common/code-ref';
-import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
-// TODO make sure to remove this from @cardstack/runtime-common deps
-import ignore, { Ignore } from 'ignore';
-import isEqual from 'lodash/isEqual';
 import { Deferred } from '@cardstack/runtime-common/deferred';
-import flatMap from 'lodash/flatMap';
-import merge from 'lodash/merge';
 import {
   CardError,
   serializableError,
   type SerializedError,
 } from '@cardstack/runtime-common/error';
-import {
-  type SingleCardDocument,
-  type Relationship,
-} from '@cardstack/runtime-common/card-document';
+import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
 import {
   isIgnored,
   type Reader,
@@ -45,12 +47,14 @@ import {
   type ModuleWithErrors,
 } from '@cardstack/runtime-common/search-index';
 import { URLMap } from '@cardstack/runtime-common/url-map';
+
 import {
   CardDef,
   type IdentityContext as IdentityContextType,
+  LoaderType,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { LoaderType } from 'https://cardstack.com/base/card-api';
+
 import { type RenderCard } from '../services/render-service';
 
 const log = logger('current-run');

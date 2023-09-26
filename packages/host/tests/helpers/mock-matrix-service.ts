@@ -1,10 +1,14 @@
-import { TrackedMap } from 'tracked-built-ins';
 import Service, { service } from '@ember/service';
+
+import { TrackedMap } from 'tracked-built-ins';
+
+import { type MatrixCardError } from '@cardstack/runtime-common';
+
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import type LoaderService from '@cardstack/host/services/loader-service';
+
 import type { RoomField } from 'https://cardstack.com/base/room';
 import type { RoomObjectiveField } from 'https://cardstack.com/base/room-objective';
-import { type MatrixCardError } from '@cardstack/runtime-common';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 

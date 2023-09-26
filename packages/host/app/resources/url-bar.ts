@@ -1,5 +1,6 @@
-import { Resource } from 'ember-resources';
 import { tracked } from '@glimmer/tracking';
+
+import { Resource } from 'ember-resources';
 
 interface Args {
   named: {

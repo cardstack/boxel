@@ -1,23 +1,28 @@
+import { hash } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import { LinkTo } from '@ember/routing';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
+
+import { tracked } from '@glimmer/tracking';
+
+import { Button, CardContainer } from '@cardstack/boxel-ui';
+
 import {
   catalogEntryRef,
   type CodeRef,
   humanReadable,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
-import { on } from '@ember/modifier';
-import { action } from '@ember/object';
-import { tracked } from '@glimmer/tracking';
-import { LinkTo } from '@ember/routing';
-import { service } from '@ember/service';
 //@ts-ignore glint does not think this is consumed-but it is consumed in the template
-import { hash } from '@ember/helper';
+
+import CardEditor from '@cardstack/host/components/card-editor';
 import { getSearchResults } from '@cardstack/host/resources/search';
 import type CardService from '@cardstack/host/services/card-service';
-import CardEditor from '@cardstack/host/components/card-editor';
-import { Button, CardContainer } from '@cardstack/boxel-ui';
-import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+
 import { CardDef } from 'https://cardstack.com/base/card-api';
+import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
 interface Signature {
   Args: {

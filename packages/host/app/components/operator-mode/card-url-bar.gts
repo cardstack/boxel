@@ -1,14 +1,18 @@
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
+
 import { BoxelInput } from '@cardstack/boxel-ui';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { service } from '@ember/service';
 import { and, bool, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { on } from '@ember/modifier';
+
 import { type RealmInfo } from '@cardstack/runtime-common';
-import type OperatorModeStateService from '../../services/operator-mode-state-service';
+
 import URLBarResource, {
   urlBarResource,
 } from '@cardstack/host/resources/url-bar';
+
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 interface Signature {
   Element: HTMLElement;
@@ -34,7 +38,9 @@ export default class CardURLBar extends Component<Signature> {
       ...attributes
     >
       <div class='realm-info' data-test-card-url-bar-realm-info>
-        <img src={{this.realmIcon}} alt='realm-icon' />
+        <div class='realm-icon'>
+          <img src={{this.realmIcon}} alt='realm-icon' />
+        </div>
         <span>in
           {{if this.realmName this.realmName 'Unknown Workspace'}}</span>
       </div>
@@ -98,8 +104,18 @@ export default class CardURLBar extends Component<Signature> {
 
         white-space: nowrap;
       }
-      .realm-info img {
-        width: 22px;
+      .realm-icon {
+        display: flex;
+        align-items: center;
+        background-color: var(--boxel-light);
+        background-image: var(--card-url-bar-realm-icon);
+
+        border: 1px solid var(--boxel-light);
+        border-radius: 4px;
+      }
+      .realm-icon img {
+        width: 20px;
+        height: 20px;
       }
       .input {
         display: flex;

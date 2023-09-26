@@ -1,9 +1,12 @@
-import { Resource } from 'ember-resources';
-import { tracked } from '@glimmer/tracking';
-import { task } from 'ember-concurrency';
-import { Loader } from '@cardstack/runtime-common/loader';
 import { getOwner } from '@ember/application';
+import { tracked } from '@glimmer/tracking';
+
+import { task } from 'ember-concurrency';
+import { Resource } from 'ember-resources';
+
 import { logger } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
+
 import type LoaderService from '../services/loader-service';
 
 interface Args {

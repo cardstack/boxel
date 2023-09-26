@@ -1,11 +1,16 @@
 import Route from '@ember/routing/route';
-import { service } from '@ember/service';
-import ENV from '@cardstack/host/config/environment';
-import { parse } from 'qs';
-import type CardService from '../services/card-service';
 import type RouterService from '@ember/routing/router-service';
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import { service } from '@ember/service';
+
+import { parse } from 'qs';
+
+import ENV from '@cardstack/host/config/environment';
+
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
+import { CardDef } from 'https://cardstack.com/base/card-api';
+
+import type CardService from '../services/card-service';
 
 const { ownRealmURL } = ENV;
 const rootPath = new URL(ownRealmURL).pathname.replace(/^\//, '');

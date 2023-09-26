@@ -1,4 +1,3 @@
-import { module, test } from 'qunit';
 import {
   visit,
   currentURL,
@@ -9,7 +8,22 @@ import {
   waitUntil,
   fillIn,
 } from '@ember/test-helpers';
+
+import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
+
+import window from 'ember-window-mock';
+import { setupWindowMock } from 'ember-window-mock/test-support';
+import { module, test } from 'qunit';
+import stringify from 'safe-stable-stringify';
+
+import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { Realm } from '@cardstack/runtime-common/realm';
+
+import config from '@cardstack/host/config/environment';
+import type LoaderService from '@cardstack/host/services/loader-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
 import {
   TestRealm,
   TestRealmAdapter,
@@ -22,16 +36,9 @@ import {
   waitForSyntaxHighlighting,
   type TestContextWithSSE,
   type TestContextWithSave,
+  sourceFetchRedirectHandle,
+  sourceFetchReturnUrlHandle,
 } from '../helpers';
-import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
-import stringify from 'safe-stable-stringify';
-import { Realm } from '@cardstack/runtime-common/realm';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import percySnapshot from '@percy/ember';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import { setupWindowMock } from 'ember-window-mock/test-support';
-import window from 'ember-window-mock';
-import config from '@cardstack/host/config/environment';
 
 module('Acceptance | operator mode tests', function (hooks) {
   let realm: Realm;
@@ -260,6 +267,14 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
       isAcceptanceTest: true,
+      overridingHandlers: [
+        async (req: Request) => {
+          return sourceFetchRedirectHandle(req, adapter, testRealmURL);
+        },
+        async (req: Request) => {
+          return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
+        },
+      ],
     });
     await realm.ready;
   });

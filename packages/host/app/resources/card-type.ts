@@ -1,23 +1,33 @@
-import { Resource } from 'ember-resources';
-import { restartableTask } from 'ember-concurrency';
+import { getOwner } from '@ember/application';
+import { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
+
+import { restartableTask } from 'ember-concurrency';
+import { Resource } from 'ember-resources';
+
 import {
   identifyCard,
   internalKeyFor,
   baseRealm,
   moduleFrom,
   getAncestor,
+  RealmInfo,
 } from '@cardstack/runtime-common';
+import { SupportedMimeType } from '@cardstack/runtime-common';
+import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
 import { Loader } from '@cardstack/runtime-common/loader';
-import { getOwner } from '@ember/application';
-import type LoaderService from '../services/loader-service';
+
+import type CardService from '@cardstack/host/services/card-service';
+
 import type {
   BaseDef,
   Field,
   FieldType,
 } from 'https://cardstack.com/base/card-api';
-import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
+
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+
+import type LoaderService from '../services/loader-service';
 
 interface Args {
   named: {
@@ -31,19 +41,30 @@ export interface Type {
   displayName: string;
   super: Type | undefined;
   fields: { name: string; card: Type | CodeRef; type: FieldType }[];
+  moduleMeta: {
+    extension: string;
+    realmInfo: RealmInfo;
+  };
   codeRef: CodeRef;
 }
 
 export class CardType extends Resource<Args> {
   @tracked type: Type | undefined;
+  @service declare cardService: CardService;
   declare loader: Loader;
   typeCache: Map<string, Type> = new Map();
+  moduleMetaCache: Map<string, { extension: string; realmInfo: RealmInfo }> =
+    new Map();
   ready: Promise<void> | undefined;
+
   modify(_positional: never[], named: Args['named']) {
     let { definition, loader } = named;
     this.loader = loader;
-    this.assembleType.perform(definition);
     this.ready = this.assembleType.perform(definition);
+  }
+
+  get isLoading() {
+    return this.assembleType.isRunning;
   }
 
   private assembleType = restartableTask(async (card: typeof BaseDef) => {
@@ -100,17 +121,49 @@ export class CardType extends Resource<Args> {
         }),
       ),
     );
+
+    let moduleIdentifier = moduleFrom(ref);
+    let moduleMeta =
+      this.moduleMetaCache.get(moduleIdentifier) ??
+      (await this.moduleMeta(new URL(moduleIdentifier)));
+    this.moduleMetaCache.set(moduleIdentifier, moduleMeta);
     let type: Type = {
       id,
-      module: moduleFrom(ref),
+      module: moduleIdentifier,
       super: superType,
       displayName: card.prototype.constructor.displayName || 'Card',
       fields: fieldTypes,
+      moduleMeta,
       codeRef: ref,
     };
     this.typeCache.set(id, type);
     return type;
   }
+
+  private moduleMeta = async (url: URL) => {
+    let response = await this.loader.fetch(url, {
+      headers: { Accept: SupportedMimeType.CardSource },
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Could not get file ${url.href}, status ${response.status}: ${
+          response.statusText
+        } - ${await response.text()}`,
+      );
+    }
+    let realmURL = response.headers.get('x-boxel-realm-url');
+    if (realmURL === null) {
+      throw new Error(`Could not get realm url for ${url.href}`);
+    }
+    let realmInfo = await this.cardService.getRealmInfoByRealmURL(
+      new URL(realmURL),
+    );
+    return {
+      realmInfo,
+      extension: '.' + new URL(response.url).pathname.split('.').pop() || '',
+    };
+  };
 }
 
 export function getCardType(parent: object, card: () => typeof BaseDef) {

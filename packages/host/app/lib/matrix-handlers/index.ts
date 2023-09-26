@@ -4,20 +4,23 @@ import {
   type MatrixClient,
   type IEvent,
 } from 'matrix-js-sdk';
-import type * as MatrixSDK from 'matrix-js-sdk';
-import type {
-  RoomField,
-  MatrixEvent as DiscreteMatrixEvent,
-} from 'https://cardstack.com/base/room';
-import type { RoomObjectiveField } from 'https://cardstack.com/base/room-objective';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+
 import {
   type LooseCardResource,
   type MatrixCardError,
   baseRealm,
   isMatrixCardError,
 } from '@cardstack/runtime-common';
+
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type {
+  RoomField,
+  MatrixEvent as DiscreteMatrixEvent,
+} from 'https://cardstack.com/base/room';
+import type { RoomObjectiveField } from 'https://cardstack.com/base/room-objective';
+
 import type LoaderService from '../../services/loader-service';
+import type * as MatrixSDK from 'matrix-js-sdk';
 
 export * as Membership from './membership';
 export * as Timeline from './timeline';

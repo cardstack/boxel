@@ -1,4 +1,3 @@
-import { module, test } from 'qunit';
 import {
   visit,
   click,
@@ -7,21 +6,30 @@ import {
   fillIn,
   triggerKeyEvent,
 } from '@ember/test-helpers';
+
+import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
+import window from 'ember-window-mock';
+import { setupWindowMock } from 'ember-window-mock/test-support';
+import { module, test } from 'qunit';
+
+import stringify from 'safe-stable-stringify';
+
 import { baseRealm } from '@cardstack/runtime-common';
+
+import { Realm } from '@cardstack/runtime-common/realm';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
+
 import {
   TestRealm,
   TestRealmAdapter,
   setupLocalIndexing,
   setupMockMessageService,
   testRealmURL,
+  sourceFetchRedirectHandle,
+  sourceFetchReturnUrlHandle,
 } from '../helpers';
-import stringify from 'safe-stable-stringify';
-import { Realm } from '@cardstack/runtime-common/realm';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import { setupWindowMock } from 'ember-window-mock/test-support';
-import window from 'ember-window-mock';
-import percySnapshot from '@percy/ember';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -170,6 +178,14 @@ module('Acceptance | code mode tests', function (hooks) {
 
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
       isAcceptanceTest: true,
+      overridingHandlers: [
+        async (req: Request) => {
+          return sourceFetchRedirectHandle(req, adapter, testRealmURL);
+        },
+        async (req: Request) => {
+          return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
+        },
+      ],
     });
     await realm.ready;
   });
@@ -587,12 +603,11 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-card-instance-definition]');
 
     assert.dom('[data-test-card-module-definition]').includesText('Card');
-    //TODO: CS-5957 deriving extension
-    // assert
-    //   .dom(
-    //     '[data-test-card-module-definition] [data-test-definition-file-extension]',
-    //   )
-    //   .includesText('.gts');
+    assert
+      .dom(
+        '[data-test-card-module-definition] [data-test-definition-file-extension]',
+      )
+      .includesText('.gts');
     assert
       .dom(
         '[data-test-card-module-definition] [data-test-definition-realm-name]',
@@ -884,9 +899,10 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-file-definition]');
 
     assert.dom('[data-test-definition-file-extension]').hasText('.png');
+    await waitFor('[data-test-definition-realm-name]');
     assert
       .dom('[data-test-definition-realm-name]')
-      .hasText('in Test Workspace B');
+      .hasText('in Test Workspace A');
     assert.dom('[data-test-definition-info-text]').containsText('Last saved');
     assert
       .dom('[data-test-binary-info] [data-test-file-name]')

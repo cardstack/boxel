@@ -1,16 +1,22 @@
-import { Resource } from 'ember-resources';
-import { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
-import { restartableTask } from 'ember-concurrency';
 import { registerDestructor } from '@ember/destroyable';
-import { SupportedMimeType, logger } from '@cardstack/runtime-common';
-import LoaderService from '../services/loader-service';
-import type MessageService from '../services/message-service';
-import type CardService from '@cardstack/host/services/card-service';
-import type RecentFilesService from '@cardstack/host/services/recent-files-service';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import { service } from '@ember/service';
+
+import { tracked } from '@glimmer/tracking';
+
 import { parse } from 'date-fns';
-import config from '@cardstack/host/config/environment';
+import { restartableTask } from 'ember-concurrency';
+import { Resource } from 'ember-resources';
+
+import { SupportedMimeType, logger } from '@cardstack/runtime-common';
+
+import type CardService from '@cardstack/host/services/card-service';
+
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+
+import LoaderService from '../services/loader-service';
+
+import type MessageService from '../services/message-service';
 
 const log = logger('resource:file');
 const utf8 = new TextDecoder();
@@ -165,25 +171,15 @@ class _FileResource extends Resource<Args> {
     let content = utf8.decode(buffer);
 
     let self = this;
-    // Inside test, The loader occasionally doesn't do a network request and creates Response object manually
-    // This means that reading response.url will give url = '' and we cannot manually alter the url in Response
-    // The below condition is a workaround
-    // TODO: CS-5982
-    let url: string;
-    if (config.environment === 'test') {
-      url = response.url === '' ? this._url : response.url;
-    } else {
-      url = response.url;
-    }
 
     this.updateState({
       state: 'ready',
       lastModified,
       realmURL,
       content,
-      name: url.split('/').pop()!,
+      name: response.url.split('/').pop()!,
       size,
-      url: url,
+      url: response.url,
       write(content: string, flushLoader?: true) {
         self.writing = self.writeTask.perform(this, content, flushLoader);
       },
