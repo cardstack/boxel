@@ -31,6 +31,15 @@ runs:
     - name: Run volta setup
       uses: volta-cli/action@v4
 
+    - shell: bash
+      run: |
+        volta which node
+        echo `volta which node`
+
+    - shell: bash
+      run: |
+        exit 1
+
     - name: Get pnpm store directory
       id: pnpm-cache
       shell: bash
