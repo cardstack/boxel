@@ -64,16 +64,20 @@ export default class DetailPanel extends Component<Signature> {
     }
   }
 
-  get isCardInstance() {
-    return this.args.readyFile.url.endsWith('.json');
-  }
-
   @action
   isSelected(el: ElementInFile) {
     return this.args.selectedElement === el;
   }
+
+  get isCardInstance() {
+    return this.args.readyFile.url.endsWith('.json');
+  }
   get isModule() {
     return hasExecutableExtension(this.args.readyFile.url);
+  }
+
+  get isBinary() {
+    return this.args.readyFile.isBinary;
   }
 
   private get fileExtension() {
@@ -144,7 +148,7 @@ export default class DetailPanel extends Component<Signature> {
               @url={{this.cardType.type.super.module}}
             />
           {{/if}}
-        {{else}}
+        {{else if this.isBinary}}
           <FileDefinitionContainer
             @fileURL={{@readyFile.url}}
             @fileExtension={{this.fileExtension}}
