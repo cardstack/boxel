@@ -1,15 +1,20 @@
-import Component from '@glimmer/component';
-import { service } from '@ember/service';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
+import { service } from '@ember/service';
+import Component from '@glimmer/component';
+
+import { tracked } from '@glimmer/tracking';
+
+import { dropTask, restartableTask } from 'ember-concurrency';
+
 import {
   Button,
   FieldContainer,
   BoxelInput,
   LoadingIndicator,
 } from '@cardstack/boxel-ui';
-import { dropTask, restartableTask } from 'ember-concurrency';
-import { tracked } from '@glimmer/tracking';
+
 import { not } from '@cardstack/host/helpers/truth-helpers';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
@@ -87,7 +92,7 @@ export default class UserProfile extends Component {
   @tracked private isEditMode = false;
   @tracked private displayName: string | undefined;
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: {}) {
     super(owner, args);
     if (!this.matrixService.isLoggedIn) {
       throw new Error(

@@ -1,20 +1,25 @@
-import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type { MiddlewareState } from '@floating-ui/dom';
-import { TrackedWeakMap, type TrackedArray } from 'tracked-built-ins';
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+
 import { velcro } from 'ember-velcro';
+import { type TrackedArray } from 'tracked-built-ins';
+
+import { IconButton, BoxelDropdown, Menu } from '@cardstack/boxel-ui';
+import cn from '@cardstack/boxel-ui/helpers/cn';
+import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
+import { and, bool, eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
+import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
-import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
-import { IconButton, BoxelDropdown, Menu } from '@cardstack/boxel-ui';
-import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
-import cn from '@cardstack/boxel-ui/helpers/cn';
-import { and, bool, eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
 import OperatorModeOverlayItemHeader from './overlay-item-header';
 import { RenderedCardForOverlayActions } from './stack-item';
+
+import type { MiddlewareState } from '@floating-ui/dom';
 
 interface Signature {
   Args: {
@@ -26,11 +31,14 @@ interface Signature {
   };
 }
 
+let boundRenderedCardElement = new WeakSet<HTMLElement>();
+
 export default class OperatorModeOverlays extends Component<Signature> {
   isEmbeddedCard(renderedCard: RenderedCardForOverlayActions) {
     return (
       renderedCard.fieldType === 'contains' ||
-      renderedCard.fieldType === 'linksTo'
+      renderedCard.fieldType === 'linksTo' ||
+      renderedCard.fieldType === 'linksToMany'
     );
   }
 
@@ -177,10 +185,6 @@ export default class OperatorModeOverlays extends Component<Signature> {
   </template>
 
   @tracked currentlyHoveredCard: RenderedCardForOverlayActions | null = null;
-  areEventsRegistered = new TrackedWeakMap<
-    RenderedCardForOverlayActions,
-    boolean
-  >();
 
   offset = {
     name: 'offset',
@@ -208,7 +212,10 @@ export default class OperatorModeOverlays extends Component<Signature> {
   get renderedCardsForOverlayActionsWithEvents() {
     let renderedCards = this.args.renderedCardsForOverlayActions;
     for (const renderedCard of renderedCards) {
-      if (this.areEventsRegistered.get(renderedCard)) continue;
+      if (boundRenderedCardElement.has(renderedCard.element)) {
+        continue;
+      }
+      boundRenderedCardElement.add(renderedCard.element);
       renderedCard.element.addEventListener(
         'mouseenter',
         (_e: MouseEvent) => (this.currentlyHoveredCard = renderedCard),

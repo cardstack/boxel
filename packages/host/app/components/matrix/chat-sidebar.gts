@@ -1,14 +1,21 @@
-import Component from '@glimmer/component';
-import { service } from '@ember/service';
-import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import UserProfile from './user-profile';
+import { action } from '@ember/object';
+import type Owner from '@ember/owner';
+import { service } from '@ember/service';
+import Component from '@glimmer/component';
+
+import { tracked } from '@glimmer/tracking';
+
+import { task } from 'ember-concurrency';
+
+import { IconButton, LoadingIndicator } from '@cardstack/boxel-ui';
+
 import Login from './login';
 import RegisterUser from './register-user';
 import RoomsManager from './rooms-manager';
-import { IconButton, LoadingIndicator } from '@cardstack/boxel-ui';
-import { tracked } from '@glimmer/tracking';
-import { task } from 'ember-concurrency';
+
+import UserProfile from './user-profile';
+
 import type MatrixService from '../../services/matrix-service';
 
 interface Args {
@@ -96,7 +103,7 @@ export default class ChatSidebar extends Component<Args> {
   @service declare matrixService: MatrixService;
   @tracked isRegistrationMode = false;
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: Args['Args']) {
     super(owner, args);
     this.loadMatrix.perform();
   }

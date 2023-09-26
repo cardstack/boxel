@@ -1,16 +1,20 @@
-import { module, test } from 'qunit';
-import { renderCard } from '../../helpers/render-component';
-import { setupRenderingTest } from 'ember-qunit';
 import { waitUntil, fillIn, RenderingTestContext } from '@ember/test-helpers';
+
+import { setupRenderingTest } from 'ember-qunit';
+import { module, test } from 'qunit';
+
+import { baseRealm } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
+
 import {
   cleanWhiteSpace,
   testRealmURL,
   shimModule,
   setupCardLogs,
 } from '../../helpers';
-import { Loader } from '@cardstack/runtime-common/loader';
-import { baseRealm } from '@cardstack/runtime-common';
-import type LoaderService from '@cardstack/host/services/loader-service';
+import { renderCard } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');

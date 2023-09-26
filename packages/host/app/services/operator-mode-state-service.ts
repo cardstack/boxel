@@ -1,20 +1,30 @@
+import { getOwner } from '@ember/application';
+import { registerDestructor } from '@ember/destroyable';
+import type RouterService from '@ember/routing/router-service';
+import { scheduleOnce } from '@ember/runloop';
+import Service, { service } from '@ember/service';
+
+import { tracked } from '@glimmer/tracking';
+
+import { task } from 'ember-concurrency';
+import window from 'ember-window-mock';
+import stringify from 'safe-stable-stringify';
+import { TrackedArray, TrackedObject } from 'tracked-built-ins';
+
+import { RealmPaths } from '@cardstack/runtime-common/paths';
+
+import { Submode } from '@cardstack/host/components/submode-switcher';
+import type MessageService from '@cardstack/host/services/message-service';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+
 import {
   type Stack,
   type StackItem,
 } from '../components/operator-mode/container';
-import Service from '@ember/service';
+
 import type CardService from '../services/card-service';
-import { TrackedArray, TrackedObject } from 'tracked-built-ins';
-import type MessageService from '@cardstack/host/services/message-service';
-import { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
-import { task } from 'ember-concurrency';
-import { getOwner } from '@ember/application';
-import { scheduleOnce } from '@ember/runloop';
-import stringify from 'safe-stable-stringify';
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import { Submode } from '@cardstack/host/components/submode-switcher';
-import { registerDestructor } from '@ember/destroyable';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
@@ -56,6 +66,9 @@ export default class OperatorModeStateService extends Service {
   @tracked recentCards = new TrackedArray<CardDef>([]);
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
+  @service declare recentFilesService: RecentFilesService;
+  @service declare router: RouterService;
+
   private subscription: { url: string; unsubscribe: () => void } | undefined;
 
   constructor(properties: object) {
@@ -237,9 +250,48 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
+  get codePathRelativeToRealm() {
+    if (this.state.codePath) {
+      let realmPath = new RealmPaths(this.cardService.defaultURL.href);
+      return realmPath.local(this.state.codePath!);
+    } else {
+      return undefined;
+    }
+  }
+
   updateCodePath(codePath: URL | null) {
     this.state.codePath = codePath;
+    this.updateOpenDirsForNestedPath();
     this.schedulePersist();
+  }
+
+  replaceCodePath(codePath: URL | null) {
+    // replace history explicitly
+    // typically used when, serving a redirect in the code path
+    // solve UX issues with back button referring back to request url of redirect
+    // when it should refer back to the previous code path
+    this.state.codePath = codePath;
+    this.router.replaceWith('card', {
+      queryParams: {
+        operatorModeState: this.serialize(),
+      },
+    });
+  }
+
+  private updateOpenDirsForNestedPath() {
+    let localPath = this.codePathRelativeToRealm;
+
+    if (localPath) {
+      let containingDirectory = localPath.split('/').slice(0, -1).join('/');
+
+      if (containingDirectory) {
+        containingDirectory += '/';
+
+        if (!this.openDirs.includes(containingDirectory)) {
+          this.toggleOpenDir(containingDirectory);
+        }
+      }
+    }
   }
 
   updateFileView(fileView: FileView) {
@@ -340,7 +392,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   async constructRecentCards() {
-    const recentCardIdsString = localStorage.getItem('recent-cards');
+    const recentCardIdsString = window.localStorage.getItem('recent-cards');
     if (!recentCardIdsString) {
       return;
     }
@@ -367,7 +419,7 @@ export default class OperatorModeStateService extends Service {
     const recentCardIds = this.recentCards
       .map((recentCard) => recentCard.id)
       .filter(Boolean); // don't include cards that don't have an ID
-    localStorage.setItem('recent-cards', JSON.stringify(recentCardIds));
+    window.localStorage.setItem('recent-cards', JSON.stringify(recentCardIds));
   }
 
   removeRecentCard(id: string) {
@@ -379,7 +431,7 @@ export default class OperatorModeStateService extends Service {
       this.recentCards.splice(index, 1);
       index = this.recentCards.findIndex((c) => c.id === id);
     }
-    localStorage.setItem(
+    window.localStorage.setItem(
       'recent-cards',
       JSON.stringify(this.recentCards.map((c) => c.id)),
     );

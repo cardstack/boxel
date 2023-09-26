@@ -1,6 +1,7 @@
 import Service, { service } from '@ember/service';
+
 import { stringify } from 'qs';
-import type LoaderService from './loader-service';
+
 import {
   SupportedMimeType,
   type LooseCardResource,
@@ -13,7 +14,9 @@ import {
   type RealmInfo,
 } from '@cardstack/runtime-common';
 import type { Query } from '@cardstack/runtime-common/query';
-import { importResource } from '../resources/import';
+
+import ENV from '@cardstack/host/config/environment';
+
 import type {
   BaseDef,
   CardDef,
@@ -21,10 +24,14 @@ import type {
   Field,
   SerializeOpts,
 } from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import ENV from '@cardstack/host/config/environment';
 
-export type CardSaveSubscriber = (json: SingleCardDocument) => void;
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
+
+import { importResource } from '../resources/import';
+
+import type LoaderService from './loader-service';
+
+export type CardSaveSubscriber = (content: SingleCardDocument | string) => void;
 const { ownRealmURL, otherRealmURLs } = ENV;
 
 export default class CardService extends Service {
@@ -69,23 +76,26 @@ export default class CardService extends Service {
     this.subscriber = undefined;
   }
 
-  private async fetchJSON(
+  async fetchJSON(
     url: string | URL,
     args?: RequestInit,
-  ): Promise<CardDocument | void> {
+  ): Promise<CardDocument | undefined> {
     let response = await this.loaderService.loader.fetch(url, {
       headers: { Accept: SupportedMimeType.CardJson },
       ...args,
     });
     if (!response.ok) {
-      throw new Error(
+      let err = new Error(
         `status: ${response.status} -
         ${response.statusText}. ${await response.text()}`,
       );
+      (err as any).status = response.status;
+      throw err;
     }
     if (response.status !== 204) {
       return await response.json();
     }
+    return;
   }
 
   async createFromSerialized(
@@ -181,6 +191,26 @@ export default class CardService extends Service {
       this.subscriber(json);
     }
     return result;
+  }
+
+  async saveSource(url: URL, content: string) {
+    let response = await this.loaderService.loader.fetch(url, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/vnd.card+source',
+      },
+      body: content,
+    });
+
+    if (!response.ok) {
+      let errorMessage = `Could not write file ${url}, status ${
+        response.status
+      }: ${response.statusText} - ${await response.text()}`;
+      console.error(errorMessage);
+      throw new Error(errorMessage);
+    }
+    this.subscriber?.(content);
+    return response;
   }
 
   async patchCard(

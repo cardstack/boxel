@@ -1,12 +1,18 @@
-import Component from '@glimmer/component';
-import { service } from '@ember/service';
-import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import type Owner from '@ember/owner';
+import RouterService from '@ember/routing/router-service';
+import { service } from '@ember/service';
+import Component from '@glimmer/component';
 //@ts-expect-error the types don't recognize the cached export
 import { tracked, cached } from '@glimmer/tracking';
-import { not, eq } from '@cardstack/host/helpers/truth-helpers';
+
+import format from 'date-fns/format';
 import { restartableTask, timeout } from 'ember-concurrency';
+
+import { TrackedMap } from 'tracked-built-ins';
+
 import {
   BoxelHeader,
   BoxelInput,
@@ -15,19 +21,25 @@ import {
   Button,
   FieldContainer,
 } from '@cardstack/boxel-ui';
-import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
-import { eventDebounceMs } from '@cardstack/host/lib/matrix-utils';
-import { getRoom, RoomResource } from '@cardstack/host/resources/room';
+
 import { aiBotUsername } from '@cardstack/runtime-common';
-import format from 'date-fns/format';
-import { TrackedMap } from 'tracked-built-ins';
-import RouterService from '@ember/routing/router-service';
-import Room from './room';
+
+import { not, eq } from '@cardstack/host/helpers/truth-helpers';
+
+import {
+  isMatrixError,
+  eventDebounceMs,
+} from '@cardstack/host/lib/matrix-utils';
+import { getRoom, RoomResource } from '@cardstack/host/resources/room';
+
 import type MatrixService from '@cardstack/host/services/matrix-service';
+
 import type {
   RoomField,
   RoomMemberField,
 } from 'https://cardstack.com/base/room';
+
+import Room from './room';
 
 export default class RoomsManager extends Component {
   <template>
@@ -230,7 +242,7 @@ export default class RoomsManager extends Component {
   @tracked private currentRoomId: string | undefined;
   private currentRoomResource = getRoom(this, () => this.currentRoomId);
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: {}) {
     super(owner, args);
     this.loadRooms.perform();
   }

@@ -1,33 +1,48 @@
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
+
+//@ts-ignore cached not available yet in definitely typed
+import { cached, tracked } from '@glimmer/tracking';
+
+import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
+import { restartableTask } from 'ember-concurrency';
+
+import debounce from 'lodash/debounce';
+
+import flatMap from 'lodash/flatMap';
+
+import { TrackedArray } from 'tracked-built-ins';
+
 import {
   Button,
   SearchInput,
   SearchInputBottomTreatment,
 } from '@cardstack/boxel-ui';
-import { on } from '@ember/modifier';
-//@ts-ignore cached not available yet in definitely typed
-import { cached, tracked } from '@glimmer/tracking';
-import { fn } from '@ember/helper';
-import { action } from '@ember/object';
-import SearchResult from './search-result';
+
 import { Label } from '@cardstack/boxel-ui';
-import { eq, gt, or } from '../../helpers/truth-helpers';
-import { service } from '@ember/service';
-import { restartableTask } from 'ember-concurrency';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type CardService from '../../services/card-service';
-import type LoaderService from '../../services/loader-service';
+
 import {
   isSingleCardDocument,
   baseRealm,
   catalogEntryRef,
 } from '@cardstack/runtime-common';
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import debounce from 'lodash/debounce';
-import flatMap from 'lodash/flatMap';
-import { TrackedArray } from 'tracked-built-ins';
+
 import ENV from '@cardstack/host/config/environment';
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
+import { CardDef } from 'https://cardstack.com/base/card-api';
+
+import { eq, gt, or } from '../../helpers/truth-helpers';
+
 import UrlSearch from '../url-search';
+
+import SearchResult from './search-result';
+
+import type CardService from '../../services/card-service';
+import type LoaderService from '../../services/loader-service';
 
 const { otherRealmURLs } = ENV;
 
@@ -45,6 +60,7 @@ interface Signature {
     mode: SearchSheetMode;
     onCancel: () => void;
     onFocus: () => void;
+    onBlur: () => void;
     onSearch: (term: string) => void;
     onCardSelect: (card: CardDef) => void;
   };
@@ -111,10 +127,7 @@ export default class SearchSheet extends Component<Signature> {
           maybeCardDoc,
           new URL(maybeCardDoc.data.id),
         );
-        this.args.onCardSelect(card);
-        this.resetState();
-        this.args.onCancel();
-        return;
+        this.handleCardSelect(card);
       }
     }
   });
@@ -123,6 +136,11 @@ export default class SearchSheet extends Component<Signature> {
   onCancel() {
     this.resetState();
     this.args.onCancel();
+  }
+
+  @action handleCardSelect(card: CardDef) {
+    this.resetState();
+    this.args.onCardSelect(card);
   }
 
   @action
@@ -226,7 +244,12 @@ export default class SearchSheet extends Component<Signature> {
   }
 
   <template>
-    <div class='search-sheet {{this.sheetSize}}' data-test-search-sheet>
+    <div
+      id='search-sheet'
+      class='search-sheet {{this.sheetSize}}'
+      data-test-search-sheet={{@mode}}
+      {{onClickOutside @onBlur exceptSelector='.add-card-to-neighbor-stack'}}
+    >
       <SearchInput
         @variant={{if (eq @mode 'closed') 'default' 'large'}}
         @bottomTreatment={{this.inputBottomTreatment}}
@@ -257,7 +280,7 @@ export default class SearchSheet extends Component<Signature> {
                   <SearchResult
                     @card={{card}}
                     @compact={{eq this.sheetSize 'prompt'}}
-                    {{on 'click' (fn @onCardSelect card)}}
+                    {{on 'click' (fn this.handleCardSelect card)}}
                     data-test-search-sheet-search-result={{i}}
                   />
                 {{/each}}
@@ -274,7 +297,7 @@ export default class SearchSheet extends Component<Signature> {
                   <SearchResult
                     @card={{card}}
                     @compact={{eq this.sheetSize 'prompt'}}
-                    {{on 'click' (fn @onCardSelect card)}}
+                    {{on 'click' (fn this.handleCardSelect card)}}
                     data-test-search-sheet-recent-card={{i}}
                   />
                 {{/each}}
@@ -287,7 +310,7 @@ export default class SearchSheet extends Component<Signature> {
         <UrlSearch
           @cardURL={{this.cardURL}}
           @setCardURL={{this.setCardURL}}
-          @setSelectedCard={{@onCardSelect}}
+          @setSelectedCard={{this.handleCardSelect}}
         />
         <div class='buttons'>
           <Button
@@ -334,6 +357,10 @@ export default class SearchSheet extends Component<Signature> {
       .closed {
         height: var(--search-sheet-closed-height);
         width: var(--search-sheet-closed-width);
+      }
+
+      .search-sheet.closed .search-sheet-content {
+        display: none;
       }
 
       .prompt {

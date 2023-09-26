@@ -1,11 +1,16 @@
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
+
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import { htmlSafe } from '@ember/template';
-import OperatorModeStackItem from './stack-item';
+
 import type { Actions } from '@cardstack/runtime-common';
-import type { StackItem } from './container';
+
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+
+import OperatorModeStackItem from './stack-item';
+
+import type { StackItem } from './container';
 
 interface Signature {
   Element: HTMLElement;
@@ -97,6 +102,13 @@ export default class OperatorModeStack extends Component<Signature> {
       }
       .operator-mode-stack.with-bg-image:first-child:before {
         display: none;
+      }
+
+      /* Add some padding to accomodate for overlaid header for embedded cards in operator mode */
+      .operator-mode-stack :deep(.embedded-card) {
+        padding-top: calc(
+          var(--overlay-embedded-card-header-height) + var(--boxel-sp-lg)
+        );
       }
 
       .inner {

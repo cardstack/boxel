@@ -1,0 +1,39 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Marcelius Wilde",
+      "phone": {
+        "country": null,
+        "area": null,
+        "number": null
+      },
+      "emergencyContact": {
+        "name": "Mama Leone",
+        "phoneNumber": {
+          "country": 1,
+          "area": 212,
+          "number": 5551212
+        },
+        "email": "mama@leonesons.com"
+      },
+      "namesInvited": [],
+      "guest": {
+        "name": "Mama Leone",
+        "additionalNames": [
+          "Felicity Shaw",
+          "Grant Kingston",
+          "Valerie Storm"
+        ]
+      },
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contact-card",
+        "name": "ContactCard"
+      }
+    }
+  }
+}

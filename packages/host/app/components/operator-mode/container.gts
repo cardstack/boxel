@@ -1,53 +1,73 @@
-import Component from '@glimmer/component';
-import { on } from '@ember/modifier';
-import { CardDef, Format } from 'https://cardstack.com/base/card-api';
-import { action } from '@ember/object';
+import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
-import { trackedFunction } from 'ember-resources/util/function';
-import CardCatalogModal from '../card-catalog/modal';
-import type CardService from '../../services/card-service';
-import get from 'lodash/get';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import ENV from '@cardstack/host/config/environment';
-import { Modal, IconButton } from '@cardstack/boxel-ui';
-import SearchSheet, { SearchSheetMode } from '../search-sheet';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import type Owner from '@ember/owner';
+import { service } from '@ember/service';
+import { htmlSafe } from '@ember/template';
+import { buildWaiter } from '@ember/test-waiters';
+import { isTesting } from '@embroider/macros';
+import Component from '@glimmer/component';
+
+import { tracked } from '@glimmer/tracking';
+
 import { restartableTask, task, dropTask } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
+import { trackedFunction } from 'ember-resources/util/function';
+
+import get from 'lodash/get';
+
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
+
+import { Modal, IconButton } from '@cardstack/boxel-ui';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
 import {
   Deferred,
   baseCardRef,
   chooseCard,
   type Actions,
   type CodeRef,
-  LooseSingleCardDocument,
+  type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-import { RealmPaths } from '@cardstack/runtime-common/paths';
-import type LoaderService from '../../services/loader-service';
-import { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
 
-import { registerDestructor } from '@ember/destroyable';
+import { RealmPaths } from '@cardstack/runtime-common/paths';
+
 import type { Query } from '@cardstack/runtime-common/query';
+
+import CodeMode from '@cardstack/host/components/operator-mode/code-mode';
+import ENV from '@cardstack/host/config/environment';
+
 import {
   getSearchResults,
   type Search,
 } from '@cardstack/host/resources/search';
-import { htmlSafe } from '@ember/template';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import perform from 'ember-concurrency/helpers/perform';
-import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import OperatorModeStack from './stack';
-import type MatrixService from '../../services/matrix-service';
-import type MessageService from '../../services/message-service';
-import type CodeService from '../../services/code-service';
+
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+
+import { assertNever } from '@cardstack/host/utils/assert-never';
+
+import { CardDef, Format } from 'https://cardstack.com/base/card-api';
+
+import CardCatalogModal from '../card-catalog/modal';
+
 import ChatSidebar from '../matrix/chat-sidebar';
+import SearchSheet, { SearchSheetMode } from '../search-sheet';
+
+import SubmodeSwitcher, { Submode } from '../submode-switcher';
+
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
-import { buildWaiter } from '@ember/test-waiters';
-import { isTesting } from '@embroider/macros';
-import SubmodeSwitcher, { Submode } from '../submode-switcher';
-import CodeMode from '@cardstack/host/components/operator-mode/code-mode';
-import { assertNever } from '@cardstack/host/utils/assert-never';
+import OperatorModeStack from './stack';
+
+import type CardService from '../../services/card-service';
+
+import type LoaderService from '../../services/loader-service';
+
+import type MatrixService from '../../services/matrix-service';
+import type MessageService from '../../services/message-service';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
 
@@ -87,14 +107,15 @@ export default class OperatorModeContainer extends Component<Signature> {
   @service declare messageService: MessageService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
-  @service declare codeService: CodeService;
+  @service declare recentFilesService: RecentFilesService;
+
   @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
   @tracked searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked isChatVisible = false;
 
   private deleteModal: DeleteModal | undefined;
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
 
     this.messageService.register();
@@ -141,6 +162,11 @@ export default class OperatorModeContainer extends Component<Signature> {
     if (this.operatorModeStateService.recentCards.length === 0) {
       this.constructRecentCards.perform();
     }
+  }
+
+  @action onBlurSearchInput() {
+    this.searchSheetTrigger = null;
+    this.searchSheetMode = SearchSheetMode.Closed;
   }
 
   @action onSearch(_term: string) {
@@ -244,6 +270,18 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   });
 
+  saveCard = task(async (card: CardDef) => {
+    await this.withTestWaiters(async () => {
+      await this.cardService.saveModel(card);
+    });
+  });
+
+  saveSource = task(async (url: URL, content: string) => {
+    await this.withTestWaiters(async () => {
+      await this.cardService.saveSource(url, content);
+    });
+  });
+
   // dropTask will ignore any subsequent delete requests until the one in progress is done
   delete = dropTask(async (card: CardDef, afterDelete?: () => void) => {
     if (!card.id) {
@@ -285,7 +323,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       this.operatorModeStateService.trimItemsFromStack(item);
     }
     this.operatorModeStateService.removeRecentCard(card.id);
-    this.codeService.removeRecentFile(`${card.id}.json`);
+    this.recentFilesService.removeRecentFile(`${card.id}.json`);
 
     await this.withTestWaiters(async () => {
       await this.cardService.deleteCard(card);
@@ -608,7 +646,7 @@ export default class OperatorModeContainer extends Component<Signature> {
       case Submode.Code:
         let codePath = this.lastCardInRightMostStack
           ? new URL(this.lastCardInRightMostStack.id + '.json')
-          : new URL(this.cardService.defaultURL + 'index.json');
+          : null;
         this.operatorModeStateService.updateCodePath(codePath);
         break;
       default:
@@ -637,7 +675,11 @@ export default class OperatorModeContainer extends Component<Signature> {
         />
 
         {{#if this.isCodeMode}}
-          <CodeMode @delete={{perform this.delete}} />
+          <CodeMode
+            @delete={{perform this.delete}}
+            @saveSourceOnClose={{perform this.saveSource}}
+            @saveCardOnClose={{perform this.saveCard}}
+          />
         {{else}}
           <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
             {{#if (eq this.allStackItems.length 0)}}
@@ -751,6 +793,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         @mode={{this.searchSheetMode}}
         @onCancel={{this.onCancelSearchSheet}}
         @onFocus={{this.onFocusSearchInput}}
+        @onBlur={{this.onBlurSearchInput}}
         @onSearch={{this.onSearch}}
         @onCardSelect={{this.onCardSelectFromSearch}}
       />
@@ -762,6 +805,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         --boxel-modal-max-width: 100%;
         --container-button-size: var(--boxel-icon-lg);
         --operator-mode-min-width: 20.5rem;
+        --operator-mode-left-column: 14rem;
       }
       :global(.operator-mode .boxel-modal__inner) {
         display: block;

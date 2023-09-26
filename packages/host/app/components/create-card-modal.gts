@@ -1,19 +1,26 @@
+import { registerDestructor } from '@ember/destroyable';
+import { fn } from '@ember/helper';
+import { action } from '@ember/object';
+
+import type Owner from '@ember/owner';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+
+import { enqueueTask } from 'ember-concurrency';
+
 import type {
   CodeRef,
   LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-import { fn } from '@ember/helper';
-import { action } from '@ember/object';
-import { tracked } from '@glimmer/tracking';
-import { registerDestructor } from '@ember/destroyable';
 import { Deferred } from '@cardstack/runtime-common/deferred';
-import { enqueueTask } from 'ember-concurrency';
-import { service } from '@ember/service';
-import type CardService from '../services/card-service';
+
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+
 import CardEditor from './card-editor';
 import ModalContainer from './modal-container';
+
+import type CardService from '../services/card-service';
 
 export default class CreateCardModal extends Component {
   <template>
@@ -42,7 +49,7 @@ export default class CreateCardModal extends Component {
     | undefined = undefined;
   @tracked zIndex = 20;
 
-  constructor(owner: unknown, args: {}) {
+  constructor(owner: Owner, args: {}) {
     super(owner, args);
     (globalThis as any)._CARDSTACK_CREATE_NEW_CARD = this;
     registerDestructor(this, () => {

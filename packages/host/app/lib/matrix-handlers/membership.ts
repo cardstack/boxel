@@ -1,8 +1,11 @@
 import debounce from 'lodash/debounce';
 import { type MatrixEvent, type RoomMember } from 'matrix-js-sdk';
+
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
-import { type Context, addRoomEvent, recomputeRoomObjective } from './index';
+
 import { eventDebounceMs } from '../matrix-utils';
+
+import { type Context, addRoomEvent, recomputeRoomObjective } from './index';
 
 export function onMembership(context: Context) {
   return (event: MatrixEvent, member: RoomMember) => {

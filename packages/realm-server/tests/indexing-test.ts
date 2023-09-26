@@ -22,7 +22,7 @@ function cleanWhiteSpace(text: string) {
 
 function trimCardContainer(text: string) {
   return cleanWhiteSpace(text).replace(
-    /<div .*? data-test-field-component-card> (.*?) <\/div> <\/div>/,
+    /<div .*? data-test-field-component-card>\s?[<!---->]*? (.*?) <\/div>/g,
     '$1',
   );
 }

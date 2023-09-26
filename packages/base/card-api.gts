@@ -138,7 +138,7 @@ function isNotReadyValue(value: any): value is NotReadyValue {
       'type' in value &&
       value.type === 'not-ready' &&
       'instance' in value &&
-      isCard(value.instance) &&
+      isCardOrField(value.instance) &&
       'fieldName' in value &&
       typeof value.fieldName === 'string'
     );
@@ -565,11 +565,21 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       fieldName,
       useIndexBasedKey in this.card,
     ) as unknown as Box<BaseDef[]>;
+
+    let renderFormat: Format | undefined = undefined;
+    if (
+      format === 'edit' &&
+      'isFieldDef' in model.value.constructor &&
+      model.value.constructor.isFieldDef
+    ) {
+      renderFormat = 'embedded';
+    }
+
     return getContainsManyComponent({
       model,
       arrayField,
       field: this,
-      format,
+      format: renderFormat ?? format,
       cardTypeFor,
     });
   }
@@ -1187,7 +1197,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
         if (!resource) {
           if (loadedValues && Array.isArray(loadedValues)) {
             let loadedValue = loadedValues.find(
-              (v) => isCard(v) && v.id === resourceId,
+              (v) => isCardOrField(v) && 'id' in v && v.id === resourceId,
             );
             if (loadedValue) {
               return loadedValue;
@@ -1593,13 +1603,25 @@ export class BaseDef {
   }
 }
 
-export function isCard(card: any): card is CardDef {
+export function isCardOrField(card: any): card is CardDef | FieldDef {
   return card && typeof card === 'object' && isBaseInstance in card;
 }
 
-class DefaultTemplate extends GlimmerComponent<{
+export function isCard(card: any): card is CardDef {
+  return isCardOrField(card) && !('isFieldDef' in card.constructor);
+}
+
+export function isCompoundField(card: any) {
+  return (
+    isCardOrField(card) &&
+    'isFieldDef' in card.constructor &&
+    !(primitive in card)
+  );
+}
+
+class DefaultCardDefTemplate extends GlimmerComponent<{
   Args: {
-    model: BaseDef;
+    model: CardDef;
     fields: Record<string, new () => GlimmerComponent>;
   };
 }> {
@@ -1621,6 +1643,46 @@ class DefaultTemplate extends GlimmerComponent<{
       .default-card-template {
         display: grid;
         gap: var(--boxel-sp-lg);
+      }
+    </style>
+  </template>
+}
+
+class FieldDefEditTemplate extends GlimmerComponent<{
+  Args: {
+    model: FieldDef;
+    fields: Record<string, new () => GlimmerComponent>;
+  };
+}> {
+  <template>
+    <div class='field-def-edit-template'>
+      {{#each-in @fields as |key Field|}}
+        {{#unless (eq key 'id')}}
+          <FieldContainer
+            {{! @glint-ignore (glint is arriving at an incorrect type signature for 'startCase') }}
+            @label={{startCase key}}
+            @vertical={{true}}
+            data-test-field={{key}}
+          >
+            <Field />
+          </FieldContainer>
+        {{/unless}}
+      {{/each-in}}
+    </div>
+    <style>
+      .field-def-edit-template {
+        display: grid;
+        gap: var(--boxel-sp-lg);
+      }
+      .field-def-edit-template :deep(.containsMany-field) {
+        padding: var(--boxel-sp-xs);
+        border: 1px solid var(--boxel-form-control-border-color);
+        border-radius: var(--boxel-form-control-border-radius);
+      }
+      .field-def-edit-template :deep(.containsMany-field.empty::after) {
+        display: block;
+        content: 'None';
+        color: var(--boxel-450);
       }
     </style>
   </template>
@@ -1655,7 +1717,7 @@ export class FieldDef extends BaseDef {
       <!-- Inherited from FieldDef embedded view. Did your field forget to specify its embedded component? -->
     </template>
   };
-  static edit: BaseDefComponent = DefaultTemplate;
+  static edit: BaseDefComponent = FieldDefEditTemplate;
 }
 
 class IDField extends FieldDef {
@@ -1679,6 +1741,7 @@ class IDField extends FieldDef {
 }
 
 export class StringField extends FieldDef {
+  static displayName = 'String';
   static [primitive]: string;
   static [useIndexBasedKey]: never;
   static embedded = class Embedded extends Component<typeof this> {
@@ -1730,8 +1793,8 @@ export class CardDef extends BaseDef {
       <!-- Inherited from CardDef embedded view. Did your card forget to specify its embedded component? -->
     </template>
   };
-  static isolated: BaseDefComponent = DefaultTemplate;
-  static edit: BaseDefComponent = DefaultTemplate;
+  static isolated: BaseDefComponent = DefaultCardDefTemplate;
+  static edit: BaseDefComponent = DefaultCardDefTemplate;
 }
 
 export type BaseDefConstructor = typeof BaseDef;
@@ -2460,11 +2523,11 @@ export async function recompute(
           }
           if (Array.isArray(value)) {
             for (let item of value) {
-              if (item && isCard(item) && !stack.includes(item)) {
+              if (item && isCardOrField(item) && !stack.includes(item)) {
                 await _loadModel(item, [item, ...stack]);
               }
             }
-          } else if (isCard(value) && !stack.includes(value)) {
+          } else if (isCardOrField(value) && !stack.includes(value)) {
             await _loadModel(value, [value, ...stack]);
           }
         }
@@ -2570,7 +2633,7 @@ export function getFields(
 ): { [fieldName: string]: Field<BaseDefConstructor> } {
   let obj: object | null;
   let usedFields: string[] = [];
-  if (isCard(cardInstanceOrClass)) {
+  if (isCardOrField(cardInstanceOrClass)) {
     // this is a card instance
     obj = Reflect.getPrototypeOf(cardInstanceOrClass);
     usedFields = getUsedFields(cardInstanceOrClass);
@@ -2584,7 +2647,7 @@ export function getFields(
     let currentFields = flatMap(Object.keys(descs), (maybeFieldName) => {
       if (maybeFieldName !== 'constructor') {
         let maybeField = getField(
-          (isCard(cardInstanceOrClass)
+          (isCardOrField(cardInstanceOrClass)
             ? cardInstanceOrClass.constructor
             : cardInstanceOrClass) as typeof BaseDef,
           maybeFieldName,

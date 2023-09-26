@@ -1,18 +1,22 @@
-import { module, test } from 'qunit';
+import { waitFor, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
+
 import { setupRenderingTest } from 'ember-qunit';
-import OperatorMode from '@cardstack/host/components/operator-mode/container';
+import { module, test } from 'qunit';
+
 import CardPrerender from '@cardstack/host/components/card-prerender';
-import { renderComponent } from '../../helpers/render-component';
+import OperatorMode from '@cardstack/host/components/operator-mode/container';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
 import {
   testRealmURL,
   setupLocalIndexing,
   TestRealmAdapter,
   TestRealm,
 } from '../../helpers';
-import { waitFor, click } from '@ember/test-helpers';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import { renderComponent } from '../../helpers/render-component';
 
 const realmName = 'Local Workspace';
 

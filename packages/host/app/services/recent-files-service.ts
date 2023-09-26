@@ -1,19 +1,35 @@
 import Service from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-import { TrackedArray } from 'tracked-built-ins';
-import window from 'ember-window-mock';
 
-export default class CodeService extends Service {
+import window from 'ember-window-mock';
+import { TrackedArray } from 'tracked-built-ins';
+
+export default class RecentFilesService extends Service {
   @tracked recentFiles = new TrackedArray<string>([]);
 
-  constructor() {
-    super();
+  constructor(properties: object) {
+    super(properties);
 
     let recentFilesString = window.localStorage.getItem('recent-files');
 
     if (recentFilesString) {
       try {
-        this.recentFiles = new TrackedArray(JSON.parse(recentFilesString));
+        this.recentFiles = new TrackedArray(
+          JSON.parse(recentFilesString).reduce(function (
+            recentFiles: string[],
+            fileString: string,
+          ) {
+            try {
+              new URL(fileString);
+              recentFiles.push(fileString);
+            } catch (e) {
+              console.log(
+                `Ignoring non-URL recent file from storage: ${fileString}`,
+              );
+            }
+            return recentFiles;
+          }, []),
+        );
       } catch (e) {
         console.log('Error restoring recent files', e);
       }
@@ -43,7 +59,7 @@ export default class CodeService extends Service {
     this.persistRecentFiles();
   }
 
-  private persistRecentFiles() {
+  persistRecentFiles() {
     window.localStorage.setItem(
       'recent-files',
       JSON.stringify(this.recentFiles),

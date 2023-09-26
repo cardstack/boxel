@@ -1,10 +1,11 @@
+import a from 'indefinite';
+
+import { getPlural } from '@cardstack/runtime-common';
 import {
   isCardTypeFilter,
   isEveryFilter,
   type Filter,
 } from '@cardstack/runtime-common/query';
-import { getPlural } from '@cardstack/runtime-common';
-import a from 'indefinite';
 
 interface ChooseCardSuggestion {
   suggestion: string; // suggests a UI text

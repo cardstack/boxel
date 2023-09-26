@@ -1,19 +1,32 @@
-import { Resource } from 'ember-resources';
-import { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
-import { restartableTask } from 'ember-concurrency';
 import { registerDestructor } from '@ember/destroyable';
-import { logger } from '@cardstack/runtime-common';
+import { service } from '@ember/service';
+
+import { tracked } from '@glimmer/tracking';
+
+import { parse } from 'date-fns';
+import { restartableTask } from 'ember-concurrency';
+import { Resource } from 'ember-resources';
+
+import { SupportedMimeType, logger } from '@cardstack/runtime-common';
+
+import type CardService from '@cardstack/host/services/card-service';
+
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+
 import LoaderService from '../services/loader-service';
+
 import type MessageService from '../services/message-service';
-import type CodeService from '@cardstack/host/services/code-service';
 
 const log = logger('resource:file');
+const utf8 = new TextDecoder();
+const encoder = new TextEncoder();
 
 interface Args {
   named: {
     url: string;
     onStateChange?: (state: FileResource['state']) => void;
+    onRedirect?: (url: string) => void;
   };
 }
 
@@ -37,8 +50,12 @@ export interface Ready {
   name: string;
   url: string;
   lastModified: string | undefined;
-  realmURL: string | undefined;
+  realmURL: string;
+  size: number; // size in bytes
   write(content: string, flushLoader?: boolean): void;
+  lastModifiedAsDate?: Date;
+  isBinary?: boolean;
+  writing?: Promise<void>;
 }
 
 export type FileResource = Loading | ServerError | NotFound | Ready;
@@ -46,7 +63,9 @@ export type FileResource = Loading | ServerError | NotFound | Ready;
 class _FileResource extends Resource<Args> {
   private declare _url: string;
   private onStateChange?: ((state: FileResource['state']) => void) | undefined;
+  private onRedirect?: ((url: string) => void) | undefined;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
+  writing: Promise<void> | undefined;
 
   @tracked private innerState: FileResource = {
     state: 'loading',
@@ -54,7 +73,9 @@ class _FileResource extends Resource<Args> {
 
   @service declare loaderService: LoaderService;
   @service declare messageService: MessageService;
-  @service declare codeService: CodeService;
+  @service declare cardService: CardService;
+  @service declare recentFilesService: RecentFilesService;
+  @service declare operatorModeStateService: OperatorModeStateService;
 
   constructor(owner: unknown) {
     super(owner);
@@ -85,10 +106,11 @@ class _FileResource extends Resource<Args> {
   }
 
   modify(_positional: never[], named: Args['named']) {
-    let { url, onStateChange } = named;
+    let { url, onStateChange, onRedirect } = named;
 
     this._url = url;
     this.onStateChange = onStateChange;
+    this.onRedirect = onRedirect;
     this.read.perform();
   }
 
@@ -98,17 +120,20 @@ class _FileResource extends Resource<Args> {
     if (this.onStateChange && this.innerState.state !== prevState.state) {
       this.onStateChange(this.innerState.state);
     }
-
-    if (newState.state === 'ready') {
-      this.codeService.addRecentFile(newState.url);
+    if (this.innerState.state === 'ready') {
+      this.recentFilesService.addRecentFile(this.innerState.url);
+      if (this.onRedirect && this._url != this.innerState.url) {
+        // code below handles redirect returned by the realm server
+        // this updates code path to be in-sync with the file.url
+        // For example, when inputting `drafts/author` will redirect to `drafts/author.gts`
+        this.onRedirect(this.innerState.url);
+      }
     }
   }
 
   private read = restartableTask(async () => {
     let response = await this.loaderService.loader.fetch(this._url, {
-      headers: {
-        Accept: 'application/vnd.card+source',
-      },
+      headers: { Accept: SupportedMimeType.CardSource },
     });
 
     if (!response.ok) {
@@ -141,7 +166,10 @@ class _FileResource extends Resource<Args> {
       throw new Error('Missing x-boxel-realm-url header in response.');
     }
 
-    let content = await response.text();
+    let buffer = await response.arrayBuffer();
+    let size = buffer.byteLength;
+    let content = utf8.decode(buffer);
+
     let self = this;
 
     this.updateState({
@@ -149,10 +177,11 @@ class _FileResource extends Resource<Args> {
       lastModified,
       realmURL,
       content,
-      name: this._url.split('/').pop()!,
-      url: this._url,
+      name: response.url.split('/').pop()!,
+      size,
+      url: response.url,
       write(content: string, flushLoader?: true) {
-        self.writeTask.perform(this, content, flushLoader);
+        self.writing = self.writeTask.perform(this, content, flushLoader);
       },
     });
 
@@ -161,27 +190,17 @@ class _FileResource extends Resource<Args> {
 
   writeTask = restartableTask(
     async (state: Ready, content: string, flushLoader?: true) => {
-      let response = await this.loaderService.loader.fetch(this._url, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/vnd.card+source',
-        },
-        body: content,
-      });
-
-      if (!response.ok) {
-        let errorMessage = `Could not write file ${this._url}, status ${
-          response.status
-        }: ${response.statusText} - ${await response.text()}`;
-        log.error(errorMessage);
-        throw new Error(errorMessage);
-      }
+      let response = await this.cardService.saveSource(
+        new URL(this._url),
+        content,
+      );
       if (this.innerState.state === 'not-found') {
         // TODO think about the "unauthorized" scenario
         throw new Error(
           'this should be impossible--we are creating the specified path',
         );
       }
+      let size = encoder.encode(content).byteLength;
 
       this.updateState({
         state: 'ready',
@@ -189,6 +208,7 @@ class _FileResource extends Resource<Args> {
         lastModified: response.headers.get('last-modified') || undefined,
         url: state.url,
         name: state.name,
+        size,
         write: state.write,
         realmURL: state.realmURL,
       });
@@ -215,8 +235,29 @@ class _FileResource extends Resource<Args> {
     return (this.innerState as Ready).url;
   }
 
+  get size() {
+    return (this.innerState as Ready).size;
+  }
+
+  get isBinary() {
+    return isBinary(this.content);
+  }
+
   get lastModified() {
     return (this.innerState as Ready).lastModified;
+  }
+
+  get lastModifiedAsDate() {
+    let rfc7321Date = (this.innerState as Ready).lastModified;
+    if (!rfc7321Date) {
+      return;
+    }
+    // This is RFC-7321 format which is the last modified date format used in HTTP headers
+    return parse(
+      rfc7321Date.replace(/ GMT$/, 'Z'),
+      'EEE, dd MMM yyyy HH:mm:ssX',
+      new Date(),
+    );
   }
 
   get realmURL() {
@@ -236,4 +277,12 @@ export function file(parent: object, args: () => Args['named']): FileResource {
 
 export function isReady(f: FileResource | undefined): f is Ready {
   return f?.state === 'ready';
+}
+
+// This is a neat trick to test if a binary file was decoded as a string that
+// works pretty well: https://stackoverflow.com/a/49773659. \ufffd is a special
+// character called a "replacement character" that will appear when you try to
+// decode a binary file as a string in javascript.
+function isBinary(content: string) {
+  return /\ufffd/.test(content);
 }

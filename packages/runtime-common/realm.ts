@@ -233,7 +233,7 @@ export class Realm {
         this.getCard.bind(this),
       )
       .delete(
-        '/.+(?<!.json)',
+        '/|/.+(?<!.json)',
         SupportedMimeType.CardJson,
         this.removeCard.bind(this),
       )
@@ -438,26 +438,33 @@ export class Realm {
     if (this.#router.handles(request)) {
       return this.#router.handle(request);
     } else {
-      let url = new URL(request.url);
-      let localPath = this.paths.local(url);
-      let maybeHandle = await this.getFileWithFallbacks(localPath);
+      return this.fallbackHandle(request);
+    }
+  }
 
-      if (!maybeHandle) {
-        return notFound(this.url, request, `${request.url} not found`);
-      }
+  async fallbackHandle(request: Request) {
+    let url = new URL(request.url);
+    let localPath = this.paths.local(url);
+    let maybeHandle = await this.getFileWithFallbacks(
+      localPath,
+      executableExtensions,
+    );
 
-      let handle = maybeHandle;
+    if (!maybeHandle) {
+      return notFound(this.url, request, `${request.url} not found`);
+    }
 
-      if (
-        executableExtensions.some((extension) =>
-          handle.path.endsWith(extension),
-        ) &&
-        !localPath.startsWith(assetsDir)
-      ) {
-        return this.makeJS(await fileContentToText(handle), handle.path);
-      } else {
-        return await this.serveLocalFile(handle);
-      }
+    let handle = maybeHandle;
+
+    if (
+      executableExtensions.some((extension) =>
+        handle.path.endsWith(extension),
+      ) &&
+      !localPath.startsWith(assetsDir)
+    ) {
+      return this.makeJS(await fileContentToText(handle), handle.path);
+    } else {
+      return await this.serveLocalFile(handle);
     }
   }
 
@@ -540,7 +547,10 @@ export class Realm {
     request: Request,
   ): Promise<ResponseWithNodeStream> {
     let localName = this.paths.local(request.url);
-    let handle = await this.getFileWithFallbacks(localName);
+    let handle = await this.getFileWithFallbacks(localName, [
+      ...executableExtensions,
+      '.json',
+    ]);
     if (!handle) {
       return notFound(this.url, request, `${localName} not found`);
     }
@@ -556,7 +566,10 @@ export class Realm {
 
   private async removeCardSource(request: Request): Promise<Response> {
     let localName = this.paths.local(request.url);
-    let handle = await this.getFileWithFallbacks(localName);
+    let handle = await this.getFileWithFallbacks(localName, [
+      ...executableExtensions,
+      '.json',
+    ]);
     if (!handle) {
       return notFound(this.url, request, `${localName} not found`);
     }
@@ -632,10 +645,12 @@ export class Realm {
   // explicit file extensions in your source code
   private async getFileWithFallbacks(
     path: LocalPath,
+    fallbackExtensions: string[],
   ): Promise<FileRef | undefined> {
     return getFileWithFallbacks(
       path,
       this.#adapter.openFile.bind(this.#adapter),
+      fallbackExtensions,
     );
   }
 
@@ -811,7 +826,8 @@ export class Realm {
     if (localPath === '') {
       localPath = 'index';
     }
-    let url = this.paths.fileURL(localPath);
+
+    let url = this.paths.fileURL(localPath.replace(/\.json$/, ''));
     let maybeError = await this.#searchIndex.card(url, { loadLinks: true });
     if (!maybeError) {
       return notFound(this.url, request);
@@ -824,6 +840,15 @@ export class Realm {
     }
     let { doc: card } = maybeError;
     card.data.links = { self: url.href };
+
+    let foundPath = this.paths.local(url);
+    if (localPath !== foundPath) {
+      return createResponse(this.url, null, {
+        status: 302,
+        headers: { Location: `${new URL(this.url).pathname}${foundPath}` },
+      });
+    }
+
     return createResponse(this.url, JSON.stringify(card, null, 2), {
       headers: {
         'last-modified': formatRFC7231(card.data.meta.lastModified!),
@@ -834,8 +859,9 @@ export class Realm {
   }
 
   private async removeCard(request: Request): Promise<Response> {
+    let reqURL = request.url.replace(/\.json$/, '');
     // strip off query params
-    let url = new URL(new URL(request.url).pathname, request.url);
+    let url = new URL(new URL(reqURL).pathname, reqURL);
     let result = await this.#searchIndex.card(url);
     if (!result) {
       return notFound(this.url, request);

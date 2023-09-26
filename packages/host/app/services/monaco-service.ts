@@ -1,15 +1,20 @@
 import Service, { service } from '@ember/service';
+
 import { task } from 'ember-concurrency';
-import type * as _MonacoSDK from 'monaco-editor';
+
 import merge from 'lodash/merge';
+
+import { type SingleCardDocument } from '@cardstack/runtime-common';
+
+import CardService from '@cardstack/host/services/card-service';
 import {
   type MonacoLanguageConfig,
   extendDefinition,
   extendConfig,
   languageConfigs,
 } from '@cardstack/host/utils/editor-language';
-import { type SingleCardDocument } from '@cardstack/runtime-common';
-import CardService from '@cardstack/host/services/card-service';
+
+import type * as _MonacoSDK from 'monaco-editor';
 
 export type MonacoSDK = typeof _MonacoSDK;
 export type IStandaloneCodeEditor = _MonacoSDK.editor.IStandaloneCodeEditor;

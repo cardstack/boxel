@@ -8,7 +8,7 @@ import {
   type BaseDefComponent,
   CardContext,
   isCard,
-  isSaved,
+  isCompoundField,
 } from './card-api';
 import { getField } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
@@ -54,30 +54,39 @@ export function getBoxComponent(
     {{#if (isCard model.value)}}
       <CardContainer
         @displayBoundaries={{true}}
+        class='field-component-card {{format}}-card'
+        {{cardComponentModifier
+          card=model.value
+          format=format
+          fieldType=field.fieldType
+          fieldName=field.name
+        }}
+        data-test-field-component-card
         {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
         ...attributes
       >
-        <div
-          class='field-component-card
-            {{format}}-card
-            {{if (isSaved model.value) "saved" "not-saved"}}'
-          {{cardComponentModifier
-            card=model.value
-            format=format
-            fieldType=field.fieldType
-            fieldName=field.name
-          }}
-          data-test-field-component-card
-        >
-          <Implementation
-            @model={{model.value}}
-            @fields={{internalFields}}
-            @set={{model.set}}
-            @fieldName={{model.name}}
-            @context={{context}}
-          />
-        </div>
+        <Implementation
+          @model={{model.value}}
+          @fields={{internalFields}}
+          @set={{model.set}}
+          @fieldName={{model.name}}
+          @context={{context}}
+        />
       </CardContainer>
+    {{else if (isCompoundField model.value)}}
+      <div
+        data-test-compound-field-component
+        {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
+        ...attributes
+      >
+        <Implementation
+          @model={{model.value}}
+          @fields={{internalFields}}
+          @set={{model.set}}
+          @fieldName={{model.name}}
+          @context={{context}}
+        />
+      </div>
     {{else}}
       <Implementation
         @model={{model.value}}
@@ -96,17 +105,9 @@ export function getBoxComponent(
         padding: var(--boxel-sp-xl);
       }
 
-      .edit-card.saved {
+      .edit-card {
         padding: var(--boxel-sp-xl) var(--boxel-sp-xxl) var(--boxel-sp-xl)
           var(--boxel-sp-xl);
-      }
-
-      /* Add some padding to accomodate for overlaid header for embedded cards in operator mode */
-      .operator-mode-stack .embedded-card,
-      .operator-mode-stack .edit-card.not-saved {
-        padding-top: calc(
-          var(--overlay-embedded-card-header-height) + var(--boxel-sp-lg)
-        );
       }
     </style>
   </template>;
@@ -225,7 +226,12 @@ export function getPluralViewComponent(
   );
   let defaultComponent = class PluralView extends GlimmerComponent {
     <template>
-      <ul class='plural-field'>
+      <div
+        class='plural-field
+          {{field.fieldType}}-field
+          {{unless model.children.length "empty"}}'
+        data-test-plural-view={{field.fieldType}}
+      >
         {{#each model.children as |child i|}}
           {{#let
             (getBoxComponent
@@ -233,20 +239,14 @@ export function getPluralViewComponent(
             )
             as |Item|
           }}
-            <li data-test-plural-view-item={{i}}>
+            <div data-test-plural-view-item={{i}}>
               <Item />
-            </li>
+            </div>
           {{/let}}
         {{/each}}
-      </ul>
+      </div>
       <style>
-        .plural-field {
-          list-style: none;
-          padding: 0;
-          margin: 0;
-        }
-
-        .plural-field > li + li {
+        .linksToMany-field > div + div {
           margin-top: var(--boxel-sp);
         }
       </style>

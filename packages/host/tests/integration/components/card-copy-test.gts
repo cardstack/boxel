@@ -1,16 +1,26 @@
-import { module, test } from 'qunit';
+import { waitUntil, waitFor, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
+
+import percySnapshot from '@percy/ember';
 import { setupRenderingTest } from 'ember-qunit';
+import { module, test } from 'qunit';
+
 import {
   baseRealm,
   type SingleCardDocument,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-import { Realm } from '@cardstack/runtime-common/realm';
 import { Loader } from '@cardstack/runtime-common/loader';
-import OperatorMode from '@cardstack/host/components/operator-mode/container';
+import { Realm } from '@cardstack/runtime-common/realm';
+
 import CardPrerender from '@cardstack/host/components/card-prerender';
-import { renderComponent } from '../../helpers/render-component';
+import OperatorMode from '@cardstack/host/components/operator-mode/container';
+
+import type CardService from '@cardstack/host/services/card-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
+
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
 import {
   testRealmURL,
   setupCardLogs,
@@ -22,11 +32,7 @@ import {
   type TestContextWithSave,
   type TestContextWithSSE,
 } from '../../helpers';
-import { waitUntil, waitFor, click } from '@ember/test-helpers';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type CardService from '@cardstack/host/services/card-service';
-import percySnapshot from '@percy/ember';
+import { renderComponent } from '../../helpers/render-component';
 
 const testRealm2URL = `http://test-realm/test2/`;
 let loader: Loader;
@@ -90,14 +96,14 @@ module('Integration | card-copy', function (hooks) {
 
       let stacks = [
         leftCards.map((url) => ({
-          type: 'card' as 'card',
+          type: 'card' as const,
           id: url,
-          format: 'isolated' as 'isolated',
+          format: 'isolated' as const,
         })),
         rightCards.map((url) => ({
-          type: 'card' as 'card',
+          type: 'card' as const,
           id: url,
-          format: 'isolated' as 'isolated',
+          format: 'isolated' as const,
         })),
       ].filter((a) => a.length > 0);
       await operatorModeStateService.restore({ stacks });
@@ -611,6 +617,9 @@ module('Integration | card-copy', function (hooks) {
       },
     );
     this.onSave((json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
       assert.strictEqual(json.data.id, `${testRealm2URL}Pet/1`);
       assert.strictEqual(json.data.attributes?.firstName, 'Mango');
       assert.deepEqual(json.data.meta.adoptsFrom, {
@@ -710,6 +719,9 @@ module('Integration | card-copy', function (hooks) {
     );
     let savedCards: SingleCardDocument[] = [];
     this.onSave((json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
       savedCards.push(json);
     });
     await this.expectEvents(
@@ -807,6 +819,9 @@ module('Integration | card-copy', function (hooks) {
     };
 
     this.onSave((json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
       assert.strictEqual(json.data.id, `${testRealm2URL}Person/1`);
       assert.strictEqual(json.data.attributes?.firstName, 'Hassan');
       assert.deepEqual(json.data.meta.adoptsFrom, {
@@ -912,6 +927,9 @@ module('Integration | card-copy', function (hooks) {
       }
     };
     this.onSave((json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
       assert.strictEqual(json.data.id, `${testRealm2URL}Person/1`);
       assert.strictEqual(json.data.attributes?.firstName, 'Sakura');
       assert.deepEqual(json.data.meta.adoptsFrom, {

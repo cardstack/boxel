@@ -29,17 +29,14 @@ interface Signature {
 
 class ContainsManyEditor extends GlimmerComponent<Signature> {
   <template>
-    <div data-test-contains-many={{this.args.field.name}}>
+    <div data-test-contains-many={{@field.name}}>
       {{#if @arrayField.children.length}}
         <ul class='list'>
           {{#each @arrayField.children as |boxedElement i|}}
             <li class='editor' data-test-item={{i}}>
               {{#let
                 (getBoxComponent
-                  (this.args.cardTypeFor @field boxedElement)
-                  @format
-                  boxedElement
-                  @field
+                  (@cardTypeFor @field boxedElement) @format boxedElement @field
                 )
                 as |Item|
               }}
@@ -76,11 +73,14 @@ class ContainsManyEditor extends GlimmerComponent<Signature> {
         padding: 0;
         margin: 0 0 var(--boxel-sp);
       }
-      .list > li + li {
-        margin-top: var(--boxel-sp);
-      }
       .editor {
         position: relative;
+        cursor: pointer;
+        padding: var(--boxel-sp);
+        border-radius: var(--boxel-form-control-border-radius);
+      }
+      .editor:hover {
+        background-color: var(--boxel-light-100);
       }
       .remove-button-container {
         position: absolute;

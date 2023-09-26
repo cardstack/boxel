@@ -18,7 +18,7 @@ import {
   identifyCard,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
-import { Button, IconButton } from '@cardstack/boxel-ui';
+import { AddButton, IconButton } from '@cardstack/boxel-ui';
 
 interface Signature {
   Args: {
@@ -32,14 +32,16 @@ class LinksToEditor extends GlimmerComponent<Signature> {
   <template>
     <div class='links-to-editor'>
       {{#if this.isEmpty}}
-        <Button @size='small' {{on 'click' this.choose}} data-test-choose-card>
+        <AddButton
+          class='add-new'
+          @variant='full-width'
+          @hideIcon={{true}}
+          {{on 'click' this.add}}
+          data-test-add-new
+        >
           Choose
-        </Button>
-        {{#if @context.actions.createCard}}
-          <Button @size='small' {{on 'click' this.create}} data-test-create-new>
-            Create New
-          </Button>
-        {{/if}}
+          {{@field.card.displayName}}
+        </AddButton>
       {{else}}
         <this.linkedCard />
         <div class='remove-button-container'>
@@ -79,7 +81,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
     </style>
   </template>
 
-  choose = () => {
+  add = () => {
     (this.chooseCard as unknown as Descriptor<any, any[]>).perform();
   };
 
@@ -114,9 +116,13 @@ class LinksToEditor extends GlimmerComponent<Signature> {
 
   private chooseCard = restartableTask(async () => {
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let chosenCard: CardDef | undefined = this.args.context?.actions?.createCard
-      ? await chooseCard({ filter: { type } })
-      : await chooseCard({ filter: { type } }, { offerToCreate: type });
+    let chosenCard: CardDef | undefined = await chooseCard(
+      { filter: { type } },
+      {
+        offerToCreate: type,
+        createNewCard: this.args.context?.actions?.createCard,
+      },
+    );
     if (chosenCard) {
       this.args.model.value = chosenCard;
     }

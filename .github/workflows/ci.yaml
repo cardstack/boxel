@@ -6,8 +6,10 @@ on:
   pull_request:
 
 permissions:
+  checks: write
   contents: read
   id-token: write
+  pull-requests: write
 
 jobs:
   lint:
@@ -94,6 +96,11 @@ jobs:
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
         working-directory: packages/host
+      - name: Publish test results
+        uses: EnricoMi/publish-unit-test-result-action@v2.9.0
+        if: always()
+        with:
+          junit_files: junit/host.xml
 
   matrix-client-test:
     name: Matrix Client Tests
@@ -192,9 +199,10 @@ jobs:
     uses: cardstack/gh-actions/.github/workflows/waypoint-build.yml@main
     secrets: inherit
     with:
-      app: "realm-demo"
+      app: "boxel-realm-server"
       environment: "staging"
       restore-mtime: true
+      working-directory: "packages/realm-server"
 
   build-ai-bot:
     name: Build ai-bot
@@ -220,6 +228,13 @@ jobs:
     with:
       environment: "staging"
 
+  realm-server-efs-config:
+    needs: [build-realm-server]
+    name: EFS Config
+    uses: ./.github/workflows/realm-server-efs-config.yml
+    with:
+      environment: "staging"
+
   deploy-realm-server:
     name: Deploy realm server to staging
     needs:
@@ -227,17 +242,20 @@ jobs:
       - host-test
       - realm-server-test
       - build-host
-      - build-realm-server
+      - realm-server-efs-config
     uses: cardstack/gh-actions/.github/workflows/waypoint-deploy.yml@main
     secrets: inherit
     with:
-      app: "realm-demo"
+      app: "boxel-realm-server"
       environment: "staging"
+      working-directory: "packages/realm-server"
+      efs-config: ${{ needs.realm-server-efs-config.outputs.config }}
+      retain: "0"
 
   deploy-ai-bot:
     name: Deploy ai-bot to staging
     needs:
-      - ai-bot-test 
+      - ai-bot-test
       - build-ai-bot
     uses: cardstack/gh-actions/.github/workflows/waypoint-deploy.yml@main
     secrets: inherit
