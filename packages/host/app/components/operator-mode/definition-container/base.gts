@@ -63,7 +63,6 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
           {{yield to='activeContent'}}
         {{/if}}
       </div>
-
     </CardContainer>
 
     <style>

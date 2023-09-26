@@ -32,6 +32,7 @@ import { MenuItem, menuItemFunc } from '@cardstack/boxel-ui/helpers/menu-item';
 import { not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { CardContainer, LoadingIndicator } from '@cardstack/boxel-ui';
 import Label from '@cardstack/boxel-ui/components/label';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
 interface Signature {
   Element: HTMLElement;
@@ -157,10 +158,9 @@ export default class DetailPanel extends Component<Signature> {
             Inheritance Panel
           </header>
 
-          {{#if this.isCardInstance}}
-            {{! JSON case when visting, eg Author/1.json }}
-            <h3>Inheritance Panel</h3>
-            <div class='inheritance-chain'>
+          <div class='inheritance-panel'>
+            {{#if this.isCardInstance}}
+              {{! JSON case when visting, eg Author/1.json }}
               <InstanceDefinitionContainer
                 @fileURL={{@readyFile.url}}
                 @name={{@cardInstance.title}}
@@ -170,7 +170,16 @@ export default class DetailPanel extends Component<Signature> {
                   (hash label='Delete' handler=@delete icon='icon-trash')
                 }}
               />
-              <div>Adopts from</div>
+              <div class='chain'>
+                {{svgJar
+                  'icon-inherit'
+                  class='chain-icon'
+                  width='24px'
+                  height='24px'
+                  role='presentation'
+                }}
+                Adopts from
+              </div>
 
               <ClickableModuleDefinitionContainer
                 @fileURL={{this.cardType.type.module}}
@@ -179,54 +188,53 @@ export default class DetailPanel extends Component<Signature> {
                 @onSelectDefinition={{this.updateCodePath}}
                 @url={{this.cardType.type.module}}
               />
-            </div>
-          {{else if this.isModule}}
-            {{! Module case when visting, eg author.gts }}
-            <h3>In This File</h3>
-            {{#each @elements as |el|}}
-              <div
-                class='inheritance-chain {{if (this.isSelected el) "selected"}}'
-              >
-                <div>{{el.card.displayName}}</div>
-                <button {{on 'click' (fn @selectElement el)}}>Select</button>
-              </div>
-            {{/each}}
-            <h3>Inheritance Panel</h3>
-            <ModuleDefinitionContainer
-              @fileURL={{this.cardType.type.module}}
-              @name={{this.cardType.type.displayName}}
-              @fileExtension={{this.cardType.type.moduleMeta.extension}}
-              @infoText={{this.lastModified.value}}
-              @isActive={{true}}
-              @actions={{array
-                (hash label='Delete' handler=@delete icon='icon-trash')
-              }}
-            />
-            {{#if this.cardType.type.super}}
-              <div>Inherits from</div>
-              <ClickableModuleDefinitionContainer
-                @fileURL={{this.cardType.type.super.module}}
-                @name={{this.cardType.type.super.displayName}}
-                @fileExtension={{this.cardType.type.super.moduleMeta.extension}}
-                @onSelectDefinition={{this.updateCodePath}}
-                @url={{this.cardType.type.super.module}}
+            {{else if this.isModule}}
+              {{! Module case when visting, eg author.gts }}
+
+              <ModuleDefinitionContainer
+                @fileURL={{this.cardType.type.module}}
+                @name={{this.cardType.type.displayName}}
+                @fileExtension={{this.cardType.type.moduleMeta.extension}}
+                @infoText={{this.lastModified.value}}
+                @isActive={{true}}
+                @actions={{array
+                  (hash label='Delete' handler=@delete icon='icon-trash')
+                }}
+              />
+              {{#if this.cardType.type.super}}
+                <div class='chain'>
+                  {{svgJar
+                    'icon-inherit'
+                    class='chain-icon'
+                    width='24px'
+                    height='24px'
+                    role='presentation'
+                  }}
+                  Inherits from
+                </div>
+                <ClickableModuleDefinitionContainer
+                  @fileURL={{this.cardType.type.super.module}}
+                  @name={{this.cardType.type.super.displayName}}
+                  @fileExtension={{this.cardType.type.super.moduleMeta.extension}}
+                  @onSelectDefinition={{this.updateCodePath}}
+                  @url={{this.cardType.type.super.module}}
+                />
+              {{/if}}
+            {{else if this.isBinary}}
+              <FileDefinitionContainer
+                @fileURL={{@readyFile.url}}
+                @fileExtension={{this.fileExtension}}
+                @infoText={{this.lastModified.value}}
+                @actions={{array
+                  (hash label='Delete' handler=@delete icon='icon-trash')
+                }}
               />
             {{/if}}
-          {{else if this.isBinary}}
-            <FileDefinitionContainer
-              @fileURL={{@readyFile.url}}
-              @fileExtension={{this.fileExtension}}
-              @infoText={{this.lastModified.value}}
-              @actions={{array
-                (hash label='Delete' handler=@delete icon='icon-trash')
-              }}
-            />
-          {{/if}}
+          </div>
         </div>
       {{/if}}
     </div>
-    <style
-    >
+    <style>
       .inner-container__header {
         font: 700 var(--boxel-font);
         letter-spacing: var(--boxel-lsp-xs);
@@ -298,6 +306,7 @@ export default class DetailPanel extends Component<Signature> {
         --icon-color: var(--boxel-dark);
         --icon-bg: var(--boxel-dark);
         --icon-border: var(--boxel-dark);
+      }
     </style>
   </template>
 }
