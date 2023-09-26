@@ -8,13 +8,13 @@ import Component from '@glimmer/component';
 // @ts-expect-error cached doesn't have type yet
 import { tracked, cached } from '@glimmer/tracking';
 
-import { cardTypeDisplayName, type RealmInfo } from '@cardstack/runtime-common';
+import { type RealmInfo } from '@cardstack/runtime-common';
 
 import { hasExecutableExtension } from '@cardstack/runtime-common';
 
 import { type Ready } from '@cardstack/host/resources/file';
 
-import { BaseDef, type CardDef } from 'https://cardstack.com/base/card-api';
+import { type CardDef } from 'https://cardstack.com/base/card-api';
 
 import { lastModifiedDate } from '../../resources/last-modified-date';
 
@@ -94,9 +94,9 @@ export default class DetailPanel extends Component<Signature> {
           <h3>Inheritance Panel</h3>
           <div class='inheritance-chain'>
             <InstanceDefinitionContainer
+              @fileURL={{this.args.readyFile.url}}
               @name={{@cardInstance.title}}
               @fileExtension='.JSON'
-              @realmInfo={{@realmInfo}}
               @infoText={{this.lastModified.value}}
               @actions={{array
                 (hash label='Delete' handler=@delete icon='icon-trash')
@@ -105,9 +105,9 @@ export default class DetailPanel extends Component<Signature> {
             <div>Adopts from</div>
 
             <ClickableModuleDefinitionContainer
+              @fileURL={{this.cardType.type.module}}
               @name={{this.cardType.type.displayName}}
               @fileExtension={{this.cardType.type.moduleMeta.extension}}
-              @realmInfo={{this.cardType.type.moduleMeta.realmInfo}}
               @onSelectDefinition={{this.updateCodePath}}
               @url={{this.cardType.type.module}}
             />
@@ -125,9 +125,9 @@ export default class DetailPanel extends Component<Signature> {
           {{/each}}
           <h3>Inheritance Panel</h3>
           <ModuleDefinitionContainer
+            @fileURL={{this.cardType.type.module}}
             @name={{this.cardType.type.displayName}}
             @fileExtension={{this.cardType.type.moduleMeta.extension}}
-            @realmInfo={{this.cardType.type.moduleMeta.realmInfo}}
             @infoText={{this.lastModified.value}}
             @isActive={{true}}
             @actions={{array
@@ -137,17 +137,17 @@ export default class DetailPanel extends Component<Signature> {
           {{#if this.cardType.type.super}}
             <div>Inherits from</div>
             <ClickableModuleDefinitionContainer
+              @fileURL={{this.cardType.type.super.module}}
               @name={{this.cardType.type.super.displayName}}
               @fileExtension={{this.cardType.type.super.moduleMeta.extension}}
-              @realmInfo={{this.cardType.type.super.moduleMeta.realmInfo}}
               @onSelectDefinition={{this.updateCodePath}}
               @url={{this.cardType.type.super.module}}
             />
           {{/if}}
         {{else}}
           <FileDefinitionContainer
+            @fileURL={{this.args.readyFile.url}}
             @fileExtension={{this.fileExtension}}
-            @realmInfo={{@realmInfo}}
             @infoText={{this.lastModified.value}}
             @actions={{array
               (hash label='Delete' handler=@delete icon='icon-trash')
