@@ -100,17 +100,19 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
               >
                 {{boxedElement.value.title}}
               </div>
-              <IconButton
-                @variant='primary'
-                @icon='icon-x'
-                @width='14px'
-                @height='14px'
-                class='remove-item-button'
-                {{on 'click' (fn this.remove i)}}
-                aria-label='Remove'
-                data-test-remove-card
-                data-test-remove={{i}}
-              />
+              <div class='remove-item-button-container'>
+                <IconButton
+                  @variant='primary'
+                  @icon='icon-x'
+                  @width='14px'
+                  @height='14px'
+                  class='remove-item-button'
+                  {{on 'click' (fn this.remove i)}}
+                  aria-label='Remove'
+                  data-test-remove-card
+                  data-test-remove={{i}}
+                />
+              </div>
             </div>
 
           {{/each}}
@@ -182,13 +184,20 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         font: 700 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-xs);
       }
-      .remove-item-button {
+      .remove-item-button-container {
         position: absolute;
-        right: var(--boxel-sp-xxs);
-        top: var(--boxel-sp-xxxs);
-        width: 14px;
-        height: 24px;
+        right: 0;
+        top: 0;
+        height: 100%;
+
+        display: flex;
+        align-items: center;
+        padding-right: var(--boxel-sp-xs);
+      }
+      .remove-item-button {
         --icon-color: var(--boxel-dark);
+        width: 14px;
+        height: 14px;
       }
     </style>
   </template>
