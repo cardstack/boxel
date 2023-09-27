@@ -1,7 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import cn from '@cardstack/boxel-ui/helpers/cn';
+import cn from '../../../helpers/cn.ts';
+import DropdownArrowDown from '../../../icons/dropdown-arrow-down.gts';
 
 export interface AccordionItemSignature {
   Element: HTMLDivElement;
@@ -20,7 +20,7 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
   <div class={{cn 'accordion-item' @className open=@isOpen}} ...attributes>
     <button class='title' {{on 'click' @onClick}}>
       <span class='caret'>
-        {{svgJar 'dropdown-arrow-down' width='20' height='20'}}
+        <DropdownArrowDown width={{20}} height={{20}} />
       </span>
       {{yield to='title'}}
     </button>

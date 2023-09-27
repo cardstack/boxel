@@ -1,7 +1,7 @@
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { PanelContext } from './index';
-import cssVars from '@cardstack/boxel-ui/helpers/css-var';
+import cssVars from '../../helpers/css-var.ts';
 import { scheduleOnce } from '@ember/runloop';
 import { on } from '@ember/modifier';
 

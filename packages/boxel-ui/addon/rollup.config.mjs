@@ -65,7 +65,7 @@ export default {
     addon.keepAssets(['styles/*']),
 
     // Remove leftover build artifacts when starting a new build.
-    addon.clean(),
+    addon.clean({ runOnce: true }),
 
     // Copy Readme and License into published package
     copy({
@@ -81,26 +81,34 @@ export default {
 function scopedCSS(srcDir, destDir) {
   return {
     name: 'scoped-css',
-    async resolveId(source, importer, options) {
+    resolveId(source, importer, options) {
       if (!isScopedCSSRequest(source)) {
         return null;
       }
       let hash = createHash('md5');
       let fullSrcDir = path.resolve(srcDir);
       let localPath = path.relative(fullSrcDir, importer);
-      hash.update(localPath);
+      hash.update(source);
       let cssFileName = hash.digest('hex').slice(0, 10) + '.css';
       let dir = path.dirname(localPath);
       let css = decodeScopedCSSRequest(source);
-      this.emitFile({
-        type: 'asset',
-        fileName: path.join(dir, cssFileName),
-        source: css,
-      });
       return {
         id: path.resolve(destDir, dir, cssFileName),
+        meta: { 'scoped-css': { css, fileName: path.join(dir, cssFileName) } },
         external: 'relative',
       };
+    },
+    generateBundle() {
+      for (const moduleId of this.getModuleIds()) {
+        let info = this.getModuleInfo(moduleId);
+        if (info.meta['scoped-css']) {
+          this.emitFile({
+            type: 'asset',
+            fileName: info.meta['scoped-css'].fileName,
+            source: info.meta['scoped-css'].css,
+          });
+        }
+      }
     },
   };
 }

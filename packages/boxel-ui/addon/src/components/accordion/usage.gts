@@ -3,8 +3,8 @@ import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
-import cssVars from '@cardstack/boxel-ui/helpers/css-var';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import cssVars from '../../helpers/css-var.gts';
+import { eq } from '../..//helpers/truth-helpers.gts';
 import Accordion from './index';
 
 export default class AccordionUsage extends Component {

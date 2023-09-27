@@ -3,7 +3,7 @@ import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import ResizablePanelGroup from './index.gts';
-import cssVar from '@cardstack/boxel-ui/helpers/css-var';
+import cssVar from '../../helpers/css-var.ts';
 import {
   cssVariable,
   CSSVariableInfo,

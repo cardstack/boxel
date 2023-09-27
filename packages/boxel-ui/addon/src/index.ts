@@ -14,6 +14,7 @@ import BoxelInput from './components/input/index.gts';
 import SearchInput, {
   SearchInputBottomTreatment,
 } from './components/input/search-input/index.gts';
+import type { InputValidationState } from './components/input/validation-state/index.gts';
 import BoxelInputValidationState from './components/input/validation-state/index.gts';
 import Label from './components/label/index.gts';
 import LoadingIndicator from './components/loading-indicator/index.gts';
@@ -42,6 +43,7 @@ export {
   GridContainer,
   Header,
   IconButton,
+  InputValidationState,
   Label,
   LoadingIndicator,
   Menu,

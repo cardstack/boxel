@@ -1,7 +1,6 @@
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import * as runtime from '@cardstack/runtime-common';
-import * as boxelUI from '@cardstack/boxel-ui';
 import * as flat from 'flat';
 import * as lodash from 'lodash';
 import * as dateFns from 'date-fns';
@@ -9,7 +8,7 @@ import * as ethers from 'ethers';
 
 export function shimExternals(loader: Loader) {
   loader.shimModule('@cardstack/runtime-common', runtime);
-  loader.shimModule('@cardstack/boxel-ui', boxelUI);
+  loader.shimModule('@cardstack/boxel-ui', {});
   // import * as boxelSvgJar from "@cardstack/boxel-ui/helpers/svg-jar";
   loader.shimModule('@cardstack/boxel-ui/helpers/svg-jar', {
     svgJar() {},
