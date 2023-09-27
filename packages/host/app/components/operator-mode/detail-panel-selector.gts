@@ -11,21 +11,18 @@ interface SelectorItemOptions {
   url: string;
   selected: boolean;
   disabled: boolean;
-  tabindex: number | string;
 }
 export class SelectorItem {
   text: string;
   selected: boolean;
   disabled: boolean;
   action: Function | undefined;
-  tabindex: number | string | undefined;
 
   constructor(text: string, options: Partial<SelectorItemOptions>) {
     this.text = text;
     this.action = options.action;
     this.selected = options.selected || false;
     this.disabled = options.disabled || false;
-    this.tabindex = options.tabindex || 0;
   }
 }
 
@@ -77,7 +74,7 @@ export default class Selector extends Component<Signature> {
   }
 
   <template>
-    <ul role='selector' class={{cn 'boxel-selector' @class}} ...attributes>
+    <ul role='menu' class={{cn 'boxel-selector' @class}} ...attributes>
       {{#if @items}}
         {{#each (compact @items) as |selectorItem|}}
           <SelectorItemRenderer @selectorItem={{selectorItem}}>
@@ -98,7 +95,6 @@ export default class Selector extends Component<Signature> {
                   role='menuitem'
                   href='#'
                   data-test-boxel-selector-item-text={{selectorItem.text}}
-                  tabindex={{selectorItem.tabindex}}
                   {{on
                     'click'
                     (fn this.invokeSelectorItemAction selectorItem.action)
