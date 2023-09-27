@@ -323,7 +323,14 @@ export default class OperatorModeContainer extends Component<Signature> {
       this.operatorModeStateService.trimItemsFromStack(item);
     }
     this.operatorModeStateService.removeRecentCard(card.id);
-    this.recentFilesService.removeRecentFile(`${card.id}.json`);
+
+    let cardRealmUrl = await this.cardService.getRealmURL(card);
+
+    if (cardRealmUrl) {
+      let realmPaths = new RealmPaths(cardRealmUrl);
+      let cardPath = realmPaths.local(`${card.id}.json`);
+      this.recentFilesService.removeRecentFile(cardPath);
+    }
 
     await this.withTestWaiters(async () => {
       await this.cardService.deleteCard(card);
