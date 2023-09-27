@@ -893,13 +893,13 @@ export default class CodeMode extends Component<Signature> {
                     @file={{this.readyFile}}
                     @importedModule={{this.importedModule.module}}
                   />
-                {{else if this.cardError}}
-                  {{this.cardError.message}}
                 {{else if this.schemaEditorIncompatible}}
                   <div
                     class='incompatible-schema-editor'
                     data-test-schema-editor-incompatible
                   >Schema Editor cannot be used with this file type</div>
+                {{else if this.cardError}}
+                  {{this.cardError.message}}
                 {{/if}}
               {{/if}}
             </div>

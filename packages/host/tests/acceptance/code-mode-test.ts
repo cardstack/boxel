@@ -144,6 +144,7 @@ module('Acceptance | code mode tests', function (hooks) {
           },
         },
       },
+      'not-json.json': 'I am not JSON.',
       'z00.json': '{}',
       'z01.json': '{}',
       'z02.json': '{}',
@@ -739,6 +740,37 @@ module('Acceptance | code mode tests', function (hooks) {
       ],
       submode: 'code',
       codePath: `${testRealmURL}z01.json`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-file-definition]');
+
+    assert.dom('[data-test-definition-file-extension]').hasText('.json');
+    await waitFor('[data-test-definition-realm-name]');
+    assert
+      .dom('[data-test-definition-realm-name]')
+      .hasText('in Test Workspace B');
+
+    assert.dom('[data-test-schema-editor-incompatible]').exists();
+  });
+
+  test('invalid JSON is shown as just a file with empty schema editor', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}not-json.json`,
     })!;
 
     await visit(
