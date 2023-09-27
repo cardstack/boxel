@@ -5,12 +5,13 @@ import { tracked } from '@glimmer/tracking';
 
 import cn from '../../helpers/cn.ts';
 import { svgJar } from '../../helpers/svg-jar.ts';
+import type { Icon } from '../../icons/types.ts';
 
 export interface Signature {
   Args: {
     class?: string;
     height?: string;
-    icon?: string;
+    icon?: string | Icon;
     variant?: string;
     width?: string;
   };
@@ -18,6 +19,10 @@ export interface Signature {
     default: [];
   };
   Element: HTMLButtonElement;
+}
+
+function isString(s: unknown): s is string {
+  return typeof s === 'string';
 }
 
 class IconButton extends Component<Signature> {
@@ -39,13 +44,19 @@ class IconButton extends Component<Signature> {
       ...attributes
     >
       {{! Using inline style attribute because targeting the svg using <style> does not work - css scoping works incorrectly }}
-      {{#if @icon}}
+      {{#if (isString @icon)}}
         {{svgJar
           @icon
           width=(if @width @width '16px')
           height=(if @height @height '16px')
           style='margin: auto;'
         }}
+      {{else if @icon}}
+        <@icon
+          width={{if @width @width '16px'}}
+          height={{if @height @height '16px'}}
+          style='margin: auto;'
+        />
       {{/if}}
     </button>
     <style>

@@ -3,6 +3,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import IconButton from '../icon-button/index.gts';
 import { eq } from '../../helpers/truth-helpers.ts';
 import { svgJar } from '../../helpers/svg-jar.ts';
+import PlusCircleIcon from '../../icons/plus-circle.gts';
 
 interface Signature {
   Element: HTMLElement;
@@ -23,7 +24,7 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
     </button>
   {{else}}
     <IconButton
-      @icon='icon-plus-circle'
+      @icon={{PlusCircleIcon}}
       @width='40px'
       @height='40px'
       class='add-button'
