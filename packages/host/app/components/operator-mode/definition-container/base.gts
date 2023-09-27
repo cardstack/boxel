@@ -32,7 +32,7 @@ interface BaseSignature {
 
 export class BaseDefinitionContainer extends Component<BaseSignature> {
   <template>
-    <CardContainer>
+    <CardContainer ...attributes>
       <Header
         @title={{@title}}
         @hasBackground={{true}}
