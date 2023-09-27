@@ -39,9 +39,9 @@
   },
   "devDependencies": {
     "@babel/core": "^7.17.10",
-    "@glint/core": "^1.0.0",
-    "@glint/environment-ember-template-imports": "^1.0.0",
-    "@glint/template": "^1.0.0",
+    "@glint/core": "^1.2.0",
+    "@glint/environment-ember-template-imports": "^1.2.0",
+    "@glint/template": "^1.2.0",
     "@types/htmlbars-inline-precompile": "^3.0.0",
     "@types/qunit": "^2.11.3",
     "@types/rsvp": "^4.0.4",
@@ -58,10 +58,10 @@
     "npm-run-all": "^4.1.5",
     "prettier": "^2.6.1",
     "typescript": "^5.1.6",
-    "webpack": "^5.70.0"
+    "webpack": "^5.88.2"
   },
   "peerDependencies": {
-    "@glint/environment-ember-loose": "^1.0.0",
+    "@glint/environment-ember-loose": "^1.2.0",
     "ember-source": "^3.8 || 4"
   },
   "engines": {

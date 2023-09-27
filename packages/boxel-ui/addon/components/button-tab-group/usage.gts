@@ -38,11 +38,11 @@ export default class ButtonTabGroupUsage extends Component {
         </ButtonTabGroup>
       </:example>
       <:api as |Args|>
-        <Args.Number
-          @name='activeIndex'
-          @description='The index of the tab which should currently be shown.'
-          @value={{this.activeIndex}}
-          @onInput={{fn (mut this.activeIndex)}}
+        <Args.String
+          @name='activeName'
+          @description='The name of the tab which should currently be shown.'
+          @value={{this.activeName}}
+          @onInput={{fn (mut this.activeName)}}
           @required={{true}}
         />
       </:api>

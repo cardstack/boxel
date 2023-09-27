@@ -1,8 +1,11 @@
 import Owner from '@ember/owner';
-import { TabInfo } from './index';
+import type { TabInfo } from './index';
 import Component from '@glimmer/component';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
+import Button from '../button';
+import { on } from '@ember/modifier';
+import { fn } from '@ember/helper';
 
 interface Signature {
   Element: HTMLElement;
@@ -25,7 +28,6 @@ export default class Tab extends Component<Signature> {
     return {
       name: this.args.name,
       title: this.args.title,
-      disabled: this.args.disabled,
     };
   }
 
@@ -40,9 +42,11 @@ export default class Tab extends Component<Signature> {
   }
 
   <template>
-    <section ...attributes>
-      {{yield}}
-    </section>
+    <Button
+      @disabled={{@disabled}}
+      {{on 'click' (fn @onTabSelect @name)}}
+      ...attributes
+    >{{@title}}</Button>
     <style></style>
   </template>
 }
