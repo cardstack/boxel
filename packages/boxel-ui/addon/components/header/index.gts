@@ -82,8 +82,9 @@ const Header: TemplateOnlyComponent<Signature> = <template>
         gap: var(--boxel-sp-xs);
       }
       header .title {
-        max-width: calc(
-          100% - 10rem
+        max-width: var(
+          --boxel-header-max-width,
+          calc(100% - 10rem)
         ); /* this includes the space to show the header buttons */
         text-overflow: ellipsis;
         overflow: hidden;

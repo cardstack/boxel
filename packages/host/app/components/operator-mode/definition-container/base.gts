@@ -71,7 +71,7 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
     <style>
       .header {
         --boxel-header-text-size: var(--boxel-font-size-sm);
-        --boxel-header-padding: var(--boxel-sp-xxs);
+        --boxel-header-padding: var(--boxel-sp-xs);
         --boxel-header-text-size: var(--boxel-font-size-sm);
         --boxel-header-text-transform: uppercase;
         --boxel-header-letter-spacing: var(--boxel-lsp-xxl);
