@@ -755,9 +755,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom('[data-test-definition-realm-name]')
       .hasText('in Test Workspace B');
 
-    await this.pauseTest();
-
-    assert.dom('[data-test-binary-file-schema-editor]').exists();
+    assert.dom('[data-test-schema-editor-incompatible]').exists();
   });
 
   test('empty state displays default realm info', async function (assert) {
@@ -1007,7 +1005,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom('[data-test-binary-info] [data-test-last-modified]')
       .containsText('Last modified');
     assert
-      .dom('[data-test-binary-file-schema-editor]')
+      .dom('[data-test-schema-editor-incompatible]')
       .hasText('Schema Editor cannot be used with this file type');
 
     await percySnapshot(assert);
