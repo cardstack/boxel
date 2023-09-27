@@ -2360,15 +2360,10 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       },
     );
-
-    assert.dom('[data-test-submode-switcher]').exists();
-    assert.dom('[data-test-submode-switcher]').hasText('Interact');
-
     await click(
       '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
     );
     await click('[data-test-boxel-menu-item-text="Code"]');
-    assert.dom('[data-test-submode-switcher]').hasText('Code');
 
     await waitUntil(() =>
       document
@@ -2392,7 +2387,10 @@ module('Integration | operator-mode', function (hooks) {
       'keypress',
       'Enter',
     );
-    assert.dom('[data-test-card-url-bar-error]').hasText('File is not found');
+    assert
+      .dom('[data-test-card-url-bar-error]')
+      .containsText('This resource does not exist');
+    await percySnapshot(assert);
 
     await fillIn('[data-test-card-url-bar-input]', `Wrong URL`);
     await triggerKeyEvent(
@@ -2400,7 +2398,68 @@ module('Integration | operator-mode', function (hooks) {
       'keypress',
       'Enter',
     );
-    assert.dom('[data-test-card-url-bar-error]').hasText('Not a valid URL');
+    assert
+      .dom('[data-test-card-url-bar-error]')
+      .containsText('Not a valid URL');
+  });
+
+  test('user can dismiss url bar error message', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await click(
+      '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
+    );
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    assert.dom('[data-test-submode-switcher]').hasText('Code');
+
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-card-url-bar-realm-info]')
+        ?.textContent?.includes('Operator Mode Workspace'),
+    );
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `${testRealmURL}Pet/NotFoundCard`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    assert.dom('[data-test-card-url-bar-error]').exists();
+
+    await click('[data-test-dismiss-url-error-button]');
+    assert.dom('[data-test-card-url-bar-error]').doesNotExist();
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `${testRealmURL}Pet/NotFoundCard_2`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    assert.dom('[data-test-card-url-bar-error]').exists();
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `${testRealmURL}Pet/mango.json`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    assert.dom('[data-test-card-url-bar-error]').doesNotExist();
   });
 
   test(`card url bar URL reacts to external changes of code path when user is not editing`, async function (assert) {

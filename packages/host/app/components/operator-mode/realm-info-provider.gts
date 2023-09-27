@@ -1,5 +1,6 @@
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+import { buildWaiter } from '@ember/test-waiters';
 
 import { use, resource } from 'ember-resources';
 
@@ -8,6 +9,8 @@ import { TrackedObject } from 'tracked-built-ins';
 import { type RealmInfo } from '@cardstack/runtime-common';
 
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
+
+const waiter = buildWaiter('realm-info-provider:load-waiter');
 
 export interface Signature {
   Args: { realmURL?: string; fileURL?: string };
@@ -41,7 +44,7 @@ export default class RealmInfoProvider extends Component<Signature> {
       error: undefined,
       load: async () => {
         state.isLoading = true;
-
+        let token = waiter.beginAsync();
         try {
           let realmInfo = await this.realmInfoService.fetchRealmInfo({
             realmURL: this.args.realmURL,
@@ -53,6 +56,7 @@ export default class RealmInfoProvider extends Component<Signature> {
           state.error = error;
         } finally {
           state.isLoading = false;
+          waiter.endAsync(token);
         }
       },
     });
