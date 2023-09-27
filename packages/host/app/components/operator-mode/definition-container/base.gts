@@ -32,7 +32,7 @@ interface BaseSignature {
 
 export class BaseDefinitionContainer extends Component<BaseSignature> {
   <template>
-    <CardContainer>
+    <CardContainer ...attributes>
       <div class='banner {{if @isActive "active"}}'>
         <Label class='banner-title'>
           {{@title}}</Label>
