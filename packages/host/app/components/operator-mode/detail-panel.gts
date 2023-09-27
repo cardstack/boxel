@@ -8,7 +8,9 @@ import Component from '@glimmer/component';
 // @ts-expect-error cached doesn't have type yet
 import { tracked, cached } from '@glimmer/tracking';
 
-import { type RealmInfo } from '@cardstack/runtime-common';
+import { or } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
+import { isCardDocument, type RealmInfo } from '@cardstack/runtime-common';
 
 import { hasExecutableExtension } from '@cardstack/runtime-common';
 
@@ -70,7 +72,7 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   get isCardInstance() {
-    return this.args.readyFile.url.endsWith('.json');
+    return isCardDocument(this.args.cardInstance);
   }
   get isModule() {
     return hasExecutableExtension(this.args.readyFile.url);
@@ -78,6 +80,10 @@ export default class DetailPanel extends Component<Signature> {
 
   get isBinary() {
     return this.args.readyFile.isBinary;
+  }
+
+  get isJSON() {
+    return this.args.readyFile.url.endsWith('.json');
   }
 
   private get fileExtension() {
@@ -148,7 +154,7 @@ export default class DetailPanel extends Component<Signature> {
               @url={{this.cardType.type.super.module}}
             />
           {{/if}}
-        {{else if this.isBinary}}
+        {{else if (or this.isBinary this.isJSON)}}
           <FileDefinitionContainer
             @fileURL={{@readyFile.url}}
             @fileExtension={{this.fileExtension}}
