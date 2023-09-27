@@ -169,28 +169,43 @@ export default class CardService extends Service {
     return serialized;
   }
 
-  async saveModel(card: CardDef): Promise<CardDef> {
-    await this.apiModule.loaded;
-    let doc = await this.serializeCard(card, {
-      // for a brand new card that has no id yet, we don't know what we are
-      // relativeTo because its up to the realm server to assign us an ID, so
-      // URL's should be absolute
-      maybeRelativeURL: null, // forces URL's to be absolute.
-    });
-    // send doc over the wire with absolute URL's. The realm server will convert
-    // to relative URL's as it serializes the cards
-    let realmUrl = await this.getRealmURL(card);
-    let json = await this.saveCardDocument(doc, realmUrl);
-
-    // in order to preserve object equality with the unsaved card instance we
-    // should always use updateFromSerialized()--this way a newly created
-    // instance that does not yet have an id is still the same instance after an
-    // ID has been assigned by the server.
-    let result = (await this.api.updateFromSerialized(card, json)) as CardDef;
-    if (this.subscriber) {
-      this.subscriber(json);
+  async saveModel(card: CardDef): Promise<CardDef | undefined> {
+    let cardChanged = false;
+    function onCardChange() {
+      cardChanged = true;
     }
-    return result;
+    this.api.subscribeToChanges(card, onCardChange);
+    try {
+      await this.apiModule.loaded;
+      let doc = await this.serializeCard(card, {
+        // for a brand new card that has no id yet, we don't know what we are
+        // relativeTo because its up to the realm server to assign us an ID, so
+        // URL's should be absolute
+        maybeRelativeURL: null, // forces URL's to be absolute.
+      });
+      // send doc over the wire with absolute URL's. The realm server will convert
+      // to relative URL's as it serializes the cards
+      let realmUrl = await this.getRealmURL(card);
+      let json = await this.saveCardDocument(doc, realmUrl);
+
+      let result: CardDef | undefined;
+      // if the card changed while the save was in flight then don't load the
+      // server's version of the card--the next auto save will include these
+      // unsaved changes.
+      if (!cardChanged) {
+        // in order to preserve object equality with the unsaved card instance we
+        // should always use updateFromSerialized()--this way a newly created
+        // instance that does not yet have an id is still the same instance after an
+        // ID has been assigned by the server.
+        result = (await this.api.updateFromSerialized(card, json)) as CardDef;
+      }
+      if (this.subscriber) {
+        this.subscriber(json);
+      }
+      return result;
+    } finally {
+      this.api.unsubscribeFromChanges(card, onCardChange);
+    }
   }
 
   async saveSource(url: URL, content: string) {
