@@ -137,8 +137,9 @@ export default class CodeMode extends Component<Signature> {
   @tracked private loadFileError: string | null = null;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
   @tracked private card: CardDef | undefined;
+  @tracked private cardError: Error | undefined;
+  @tracked private userHasDismissedURLError = false;
   @tracked private selectedElement: ElementInFile | undefined;
-  @tracked cardError: Error | undefined;
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
@@ -270,6 +271,10 @@ export default class CodeMode extends Component<Signature> {
     this.loadFileError = null;
   }
 
+  @action private dismissURLError() {
+    this.userHasDismissedURLError = true;
+  }
+
   @use private realmInfoResource = resource(() => {
     if (!this.realmURL) {
       return new TrackedObject({
@@ -376,9 +381,12 @@ export default class CodeMode extends Component<Signature> {
     return file(context, () => ({
       url: this.codePath!.href,
       onStateChange: (state) => {
+        this.userHasDismissedURLError = false;
         if (state === 'not-found') {
-          this.loadFileError = 'File is not found';
+          this.loadFileError = 'This resource does not exist';
           this.setFileView('browser');
+        } else if (state === 'ready') {
+          this.loadFileError = null;
         }
       },
       onRedirect: (url: string) => {
@@ -704,6 +712,8 @@ export default class CodeMode extends Component<Signature> {
     <CardURLBar
       @loadFileError={{this.loadFileError}}
       @resetLoadFileError={{this.resetLoadFileError}}
+      @userHasDismissedError={{this.userHasDismissedURLError}}
+      @dismissURLError={{this.dismissURLError}}
       @realmInfo={{this.realmInfo}}
       class='card-url-bar'
     />
@@ -785,7 +795,7 @@ export default class CodeMode extends Component<Signature> {
                     Inspector is not available
                   {{/if}}
                 {{else}}
-                  <FileTree @url={{this.realmURL}} />
+                  <FileTree @realmURL={{this.realmURL}} />
                 {{/if}}
               </section>
             </div>
