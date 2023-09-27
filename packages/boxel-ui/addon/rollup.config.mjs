@@ -74,14 +74,14 @@ export default {
         { src: '../LICENSE.md', dest: '.' },
       ],
     }),
-    scopedCSS('src', 'dist'),
+    scopedCSS('src'),
   ],
 };
 
-function scopedCSS(srcDir, destDir) {
+function scopedCSS(srcDir) {
   return {
     name: 'scoped-css',
-    resolveId(source, importer, options) {
+    resolveId(source, importer) {
       if (!isScopedCSSRequest(source)) {
         return null;
       }
@@ -93,7 +93,7 @@ function scopedCSS(srcDir, destDir) {
       let dir = path.dirname(localPath);
       let css = decodeScopedCSSRequest(source);
       return {
-        id: path.resolve(destDir, dir, cssFileName),
+        id: path.resolve(path.dirname(importer), cssFileName),
         meta: { 'scoped-css': { css, fileName: path.join(dir, cssFileName) } },
         external: 'relative',
       };
