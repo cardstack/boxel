@@ -28,8 +28,7 @@ import type { ElementInFile } from './code-mode';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import BoxelMenu from '@cardstack/boxel-ui/components/menu';
 import { MenuItem, menuItemFunc } from '@cardstack/boxel-ui/helpers/menu-item';
-import { CardContainer, LoadingIndicator } from '@cardstack/boxel-ui';
-import Label from '@cardstack/boxel-ui/components/label';
+import { CardContainer, LoadingIndicator, Header } from '@cardstack/boxel-ui';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { or } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
@@ -133,10 +132,11 @@ export default class DetailPanel extends Component<Signature> {
               </span>
             </div>
             <CardContainer>
-              <div class='banner'>
-                <Label class='banner-title'>
-                  {{@readyFile.name}}</Label>
-              </div>
+              <Header
+                @title={{@readyFile.name}}
+                @hasBackground={{true}}
+                class='header'
+              />
               <BoxelMenu
                 @class='in-this-file-menu'
                 @items={{this.buildMenuItems}}
@@ -232,6 +232,16 @@ export default class DetailPanel extends Component<Signature> {
       {{/if}}
     </div>
     <style>
+      .header {
+        --boxel-header-text-size: var(--boxel-font-size-sm);
+        --boxel-header-padding: var(--boxel-sp-xs);
+        --boxel-header-text-size: var(--boxel-font-size-sm);
+        --boxel-header-text-transform: uppercase;
+        --boxel-header-letter-spacing: var(--boxel-lsp-xxl);
+        --boxel-header-background-color: var(--boxel-100);
+        --boxel-header-text-color: var(--boxel-dark);
+        --boxel-header-max-width: none;
+      }
       .in-this-file-panel-banner {
         display: flex;
         justify-content: space-between;
@@ -270,23 +280,6 @@ export default class DetailPanel extends Component<Signature> {
       }
       :global(.in-this-file-menu-item .check-icon) {
         display: none;
-      }
-
-      .banner {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: var(--boxel-sp-xxs) var(--boxel-sp-sm) var(--boxel-sp-xxs);
-        border-top-left-radius: var(--boxel-border-radius);
-        border-top-right-radius: var(--boxel-border-radius);
-        background-color: var(--boxel-100);
-      }
-
-      .banner-title {
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 200;
-        letter-spacing: var(--boxel-lsp-xxl);
-        text-transform: uppercase;
       }
       .loading {
         display: flex;
