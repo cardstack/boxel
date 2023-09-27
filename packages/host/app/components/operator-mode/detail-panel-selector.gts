@@ -1,16 +1,13 @@
 import Component from '@glimmer/component';
 import { action } from '@ember/object';
-import { Link } from 'ember-link';
 import { type EmptyObject } from '@ember/component/helper';
 import compact from 'ember-composable-helpers/helpers/compact';
 import { on } from '@ember/modifier';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import { fn } from '@ember/helper';
 
-type ActionType = Link | Function;
-
 interface SelectorItemOptions {
-  action: ActionType;
+  action: Function;
   url: string;
   selected: boolean;
   disabled: boolean;
@@ -20,7 +17,7 @@ export class SelectorItem {
   text: string;
   selected: boolean;
   disabled: boolean;
-  action: ActionType | undefined;
+  action: Function | undefined;
   tabindex: number | string | undefined;
 
   constructor(text: string, options: Partial<SelectorItemOptions>) {
@@ -33,7 +30,7 @@ export class SelectorItem {
 }
 
 export function selectorItemFunc(
-  params: [string, ActionType],
+  params: [string, Function],
   named: Partial<SelectorItemOptions>,
 ): SelectorItem {
   let text = params[0];
@@ -67,7 +64,7 @@ interface Signature {
 
 export default class Selector extends Component<Signature> {
   @action invokeSelectorItemAction(
-    actionOrLink: unknown,
+    action: unknown,
     e: Event | KeyboardEvent,
   ): void {
     e.preventDefault();
@@ -76,11 +73,7 @@ export default class Selector extends Component<Signature> {
       return;
     }
 
-    if (actionOrLink instanceof Link && actionOrLink.transitionTo) {
-      actionOrLink.transitionTo();
-    } else {
-      (actionOrLink as () => never)();
-    }
+    (action as () => never)();
   }
 
   <template>
