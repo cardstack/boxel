@@ -74,7 +74,10 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   get isCardInstance() {
-    return this.args.readyFile.url.endsWith('.json') && this.args.cardInstance;
+    return (
+      this.args.readyFile.url.endsWith('.json') &&
+      this.args.cardInstance !== undefined
+    );
   }
   get isModule() {
     return hasExecutableExtension(this.args.readyFile.url);
