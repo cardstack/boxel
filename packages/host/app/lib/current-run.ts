@@ -278,8 +278,16 @@ export class CurrentRun {
 
       let { content, lastModified } = fileRef;
       if (url.href.endsWith('.json')) {
-        let { data: resource } = JSON.parse(content);
-        if (isCardResource(resource)) {
+        let resource;
+
+        try {
+          let { data } = JSON.parse(content);
+          resource = data;
+        } catch (e) {
+          log.debug(`unable to parse ${url.href} as card JSON`);
+        }
+
+        if (resource && isCardResource(resource)) {
           await this.indexCard(
             localPath,
             lastModified,

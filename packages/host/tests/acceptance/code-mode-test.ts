@@ -129,6 +129,7 @@ module('Acceptance | code mode tests', function (hooks) {
           },
         },
       },
+      'not-json.json': 'I am not JSON.',
       'Person/1.json': {
         data: {
           type: 'card',
