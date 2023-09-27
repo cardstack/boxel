@@ -2,7 +2,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
 import { Button } from '@cardstack/boxel-ui';
-import { CardContainer } from '@cardstack/boxel-ui';
+import { CardContainer, Header } from '@cardstack/boxel-ui';
 import Label from '@cardstack/boxel-ui/components/label';
 
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
@@ -32,15 +32,18 @@ interface BaseSignature {
 
 export class BaseDefinitionContainer extends Component<BaseSignature> {
   <template>
-    <CardContainer>
-      <div class='banner {{if @isActive "active"}}'>
-        <Label class='banner-title'>
-          {{@title}}</Label>
-        <span
-          class='banner-title'
-          data-test-definition-file-extension
-        >{{@fileExtension}}</span>
-      </div>
+    <CardContainer ...attributes>
+      <Header
+        @title={{@title}}
+        @hasBackground={{true}}
+        class='header {{if @isActive "active"}}'
+      >
+        <:detail>
+          <div data-test-definition-file-extension>
+            {{@fileExtension}}
+          </div>
+        </:detail>
+      </Header>
       <div class='content'>
         <div class='definition-info'>
           <RealmInfoProvider @fileURL={{@fileURL}}>
@@ -68,34 +71,19 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
     <style>
       .header {
         --boxel-header-text-size: var(--boxel-font-size-sm);
+        --boxel-header-padding: var(--boxel-sp-xs);
+        --boxel-header-text-size: var(--boxel-font-size-sm);
+        --boxel-header-text-transform: uppercase;
+        --boxel-header-letter-spacing: var(--boxel-lsp-xxl);
+        --boxel-header-detail-margin-left: auto;
+        --boxel-header-detail-max-width: none;
+        --boxel-header-background-color: var(--boxel-100);
+        --boxel-header-text-color: var(--boxel-450);
       }
 
-      .banner {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: var(--boxel-sp-xxs) var(--boxel-sp-sm) var(--boxel-sp-xxs);
-        border-top-left-radius: var(--boxel-border-radius);
-        border-top-right-radius: var(--boxel-border-radius);
-        background-color: var(--boxel-100);
-      }
-      .banner-title {
-        color: var(--boxel-450);
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 200;
-        letter-spacing: var(--boxel-lsp-xxl);
-        text-transform: uppercase;
-      }
-
-      .banner.active {
-        background-color: var(--boxel-highlight);
-      }
-
-      .banner.active .banner-title {
-        color: var(--boxel-light);
-      }
-      .banner.active .file-extension {
-        color: var(--boxel-light);
+      .header.active {
+        --boxel-header-background-color: var(--boxel-highlight);
+        --boxel-header-text-color: var(--boxel-light);
       }
       .content {
         display: flex;
