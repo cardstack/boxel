@@ -1,7 +1,22 @@
-import { module, test } from 'qunit';
-import { setupRenderingTest } from 'ember-qunit';
-import { renderCard } from '../../helpers/render-component';
+import { fillIn, RenderingTestContext } from '@ember/test-helpers';
+
 import parseISO from 'date-fns/parseISO';
+import { setupRenderingTest } from 'ember-qunit';
+import { isAddress } from 'ethers';
+import { module, test } from 'qunit';
+
+import {
+  baseRealm,
+  NotLoaded,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
+
+import { shimExternals } from '@cardstack/host/lib/externals';
+import type LoaderService from '@cardstack/host/services/loader-service';
+
+import { type CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
+
 import {
   p,
   cleanWhiteSpace,
@@ -9,17 +24,8 @@ import {
   setupCardLogs,
   saveCard,
 } from '../../helpers';
-import { Loader } from '@cardstack/runtime-common/loader';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import {
-  baseRealm,
-  NotLoaded,
-  type LooseSingleCardDocument,
-} from '@cardstack/runtime-common';
-import { fillIn, RenderingTestContext } from '@ember/test-helpers';
-import { isAddress } from 'ethers';
-import { type CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
-import { shimExternals } from '@cardstack/host/lib/externals';
+
+import { renderCard } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let codeRef: typeof import('https://cardstack.com/base/code-ref');

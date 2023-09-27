@@ -152,8 +152,8 @@ export class Loader {
     this.urlHandlers.push(handler);
   }
 
-  setURLHandlers(handlers: RequestHandler[]) {
-    this.urlHandlers = handlers;
+  prependURLHandlers(handlers: RequestHandler[]) {
+    this.urlHandlers = [...handlers, ...this.urlHandlers];
   }
 
   shimModule(moduleIdentifier: string, module: Record<string, any>) {

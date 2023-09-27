@@ -1,14 +1,19 @@
-import Component from '@glimmer/component';
-import { internalKeyFor } from '@cardstack/runtime-common';
-import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
-import { type Type } from '@cardstack/host/resources/card-type';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
+import Component from '@glimmer/component';
 
-import type LoaderService from '@cardstack/host/services/loader-service';
-import type CardService from '@cardstack/host/services/card-service';
+import { internalKeyFor } from '@cardstack/runtime-common';
+import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
+
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
+
+import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import { type Type } from '@cardstack/host/resources/card-type';
+
 import type { Ready } from '@cardstack/host/resources/file';
+import type CardService from '@cardstack/host/services/card-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
+
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
@@ -34,12 +39,20 @@ export default class CardSchemaEditor extends Component<Signature> {
       }
 
       .pill {
-        border: 1px solid gray;
-        display: inline-block;
+        border: 1px solid var(--boxel-400);
         padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
         border-radius: 8px;
         background-color: white;
         font-weight: 600;
+        display: inline-flex;
+      }
+
+      .pill > div {
+        display: flex;
+      }
+
+      .pill > div > span {
+        margin: auto;
       }
 
       .realm-icon {
@@ -81,6 +94,11 @@ export default class CardSchemaEditor extends Component<Signature> {
       .field-type {
         color: #949494;
       }
+
+      .realm-icon > img {
+        height: 20px;
+        width: 20px;
+      }
     </style>
 
     <div
@@ -88,10 +106,22 @@ export default class CardSchemaEditor extends Component<Signature> {
       data-test-card-schema={{@cardType.displayName}}
     >
       <div class='pill'>
-        <span class='realm-icon'>
-          🟦
-        </span>
-        {{@cardType.displayName}}
+        <div class='realm-icon'>
+          <RealmInfoProvider @fileURL={{@cardType.module}}>
+            <:ready as |realmInfo|>
+              <img
+                src={{realmInfo.iconURL}}
+                alt='Realm icon'
+                data-test-realm-icon-url={{realmInfo.iconURL}}
+              />
+            </:ready>
+          </RealmInfoProvider>
+        </div>
+        <div>
+          <span>
+            {{@cardType.displayName}}
+          </span>
+        </div>
       </div>
 
       <div class='card-fields'>
@@ -107,19 +137,30 @@ export default class CardSchemaEditor extends Component<Signature> {
                 </div>
               </div>
               <div class='right'>
-
                 <div class='pill'>
-                  <span class='realm-icon'>
-                    🟪
-                  </span>
-                  {{#let
-                    (this.fieldCardDisplayName field.card)
-                    as |cardDisplayName|
-                  }}
-                    <span
-                      data-test-card-display-name={{cardDisplayName}}
-                    >{{cardDisplayName}}</span>
-                  {{/let}}
+                  <div class='realm-icon'>
+                    <RealmInfoProvider @fileURL={{this.fieldModuleURL field}}>
+                      <:ready as |realmInfo|>
+                        <img
+                          src={{realmInfo.iconURL}}
+                          alt='Realm icon'
+                          data-test-realm-icon-url={{realmInfo.iconURL}}
+                        />
+                      </:ready>
+                    </RealmInfoProvider>
+                  </div>
+                  <div>
+                    <span>
+                      {{#let
+                        (this.fieldCardDisplayName field.card)
+                        as |cardDisplayName|
+                      }}
+                        <span
+                          data-test-card-display-name={{cardDisplayName}}
+                        >{{cardDisplayName}}</span>
+                      {{/let}}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -144,5 +185,9 @@ export default class CardSchemaEditor extends Component<Signature> {
       return internalKeyFor(card, undefined);
     }
     return card.displayName;
+  }
+
+  fieldModuleURL(field: Type['fields'][0]) {
+    return (field.card as Type).module;
   }
 }

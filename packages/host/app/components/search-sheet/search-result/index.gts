@@ -1,11 +1,17 @@
-import Component from '@glimmer/component';
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import { cardTypeDisplayName } from '@cardstack/runtime-common';
-import { CardContainer } from '@cardstack/boxel-ui';
-import { trackedFunction } from 'ember-resources/util/function';
-import type CardService from '../../../services/card-service';
 import { service } from '@ember/service';
+import Component from '@glimmer/component';
+
+import { trackedFunction } from 'ember-resources/util/function';
+
+import { CardContainer } from '@cardstack/boxel-ui';
+
 import cn from '@cardstack/boxel-ui/helpers/cn';
+
+import { cardTypeDisplayName } from '@cardstack/runtime-common';
+
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+
+import type CardService from '../../../services/card-service';
 
 interface Signature {
   Element: HTMLElement;
@@ -60,7 +66,7 @@ export default class SearchResult extends Component<Signature> {
       .search-result__display-name {
         margin: 0;
         font: 500 var(--boxel-font-xs);
-        color: #919191;
+        color: var(--boxel-450);
       }
       .search-result:not(.is-compact) .search-result__realm-name {
         display: block;

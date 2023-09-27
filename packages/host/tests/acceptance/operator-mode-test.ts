@@ -1,4 +1,3 @@
-import { module, test } from 'qunit';
 import {
   visit,
   currentURL,
@@ -7,10 +6,24 @@ import {
   triggerKeyEvent,
   waitFor,
   waitUntil,
-  find,
   fillIn,
 } from '@ember/test-helpers';
+
+import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
+
+import window from 'ember-window-mock';
+import { setupWindowMock } from 'ember-window-mock/test-support';
+import { module, test } from 'qunit';
+import stringify from 'safe-stable-stringify';
+
+import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { Realm } from '@cardstack/runtime-common/realm';
+
+import config from '@cardstack/host/config/environment';
+import type LoaderService from '@cardstack/host/services/loader-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
 import {
   TestRealm,
   TestRealmAdapter,
@@ -23,15 +36,9 @@ import {
   waitForSyntaxHighlighting,
   type TestContextWithSSE,
   type TestContextWithSave,
+  sourceFetchRedirectHandle,
+  sourceFetchReturnUrlHandle,
 } from '../helpers';
-import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
-import stringify from 'safe-stable-stringify';
-import { Realm } from '@cardstack/runtime-common/realm';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import percySnapshot from '@percy/ember';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import { setupWindowMock } from 'ember-window-mock/test-support';
-import window from 'ember-window-mock';
 
 module('Acceptance | operator mode tests', function (hooks) {
   let realm: Realm;
@@ -260,6 +267,14 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
       isAcceptanceTest: true,
+      overridingHandlers: [
+        async (req: Request) => {
+          return sourceFetchRedirectHandle(req, adapter, testRealmURL);
+        },
+        async (req: Request) => {
+          return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
+        },
+      ],
     });
     await realm.ready;
   });
@@ -879,7 +894,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         )}`,
       );
 
-      await waitUntil(() => find('[data-test-card-resource-loaded]'));
+      await waitFor('[data-test-card-resource-loaded]');
 
       assert.dom('[data-test-code-mode-card-preview-header]').hasText('Person');
       assert
@@ -1002,7 +1017,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitUntil(() => find('[data-test-card-resource-loaded]'));
+    await waitFor('[data-test-card-resource-loaded]');
     await this.expectEvents(
       assert,
       realm,
@@ -1057,7 +1072,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitUntil(() => find('[data-test-editor]'));
+    await waitFor('[data-test-editor]');
     assert.deepEqual(JSON.parse(getMonacoContent()), {
       data: {
         attributes: {
@@ -1108,7 +1123,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitUntil(() => find('[data-test-editor]'));
+    await waitFor('[data-test-editor]');
 
     this.onSave((json) => {
       if (typeof json === 'string') {
@@ -1173,7 +1188,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitUntil(() => find('[data-test-editor]'));
+    await waitFor('[data-test-editor]');
 
     this.onSave((json) => {
       if (typeof json === 'string') {
@@ -1212,7 +1227,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitUntil(() => find('[data-test-editor]'));
+    await waitFor('[data-test-editor]');
 
     this.onSave((content) => {
       if (typeof content !== 'string') {
@@ -1240,7 +1255,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitUntil(() => find('[data-test-editor]'));
+    await waitFor('[data-test-editor]');
 
     this.onSave((content) => {
       if (typeof content !== 'string') {
@@ -1255,38 +1270,49 @@ module('Acceptance | operator mode tests', function (hooks) {
   });
 
   test<TestContextWithSave>('unsaved changes made in card editor are saved when switching out of code mode', async function (assert) {
-    assert.expect(1);
+    config.autoSaveDelayMs = 1000; // slowdown the auto save so it doesn't interfere with this test
+    let numSaves = 0;
+    try {
+      assert.expect(1);
 
-    let operatorModeStateParam = stringify({
-      stacks: [
-        [
-          {
-            id: `${testRealmURL}Pet/mango`,
-            format: 'isolated',
-          },
+      let operatorModeStateParam = stringify({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Pet/mango`,
+              format: 'isolated',
+            },
+          ],
         ],
-      ],
-      submode: 'code',
-      codePath: `${testRealmURL}Pet/mango.json`,
-    })!;
-    await visit(
-      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-        operatorModeStateParam,
-      )}`,
-    );
-    await waitUntil(() => find('[data-test-editor]'));
+        submode: 'code',
+        codePath: `${testRealmURL}Pet/mango.json`,
+      })!;
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam,
+        )}`,
+      );
+      await waitFor('[data-test-editor]');
 
-    this.onSave((json) => {
-      if (typeof json === 'string') {
-        throw new Error('expected JSON save data');
-      }
-      assert.strictEqual(json.data.attributes?.name, 'MangoXXX');
-    });
+      this.onSave((json) => {
+        if (typeof json === 'string') {
+          throw new Error('expected JSON save data');
+        }
+        if (numSaves > 0) {
+          // this is the auto-save--we can ignore it
+        } else {
+          assert.strictEqual(json.data.attributes?.name, 'MangoXXX');
+          numSaves++;
+        }
+      });
 
-    await click('[data-test-preview-card-footer-button-edit]');
-    await fillIn('[data-test-field="name"] input', 'MangoXXX');
-    await click('[data-test-submode-switcher] button');
-    await click('[data-test-boxel-menu-item-text="Interact"]');
+      await click('[data-test-preview-card-footer-button-edit]');
+      await fillIn('[data-test-field="name"] input', 'MangoXXX');
+      await click('[data-test-submode-switcher] button');
+      await click('[data-test-boxel-menu-item-text="Interact"]');
+    } finally {
+      config.autoSaveDelayMs = 0;
+    }
   });
 
   test<TestContextWithSave>('invalid JSON card instance change made in monaco editor is NOT auto-saved', async function (assert) {
@@ -1308,7 +1334,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitUntil(() => find('[data-test-editor]'));
+    await waitFor('[data-test-editor]');
 
     this.onSave(() => {
       assert.ok(false, `save should never happen`);
@@ -1380,7 +1406,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitUntil(() => find('[data-test-editor]'));
+    await waitFor('[data-test-editor]');
 
     await this.expectEvents(
       assert,
@@ -1453,7 +1479,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    await waitUntil(() => find('[data-test-editor]'));
+    await waitFor('[data-test-editor]');
     assert.strictEqual(
       window.localStorage.getItem('recent-files'),
       JSON.stringify([`${testRealmURL}Pet/vangogh.json`]),
@@ -1472,7 +1498,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         await click('[data-test-confirm-delete-button]');
       },
     );
-    await waitUntil(() => find('[data-test-empty-code-mode]'));
+    await waitFor('[data-test-empty-code-mode]');
     await percySnapshot(
       'Acceptance | operator mode tests | Can delete a card instance from code mode with no recent files - empty code mode',
     );
@@ -1542,7 +1568,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    await waitUntil(() => find('[data-test-editor]'));
+    await waitFor('[data-test-editor]');
     assert.strictEqual(
       window.localStorage.getItem('recent-files'),
       JSON.stringify([
@@ -1563,7 +1589,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         await click('[data-test-confirm-delete-button]');
       },
     );
-    await waitUntil(() => find('[data-test-editor]'));
+    await waitFor('[data-test-editor]');
     assert
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}Pet/mango.json`);

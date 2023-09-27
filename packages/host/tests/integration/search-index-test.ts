@@ -1,4 +1,21 @@
+import { RenderingTestContext } from '@ember/test-helpers';
+
+import { setupRenderingTest } from 'ember-qunit';
 import { module, test, skip } from 'qunit';
+
+import {
+  baseRealm,
+  baseCardRef,
+  type CodeRef,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
+import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
+import { Loader } from '@cardstack/runtime-common/loader';
+import { RealmPaths } from '@cardstack/runtime-common/paths';
+import { SearchIndex } from '@cardstack/runtime-common/search-index';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
+
 import {
   TestRealm,
   TestRealmAdapter,
@@ -10,19 +27,6 @@ import {
   setupLocalIndexing,
   type CardDocFiles,
 } from '../helpers';
-import { RealmPaths } from '@cardstack/runtime-common/paths';
-import { setupRenderingTest } from 'ember-qunit';
-import { SearchIndex } from '@cardstack/runtime-common/search-index';
-import {
-  baseRealm,
-  baseCardRef,
-  type CodeRef,
-  type LooseSingleCardDocument,
-} from '@cardstack/runtime-common';
-import { RenderingTestContext } from '@ember/test-helpers';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import { Loader } from '@cardstack/runtime-common/loader';
-import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 
 const paths = new RealmPaths(testRealmURL);
 const testModuleRealm = 'http://localhost:4202/test/';

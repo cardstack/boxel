@@ -1,9 +1,12 @@
-import Component from '@glimmer/component';
-import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-import SearchSheet, { SearchSheetMode } from './index';
-import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
+import Component from '@glimmer/component';
+
+import { tracked } from '@glimmer/tracking';
+
+import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
+
+import SearchSheet, { SearchSheetMode } from './index';
 
 const validModes = Object.values(SearchSheetMode);
 

@@ -1,24 +1,30 @@
+import { getOwner } from '@ember/application';
+import { registerDestructor } from '@ember/destroyable';
+import type RouterService from '@ember/routing/router-service';
+import { scheduleOnce } from '@ember/runloop';
+import Service, { service } from '@ember/service';
+
+import { tracked } from '@glimmer/tracking';
+
+import { task } from 'ember-concurrency';
+import window from 'ember-window-mock';
+import stringify from 'safe-stable-stringify';
+import { TrackedArray, TrackedObject } from 'tracked-built-ins';
+
+import { RealmPaths } from '@cardstack/runtime-common/paths';
+
+import { Submode } from '@cardstack/host/components/submode-switcher';
+import type MessageService from '@cardstack/host/services/message-service';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+
 import {
   type Stack,
   type StackItem,
 } from '../components/operator-mode/container';
-import Service from '@ember/service';
+
 import type CardService from '../services/card-service';
-import { TrackedArray, TrackedObject } from 'tracked-built-ins';
-import type MessageService from '@cardstack/host/services/message-service';
-import type RecentFilesService from '@cardstack/host/services/recent-files-service';
-import { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
-import { task } from 'ember-concurrency';
-import { getOwner } from '@ember/application';
-import { scheduleOnce } from '@ember/runloop';
-import stringify from 'safe-stable-stringify';
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import { Submode } from '@cardstack/host/components/submode-switcher';
-import { registerDestructor } from '@ember/destroyable';
-import { RealmPaths } from '@cardstack/runtime-common/paths';
-import window from 'ember-window-mock';
-import type RouterService from '@ember/routing/router-service';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).
@@ -247,7 +253,14 @@ export default class OperatorModeStateService extends Service {
   get codePathRelativeToRealm() {
     if (this.state.codePath) {
       let realmPath = new RealmPaths(this.cardService.defaultURL.href);
-      return realmPath.local(this.state.codePath!);
+      try {
+        return realmPath.local(this.state.codePath!);
+      } catch (err: any) {
+        if (err.status === 404) {
+          return undefined;
+        }
+        throw err;
+      }
     } else {
       return undefined;
     }

@@ -1,22 +1,27 @@
-import { module, test } from 'qunit';
+import { waitUntil, waitFor, fillIn, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
+
+import { setupRenderingTest } from 'ember-qunit';
+import { module, test } from 'qunit';
+
 import { baseRealm, CodeRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
-import { setupRenderingTest } from 'ember-qunit';
-import { renderComponent } from '../../helpers/render-component';
+
+import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
+import CardPrerender from '@cardstack/host/components/card-prerender';
+import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import CatalogEntryEditor from '@cardstack/host/components/editor/catalog-entry-editor';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
+
 import {
   TestRealm,
   TestRealmAdapter,
   testRealmURL,
   setupLocalIndexing,
 } from '../../helpers';
-import { waitUntil, waitFor, fillIn, click } from '@ember/test-helpers';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import CreateCardModal from '@cardstack/host/components/create-card-modal';
-import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
-import CardPrerender from '@cardstack/host/components/card-prerender';
+import { renderComponent } from '../../helpers/render-component';
 
 let loader: Loader;
 

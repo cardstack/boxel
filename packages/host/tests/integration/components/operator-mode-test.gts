@@ -1,24 +1,3 @@
-import { module, test, skip } from 'qunit';
-import GlimmerComponent from '@glimmer/component';
-import { setupRenderingTest } from 'ember-qunit';
-import { baseRealm, cardTypeDisplayName } from '@cardstack/runtime-common';
-import { Realm } from '@cardstack/runtime-common/realm';
-import { Loader } from '@cardstack/runtime-common/loader';
-import OperatorMode from '@cardstack/host/components/operator-mode/container';
-import CardPrerender from '@cardstack/host/components/card-prerender';
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import { renderComponent } from '../../helpers/render-component';
-import {
-  testRealmURL,
-  setupCardLogs,
-  setupLocalIndexing,
-  setupServerSentEvents,
-  setupOnSave,
-  TestRealmAdapter,
-  TestRealm,
-  type TestContextWithSave,
-} from '../../helpers';
-import { MockMatrixService } from '../../helpers/mock-matrix-service';
 import {
   waitFor,
   waitUntil,
@@ -30,10 +9,41 @@ import {
   triggerKeyEvent,
   typeIn,
 } from '@ember/test-helpers';
-import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import GlimmerComponent from '@glimmer/component';
+
 import percySnapshot from '@percy/ember';
+import { setupRenderingTest } from 'ember-qunit';
+import { module, test, skip } from 'qunit';
+
+import { baseRealm, cardTypeDisplayName } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
+import { Realm } from '@cardstack/runtime-common/realm';
+
+import CardPrerender from '@cardstack/host/components/card-prerender';
+import OperatorMode from '@cardstack/host/components/operator-mode/container';
+
+import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
+
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
+import { CardDef } from 'https://cardstack.com/base/card-api';
+
+import {
+  testRealmURL,
+  setupCardLogs,
+  setupLocalIndexing,
+  setupServerSentEvents,
+  setupOnSave,
+  TestRealmAdapter,
+  TestRealm,
+  type TestContextWithSave,
+  sourceFetchRedirectHandle,
+  sourceFetchReturnUrlHandle,
+} from '../../helpers';
+import { MockMatrixService } from '../../helpers/mock-matrix-service';
+import { renderComponent } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 const realmName = 'Operator Mode Workspace';
@@ -622,7 +632,16 @@ module('Integration | operator-mode', function (hooks) {
       '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
       ...Object.fromEntries(personCards),
     });
-    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
+      overridingHandlers: [
+        async (req: Request) => {
+          return sourceFetchRedirectHandle(req, adapter, testRealmURL);
+        },
+        async (req: Request) => {
+          return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
+        },
+      ],
+    });
     await realm.ready;
 
     setCardInOperatorModeState = async (cardURL: string) => {
@@ -644,6 +663,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test<TestContextWithSave>('it allows chat commands to change cards in the stack', async function (assert) {
+    assert.expect(4);
     this.owner.register('service:matrixService', MockMatrixService);
     let matrixService = this.owner.lookup(
       'service:matrixService',
@@ -697,8 +717,8 @@ module('Integration | operator-mode', function (hooks) {
       assert.strictEqual(json.data.attributes?.firstName, 'Dave');
     });
     await click('[data-test-command-apply]');
+    await waitFor('[data-test-patch-card-idle]');
 
-    await waitFor('[data-test-person="Dave"]');
     assert.dom('[data-test-person]').hasText('Dave');
   });
 
@@ -1639,7 +1659,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
 
     await focus(`[data-test-search-input] input`);
-    await fillIn(`[data-test-search-input] input`, 'Ma');
+    await typeIn(`[data-test-search-input] input`, 'Ma');
     assert.dom(`[data-test-search-label]`).containsText('Searching for "Ma"');
 
     await waitFor(`[data-test-search-sheet-search-result]`);
@@ -1660,7 +1680,7 @@ module('Integration | operator-mode', function (hooks) {
 
     //No cards match
     await focus(`[data-test-search-input] input`);
-    await fillIn(`[data-test-search-input] input`, 'No Cards');
+    await typeIn(`[data-test-search-input] input`, 'No Cards');
     assert
       .dom(`[data-test-search-label]`)
       .containsText('Searching for "No Cards"');
@@ -1984,7 +2004,7 @@ module('Integration | operator-mode', function (hooks) {
     await click(`[data-test-create-new-card-button]`);
     await waitFor('[data-test-card-catalog-item]');
 
-    await fillIn(`[data-test-search-field] input`, `pet`);
+    await typeIn(`[data-test-search-field] input`, `pet`);
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
       { count: 0 },
@@ -2019,7 +2039,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-create-new-card-button]`);
 
-    await fillIn(`[data-test-search-input] input`, `pet`);
+    await typeIn(`[data-test-search-input] input`, `pet`);
     assert.dom(`[data-test-search-input] input`).hasValue('pet');
     await waitFor('[data-test-card-catalog-item]', { count: 2 });
     await click(`[data-test-select="${testRealmURL}CatalogEntry/pet-room"]`);
@@ -2061,7 +2081,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor('[data-test-card-catalog-modal]');
     await waitFor('[data-test-card-catalog-item]', { count: 3 });
-    await fillIn(`[data-test-search-input] input`, `bob`);
+    await typeIn(`[data-test-search-input] input`, `bob`);
     assert.dom(`[data-test-search-input] input`).hasValue('bob');
     await waitFor('[data-test-card-catalog-item]', { count: 1 });
     await click(`[data-test-select="${testRealmURL}Author/1"]`);
@@ -2340,15 +2360,10 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       },
     );
-
-    assert.dom('[data-test-submode-switcher]').exists();
-    assert.dom('[data-test-submode-switcher]').hasText('Interact');
-
     await click(
       '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
     );
     await click('[data-test-boxel-menu-item-text="Code"]');
-    assert.dom('[data-test-submode-switcher]').hasText('Code');
 
     await waitUntil(() =>
       document
@@ -2372,7 +2387,10 @@ module('Integration | operator-mode', function (hooks) {
       'keypress',
       'Enter',
     );
-    assert.dom('[data-test-card-url-bar-error]').hasText('File is not found');
+    assert
+      .dom('[data-test-card-url-bar-error]')
+      .containsText('This resource does not exist');
+    await percySnapshot(assert);
 
     await fillIn('[data-test-card-url-bar-input]', `Wrong URL`);
     await triggerKeyEvent(
@@ -2380,7 +2398,68 @@ module('Integration | operator-mode', function (hooks) {
       'keypress',
       'Enter',
     );
-    assert.dom('[data-test-card-url-bar-error]').hasText('Not a valid URL');
+    assert
+      .dom('[data-test-card-url-bar-error]')
+      .containsText('Not a valid URL');
+  });
+
+  test('user can dismiss url bar error message', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await click(
+      '[data-test-submode-switcher] .submode-switcher-dropdown-trigger',
+    );
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    assert.dom('[data-test-submode-switcher]').hasText('Code');
+
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-card-url-bar-realm-info]')
+        ?.textContent?.includes('Operator Mode Workspace'),
+    );
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `${testRealmURL}Pet/NotFoundCard`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    assert.dom('[data-test-card-url-bar-error]').exists();
+
+    await click('[data-test-dismiss-url-error-button]');
+    assert.dom('[data-test-card-url-bar-error]').doesNotExist();
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `${testRealmURL}Pet/NotFoundCard_2`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    assert.dom('[data-test-card-url-bar-error]').exists();
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `${testRealmURL}Pet/mango.json`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    assert.dom('[data-test-card-url-bar-error]').doesNotExist();
   });
 
   test(`card url bar URL reacts to external changes of code path when user is not editing`, async function (assert) {
@@ -2499,7 +2578,7 @@ module('Integration | operator-mode', function (hooks) {
     await click(`[data-test-search-sheet] .search-sheet-content`);
     assert.dom(`[data-test-search-sheet="search-prompt"]`).exists();
 
-    await fillIn(`[data-test-search-input] input`, 'A');
+    await typeIn(`[data-test-search-input] input`, 'A');
     await click(
       `[data-test-search-sheet] .search-sheet-content .search-result-section`,
     );

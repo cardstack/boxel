@@ -1,4 +1,10 @@
 import Service, { service } from '@ember/service';
+
+import { tracked } from '@glimmer/tracking';
+
+import { task } from 'ember-concurrency';
+
+import { marked } from 'marked';
 import {
   type IAuthData,
   type MatrixEvent,
@@ -7,29 +13,32 @@ import {
   type IEvent,
   type MatrixClient,
 } from 'matrix-js-sdk';
-import type * as MatrixSDK from 'matrix-js-sdk';
-import { task } from 'ember-concurrency';
-import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
-import { importResource } from '../resources/import';
-import { marked } from 'marked';
-import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
-import type CardService from '../services/card-service';
-import ENV from '@cardstack/host/config/environment';
+
 import {
   type LooseSingleCardDocument,
   type CodeRef,
   type MatrixCardError,
   sanitizeHtml,
 } from '@cardstack/runtime-common';
-import type LoaderService from './loader-service';
+
+import ENV from '@cardstack/host/config/environment';
+
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type {
   RoomField,
   MatrixEvent as DiscreteMatrixEvent,
 } from 'https://cardstack.com/base/room';
 import type { RoomObjectiveField } from 'https://cardstack.com/base/room-objective';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
+
+import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
+import { importResource } from '../resources/import';
+
+import type LoaderService from './loader-service';
+
+import type CardService from '../services/card-service';
+import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
 const SET_OBJECTIVE_POWER_LEVEL = 50;

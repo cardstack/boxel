@@ -1,5 +1,5 @@
-import Component from '@glimmer/component';
 import { LinkTo } from '@ember/routing';
+import Component from '@glimmer/component';
 
 interface Signature {
   Args: {};

@@ -1,7 +1,9 @@
-import FreestyleController from 'ember-freestyle/controllers/freestyle';
-import SearchSheetUsage from '@cardstack/host/components/search-sheet/usage';
-import formatComponentName from '../helpers/format-component-name';
 import { ComponentLike } from '@glint/template';
+import FreestyleController from 'ember-freestyle/controllers/freestyle';
+
+import SearchSheetUsage from '@cardstack/host/components/search-sheet/usage';
+
+import formatComponentName from '../helpers/format-component-name';
 
 interface UsageComponent {
   title: string;

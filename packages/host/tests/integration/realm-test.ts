@@ -1,9 +1,23 @@
+import { RenderingTestContext } from '@ember/test-helpers';
+
+import { setupRenderingTest } from 'ember-qunit';
+import { stringify } from 'qs';
 import { module, test } from 'qunit';
+
+import { baseRealm, CodeRef } from '@cardstack/runtime-common';
 import { isSingleCardDocument } from '@cardstack/runtime-common/card-document';
 import {
   cardSrc,
   compiledCard,
 } from '@cardstack/runtime-common/etc/test-fixtures';
+
+import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
+import { Loader } from '@cardstack/runtime-common/loader';
+
+import { shimExternals } from '@cardstack/host/lib/externals';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
+
 import {
   TestRealm,
   TestRealmAdapter,
@@ -14,15 +28,8 @@ import {
   setupServerSentEvents,
   type TestContextWithSSE,
 } from '../helpers';
-import { setupRenderingTest } from 'ember-qunit';
-import { stringify } from 'qs';
-import { baseRealm, CodeRef } from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
+
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-import { shimExternals } from '@cardstack/host/lib/externals';
-import { RenderingTestContext } from '@ember/test-helpers';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
 
 let loader: Loader;
 

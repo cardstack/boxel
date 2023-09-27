@@ -1,27 +1,35 @@
-import { module, test } from 'qunit';
 import {
   visit,
   click,
   waitFor,
-  waitUntil,
   find,
   fillIn,
   triggerKeyEvent,
 } from '@ember/test-helpers';
+
+import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
+import window from 'ember-window-mock';
+import { setupWindowMock } from 'ember-window-mock/test-support';
+import { module, test } from 'qunit';
+
+import stringify from 'safe-stable-stringify';
+
 import { baseRealm } from '@cardstack/runtime-common';
+
+import { Realm } from '@cardstack/runtime-common/realm';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
+
 import {
   TestRealm,
   TestRealmAdapter,
   setupLocalIndexing,
   setupMockMessageService,
   testRealmURL,
+  sourceFetchRedirectHandle,
+  sourceFetchReturnUrlHandle,
 } from '../helpers';
-import stringify from 'safe-stable-stringify';
-import { Realm } from '@cardstack/runtime-common/realm';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import { setupWindowMock } from 'ember-window-mock/test-support';
-import window from 'ember-window-mock';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -170,6 +178,14 @@ module('Acceptance | code mode tests', function (hooks) {
 
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
       isAcceptanceTest: true,
+      overridingHandlers: [
+        async (req: Request) => {
+          return sourceFetchRedirectHandle(req, adapter, testRealmURL);
+        },
+        async (req: Request) => {
+          return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
+        },
+      ],
     });
     await realm.ready;
   });
@@ -200,7 +216,7 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.dom('[data-test-inheritance-toggle]').hasClass('active');
     assert.dom('[data-test-file-browser-toggle]').doesNotHaveClass('active');
 
-    await waitUntil(() => find('[data-test-card-inheritance-panel]'));
+    await waitFor('[data-test-card-inheritance-panel]');
 
     assert.dom('[data-test-card-inheritance-panel]').exists();
     assert.dom('[data-test-file]').doesNotExist();
@@ -582,17 +598,16 @@ module('Acceptance | code mode tests', function (hooks) {
       )}`,
     );
 
-    await waitUntil(() => find('[data-test-card-inheritance-panel]'));
-    await waitUntil(() => find('[data-test-card-module-definition]'));
-    await waitUntil(() => find('[data-test-card-instance-definition]'));
+    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-card-module-definition]');
+    await waitFor('[data-test-card-instance-definition]');
 
     assert.dom('[data-test-card-module-definition]').includesText('Card');
-    //TODO: CS-5957 deriving extension
-    // assert
-    //   .dom(
-    //     '[data-test-card-module-definition] [data-test-definition-file-extension]',
-    //   )
-    //   .includesText('.gts');
+    assert
+      .dom(
+        '[data-test-card-module-definition] [data-test-definition-file-extension]',
+      )
+      .includesText('.gts');
     assert
       .dom(
         '[data-test-card-module-definition] [data-test-definition-realm-name]',
@@ -634,8 +649,8 @@ module('Acceptance | code mode tests', function (hooks) {
       )}`,
     );
 
-    await waitUntil(() => find('[data-test-card-inheritance-panel]'));
-    await waitUntil(() => find('[data-test-card-module-definition]'));
+    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-card-module-definition]');
 
     assert.dom('[data-test-card-module-definition]').includesText('Card');
 
@@ -763,7 +778,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .hasValue(`${testRealmURL}pers`);
     assert
       .dom('[data-test-card-url-bar-error]')
-      .containsText('File is not found');
+      .containsText('This resource does not exist');
     assert.dom('[data-test-recent-file]').exists({ count: 1 });
     assert.dom(`[data-test-recent-file="${testRealmURL}person.gts"]`).exists();
     assert
@@ -836,6 +851,83 @@ module('Acceptance | code mode tests', function (hooks) {
       .exists();
 
     assert.dom(`[data-test-card-schema="Base"]`).exists();
+
+    // Check that realm icons in the schema editor are correct (card and its fields)
+
+    let realm1IconUrl = 'https://i.postimg.cc/L8yXRvws/icon.png';
+    let realm2IconUrl = 'https://i.postimg.cc/d0B9qMvy/icon.png';
+
+    await waitFor(
+      // using non test selectors to disambiguate what we are waiting for, as
+      // without these the selectors are matching DOM that is not being tested
+      '[data-test-card-schema="Person"] .pill .realm-icon [data-test-realm-icon-url]',
+    );
+    assert
+      .dom(`[data-test-card-schema="Person"] [data-test-realm-icon-url]`)
+      .hasAttribute('data-test-realm-icon-url', realm1IconUrl);
+
+    await waitFor(
+      '[data-test-card-schema="Person"] [data-test-field-name="firstName"] [data-test-realm-icon-url]',
+    );
+
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="firstName"] [data-test-realm-icon-url]`,
+      )
+      .hasAttribute('data-test-realm-icon-url', realm2IconUrl);
+
+    await waitFor(
+      // using non test selectors to disambiguate what we are waiting for, as
+      // without these the selectors are matching DOM that is not being tested
+      '[data-test-card-schema="Card"] .pill .realm-icon [data-test-realm-icon-url]',
+    );
+    assert
+      .dom(`[data-test-card-schema="Card"] [data-test-realm-icon-url]`)
+      .hasAttribute('data-test-realm-icon-url', realm2IconUrl);
+
+    await waitFor(
+      '[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-realm-icon-url]',
+    );
+    assert
+      .dom(
+        `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-realm-icon-url]`,
+      )
+      .hasAttribute('data-test-realm-icon-url', realm2IconUrl);
+  });
+
+  test('code mode handles binary files', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `http://localhost:4202/test/mango.png`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-file-definition]');
+
+    assert.dom('[data-test-definition-file-extension]').hasText('.png');
+    await waitFor('[data-test-definition-realm-name]');
+    assert
+      .dom('[data-test-definition-realm-name]')
+      .hasText('in Test Workspace A');
+    assert.dom('[data-test-definition-info-text]').containsText('Last saved');
+    assert
+      .dom('[data-test-binary-info] [data-test-file-name]')
+      .hasText('mango.png');
+    assert.dom('[data-test-binary-info] [data-test-size]').hasText('114.71 kB');
+    assert
+      .dom('[data-test-binary-info] [data-test-last-modified]')
+      .containsText('Last modified');
+    assert
+      .dom('[data-test-binary-file-schema-editor]')
+      .hasText('Schema Editor cannot be used with this file type');
+
+    await percySnapshot(assert);
   });
 });
 

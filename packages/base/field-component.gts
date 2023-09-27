@@ -226,7 +226,12 @@ export function getPluralViewComponent(
   );
   let defaultComponent = class PluralView extends GlimmerComponent {
     <template>
-      <ul class='plural-field'>
+      <div
+        class='plural-field
+          {{field.fieldType}}-field
+          {{unless model.children.length "empty"}}'
+        data-test-plural-view={{field.fieldType}}
+      >
         {{#each model.children as |child i|}}
           {{#let
             (getBoxComponent
@@ -234,20 +239,14 @@ export function getPluralViewComponent(
             )
             as |Item|
           }}
-            <li data-test-plural-view-item={{i}}>
+            <div data-test-plural-view-item={{i}}>
               <Item />
-            </li>
+            </div>
           {{/let}}
         {{/each}}
-      </ul>
+      </div>
       <style>
-        .plural-field {
-          list-style: none;
-          padding: 0;
-          margin: 0;
-        }
-
-        .plural-field > li + li {
+        .linksToMany-field > div + div {
           margin-top: var(--boxel-sp);
         }
       </style>
