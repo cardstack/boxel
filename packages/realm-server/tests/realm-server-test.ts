@@ -176,6 +176,7 @@ module('Realm Server', function (hooks) {
         .send({
           data: {
             type: 'card',
+            attributes: {},
             meta: {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/card-api',
@@ -209,6 +210,7 @@ module('Realm Server', function (hooks) {
         {
           data: {
             type: 'card',
+            attributes: {},
             meta: {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/card-api',
