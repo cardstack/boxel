@@ -117,7 +117,7 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   <template>
-    <div class='container' ...attributes>
+    <div ...attributes>
       {{#if this.isLoading}}
         <div class='loading'>
           <LoadingIndicator />
@@ -232,12 +232,6 @@ export default class DetailPanel extends Component<Signature> {
       {{/if}}
     </div>
     <style>
-      .container {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-sm);
-        height: 100%;
-      }
       .in-this-file-panel-banner {
         display: flex;
         justify-content: space-between;
@@ -260,6 +254,7 @@ export default class DetailPanel extends Component<Signature> {
       .in-this-file-panel,
       .details-panel,
       .inheritance-panel {
+        padding-top: var(--boxel-sp-sm);
         gap: var(--boxel-sp-xs);
         display: flex;
         flex-direction: column;
@@ -296,8 +291,6 @@ export default class DetailPanel extends Component<Signature> {
       .loading {
         display: flex;
         justify-content: center;
-        align-items: center;
-        height: 100%;
       }
       .chain {
         display: flex;
