@@ -5,12 +5,9 @@ import { service } from '@ember/service';
 
 import Component from '@glimmer/component';
 
-// @ts-expect-error cached doesn't have type yet
-import { tracked, cached } from '@glimmer/tracking';
-
 import { or } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
-import { isCardDocument, type RealmInfo } from '@cardstack/runtime-common';
+import { type RealmInfo } from '@cardstack/runtime-common';
 
 import { hasExecutableExtension } from '@cardstack/runtime-common';
 
