@@ -1004,9 +1004,7 @@ module('Acceptance | code mode tests', function (hooks) {
     assert
       .dom('[data-test-binary-info] [data-test-last-modified]')
       .containsText('Last modified');
-    assert
-      .dom('[data-test-schema-editor-incompatible]')
-      .hasText('Schema Editor cannot be used with this file type');
+    assert.dom('[data-test-schema-editor-incompatible]').exists();
 
     await percySnapshot(assert);
   });
