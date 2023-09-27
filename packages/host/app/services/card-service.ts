@@ -169,6 +169,7 @@ export default class CardService extends Service {
     return serialized;
   }
 
+  // we return undefined if the card changed locally while the save was in-flight
   async saveModel(card: CardDef): Promise<CardDef | undefined> {
     let cardChanged = false;
     function onCardChange() {
@@ -228,10 +229,11 @@ export default class CardService extends Service {
     return response;
   }
 
+  // we return undefined if the card changed locally while the save was in-flight
   async patchCard(
     card: CardDef,
     doc: LooseSingleCardDocument,
-  ): Promise<CardDef> {
+  ): Promise<CardDef | undefined> {
     await this.apiModule.loaded;
     let updatedCard = await this.api.updateFromSerialized<typeof CardDef>(
       card,
