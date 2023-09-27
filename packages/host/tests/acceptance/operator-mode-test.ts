@@ -1271,6 +1271,7 @@ module('Acceptance | operator mode tests', function (hooks) {
 
   test<TestContextWithSave>('unsaved changes made in card editor are saved when switching out of code mode', async function (assert) {
     config.autoSaveDelayMs = 1000; // slowdown the auto save so it doesn't interfere with this test
+    let numSaves = 0;
     try {
       assert.expect(1);
 
@@ -1297,7 +1298,12 @@ module('Acceptance | operator mode tests', function (hooks) {
         if (typeof json === 'string') {
           throw new Error('expected JSON save data');
         }
-        assert.strictEqual(json.data.attributes?.name, 'MangoXXX');
+        if (numSaves > 0) {
+          // this is the auto-save--we can ignore it
+        } else {
+          assert.strictEqual(json.data.attributes?.name, 'MangoXXX');
+          numSaves++;
+        }
       });
 
       await click('[data-test-preview-card-footer-button-edit]');

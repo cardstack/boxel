@@ -255,7 +255,14 @@ export default class OperatorModeStateService extends Service {
       let realmPath = new RealmPaths(this.cardService.defaultURL.href);
 
       if (realmPath.inRealm(this.state.codePath)) {
-        return realmPath.local(this.state.codePath!);
+        try {
+          return realmPath.local(this.state.codePath!);
+        } catch (err: any) {
+          if (err.status === 404) {
+            return undefined;
+          }
+          throw err;
+        }
       }
     }
 
