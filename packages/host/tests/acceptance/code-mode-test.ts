@@ -727,7 +727,7 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.dom('[data-test-card-instance-definition]').doesNotExist();
   });
 
-  test('non-card JSON is shown as just a file with no preview', async function (assert) {
+  test('non-card JSON is shown as just a file with empty schema editor', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [
         [
@@ -754,6 +754,10 @@ module('Acceptance | code mode tests', function (hooks) {
     assert
       .dom('[data-test-definition-realm-name]')
       .hasText('in Test Workspace B');
+
+    await this.pauseTest();
+
+    assert.dom('[data-test-binary-file-schema-editor]').exists();
   });
 
   test('empty state displays default realm info', async function (assert) {
