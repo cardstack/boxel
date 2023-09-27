@@ -26,8 +26,8 @@ import {
 
 import type { ElementInFile } from './code-mode';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import BoxelMenu from '@cardstack/boxel-ui/components/menu';
-import { MenuItem, menuItemFunc } from '@cardstack/boxel-ui/helpers/menu-item';
+import Selector from './detail-panel-selector';
+import { SelectorItem, selectorItemFunc } from './detail-panel-selector';
 import { CardContainer, LoadingIndicator, Header } from '@cardstack/boxel-ui';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { or } from '@cardstack/boxel-ui/helpers/truth-helpers';
@@ -92,13 +92,13 @@ export default class DetailPanel extends Component<Signature> {
     }
   }
 
-  get buildMenuItems(): MenuItem[] {
+  get buildSelectorItems(): SelectorItem[] {
     if (!this.args.elements) {
       return [];
     }
     return this.args.elements.map((el) => {
       const isSelected = this.args.selectedElement === el;
-      return menuItemFunc(
+      return selectorItemFunc(
         [
           el.card.displayName,
           () => {
@@ -137,10 +137,9 @@ export default class DetailPanel extends Component<Signature> {
                 @hasBackground={{true}}
                 class='header'
               />
-              <BoxelMenu
+              <Selector
                 @class='in-this-file-menu'
-                @items={{this.buildMenuItems}}
-                @itemClass='in-this-file-menu-item'
+                @items={{this.buildSelectorItems}}
               />
             </CardContainer>
           </div>
@@ -271,15 +270,6 @@ export default class DetailPanel extends Component<Signature> {
       }
       .in-this-file-menu {
         padding: var(--boxel-sp-xs);
-      }
-
-      :global(.in-this-file-menu-item) {
-        --boxel-menu-selected-background-color: var(--boxel-highlight);
-        --boxel-menu-selected-font-color: var(--boxel-light-100);
-        --boxel-menu-selected-hover-font-color: var(--boxel-dark);
-      }
-      :global(.in-this-file-menu-item .check-icon) {
-        display: none;
       }
       .loading {
         display: flex;
