@@ -1,9 +1,9 @@
 import { Addon } from '@embroider/addon-dev/rollup';
 import { babel } from '@rollup/plugin-babel';
-import copy from 'rollup-plugin-copy';
-import path from 'path';
 import { createHash } from 'crypto';
-import { isScopedCSSRequest, decodeScopedCSSRequest } from 'glimmer-scoped-css'
+import { decodeScopedCSSRequest, isScopedCSSRequest } from 'glimmer-scoped-css';
+import path from 'path';
+import copy from 'rollup-plugin-copy';
 
 const addon = new Addon({
   srcDir: 'src',
@@ -74,7 +74,7 @@ export default {
         { src: '../LICENSE.md', dest: '.' },
       ],
     }),
-    scopedCSS('src', 'dist')
+    scopedCSS('src', 'dist'),
   ],
 };
 
@@ -89,15 +89,18 @@ function scopedCSS(srcDir, destDir) {
       let fullSrcDir = path.resolve(srcDir);
       let localPath = path.relative(fullSrcDir, importer);
       hash.update(localPath);
-      let cssFileName = hash.digest('hex').slice(0,10) + '.css';
+      let cssFileName = hash.digest('hex').slice(0, 10) + '.css';
       let dir = path.dirname(localPath);
       let css = decodeScopedCSSRequest(source);
-			this.emitFile({
-				type: 'asset',
-				fileName: path.join(dir, cssFileName),
-				source: css
-			});
-      return { id: path.resolve(destDir, dir, cssFileName), external: 'relative' };
-    }
-  }
+      this.emitFile({
+        type: 'asset',
+        fileName: path.join(dir, cssFileName),
+        source: css,
+      });
+      return {
+        id: path.resolve(destDir, dir, cssFileName),
+        external: 'relative',
+      };
+    },
+  };
 }

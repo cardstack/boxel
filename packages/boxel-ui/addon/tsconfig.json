@@ -27,8 +27,7 @@
     "traceResolution": false,
     "paths": {
       "https://cardstack.com/base/*": ["../../base/*"],
-      "*": ["types/*"],
-      "//cdn.skypack.dev/lodash": ["node_modules/@types/lodash"],
+      "*": ["./types/*"],
       "@cardstack/boxel-ui": ["./src"],
       "@cardstack/boxel-ui/*": ["./src/*"]
     },

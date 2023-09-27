@@ -1,6 +1,6 @@
 {
-  "presets": [["@babel/preset-typescript", { "allExtensions": true, "onlyRemoveTypeImports": true }]],
   "plugins": [
+    ["@babel/plugin-transform-typescript", { "allExtensions": true, "onlyRemoveTypeImports": true, "allowDeclareFields": true }],
     "@embroider/addon-dev/template-colocation-plugin",
     "@babel/plugin-transform-class-static-block",
     ["babel-plugin-ember-template-compilation", {

@@ -1,0 +1,1 @@
+Note: icon components in addon/src/icons are code-generated from svg files using pnpm rebuild-icons from the addon project.

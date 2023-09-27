@@ -1,4 +1,4 @@
-import cssVar from '@cardstack/boxel-ui/helpers/css-var';
+import cssVar from '../../helpers/css-var.ts';
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -7,7 +7,7 @@ import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import {
   cssVariable,
-  CSSVariableInfo,
+  type CSSVariableInfo,
 } from 'ember-freestyle/decorators/css-variable';
 
 import BoxelIconButton from './index.gts';

@@ -3,7 +3,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import IconButton from '../icon-button/index.gts';
 import { eq } from '../../helpers/truth-helpers.ts';
 import { svgJar } from '../../helpers/svg-jar.ts';
-import PlusCircleIcon from '../../icons/plus-circle.gts';
+import PlusCircleIcon from '../../icons/icon-plus-circle.gts';
 
 interface Signature {
   Element: HTMLElement;

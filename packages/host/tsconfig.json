@@ -27,7 +27,6 @@
       "@cardstack/host/*": ["app/*"],
       "https://cardstack.com/base/*": ["../base/*"],
       "*": ["types/*"],
-      "//cdn.skypack.dev/lodash": ["node_modules/@types/lodash"],
       "@cardstack/boxel-ui": ["../boxel-ui/addon"],
       "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"]
     },

@@ -1,13 +1,12 @@
 /* eslint-disable no-console */
-import cn from '@cardstack/boxel-ui/helpers/cn';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import cn from '../../helpers/cn.ts';
+import { eq } from '../../helpers/truth-helpers.ts';
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-
 import BoxelButton from './index.gts';
 
 export default class ButtonUsage extends Component {
