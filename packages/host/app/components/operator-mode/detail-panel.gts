@@ -71,9 +71,6 @@ export default class DetailPanel extends Component<Signature> {
     return this.args.selectedElement === el;
   }
 
-  get isCardInstance() {
-    return isCardDocument(this.args.cardInstance);
-  }
   get isModule() {
     return hasExecutableExtension(this.args.readyFile.url);
   }
@@ -99,7 +96,7 @@ export default class DetailPanel extends Component<Signature> {
       {{#if this.isLoading}}
         <div>Loading...</div>
       {{else}}
-        {{#if this.isCardInstance}}
+        {{#if @cardInstance}}
           {{! JSON case when visting, eg Author/1.json }}
           <h3>Inheritance Panel</h3>
           <div class='inheritance-chain'>
