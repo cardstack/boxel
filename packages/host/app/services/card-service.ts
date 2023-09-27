@@ -174,9 +174,9 @@ export default class CardService extends Service {
     function onCardChange() {
       cardChanged = true;
     }
-    this.api.subscribeToChanges(card, onCardChange);
     try {
       await this.apiModule.loaded;
+      this.api.subscribeToChanges(card, onCardChange);
       let doc = await this.serializeCard(card, {
         // for a brand new card that has no id yet, we don't know what we are
         // relativeTo because its up to the realm server to assign us an ID, so
