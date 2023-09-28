@@ -658,6 +658,9 @@ module('Acceptance | code mode tests', function (hooks) {
         '[data-test-card-module-definition] [data-test-definition-file-extension]',
       )
       .includesText('.gts');
+    await waitFor(
+      '[data-test-card-module-definition] [data-test-definition-realm-name]',
+    );
     assert
       .dom(
         '[data-test-card-module-definition] [data-test-definition-realm-name]',
@@ -672,6 +675,9 @@ module('Acceptance | code mode tests', function (hooks) {
         '[data-test-card-instance-definition] [data-test-definition-file-extension]',
       )
       .includesText('.JSON');
+    await waitFor(
+      '[data-test-card-instance-definition] [data-test-definition-realm-name]',
+    );
     assert
       .dom(
         '[data-test-card-instance-definition] [data-test-definition-realm-name]',
@@ -722,6 +728,9 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}person.gts`);
     assert.dom('[data-test-card-module-definition]').includesText('Card');
+    await waitFor(
+      '[data-test-card-module-definition] [data-test-definition-realm-name]',
+    );
     assert
       .dom(
         '[data-test-card-module-definition] [data-test-definition-realm-name]',
