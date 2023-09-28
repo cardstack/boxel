@@ -18,12 +18,12 @@ export interface AccordionItemSignature {
 
 const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
   <li class={{cn 'accordion-item' @className open=@isOpen}} ...attributes>
-    <header class='title' {{on 'click' @onClick}}>
+    <button class='title' {{on 'click' @onClick}}>
       <span class='caret'>
         {{svgJar 'dropdown-arrow-down' width='20' height='20'}}
       </span>
       {{yield to='title'}}
-    </header>
+    </button>
     <div class='content'>
       {{yield to='content'}}
     </div>
@@ -41,7 +41,7 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
       --accordion-item-title-padding: var(--boxel-sp-xs);
 
       display: grid;
-      grid-template-rows: min-content 1fr;
+      grid-template-rows: auto 1fr;
       min-height: var(--accordion-item-closed-min-height);
     }
     .accordion-item.open {
@@ -62,6 +62,9 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
       padding: var(--accordion-item-title-padding);
       font: var(--accordion-item-title-font);
       letter-spacing: var(--accordion-item-title-letter-spacing);
+      border: none;
+      background-color: transparent;
+      text-align: left;
     }
     .title:hover {
       cursor: pointer;

@@ -53,7 +53,7 @@ export default class SchemaEditorColumn extends Component<Signature> {
         overflow: hidden;
       }
       .a-item {
-        --accordion-item-content-padding: 0;
+        --accordion-item-closed-min-height: 45px;
       }
       .a-item:last-child:not(.open) {
         border-bottom: var(--boxel-border);
