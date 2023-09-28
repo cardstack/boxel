@@ -492,14 +492,9 @@ module('Acceptance | code mode tests', function (hooks) {
   });
 
   test('recent file links are shown', async function (assert) {
-    let otherRealmCardUrl = 'http://example.com/other-realm-card.json';
     window.localStorage.setItem(
       'recent-files',
-      JSON.stringify([
-        `${testRealmURL}index.json`,
-        otherRealmCardUrl,
-        'a-non-url-to-ignore',
-      ]),
+      JSON.stringify([[testRealmURL, 'index.json'], 'a-non-url-to-ignore']),
     );
 
     let codeModeStateParam = stringify({
@@ -529,6 +524,11 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom('[data-test-recent-file]')
       .exists({ count: 1 })
       .containsText('index.json');
+
+    assert
+      .dom('[data-test-recent-file] [data-test-realm-icon-url]')
+      .hasAttribute('src', 'https://i.postimg.cc/L8yXRvws/icon.png')
+      .hasAttribute('alt', '');
 
     await click('[data-test-file="index.json"]');
     assert
@@ -570,12 +570,62 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.deepEqual(
       JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
       [
-        `${testRealmURL}index.json`,
-        `${testRealmURL}person.gts`,
-        `${testRealmURL}Person/1.json`,
-        otherRealmCardUrl,
+        [testRealmURL, 'index.json'],
+        [testRealmURL, 'person.gts'],
+        [testRealmURL, 'Person/1.json'],
       ],
     );
+  });
+
+  test('recent files are truncated at 100', async function (assert) {
+    let recentFilesEntries = [];
+
+    for (let i = 0; i < 100; i++) {
+      recentFilesEntries.push([testRealmURL, `file-${i}.txt`]);
+    }
+
+    window.localStorage.setItem(
+      'recent-files',
+      JSON.stringify(recentFilesEntries),
+    );
+
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}Person/1.json`,
+      fileView: 'browser',
+      openDirs: [],
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-file]');
+    await waitFor('[data-test-directory]');
+
+    await percySnapshot(assert);
+
+    assert.dom('[data-test-recent-file]').exists({ count: 99 });
+
+    await click('[data-test-file="index.json"]');
+    assert.dom('[data-test-recent-file]').exists({ count: 100 });
+
+    assert
+      .dom('[data-test-recent-file]:nth-child(1)')
+      .containsText('Person/1.json');
+
+    assert
+      .dom('[data-test-recent-file]:nth-child(99)')
+      .containsText('file-97.txt');
   });
 
   test('card inheritance panel will show json instance definition and module definition', async function (assert) {
@@ -608,6 +658,9 @@ module('Acceptance | code mode tests', function (hooks) {
         '[data-test-card-module-definition] [data-test-definition-file-extension]',
       )
       .includesText('.gts');
+    await waitFor(
+      '[data-test-card-module-definition] [data-test-definition-realm-name]',
+    );
     assert
       .dom(
         '[data-test-card-module-definition] [data-test-definition-realm-name]',
@@ -622,6 +675,9 @@ module('Acceptance | code mode tests', function (hooks) {
         '[data-test-card-instance-definition] [data-test-definition-file-extension]',
       )
       .includesText('.JSON');
+    await waitFor(
+      '[data-test-card-instance-definition] [data-test-definition-realm-name]',
+    );
     assert
       .dom(
         '[data-test-card-instance-definition] [data-test-definition-realm-name]',
@@ -632,8 +688,9 @@ module('Acceptance | code mode tests', function (hooks) {
         '[data-test-card-instance-definition] [data-test-definition-info-text]',
       )
       .includesText('Last saved just now');
-
-    assert.dom('[data-test-card-instance-definition]').hasClass('active');
+    assert
+      .dom('[data-test-card-instance-definition] [data-test-definition-header]')
+      .hasClass('active');
   });
 
   test('card inheritance panel will show module definition', async function (assert) {
@@ -658,7 +715,9 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}person.gts`);
 
-    assert.dom('[data-test-card-module-definition]').hasClass('active');
+    assert
+      .dom('[data-test-card-module-definition] [data-test-definition-header]')
+      .hasClass('active');
     assert
       .dom(
         '[data-test-card-module-definition] [data-test-definition-file-extension]',
@@ -669,6 +728,9 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}person.gts`);
     assert.dom('[data-test-card-module-definition]').includesText('Card');
+    await waitFor(
+      '[data-test-card-module-definition] [data-test-definition-realm-name]',
+    );
     assert
       .dom(
         '[data-test-card-module-definition] [data-test-definition-realm-name]',

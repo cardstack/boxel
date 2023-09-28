@@ -681,11 +681,15 @@ export default class CodeMode extends Component<Signature> {
   private delete() {
     if (this.card) {
       this.args.delete(this.card, () => {
-        let previousFile = this.recentFilesService.recentFiles[0] as
-          | string
-          | undefined;
-        let url = previousFile ? new URL(previousFile) : null;
-        this.operatorModeStateService.updateCodePath(url);
+        let recentFile = this.recentFilesService.recentFiles[0];
+
+        if (recentFile) {
+          let recentFileUrl = `${recentFile.realmURL}${recentFile.filePath}`;
+
+          this.operatorModeStateService.updateCodePath(new URL(recentFileUrl));
+        } else {
+          this.operatorModeStateService.updateCodePath(null);
+        }
       });
     } else {
       throw new Error(`TODO: non-card instance deletes are not yet supported`);
@@ -780,22 +784,20 @@ export default class CodeMode extends Component<Signature> {
               </header>
               <section class='inner-container__content'>
                 {{#if (eq this.fileView 'inheritance')}}
-                  <section class='inner-container__content'>
-                    {{#if this.isReady}}
-                      <DetailPanel
-                        @cardInstance={{this.card}}
-                        @readyFile={{this.readyFile}}
-                        @realmInfo={{this.realmInfo}}
-                        @selectedElement={{this.selectedElementInFile}}
-                        @elements={{this.elementsInFile}}
-                        @selectElement={{this.selectElementInFile}}
-                        @delete={{this.delete}}
-                        data-test-card-inheritance-panel
-                      />
-                    {{else if this.emptyOrNotFound}}
-                      Inspector is not available
-                    {{/if}}
-                  </section>
+                  {{#if this.isReady}}
+                    <DetailPanel
+                      @cardInstance={{this.card}}
+                      @readyFile={{this.readyFile}}
+                      @realmInfo={{this.realmInfo}}
+                      @selectedElement={{this.selectedElementInFile}}
+                      @elements={{this.elementsInFile}}
+                      @selectElement={{this.selectElementInFile}}
+                      @delete={{this.delete}}
+                      data-test-card-inheritance-panel
+                    />
+                  {{else if this.emptyOrNotFound}}
+                    Inspector is not available
+                  {{/if}}
                 {{else}}
                   <FileTree @realmURL={{this.realmURL}} />
                 {{/if}}
@@ -983,6 +985,7 @@ export default class CodeMode extends Component<Signature> {
       .inner-container__content {
         padding: var(--boxel-sp-xxs) var(--boxel-sp-xs) var(--boxel-sp-sm);
         overflow-y: auto;
+        height: 100%;
       }
       .inner-container--empty {
         background-color: var(--boxel-light-100);
@@ -991,6 +994,10 @@ export default class CodeMode extends Component<Signature> {
       }
       .inner-container--empty > :deep(svg) {
         --icon-color: var(--boxel-highlight);
+      }
+
+      .file-view {
+        background-color: var(--boxel-200);
       }
 
       .choose-file-prompt {
