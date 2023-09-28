@@ -7,6 +7,7 @@ on:
       - ".github/workflows/pr-boxel-host.yml"
       - "package.json"
       - "pnpm-lock.yaml"
+      - ".github/actions/init"
 
 permissions:
   contents: read
