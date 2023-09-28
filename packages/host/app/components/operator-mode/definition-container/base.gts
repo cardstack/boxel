@@ -46,19 +46,21 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
       </Header>
       <div class='content'>
         <div class='definition-info'>
-          <RealmInfoProvider @fileURL={{@fileURL}}>
-            <:ready as |realmInfo|>
-              <div class='realm-info'>
-                <img
-                  src={{realmInfo.iconURL}}
-                  alt='realm-icon'
-                  data-test-realm-icon-url={{realmInfo.iconURL}}
-                />
-                <Label class='realm-name' data-test-definition-realm-name>in
-                  {{realmInfo.name}}</Label>
-              </div>
-            </:ready>
-          </RealmInfoProvider>
+          {{#if @fileURL}}
+            <RealmInfoProvider @fileURL={{@fileURL}}>
+              <:ready as |realmInfo|>
+                <div class='realm-info'>
+                  <img
+                    src={{realmInfo.iconURL}}
+                    alt='realm-icon'
+                    data-test-realm-icon-url={{realmInfo.iconURL}}
+                  />
+                  <Label class='realm-name' data-test-definition-realm-name>in
+                    {{realmInfo.name}}</Label>
+                </div>
+              </:ready>
+            </RealmInfoProvider>
+          {{/if}}
           <div data-test-definition-name class='definition-name'>{{@name}}</div>
 
         </div>

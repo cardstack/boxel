@@ -29,6 +29,7 @@ import {
   setupServerSentEvents,
   testRealmURL,
   getMonacoContent,
+  sourceFetchReturnUrlHandle,
   waitForSyntaxHighlighting,
   type TestContextWithSSE,
 } from '../helpers';
@@ -151,6 +152,11 @@ module('Acceptance | basic tests', function (hooks) {
 
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
       isAcceptanceTest: true,
+      overridingHandlers: [
+        async (req: Request) => {
+          return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
+        },
+      ],
     });
     await realm.ready;
   });
