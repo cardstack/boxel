@@ -128,7 +128,7 @@ export default class SchemaEditorColumn extends Component<Signature> {
       }
 
       .accordion :deep(.card-adoption-chain:first-child) {
-        margin-top: var(--boxel-sp-xxxs);
+        padding-top: var(--boxel-sp-xxxs);
       }
     </style>
   </template>
