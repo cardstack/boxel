@@ -280,7 +280,7 @@ export default class DetailPanel extends Component<Signature> {
       }
       .chain {
         display: flex;
-        font-size: var(--boxel-font-size);
+        font: var(--boxel-font-size-sm);
         align-items: center;
         gap: var(--boxel-sp-xxxs);
         justify-content: center;
