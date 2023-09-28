@@ -43,7 +43,6 @@ import {
 } from '@cardstack/runtime-common';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
-import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
 import config from '@cardstack/host/config/environment';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
@@ -89,6 +88,7 @@ import BinaryFileInfo from './binary-file-info';
 import CardPreviewPanel from './card-preview-panel';
 import CardURLBar from './card-url-bar';
 import DetailPanel from './detail-panel';
+import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
 
 interface Signature {
   Args: {
@@ -873,7 +873,7 @@ export default class CodeMode extends Component<Signature> {
                     data-test-card-resource-loaded
                   />
                 {{else if this.importedModule.module}}
-                  <CardAdoptionChain
+                  <SchemaEditorColumn
                     @file={{this.readyFile}}
                     @importedModule={{this.importedModule.module}}
                   />

@@ -32,6 +32,10 @@ export default class CardSchemaEditor extends Component<Signature> {
         margin-top: var(--boxel-sp);
       }
 
+      .schema-editor-container:first-child {
+        margin-top: 0;
+      }
+
       .schema {
         display: grid;
         gap: var(--boxel-sp);
