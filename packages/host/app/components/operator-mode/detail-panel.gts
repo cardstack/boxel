@@ -235,9 +235,8 @@ export default class DetailPanel extends Component<Signature> {
     </div>
     <style>
       .header {
-        --boxel-header-text-size: var(--boxel-font-size-sm);
         --boxel-header-padding: var(--boxel-sp-xs);
-        --boxel-header-text-size: var(--boxel-font-size-sm);
+        --boxel-header-text-size: var(--boxel-font-size-xs);
         --boxel-header-text-transform: uppercase;
         --boxel-header-letter-spacing: var(--boxel-lsp-xxl);
         --boxel-header-background-color: var(--boxel-100);
