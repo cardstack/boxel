@@ -682,8 +682,9 @@ module('Acceptance | code mode tests', function (hooks) {
         '[data-test-card-instance-definition] [data-test-definition-info-text]',
       )
       .includesText('Last saved just now');
-
-    assert.dom('[data-test-card-instance-definition]').hasClass('active');
+    assert
+      .dom('[data-test-card-instance-definition] [data-test-definition-header]')
+      .hasClass('active');
   });
 
   test('card inheritance panel will show module definition', async function (assert) {
@@ -708,7 +709,9 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}person.gts`);
 
-    assert.dom('[data-test-card-module-definition]').hasClass('active');
+    assert
+      .dom('[data-test-card-module-definition] [data-test-definition-header]')
+      .hasClass('active');
     assert
       .dom(
         '[data-test-card-module-definition] [data-test-definition-file-extension]',

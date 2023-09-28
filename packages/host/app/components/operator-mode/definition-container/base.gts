@@ -37,6 +37,7 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
         @title={{@title}}
         @hasBackground={{true}}
         class='header {{if @isActive "active"}}'
+        data-test-definition-header
       >
         <:detail>
           <div data-test-definition-file-extension>
