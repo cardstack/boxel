@@ -14,7 +14,6 @@ import { cached, tracked } from '@glimmer/tracking';
 import { task, restartableTask, timeout, all } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { use, resource } from 'ember-resources';
-import isEqual from 'lodash/isEqual';
 import { TrackedObject } from 'tracked-built-ins';
 
 import {
@@ -32,7 +31,6 @@ import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import {
   type RealmInfo,
   type SingleCardDocument,
-  type LooseSingleCardDocument,
   type CodeRef,
   RealmPaths,
   logger,
@@ -98,6 +96,17 @@ interface Signature {
     saveCardOnClose: (card: CardDef) => void;
   };
 }
+// One of our challeges is that it is difficult to tell if the server sent events that
+// we receive are from out of band changes or just echos of the changes we are making
+// from the UI. A monotonically increasing version number could help to make it more
+// clear if SSE events are just echo or not. Barring that, we are using a simple heuristic
+// to identify if an event is our own--specifically a time window. If an SSE event occurs
+// more than `loadIfNewerThanSec` seconds after the last card editor save, then we will
+// consider it as an event not tied to our own card editor's auto save. The drawback is that
+// this does mean it will take `loadIfNewerThanSec` seconds for auto saves made in monaco to
+// to be visible in the card editor after a subsequent auto save made in the card editor.
+// Probably that is ok for now...
+const loadIfNewerThanSec = 5;
 const log = logger('component:code-mode');
 const waiter = buildWaiter('code-mode:load-card-waiter');
 let { autoSaveDelayMs } = config;
@@ -121,6 +130,8 @@ interface ExportedCard {
   cardType: CardType;
   card: typeof BaseDef;
 }
+
+const cardEditorSaveTimes = new Map<string, number>();
 
 // Element
 // - exported / unexported card or field
@@ -427,11 +438,9 @@ export default class CodeMode extends Component<Signature> {
   private maybeReloadCard = restartableTask(async (id: string) => {
     if (this.card?.id === id) {
       try {
-        await this.loadIfDifferent.perform(
+        // we need to be careful that we are not responding to our own echo which is what loadIfNewer tries to do
+        await this.loadIfNewer.perform(
           new URL(id),
-          // we need to be careful that we are not responding to our own echo.
-          // first test to see if the card is actually different by comparing
-          // the serializations
           (await this.cardService.fetchJSON(id)) as SingleCardDocument,
         );
       } catch (e: any) {
@@ -469,7 +478,7 @@ export default class CodeMode extends Component<Signature> {
         if (!url) {
           return undefined;
         }
-        this.loadIfDifferent.perform(new URL(url), maybeCard);
+        this.loadIfNewer.perform(new URL(url), maybeCard);
         return maybeCard;
       }
     }
@@ -525,16 +534,13 @@ export default class CodeMode extends Component<Signature> {
     return this.elements.value;
   }
 
-  private loadIfDifferent = restartableTask(
+  private loadIfNewer = restartableTask(
     async (url: URL, incomingDoc?: SingleCardDocument) => {
       await this.withTestWaiters(async () => {
         let card = await this.cardService.loadModel(url);
-        if (this.card && incomingDoc) {
-          let incoming = comparableSerialization(incomingDoc);
-          let current = comparableSerialization(
-            await this.cardService.serializeCard(this.card),
-          );
-          if (isEqual(incoming, current)) {
+        let saveTime = cardEditorSaveTimes.get(url.href);
+        if (this.card && incomingDoc && saveTime != null) {
+          if (Date.now() - saveTime < loadIfNewerThanSec * 1000) {
             return;
           }
         }
@@ -555,6 +561,7 @@ export default class CodeMode extends Component<Signature> {
     if (this.card) {
       this.hasUnsavedCardChanges = true;
       await timeout(autoSaveDelayMs);
+      cardEditorSaveTimes.set(this.card.id, Date.now());
       await this.saveCard.perform(this.card);
       this.hasUnsavedCardChanges = false;
     }
@@ -796,22 +803,20 @@ export default class CodeMode extends Component<Signature> {
               </header>
               <section class='inner-container__content'>
                 {{#if (eq this.fileView 'inheritance')}}
-                  <section class='inner-container__content'>
-                    {{#if this.isReady}}
-                      <DetailPanel
-                        @cardInstance={{this.card}}
-                        @readyFile={{this.readyFile}}
-                        @realmInfo={{this.realmInfo}}
-                        @selectedElement={{this.selectedElementInFile}}
-                        @elements={{this.elementsInFile}}
-                        @selectElement={{this.selectElementInFile}}
-                        @delete={{this.delete}}
-                        data-test-card-inheritance-panel
-                      />
-                    {{else if this.emptyOrNotFound}}
-                      Inspector is not available
-                    {{/if}}
-                  </section>
+                  {{#if this.isReady}}
+                    <DetailPanel
+                      @cardInstance={{this.card}}
+                      @readyFile={{this.readyFile}}
+                      @realmInfo={{this.realmInfo}}
+                      @selectedElement={{this.selectedElementInFile}}
+                      @elements={{this.elementsInFile}}
+                      @selectElement={{this.selectElementInFile}}
+                      @delete={{this.delete}}
+                      data-test-card-inheritance-panel
+                    />
+                  {{else if this.emptyOrNotFound}}
+                    Inspector is not available
+                  {{/if}}
                 {{else}}
                   <FileTree @realmURL={{this.realmURL}} />
                 {{/if}}
@@ -999,6 +1004,7 @@ export default class CodeMode extends Component<Signature> {
       .inner-container__content {
         padding: var(--boxel-sp-xxs) var(--boxel-sp-xs) var(--boxel-sp-sm);
         overflow-y: auto;
+        height: 100%;
       }
       .inner-container--empty {
         background-color: var(--boxel-light-100);
@@ -1007,6 +1013,10 @@ export default class CodeMode extends Component<Signature> {
       }
       .inner-container--empty > :deep(svg) {
         --icon-color: var(--boxel-highlight);
+      }
+
+      .file-view {
+        background-color: var(--boxel-200);
       }
 
       .choose-file-prompt {
@@ -1124,18 +1134,6 @@ export default class CodeMode extends Component<Signature> {
 
 function getMonacoContent() {
   return (window as any).monaco.editor.getModels()[0].getValue();
-}
-
-function comparableSerialization(doc: LooseSingleCardDocument) {
-  delete doc.included;
-  delete doc.data.links;
-  delete (doc.data as any).meta;
-  delete doc.data.type;
-  delete doc.data.id;
-  for (let rel of Object.keys(doc.data.relationships ?? {})) {
-    delete doc.data.relationships?.[rel].data;
-  }
-  return doc;
 }
 
 function isCardOrField(cardOrField: any): cardOrField is typeof BaseDef {

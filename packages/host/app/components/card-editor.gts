@@ -77,8 +77,8 @@ export default class CardEditor extends Component<Signature> {
   }
 
   private write = restartableTask(async () => {
-    let card = await this.cardService.saveModel(this.args.card);
-    this.args.onSave?.(card);
+    await this.cardService.saveModel(this.args.card);
+    this.args.onSave?.(this.args.card);
     this.format = 'isolated';
   });
 }
