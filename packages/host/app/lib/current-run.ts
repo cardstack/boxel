@@ -284,7 +284,7 @@ export class CurrentRun {
           let { data } = JSON.parse(content);
           resource = data;
         } catch (e) {
-          log.debug(`unable to parse ${url.href} as card JSON`);
+          log.warn(`unable to parse ${url.href} as card JSON`);
         }
 
         if (resource && isCardResource(resource)) {
