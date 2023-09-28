@@ -15,6 +15,7 @@ import { RealmPaths } from '@cardstack/runtime-common/paths';
 
 import { Submode } from '@cardstack/host/components/submode-switcher';
 import type MessageService from '@cardstack/host/services/message-service';
+import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -64,9 +65,12 @@ export default class OperatorModeStateService extends Service {
     openDirs: [],
   });
   @tracked recentCards = new TrackedArray<CardDef>([]);
+  @tracked currentRealmURL: URL | undefined;
+
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
   @service declare recentFilesService: RecentFilesService;
+  @service declare realmInfoService: RealmInfoService;
   @service declare router: RouterService;
 
   private subscription: { url: string; unsubscribe: () => void } | undefined;
@@ -251,8 +255,8 @@ export default class OperatorModeStateService extends Service {
   }
 
   get codePathRelativeToRealm() {
-    if (this.state.codePath) {
-      let realmPath = new RealmPaths(this.cardService.defaultURL.href);
+    if (this.state.codePath && this.currentRealmURL) {
+      let realmPath = new RealmPaths(this.currentRealmURL);
 
       if (realmPath.inRealm(this.state.codePath)) {
         try {
@@ -269,7 +273,31 @@ export default class OperatorModeStateService extends Service {
     return undefined;
   }
 
-  updateCodePath(codePath: URL | null) {
+  async updateCodePath(codePath: URL | null) {
+    let changingRealms = false;
+
+    if (!this.currentRealmURL && codePath) {
+      changingRealms = true;
+    }
+
+    if (this.currentRealmURL && codePath) {
+      let realmPaths = new RealmPaths(this.currentRealmURL);
+
+      if (!realmPaths.inRealm(codePath)) {
+        console.log('changing realms!', codePath);
+        changingRealms = true;
+      }
+    }
+
+    if (changingRealms && codePath) {
+      try {
+        let newRealm = await this.realmInfoService.fetchRealmURL(codePath.href);
+        this.currentRealmURL = new URL(newRealm);
+      } catch (error) {
+        console.log('error changing realms', error);
+      }
+    }
+
     this.state.codePath = codePath;
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();

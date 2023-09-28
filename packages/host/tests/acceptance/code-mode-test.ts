@@ -15,7 +15,7 @@ import { module, test } from 'qunit';
 
 import stringify from 'safe-stable-stringify';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { Loader, baseRealm } from '@cardstack/runtime-common';
 
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -79,6 +79,7 @@ const personCardSource = `
 module('Acceptance | code mode tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
+  let loader: Loader;
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -174,7 +175,7 @@ module('Acceptance | code mode tests', function (hooks) {
       },
     });
 
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
 
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
@@ -314,6 +315,42 @@ module('Acceptance | code mode tests', function (hooks) {
     await click('[data-test-file="Person/1.json"]');
 
     assert.dom('[data-test-person]').exists();
+  });
+
+  test('navigating to a file in a different realm causes it to become active in the file tree', async function (assert) {
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
+      openDirs: ['Person/'],
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `http://localhost:4202/test/mango.png`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+
+    await waitFor('[data-test-file="mango.png"]');
+    assert.dom('[data-test-file="mango.png"]').hasClass('selected');
   });
 
   test('open directories are persisted', async function (assert) {
