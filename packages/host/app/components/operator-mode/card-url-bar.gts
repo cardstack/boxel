@@ -1,10 +1,10 @@
+import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { BoxelInput } from '@cardstack/boxel-ui';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { and, bool, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { on } from '@ember/modifier';
 
 import { type RealmInfo } from '@cardstack/runtime-common';
 
@@ -181,8 +181,8 @@ export default class CardURLBar extends Component<Signature> {
 
   private urlBar: URLBarResource = urlBarResource(this, () => ({
     getValue: () => this.codePath,
-    setValue: (url: string) => {
-      this.operatorModeStateService.updateCodePath(new URL(url));
+    setValue: async (url: string) => {
+      await this.operatorModeStateService.updateCodePath(new URL(url));
     },
     setValueError: this.args.loadFileError,
     resetValueError: this.args.resetLoadFileError,

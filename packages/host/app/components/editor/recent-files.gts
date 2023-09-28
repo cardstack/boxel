@@ -49,8 +49,8 @@ class File extends Component<FileArgs> {
   @service declare operatorModeStateService: OperatorModeStateService;
 
   @action
-  openFile() {
-    this.operatorModeStateService.updateCodePath(new URL(this.fullUrl));
+  async openFile() {
+    await this.operatorModeStateService.updateCodePath(new URL(this.fullUrl));
   }
 
   get realmPaths() {

@@ -7,6 +7,12 @@ import Component from '@glimmer/component';
 // @ts-expect-error cached doesn't have type yet
 import { tracked, cached } from '@glimmer/tracking';
 
+import { CardContainer, LoadingIndicator, Header } from '@cardstack/boxel-ui';
+
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+
+import { or } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
 import { type RealmInfo } from '@cardstack/runtime-common';
 
 import { hasExecutableExtension, getPlural } from '@cardstack/runtime-common';
@@ -24,13 +30,12 @@ import {
   ClickableModuleDefinitionContainer,
 } from './definition-container';
 
+import Selector from './detail-panel-selector';
+
+import { SelectorItem, selectorItemFunc } from './detail-panel-selector';
+
 import type { ElementInFile } from './code-mode';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import Selector from './detail-panel-selector';
-import { SelectorItem, selectorItemFunc } from './detail-panel-selector';
-import { CardContainer, LoadingIndicator, Header } from '@cardstack/boxel-ui';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { or } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 interface Signature {
   Element: HTMLElement;
@@ -62,9 +67,9 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   @action
-  updateCodePath(url: URL | undefined) {
+  async updateCodePath(url: URL | undefined) {
     if (url) {
-      this.operatorModeStateService.updateCodePath(url);
+      await this.operatorModeStateService.updateCodePath(url);
     }
   }
 

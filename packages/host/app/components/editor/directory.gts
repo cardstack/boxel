@@ -137,9 +137,9 @@ export default class Directory extends Component<Args> {
   @service declare router: RouterService;
 
   @action
-  openFile(entryPath: LocalPath) {
+  async openFile(entryPath: LocalPath) {
     let fileUrl = new RealmPaths(this.args.realmURL).fileURL(entryPath);
-    this.operatorModeStateService.updateCodePath(fileUrl);
+    await this.operatorModeStateService.updateCodePath(fileUrl);
   }
 
   @action
