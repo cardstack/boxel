@@ -129,7 +129,10 @@ export default class Selector extends Component<Signature> {
             var(--boxel-sp);
           --boxel-selector-selected-background-color: var(--boxel-highlight);
           --boxel-selector-selected-font-color: var(--boxel-light-100);
-          --boxel-selector-selected-hover-font-color: var(--boxel-dark);
+          --boxel-selector-selected-hover-font-color: var(--boxel-light);
+          --boxel-selector-selected-hover-background-color: var(
+            --boxel-highlight-hover
+          );
           list-style-type: none;
           margin: 0;
           padding: 0;
@@ -141,15 +144,6 @@ export default class Selector extends Component<Signature> {
           font: var(--boxel-selector-font);
           letter-spacing: var(--boxel-lsp-sm);
           border-radius: inherit;
-        }
-
-        .boxel-selector__item--selected {
-          background-color: var(--boxel-selector-selected-background-color);
-          color: var(--boxel-selector-selected-font-color);
-        }
-
-        .boxel-selector__item--selected:hover {
-          color: var(--boxel-selector-selected-hover-font-color);
         }
 
         .boxel-selector__item:hover {
@@ -172,6 +166,17 @@ export default class Selector extends Component<Signature> {
 
         .boxel-selector__item__content:focus-visible {
           outline: var(--boxel-outline);
+        }
+
+        .boxel-selector__item--selected {
+          background-color: var(--boxel-selector-selected-background-color);
+          color: var(--boxel-selector-selected-font-color);
+        }
+
+        .boxel-selector__item--selected:hover {
+          background-color: var(
+            --boxel-selector-selected-hover-background-color
+          );
         }
 
         .boxel-selector__item--dangerous {
