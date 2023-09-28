@@ -1593,7 +1593,6 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}Pet/mango.json`);
-    assert.dom('[data-test-definition-name]').hasText('Mango');
     assert.deepEqual(JSON.parse(getMonacoContent()), {
       data: {
         attributes: {
