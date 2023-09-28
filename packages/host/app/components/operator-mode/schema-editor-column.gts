@@ -41,7 +41,7 @@ export default class SchemaEditorColumn extends Component<Signature> {
         class='accordion-item
           {{if (eq this.selectedItem "schema-editor") "opened"}}'
       >
-        <div
+        <button
           class='accordion-item-title'
           {{on 'click' (fn this.selectItem 'schema-editor')}}
         >
@@ -50,7 +50,7 @@ export default class SchemaEditorColumn extends Component<Signature> {
           </span>
 
           Schema Editor
-        </div>
+        </button>
 
         <div class='accordion-item-content'>
           <CardAdoptionChain
@@ -106,6 +106,8 @@ export default class SchemaEditorColumn extends Component<Signature> {
         padding: var(--boxel-sp-sm);
         font: 700 var(--boxel-font);
         letter-spacing: var(--boxel-lsp-xs);
+        border: 0;
+        background-color: transparent;
       }
 
       .accordion-item-content {
