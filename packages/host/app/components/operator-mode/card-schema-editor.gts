@@ -29,26 +29,26 @@ export default class CardSchemaEditor extends Component<Signature> {
   <template>
     <style>
       .schema-editor-container {
-        margin-top: var(--boxel-sp);
+        padding: var(--boxel-sp-sm);
       }
 
-      .schema-editor-container:first-child {
-        margin-top: 0;
+      .schema-editor-container + .schema-editor-container {
+        margin-top: var(--boxel-sp);
       }
 
       .schema {
         display: grid;
         gap: var(--boxel-sp);
-        padding: var(--boxel-sp);
       }
 
       .pill {
-        border: 1px solid var(--boxel-400);
-        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
-        border-radius: 8px;
-        background-color: white;
-        font-weight: 600;
         display: inline-flex;
+        padding: 5px var(--boxel-sp-xs);
+        background-color: var(--boxel-light);
+        border: 1px solid var(--boxel-400);
+        border-radius: var(--boxel-border-radius-sm);
+        font: 700 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
       }
 
       .pill > div {
@@ -63,45 +63,34 @@ export default class CardSchemaEditor extends Component<Signature> {
         margin-right: var(--boxel-sp-xxxs);
       }
 
-      .card-field {
-        background-color: white;
+      .card-field + .card-field {
+        margin-top: var(--boxel-sp-sm);
       }
 
       .card-field {
-        margin-bottom: var(--boxel-sp-xs);
-        padding: var(--boxel-sp);
+        padding: var(--boxel-sp-xxs) var(--boxel-sp-sm);
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: var(--boxel-sp-xs);
+        background-color: var(--boxel-light);
         border-radius: var(--boxel-border-radius);
-        display: flex;
+        overflow: hidden;
       }
 
-      .card-fields {
-        margin-top: var(--boxel-sp);
-      }
-
-      .left {
-        display: flex;
-        margin-top: auto;
-        margin-bottom: auto;
-        flex-direction: column;
-      }
-
-      .right {
-        margin-left: auto;
-        margin-top: auto;
-        margin-bottom: auto;
+      .pill + .card-fields {
+        margin-top: var(--boxel-sp-sm);
       }
 
       .field-name {
-        font-size: var(--boxel-font-size);
+        font: 500 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
       }
 
       .field-type {
-        color: #949494;
-      }
-
-      .realm-icon > img {
-        height: 20px;
-        width: 20px;
+        color: var(--boxel-450);
+        font: 500 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-xs);
       }
     </style>
 
@@ -116,6 +105,8 @@ export default class CardSchemaEditor extends Component<Signature> {
               <img
                 src={{realmInfo.iconURL}}
                 alt='Realm icon'
+                width='20'
+                height='20'
                 data-test-realm-icon-url={{realmInfo.iconURL}}
               />
             </:ready>
@@ -148,6 +139,8 @@ export default class CardSchemaEditor extends Component<Signature> {
                         <img
                           src={{realmInfo.iconURL}}
                           alt='Realm icon'
+                          width='20'
+                          height='20'
                           data-test-realm-icon-url={{realmInfo.iconURL}}
                         />
                       </:ready>

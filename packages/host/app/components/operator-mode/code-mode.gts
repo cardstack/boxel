@@ -866,29 +866,27 @@ export default class CodeMode extends Component<Signature> {
             @defaultWidth={{defaultPanelWidths.rightPanel}}
             @width={{this.panelWidths.rightPanel}}
           >
-            <div class='inner-container'>
-              {{#if this.isReady}}
-                {{#if this.cardIsLoaded}}
-                  <CardPreviewPanel
-                    @card={{this.loadedCard}}
-                    @realmIconURL={{this.realmIconURL}}
-                    data-test-card-resource-loaded
-                  />
-                {{else if this.importedModule.module}}
-                  <SchemaEditorColumn
-                    @file={{this.readyFile}}
-                    @importedModule={{this.importedModule.module}}
-                  />
-                {{else if this.cardError}}
-                  {{this.cardError.message}}
-                {{else if this.readyFile.isBinary}}
-                  <div
-                    class='binary-file-schema-editor'
-                    data-test-binary-file-schema-editor
-                  >Schema Editor cannot be used with this file type</div>
-                {{/if}}
+            {{#if this.isReady}}
+              {{#if this.cardIsLoaded}}
+                <CardPreviewPanel
+                  @card={{this.loadedCard}}
+                  @realmIconURL={{this.realmIconURL}}
+                  data-test-card-resource-loaded
+                />
+              {{else if this.importedModule.module}}
+                <SchemaEditorColumn
+                  @file={{this.readyFile}}
+                  @importedModule={{this.importedModule.module}}
+                />
+              {{else if this.cardError}}
+                {{this.cardError.message}}
+              {{else if this.readyFile.isBinary}}
+                <div
+                  class='binary-file-schema-editor'
+                  data-test-binary-file-schema-editor
+                >Schema Editor cannot be used with this file type</div>
               {{/if}}
-            </div>
+            {{/if}}
           </ResizablePanel>
         {{else}}
           <ResizablePanel

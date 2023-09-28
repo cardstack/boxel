@@ -4,16 +4,16 @@ import type { ComponentLike } from '@glint/template';
 import AccordionItem, { type AccordionItemSignature } from './item';
 
 interface Signature {
-  Element: HTMLDivElement;
+  Element: HTMLElement;
   Blocks: {
     default: [{ Item: ComponentLike<AccordionItemSignature> }];
   };
 }
 
 const Accordion: TemplateOnlyComponent<Signature> = <template>
-  <div class='accordion' ...attributes>
+  <ul class='accordion' ...attributes>
     {{yield (hash Item=(component AccordionItem className='item'))}}
-  </div>
+  </ul>
   <style>
     .accordion {
       --accordion-default-item-height: var(--item-open-min-height, 7rem);
@@ -21,9 +21,15 @@ const Accordion: TemplateOnlyComponent<Signature> = <template>
       --accordion-border: var(--boxel-border);
       --accordion-border-radius: var(--boxel-border-radius-xl);
 
+      list-style-type: none;
+      margin-top: 0;
+      margin-bottom: 0;
+      padding-left: 0;
       background-color: var(--accordion-background-color);
       border: var(--accordion-border);
       border-radius: var(--accordion-border-radius);
+      display: flex;
+      flex-direction: column;
     }
     .accordion > :deep(.item + .item) {
       border-top: var(--accordion-border);
