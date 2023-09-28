@@ -1,13 +1,10 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-
 import Component from '@glimmer/component';
-
 import { tracked } from '@glimmer/tracking';
 
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
@@ -36,6 +33,8 @@ export default class SchemaEditorColumn extends Component<Signature> {
   }
 
   <template>
+    {{! The linter is unexpectedly complaining there is whitespace in this template, which is odd. Let's ignore }}
+    {{! template-lint-disable no-whitespace-for-layout }}
     <div class='accordion'>
       <div
         class='accordion-item
