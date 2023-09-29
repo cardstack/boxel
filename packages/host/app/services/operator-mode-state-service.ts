@@ -7,6 +7,7 @@ import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
+import { use, resource } from 'ember-resources';
 import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
@@ -65,7 +66,8 @@ export default class OperatorModeStateService extends Service {
     openDirs: {},
   });
   @tracked recentCards = new TrackedArray<CardDef>([]);
-  @tracked currentRealmURL: URL | undefined;
+
+  private cachedRealmURL: URL | null = null;
 
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
@@ -293,7 +295,6 @@ export default class OperatorModeStateService extends Service {
     if (changingRealms && codePath) {
       try {
         let newRealm = await this.realmInfoService.fetchRealmURL(codePath.href);
-        this.currentRealmURL = new URL(newRealm);
       } catch (error) {
         console.log('error changing realms', error);
       }
@@ -520,4 +521,52 @@ export default class OperatorModeStateService extends Service {
     this.state.openDirs[this.currentRealmURL.href] = [...dirs, entryPath];
     this.schedulePersist();
   }
+
+  get currentRealmURL() {
+    return this.realmURLResource.value;
+  }
+
+  @use private realmURLResource = resource(() => {
+    if (!this.state.codePath) {
+      return new TrackedObject({
+        error: null,
+        isLoading: false,
+        value: this.cachedRealmURL,
+        load: () => Promise<void>,
+      });
+    }
+
+    const state: {
+      isLoading: boolean;
+      value: RealmInfo | null;
+      error: Error | undefined;
+      load: () => Promise<void>;
+    } = new TrackedObject({
+      isLoading: true,
+      value: this.cachedRealmURL,
+      error: undefined,
+      load: async () => {
+        state.isLoading = true;
+
+        try {
+          let realmURL = await this.cardService.getRealmURLFor(
+            this.state.codePath,
+          );
+
+          if (realmURL) {
+            this.cachedRealmURL = realmURL;
+          }
+
+          state.value = realmURL;
+        } catch (error: any) {
+          state.error = error;
+        } finally {
+          state.isLoading = false;
+        }
+      },
+    });
+
+    state.load();
+    return state;
+  });
 }
