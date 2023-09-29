@@ -10,7 +10,7 @@ import { task } from 'ember-concurrency';
 import { use, resource } from 'ember-resources';
 import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
-import { TrackedArray, TrackedObject } from 'tracked-built-ins';
+import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
@@ -37,7 +37,7 @@ export interface OperatorModeState {
   submode: Submode;
   codePath: URL | null;
   fileView?: FileView;
-  openDirs: Record<string, string[]>;
+  openDirs: Map<string, string[]>;
 }
 
 interface CardItem {
@@ -55,7 +55,7 @@ export type SerializedState = {
   submode?: Submode;
   codePath?: string;
   fileView?: FileView;
-  openDirs?: Record<string, string[]>;
+  openDirs?: Map<string, string[]>;
 };
 
 export default class OperatorModeStateService extends Service {
@@ -63,7 +63,7 @@ export default class OperatorModeStateService extends Service {
     stacks: new TrackedArray([]),
     submode: Submode.Interact,
     codePath: null,
-    openDirs: {},
+    openDirs: new TrackedMap<string, string[]>(),
   });
   @tracked recentCards = new TrackedArray<CardDef>([]);
 
@@ -336,16 +336,14 @@ export default class OperatorModeStateService extends Service {
 
   get currentRealmOpenDirs() {
     if (this.currentRealmURL) {
-      let currentRealmOpenDirs = this.openDirs[this.currentRealmURL.href];
+      let currentRealmOpenDirs = this.openDirs.get(this.currentRealmURL.href);
 
       if (currentRealmOpenDirs) {
         return currentRealmOpenDirs;
-      } else {
-        return (this.openDirs[this.currentRealmURL.href] = []);
       }
     }
 
-    return [];
+    return new TrackedArray([]);
   }
 
   updateFileView(fileView: FileView) {
@@ -388,7 +386,7 @@ export default class OperatorModeStateService extends Service {
       submode: this.state.submode,
       codePath: this.state.codePath?.toString(),
       fileView: this.state.fileView?.toString() as FileView,
-      openDirs: this.state.openDirs,
+      openDirs: new Map(this.state.openDirs),
     };
 
     for (let stack of this.state.stacks) {
@@ -418,12 +416,18 @@ export default class OperatorModeStateService extends Service {
   // Deserialize a stringified JSON version of OperatorModeState into a Glimmer tracked object
   // so that templates can react to changes in stacks and their items
   async deserialize(rawState: SerializedState): Promise<OperatorModeState> {
+    // FIXME why are intermediate variables needed?
+    let rawOpenDirsEntries = Object.entries(rawState.openDirs ?? {});
+    let entriesWithTrackedArrays = rawOpenDirsEntries.map(
+      ([realmURL, dirs]) => [realmURL, new TrackedArray(dirs)],
+    );
+    let openDirs = new TrackedMap<string, string[]>(entriesWithTrackedArrays);
     let newState: OperatorModeState = new TrackedObject({
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submode.Interact,
       codePath: rawState.codePath ? new URL(rawState.codePath) : null,
       fileView: rawState.fileView ?? 'inheritance',
-      openDirs: rawState.openDirs ?? {},
+      openDirs,
     });
 
     let stackIndex = 0;
@@ -492,7 +496,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   get openDirs() {
-    return this.state.openDirs ?? [];
+    return this.state.openDirs ?? new TrackedMap();
   }
 
   toggleOpenDir(entryPath: string): void {
@@ -510,15 +514,18 @@ export default class OperatorModeStateService extends Service {
         } else {
           dirs.splice(i, 1);
         }
-        this.state.openDirs[this.currentRealmURL.href] = dirs;
+        this.openDirs.set(this.currentRealmURL.href, new TrackedArray(dirs));
         return;
       } else if (entryPath.startsWith(dirs[i])) {
         dirs[i] = entryPath;
-        this.state.openDirs[this.currentRealmURL.href] = dirs;
+        this.openDirs.set(this.currentRealmURL.href, new TrackedArray(dirs));
         return;
       }
     }
-    this.state.openDirs[this.currentRealmURL.href] = [...dirs, entryPath];
+    this.openDirs.set(
+      this.currentRealmURL.href,
+      new TrackedArray([...dirs, entryPath]),
+    );
     this.schedulePersist();
   }
 
@@ -555,6 +562,12 @@ export default class OperatorModeStateService extends Service {
 
           if (realmURL) {
             this.cachedRealmURL = realmURL;
+
+            // FIXME can this be moved to toggleOpenDir?
+            if (!this.openDirs.has(realmURL.href)) {
+              let newOpenDirs = new TrackedArray<string>();
+              this.openDirs.set(realmURL.href, newOpenDirs);
+            }
           }
 
           state.value = realmURL;
