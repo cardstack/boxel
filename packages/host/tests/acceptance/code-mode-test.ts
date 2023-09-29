@@ -740,6 +740,68 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.dom('[data-test-card-instance-definition]').doesNotExist();
   });
 
+  test('non-card JSON is shown as just a file with empty schema editor', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}z01.json`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-file-definition]');
+
+    assert.dom('[data-test-definition-file-extension]').hasText('.json');
+    await waitFor('[data-test-definition-realm-name]');
+    assert
+      .dom('[data-test-definition-realm-name]')
+      .hasText('in Test Workspace B');
+
+    assert.dom('[data-test-schema-editor-incompatible]').exists();
+  });
+
+  test('invalid JSON is shown as just a file with empty schema editor', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}not-json.json`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-file-definition]');
+
+    assert.dom('[data-test-definition-file-extension]').hasText('.json');
+    await waitFor('[data-test-definition-realm-name]');
+    assert
+      .dom('[data-test-definition-realm-name]')
+      .hasText('in Test Workspace B');
+
+    assert.dom('[data-test-schema-editor-incompatible]').exists();
+  });
+
   test('empty state displays default realm info', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [],
@@ -986,9 +1048,7 @@ module('Acceptance | code mode tests', function (hooks) {
     assert
       .dom('[data-test-binary-info] [data-test-last-modified]')
       .containsText('Last modified');
-    assert
-      .dom('[data-test-binary-file-schema-editor]')
-      .hasText('Schema Editor cannot be used with this file type');
+    assert.dom('[data-test-schema-editor-incompatible]').exists();
 
     await percySnapshot(assert);
   });

@@ -34,6 +34,7 @@ import {
   type CodeRef,
   RealmPaths,
   logger,
+  isCardDocument,
   isSingleCardDocument,
   identifyCard,
   moduleFrom,
@@ -248,6 +249,17 @@ export default class CodeMode extends Component<Signature> {
 
   private get isReady() {
     return this.maybeMonacoSDK && isReady(this.openFile.current);
+  }
+
+  private get schemaEditorIncompatible() {
+    return this.readyFile.isBinary || this.isNonCardJson;
+  }
+
+  private isNonCardJson() {
+    return (
+      this.readyFile.name.endsWith('.json') &&
+      !isCardDocument(this.readyFile.content)
+    );
   }
 
   private get emptyOrNotFound() {
@@ -886,13 +898,13 @@ export default class CodeMode extends Component<Signature> {
                     @file={{this.readyFile}}
                     @importedModule={{this.importedModule.module}}
                   />
+                {{else if this.schemaEditorIncompatible}}
+                  <div
+                    class='incompatible-schema-editor'
+                    data-test-schema-editor-incompatible
+                  >Schema Editor cannot be used with this file type</div>
                 {{else if this.cardError}}
                   {{this.cardError.message}}
-                {{else if this.readyFile.isBinary}}
-                  <div
-                    class='binary-file-schema-editor'
-                    data-test-binary-file-schema-editor
-                  >Schema Editor cannot be used with this file type</div>
                 {{/if}}
               {{/if}}
             </div>
@@ -1103,7 +1115,7 @@ export default class CodeMode extends Component<Signature> {
       .saved-msg {
         margin-right: var(--boxel-sp-xxs);
       }
-      .binary-file-schema-editor {
+      .incompatible-schema-editor {
         display: flex;
         flex-wrap: wrap;
         align-content: center;

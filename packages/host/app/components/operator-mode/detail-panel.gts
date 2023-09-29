@@ -7,6 +7,12 @@ import Component from '@glimmer/component';
 // @ts-expect-error cached doesn't have type yet
 import { tracked, cached } from '@glimmer/tracking';
 
+import { CardContainer, LoadingIndicator, Header } from '@cardstack/boxel-ui';
+
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+
+import { or } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
 import { type RealmInfo } from '@cardstack/runtime-common';
 
 import { hasExecutableExtension, getPlural } from '@cardstack/runtime-common';
@@ -24,13 +30,12 @@ import {
   ClickableModuleDefinitionContainer,
 } from './definition-container';
 
+import Selector from './detail-panel-selector';
+
+import { SelectorItem, selectorItemFunc } from './detail-panel-selector';
+
 import type { ElementInFile } from './code-mode';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import Selector from './detail-panel-selector';
-import { SelectorItem, selectorItemFunc } from './detail-panel-selector';
-import { CardContainer, LoadingIndicator, Header } from '@cardstack/boxel-ui';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { or } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 interface Signature {
   Element: HTMLElement;
@@ -85,6 +90,10 @@ export default class DetailPanel extends Component<Signature> {
 
   get isBinary() {
     return this.args.readyFile.isBinary;
+  }
+
+  get isJSON() {
+    return this.args.readyFile.url.endsWith('.json');
   }
 
   private get fileExtension() {
@@ -214,22 +223,22 @@ export default class DetailPanel extends Component<Signature> {
               {{/if}}
             {{/if}}
           </div>
-        {{/if}}
-
-        {{#if this.isBinary}}
-          <div class='details-panel'>
-            <header class='panel-header' aria-label='Details Panel Header'>
-              Details
-            </header>
-            <FileDefinitionContainer
-              @fileURL={{@readyFile.url}}
-              @fileExtension={{this.fileExtension}}
-              @infoText={{this.lastModified.value}}
-              @actions={{array
-                (hash label='Delete' handler=@delete icon='icon-trash')
-              }}
-            />
-          </div>
+        {{else}}
+          {{#if (or this.isBinary this.isJSON)}}
+            <div class='details-panel'>
+              <header class='panel-header' aria-label='Details Panel Header'>
+                Details
+              </header>
+              <FileDefinitionContainer
+                @fileURL={{@readyFile.url}}
+                @fileExtension={{this.fileExtension}}
+                @infoText={{this.lastModified.value}}
+                @actions={{array
+                  (hash label='Delete' handler=@delete icon='icon-trash')
+                }}
+              />
+            </div>
+          {{/if}}
         {{/if}}
       {{/if}}
     </div>
