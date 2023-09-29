@@ -75,3 +75,17 @@ suppress_key_server_warning: true
 
 ui_auth:
   session_timeout: '300s'
+
+email:
+  smtp_host: 'boxel-smtp'
+  smtp_port: 25
+  smtp_user: 'user'
+  smtp_pass: 'pass'
+  enable_tls: false
+  notif_from: 'Your Friendly %(app)s homeserver <noreply@example.com>'
+  app_name: 'Boxel'
+  enable_notifs: true
+  notif_for_new_users: false
+  client_base_url: 'http://localhost:4201'
+  validation_token_lifetime: '15m'
+  invite_client_location: 'https://app.element.io'

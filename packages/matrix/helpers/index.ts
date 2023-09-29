@@ -4,6 +4,7 @@ import {
   synapseStop,
   type SynapseInstance,
 } from '../docker/synapse';
+import { smtpStart, smtpStop } from '../docker/smtp4dev';
 export const testHost = 'http://localhost:4202/test';
 
 interface ProfileAssertions {
@@ -18,8 +19,14 @@ export const test = base.extend<{ synapse: SynapseInstance }>({
   // eslint-disable-next-line no-empty-pattern
   synapse: async ({}, use) => {
     let synapseInstance = await synapseStart();
+    // TODO parallelizing the SMTP container will involve leveraging a dynamic
+    // docker name wired into the homeserver.yaml config file, as we take
+    // advantage of the fact that we can use the docker-name as the hostname for
+    // the SMTP server via the shared docker network
+    await smtpStart();
     await use(synapseInstance);
     await synapseStop(synapseInstance.synapseId);
+    await smtpStop();
   },
 
   page: async ({ page, synapse }, use) => {
