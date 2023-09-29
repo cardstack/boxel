@@ -893,10 +893,11 @@ export default class CodeMode extends Component<Signature> {
                     @realmIconURL={{this.realmIconURL}}
                     data-test-card-resource-loaded
                   />
-                {{else if this.importedModule.module}}
+                {{else if this.selectedElementInFile}}
                   <CardAdoptionChain
                     @file={{this.readyFile}}
-                    @importedModule={{this.importedModule.module}}
+                    @card={{this.selectedElementInFile.card}}
+                    @cardTypeResource={{this.selectedElementInFile.cardType}}
                   />
                 {{else if this.schemaEditorIncompatible}}
                   <div
