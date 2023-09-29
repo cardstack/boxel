@@ -514,22 +514,22 @@ export default class OperatorModeStateService extends Service {
         } else {
           dirs.splice(i, 1);
         }
-        this.openDirs.set(this.currentRealmURL.href, new TrackedArray(dirs));
+        this.openDirs.set(this.currentRealmURL, new TrackedArray(dirs));
         return;
       } else if (entryPath.startsWith(dirs[i])) {
         dirs[i] = entryPath;
-        this.openDirs.set(this.currentRealmURL.href, new TrackedArray(dirs));
+        this.openDirs.set(this.currentRealmURL, new TrackedArray(dirs));
         return;
       }
     }
     this.openDirs.set(
-      this.currentRealmURL.href,
+      this.currentRealmURL,
       new TrackedArray([...dirs, entryPath]),
     );
     this.schedulePersist();
   }
 
-  get currentRealmURL() {
+  get currentRealmURL(): string {
     return this.realmURLResource.value;
   }
 

@@ -44,11 +44,15 @@ export default class RecentFilesService extends Service {
   }
 
   addRecentFileUrl(url: string) {
-    let realmPaths = new RealmPaths(
-      this.operatorModeStateService.currentRealmURL,
-    );
-    if (realmPaths.inRealm(new URL(url))) {
-      this.addRecentFile(realmPaths.local(url));
+    let realmURL = this.operatorModeStateService.currentRealmURL;
+
+    if (realmURL) {
+      let realmPaths = new RealmPaths(
+        new URL(this.operatorModeStateService.currentRealmURL),
+      );
+      if (realmPaths.inRealm(new URL(url))) {
+        this.addRecentFile(realmPaths.local(url));
+      }
     }
   }
 
@@ -61,7 +65,10 @@ export default class RecentFilesService extends Service {
       this.recentFiles.splice(existingIndex, 1);
     }
 
-    this.recentFiles.unshift({ realmURL: currentRealmUrl, filePath: file });
+    this.recentFiles.unshift({
+      realmURL: new URL(currentRealmUrl),
+      filePath: file,
+    });
 
     if (this.recentFiles.length > 100) {
       this.recentFiles.pop();
@@ -87,7 +94,7 @@ export default class RecentFilesService extends Service {
 
     return this.recentFiles.findIndex(
       ({ realmURL, filePath }) =>
-        realmURL.href === currentRealmUrl.href && filePath === path,
+        realmURL.href === currentRealmUrl && filePath === path,
     );
   }
 
