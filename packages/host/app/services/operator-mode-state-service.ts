@@ -36,7 +36,7 @@ export interface OperatorModeState {
   submode: Submode;
   codePath: URL | null;
   fileView?: FileView;
-  openDirs: string[];
+  openDirs: Record<string, string[]>;
 }
 
 interface CardItem {
@@ -54,7 +54,7 @@ export type SerializedState = {
   submode?: Submode;
   codePath?: string;
   fileView?: FileView;
-  openDirs?: string[];
+  openDirs?: Record<string, string[]>;
 };
 
 export default class OperatorModeStateService extends Service {
@@ -62,7 +62,7 @@ export default class OperatorModeStateService extends Service {
     stacks: new TrackedArray([]),
     submode: Submode.Interact,
     codePath: null,
-    openDirs: [],
+    openDirs: {},
   });
   @tracked recentCards = new TrackedArray<CardDef>([]);
   @tracked currentRealmURL: URL | undefined;
@@ -274,6 +274,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   async updateCodePath(codePath: URL | null) {
+    console.log('Update code path!', codePath);
     let changingRealms = false;
 
     if (!this.currentRealmURL && codePath) {
@@ -325,11 +326,25 @@ export default class OperatorModeStateService extends Service {
       if (containingDirectory) {
         containingDirectory += '/';
 
-        if (!this.openDirs.includes(containingDirectory)) {
+        if (!this.currentRealmOpenDirs.includes(containingDirectory)) {
           this.toggleOpenDir(containingDirectory);
         }
       }
     }
+  }
+
+  get currentRealmOpenDirs() {
+    if (this.currentRealmURL) {
+      let currentRealmOpenDirs = this.openDirs[this.currentRealmURL.href];
+
+      if (currentRealmOpenDirs) {
+        return currentRealmOpenDirs;
+      } else {
+        return (this.openDirs[this.currentRealmURL.href] = []);
+      }
+    }
+
+    return [];
   }
 
   updateFileView(fileView: FileView) {
@@ -407,7 +422,7 @@ export default class OperatorModeStateService extends Service {
       submode: rawState.submode ?? Submode.Interact,
       codePath: rawState.codePath ? new URL(rawState.codePath) : null,
       fileView: rawState.fileView ?? 'inheritance',
-      openDirs: rawState.openDirs ?? [],
+      openDirs: rawState.openDirs ?? {},
     });
 
     let stackIndex = 0;
@@ -480,7 +495,11 @@ export default class OperatorModeStateService extends Service {
   }
 
   toggleOpenDir(entryPath: string): void {
-    let dirs = this.openDirs.slice();
+    if (!this.currentRealmURL) {
+      return;
+    }
+
+    let dirs = this.currentRealmOpenDirs.slice();
     for (let i = 0; i < dirs.length; i++) {
       if (dirs[i].startsWith(entryPath)) {
         let localParts = entryPath.split('/').filter((p) => p.trim() != '');
@@ -490,15 +509,15 @@ export default class OperatorModeStateService extends Service {
         } else {
           dirs.splice(i, 1);
         }
-        this.state.openDirs = dirs;
+        this.state.openDirs[this.currentRealmURL.href] = dirs;
         return;
       } else if (entryPath.startsWith(dirs[i])) {
         dirs[i] = entryPath;
-        this.state.openDirs = dirs;
+        this.state.openDirs[this.currentRealmURL.href] = dirs;
         return;
       }
     }
-    this.state.openDirs = [...dirs, entryPath];
+    this.state.openDirs[this.currentRealmURL.href] = [...dirs, entryPath];
     this.schedulePersist();
   }
 }

@@ -160,7 +160,7 @@ function isOpen(
   operatorModeStateService: OperatorModeStateService,
 ) {
   let directoryIsPersistedOpen = (
-    operatorModeStateService.state.openDirs ?? []
+    operatorModeStateService.currentRealmOpenDirs ?? []
   ).find((item) => item.startsWith(path));
 
   return directoryIsPersistedOpen;
