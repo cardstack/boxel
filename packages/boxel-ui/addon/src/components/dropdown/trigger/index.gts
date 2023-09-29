@@ -1,13 +1,14 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import cn from '../../../helpers/cn.ts';
-import { svgJar } from '../../../helpers/svg-jar.ts';
+import CaretDown from '../../../icons/caret-down.gts';
+import type { Icon } from '../../../icons/types.ts';
 import BoxelButton from '../../button/index.gts';
 
 interface Signature {
   Args: {
     disabled?: boolean;
-    icon?: string;
+    icon?: Icon;
     isMissingValue?: boolean;
     label: string | number | undefined;
   };
@@ -24,16 +25,18 @@ const BoxelDropdownTrigger: TemplateOnlyComponent<Signature> = <template>
     ...attributes
   >
     {{#if @icon}}
-      {{svgJar @icon class='boxel-dropdown-trigger__icon' role='presentation'}}
+      <@icon
+        class='boxel-dropdown-trigger__icon' role='presentation'
+      />
     {{/if}}
+
     {{@label}}
-    {{svgJar
-      'caret-down'
+    <CaretDown
       class='boxel-dropdown-trigger__caret'
       width=8
       height=8
       role='presentation'
-    }}
+    />
   </BoxelButton>
   <style>
     @layer {

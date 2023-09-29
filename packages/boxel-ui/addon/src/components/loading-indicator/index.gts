@@ -1,7 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import cssVar from '../../helpers/css-var.ts';
-import { svgJar } from '../../helpers/svg-jar.ts';
+import LoadingIndicatorIcon from '../../icons/loading-indicator.gts';
 
 interface Signature {
   Args: {
@@ -12,11 +12,7 @@ interface Signature {
 
 const LoadingIndicator: TemplateOnlyComponent<Signature> = <template>
   <div class='boxel-loading-indicator' ...attributes>
-    {{svgJar
-      'loading-indicator'
-      style=(cssVar icon-color=(if @color @color '#000'))
-      role='presentation'
-    }}
+    <LoadingIndicatorIcon style={{cssVar icon-color=(if @color @color '#000')}} role='presentation' />
   </div>
   <style>
     /* zero specificity default sizing */

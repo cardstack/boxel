@@ -1,19 +1,19 @@
-import Component from '@glimmer/component';
-import { action } from '@ember/object';
 import { registerDestructor } from '@ember/destroyable';
-import { TrackedMap } from 'tracked-built-ins';
-import didResizeModifier from 'ember-resize-modifier/modifiers/did-resize';
-import ResizablePanel from './panel';
+import { action } from '@ember/object';
+import Component from '@glimmer/component';
 import { WithBoundArgs } from '@glint/template';
+import didResizeModifier from 'ember-resize-modifier/modifiers/did-resize';
+import { TrackedMap } from 'tracked-built-ins';
+
+import ResizablePanel from './panel.gts';
 
 export type PanelContext = {
-  width: string;
   defaultWidth: string;
   minWidth?: string;
+  width: string;
 };
 
 interface Signature {
-  Element: HTMLDivElement;
   Args: {
     onListPanelContextChange?: (listPanelContext: PanelContext[]) => void;
   };
@@ -29,6 +29,7 @@ interface Signature {
       >,
     ];
   };
+  Element: HTMLDivElement;
 }
 
 export default class ResizablePanelGroup extends Component<Signature> {
@@ -299,7 +300,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
       width: 0,
     };
     for (let index = 1; index <= this.listPanelContext.size; index++) {
-      let panelWidth = panelWidths[index - 1];
+      let panelWidth = panelWidths[index - 1] || 0;
       let newWidth =
         panelWidth +
         Math.round((panelWidth / totalPanelWidth) * panelGroupRemainingWidth);

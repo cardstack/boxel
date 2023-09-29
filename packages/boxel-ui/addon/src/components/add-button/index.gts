@@ -1,25 +1,25 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import IconButton from '../icon-button/index.gts';
 import { eq } from '../../helpers/truth-helpers.ts';
-import { svgJar } from '../../helpers/svg-jar.ts';
+import IconPlus from '../../icons/icon-plus.gts';
 import PlusCircleIcon from '../../icons/icon-plus-circle.gts';
+import IconButton from '../icon-button/index.gts';
 
 interface Signature {
-  Element: HTMLElement;
   Args: {
-    variant?: 'full-width';
     hideIcon?: boolean;
+    variant?: 'full-width';
   };
   Blocks: {
     default: [];
   };
+  Element: HTMLElement;
 }
 
 const AddButton: TemplateOnlyComponent<Signature> = <template>
   {{#if (eq @variant 'full-width')}}
     <button class='add-button--full-width' ...attributes>
-      {{unless @hideIcon (svgJar 'icon-plus' width='20px' height='20px')}}
+      {{#unless @hideIcon}}<IconPlus width='20px' height='20px' />{{/unless}}
       {{yield}}
     </button>
   {{else}}

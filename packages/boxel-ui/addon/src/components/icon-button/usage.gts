@@ -1,4 +1,3 @@
-import cssVar from '../../helpers/css-var.ts';
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -6,14 +5,18 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import {
-  cssVariable,
   type CSSVariableInfo,
+  cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 
+import cssVar from '../../helpers/css-var.ts';
+import IconPlusCircle from '../../icons/icon-plus-circle.gts';
+import { ALL_ICON_COMPONENTS } from '../../icons/index.gts';
+import type { Icon } from '../../icons/types.ts';
 import BoxelIconButton from './index.gts';
 
 export default class IconButtonUsage extends Component {
-  @tracked icon = 'icon-plus-circle';
+  @tracked icon: Icon = IconPlusCircle;
   @tracked variant?: string;
   @tracked width = '40px';
   @tracked height = '40px';
@@ -45,11 +48,12 @@ export default class IconButtonUsage extends Component {
       </:example>
 
       <:api as |Args|>
-        <Args.String
+        <Args.Component
           @name='icon'
-          @description='the name of the svg to show'
+          @description='Icon component reference'
           @value={{this.icon}}
-          @onInput={{fn (mut this.icon)}}
+          @options={{ALL_ICON_COMPONENTS}}
+          @onChange={{fn (mut this.icon)}}
         />
         <Args.String
           @name='variant'

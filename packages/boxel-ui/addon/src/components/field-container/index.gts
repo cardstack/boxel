@@ -2,8 +2,8 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import cn from '../../helpers/cn.ts';
 import element from '../../helpers/element.ts';
-import { svgJar } from '../../helpers/svg-jar.ts';
 import { eq, not, or } from '../../helpers/truth-helpers.ts';
+import type { Icon } from '../../icons/types.ts';
 import Label from '../label/index.gts';
 
 export interface Signature {
@@ -11,7 +11,7 @@ export interface Signature {
     centeredDisplay?: boolean;
     fieldId?: string;
     horizontalLabelSize?: string;
-    icon?: string;
+    icon?: Icon;
     label: string;
     tag?: keyof HTMLElementTagNameMap;
     vertical?: boolean;
@@ -42,7 +42,9 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
 
       {{#if @icon}}
         <div class='with-icon'>
-          {{svgJar @icon class='boxel-field__icon' role='presentation'}}
+          <@icon
+            class='boxel-field__icon' role='presentation'
+          />
           <div class='yield-with-icon'>
             {{yield}}
           </div>

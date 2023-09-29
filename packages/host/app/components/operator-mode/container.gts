@@ -20,7 +20,6 @@ import get from 'lodash/get';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
 import { Modal, IconButton } from '@cardstack/boxel-ui';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import {
@@ -44,7 +43,6 @@ import {
   getSearchResults,
   type Search,
 } from '@cardstack/host/resources/search';
-
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
@@ -68,6 +66,9 @@ import type LoaderService from '../../services/loader-service';
 
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import SparkleIcon from '@cardstack/boxel-ui/icons/sparkle';
+import IconPlus from '@cardstack/boxel-ui/icons/icon-plus';
+import Download from '@cardstack/boxel-ui/icons/download';
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
 
@@ -711,7 +712,7 @@ export default class OperatorModeContainer extends Component<Signature> {
                   {{on 'click' (fn (perform this.addCard))}}
                   data-test-add-card-button
                 >
-                  {{svgJar 'icon-plus' width='50px' height='50px'}}
+                  <IconPlus width='50px' height='50px' />
                 </button>
               </div>
             {{else}}
@@ -761,7 +762,7 @@ export default class OperatorModeContainer extends Component<Signature> {
                   )
                 }}
               >
-                {{svgJar 'download' width='25' height='25'}}
+                <Download width='25' height='25' />
               </button>
               <button
                 data-test-add-card-right-stack
@@ -781,7 +782,7 @@ export default class OperatorModeContainer extends Component<Signature> {
                   )
                 }}
               >
-                {{svgJar 'download' width='25' height='25'}}
+                <Download width='25' height='25' />
               </button>
             {{/if}}
           </div>
@@ -798,7 +799,7 @@ export default class OperatorModeContainer extends Component<Signature> {
             <IconButton
               data-test-open-chat
               class='chat-btn'
-              @icon='sparkle'
+              @icon={{SparkleIcon}}
               @width='25'
               @height='25'
               {{on 'click' this.toggleChat}}

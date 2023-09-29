@@ -1,6 +1,8 @@
 import { helper } from '@ember/component/helper';
 import type { Link } from 'ember-link';
 
+import type { Icon } from '../icons/types.ts';
+
 // eslint-disable-next-line @typescript-eslint/ban-types
 type ActionType = Link | Function;
 
@@ -9,7 +11,7 @@ interface MenuItemOptions {
   dangerous: boolean;
   disabled: boolean;
   header: boolean;
-  icon: string;
+  icon: Icon;
   iconURL: string;
   id?: string;
   inactive: boolean;
@@ -24,7 +26,7 @@ export class MenuItem {
   selected: boolean;
   disabled: boolean;
   header: boolean;
-  icon: string | undefined;
+  icon: Icon | undefined;
   iconURL: string | undefined;
   action: ActionType | undefined;
   url: string | undefined;

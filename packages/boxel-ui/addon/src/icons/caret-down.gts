@@ -6,22 +6,20 @@ import type { Signature } from './types.ts';
 const IconComponent: TemplateOnlyComponent<Signature> = <template>
   <svg
     xmlns='http://www.w3.org/2000/svg'
-    width='16'
-    height='16'
-    viewBox='0 0 16 16'
+    width='10.828'
+    height='6.414'
+    viewBox='0 0 10.828 6.414'
     ...attributes
-  ><g
-      fill='var(--icon-color, #000)'
-      stroke='var(--icon-color, #000)'
-      stroke-width='5.5'
-    ><circle cx='8' cy='8' r='8' stroke='none' /><circle
-        cx='8'
-        cy='8'
-        r='5'
-        fill='#fff'
-      /></g></svg>
+  ><path
+      fill='none'
+      stroke='var(--icon-color,#000)'
+      stroke-linecap='round'
+      stroke-linejoin='round'
+      stroke-width='2'
+      d='m1.414 1.414 4 4 4-4'
+    /></svg>
 </template>;
 
 // @ts-expect-error this is the only way to set a name on a Template Only Component currently
-IconComponent.name = 'IconCircleSelected';
+IconComponent.name = 'CaretDown';
 export default IconComponent;

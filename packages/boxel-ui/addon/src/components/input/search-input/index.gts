@@ -1,10 +1,11 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+
 import cn from '../../../helpers/cn.ts';
 import { eq } from '../../../helpers/truth-helpers.ts';
-import { svgJar } from '../../../helpers/svg-jar.ts';
-import BoxelInputValidationState from '../validation-state/index.gts';
-import type { InputValidationState } from '../validation-state/index.gts';
+import IconSearch from '../../../icons/icon-search.gts';
 import BoxelInput from '../index.gts';
+import type { InputValidationState } from '../validation-state/index.gts';
+import BoxelInputValidationState from '../validation-state/index.gts';
 
 export enum SearchInputBottomTreatment {
   Flat = 'flat',
@@ -12,19 +13,19 @@ export enum SearchInputBottomTreatment {
 }
 
 interface Signature {
-  Element: HTMLElement;
   Args: {
-    hasValidation?: boolean;
-    variant?: 'large' | 'default';
-    value: string;
     bottomTreatment?: SearchInputBottomTreatment;
-    state?: InputValidationState;
     errorMessage?: string;
-    placeholder?: string;
+    hasValidation?: boolean;
     onFocus?: (ev: Event) => void;
     onInput?: (val: string) => void;
     onKeyPress?: (ev: KeyboardEvent) => void;
+    placeholder?: string;
+    state?: InputValidationState;
+    value: string;
+    variant?: 'large' | 'default';
   };
+  Element: HTMLElement;
 }
 
 const SearchInput: TemplateOnlyComponent<Signature> = <template>
@@ -60,7 +61,7 @@ const SearchInput: TemplateOnlyComponent<Signature> = <template>
       />
     {{/if}}
     <span class='search-icon-container'>
-      {{svgJar 'icon-search' width='20' height='20'}}
+      <IconSearch width='20' height='20' />
     </span>
   </label>
 

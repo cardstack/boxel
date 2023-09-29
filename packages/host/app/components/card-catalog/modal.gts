@@ -14,7 +14,6 @@ import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
 import { Button, SearchInput } from '@cardstack/boxel-ui';
 
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { and, eq, gt, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import {
@@ -139,12 +138,7 @@ export default class CardCatalogModal extends Component<Signature> {
                   }}
                   data-test-card-catalog-create-new-button
                 >
-                  {{svgJar
-                    'icon-plus'
-                    width='20'
-                    height='20'
-                    role='presentation'
-                  }}
+                  <IconPlus width='20' height='20' role='presentation' />
                   Create New
                   {{this.cardRefName}}
                 </Button>

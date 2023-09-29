@@ -27,7 +27,6 @@ export default {
       'helpers/menu-item.js',
       'helpers/optional.js',
       'helpers/pick.js',
-      'helpers/svg-jar.js',
       'helpers/truth-helpers.js',
       'components/**/usage.gts',
       'index.js',

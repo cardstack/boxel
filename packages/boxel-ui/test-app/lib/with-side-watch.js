@@ -1,3 +1,5 @@
+/* eslint-disable no-undef */
+/* eslint-disable @typescript-eslint/no-var-requires */
 const mergeTrees = require('broccoli-merge-trees');
 const { WatchedDir } = require('broccoli-source');
 const Plugin = require('broccoli-plugin');

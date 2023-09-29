@@ -1,6 +1,9 @@
-import { svgJar } from '../../../helpers/svg-jar.ts';
 import Component from '@glimmer/component';
 
+import FailureBordered from '../../../icons/failure-bordered.gts';
+import LoadingIndicator from '../../../icons/loading-indicator.gts';
+import SuccessBordered from '../../../icons/success-bordered.gts';
+import type { Icon } from '../../../icons/types.ts';
 import BoxelInput from '../index.gts';
 
 export type InputValidationState = 'valid' | 'invalid' | 'loading' | 'initial';
@@ -41,21 +44,21 @@ interface Signature {
 }
 
 export default class BoxelInputValidationState extends Component<Signature> {
-  get icon(): string {
+  get icon(): Icon | undefined {
     if (this.args.disabled) {
-      return '';
+      return undefined;
     }
     switch (this.args.state) {
       case 'valid':
-        return 'success-bordered';
+        return SuccessBordered;
       case 'invalid':
-        return 'failure-bordered';
+        return FailureBordered;
       case 'loading':
-        return 'loading-indicator';
+        return LoadingIndicator;
       case 'initial':
-        return '';
+        return undefined;
       default:
-        return '';
+        return undefined;
     }
   }
 
@@ -89,7 +92,7 @@ export default class BoxelInputValidationState extends Component<Signature> {
       />
       {{#if this.icon}}
         <span class='boxel-validation-state-input-group__icon'>
-          {{svgJar this.icon role='presentation'}}
+          <this.icon role='presentation' />
         </span>
       {{/if}}
     </div>

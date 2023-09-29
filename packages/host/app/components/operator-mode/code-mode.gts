@@ -21,7 +21,9 @@ import {
   PanelContext,
 } from '@cardstack/boxel-ui';
 import cn from '@cardstack/boxel-ui/helpers/cn';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import CheckMark from '@cardstack/boxel-ui/icons/check-mark';
+import File from '@cardstack/boxel-ui/icons/file';
+
 import { and, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import {
@@ -720,7 +722,7 @@ export default class CodeMode extends Component<Signature> {
                     <span class='saved-msg'>
                       Saved
                     </span>
-                    {{svgJar 'check-mark' width='27' height='27'}}
+                    <CheckMark width='27' height='27' />
                   {{/if}}
                 </div>
               {{else if this.isLoading}}
@@ -768,7 +770,7 @@ export default class CodeMode extends Component<Signature> {
               class='inner-container inner-container--empty'
               data-test-empty-code-mode
             >
-              {{svgJar 'file' width='40' height='40' role='presentation'}}
+              <File width='40' height='40' role='presentation' />
               <h3 class='choose-file-prompt'>
                 Choose a file on the left to open it
               </h3>

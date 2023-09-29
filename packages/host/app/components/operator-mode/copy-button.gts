@@ -7,7 +7,6 @@ import Component from '@glimmer/component';
 import { task } from 'ember-concurrency';
 
 import { BoxelButton } from '@cardstack/boxel-ui';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { eq, gt, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -16,6 +15,8 @@ import type { StackItem } from './container';
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import ArrowLeft from '@cardstack/boxel-ui/icons/arrow-left';
+import ArrowRight from '@cardstack/boxel-ui/icons/arrow-right';
 
 interface Signature {
   Args: {
@@ -68,7 +69,7 @@ export default class OperatorModeContainer extends Component<Signature> {
             </span>
           {{else}}
             {{#if (eq this.state.direction 'left')}}
-              {{svgJar 'arrow-left' width='18px' height='18px'}}
+              <ArrowLeft width='18px' height='18px' />
             {{/if}}
             <span class='copy-text'>
               Copy
@@ -80,7 +81,7 @@ export default class OperatorModeContainer extends Component<Signature> {
               {{/if}}
             </span>
             {{#if (eq this.state.direction 'right')}}
-              {{svgJar 'arrow-right' width='18px' height='18px'}}
+              <ArrowRight width='18px' height='18px' />
             {{/if}}
           {{/if}}
         </BoxelButton>

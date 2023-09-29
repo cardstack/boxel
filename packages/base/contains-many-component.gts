@@ -13,6 +13,7 @@ import {
 import { getBoxComponent, getPluralViewComponent } from './field-component';
 import { AddButton, IconButton } from '@cardstack/boxel-ui';
 import { getPlural } from '@cardstack/runtime-common';
+import IconTrash from '@cardstack/boxel-ui/icons/icon-trash';
 
 interface Signature {
   Args: {
@@ -44,7 +45,7 @@ class ContainsManyEditor extends GlimmerComponent<Signature> {
               {{/let}}
               <div class='remove-button-container'>
                 <IconButton
-                  @icon='icon-trash'
+                  @icon={{IconTrash}}
                   @width='20px'
                   @height='20px'
                   class='remove'

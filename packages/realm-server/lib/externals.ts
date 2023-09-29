@@ -9,10 +9,6 @@ import * as ethers from 'ethers';
 export function shimExternals(loader: Loader) {
   loader.shimModule('@cardstack/runtime-common', runtime);
   loader.shimModule('@cardstack/boxel-ui', {});
-  // import * as boxelSvgJar from "@cardstack/boxel-ui/helpers/svg-jar";
-  loader.shimModule('@cardstack/boxel-ui/helpers/svg-jar', {
-    svgJar() {},
-  });
   // import * as boxelCssVar from '@cardstack/boxel-ui/helpers/css-var';
   loader.shimModule('@cardstack/boxel-ui/helpers/css-var', {
     cssVar() {},

@@ -3,10 +3,13 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
+import IconGlobe from '../../../icons/icon-globe.gts';
+import { ALL_ICON_COMPONENTS } from '../../../icons/index.gts';
+import type { Icon } from '../../../icons/types.ts';
 import BoxelDropdownTrigger from './index.gts';
 
 export default class BoxelDropdownUsage extends Component {
-  @tracked icon: string | undefined = 'clock';
+  @tracked icon: Icon | undefined = IconGlobe;
   @tracked label: string | undefined = 'Choose one';
   @tracked isMissingValue: boolean | undefined;
   <template>
@@ -25,11 +28,12 @@ export default class BoxelDropdownUsage extends Component {
         />
       </:example>
       <:api as |Args|>
-        <Args.String
+        <Args.Component
           @name='icon'
-          @description='Optional icon name to show on the left of the trigger'
+          @description='Optional icon component reference to show on the left of the trigger'
           @value={{this.icon}}
-          @onInput={{fn (mut this.icon)}}
+          @options={{ALL_ICON_COMPONENTS}}
+          @onChange={{fn (mut this.icon)}}
         />
         <Args.String
           @name='label'

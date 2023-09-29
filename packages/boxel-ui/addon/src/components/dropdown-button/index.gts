@@ -3,13 +3,13 @@ import { type WithBoundArgs } from '@glint/template';
 import { hash } from '@ember/helper';
 import BoxelDropdown from '../dropdown';
 import BoxelMenu from '../menu';
-import cn from '@cardstack/boxel-ui/helpers/cn';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import cn from '../../helpers/cn';
+import type { Icon } from '../../icons/types';
 
 interface Signature {
   Element: HTMLButtonElement;
   Args: {
-    icon: string;
+    icon: Icon | undefined;
     label: string;
     class?: string;
     contentClass?: string;
@@ -42,11 +42,16 @@ const DropdownButton: TemplateOnlyComponent<Signature> = <template>
         ...attributes
       >
         {{#if @icon}}
-          {{svgJar
-            @icon
-            width=(if @iconSize @iconSize 16)
-            height=(if @iconSize @iconSize 16)
-          }}
+          <@icon
+            width='(if'
+            @iconSize
+            @iconSize
+            16)
+            height='(if'
+            @iconSize
+            @iconSize
+            16)
+          />
         {{/if}}
       </button>
     </:trigger>

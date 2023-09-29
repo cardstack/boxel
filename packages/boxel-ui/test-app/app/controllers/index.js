@@ -16,9 +16,13 @@ import MessageUsage from '@cardstack/boxel-ui/components/message/usage';
 import ModalUsage from '@cardstack/boxel-ui/components/modal/usage';
 import MenuUsage from '@cardstack/boxel-ui/components/menu/usage';
 import DropdownUsage from '@cardstack/boxel-ui/components/dropdown/usage';
+import DropdownTriggerUsage from '@cardstack/boxel-ui/components/dropdown/trigger/usage';
 import TooltipUsage from '@cardstack/boxel-ui/components/tooltip/usage';
 import ResizablePanelGroupUsage from '@cardstack/boxel-ui/components/resizable-panel-group/usage';
+<<<<<<< HEAD
 import RadioInput from '@cardstack/boxel-ui/components/radio-input/usage';
+=======
+>>>>>>> 931f10c3 (Convert icon usage to components and drop svg-jar)
 
 export default class IndexController extends FreestyleController {
   constructor() {
@@ -26,24 +30,25 @@ export default class IndexController extends FreestyleController {
     this.usageComponents = [
       ['Boxel::Accordion', AccordionUsage],
       ['Boxel::AddButton', AddButtonUsage],
+      ['Boxel::Button', ButtonUsage],
       ['Boxel::CardContainer', CardContainerUsage],
       ['Boxel::Dropdown', DropdownUsage],
       ['Boxel::DropdownButton', DropdownButtonUsage],
       ['Boxel::FieldContainer', FieldContainerUsage],
       ['Boxel::GridContainer', GridContainerUsage],
       ['Boxel::Header', HeaderUsage],
-      ['Boxel::Button', ButtonUsage],
       ['Boxel::IconButton', IconButtonUsage],
-      ['Boxel::Input', InputUsage],
       ['Boxel::Input::SearchInput', SearchInputUsage],
       ['Boxel::Input::ValidationState', InputValidationStateUsage],
+      ['Boxel::Input', InputUsage],
       ['Boxel::LoadingIndicator', LoadingIndicatorUsage],
-      ['Boxel::Modal', ModalUsage],
-      ['Boxel::Message', MessageUsage],
       ['Boxel::Menu', MenuUsage],
       ['Boxel::Tooltip', TooltipUsage],
       ['Boxel::ResizablePanel', ResizablePanelGroupUsage],
+<<<<<<< HEAD
       ['Boxel::RadioInput', RadioInput],
+=======
+>>>>>>> 931f10c3 (Convert icon usage to components and drop svg-jar)
     ].map(([name, c]) => {
       return {
         title: name,

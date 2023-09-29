@@ -9,8 +9,8 @@ import { Link } from 'ember-link';
 import cn from '../../helpers/cn.ts';
 import type { MenuDivider } from '../../helpers/menu-divider.ts';
 import type { MenuItem } from '../../helpers/menu-item.ts';
-import { svgJar } from '../../helpers/svg-jar.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
+import CheckMark from '../../icons/check-mark.gts';
 
 // This little component helps to make glint understand when we have a MenuItem and when we have a MenuDivider
 class MenuItemRenderer extends Component<{
@@ -80,7 +80,7 @@ export default class Menu extends Component<Signature> {
                   'boxel-menu__item'
                   @itemClass
                   boxel-menu__item--dangerous=menuItem.dangerous
-                  boxel-menu__item--has-icon=menuItem.icon
+                  boxel-menu__item--has-icon=(if menuItem.icon true false)
                   boxel-menu__item--selected=menuItem.selected
                   boxel-menu__item--disabled=menuItem.disabled
                 }}
@@ -103,12 +103,11 @@ export default class Menu extends Component<Signature> {
                 >
                   <span class='menu-item'>
                     {{#if menuItem.icon}}
-                      {{svgJar
-                        menuItem.icon
+                      <menuItem.icon
                         width='16'
                         height='16'
                         data-test-boxel-menu-item-icon=true
-                      }}
+                      />
                     {{else if menuItem.iconURL}}
                       <span
                         class='menu-item__icon-url'
@@ -123,7 +122,7 @@ export default class Menu extends Component<Signature> {
                       check-icon--selected=menuItem.selected
                     }}
                   >
-                    {{svgJar 'check-mark' width='20' height='20'}}
+                    <CheckMark width='20' height='20' />
                   </span>
                 </div>
               </li>

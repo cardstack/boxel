@@ -11,8 +11,8 @@ export interface AccordionItemSignature {
     className?: string;
   };
   Blocks: {
-    title: [];
     content: [];
+    title: [];
   };
 }
 

@@ -19,6 +19,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { AddButton, IconButton } from '@cardstack/boxel-ui';
+import IconMinusCircle from '@cardstack/boxel-ui/icons/icon-minus-circle';
 
 interface Signature {
   Args: {
@@ -47,7 +48,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
         <div class='remove-button-container'>
           <IconButton
             @variant='primary'
-            @icon='icon-minus-circle'
+            @icon={{IconMinusCircle}}
             @width='20px'
             @height='20px'
             class='remove'

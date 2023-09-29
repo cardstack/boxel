@@ -8,6 +8,7 @@ node_modules/
 
 # misc
 /.eslintcache
+/addon/.eslintcache
 .env*
 .pnpm-debug.log
 npm-debug.log*

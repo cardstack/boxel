@@ -6,10 +6,13 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import get from 'lodash/get';
+import DropdownArrowUp from '@cardstack/boxel-ui/icons/dropdown-arrow-up';
+import DropdownArrowDown from '@cardstack/boxel-ui/icons/dropdown-arrow-down';
+import Eye from '@cardstack/boxel-ui/icons/eye';
+import IconCode from '@cardstack/boxel-ui/icons/icon-code';
 
 import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui';
 import { menuItemFunc, MenuItem } from '@cardstack/boxel-ui/helpers/menu-item';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
 export enum Submode {
   Interact = 'interact',
@@ -35,11 +38,9 @@ export default class SubmodeSwitcher extends Component<Signature> {
             {{on 'click' this.toggleDropdown}}
             {{bindings}}
           >
-            {{svgJar
-              (get this.submodeIcons @submode)
-              width='18px'
-              height='18px'
-            }}
+            {{#let (get this.submodeIcons @submode) as |SubmodeIcon|}}
+              <SubmodeIcon width='18px' height='18px' />
+            {{/let}}
             {{capitalize @submode}}
             <div
               class='arrow-icon'
@@ -49,11 +50,11 @@ export default class SubmodeSwitcher extends Component<Signature> {
                 'down'
               }}
             >
-              {{svgJar
-                (if this.isExpanded 'dropdown-arrow-up' 'dropdown-arrow-down')
-                width='22px'
-                height='22px'
-              }}
+              {{#if this.isExpanded}}
+                <DropdownArrowUp width='22px' height='22px' />
+              {{else}}
+                <DropdownArrowDown width='22px' height='22px' />
+              {{/if}}
             </div>
           </Button>
         </:trigger>
@@ -127,8 +128,8 @@ export default class SubmodeSwitcher extends Component<Signature> {
   </template>
 
   submodeIcons = {
-    [Submode.Interact]: 'eye',
-    [Submode.Code]: 'icon-code',
+    [Submode.Interact]: Eye,
+    [Submode.Code]: IconCode,
   };
   @tracked isExpanded = false;
 

@@ -7,8 +7,8 @@ import Component from '@glimmer/component';
 import { TrackedArray } from 'tracked-built-ins';
 
 import { Button, IconButton } from '@cardstack/boxel-ui';
-import cn from '@cardstack/boxel-ui/helpers/cn';
-import { eq, gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import cn from '../../helpers/cn.ts';
+import { eq, gt } from '../../helpers/truth-helpers.ts';
 
 import type { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
 
@@ -18,6 +18,7 @@ import CardCatalogResultsHeader from './results-header';
 import type CardService from '../../services/card-service';
 
 import type { RealmCards } from '../card-catalog/modal';
+import EyeIcon from '@cardstack/boxel-ui/icons/eye';
 
 interface Signature {
   Args: {
@@ -68,7 +69,7 @@ export default class CardCatalog extends Component<Signature> {
                   />
                   <IconButton
                     class='hover-button preview'
-                    @icon='eye'
+                    @icon={{EyeIcon}}
                     aria-label='preview'
                   />
                 </li>

@@ -1,4 +1,3 @@
-import cssVar from '../../helpers/css-var.ts';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -6,10 +5,11 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import {
-  cssVariable,
   type CSSVariableInfo,
+  cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 
+import cssVar from '../../helpers/css-var.ts';
 import BoxelInput from './index.gts';
 
 export default class InputUsage extends Component {

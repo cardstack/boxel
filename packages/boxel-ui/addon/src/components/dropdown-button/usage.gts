@@ -4,8 +4,8 @@ import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import BoxelDropdownButton from './index';
 import { fn, array } from '@ember/helper';
-import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
-import menuDivider from '@cardstack/boxel-ui/helpers/menu-divider';
+import menuItem from '../../helpers/menu-item.ts';
+import menuDivider from '../..//helpers/menu-divider.ts';
 
 export default class DropdownButtonUsageComponent extends Component {
   @tracked label = 'Label';

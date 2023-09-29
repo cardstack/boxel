@@ -1,26 +1,26 @@
+import { on } from '@ember/modifier';
+import { scheduleOnce } from '@ember/runloop';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { PanelContext } from './index';
 import cssVars from '../../helpers/css-var.ts';
-import { scheduleOnce } from '@ember/runloop';
-import { on } from '@ember/modifier';
 
 interface Signature {
-  Element: HTMLDivElement;
   Args: {
     defaultWidth: string;
-    width?: string;
+    isLastPanel: (panelId: number) => boolean;
     minWidth?: string;
+    onResizeHandlerDblClick: (event: MouseEvent) => void;
+    onResizeHandlerMouseDown: (event: MouseEvent) => void;
+    panelContext: (panelId: number) => PanelContext | undefined;
     // The following arguments will be supplied by the parent ResizablePanelGroup that yields this component
     registerPanel: (context: PanelContext) => number;
-    panelContext: (panelId: number) => PanelContext | undefined;
-    isLastPanel: (panelId: number) => boolean;
-    onResizeHandlerMouseDown: (event: MouseEvent) => void;
-    onResizeHandlerDblClick: (event: MouseEvent) => void;
+    width?: string;
   };
   Blocks: {
     default: [];
   };
+  Element: HTMLDivElement;
 }
 
 export default class Panel extends Component<Signature> {

@@ -52,6 +52,11 @@ import { type StackItem } from './container';
 import OperatorModeOverlays from './overlays';
 
 import type CardService from '../../services/card-service';
+import ThreeDotsHorizontal from '@cardstack/boxel-ui/icons/three-dots-horizontal';
+import IconPencil from '@cardstack/boxel-ui/icons/icon-pencil';
+import IconX from '@cardstack/boxel-ui/icons/icon-x';
+import IconTrash from '@cardstack/boxel-ui/icons/icon-trash';
+import IconLink from '@cardstack/boxel-ui/icons/icon-link';
 
 interface Signature {
   Args: {
@@ -316,7 +321,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               <Tooltip @placement='top'>
                 <:trigger>
                   <IconButton
-                    @icon='icon-pencil'
+                    @icon={{IconPencil}}
                     @width='24px'
                     @height='24px'
                     class='icon-button'
@@ -333,7 +338,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               <Tooltip @placement='top'>
                 <:trigger>
                   <IconButton
-                    @icon='icon-pencil'
+                    @icon={{IconPencil}}
                     @width='24px'
                     @height='24px'
                     class='icon-save'
@@ -353,7 +358,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                   <Tooltip @placement='top'>
                     <:trigger>
                       <IconButton
-                        @icon='three-dots-horizontal'
+                        @icon={{ThreeDotsHorizontal}}
                         @width='20px'
                         @height='20px'
                         class='icon-button'
@@ -376,12 +381,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
                         (menuItem
                           'Copy Card URL'
                           (perform this.copyToClipboard)
-                          icon='icon-link'
+                          icon=IconLink
                         )
                         (menuItem
                           'Delete'
                           (fn @delete this.card)
-                          icon='icon-trash'
+                          icon=IconTrash
                           dangerous=true
                         )
                       )
@@ -389,12 +394,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
                         (menuItem
                           'Copy Card URL'
                           (perform this.copyToClipboard)
-                          icon='icon-link'
+                          icon=IconLink
                         )
                         (menuItem
                           'Delete'
                           (fn @delete this.card)
-                          icon='icon-trash'
+                          icon=IconTrash
                           dangerous=true
                         )
                       )
@@ -406,7 +411,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             <Tooltip @placement='top'>
               <:trigger>
                 <IconButton
-                  @icon='icon-x'
+                  @icon={{IconX}}
                   @width='20px'
                   @height='20px'
                   class='icon-button'

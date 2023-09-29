@@ -1,13 +1,16 @@
-import cssVars from '../../helpers/css-var.ts';
 import { array, fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import {
-  cssVariable,
   type CSSVariableInfo,
+  cssVariable,
 } from 'ember-freestyle/decorators/css-variable';
 
+import cssVars from '../../helpers/css-var.ts';
+import { ALL_ICON_COMPONENTS } from '../../icons/index.gts';
+import Profile from '../../icons/profile.gts';
+import type { Icon } from '../../icons/types.ts';
 import BoxelInput from '../input/index.gts';
 import BoxelInputValidationState from '../input/validation-state/index.gts';
 import BoxelFieldContainer from './index.gts';
@@ -19,12 +22,12 @@ export default class FieldUsage extends Component {
   @tracked vertical = false;
   @tracked centeredDisplay = false;
   @tracked horizontalLabelSize = 'default';
-  @tracked icon = 'profile';
+  @tracked icon = Profile;
   @tracked tag?: keyof HTMLElementTagNameMap;
 
   @tracked vertical2 = false;
   @tracked horizontalLabelSize2 = 'default';
-  @tracked icon2 = '';
+  @tracked icon2: Icon | undefined;
   @cssVariable({ cssClassName: 'boxel-field' })
   declare boxelFieldLabelAlign: CSSVariableInfo;
   @cssVariable({ cssClassName: 'boxel-field' })
@@ -70,11 +73,12 @@ export default class FieldUsage extends Component {
           @value={{this.label}}
           @onInput={{fn (mut this.label)}}
         />
-        <Args.String
+        <Args.Component
           @name='icon'
-          @description='icon name'
+          @description='icon component reference'
           @value={{this.icon}}
-          @onInput={{fn (mut this.icon)}}
+          @options={{ALL_ICON_COMPONENTS}}
+          @onChange={{fn (mut this.icon)}}
         />
         <Args.Bool
           @name='vertical'
@@ -149,11 +153,12 @@ export default class FieldUsage extends Component {
         </BoxelFieldContainer>
       </:example>
       <:api as |Args|>
-        <Args.String
+        <Args.Component
           @name='icon'
-          @description='icon name'
+          @description='icon component reference'
           @value={{this.icon2}}
-          @onInput={{fn (mut this.icon2)}}
+          @options={{ALL_ICON_COMPONENTS}}
+          @onChange={{fn (mut this.icon2)}}
         />
         <Args.Bool
           @name='vertical'

@@ -3,7 +3,7 @@ import dayjs from 'dayjs';
 
 import cn from '../../helpers/cn.ts';
 import { dayjsFormat } from '../../helpers/dayjs-format.ts';
-import { svgJar } from '../../helpers/svg-jar.ts';
+import Profile from '../../icons/profile.gts';
 
 interface Signature {
   Args: {
@@ -39,12 +39,11 @@ const Message: TemplateOnlyComponent<Signature> = <template>
             data-test-boxel-message-avatar
           />
         {{else}}
-          {{svgJar
-            'profile'
+          <Profile
             width='40px'
             height='40px'
-            aria-label=(if @name @name 'participant')
-          }}
+            aria-label={{if @name @name 'participant'}}
+          />
         {{/if}}
       {{/unless}}
       <h3 class='info'>

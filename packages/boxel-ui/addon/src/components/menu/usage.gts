@@ -5,6 +5,7 @@ import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
 import menuDivider from '../../helpers/menu-divider.ts';
 import menuItem from '../../helpers/menu-item.ts';
+import IconTrash from '../../icons/icon-trash.gts';
 import BoxelMenu from './index.gts';
 
 export default class MenuUsage extends Component {
@@ -29,7 +30,7 @@ export default class MenuUsage extends Component {
             (menuItem
               'Remove'
               (fn this.log 'Remove menu item clicked')
-              icon='icon-trash'
+              icon=IconTrash
               dangerous=true
             )
           }}
