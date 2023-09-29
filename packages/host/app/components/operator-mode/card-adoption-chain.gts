@@ -20,6 +20,7 @@ import LoaderService from '@cardstack/host/services/loader-service';
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
+  Element: HTMLDivElement;
   Args: {
     file: Ready;
     importedModule: Record<string, any>;
@@ -36,7 +37,7 @@ export default class CardAdoptionChain extends Component<Signature> {
       }
     </style>
 
-    <div class='card-adoption-chain'>
+    <div class='card-adoption-chain' ...attributes>
       {{#each this.cardInheritanceChain as |data|}}
         <CardSchemaEditor
           @card={{data.card}}
