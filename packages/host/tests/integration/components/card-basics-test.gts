@@ -915,6 +915,53 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test="title"]').containsText('First Post');
   });
 
+  test('render default atom view template', async function (assert) {
+    let { field, contains, FieldDef, StringField } = cardApi;
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
+        computeVia: function (this: Person) {
+          return this.firstName;
+        },
+      });
+    }
+    await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
+    let helloWorld = new Person({ firstName: 'Arthur' });
+
+    await renderCard(loader, helloWorld, 'atom');
+    assert.dom('[data-test-atom-view]').hasText('Arthur');
+  });
+
+  test('render user provided atom view template', async function (assert) {
+    let { field, contains, FieldDef, StringField, Component } = cardApi;
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
+        computeVia: function (this: Person) {
+          return this.firstName;
+        },
+      });
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <div class='name' data-test-template><@fields.firstName /></div>
+          <style>
+            .name {
+              color: red;
+              font-weight: bold;
+            }
+          </style>
+        </template>
+      };
+    }
+    await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
+    let helloWorld = new Person({ firstName: 'Arthur' });
+
+    await renderCard(loader, helloWorld, 'atom');
+    await this.pauseTest();
+    assert.dom('[data-test-template]').hasText('Arthur');
+    assert.dom('[data-test-template]').hasClass('name');
+  });
+
   test('render a containsMany primitive field', async function (assert) {
     let { field, contains, containsMany, CardDef, Component } = cardApi;
     let { default: StringField } = string;

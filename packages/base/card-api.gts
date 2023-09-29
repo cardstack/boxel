@@ -77,7 +77,7 @@ export type FieldsTypeFor<T extends BaseDef> = {
       ? FieldsTypeFor<T[Field]>
       : unknown);
 };
-export type Format = 'isolated' | 'embedded' | 'edit';
+export type Format = 'isolated' | 'embedded' | 'edit' | 'atom';
 export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
 
 type Setter = (value: any) => void;
@@ -1692,6 +1692,34 @@ class FieldDefEditTemplate extends GlimmerComponent<{
   </template>
 }
 
+class FielDefAtomViewTemplate extends GlimmerComponent<{
+  Args: {
+    model: FieldDef;
+    fields: Record<string, new () => GlimmerComponent>;
+  };
+}> {
+  <template>
+    <span class='atom-view-template' data-test-atom-view>
+      {{#each-in @fields as |key Field|}}
+        {{#if (eq key 'title')}}
+          <Field />
+        {{/if}}
+      {{/each-in}}
+    </span>
+    <style>
+      .atom-view-template {
+        display: inline-block;
+        font: 700 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+        border: var(--boxel-border);
+        padding: 4px var(--boxel-sp-lg);
+        background-color: var(--boxel-light);
+        border-radius: var(--boxel-border-radius);
+      }
+    </style>
+  </template>
+}
+
 export class Component<
   CardT extends BaseDefConstructor,
 > extends GlimmerComponent<SignatureFor<CardT>> {}
@@ -1722,6 +1750,7 @@ export class FieldDef extends BaseDef {
     </template>
   };
   static edit: BaseDefComponent = FieldDefEditTemplate;
+  static atom: BaseDefComponent = FielDefAtomViewTemplate;
 }
 
 class IDField extends FieldDef {
@@ -1756,6 +1785,11 @@ export class StringField extends FieldDef {
   static edit = class Edit extends Component<typeof this> {
     <template>
       <BoxelInput @value={{@model}} @onInput={{@set}} />
+    </template>
+  };
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      {{@model}}
     </template>
   };
 }

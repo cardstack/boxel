@@ -139,6 +139,8 @@ function defaultFieldFormat(format: Format): Format {
     case 'isolated':
     case 'embedded':
       return 'embedded';
+    case 'atom':
+      return 'atom';
   }
 }
 
