@@ -556,17 +556,19 @@ export default class OperatorModeStateService extends Service {
         state.isLoading = true;
 
         try {
-          let realmURL = await this.cardService.getRealmURLFor(
-            this.state.codePath,
-          );
+          let realmURL = (
+            await this.realmInfoService.fetchRealmInfo({
+              fileURL: this.state.codePath?.href,
+            })
+          ).id;
 
           if (realmURL) {
-            this.cachedRealmURL = realmURL;
+            this.cachedRealmURL = new URL(realmURL);
 
             // FIXME can this be moved to toggleOpenDir?
-            if (!this.openDirs.has(realmURL.href)) {
+            if (!this.openDirs.has(realmURL)) {
               let newOpenDirs = new TrackedArray<string>();
-              this.openDirs.set(realmURL.href, newOpenDirs);
+              this.openDirs.set(realmURL, newOpenDirs);
             }
           }
 

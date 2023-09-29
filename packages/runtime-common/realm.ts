@@ -73,6 +73,7 @@ import type { LoaderType } from 'https://cardstack.com/base/card-api';
 import scopedCSSTransform from 'glimmer-scoped-css/ast-transform';
 
 export type RealmInfo = {
+  id: string;
   name: string;
   backgroundURL: string | null;
   iconURL: string | null;
