@@ -15,7 +15,11 @@ import { or } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import { type RealmInfo } from '@cardstack/runtime-common';
 
-import { hasExecutableExtension, getPlural } from '@cardstack/runtime-common';
+import {
+  hasExecutableExtension,
+  getPlural,
+  isCardDocument,
+} from '@cardstack/runtime-common';
 
 import { type Ready } from '@cardstack/host/resources/file';
 
@@ -80,7 +84,7 @@ export default class DetailPanel extends Component<Signature> {
 
   get isCardInstance() {
     return (
-      this.args.readyFile.url.endsWith('.json') &&
+      isCardDocument(this.args.readyFile.content) &&
       this.args.cardInstance !== undefined
     );
   }
