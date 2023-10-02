@@ -47,12 +47,6 @@ export default class CardURLBar extends Component<Signature> {
             </div>
             <span>in {{realmInfo.name}}</span>
           </:ready>
-          <:error>
-            <div class='realm-icon'>
-              <img src='' alt='realm-icon' />
-            </div>
-            <span>in Unknown Workspace</span>
-          </:error>
         </RealmInfoProvider>
       </div>
       <div class='input'>
