@@ -421,7 +421,7 @@ export default class CodeMode extends Component<Signature> {
   @use private importedModule = resource(() => {
     if (isReady(this.openFile.current)) {
       let f: Ready = this.openFile.current;
-      if (isCardDocument(f.content)) {
+      if (f.url.endsWith('.json') && isCardDocument(f.content)) {
         let ref = identifyCard(this.card?.constructor);
         if (ref !== undefined) {
           return importResource(this, () => moduleFrom(ref as CodeRef));

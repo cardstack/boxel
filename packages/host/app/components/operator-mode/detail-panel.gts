@@ -84,6 +84,7 @@ export default class DetailPanel extends Component<Signature> {
 
   get isCardInstance() {
     return (
+      this.isJSON &&
       isCardDocument(this.args.readyFile.content) &&
       this.args.cardInstance !== undefined
     );
