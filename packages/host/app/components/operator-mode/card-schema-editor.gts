@@ -15,6 +15,7 @@ import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
+import { gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 interface Signature {
   Args: {
@@ -103,28 +104,45 @@ export default class CardSchemaEditor extends Component<Signature> {
         height: 20px;
         width: 20px;
       }
+
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .total-fields {
+        font: 600 var(--boxel-font);
+      }
     </style>
 
     <div
       class='schema-editor-container'
       data-test-card-schema={{@cardType.displayName}}
     >
-      <div class='pill'>
-        <div class='realm-icon'>
-          <RealmInfoProvider @fileURL={{@cardType.module}}>
-            <:ready as |realmInfo|>
-              <img
-                src={{realmInfo.iconURL}}
-                alt='Realm icon'
-                data-test-realm-icon-url={{realmInfo.iconURL}}
-              />
-            </:ready>
-          </RealmInfoProvider>
+      <div class='header'>
+        <div class='pill'>
+          <div class='realm-icon'>
+            <RealmInfoProvider @fileURL={{@cardType.module}}>
+              <:ready as |realmInfo|>
+                <img
+                  src={{realmInfo.iconURL}}
+                  alt='Realm icon'
+                  data-test-realm-icon-url={{realmInfo.iconURL}}
+                />
+              </:ready>
+            </RealmInfoProvider>
+          </div>
+          <div>
+            <span>
+              {{@cardType.displayName}}
+            </span>
+          </div>
         </div>
-        <div>
-          <span>
-            {{@cardType.displayName}}
-          </span>
+        <div data-test-total-fields>
+          <span class='total-fields'>+
+            {{this.totalOwnField}}</span>
+          {{if (gt this.totalOwnField 1) 'Fields' 'Field'}}
         </div>
       </div>
 
@@ -182,6 +200,18 @@ export default class CardSchemaEditor extends Component<Signature> {
     return Object.keys(
       Object.getOwnPropertyDescriptors(this.args.card.prototype),
     ).includes(fieldName);
+  }
+
+  @action
+  get totalOwnField(): number {
+    let total = 0;
+    for (let field of this.args.cardType.fields) {
+      if (this.isOwnField(field.name)) {
+        total++;
+      }
+    }
+
+    return total;
   }
 
   fieldCardDisplayName(card: Type | CodeRef): string {
