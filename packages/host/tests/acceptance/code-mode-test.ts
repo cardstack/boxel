@@ -76,6 +76,29 @@ const personCardSource = `
   }
 `;
 
+const employeeCardSource = `
+  import {
+    contains,
+    field,
+    Component,
+  } from 'https://cardstack.com/base/card-api';
+  import StringCard from 'https://cardstack.com/base/string';
+  import { Person } from './person';
+
+  export class Employee extends Person {
+    static displayName = 'Employee';
+    @field department = contains(StringCard);
+
+    static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <@fields.firstName /> <@fields.lastName />
+
+        Department: <@fields.department />
+      </template>
+    };
+  }
+`;
+
 module('Acceptance | code mode tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
@@ -98,6 +121,7 @@ module('Acceptance | code mode tests', function (hooks) {
       'index.gts': indexCardSource,
       'pet-person.gts': personCardSource,
       'person.gts': personCardSource,
+      'employee.gts': employeeCardSource,
       'person-entry.json': {
         data: {
           type: 'card',
@@ -1018,6 +1042,51 @@ module('Acceptance | code mode tests', function (hooks) {
         `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-realm-icon-url]`,
       )
       .hasAttribute('data-test-realm-icon-url', realm2IconUrl);
+  });
+
+  test('card type and fields are clickable and navigate to the correct file', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}employee.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor(
+      '[data-test-card-schema="Employee"] [data-test-card-schema-navigational-button]',
+    );
+
+    // Click on card definition button
+    await click(
+      '[data-test-card-schema="Employee"] [data-test-card-schema-navigational-button]',
+    );
+
+    await waitFor('[data-test-current-module-name]');
+
+    assert.dom('[data-test-current-module-name]').hasText('employee.gts');
+
+    // Go back so that we can test clicking on a field definition button
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor(
+      '[data-test-card-schema="Employee"] [data-test-field-name="department"] [data-test-card-display-name="String"]',
+    );
+
+    await click(
+      '[data-test-card-schema="Employee"] [data-test-field-name="department"] [data-test-card-display-name="String"]',
+    );
+
+    await waitFor('[data-test-current-module-name]');
+    assert.dom('[data-test-current-module-name]').hasText('string.ts');
   });
 
   test('code mode handles binary files', async function (assert) {
