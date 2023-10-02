@@ -983,7 +983,7 @@ module('Acceptance | code mode tests', function (hooks) {
 
     assert
       .dom('[data-test-card-schema="Base"] [data-test-total-fields]')
-      .containsText('+ 0 Field');
+      .containsText('No Fields');
     assert.dom(`[data-test-card-schema="Base"]`).exists();
 
     // Check that realm icons in the schema editor are correct (card and its fields)
