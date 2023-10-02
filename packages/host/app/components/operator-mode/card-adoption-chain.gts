@@ -33,14 +33,11 @@ export default class CardAdoptionChain extends Component<Signature> {
       .card-adoption-chain {
         height: 100%;
         background-color: var(--boxel-200);
-        padding: var(--boxel-sp);
         overflow-y: auto;
       }
     </style>
 
     <div class='card-adoption-chain'>
-      <h3>Schema Editor</h3>
-
       {{#each this.cardInheritanceChain as |data|}}
         <CardSchemaEditor
           @card={{data.card}}
