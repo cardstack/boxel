@@ -57,8 +57,8 @@
     "@percy/ember": "^4.2.0",
     "@simple-dom/interface": "^1.4.0",
     "@simple-dom/serializer": "^1.4.0",
-    "@types/filesize": "^5.0.0",
     "@simple-dom/void-map": "^1.4.0",
+    "@types/filesize": "^5.0.0",
     "@types/flat": "^5.0.2",
     "@types/htmlbars-inline-precompile": "^3.0.0",
     "@types/indefinite": "^2.3.1",
@@ -68,6 +68,7 @@
     "@types/qs": "^6.9.7",
     "@types/qunit": "^2.11.3",
     "@types/rsvp": "^4.0.4",
+    "@types/uuid": "^9.0.4",
     "@typescript-eslint/eslint-plugin": "^5.17.0",
     "@typescript-eslint/parser": "^5.17.0",
     "broccoli-asset-rev": "^3.0.0",
@@ -152,6 +153,7 @@
     "testem-multi-reporter": "^1.2.0",
     "tracked-built-ins": "^3.1.1",
     "typescript": "^5.1.6",
+    "uuid": "^9.0.1",
     "webpack": "^5.78.0"
   },
   "peerDependencies": {
