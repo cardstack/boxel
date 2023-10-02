@@ -202,7 +202,6 @@ export default class CardSchemaEditor extends Component<Signature> {
     ).includes(fieldName);
   }
 
-  @action
   get totalOwnField(): number {
     let total = 0;
     for (let field of this.args.cardType.fields) {
