@@ -916,9 +916,12 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('render default atom view template', async function (assert) {
-    let { field, contains, FieldDef, StringField } = cardApi;
+    let { field, contains, FieldDef } = cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
     class Person extends FieldDef {
       @field firstName = contains(StringField);
+      @field age = contains(NumberField);
       @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
@@ -926,16 +929,20 @@ module('Integration | card-basics', function (hooks) {
       });
     }
     await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
-    let helloWorld = new Person({ firstName: 'Arthur' });
+    let helloWorld = new Person({ firstName: 'Arthur', age: 10 });
 
     await renderCard(loader, helloWorld, 'atom');
     assert.dom('[data-test-atom-view]').hasText('Arthur');
+    assert.dom('[data-test-atom-view]').doesNotContainText('10');
   });
 
   test('render user provided atom view template', async function (assert) {
-    let { field, contains, FieldDef, StringField, Component } = cardApi;
+    let { field, contains, FieldDef, Component } = cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
     class Person extends FieldDef {
       @field firstName = contains(StringField);
+      @field age = contains(NumberField);
       @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
@@ -943,7 +950,10 @@ module('Integration | card-basics', function (hooks) {
       });
       static atom = class Atom extends Component<typeof this> {
         <template>
-          <div class='name' data-test-template><@fields.firstName /></div>
+          <div class='name' data-test-template>
+            <@fields.firstName />
+            <@fields.age />
+          </div>
           <style>
             .name {
               color: red;
@@ -954,10 +964,10 @@ module('Integration | card-basics', function (hooks) {
       };
     }
     await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
-    let helloWorld = new Person({ firstName: 'Arthur' });
+    let helloWorld = new Person({ firstName: 'Arthur', age: 10 });
 
     await renderCard(loader, helloWorld, 'atom');
-    assert.dom('[data-test-template]').hasText('Arthur');
+    assert.dom('[data-test-template]').hasText('Arthur 10');
     assert.dom('[data-test-template]').hasClass('name');
   });
 
