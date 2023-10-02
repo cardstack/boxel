@@ -921,18 +921,23 @@ module('Integration | card-basics', function (hooks) {
     let { default: NumberField } = number;
     class Person extends FieldDef {
       @field firstName = contains(StringField);
+      @field lastName = contains(StringField);
       @field age = contains(NumberField);
       @field title = contains(StringField, {
         computeVia: function (this: Person) {
-          return this.firstName;
+          return `${this.firstName} ${this.lastName}`;
         },
       });
     }
     await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
-    let helloWorld = new Person({ firstName: 'Arthur', age: 10 });
+    let helloWorld = new Person({
+      firstName: 'Arthur',
+      lastName: 'M',
+      age: 10,
+    });
 
     await renderCard(loader, helloWorld, 'atom');
-    assert.dom('[data-test-atom-view]').hasText('Arthur');
+    assert.dom('[data-test-atom-view]').hasText('Arthur M');
     assert.dom('[data-test-atom-view]').doesNotContainText('10');
   });
 
@@ -2050,6 +2055,92 @@ module('Integration | card-basics', function (hooks) {
         '[data-test-field="guest2"] [data-test-plural-view="containsMany"] [data-test-plural-view-item]',
       )
       .doesNotExist();
+  });
+
+  test('linksToMany field items in a compound field render in atom layout', async function (assert) {
+    let { field, contains, linksToMany, CardDef, FieldDef, Component } =
+      cardApi;
+    let { default: StringField } = string;
+
+    class Country extends CardDef {
+      @field countryName = contains(StringField);
+      @field flag = contains(StringField);
+      @field title = contains(StringField, {
+        computeVia: function (this: Country) {
+          return `${this.flag} ${this.countryName}`;
+        },
+      });
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <span style='color: purple'><@fields.countryName /></span>
+        </template>
+      };
+    }
+
+    class Traveler extends FieldDef {
+      @field travelerName = contains(StringField);
+      @field countriesVisited = linksToMany(Country);
+    }
+
+    class ContactCard extends CardDef {
+      @field name = contains(StringField);
+      @field traveler = contains(Traveler);
+      @field favoritePlaces = linksToMany(Country);
+    }
+
+    await shimModule(
+      `${testRealmURL}test-cards`,
+      { Country, ContactCard },
+      loader,
+    );
+
+    let us = new Country({ countryName: 'United States', flag: '🇺🇸' });
+    let canada = new Country({ countryName: 'Canada', flag: '🇨🇦' });
+    let brazil = new Country({ countryName: 'Brazil', flag: '🇧🇷' });
+
+    await saveCard(us, `${testRealmURL}Country/us`, loader);
+    await saveCard(canada, `${testRealmURL}Country/canada`, loader);
+    await saveCard(brazil, `${testRealmURL}Country/brazil`, loader);
+
+    let card = new ContactCard({
+      name: 'Marcelius Wilde',
+      traveler: new Traveler({
+        travelerName: 'Mama Leone',
+        countriesVisited: [us, canada, brazil],
+      }),
+      favoritePlaces: [brazil, us, canada],
+    });
+
+    await renderCard(loader, card, 'edit');
+    await percySnapshot(assert);
+
+    assert.dom('[data-test-field="name"] input').hasValue('Marcelius Wilde');
+    assert.dom('[data-test-field="travelerName"] input').hasValue('Mama Leone');
+    assert
+      .dom(
+        '[data-test-field="countriesVisited"] [data-test-plural-view="linksToMany"] [data-test-plural-view-item]',
+      )
+      .exists({ count: 3 });
+    assert
+      .dom(
+        '[data-test-plural-view-format="atom"] [data-test-plural-view-item="0"]',
+      )
+      .hasText('🇺🇸 United States');
+    assert
+      .dom(
+        '[data-test-plural-view-format="atom"] [data-test-plural-view-item="1"]',
+      )
+      .hasText('🇨🇦 Canada');
+    assert
+      .dom('[data-test-field="countriesVisited"] [data-test-remove-card]')
+      .doesNotExist();
+
+    assert
+      .dom('[data-test-field="favoritePlaces"] [data-test-remove-card]')
+      .exists();
+    assert
+      .dom('[data-test-field="favoritePlaces"] [data-test-add-new]')
+      .exists();
   });
 
   test('can get a queryable value for a field', async function (assert) {

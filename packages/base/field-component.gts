@@ -13,6 +13,7 @@ import {
 import { getField } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import Modifier from 'ember-modifier';
 
 const componentCache = new WeakMap<
@@ -108,6 +109,13 @@ export function getBoxComponent(
       .edit-card {
         padding: var(--boxel-sp-xl) var(--boxel-sp-xxl) var(--boxel-sp-xl)
           var(--boxel-sp-xl);
+      }
+
+      .atom-card {
+        font: 700 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+        padding: 4px var(--boxel-sp-sm);
+        background-color: var(--boxel-light);
       }
     </style>
   </template>;
@@ -231,8 +239,10 @@ export function getPluralViewComponent(
       <div
         class='plural-field
           {{field.fieldType}}-field
+          {{format}}-field
           {{unless model.children.length "empty"}}'
         data-test-plural-view={{field.fieldType}}
+        data-test-plural-view-format={{format}}
       >
         {{#each model.children as |child i|}}
           {{#let
@@ -248,8 +258,15 @@ export function getPluralViewComponent(
         {{/each}}
       </div>
       <style>
-        .linksToMany-field > div + div {
+        .linksToMany-field:not(.atom-field) > div + div {
           margin-top: var(--boxel-sp);
+        }
+        .atom-field {
+          display: flex;
+          gap: var(--boxel-sp-sm);
+          padding: var(--boxel-sp-sm);
+          border: var(--boxel-border);
+          border-radius: var(--boxel-border-radius);
         }
       </style>
     </template>

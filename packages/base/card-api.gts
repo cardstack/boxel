@@ -1380,11 +1380,19 @@ class LinksToMany<FieldT extends CardDefConstructor>
       fieldName,
       useIndexBasedKey in this.card,
     ) as unknown as Box<CardDef[]>;
+    let renderFormat: Format | undefined = undefined;
+    if (
+      format === 'edit' &&
+      'isFieldDef' in model.value.constructor &&
+      model.value.constructor.isFieldDef
+    ) {
+      renderFormat = 'atom';
+    }
     return getLinksToManyComponent({
       model,
       arrayField,
       field: this,
-      format,
+      format: renderFormat ?? format,
       cardTypeFor,
       context,
     });
@@ -1652,6 +1660,21 @@ class DefaultCardDefTemplate extends GlimmerComponent<{
   </template>
 }
 
+class DefaultCardDefAtomView extends GlimmerComponent<{
+  Args: {
+    model: CardDef;
+    fields: Record<string, new () => GlimmerComponent>;
+  };
+}> {
+  <template>
+    {{#each-in @fields as |key Field|}}
+      {{#if (eq key 'title')}}
+        <Field />
+      {{/if}}
+    {{/each-in}}
+  </template>
+}
+
 class FieldDefEditTemplate extends GlimmerComponent<{
   Args: {
     model: FieldDef;
@@ -1829,6 +1852,7 @@ export class CardDef extends BaseDef {
   };
   static isolated: BaseDefComponent = DefaultCardDefTemplate;
   static edit: BaseDefComponent = DefaultCardDefTemplate;
+  static atom: BaseDefComponent = DefaultCardDefAtomView;
 }
 
 export type BaseDefConstructor = typeof BaseDef;
