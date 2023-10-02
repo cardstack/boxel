@@ -58,12 +58,13 @@ export default class NumberField extends FieldDef {
   ): Promise<BaseInstanceType<T>> {
     return _deserialize(number).value as BaseInstanceType<T>;
   }
-
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       {{@model}}
     </template>
   };
+
+  static atom = this.embedded;
 
   static edit = class Edit extends Component<typeof this> {
     <template>

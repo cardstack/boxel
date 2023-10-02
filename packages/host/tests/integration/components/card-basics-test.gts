@@ -957,7 +957,35 @@ module('Integration | card-basics', function (hooks) {
     let helloWorld = new Person({ firstName: 'Arthur' });
 
     await renderCard(loader, helloWorld, 'atom');
-    await this.pauseTest();
+    assert.dom('[data-test-template]').hasText('Arthur');
+    assert.dom('[data-test-template]').hasClass('name');
+  });
+
+  test('render user provided atom view template', async function (assert) {
+    let { field, contains, FieldDef, StringField, Component } = cardApi;
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
+        computeVia: function (this: Person) {
+          return this.firstName;
+        },
+      });
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <div class='name' data-test-template><@fields.firstName /></div>
+          <style>
+            .name {
+              color: red;
+              font-weight: bold;
+            }
+          </style>
+        </template>
+      };
+    }
+    await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
+    let helloWorld = new Person({ firstName: 'Arthur' });
+
+    await renderCard(loader, helloWorld, 'atom');
     assert.dom('[data-test-template]').hasText('Arthur');
     assert.dom('[data-test-template]').hasClass('name');
   });
@@ -1896,7 +1924,120 @@ module('Integration | card-basics', function (hooks) {
       .doesNotExist('edit');
     assert
       .dom(
+        '[data-test-field="bannedGuest"] [data-test-plural-view="containsMany"]',
+      )
+      .hasClass('empty');
+    assert
+      .dom(
         '[data-test-field="bannedGuest"] [data-test-plural-view="containsMany"] [data-test-plural-view-item]',
+      )
+      .doesNotExist();
+  });
+
+  test('composite containsMany field inside another field renders in atom layout', async function (assert) {
+    let { field, contains, containsMany, CardDef, FieldDef, Component } =
+      cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
+
+    class PersonField extends FieldDef {
+      @field fullName = contains(StringField);
+      @field guestCount = contains(NumberField);
+      @field title = contains(StringField, {
+        computeVia: function (this: PersonField) {
+          return this.fullName;
+        },
+      });
+
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <@fields.fullName />
+          {{#if @model.guestCount}}
+            +<@fields.guestCount />
+          {{/if}}
+        </template>
+      };
+    }
+
+    class Guest extends FieldDef {
+      @field name = contains(StringField);
+      @field additionalNames = containsMany(PersonField);
+    }
+
+    class ContactCard extends CardDef {
+      static displayName = 'Contact';
+      @field name = contains(StringField);
+      @field guest = contains(Guest);
+      @field guest2 = contains(Guest);
+
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <@fields.name />
+          <@fields.guest />
+          <@fields.guest2 />
+        </template>
+      };
+    }
+
+    let card = new ContactCard({
+      name: 'Marcelius Wilde',
+      guest: new Guest({
+        name: 'Mama Leone',
+        additionalNames: [
+          new PersonField({
+            fullName: 'Felicity Shaw',
+            guestCount: 1,
+          }),
+          new PersonField({
+            fullName: 'Grant Kingston',
+            guestCount: 1,
+          }),
+          new PersonField({
+            fullName: 'Valerie Storm',
+            guestCount: 2,
+          }),
+        ],
+      }),
+      guest2: new Guest({
+        name: 'Papa Leone',
+      }),
+    });
+
+    await renderCard(loader, card, 'edit');
+    await percySnapshot(assert);
+
+    assert
+      .dom('[data-test-field="guest"] [data-test-field="name"] input')
+      .hasValue('Mama Leone');
+    assert
+      .dom(
+        '[data-test-field="guest"] [data-test-contains-many="additionalNames"]',
+      )
+      .doesNotExist('edit template is not rendered');
+    assert
+      .dom(
+        '[data-test-field="guest"] [data-test-plural-view="containsMany"] [data-test-plural-view-item]',
+      )
+      .exists({ count: 3 });
+    assert
+      .dom('[data-test-field="guest"] [data-test-plural-view-item="0"]')
+      .containsText('Felicity Shaw + 1');
+    assert
+      .dom('[data-test-field="guest"] [data-test-plural-view-item="1"]')
+      .containsText('Grant Kingston + 1');
+    assert
+      .dom('[data-test-field="guest"] [data-test-plural-view-item="2"]')
+      .containsText('Valerie Storm + 2');
+
+    assert
+      .dom('[data-test-field="guest2"] [data-test-field="name"] input')
+      .hasValue('Papa Leone');
+    assert
+      .dom('[data-test-field="guest2"] [data-test-plural-view="containsMany"]')
+      .hasClass('empty');
+    assert
+      .dom(
+        '[data-test-field="guest2"] [data-test-plural-view="containsMany"] [data-test-plural-view-item]',
       )
       .doesNotExist();
   });

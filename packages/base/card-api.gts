@@ -572,7 +572,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       'isFieldDef' in model.value.constructor &&
       model.value.constructor.isFieldDef
     ) {
-      renderFormat = 'embedded';
+      renderFormat = 'atom';
     }
 
     return getContainsManyComponent({
@@ -1692,7 +1692,7 @@ class FieldDefEditTemplate extends GlimmerComponent<{
   </template>
 }
 
-class FielDefAtomViewTemplate extends GlimmerComponent<{
+class FieldDefDefaultAtomView extends GlimmerComponent<{
   Args: {
     model: FieldDef;
     fields: Record<string, new () => GlimmerComponent>;
@@ -1750,7 +1750,7 @@ export class FieldDef extends BaseDef {
     </template>
   };
   static edit: BaseDefComponent = FieldDefEditTemplate;
-  static atom: BaseDefComponent = FielDefAtomViewTemplate;
+  static atom: BaseDefComponent = FieldDefDefaultAtomView;
 }
 
 class IDField extends FieldDef {
@@ -1787,11 +1787,7 @@ export class StringField extends FieldDef {
       <BoxelInput @value={{@model}} @onInput={{@set}} />
     </template>
   };
-  static atom = class Atom extends Component<typeof this> {
-    <template>
-      {{@model}}
-    </template>
-  };
+  static atom = this.embedded;
 }
 
 export class CardDef extends BaseDef {
