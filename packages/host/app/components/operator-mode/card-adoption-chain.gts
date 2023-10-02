@@ -11,8 +11,8 @@ import { loadCard } from '@cardstack/runtime-common/code-ref';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import CardSchemaEditor from '@cardstack/host/components/operator-mode/card-schema-editor';
-import { getCardType } from '@cardstack/host/resources/card-type';
-import { type Type } from '@cardstack/host/resources/card-type';
+
+import { type CardType, type Type } from '@cardstack/host/resources/card-type';
 import type { Ready } from '@cardstack/host/resources/file';
 
 import LoaderService from '@cardstack/host/services/loader-service';
@@ -22,7 +22,8 @@ import type { BaseDef } from 'https://cardstack.com/base/card-api';
 interface Signature {
   Args: {
     file: Ready;
-    importedModule: Record<string, any>;
+    cardTypeResource?: CardType;
+    card: typeof BaseDef;
   };
 }
 
@@ -66,17 +67,13 @@ export default class CardAdoptionChain extends Component<Signature> {
 
   loadInheritanceChain = restartableTask(async () => {
     let fileUrl = this.args.file.url;
-    let module = this.args.importedModule;
+    let { card, cardTypeResource } = this.args;
 
-    let card = cardsFromModule(module)[0]; // TODO: this must come from the export selection in the left column
-    let cardTypeResource = getCardType(this, () => card);
-    await cardTypeResource.ready;
+    await cardTypeResource!.ready;
+    let cardType = cardTypeResource!.type;
 
-    let cardType = cardTypeResource.type;
     if (!cardType) {
-      throw new Error(
-        `Bug: should never get here because we waited for it to be ready`,
-      );
+      throw new Error('Card type not found');
     }
 
     // Chain goes from most specific to least specific
@@ -103,13 +100,4 @@ export default class CardAdoptionChain extends Component<Signature> {
 
     this.cardInheritanceChain = cardInheritanceChain;
   });
-}
-
-function cardsFromModule(
-  module: Record<string, any>,
-  _never?: never,
-): (typeof BaseDef)[] {
-  return Object.values(module).filter(
-    (maybeCard) => typeof maybeCard === 'function' && 'baseDef' in maybeCard,
-  );
 }
