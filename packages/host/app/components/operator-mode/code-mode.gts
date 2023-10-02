@@ -24,9 +24,8 @@ import {
 } from '@cardstack/boxel-ui';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { and } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { eq, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import {
   type RealmInfo,
@@ -40,6 +39,13 @@ import {
   moduleFrom,
   hasExecutableExtension,
 } from '@cardstack/runtime-common';
+import {
+  ModuleSyntax,
+  PossibleCardClass,
+  ExportedClass,
+  ExportedFunction,
+} from '@cardstack/runtime-common/module-syntax';
+import { isCardDef, isFieldDef } from '@cardstack/runtime-common/code-ref';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import config from '@cardstack/host/config/environment';
@@ -126,17 +132,56 @@ const defaultPanelWidths: PanelWidths = {
   emptyCodeModePanel: '80%',
 };
 
-interface ExportedCard {
-  cardType: CardType;
-  card: typeof BaseDef;
-}
-
 const cardEditorSaveTimes = new Map<string, number>();
 
-// Element
-// - exported / unexported card or field
-// - exported class or function
-export type ElementInFile = ExportedCard; // can add more types here
+export type Object = CardOrFieldObject | FunctionOrClassObject | UnknownObject;
+export type CardOrFieldObject = CardOrField & Partial<CardElement>;
+export type FunctionOrClassObject =
+  | ExportedFunctionElement
+  | ExportedClassElement;
+export type UnknownObject = UnknownElement;
+
+// This currently represents the exported card or field from a module
+// We should make this to consider unexported card or field from a module
+export interface CardOrField {
+  cardType: CardType;
+  cardOrField: typeof BaseDef;
+}
+
+//This represents the type inside the file
+export enum ElementType {
+  Card = 'card',
+  Field = 'field',
+  ExportedFunction = 'function',
+  ExportedClass = 'class',
+  Unknown = 'unknown',
+}
+// an element should be (an item of focus within a module)
+// - exported function or class
+// - exported card or field
+// - unexported card or field
+interface FieldElement {
+  type: ElementType.Field;
+  value: PossibleCardClass;
+}
+interface CardElement {
+  type: ElementType.Card;
+  value: PossibleCardClass;
+}
+
+interface ExportedFunctionElement {
+  type: ElementType.ExportedFunction;
+  value: ExportedFunction;
+}
+
+interface ExportedClassElement {
+  type: ElementType.ExportedClass;
+  value: ExportedClass;
+}
+interface UnknownElement {
+  type: ElementType.Unknown;
+  value: any;
+}
 
 export default class CodeMode extends Component<Signature> {
   @service declare monacoService: MonacoService;
@@ -151,7 +196,7 @@ export default class CodeMode extends Component<Signature> {
   @tracked private card: CardDef | undefined;
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
-  @tracked private selectedElement: ElementInFile | undefined;
+  @tracked private selectedElement: Object | undefined;
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
@@ -342,6 +387,7 @@ export default class CodeMode extends Component<Signature> {
     return state;
   });
 
+  // this should only be for gts files
   @use private elements = resource(({ on }) => {
     on.cleanup(() => {
       this.selectedElement = undefined;
@@ -357,7 +403,7 @@ export default class CodeMode extends Component<Signature> {
 
     const state: {
       isLoading: boolean;
-      value: ElementInFile[] | null;
+      value: Object[] | null;
       error: Error | undefined;
       load: () => Promise<void>;
     } = new TrackedObject({
@@ -371,16 +417,57 @@ export default class CodeMode extends Component<Signature> {
           return;
         }
         try {
-          await this.importedModule.loaded;
-          let module = this.importedModule?.module;
-          if (module) {
-            let cards = cardsOrFieldsFromModule(module);
-            let elements: ElementInFile[] = cards.map((card) => {
-              return {
-                cardType: getCardType(this, () => card),
-                card: card,
-              };
-            });
+          if (isReady(this.openFile.current) && this.importedModule?.module) {
+            let module = this.importedModule?.module;
+            let cardsOrFields = cardsOrFieldsFromModule(module);
+            let elements: Object[] = [];
+            if (
+              this.openFile.current.url.endsWith('.json') &&
+              isCardDocumentString(this.openFile.current.content)
+            ) {
+              let cardOrField = cardsOrFields[0];
+              console.log(cardOrField);
+              elements = [
+                {
+                  cardType: getCardType(
+                    this,
+                    () => cardOrField as typeof BaseDef,
+                  ),
+                  cardOrField,
+                } as CardOrFieldObject,
+              ];
+              console.log(elements);
+            } else {
+              //gts case
+              await this.importedModule.loaded;
+              let moduleSyntax = new ModuleSyntax(
+                this.openFile.current.content,
+              );
+
+              let values = moduleSyntax.elements();
+              elements = values.map((value) => {
+                let cardOrField = cardsOrFields.find(
+                  (c) => c.name === value.localName,
+                );
+                if (cardOrField !== undefined) {
+                  return {
+                    type: isFieldDef(cardOrField)
+                      ? ElementType.Field
+                      : isCardDef(cardOrField)
+                      ? ElementType.Card
+                      : ElementType.Unknown,
+                    value,
+                    cardType: getCardType(
+                      this,
+                      () => cardOrField as typeof BaseDef,
+                    ),
+                    cardOrField,
+                  } as CardOrFieldObject;
+                } else {
+                  return { value, type: ElementType.Unknown } as UnknownObject;
+                }
+              });
+            }
             state.value = elements;
           }
         } catch (error: any) {
@@ -523,7 +610,7 @@ export default class CodeMode extends Component<Signature> {
   }
 
   @action
-  private selectElementInFile(el: ElementInFile) {
+  private selectElementInFile(el: Object) {
     this.selectedElement = el;
   }
 
@@ -893,10 +980,10 @@ export default class CodeMode extends Component<Signature> {
                     @realmIconURL={{this.realmIconURL}}
                     data-test-card-resource-loaded
                   />
-                {{else if this.selectedElementInFile}}
+                {{else if this.selectedElementInFile.cardOrField}}
                   <SchemaEditorColumn
                     @file={{this.readyFile}}
-                    @card={{this.selectedElementInFile.card}}
+                    @card={{this.selectedElementInFile.cardOrField}}
                     @cardTypeResource={{this.selectedElementInFile.cardType}}
                   />
                 {{else if this.schemaEditorIncompatible}}

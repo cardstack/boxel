@@ -6,6 +6,8 @@ import {
   PossibleCardClass,
   ClassReference,
   ExternalReference,
+  ExportedClass,
+  ExportedFunction,
 } from './schema-analysis-plugin';
 import {
   removeFieldPlugin,
@@ -28,10 +30,18 @@ import type { types as t } from '@babel/core';
 import type { NodePath } from '@babel/traverse';
 import type { FieldType } from 'https://cardstack.com/base/card-api';
 
-export type { ClassReference, ExternalReference };
+export type {
+  ClassReference,
+  ExternalReference,
+  PossibleCardClass,
+  ExportedClass,
+  ExportedFunction,
+};
+import { unionWith } from 'lodash';
 
 export class ModuleSyntax {
   declare possibleCards: PossibleCardClass[];
+  declare exports: (ExportedClass | ExportedFunction)[];
   private declare ast: t.File;
 
   constructor(src: string) {
@@ -41,10 +51,11 @@ export class ModuleSyntax {
   private analyze(src: string) {
     let moduleAnalysis: Options = {
       possibleCards: [],
+      exports: [],
     };
     let preprocessedSrc = preprocessTemplateTags(src);
 
-    this.ast = Babel.transformSync(preprocessedSrc, {
+    let r = Babel.transformSync(preprocessedSrc, {
       code: false,
       ast: true,
       plugins: [
@@ -53,8 +64,28 @@ export class ModuleSyntax {
         classPropertiesPlugin,
         [schemaAnalysisPlugin, moduleAnalysis],
       ],
-    })!.ast!;
+    });
+    this.ast = r!.ast!;
     this.possibleCards = moduleAnalysis.possibleCards;
+    this.exports = moduleAnalysis.exports;
+  }
+
+  elements(): (PossibleCardClass | Exports)[] {
+    // Create a custom comparison function to determine equality based on localName
+    const compareByLocalName = (
+      a: PossibleCardClass | Exports,
+      b: PossibleCardClass | Exports,
+    ) => {
+      // Extract localName from elements
+      const aLocalName = 'localName' in a ? a.localName : undefined;
+      const bLocalName = 'localName' in b ? b.localName : undefined;
+
+      // Compare local names for equality, prioritizing PossibleCardClass instances
+      return aLocalName === bLocalName;
+    };
+
+    // Use _.unionWith to combine and deduplicate the arrays, prioritizing PossibleCardClass instances
+    return unionWith(this.possibleCards, this.exports, compareByLocalName);
   }
 
   code(): string {

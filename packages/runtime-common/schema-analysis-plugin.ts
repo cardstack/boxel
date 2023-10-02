@@ -1,5 +1,5 @@
 import type * as Babel from '@babel/core';
-import type { types as t } from '@babel/core';
+import { types as t } from '@babel/core';
 import type { NodePath, Scope } from '@babel/traverse';
 
 interface State {
@@ -13,18 +13,21 @@ export interface ExternalReference {
   name: string;
 }
 
-export type ClassReference =
-  | ExternalReference
-  | {
-      type: 'internal';
-      classIndex: number;
-    };
+export interface InternalReference {
+  type: 'internal';
+  classIndex?: number;
+}
 
-export interface PossibleCardClass {
-  super: ClassReference;
+export type ClassReference = ExternalReference | InternalReference;
+
+export interface Base {
   localName: string | undefined;
   exportedAs: string | undefined;
-  path: NodePath<t.ClassDeclaration>;
+  path: NodePath<t.ClassDeclaration> | NodePath<t.ExportNamedDeclaration>;
+}
+
+export interface PossibleCardClass extends Base {
+  super: ClassReference;
   possibleFields: Map<string, PossibleField>;
 }
 
@@ -35,14 +38,39 @@ export interface PossibleField {
   path: NodePath<t.ClassProperty>;
 }
 
+export interface ExportedClass extends Base {}
+
+export interface ExportedFunction extends Base {}
+
 export interface Options {
   possibleCards: PossibleCardClass[];
+  exports: Exports[];
 }
 
 export function schemaAnalysisPlugin(_babel: typeof Babel) {
   // let t = babel.types;
   return {
     visitor: {
+      ExportNamedDeclaration: {
+        enter(path: NodePath<t.ExportNamedDeclaration>, state: State) {
+          const declaration = path.node.declaration;
+          if (
+            t.isClassDeclaration(declaration) ||
+            t.isFunctionDeclaration(declaration)
+          ) {
+            let exportedAs = declaration.id
+              ? getName(declaration.id)
+              : undefined;
+
+            let localName = declaration.id ? declaration.id.name : undefined;
+            state.opts.exports.push({
+              path,
+              exportedAs,
+              localName,
+            });
+          }
+        },
+      },
       ClassDeclaration: {
         enter(path: NodePath<t.ClassDeclaration>, state: State) {
           if (!path.node.superClass) {
@@ -229,6 +257,7 @@ function makeClassReference(
 
   if (binding?.path.isClassDeclaration()) {
     let superClassNode = binding.path.node;
+    // only specific to finding cards
     let superClassIndex = state.opts.possibleCards.findIndex(
       (card) => card.path.node === superClassNode,
     );

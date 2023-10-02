@@ -38,7 +38,7 @@ import Selector from './detail-panel-selector';
 
 import { SelectorItem, selectorItemFunc } from './detail-panel-selector';
 
-import type { ElementInFile } from './code-mode';
+import { type Object, ElementType } from './code-mode';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 interface Signature {
@@ -47,9 +47,9 @@ interface Signature {
     realmInfo: RealmInfo | null;
     readyFile: Ready;
     cardInstance: CardDef | undefined;
-    selectedElement?: ElementInFile;
-    elements: ElementInFile[];
-    selectElement: (el: ElementInFile) => void;
+    selectedElement?: Object;
+    elements: Object[];
+    selectElement: (el: Object) => void;
     delete: () => void;
   };
 }
@@ -101,6 +101,18 @@ export default class DetailPanel extends Component<Signature> {
     return this.args.readyFile.url.endsWith('.json');
   }
 
+  get isField() {
+    return (
+      this.isModule && this.args.selectedElement?.type === ElementType.Field
+    );
+  }
+
+  get isCard() {
+    return (
+      this.isModule && this.args.selectedElement?.type === ElementType.Card
+    );
+  }
+
   private get fileExtension() {
     if (!this.args.cardInstance) {
       return '.' + this.args.readyFile.url.split('.').pop() || '';
@@ -115,9 +127,12 @@ export default class DetailPanel extends Component<Signature> {
     }
     return this.args.elements.map((el) => {
       const isSelected = this.args.selectedElement === el;
+      let name = el.cardOrField
+        ? el.cardOrField.displayName
+        : el.value.localName;
       return selectorItemFunc(
         [
-          el.card.displayName,
+          name ?? 'no name found',
           () => {
             this.args.selectElement(el);
           },
@@ -163,7 +178,7 @@ export default class DetailPanel extends Component<Signature> {
           </div>
         {{/if}}
 
-        {{#if (or this.isCardInstance this.isModule)}}
+        {{#if (or this.isCardInstance this.isCard this.isField)}}
           <div class='inheritance-panel'>
             <header class='panel-header' aria-label='Inheritance Panel Header'>
               Card Inheritance
@@ -189,43 +204,83 @@ export default class DetailPanel extends Component<Signature> {
                 }}
                 Adopts from
               </div>
-
               <ClickableModuleDefinitionContainer
+                @title={{'Card Definition'}}
                 @fileURL={{this.cardType.type.module}}
                 @name={{this.cardType.type.displayName}}
                 @fileExtension={{this.cardType.type.moduleInfo.extension}}
                 @onSelectDefinition={{this.updateCodePath}}
                 @url={{this.cardType.type.module}}
               />
-            {{else if this.isModule}}
-              <ModuleDefinitionContainer
-                @fileURL={{this.cardType.type.module}}
-                @name={{this.cardType.type.displayName}}
-                @fileExtension={{this.cardType.type.moduleInfo.extension}}
-                @infoText={{this.lastModified.value}}
-                @isActive={{true}}
-                @actions={{array
-                  (hash label='Delete' handler=@delete icon='icon-trash')
-                }}
-              />
-              {{#if this.cardType.type.super}}
-                <div class='chain'>
-                  {{svgJar
-                    'icon-inherit'
-                    class='chain-icon'
-                    width='24px'
-                    height='24px'
-                    role='presentation'
-                  }}
-                  Inherits from
-                </div>
-                <ClickableModuleDefinitionContainer
-                  @fileURL={{this.cardType.type.super.module}}
-                  @name={{this.cardType.type.super.displayName}}
-                  @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
-                  @onSelectDefinition={{this.updateCodePath}}
-                  @url={{this.cardType.type.super.module}}
-                />
+
+              {{else if this.isField}}
+                {{#let 'Field Definition' as |definitionTitle|}}
+                  <ModuleDefinitionContainer
+                    @title={{definitionTitle}}
+                    @fileURL={{this.cardType.type.module}}
+                    @name={{this.cardType.type.displayName}}
+                    @fileExtension={{this.cardType.type.moduleInfo.extension}}
+                    @infoText={{this.lastModified.value}}
+                    @isActive={{true}}
+                    @actions={{array
+                      (hash label='Delete' handler=@delete icon='icon-trash')
+                    }}
+                  />
+                  {{#if this.cardType.type.super}}
+                    <div class='chain'>
+                      {{svgJar
+                        'icon-inherit'
+                        class='chain-icon'
+                        width='24px'
+                        height='24px'
+                        role='presentation'
+                      }}
+                      Inherits from
+                    </div>
+                    <ClickableModuleDefinitionContainer
+                      @title={{definitionTitle}}
+                      @fileURL={{this.cardType.type.super.module}}
+                      @name={{this.cardType.type.super.displayName}}
+                      @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
+                      @onSelectDefinition={{this.updateCodePath}}
+                      @url={{this.cardType.type.super.module}}
+                    />
+                  {{/if}}
+                {{/let}}
+              {{else if this.isCard}}
+                {{#let 'Card Definition' as |definitionTitle|}}
+                  <ModuleDefinitionContainer
+                    @title={{definitionTitle}}
+                    @fileURL={{this.cardType.type.module}}
+                    @name={{this.cardType.type.displayName}}
+                    @fileExtension={{this.cardType.type.moduleInfo.extension}}
+                    @infoText={{this.lastModified.value}}
+                    @isActive={{true}}
+                    @actions={{array
+                      (hash label='Delete' handler=@delete icon='icon-trash')
+                    }}
+                  />
+                  {{#if this.cardType.type.super}}
+                    <div class='chain'>
+                      {{svgJar
+                        'icon-inherit'
+                        class='chain-icon'
+                        width='24px'
+                        height='24px'
+                        role='presentation'
+                      }}
+                      Inherits from
+                    </div>
+                    <ClickableModuleDefinitionContainer
+                      @title={{definitionTitle}}
+                      @fileURL={{this.cardType.type.super.module}}
+                      @name={{this.cardType.type.super.displayName}}
+                      @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
+                      @onSelectDefinition={{this.updateCodePath}}
+                      @url={{this.cardType.type.super.module}}
+                    />
+                  {{/if}}
+                {{/let}}
               {{/if}}
             {{/if}}
           </div>
@@ -303,5 +358,10 @@ export default class DetailPanel extends Component<Signature> {
         --icon-color: var(--boxel-dark);
       }
     </style>
+
+
+
+
+
   </template>
 }

@@ -26,7 +26,7 @@ import {
 import {
   loadCard,
   identifyCard,
-  isCard,
+  isBaseDef,
   moduleFrom,
 } from '@cardstack/runtime-common/code-ref';
 import { Deferred } from '@cardstack/runtime-common/deferred';
@@ -326,7 +326,7 @@ export class CurrentRun {
     }
 
     let refs = Object.values(module)
-      .filter((maybeCard) => isCard(maybeCard))
+      .filter((maybeCard) => isBaseDef(maybeCard))
       .map((card) => identifyCard(card))
       .filter(Boolean) as CodeRef[];
     for (let ref of refs) {
