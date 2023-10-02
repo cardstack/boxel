@@ -15,11 +15,13 @@ const waiter = buildWaiter('realm-info-provider:load-waiter');
 interface RealmURLArg {
   realmURL: string;
   fileURL?: never;
+  returnUnknownRealmIfError?: boolean;
 }
 
 interface FileURLArg {
   fileURL: string;
   realmURL?: never;
+  returnUnknownRealmIfError?: boolean;
 }
 
 export interface Signature {
@@ -60,6 +62,13 @@ export default class RealmInfoProvider extends Component<Signature> {
 
           state.value = realmInfo;
         } catch (error: any) {
+          if (this.args.returnUnknownRealmIfError) {
+            state.value = {
+              name: 'Unknown Workspace',
+              iconURL: '',
+              backgroundURL: '',
+            };
+          }
           state.error = error;
         } finally {
           state.isLoading = false;

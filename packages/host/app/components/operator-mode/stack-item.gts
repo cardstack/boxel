@@ -267,7 +267,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
       style={{this.styleForStackedCard}}
     >
       <CardContainer class={{cn 'card' edit=(eq @item.format 'edit')}}>
-        <RealmInfoProvider @fileURL={{this.card.id}}>
+        <RealmInfoProvider
+          @realmURL={{this.card.id}}
+          @returnUnknownRealmIfError={{true}}
+        >
           <:ready as |realmInfo|>
             <Header
               @title={{this.headerTitle realmInfo.name}}
@@ -411,12 +414,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
               </:detail>
             </Header>
           </:ready>
-          <:error>
-            <div class='realm-icon'>
-              <img src='' alt='realm-icon' />
-            </div>
-            <span>in Unknown Workspace</span>
-          </:error>
         </RealmInfoProvider>
         <div class='content' {{ContentElement onSetup=this.setupContentEl}}>
           <Preview

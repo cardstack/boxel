@@ -11,6 +11,7 @@ import URLBarResource, {
 } from '@cardstack/host/resources/url-bar';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type CardService from '../../services/card-service';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 
 interface Signature {
@@ -36,7 +37,10 @@ export default class CardURLBar extends Component<Signature> {
       ...attributes
     >
       <div class='realm-info' data-test-card-url-bar-realm-info>
-        <RealmInfoProvider @fileURL={{this.codePath}}>
+        <RealmInfoProvider
+          @realmURL={{this.realmURL}}
+          @returnUnknownRealmIfError={{true}}
+        >
           <:ready as |realmInfo|>
             <div class='realm-icon'>
               <img src={{realmInfo.iconURL}} alt='realm-icon' />
@@ -185,6 +189,7 @@ export default class CardURLBar extends Component<Signature> {
   </template>
 
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare cardService: CardService;
 
   private urlBar: URLBarResource = urlBarResource(this, () => ({
     getValue: () => this.codePath,
@@ -198,6 +203,17 @@ export default class CardURLBar extends Component<Signature> {
   private get codePath() {
     return this.operatorModeStateService.state.codePath
       ? this.operatorModeStateService.state.codePath.toString()
-      : '';
+      : null;
+  }
+
+  private get realmURL() {
+    let url;
+    if (this.codePath) {
+      url = this.cardService.getRealmURLFor(new URL(this.codePath))?.toString();
+    }
+    if (!url) {
+      url = this.cardService.defaultURL.toString();
+    }
+    return url;
   }
 }
