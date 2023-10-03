@@ -1660,7 +1660,7 @@ class DefaultCardDefTemplate extends GlimmerComponent<{
   </template>
 }
 
-class DefaultCardDefAtomView extends GlimmerComponent<{
+class DefaultAtomViewTemplate extends GlimmerComponent<{
   Args: {
     model: CardDef;
     fields: Record<string, new () => GlimmerComponent>;
@@ -1715,34 +1715,6 @@ class FieldDefEditTemplate extends GlimmerComponent<{
   </template>
 }
 
-class FieldDefDefaultAtomView extends GlimmerComponent<{
-  Args: {
-    model: FieldDef;
-    fields: Record<string, new () => GlimmerComponent>;
-  };
-}> {
-  <template>
-    <span class='atom-view-template' data-test-atom-view>
-      {{#each-in @fields as |key Field|}}
-        {{#if (eq key 'title')}}
-          <Field />
-        {{/if}}
-      {{/each-in}}
-    </span>
-    <style>
-      .atom-view-template {
-        display: inline-block;
-        font: 700 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-        border: var(--boxel-border);
-        padding: 4px var(--boxel-sp-lg);
-        background-color: var(--boxel-light);
-        border-radius: var(--boxel-border-radius);
-      }
-    </style>
-  </template>
-}
-
 export class Component<
   CardT extends BaseDefConstructor,
 > extends GlimmerComponent<SignatureFor<CardT>> {}
@@ -1773,7 +1745,7 @@ export class FieldDef extends BaseDef {
     </template>
   };
   static edit: BaseDefComponent = FieldDefEditTemplate;
-  static atom: BaseDefComponent = FieldDefDefaultAtomView;
+  static atom: BaseDefComponent = DefaultAtomViewTemplate;
 }
 
 class IDField extends FieldDef {
@@ -1852,7 +1824,7 @@ export class CardDef extends BaseDef {
   };
   static isolated: BaseDefComponent = DefaultCardDefTemplate;
   static edit: BaseDefComponent = DefaultCardDefTemplate;
-  static atom: BaseDefComponent = DefaultCardDefAtomView;
+  static atom: BaseDefComponent = DefaultAtomViewTemplate;
 }
 
 export type BaseDefConstructor = typeof BaseDef;

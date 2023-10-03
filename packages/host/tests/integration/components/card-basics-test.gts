@@ -937,11 +937,14 @@ module('Integration | card-basics', function (hooks) {
     });
 
     await renderCard(loader, helloWorld, 'atom');
-    assert.dom('[data-test-atom-view]').hasText('Arthur M');
-    assert.dom('[data-test-atom-view]').doesNotContainText('10');
+    assert.dom('[data-test-compound-field-component]').hasText('Arthur M');
+    assert.dom('[data-test-compound-field-component]').doesNotContainText('10');
+    assert
+      .dom('[data-test-compound-field-component]')
+      .hasClass('atom-compound-field');
   });
 
-  test('render user provided atom view template', async function (assert) {
+  test('render user-provided atom view template', async function (assert) {
     let { field, contains, FieldDef, Component } = cardApi;
     let { default: StringField } = string;
     let { default: NumberField } = number;
@@ -972,36 +975,12 @@ module('Integration | card-basics', function (hooks) {
     let helloWorld = new Person({ firstName: 'Arthur', age: 10 });
 
     await renderCard(loader, helloWorld, 'atom');
-    assert.dom('[data-test-template]').hasText('Arthur 10');
-    assert.dom('[data-test-template]').hasClass('name');
-  });
-
-  test('render user provided atom view template', async function (assert) {
-    let { field, contains, FieldDef, StringField, Component } = cardApi;
-    class Person extends FieldDef {
-      @field firstName = contains(StringField);
-      @field title = contains(StringField, {
-        computeVia: function (this: Person) {
-          return this.firstName;
-        },
-      });
-      static atom = class Atom extends Component<typeof this> {
-        <template>
-          <div class='name' data-test-template><@fields.firstName /></div>
-          <style>
-            .name {
-              color: red;
-              font-weight: bold;
-            }
-          </style>
-        </template>
-      };
-    }
-    await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
-    let helloWorld = new Person({ firstName: 'Arthur' });
-
-    await renderCard(loader, helloWorld, 'atom');
-    assert.dom('[data-test-template]').hasText('Arthur');
+    assert
+      .dom('[data-test-compound-field-component] [data-test-template]')
+      .hasText('Arthur 10');
+    assert
+      .dom('[data-test-compound-field-component]')
+      .hasClass('atom-compound-field');
     assert.dom('[data-test-template]').hasClass('name');
   });
 
@@ -1863,8 +1842,7 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('primitive containsMany field inside another field is read-only', async function (assert) {
-    let { field, contains, containsMany, CardDef, FieldDef, Component } =
-      cardApi;
+    let { field, contains, containsMany, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;
 
     class Guest extends FieldDef {
@@ -1880,14 +1858,6 @@ module('Integration | card-basics', function (hooks) {
       @field banned = containsMany(StringField);
       @field guest = contains(Guest);
       @field bannedGuest = contains(Guest);
-
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <@fields.name />
-          <@fields.vip />
-          <@fields.guest />
-        </template>
-      };
     }
 
     let card = new ContactCard({
@@ -1950,8 +1920,7 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('composite containsMany field inside another field renders in atom layout', async function (assert) {
-    let { field, contains, containsMany, CardDef, FieldDef, Component } =
-      cardApi;
+    let { field, contains, containsMany, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;
     let { default: NumberField } = number;
 
@@ -1960,18 +1929,11 @@ module('Integration | card-basics', function (hooks) {
       @field guestCount = contains(NumberField);
       @field title = contains(StringField, {
         computeVia: function (this: PersonField) {
-          return this.fullName;
+          return this.guestCount
+            ? `${this.fullName} + ${this.guestCount}`
+            : this.fullName;
         },
       });
-
-      static atom = class Atom extends Component<typeof this> {
-        <template>
-          <@fields.fullName />
-          {{#if @model.guestCount}}
-            +<@fields.guestCount />
-          {{/if}}
-        </template>
-      };
     }
 
     class Guest extends FieldDef {
@@ -1984,14 +1946,7 @@ module('Integration | card-basics', function (hooks) {
       @field name = contains(StringField);
       @field guest = contains(Guest);
       @field guest2 = contains(Guest);
-
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <@fields.name />
-          <@fields.guest />
-          <@fields.guest2 />
-        </template>
-      };
+      @field vip = containsMany(StringField);
     }
 
     let card = new ContactCard({
@@ -2016,6 +1971,7 @@ module('Integration | card-basics', function (hooks) {
       guest2: new Guest({
         name: 'Papa Leone',
       }),
+      vip: ['Cornelius Wilde', 'Dominique Wilde', 'Esmeralda Wilde'],
     });
 
     await renderCard(loader, card, 'edit');

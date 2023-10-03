@@ -13,7 +13,6 @@ import {
 import { getField } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import Modifier from 'ember-modifier';
 
 const componentCache = new WeakMap<
@@ -76,6 +75,7 @@ export function getBoxComponent(
       </CardContainer>
     {{else if (isCompoundField model.value)}}
       <div
+        class='{{format}}-compound-field'
         data-test-compound-field-component
         {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
         ...attributes
@@ -239,7 +239,7 @@ export function getPluralViewComponent(
       <div
         class='plural-field
           {{field.fieldType}}-field
-          {{format}}-field
+          {{format}}-format
           {{unless model.children.length "empty"}}'
         data-test-plural-view={{field.fieldType}}
         data-test-plural-view-format={{format}}
@@ -258,12 +258,17 @@ export function getPluralViewComponent(
         {{/each}}
       </div>
       <style>
-        .linksToMany-field:not(.atom-field) > div + div {
+        .linksToMany-field.embedded-format > div + div {
           margin-top: var(--boxel-sp);
         }
-        .atom-field {
+        .linksToMany-field.atom-format {
           display: flex;
           gap: var(--boxel-sp-sm);
+          padding: var(--boxel-sp-sm);
+          border: var(--boxel-border);
+          border-radius: var(--boxel-border-radius);
+        }
+        .containsMany-field.atom-format {
           padding: var(--boxel-sp-sm);
           border: var(--boxel-border);
           border-radius: var(--boxel-border-radius);
