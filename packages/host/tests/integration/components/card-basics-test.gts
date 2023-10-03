@@ -2035,7 +2035,7 @@ module('Integration | card-basics', function (hooks) {
       });
       static embedded = class Embedded extends Component<typeof this> {
         <template>
-          <span style='color: purple'><@fields.countryName /></span>
+          <@fields.countryName />
         </template>
       };
     }
