@@ -367,7 +367,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             ],
             submode: 'interact',
             fileView: 'inheritance',
-            openDirs: [],
+            openDirs: {},
           })!,
         )}`,
       );
@@ -394,7 +394,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             ],
             submode: 'interact',
             fileView: 'inheritance',
-            openDirs: [],
+            openDirs: {},
           })!,
         )}`,
       );
@@ -421,7 +421,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             ],
             submode: 'interact',
             fileView: 'inheritance',
-            openDirs: [],
+            openDirs: {},
           })!,
         )}`,
       );
@@ -672,7 +672,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             ],
             submode: 'interact',
             fileView: 'inheritance',
-            openDirs: [],
+            openDirs: {},
           })!,
         )}`,
       );
@@ -835,7 +835,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             submode: 'code',
             codePath: `${testRealmURL}Pet/mango.json`,
             fileView: 'inheritance',
-            openDirs: ['Pet/'],
+            openDirs: { testRealmURL: ['Pet/'] },
           })!,
         )}`,
       );
@@ -868,7 +868,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             ],
             submode: 'interact',
             fileView: 'inheritance',
-            openDirs: ['Pet/'],
+            openDirs: { testRealmURL: ['Pet/'] },
           })!,
         )}`,
       );
