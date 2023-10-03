@@ -12,6 +12,7 @@ import { CardType } from '@cardstack/host/resources/card-type';
 import { Ready } from '@cardstack/host/resources/file';
 
 import { BaseDef } from 'https://cardstack.com/base/card-api';
+import { getPlural } from '@cardstack/runtime-common';
 
 interface Signature {
   Element: HTMLElement;
@@ -26,6 +27,7 @@ type SelectedItem = 'schema-editor' | null;
 
 export default class SchemaEditorColumn extends Component<Signature> {
   @tracked selectedItem: SelectedItem = 'schema-editor';
+  @tracked totalFields: number = 0;
 
   @action selectItem(item: SelectedItem) {
     if (this.selectedItem === item) {
@@ -34,6 +36,10 @@ export default class SchemaEditorColumn extends Component<Signature> {
     }
 
     this.selectedItem = item;
+  }
+
+  @action setTotalFields(totalFields: number) {
+    this.totalFields = totalFields;
   }
 
   <template>
@@ -53,6 +59,14 @@ export default class SchemaEditorColumn extends Component<Signature> {
           </span>
 
           Schema Editor
+
+          <div class='total-fields' data-test-total-fields>
+            <p class='total-fields-value'>{{this.totalFields}}</p>
+            <p class='total-fields-label'>{{getPlural
+                'Field'
+                this.totalFields
+              }}</p>
+          </div>
         </button>
 
         <div class='accordion-item-content'>
@@ -60,6 +74,7 @@ export default class SchemaEditorColumn extends Component<Signature> {
             @file={{@file}}
             @card={{@card}}
             @cardTypeResource={{@cardTypeResource}}
+            @setTotalFields={{this.setTotalFields}}
           />
         </div>
       </div>
@@ -135,6 +150,25 @@ export default class SchemaEditorColumn extends Component<Signature> {
 
       .accordion :deep(.card-adoption-chain:first-child) {
         padding-top: var(--boxel-sp-xxxs);
+      }
+
+      .total-fields {
+        display: flex;
+        align-items: baseline;
+        gap: var(--boxel-sp-xxxs);
+        margin-left: auto;
+      }
+
+      .total-fields > * {
+        margin: 0;
+      }
+
+      .total-fields-value {
+        font: 600 var(--boxel-font);
+      }
+
+      .total-fields-label {
+        font: var(--boxel-font-sm);
       }
     </style>
   </template>

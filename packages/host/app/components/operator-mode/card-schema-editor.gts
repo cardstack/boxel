@@ -1,8 +1,9 @@
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
-import { internalKeyFor } from '@cardstack/runtime-common';
+import { internalKeyFor, getPlural } from '@cardstack/runtime-common';
 import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
 
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
@@ -16,6 +17,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 import { gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { scheduleOnce } from '@ember/runloop';
 
 interface Signature {
   Args: {
@@ -23,6 +25,7 @@ interface Signature {
     file: Ready;
     cardType: Type;
     moduleSyntax: ModuleSyntax;
+    setTotalFieldsOfSchema?: (totalFields: number) => void;
   };
 }
 
@@ -112,7 +115,22 @@ export default class CardSchemaEditor extends Component<Signature> {
       }
 
       .total-fields {
+        display: flex;
+        align-items: baseline;
+        gap: var(--boxel-sp-xxxs);
+        margin-left: auto;
+      }
+
+      .total-fields > * {
+        margin: 0;
+      }
+
+      .total-fields-value {
         font: 600 var(--boxel-font);
+      }
+
+      .total-fields-label {
+        font: var(--boxel-font-sm);
       }
     </style>
 
@@ -139,13 +157,15 @@ export default class CardSchemaEditor extends Component<Signature> {
             </span>
           </div>
         </div>
-        <div data-test-total-fields>
-          {{#if (gt this.totalOwnField 0)}}
-            <span class='total-fields'>+
-              {{this.totalOwnField}}</span>
-            {{if (gt this.totalOwnField 1) 'Fields' 'Field'}}
+        <div class='total-fields' data-test-total-fields>
+          {{#if (gt this.totalOwnFields 0)}}
+            <p class='total-fields-value'>+ {{this.totalOwnFields}}</p>
+            <p class='total-fields-label'>{{getPlural
+                'Field'
+                this.totalOwnFields
+              }}</p>
           {{else}}
-            No Fields
+            <p class='total-fields-label'>No Fields</p>
           {{/if}}
         </div>
       </div>
@@ -198,6 +218,13 @@ export default class CardSchemaEditor extends Component<Signature> {
 
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
+  @tracked totalOwnFields: number = 0;
+
+  constructor(owner: any, args: any) {
+    super(owner, args);
+
+    scheduleOnce('afterRender', this, this.calculateTotalOwnFields);
+  }
 
   @action
   isOwnField(fieldName: string): boolean {
@@ -206,15 +233,12 @@ export default class CardSchemaEditor extends Component<Signature> {
     ).includes(fieldName);
   }
 
-  get totalOwnField(): number {
-    let total = 0;
-    for (let field of this.args.cardType.fields) {
-      if (this.isOwnField(field.name)) {
-        total++;
-      }
-    }
-
-    return total;
+  @action
+  calculateTotalOwnFields() {
+    this.totalOwnFields = this.args.cardType.fields.filter((field) =>
+      this.isOwnField(field.name),
+    ).length;
+    this.args.setTotalFieldsOfSchema?.(this.totalOwnFields);
   }
 
   fieldCardDisplayName(card: Type | CodeRef): string {

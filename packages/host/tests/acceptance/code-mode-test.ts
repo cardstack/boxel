@@ -947,6 +947,7 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-card-schema]');
 
     assert.dom('[data-test-card-schema]').exists({ count: 3 });
+    assert.dom('[data-test-total-fields]').containsText('5 Fields');
 
     assert
       .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
