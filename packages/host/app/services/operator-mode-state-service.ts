@@ -543,6 +543,22 @@ export default class OperatorModeStateService extends Service {
       });
     }
 
+    let codePath = this.state.codePath;
+
+    // Avoid refetching realm info if we have not changed realms
+    if (this.cachedRealmURL) {
+      let realmPaths = new RealmPaths(this.cachedRealmURL);
+
+      if (realmPaths.inRealm(codePath)) {
+        return new TrackedObject({
+          error: null,
+          isLoading: false,
+          value: this.cachedRealmURL,
+          load: () => Promise<void>,
+        });
+      }
+    }
+
     const state: {
       isLoading: boolean;
       value: RealmInfo | null;
