@@ -47,7 +47,7 @@ export default class CardURLBar extends Component<Signature> {
           </:ready>
           <:error>
             <div class='realm-icon'>
-              <img src='' alt='realm-icon' />
+              {{svgJar 'icon-circle' width='22px' height='22px'}}
             </div>
             <span>in Unknown Workspace</span>
           </:error>
@@ -121,6 +121,8 @@ export default class CardURLBar extends Component<Signature> {
 
         border: 1px solid var(--boxel-light);
         border-radius: 4px;
+
+        --icon-color: var(--boxel-light);
       }
       .realm-icon img {
         width: 20px;
