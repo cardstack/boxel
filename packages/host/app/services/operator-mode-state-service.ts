@@ -533,7 +533,7 @@ export default class OperatorModeStateService extends Service {
     return this.realmURLResource.value;
   }
 
-  @use private realmURLResource = resource(() => {
+  @use realmURLResource = resource(() => {
     if (!this.state.codePath) {
       return new TrackedObject({
         error: null,
@@ -573,6 +573,9 @@ export default class OperatorModeStateService extends Service {
           }
 
           state.value = realmURL;
+
+          // FIXME is it wrong to do this every time the realm changes?
+          this.updateOpenDirsForNestedPath();
         } catch (error: any) {
           state.error = error;
         } finally {
