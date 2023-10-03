@@ -61,7 +61,8 @@ export function getBoxComponent(
           fieldType=field.fieldType
           fieldName=field.name
         }}
-        data-test-field-component-card={{format}}
+        data-test-card-format={{format}}
+        data-test-field-component-card
         {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
         ...attributes
       >
@@ -75,7 +76,8 @@ export function getBoxComponent(
       </CardContainer>
     {{else if (isCompoundField model.value)}}
       <div
-        data-test-compound-field-component={{format}}
+        data-test-compound-field-format={{format}}
+        data-test-compound-field-component
         {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
         ...attributes
       >

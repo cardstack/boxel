@@ -939,7 +939,7 @@ module('Integration | card-basics', function (hooks) {
     await renderCard(loader, helloWorld, 'atom');
     assert.dom('[data-test-compound-field-component]').hasText('Arthur M');
     assert.dom('[data-test-compound-field-component]').doesNotContainText('10');
-    assert.dom('[data-test-compound-field-component="atom"]').exists();
+    assert.dom('[data-test-compound-field-format="atom"]').exists();
   });
 
   test('render user-provided atom view template', async function (assert) {
@@ -974,9 +974,8 @@ module('Integration | card-basics', function (hooks) {
 
     await renderCard(loader, helloWorld, 'atom');
     assert
-      .dom('[data-test-compound-field-component] [data-test-template]')
+      .dom('[data-test-compound-field-format="atom"] [data-test-template]')
       .hasText('Arthur 10');
-    assert.dom('[data-test-compound-field-component="atom"]').exists();
     assert.dom('[data-test-template]').hasClass('name');
   });
 
@@ -1990,7 +1989,7 @@ module('Integration | card-basics', function (hooks) {
       .containsText('Felicity Shaw + 1');
     assert
       .dom(
-        '[data-test-field="guest"] [data-test-plural-view-item="0"] > [data-test-compound-field-component="atom"]',
+        '[data-test-field="guest"] [data-test-plural-view-item="0"] > [data-test-compound-field-format="atom"]',
       )
       .exists('atom layout is rendered for items');
     assert
