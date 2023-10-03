@@ -74,6 +74,7 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
     <style>
       .card-container {
         overflow: hidden;
+        overflow-wrap: anywhere;
       }
       .header {
         --boxel-header-text-size: var(--boxel-font-size-sm);
