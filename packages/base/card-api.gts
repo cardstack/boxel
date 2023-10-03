@@ -1782,7 +1782,11 @@ export class StringField extends FieldDef {
       <BoxelInput @value={{@model}} @onInput={{@set}} />
     </template>
   };
-  static atom = this.embedded;
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      {{@model}}
+    </template>
+  };
 }
 
 export class CardDef extends BaseDef {
