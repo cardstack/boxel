@@ -939,9 +939,7 @@ module('Integration | card-basics', function (hooks) {
     await renderCard(loader, helloWorld, 'atom');
     assert.dom('[data-test-compound-field-component]').hasText('Arthur M');
     assert.dom('[data-test-compound-field-component]').doesNotContainText('10');
-    assert
-      .dom('[data-test-compound-field-component]')
-      .hasClass('atom-compound-field');
+    assert.dom('[data-test-compound-field-component="atom"]').exists();
   });
 
   test('render user-provided atom view template', async function (assert) {
@@ -978,9 +976,7 @@ module('Integration | card-basics', function (hooks) {
     assert
       .dom('[data-test-compound-field-component] [data-test-template]')
       .hasText('Arthur 10');
-    assert
-      .dom('[data-test-compound-field-component]')
-      .hasClass('atom-compound-field');
+    assert.dom('[data-test-compound-field-component="atom"]').exists();
     assert.dom('[data-test-template]').hasClass('name');
   });
 
@@ -1979,10 +1975,11 @@ module('Integration | card-basics', function (hooks) {
       .dom('[data-test-field="guest"] [data-test-field="name"] input')
       .hasValue('Mama Leone');
     assert
-      .dom(
-        '[data-test-field="guest"] [data-test-contains-many="additionalNames"]',
-      )
-      .doesNotExist('edit template is not rendered');
+      .dom('[data-test-field="guest"] [data-test-plural-view-format="atom"]')
+      .exists('atom layout is rendered');
+    assert
+      .dom('[data-test-field="guest"] [data-test-plural-view="containsMany"]')
+      .hasClass('atom-format', 'field has correct class');
     assert
       .dom(
         '[data-test-field="guest"] [data-test-plural-view="containsMany"] [data-test-plural-view-item]',
@@ -1993,9 +1990,9 @@ module('Integration | card-basics', function (hooks) {
       .containsText('Felicity Shaw + 1');
     assert
       .dom(
-        '[data-test-field="guest"] [data-test-plural-view-item="0"] > [data-test-compound-field-component]',
+        '[data-test-field="guest"] [data-test-plural-view-item="0"] > [data-test-compound-field-component="atom"]',
       )
-      .hasClass('atom-compound-field', 'atom view field has correct class');
+      .exists('atom layout is rendered for items');
     assert
       .dom('[data-test-field="guest"] [data-test-plural-view-item="1"]')
       .containsText('Grant Kingston + 1');
@@ -2007,16 +2004,11 @@ module('Integration | card-basics', function (hooks) {
       .dom('[data-test-field="guest2"] [data-test-field="name"] input')
       .hasValue('Papa Leone');
     assert
-      .dom(
-        '[data-test-field="guest2"] [data-test-contains-many="additionalNames"]',
-      )
-      .doesNotExist('edit template is not rendered for empty field');
-    assert
-      .dom('[data-test-field="guest2"] [data-test-plural-view="containsMany"]')
+      .dom('[data-test-field="guest2"] [data-test-plural-view-format="atom"]')
       .hasClass('empty', 'empty containsMany field has correct class');
     assert
-      .dom('[data-test-field="guest2"] [data-test-plural-view-item]')
-      .doesNotExist('empty containsMany field does not display any items');
+      .dom('[data-test-field="guest2"] [data-test-plural-view-format="atom"]')
+      .hasText('', 'field is empty');
 
     assert
       .dom('[data-test-field="vip"] [data-test-contains-many="vip"]')
@@ -2096,14 +2088,14 @@ module('Integration | card-basics', function (hooks) {
       .hasValue('Mama Leone');
     assert
       .dom(
-        '[data-test-field="traveler"] [data-test-links-to-many="countriesVisited"]',
-      )
-      .doesNotExist('edit template is not rendered');
-    assert
-      .dom(
         '[data-test-field="countriesVisited"] [data-test-plural-view-format="atom"]',
       )
-      .hasClass('atom-format', 'atom view field has correct class');
+      .exists('atom layout is rendered');
+    assert
+      .dom(
+        '[data-test-field="countriesVisited"] [data-test-plural-view="linksToMany"]',
+      )
+      .hasClass('atom-format', 'field has correct class');
     assert
       .dom(
         '[data-test-field="countriesVisited"] [data-test-plural-view-format="atom"] [data-test-plural-view-item]',
