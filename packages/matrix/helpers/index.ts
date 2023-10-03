@@ -18,7 +18,11 @@ interface LoginOptions {
 export const test = base.extend<{ synapse: SynapseInstance }>({
   // eslint-disable-next-line no-empty-pattern
   synapse: async ({}, use) => {
-    let synapseInstance = await synapseStart();
+    let synapseInstance = await synapseStart({
+      template: 'test',
+      containerName: 'boxel-synapse',
+      hostPort: 8008,
+    });
     // TODO parallelizing the SMTP container will involve leveraging a dynamic
     // docker name wired into the homeserver.yaml config file, as we take
     // advantage of the fact that we can use the docker-name as the hostname for

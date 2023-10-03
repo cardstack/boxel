@@ -35,7 +35,6 @@ export default class UserProfile extends Component {
           {{/if}}
         </div>
       </FieldContainer>
-
       <FieldContainer @label='Display Name' @tag='label'>
         {{#if this.isEditMode}}
           <BoxelInput

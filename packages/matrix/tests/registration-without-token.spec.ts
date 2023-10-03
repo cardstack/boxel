@@ -34,6 +34,7 @@ test.describe('User Registration w/o Token', () => {
     ).toHaveCount(0);
     await page.locator('[data-test-username-field]').fill('user1');
     await page.locator('[data-test-password-field]').fill('mypassword');
+    await page.locator('[data-test-confirm-password-field]').fill('mypassword');
     await page.locator('[data-test-register-btn]').click();
 
     await assertLoggedIn(page);

@@ -3,13 +3,6 @@ import { smtpStart, smtpStop } from '../docker/smtp4dev';
 const [command] = process.argv.slice(2);
 (async () => {
   if (command === 'start') {
-    try {
-      await smtpStop();
-    } catch (e: any) {
-      if (!e.message.includes('No such container')) {
-        throw e;
-      }
-    }
     await smtpStart();
   } else if (command === 'stop') {
     await smtpStop();

@@ -5,6 +5,13 @@ interface Options {
 }
 
 export async function smtpStart(opts?: Options) {
+  try {
+    await smtpStop();
+  } catch (e: any) {
+    if (!e.message.includes('No such container')) {
+      throw e;
+    }
+  }
   let mailClientPort = opts?.mailClientPort ?? 5001;
   let portMapping = `${mailClientPort}:80`;
   await dockerCreateNetwork({ networkName: 'boxel' });

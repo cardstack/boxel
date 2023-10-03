@@ -1,5 +1,3 @@
-# TODO MAKE SURE TO UPDATE THE OTHER SYNAPSE CONFIGS!!
-
 server_name: 'localhost'
 pid_file: /data/homeserver.pid
 public_baseurl: 'http://localhost:8008'

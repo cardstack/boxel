@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
+import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
@@ -31,18 +32,26 @@ const MATRIX_REGISTRATION_TYPES = {
   register: undefined,
 };
 
-interface Args {
+interface Signature {
   Args: {
     onCancel: () => void;
   };
 }
 
-export default class RegisterUser extends Component<Args> {
+interface Validation {
+  session: string;
+  email: string;
+  clientSecret: string;
+  sid: string;
+  sendAttempt: number;
+}
+
+export default class RegisterUser extends Component<Signature> {
   <template>
     <BoxelHeader @title='Register User' @hasBackground={{true}} />
     <div class='registration-form' data-test-register-user>
       {{#if this.showEmailValidationStatus}}
-        <div class='email'>
+        <div class='email' data-test-email-validation>
           {{#if this.isEmailValidated}}
             <p class='validated'>
               The email address
@@ -87,7 +96,10 @@ export default class RegisterUser extends Component<Args> {
           />
         </FieldContainer>
         <div class='button-wrapper'>
-          <Button data-test-cancel-btn {{on 'click' @onCancel}}>Cancel</Button>
+          <Button
+            data-test-cancel-btn
+            {{on 'click' this.cancel}}
+          >Cancel</Button>
           <Button
             data-test-next-btn
             @kind='primary'
@@ -139,7 +151,10 @@ export default class RegisterUser extends Component<Args> {
           />
         </FieldContainer>
         <div class='button-wrapper'>
-          <Button data-test-cancel-btn {{on 'click' @onCancel}}>Cancel</Button>
+          <Button
+            data-test-cancel-btn
+            {{on 'click' this.cancel}}
+          >Cancel</Button>
           <Button
             data-test-register-btn
             @kind='primary'
@@ -160,7 +175,10 @@ export default class RegisterUser extends Component<Args> {
           />
         </FieldContainer>
         <div class='button-wrapper'>
-          <Button data-test-cancel-btn {{on 'click' @onCancel}}>Cancel</Button>
+          <Button
+            data-test-cancel-btn
+            {{on 'click' this.cancel}}
+          >Cancel</Button>
           <Button
             data-test-validate-btn
             @kind='primary'
@@ -283,6 +301,27 @@ export default class RegisterUser extends Component<Args> {
 
   @service private declare matrixService: MatrixService;
 
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
+    let validationStr = localStorage.getItem('email-validation');
+    if (validationStr) {
+      let { email, sid, clientSecret, sendAttempt, session } = JSON.parse(
+        validationStr,
+      ) as Validation;
+
+      this.state = {
+        type: 'askForUserCreds',
+        email,
+        sid,
+        clientSecret,
+        session,
+        sendAttempt,
+      };
+
+      this.checkEmailValidation.perform();
+    }
+  }
+
   private get showEmailValidationStatus() {
     return [
       'askForUserCreds',
@@ -400,7 +439,7 @@ export default class RegisterUser extends Component<Args> {
     }
   }
 
-  @action resendValidation() {
+  @action private resendValidation() {
     if (this.state.type === 'initial' || this.state.type === 'login') {
       throw new Error(
         `invalid state: cannot resendValidation() in state ${this.state.type}`,
@@ -412,8 +451,13 @@ export default class RegisterUser extends Component<Args> {
     this.validateEmail.perform(clientSecret, sendAttempt);
   }
 
-  @action doValidation() {
+  @action private doValidation() {
     this.validateEmail.perform();
+  }
+
+  @action private cancel() {
+    localStorage.removeItem('email-validation');
+    this.args.onCancel();
   }
 
   private validateEmail = restartableTask(
@@ -455,6 +499,7 @@ export default class RegisterUser extends Component<Args> {
               session,
               sendAttempt,
             };
+            this.serializeValidation();
           },
         });
       } else {
@@ -464,9 +509,27 @@ export default class RegisterUser extends Component<Args> {
           );
         }
         this.state.sid = sid;
+        this.serializeValidation();
       }
     },
   );
+
+  private serializeValidation() {
+    if (this.state.type === 'initial' || this.state.type === 'login') {
+      throw new Error(
+        `invalid state: cannot serializeValidation() in state ${this.state.type}`,
+      );
+    }
+    let { session, sid, email, clientSecret, sendAttempt } = this.state;
+    let validation: Validation = {
+      session,
+      sid,
+      email,
+      clientSecret,
+      sendAttempt,
+    };
+    localStorage.setItem('email-validation', JSON.stringify(validation));
+  }
 
   private checkEmailValidation = restartableTask(
     async (opts?: {
@@ -493,7 +556,7 @@ export default class RegisterUser extends Component<Args> {
         ({ username, password } = this.state);
       }
       if (this.state.type !== 'initial') {
-        ({ session, session, sid, clientSecret } = this.state);
+        ({ session, sid, clientSecret } = this.state);
       }
       if (!sid || !clientSecret) {
         throw new Error(
@@ -524,6 +587,7 @@ export default class RegisterUser extends Component<Args> {
               'm.login.email.identity',
             )
           ) {
+            localStorage.removeItem('email-validation');
             this.isEmailValidated = true;
           }
         }
