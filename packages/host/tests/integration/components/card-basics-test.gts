@@ -1919,7 +1919,7 @@ module('Integration | card-basics', function (hooks) {
       .doesNotExist();
   });
 
-  test('composite containsMany field inside another field renders in atom layout', async function (assert) {
+  test('nested containsMany field items in a compound field render in atom layout', async function (assert) {
     let { field, contains, containsMany, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;
     let { default: NumberField } = number;
@@ -1968,9 +1968,7 @@ module('Integration | card-basics', function (hooks) {
           }),
         ],
       }),
-      guest2: new Guest({
-        name: 'Papa Leone',
-      }),
+      guest2: new Guest({ name: 'Papa Leone' }),
       vip: ['Cornelius Wilde', 'Dominique Wilde', 'Esmeralda Wilde'],
     });
 
@@ -1994,6 +1992,11 @@ module('Integration | card-basics', function (hooks) {
       .dom('[data-test-field="guest"] [data-test-plural-view-item="0"]')
       .containsText('Felicity Shaw + 1');
     assert
+      .dom(
+        '[data-test-field="guest"] [data-test-plural-view-item="0"] > [data-test-compound-field-component]',
+      )
+      .hasClass('atom-compound-field', 'atom view field has correct class');
+    assert
       .dom('[data-test-field="guest"] [data-test-plural-view-item="1"]')
       .containsText('Grant Kingston + 1');
     assert
@@ -2004,16 +2007,29 @@ module('Integration | card-basics', function (hooks) {
       .dom('[data-test-field="guest2"] [data-test-field="name"] input')
       .hasValue('Papa Leone');
     assert
-      .dom('[data-test-field="guest2"] [data-test-plural-view="containsMany"]')
-      .hasClass('empty');
-    assert
       .dom(
-        '[data-test-field="guest2"] [data-test-plural-view="containsMany"] [data-test-plural-view-item]',
+        '[data-test-field="guest2"] [data-test-contains-many="additionalNames"]',
       )
-      .doesNotExist();
+      .doesNotExist('edit template is not rendered for empty field');
+    assert
+      .dom('[data-test-field="guest2"] [data-test-plural-view="containsMany"]')
+      .hasClass('empty', 'empty containsMany field has correct class');
+    assert
+      .dom('[data-test-field="guest2"] [data-test-plural-view-item]')
+      .doesNotExist('empty containsMany field does not display any items');
+
+    assert
+      .dom('[data-test-field="vip"] [data-test-contains-many="vip"]')
+      .exists('top level containsMany field is rendered in edit format');
+    assert
+      .dom('[data-test-contains-many="vip"] [data-test-add-new]')
+      .exists('top level containsMany field has add button');
+    assert
+      .dom('[data-test-contains-many="vip"] [data-test-remove="0"]')
+      .exists('top level containsMany field item has remove button');
   });
 
-  test('linksToMany field items in a compound field render in atom layout', async function (assert) {
+  test('nested linksToMany field items in a compound field render in atom layout', async function (assert) {
     let { field, contains, linksToMany, CardDef, FieldDef, Component } =
       cardApi;
     let { default: StringField } = string;
@@ -2041,6 +2057,7 @@ module('Integration | card-basics', function (hooks) {
     class ContactCard extends CardDef {
       @field name = contains(StringField);
       @field traveler = contains(Traveler);
+      @field traveler2 = contains(Traveler);
       @field favoritePlaces = linksToMany(Country);
     }
 
@@ -2064,6 +2081,7 @@ module('Integration | card-basics', function (hooks) {
         travelerName: 'Mama Leone',
         countriesVisited: [us, canada, brazil],
       }),
+      traveler2: new Traveler({ travelerName: 'Papa Leone' }),
       favoritePlaces: [brazil, us, canada],
     });
 
@@ -2071,10 +2089,24 @@ module('Integration | card-basics', function (hooks) {
     await percySnapshot(assert);
 
     assert.dom('[data-test-field="name"] input').hasValue('Marcelius Wilde');
-    assert.dom('[data-test-field="travelerName"] input').hasValue('Mama Leone');
     assert
       .dom(
-        '[data-test-field="countriesVisited"] [data-test-plural-view="linksToMany"] [data-test-plural-view-item]',
+        '[data-test-field="traveler"] [data-test-field="travelerName"] input',
+      )
+      .hasValue('Mama Leone');
+    assert
+      .dom(
+        '[data-test-field="traveler"] [data-test-links-to-many="countriesVisited"]',
+      )
+      .doesNotExist('edit template is not rendered');
+    assert
+      .dom(
+        '[data-test-field="countriesVisited"] [data-test-plural-view-format="atom"]',
+      )
+      .hasClass('atom-format', 'atom view field has correct class');
+    assert
+      .dom(
+        '[data-test-field="countriesVisited"] [data-test-plural-view-format="atom"] [data-test-plural-view-item]',
       )
       .exists({ count: 3 });
     assert
@@ -2084,19 +2116,28 @@ module('Integration | card-basics', function (hooks) {
       .hasText('🇺🇸 United States');
     assert
       .dom(
+        '[data-test-plural-view-format="atom"] [data-test-plural-view-item="0"] > [data-test-field-component-card]',
+      )
+      .hasClass('atom-card', 'atom view field item has correct class');
+    assert
+      .dom(
         '[data-test-plural-view-format="atom"] [data-test-plural-view-item="1"]',
       )
       .hasText('🇨🇦 Canada');
-    assert
-      .dom('[data-test-field="countriesVisited"] [data-test-remove-card]')
-      .doesNotExist();
+    // TODO: Add assertions for add/remove buttons when design is implemented
 
     assert
-      .dom('[data-test-field="favoritePlaces"] [data-test-remove-card]')
-      .exists();
+      .dom(
+        '[data-test-field="traveler2"] [data-test-field="travelerName"] input',
+      )
+      .hasValue('Papa Leone');
+    // TODO: Add assertions for empty nested linksToMany field
+
     assert
-      .dom('[data-test-field="favoritePlaces"] [data-test-add-new]')
-      .exists();
+      .dom(
+        '[data-test-field="favoritePlaces"] [data-test-links-to-many="favoritePlaces"]',
+      )
+      .exists('top level linksToMany field is in edit format');
   });
 
   test('can get a queryable value for a field', async function (assert) {
