@@ -1,4 +1,3 @@
-import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 //@ts-ignore cached not available yet in definitely typed
@@ -19,7 +18,7 @@ import type { Ready } from '@cardstack/host/resources/file';
 import LoaderService from '@cardstack/host/services/loader-service';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
-import { TrackedMap } from 'tracked-built-ins';
+import { calculateTotalOwnFields } from '@cardstack/host/utils/schema-editor';
 
 interface Signature {
   Args: {
@@ -41,15 +40,12 @@ export default class CardAdoptionChain extends Component<Signature> {
     </style>
 
     <div class='card-adoption-chain'>
-      {{#each this.cardInheritanceChain as |data index|}}
+      {{#each this.cardInheritanceChain as |data|}}
         <CardSchemaEditor
           @card={{data.card}}
           @cardType={{data.cardType}}
           @file={{@file}}
           @moduleSyntax={{this.moduleSyntax}}
-          @setTotalFieldsOfSchema={{this.generateSetterTotalFieldsOfSchema
-            index
-          }}
         />
       {{/each}}
     </div>
@@ -60,7 +56,6 @@ export default class CardAdoptionChain extends Component<Signature> {
     cardType: Type;
     card: any;
   }[] = [];
-  totalFieldsOfSchema = new TrackedMap<number, number>();
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
@@ -106,17 +101,12 @@ export default class CardAdoptionChain extends Component<Signature> {
     }
 
     this.cardInheritanceChain = cardInheritanceChain;
-  });
-
-  @action
-  generateSetterTotalFieldsOfSchema(index: number) {
-    return (totalFields: number) => {
-      this.totalFieldsOfSchema.set(index, totalFields);
-      this.args.setTotalFields?.(
-        Array.from(this.totalFieldsOfSchema.values()).reduce(
+    this.args.setTotalFields?.(
+      this.cardInheritanceChain
+        .map((data) => calculateTotalOwnFields(data.card, data.cardType))
+        .reduce(
           (prevValue: number, currentValue: number) => prevValue + currentValue,
         ),
-      );
-    };
-  }
+    );
+  });
 }

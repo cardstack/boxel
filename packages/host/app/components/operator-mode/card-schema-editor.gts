@@ -1,7 +1,6 @@
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 import { internalKeyFor, getPlural } from '@cardstack/runtime-common';
 import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
@@ -17,7 +16,10 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 import { gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { scheduleOnce } from '@ember/runloop';
+import {
+  isOwnField,
+  calculateTotalOwnFields,
+} from '@cardstack/host/utils/schema-editor';
 
 interface Signature {
   Args: {
@@ -25,7 +27,6 @@ interface Signature {
     file: Ready;
     cardType: Type;
     moduleSyntax: ModuleSyntax;
-    setTotalFieldsOfSchema?: (totalFields: number) => void;
   };
 }
 
@@ -218,27 +219,14 @@ export default class CardSchemaEditor extends Component<Signature> {
 
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
-  @tracked totalOwnFields: number = 0;
-
-  constructor(owner: any, args: any) {
-    super(owner, args);
-
-    scheduleOnce('afterRender', this, this.calculateTotalOwnFields);
-  }
 
   @action
   isOwnField(fieldName: string): boolean {
-    return Object.keys(
-      Object.getOwnPropertyDescriptors(this.args.card.prototype),
-    ).includes(fieldName);
+    return isOwnField(this.args.card, fieldName);
   }
 
-  @action
-  calculateTotalOwnFields() {
-    this.totalOwnFields = this.args.cardType.fields.filter((field) =>
-      this.isOwnField(field.name),
-    ).length;
-    this.args.setTotalFieldsOfSchema?.(this.totalOwnFields);
+  get totalOwnFields() {
+    return calculateTotalOwnFields(this.args.card, this.args.cardType);
   }
 
   fieldCardDisplayName(card: Type | CodeRef): string {
