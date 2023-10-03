@@ -153,6 +153,7 @@ export default class DetailPanel extends Component<Signature> {
                 @title={{@readyFile.name}}
                 @hasBackground={{true}}
                 class='header'
+                data-test-current-module-name={{@readyFile.name}}
               />
               <Selector
                 @class='in-this-file-menu'
