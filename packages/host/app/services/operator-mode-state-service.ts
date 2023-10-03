@@ -336,7 +336,7 @@ export default class OperatorModeStateService extends Service {
 
   get currentRealmOpenDirs() {
     if (this.currentRealmURL) {
-      let currentRealmOpenDirs = this.openDirs.get(this.currentRealmURL.href);
+      let currentRealmOpenDirs = this.openDirs.get(this.currentRealmURL);
 
       if (currentRealmOpenDirs) {
         return currentRealmOpenDirs;
