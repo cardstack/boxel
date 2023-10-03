@@ -18,7 +18,7 @@ import { type RealmInfo } from '@cardstack/runtime-common';
 import {
   hasExecutableExtension,
   getPlural,
-  isCardDocument,
+  isCardDocumentString,
 } from '@cardstack/runtime-common';
 
 import { type Ready } from '@cardstack/host/resources/file';
@@ -85,7 +85,7 @@ export default class DetailPanel extends Component<Signature> {
   get isCardInstance() {
     return (
       this.isJSON &&
-      isCardDocument(this.args.readyFile.content) &&
+      isCardDocumentString(this.args.readyFile.content) &&
       this.args.cardInstance !== undefined
     );
   }
