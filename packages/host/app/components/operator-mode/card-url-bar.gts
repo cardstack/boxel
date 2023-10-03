@@ -25,6 +25,7 @@ interface Signature {
     userHasDismissedError: boolean; // user driven state that indicates if we should show error message
     resetLoadFileError: () => void; // callback to reset upstream error state -- perform on keypress
     dismissURLError: () => void; // callback allow user to dismiss the error message
+    realmURL: string;
   };
 }
 
@@ -37,7 +38,7 @@ export default class CardURLBar extends Component<Signature> {
       ...attributes
     >
       <div class='realm-info' data-test-card-url-bar-realm-info>
-        <RealmInfoProvider @realmURL={{this.realmURL}}>
+        <RealmInfoProvider @realmURL={{@realmURL}}>
           <:ready as |realmInfo|>
             <div class='realm-icon'>
               <img src={{realmInfo.iconURL}} alt='realm-icon' />
@@ -201,16 +202,5 @@ export default class CardURLBar extends Component<Signature> {
     return this.operatorModeStateService.state.codePath
       ? this.operatorModeStateService.state.codePath.toString()
       : null;
-  }
-
-  private get realmURL() {
-    let url;
-    if (this.codePath) {
-      url = this.cardService.getRealmURLFor(new URL(this.codePath))?.toString();
-    }
-    if (!url) {
-      url = this.cardService.defaultURL.toString();
-    }
-    return url;
   }
 }
