@@ -55,6 +55,10 @@ export default class CardSchemaEditor extends Component<Signature> {
         display: inline-flex;
       }
 
+      .pill:hover {
+        background-color: var(--boxel-100);
+      }
+
       .pill > div {
         display: flex;
       }
