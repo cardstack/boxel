@@ -162,13 +162,13 @@ export default class CardSchemaEditor extends Component<Signature> {
         </div>
         <div class='total-fields' data-test-total-fields>
           {{#if (gt this.totalOwnFields 0)}}
-            <p class='total-fields-value'>+ {{this.totalOwnFields}}</p>
-            <p class='total-fields-label'>{{getPlural
+            <span class='total-fields-value'>+ {{this.totalOwnFields}}</span>
+            <span class='total-fields-label'>{{getPlural
                 'Field'
                 this.totalOwnFields
-              }}</p>
+              }}</span>
           {{else}}
-            <p class='total-fields-label'>No Fields</p>
+            <span class='total-fields-label'>No Fields</span>
           {{/if}}
         </div>
       </div>
