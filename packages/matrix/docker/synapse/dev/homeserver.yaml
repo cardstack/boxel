@@ -84,9 +84,11 @@ email:
   smtp_host: 'boxel-smtp'
   smtp_port: 25
   enable_tls: false
-  notif_from: 'Your Friendly %(app)s homeserver <noreply@example.com>'
+  notif_from: '%(app)s <noreply@example.com>'
   app_name: 'Boxel'
   enable_notifs: true
   notif_for_new_users: false
   client_base_url: 'http://localhost:4200'
   validation_token_lifetime: '15m'
+  subjects:
+    email_validation: '%(app)s Email Validation'

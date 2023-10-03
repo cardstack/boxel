@@ -8,14 +8,12 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, timeout } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
 
 import difference from 'lodash/difference';
 import { type IAuthData, type IRequestTokenResponse } from 'matrix-js-sdk';
 
 import {
   BoxelHeader,
-  BoxelInput,
   BoxelInputValidationState,
   LoadingIndicator,
   Button,
@@ -44,20 +42,33 @@ export default class RegisterUser extends Component<Args> {
     <BoxelHeader @title='Register User' @hasBackground={{true}} />
     <div class='registration-form' data-test-register-user>
       {{#if this.showEmailValidationStatus}}
-        <div class='email-field'>
-          <span class='label'>Email:</span>
-          <span class='email'>
-            {{! @glint-ignore glint doesn't understand what state we are in here}}
-            {{this.state.email}}
-          </span>
+        <div class='email'>
           {{#if this.isEmailValidated}}
-            <span class='email-validated' data-test-email-validated>
-              {{svgJar 'check-mark' width='27' height='27'}}
-            </span>
+            <p class='validated'>
+              The email address
+              {{! @glint-ignore glint doesn't understand what state we are in here}}
+              <strong>{{this.state.email}}</strong>
+              has been validated.
+              <span class='validated-check' data-test-email-validated>
+                <span>
+                  {{svgJar 'check-mark' width='27' height='27'}}
+                </span>
+              </span>
+            </p>
           {{else}}
-            <div class='notice'>
-              Please check your email for a validation message and click the
-              link within the email (TODO add "resend" button).</div>
+            <p>
+              The email address
+              {{! @glint-ignore glint doesn't understand what state we are in here}}
+              <strong>{{this.state.email}}</strong>
+              has not been validated.
+            </p>
+            <p>Please check your email for a validation message and click the
+              link within the email.</p>
+            <Button
+              data-test-resend-validation
+              {{on 'click' this.resendValidation}}
+              @kind='secondary-light'
+            >Resend Validation Email</Button>
           {{/if}}
         </div>
 
@@ -70,7 +81,7 @@ export default class RegisterUser extends Component<Args> {
             data-test-token-field
             @id=''
             @state={{this.tokenInputState}}
-            @value={{this.cleanToken}}
+            @value={{this.token}}
             @errorMessage={{this.tokenError}}
             @onInput={{this.setToken}}
           />
@@ -94,7 +105,7 @@ export default class RegisterUser extends Component<Args> {
             data-test-username-field
             @id=''
             @state={{this.usernameInputState}}
-            @value={{this.cleanUsername}}
+            @value={{this.username}}
             @errorMessage={{this.usernameError}}
             @onInput={{this.setUsername}}
           />
@@ -104,11 +115,27 @@ export default class RegisterUser extends Component<Args> {
           @tag='label'
           class='registration-field'
         >
-          <BoxelInput
+          <BoxelInputValidationState
             data-test-password-field
-            type='password'
+            @id=''
+            @type='password'
             @value={{this.password}}
+            @state={{this.passwordInputState}}
+            @errorMessage={{this.passwordError}}
             @onInput={{this.setPassword}}
+          />
+        </FieldContainer>
+        <FieldContainer
+          @label='Confirm Password:'
+          @tag='label'
+          class='registration-field'
+        >
+          <BoxelInputValidationState
+            data-test-confirm-password-field
+            @type='password'
+            @value={{this.confirmPassword}}
+            @state={{this.passwordInputState}}
+            @onInput={{this.setConfirmPassword}}
           />
         </FieldContainer>
         <div class='button-wrapper'>
@@ -126,9 +153,10 @@ export default class RegisterUser extends Component<Args> {
             data-test-email-field
             @id=''
             @state={{this.emailInputState}}
-            @value={{this.cleanEmail}}
+            @value={{this.email}}
             @errorMessage={{this.emailError}}
             @onInput={{this.setEmail}}
+            @type='email'
           />
         </FieldContainer>
         <div class='button-wrapper'>
@@ -137,7 +165,7 @@ export default class RegisterUser extends Component<Args> {
             data-test-validate-btn
             @kind='primary'
             @disabled={{this.isValidateButtonDisabled}}
-            {{on 'click' (perform this.validateEmail)}}
+            {{on 'click' this.doValidation}}
           >Validate Email</Button>
         </div>
       {{/if}}
@@ -160,17 +188,36 @@ export default class RegisterUser extends Component<Args> {
       .registration-field {
         margin-top: var(--boxel-sp-sm);
       }
+      .email {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        margin-bottom: var(--boxel-sp-xxl);
+      }
+      .validated strong {
+        color: var(--boxel-dark-green);
+      }
+      .validated-check {
+        --icon-color: var(--boxel-dark-green);
+        position: relative;
+      }
+      .validated-check span {
+        position: absolute;
+        top: -4px;
+      }
     </style>
   </template>
 
-  @tracked private usernameError: string | undefined;
-  @tracked private tokenError: string | undefined;
-  @tracked private email: string | undefined;
+  @tracked private email = '';
+  @tracked private username = '';
+  @tracked private password = '';
+  @tracked private confirmPassword = '';
+  @tracked private token = '';
   @tracked private isEmailValidated = false;
   @tracked private emailError: string | undefined;
-  @tracked private username: string | undefined;
-  @tracked private password: string | undefined;
-  @tracked private token: string | undefined;
+  @tracked private usernameError: string | undefined;
+  @tracked private tokenError: string | undefined;
+  @tracked private passwordError: string | undefined;
   @tracked private state:
     | { type: 'initial' }
     | {
@@ -179,6 +226,7 @@ export default class RegisterUser extends Component<Args> {
         email: string;
         clientSecret: string;
         sid: string;
+        sendAttempt: number;
       }
     | {
         type: 'register';
@@ -188,6 +236,7 @@ export default class RegisterUser extends Component<Args> {
         email: string;
         clientSecret: string;
         sid: string;
+        sendAttempt: number;
       }
     | {
         type: 'askForToken';
@@ -197,6 +246,7 @@ export default class RegisterUser extends Component<Args> {
         email: string;
         clientSecret: string;
         sid: string;
+        sendAttempt: number;
       }
     | {
         type: 'sendToken';
@@ -207,6 +257,7 @@ export default class RegisterUser extends Component<Args> {
         email: string;
         clientSecret: string;
         sid: string;
+        sendAttempt: number;
       }
     | {
         type: 'waitForEmailValidation';
@@ -217,6 +268,7 @@ export default class RegisterUser extends Component<Args> {
         email: string;
         clientSecret: string;
         sid: string;
+        sendAttempt: number;
       }
     // TODO we'll need to also add a CAPTCHA state
     // this will be probably impossible to test
@@ -232,19 +284,17 @@ export default class RegisterUser extends Component<Args> {
   @service private declare matrixService: MatrixService;
 
   private get showEmailValidationStatus() {
-    return (
-      [
-        'askForUserCreds',
-        'register',
-        'askForToken',
-        'sendToken',
-        'waitForEmailValidation',
-      ].includes(this.state.type) && !this.doRegistrationFlow.isRunning
-    );
+    return [
+      'askForUserCreds',
+      'register',
+      'askForToken',
+      'sendToken',
+      'waitForEmailValidation',
+    ].includes(this.state.type);
   }
 
   private get isRegisterButtonDisabled() {
-    return !this.username || !this.password;
+    return !this.username || !this.password || !this.confirmPassword;
   }
 
   private get isValidateButtonDisabled() {
@@ -255,20 +305,12 @@ export default class RegisterUser extends Component<Args> {
     return !this.token;
   }
 
-  private get cleanUsername() {
-    return this.username || '';
-  }
-
-  private get cleanToken() {
-    return this.token || '';
-  }
-
-  private get cleanEmail() {
-    return this.email || '';
-  }
-
   private get usernameInputState() {
     return this.usernameError ? 'invalid' : 'initial';
+  }
+
+  private get passwordInputState() {
+    return this.passwordError ? 'invalid' : 'initial';
   }
 
   private get tokenInputState() {
@@ -300,6 +342,13 @@ export default class RegisterUser extends Component<Args> {
   @action
   private setPassword(password: string) {
     this.password = password;
+    this.passwordError = undefined;
+  }
+
+  @action
+  private setConfirmPassword(password: string) {
+    this.confirmPassword = password;
+    this.passwordError = undefined;
   }
 
   @action
@@ -317,6 +366,8 @@ export default class RegisterUser extends Component<Args> {
       throw new Error(
         `bug: should never get here: register button disabled when no password`,
       );
+    } else if (this.password !== this.confirmPassword) {
+      this.passwordError = `Passwords do not match`;
     } else {
       this.state = {
         ...this.state,
@@ -349,43 +400,73 @@ export default class RegisterUser extends Component<Args> {
     }
   }
 
-  private validateEmail = restartableTask(async () => {
-    if (!this.email) {
+  @action resendValidation() {
+    if (this.state.type === 'initial' || this.state.type === 'login') {
       throw new Error(
-        `bug: should never get here: validate button disabled when no email`,
+        `invalid state: cannot resendValidation() in state ${this.state.type}`,
       );
     }
-    let email = this.email;
-    let clientSecret = uuidv4();
-    let res: IRequestTokenResponse | undefined;
-    try {
-      res = await this.matrixService.requestRegisterEmailToken(
-        email,
-        clientSecret,
-        1,
-      );
-    } catch (e: any) {
-      if (e.status === 400 && e.data.errcode === 'M_THREEPID_IN_USE') {
-        this.emailError = e.message;
-        return;
+
+    this.state.sendAttempt++;
+    let { clientSecret, sendAttempt } = this.state;
+    this.validateEmail.perform(clientSecret, sendAttempt);
+  }
+
+  @action doValidation() {
+    this.validateEmail.perform();
+  }
+
+  private validateEmail = restartableTask(
+    async (clientSecret: string = uuidv4(), sendAttempt: number = 1) => {
+      if (!this.email) {
+        throw new Error(
+          `bug: should never get here: validate button disabled when no email`,
+        );
       }
-      throw e;
-    }
-    let { sid } = res;
-    await this.checkEmailValidation.perform({
-      sid,
-      clientSecret,
-      onSession: (session) => {
-        this.state = {
-          type: 'askForUserCreds',
+      let email = this.email;
+      let res: IRequestTokenResponse | undefined;
+      try {
+        res = await this.matrixService.requestRegisterEmailToken(
           email,
+          clientSecret,
+          sendAttempt,
+        );
+      } catch (e: any) {
+        if (e.status === 400 && e.data.errcode === 'M_THREEPID_IN_USE') {
+          this.emailError = e.message;
+          return;
+        }
+        throw e;
+      }
+      let { sid } = res;
+
+      // only need to kick off the check validation poll after
+      // the first vaidation attempt
+      if (sendAttempt === 1) {
+        await this.checkEmailValidation.perform({
           sid,
           clientSecret,
-          session,
-        };
-      },
-    });
-  });
+          onSession: (session) => {
+            this.state = {
+              type: 'askForUserCreds',
+              email,
+              sid,
+              clientSecret,
+              session,
+              sendAttempt,
+            };
+          },
+        });
+      } else {
+        if (this.state.type === 'initial' || this.state.type === 'login') {
+          throw new Error(
+            `invalid state: cannot validateEmail() with sendAttempt=${sendAttempt} in state ${this.state.type}`,
+          );
+        }
+        this.state.sid = sid;
+      }
+    },
+  );
 
   private checkEmailValidation = restartableTask(
     async (opts?: {
@@ -447,7 +528,7 @@ export default class RegisterUser extends Component<Args> {
           }
         }
         if (!this.isEmailValidated) {
-          await timeout(5 * 1000);
+          await timeout(1000);
           this.checkEmailValidation.perform();
         }
       }

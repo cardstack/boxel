@@ -12,6 +12,22 @@ interface ValidationStateInputArgs {
   helperText?: string;
   placeholder?: string;
   id?: string;
+  // from https://developer.mozilla.org/en-US/docs/Web/HTML/Element/Input (add more as needed)
+  type?:
+    | 'password'
+    | 'number'
+    | 'email'
+    | 'color'
+    | 'tel'
+    | 'file'
+    | 'url'
+    | 'date'
+    | 'datetime-local'
+    | 'checkbox'
+    | 'image'
+    | 'radio'
+    | 'range'
+    | 'search';
   value: string;
   onInput?: (val: string) => void;
   onBlur?: (ev: Event) => void;
@@ -64,6 +80,8 @@ export default class BoxelInputValidationState extends Component<Signature> {
         @placeholder={{@placeholder}}
         @onKeyPress={{@onKeyPress}}
         @onFocus={{@onFocus}}
+        {{! BoxelInput gets this from the ...attribues }}
+        type={{@type}}
         autocomplete='off'
         autocorrect='off'
         autocapitalize='off'
