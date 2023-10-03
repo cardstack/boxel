@@ -2,6 +2,8 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import { gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
 import { internalKeyFor, getPlural } from '@cardstack/runtime-common';
 import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
 
@@ -14,12 +16,12 @@ import type { Ready } from '@cardstack/host/resources/file';
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
-import { gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import {
   isOwnField,
   calculateTotalOwnFields,
 } from '@cardstack/host/utils/schema-editor';
+
+import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {

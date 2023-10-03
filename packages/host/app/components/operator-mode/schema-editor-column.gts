@@ -7,12 +7,13 @@ import { tracked } from '@glimmer/tracking';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
+import { getPlural } from '@cardstack/runtime-common';
+
 import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
 import { CardType } from '@cardstack/host/resources/card-type';
 import { Ready } from '@cardstack/host/resources/file';
 
 import { BaseDef } from 'https://cardstack.com/base/card-api';
-import { getPlural } from '@cardstack/runtime-common';
 
 interface Signature {
   Element: HTMLElement;
@@ -27,7 +28,7 @@ type SelectedItem = 'schema-editor' | null;
 
 export default class SchemaEditorColumn extends Component<Signature> {
   @tracked selectedItem: SelectedItem = 'schema-editor';
-  @tracked totalFields: number = 0;
+  @tracked totalFields = 0;
 
   @action selectItem(item: SelectedItem) {
     if (this.selectedItem === item) {

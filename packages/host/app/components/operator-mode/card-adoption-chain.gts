@@ -17,8 +17,9 @@ import type { Ready } from '@cardstack/host/resources/file';
 
 import LoaderService from '@cardstack/host/services/loader-service';
 
-import type { BaseDef } from 'https://cardstack.com/base/card-api';
 import { calculateTotalOwnFields } from '@cardstack/host/utils/schema-editor';
+
+import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
