@@ -191,6 +191,16 @@ export function isCardDocument(doc: any): doc is CardDocument {
   return isSingleCardDocument(doc) || isCardCollectionDocument(doc);
 }
 
+export function isCardDocumentString(maybeJsonString: string) {
+  try {
+    let doc = JSON.parse(maybeJsonString);
+    return isSingleCardDocument(doc) || isCardCollectionDocument(doc);
+  } catch (err) {
+    console.log(`string ${maybeJsonString} is not a valid card doc`);
+    return false;
+  }
+}
+
 export function isSingleCardDocument(doc: any): doc is SingleCardDocument {
   if (typeof doc !== 'object' || doc == null) {
     return false;

@@ -34,7 +34,7 @@ import {
   type CodeRef,
   RealmPaths,
   logger,
-  isCardDocument,
+  isCardDocumentString,
   isSingleCardDocument,
   identifyCard,
   moduleFrom,
@@ -258,7 +258,7 @@ export default class CodeMode extends Component<Signature> {
   private isNonCardJson() {
     return (
       this.readyFile.name.endsWith('.json') &&
-      !isCardDocument(this.readyFile.content)
+      !isCardDocumentString(this.readyFile.content)
     );
   }
 
@@ -421,7 +421,7 @@ export default class CodeMode extends Component<Signature> {
   @use private importedModule = resource(() => {
     if (isReady(this.openFile.current)) {
       let f: Ready = this.openFile.current;
-      if (f.url.endsWith('.json')) {
+      if (f.url.endsWith('.json') && isCardDocumentString(f.content)) {
         let ref = identifyCard(this.card?.constructor);
         if (ref !== undefined) {
           return importResource(this, () => moduleFrom(ref as CodeRef));
@@ -893,10 +893,11 @@ export default class CodeMode extends Component<Signature> {
                     @realmIconURL={{this.realmIconURL}}
                     data-test-card-resource-loaded
                   />
-                {{else if this.importedModule.module}}
+                {{else if this.selectedElementInFile}}
                   <SchemaEditorColumn
                     @file={{this.readyFile}}
-                    @importedModule={{this.importedModule.module}}
+                    @card={{this.selectedElementInFile.card}}
+                    @cardTypeResource={{this.selectedElementInFile.cardType}}
                   />
                 {{else if this.schemaEditorIncompatible}}
                   <div

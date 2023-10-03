@@ -7,13 +7,17 @@ import { Accordion } from '@cardstack/boxel-ui';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
+import { CardType } from '@cardstack/host/resources/card-type';
 import { Ready } from '@cardstack/host/resources/file';
+
+import { BaseDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Element: HTMLElement;
   Args: {
     file: Ready;
-    importedModule: object;
+    cardTypeResource?: CardType;
+    card: typeof BaseDef;
   };
 }
 
@@ -43,7 +47,8 @@ export default class SchemaEditorColumn extends Component<Signature> {
           <CardAdoptionChain
             class='accordion-content'
             @file={{@file}}
-            @importedModule={{@importedModule}}
+            @card={{@card}}
+            @cardTypeResource={{@cardTypeResource}}
           />
         </:content>
       </A.Item>
