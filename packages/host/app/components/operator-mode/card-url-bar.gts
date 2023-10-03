@@ -37,16 +37,19 @@ export default class CardURLBar extends Component<Signature> {
       ...attributes
     >
       <div class='realm-info' data-test-card-url-bar-realm-info>
-        <RealmInfoProvider
-          @realmURL={{this.realmURL}}
-          @returnUnknownRealmIfError={{true}}
-        >
+        <RealmInfoProvider @realmURL={{this.realmURL}}>
           <:ready as |realmInfo|>
             <div class='realm-icon'>
               <img src={{realmInfo.iconURL}} alt='realm-icon' />
             </div>
             <span>in {{realmInfo.name}}</span>
           </:ready>
+          <:error>
+            <div class='realm-icon'>
+              <img src='' alt='realm-icon' />
+            </div>
+            <span>in Unknown Workspace</span>
+          </:error>
         </RealmInfoProvider>
       </div>
       <div class='input'>
