@@ -30,34 +30,33 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
   </div>
   <style>
     .accordion-item {
-      --accordion-item-closed-min-height: 2.75rem;
-      --accordion-item-open-min-height: var(
-        --item-open-min-height,
-        var(--accordion-default-item-height)
-      );
+      --accordion-item-closed-height: 2.75rem;
+      --accordion-item-open-height: 8rem;
       --accordion-item-border: var(--accordion-border);
       --accordion-item-title-font: 700 var(--boxel-font);
       --accordion-item-title-letter-spacing: var(--boxel-lsp-xs);
       --accordion-item-title-padding: var(--boxel-sp-xs);
 
-      min-height: var(--accordion-item-closed-min-height);
-      display: grid;
-      grid-template-rows: auto 1fr;
-      flex-shrink: 0;
+      height: var(--accordion-item-closed-height);
+      display: flex;
+      flex-direction: column;
+      transition: all var(--boxel-transition);
     }
     .accordion-item.open {
-      flex-grow: 1;
-      flex-shrink: 1;
-      min-height: var(--accordion-item-open-min-height);
+      height: var(--accordion-item-open-height);
+      flex: 1;
     }
-    .accordion-item > .content {
-      height: 0;
-      overflow: hidden;
+    .content {
+      flex: 1;
+      opacity: 0;
+      display: none;
     }
     .accordion-item.open > .content {
-      height: 100%;
+      display: block;
+      opacity: 1;
       overflow-y: auto;
       border-top: var(--accordion-item-border);
+      transition: all var(--boxel-transition);
     }
     .title {
       display: flex;
@@ -78,6 +77,7 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
       width: var(--boxel-icon-sm);
       height: var(--boxel-icon-sm);
       transform: rotate(-90deg);
+      transition: transform var(--boxel-transition);
     }
     .accordion-item.open > .title > .caret {
       transform: rotate(0deg);

@@ -5,23 +5,13 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import cssVars from '@cardstack/boxel-ui/helpers/css-var';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import {
-  cssVariable,
-  CSSVariableInfo,
-} from 'ember-freestyle/decorators/css-variable';
 import Accordion from './index';
 
 export default class AccordionUsage extends Component {
-  @cssVariable({ cssClassName: 'accordion' })
-  declare defaultOpenHeight: CSSVariableInfo;
-
   <template>
     <FreestyleUsage @name='Accordion'>
       <:example>
-        <Accordion
-          style={{cssVars item-open-min-height=this.defaultOpenHeight.value}}
-          as |A|
-        >
+        <Accordion as |A|>
           <A.Item
             class='item'
             @onClick={{fn this.selectItem 'schema'}}
@@ -40,7 +30,7 @@ export default class AccordionUsage extends Component {
           </A.Item>
           <A.Item
             class='item'
-            style={{cssVars item-open-min-height='15rem'}}
+            style={{cssVars accordion-item-closed-height='65px'}}
             @onClick={{fn this.selectItem 'other'}}
             @isOpen={{eq this.selectedItem 'other'}}
           >
@@ -70,11 +60,14 @@ export default class AccordionUsage extends Component {
       </:example>
       <:cssVars as |Css|>
         <Css.Basic
-          @name='item-open-min-height'
-          @type='min-height, height'
-          @description='Sets a default min-height for accordion items when items are expanded. Can also be used to set height for an individual accordion item.'
-          @value={{this.defaultOpenHeight.value}}
-          @onInput={{this.defaultOpenHeight.update}}
+          @name='accordion-item-closed-height'
+          @type='height'
+          @description='Sets height for collapsed accordion item.'
+        />
+        <Css.Basic
+          @name='accordion-item-open-height'
+          @type='height'
+          @description='Sets height for expanded accordion item.'
         />
       </:cssVars>
     </FreestyleUsage>

@@ -55,9 +55,6 @@ export default class SchemaEditorColumn extends Component<Signature> {
     </Accordion>
 
     <style>
-      .accordion {
-        height: 100%;
-      }
       .accordion-item:last-child {
         border-bottom: var(--boxel-border);
       }
