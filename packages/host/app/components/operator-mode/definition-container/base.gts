@@ -32,7 +32,7 @@ interface BaseSignature {
 
 export class BaseDefinitionContainer extends Component<BaseSignature> {
   <template>
-    <CardContainer ...attributes>
+    <CardContainer class='card-container' ...attributes>
       <Header
         @title={{@title}}
         @hasBackground={{true}}
@@ -72,6 +72,10 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
     </CardContainer>
 
     <style>
+      .card-container {
+        overflow: hidden;
+        overflow-wrap: anywhere;
+      }
       .header {
         --boxel-header-text-size: var(--boxel-font-size-sm);
         --boxel-header-padding: var(--boxel-sp-xs);
