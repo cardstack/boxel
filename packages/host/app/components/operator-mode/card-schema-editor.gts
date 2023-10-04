@@ -148,22 +148,29 @@ export default class CardSchemaEditor extends Component<Signature> {
       class='schema-editor-container'
       data-test-card-schema={{@cardType.displayName}}
     >
-      <button
-        class='pill'
-        data-test-card-schema-navigational-button
-        {{on 'click' (fn this.openCardDefinition @cardType.module)}}
-      >
-        <div class='realm-icon'>
-          <RealmInfoProvider @fileURL={{@cardType.module}}>
-            <:ready as |realmInfo|>
-              <img
-                src={{realmInfo.iconURL}}
-                alt='Realm icon'
-                data-test-realm-icon-url={{realmInfo.iconURL}}
-              />
-            </:ready>
-          </RealmInfoProvider>
-        </div>
+      <div class='header'>
+        <button
+          class='pill'
+          data-test-card-schema-navigational-button
+          {{on 'click' (fn this.openCardDefinition @cardType.module)}}
+        >
+          <div class='realm-icon'>
+            <RealmInfoProvider @fileURL={{@cardType.module}}>
+              <:ready as |realmInfo|>
+                <img
+                  src={{realmInfo.iconURL}}
+                  alt='Realm icon'
+                  data-test-realm-icon-url={{realmInfo.iconURL}}
+                />
+              </:ready>
+            </RealmInfoProvider>
+          </div>
+          <div>
+            <span>
+              {{@cardType.displayName}}
+            </span>
+          </div>
+        </button>
         <div class='total-fields' data-test-total-fields>
           {{#if (gt this.totalOwnFields 0)}}
             <span class='total-fields-value'>+ {{this.totalOwnFields}}</span>
@@ -175,7 +182,7 @@ export default class CardSchemaEditor extends Component<Signature> {
             <span class='total-fields-label'>No Fields</span>
           {{/if}}
         </div>
-      </button>
+      </div>
 
       <div class='card-fields'>
         {{#each @cardType.fields as |field|}}
