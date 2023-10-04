@@ -1,7 +1,6 @@
 import Component from '@glimmer/component';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
-import { action } from '@ember/object';
 
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
@@ -29,18 +28,24 @@ export default class CardAdoptionChain extends Component<Signature> {
         justify-content: center;
         align-items: center;
         padding: var(--boxel-sp) 0;
+        gap: var(--boxel-sp-xxxs);
+        font: var(--boxel-font-size-sm);
 
         position: relative;
       }
 
+      .chain:last-child .inherits-from {
+        display: none;
+      }
+
       .inherits-icon {
-        height: 25px;
+        height: 24px;
       }
 
       .line1 {
         width: 50%;
-        height: 2px;
-        background-color: var(--boxel-dark);
+        height: 1px;
+        background-color: var(--boxel-purple-200);
         position: absolute;
         top: 50%;
         left: 0;
@@ -49,8 +54,8 @@ export default class CardAdoptionChain extends Component<Signature> {
 
       .line2 {
         width: 50%;
-        height: 2px;
-        background-color: var(--boxel-dark);
+        height: 1px;
+        background-color: var(--boxel-purple-200);
         position: absolute;
         top: 50%;
         right: 0;
@@ -59,25 +64,25 @@ export default class CardAdoptionChain extends Component<Signature> {
     </style>
 
     <div class='card-adoption-chain'>
-      {{#each @cardInheritanceChain as |data index|}}
-        <CardSchemaEditor
-          @card={{data.card}}
-          @cardType={{data.cardType}}
-          @file={{@file}}
-          @moduleSyntax={{this.moduleSyntax}}
-        />
-        {{#unless (this.isLastIndex index)}}
+      {{#each @cardInheritanceChain as |data|}}
+        <div class='chain'>
+          <CardSchemaEditor
+            @card={{data.card}}
+            @cardType={{data.cardType}}
+            @file={{@file}}
+            @moduleSyntax={{this.moduleSyntax}}
+          />
           <div class='inherits-from'>
             <span class='inherits-icon'>{{svgJar
-                'icon-inheritance'
-                width='25'
-                height='25'
+                'icon-inherit'
+                width='24px'
+                height='24px'
               }}</span>
             <span>Inherits From</span>
             <div class='line1' />
             <div class='line2' />
           </div>
-        {{/unless}}
+        </div>
       {{/each}}
     </div>
   </template>
@@ -85,10 +90,5 @@ export default class CardAdoptionChain extends Component<Signature> {
   @cached
   get moduleSyntax() {
     return new ModuleSyntax(this.args.file.content);
-  }
-
-  @action
-  isLastIndex(index: number) {
-    return index == this.args.cardInheritanceChain.length - 1;
   }
 }
