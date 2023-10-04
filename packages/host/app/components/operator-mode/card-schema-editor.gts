@@ -1,3 +1,5 @@
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
@@ -20,6 +22,7 @@ import {
   isOwnField,
   calculateTotalOwnFields,
 } from '@cardstack/host/utils/schema-editor';
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
@@ -56,6 +59,10 @@ export default class CardSchemaEditor extends Component<Signature> {
         background-color: white;
         font-weight: 600;
         display: inline-flex;
+      }
+
+      .pill:hover {
+        background-color: var(--boxel-100);
       }
 
       .pill > div {
@@ -141,24 +148,21 @@ export default class CardSchemaEditor extends Component<Signature> {
       class='schema-editor-container'
       data-test-card-schema={{@cardType.displayName}}
     >
-      <div class='header'>
-        <div class='pill'>
-          <div class='realm-icon'>
-            <RealmInfoProvider @fileURL={{@cardType.module}}>
-              <:ready as |realmInfo|>
-                <img
-                  src={{realmInfo.iconURL}}
-                  alt='Realm icon'
-                  data-test-realm-icon-url={{realmInfo.iconURL}}
-                />
-              </:ready>
-            </RealmInfoProvider>
-          </div>
-          <div>
-            <span>
-              {{@cardType.displayName}}
-            </span>
-          </div>
+      <button
+        class='pill'
+        data-test-card-schema-navigational-button
+        {{on 'click' (fn this.openCardDefinition @cardType.module)}}
+      >
+        <div class='realm-icon'>
+          <RealmInfoProvider @fileURL={{@cardType.module}}>
+            <:ready as |realmInfo|>
+              <img
+                src={{realmInfo.iconURL}}
+                alt='Realm icon'
+                data-test-realm-icon-url={{realmInfo.iconURL}}
+              />
+            </:ready>
+          </RealmInfoProvider>
         </div>
         <div class='total-fields' data-test-total-fields>
           {{#if (gt this.totalOwnFields 0)}}
@@ -171,7 +175,7 @@ export default class CardSchemaEditor extends Component<Signature> {
             <span class='total-fields-label'>No Fields</span>
           {{/if}}
         </div>
-      </div>
+      </button>
 
       <div class='card-fields'>
         {{#each @cardType.fields as |field|}}
@@ -186,31 +190,37 @@ export default class CardSchemaEditor extends Component<Signature> {
                 </div>
               </div>
               <div class='right'>
-                <div class='pill'>
-                  <div class='realm-icon'>
-                    <RealmInfoProvider @fileURL={{this.fieldModuleURL field}}>
-                      <:ready as |realmInfo|>
-                        <img
-                          src={{realmInfo.iconURL}}
-                          alt='Realm icon'
-                          data-test-realm-icon-url={{realmInfo.iconURL}}
-                        />
-                      </:ready>
-                    </RealmInfoProvider>
-                  </div>
-                  <div>
-                    <span>
-                      {{#let
-                        (this.fieldCardDisplayName field.card)
-                        as |cardDisplayName|
-                      }}
-                        <span
-                          data-test-card-display-name={{cardDisplayName}}
-                        >{{cardDisplayName}}</span>
-                      {{/let}}
-                    </span>
-                  </div>
-                </div>
+                {{#let (this.fieldModuleURL field) as |moduleUrl|}}
+                  <button
+                    class='pill'
+                    data-test-card-schema-field-navigational-button
+                    {{on 'click' (fn this.openCardDefinition moduleUrl)}}
+                  >
+                    <div class='realm-icon'>
+                      <RealmInfoProvider @fileURL={{moduleUrl}}>
+                        <:ready as |realmInfo|>
+                          <img
+                            src={{realmInfo.iconURL}}
+                            alt='Realm icon'
+                            data-test-realm-icon-url={{realmInfo.iconURL}}
+                          />
+                        </:ready>
+                      </RealmInfoProvider>
+                    </div>
+                    <div>
+                      <span>
+                        {{#let
+                          (this.fieldCardDisplayName field.card)
+                          as |cardDisplayName|
+                        }}
+                          <span
+                            data-test-card-display-name={{cardDisplayName}}
+                          >{{cardDisplayName}}</span>
+                        {{/let}}
+                      </span>
+                    </div>
+                  </button>
+                {{/let}}
               </div>
             </div>
           {{/if}}
@@ -221,6 +231,11 @@ export default class CardSchemaEditor extends Component<Signature> {
 
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
+  @service declare operatorModeStateService: OperatorModeStateService;
+
+  @action openCardDefinition(moduleURL: string) {
+    this.operatorModeStateService.updateCodePath(new URL(moduleURL));
+  }
 
   @action
   isOwnField(fieldName: string): boolean {
