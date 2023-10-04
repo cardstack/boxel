@@ -93,7 +93,6 @@ export async function clearLocalStorage(page: Page) {
   await page.evaluate(() => window.localStorage.clear());
 }
 
-// The page.url will
 export async function validateEmail(
   page: Page,
   email: string,

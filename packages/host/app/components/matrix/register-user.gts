@@ -643,7 +643,6 @@ export default class RegisterUser extends Component<Signature> {
       });
     } catch (e: any) {
       let maybeRegistrationFlow = e.data;
-      debugger;
       if (
         isRegistrationFlows(maybeRegistrationFlow) &&
         maybeRegistrationFlow.flows.length > 0
