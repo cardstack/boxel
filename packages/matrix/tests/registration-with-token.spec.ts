@@ -72,7 +72,7 @@ test.describe('User Registration w/ Token', () => {
     await expect(page.locator('[data-test-next-btn]')).toBeEnabled();
     await page.locator('[data-test-next-btn]').click();
 
-    await assertLoggedIn(page);
+    await assertLoggedIn(page, { email: 'user1@example.com' });
 
     // assert that the registration mode state is cleared properly
     await logout(page);

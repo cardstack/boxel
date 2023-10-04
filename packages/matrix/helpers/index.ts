@@ -11,6 +11,7 @@ export const mailHost = 'http://localhost:5001';
 interface ProfileAssertions {
   userId?: string;
   displayName?: string;
+  email?: string;
 }
 interface LoginOptions {
   expectFailure?: true;
@@ -370,6 +371,11 @@ export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
   await expect(
     page.locator('[data-test-field-value="displayName"]'),
   ).toContainText(opts?.displayName ?? 'user1');
+  if (opts?.email) {
+    await expect(page.locator('[data-test-field-value="email"]')).toHaveText(
+      opts.email,
+    );
+  }
 }
 
 export async function assertLoggedOut(page: Page) {
