@@ -131,7 +131,7 @@ const inThisFileSource = `
   }
 
   class LocalField extends FieldDef {
-    displayName = 'local field';
+    static displayName = 'local field';
   }
   export class ExportedField extends FieldDef {
     static displayName = 'exported field';
