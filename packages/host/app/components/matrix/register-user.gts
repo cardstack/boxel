@@ -653,8 +653,13 @@ export default class RegisterUser extends Component<Signature> {
         let nextStage = remainingStages[0];
         this.nextStateFromResponse(nextStage, maybeRegistrationFlow);
       } else if (isMatrixError(e) && e.errcode === 'M_USER_IN_USE') {
+        if (this.state.type === 'login') {
+          throw new Error(
+            `invalid state: cannot doRegistrationFlow() with errcode '${e.errcode}' in state ${this.state.type}`,
+          );
+        }
         this.usernameError = e.data.error;
-        this.state = { type: 'initial' };
+        this.state = { ...this.state, type: 'askForUserCreds' };
       } else {
         throw e;
       }
