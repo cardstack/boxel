@@ -1,12 +1,13 @@
 # Card Rendering
 
-To render a card, the primary step is to obtain a Glimmer component identified by the template tags within the card. A card may contain several Glimmer components, including fields and other miscellaneous components, that are categorized into three formats: isolated, embedded, and edit. These formats determine which component should be rendered. If there are no components available for the isolated or edit formats, the default format from the CardDef base class is used instead. The Glimmer components themselves are building blocks that can be used to create many other things.
+To render a card, the primary step is to obtain a Glimmer component identified by the template tags within the card. A card may contain several Glimmer components, including fields and other miscellaneous components, that are categorized into four formats: isolated, embedded, edit, and atom. These formats determine which component should be rendered. If there are no components available for the isolated, edit, or atom formats, the default format from the CardDef base class is used instead. The Glimmer components themselves are building blocks that can be used to create many other things.
 
 ## Format
 
 - Isolated format renders a card as a root component.
 - Embedded format is useful when a card is embedded within another card.
 - Edit format is used when the user wants to update the value of the card.
+- Atom format is used to render the smallest format of a card or a field, using the `title` field. Nested `linksToMany` and nested `containsMany` fields use this format.
 
 ## Field
 
