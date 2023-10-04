@@ -88,7 +88,6 @@ export default class RegisterUser extends Component<Signature> {
         <FieldContainer @label='Registration Token:' @tag='label'>
           <BoxelInputValidationState
             data-test-token-field
-            @id=''
             @state={{this.tokenInputState}}
             @value={{this.token}}
             @errorMessage={{this.tokenError}}
@@ -115,7 +114,6 @@ export default class RegisterUser extends Component<Signature> {
         >
           <BoxelInputValidationState
             data-test-username-field
-            @id=''
             @state={{this.usernameInputState}}
             @value={{this.username}}
             @errorMessage={{this.usernameError}}
@@ -129,7 +127,6 @@ export default class RegisterUser extends Component<Signature> {
         >
           <BoxelInputValidationState
             data-test-password-field
-            @id=''
             @type='password'
             @value={{this.password}}
             @state={{this.passwordInputState}}
@@ -166,7 +163,6 @@ export default class RegisterUser extends Component<Signature> {
         <FieldContainer @label='Email:' @tag='label' class='registration-field'>
           <BoxelInputValidationState
             data-test-email-field
-            @id=''
             @state={{this.emailInputState}}
             @value={{this.email}}
             @errorMessage={{this.emailError}}
