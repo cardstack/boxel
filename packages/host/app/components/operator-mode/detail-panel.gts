@@ -187,7 +187,7 @@ export default class DetailPanel extends Component<Signature> {
               <span class='number-items'>{{this.numberOfElementsInFileString}}
               </span>
             </div>
-            <CardContainer>
+            <CardContainer class='in-this-file-card-container'>
               <Header
                 @title={{@readyFile.name}}
                 @hasBackground={{true}}
@@ -339,6 +339,10 @@ export default class DetailPanel extends Component<Signature> {
         --boxel-header-background-color: var(--boxel-100);
         --boxel-header-text-color: var(--boxel-dark);
         --boxel-header-max-width: none;
+      }
+      .in-this-file-card-container {
+        overflow: hidden;
+        overflow-wrap: anywhere;
       }
       .in-this-file-panel-banner {
         display: flex;
