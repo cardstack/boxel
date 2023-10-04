@@ -42,7 +42,7 @@ export default class CardAdoptionChain extends Component<Signature> {
         height: 24px;
       }
 
-      .line1 {
+      .left-line {
         width: 50%;
         height: 1px;
         background-color: var(--boxel-purple-200);
@@ -52,7 +52,7 @@ export default class CardAdoptionChain extends Component<Signature> {
         transform: translateX(-50%);
       }
 
-      .line2 {
+      .right-line {
         width: 50%;
         height: 1px;
         background-color: var(--boxel-purple-200);
@@ -79,8 +79,8 @@ export default class CardAdoptionChain extends Component<Signature> {
                 height='24px'
               }}</span>
             <span>Inherits From</span>
-            <div class='line1' />
-            <div class='line2' />
+            <div class='left-line' />
+            <div class='right-line' />
           </div>
         </div>
       {{/each}}
