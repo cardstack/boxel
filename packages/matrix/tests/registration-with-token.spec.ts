@@ -206,17 +206,23 @@ test.describe('User Registration w/ Token', () => {
   });
 
   test.skip(`it shows an error when passwords do not match`, async ({
-    page,
-    synapse,
-  }) => {});
+    page: _page,
+    synapse: _synapse,
+  }) => {
+    // TODO
+  });
 
   test.skip(`it can register a user when email validation is performed after providing registration token`, async ({
-    page,
-    synapse,
-  }) => {});
+    page: _page,
+    synapse: _synapse,
+  }) => {
+    // TODO
+  });
 
   test.skip(`it can resend email validation message`, async ({
-    page,
-    synapse,
-  }) => {});
+    page: _page,
+    synapse: _synapse,
+  }) => {
+    // TODO
+  });
 });
