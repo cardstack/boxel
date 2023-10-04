@@ -22,6 +22,7 @@ export default class CardAdoptionChain extends Component<Signature> {
     <style>
       .card-adoption-chain {
         background-color: var(--boxel-200);
+        height: 100%;
       }
     </style>
 
