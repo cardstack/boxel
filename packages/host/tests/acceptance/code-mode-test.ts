@@ -105,7 +105,6 @@ const inThisFileSource = `
     field,
     CardDef,
     FieldDef,
-    Component,
   } from 'https://cardstack.com/base/card-api';
   import StringCard from 'https://cardstack.com/base/string';
 

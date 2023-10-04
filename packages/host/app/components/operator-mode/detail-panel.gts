@@ -38,8 +38,10 @@ import Selector from './detail-panel-selector';
 
 import { SelectorItem, selectorItemFunc } from './detail-panel-selector';
 
-import { type Object, ElementType } from './code-mode';
+import { type Element, isCardOrFieldElement } from './code-mode';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+
+import { isCardDef, isFieldDef } from '@cardstack/runtime-common/code-ref';
 
 interface Signature {
   Element: HTMLElement;
@@ -47,9 +49,9 @@ interface Signature {
     realmInfo: RealmInfo | null;
     readyFile: Ready;
     cardInstance: CardDef | undefined;
-    selectedElement?: Object;
-    elements: Object[];
-    selectElement: (el: Object) => void;
+    selectedElement?: Element;
+    elements: Element[];
+    selectElement: (el: Element) => void;
     delete: () => void;
   };
 }
@@ -59,13 +61,23 @@ export default class DetailPanel extends Component<Signature> {
   private lastModified = lastModifiedDate(this, () => this.args.readyFile);
 
   get cardType() {
-    return this.args.selectedElement?.cardType;
+    if (
+      this.args.selectedElement &&
+      isCardOrFieldElement(this.args.selectedElement)
+    ) {
+      return this.args.selectedElement.cardType;
+    }
+    return;
   }
 
   get isLoading() {
     return (
-      this.args.elements.some(({ cardType }) => {
-        return cardType?.isLoading;
+      this.args.elements.some((el) => {
+        if (isCardOrFieldElement(el)) {
+          return el.cardType?.isLoading;
+        } else {
+          return false;
+        }
       }) || this.cardType?.isLoading
     );
   }
@@ -78,7 +90,7 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   @action
-  isSelected(el: ElementInFile) {
+  isSelected(el: Element) {
     return this.args.selectedElement === el;
   }
 
@@ -102,15 +114,25 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   get isField() {
-    return (
-      this.isModule && this.args.selectedElement?.type === ElementType.Field
-    );
+    if (
+      this.args.selectedElement &&
+      isCardOrFieldElement(this.args.selectedElement)
+    ) {
+      return (
+        this.isModule && isFieldDef(this.args.selectedElement?.cardOrField)
+      );
+    }
+    return false;
   }
 
   get isCard() {
-    return (
-      this.isModule && this.args.selectedElement?.type === ElementType.Card
-    );
+    if (
+      this.args.selectedElement &&
+      isCardOrFieldElement(this.args.selectedElement)
+    ) {
+      return this.isModule && isCardDef(this.args.selectedElement?.cardOrField);
+    }
+    return false;
   }
 
   private get fileExtension() {
@@ -127,12 +149,14 @@ export default class DetailPanel extends Component<Signature> {
     }
     return this.args.elements.map((el) => {
       const isSelected = this.args.selectedElement === el;
-      let name = el.cardOrField
-        ? el.cardOrField.displayName
-        : el.value.localName;
+      let localName =
+        (isCardOrFieldElement(el)
+          ? el.cardOrField.displayName
+          : el.localName) ?? '??';
+      // let exportedName = el.exportedAs ?? '??';
       return selectorItemFunc(
         [
-          name ?? 'no name found',
+          localName,
           () => {
             this.args.selectElement(el);
           },

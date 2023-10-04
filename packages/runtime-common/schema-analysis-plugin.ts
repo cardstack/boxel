@@ -20,15 +20,18 @@ export interface InternalReference {
 
 export type ClassReference = ExternalReference | InternalReference;
 
-export interface Base {
+export type Export = {
   localName: string | undefined;
   exportedAs: string | undefined;
-  path: NodePath<t.ClassDeclaration> | NodePath<t.ExportNamedDeclaration>;
-}
+  path: NodePath<t.ExportDeclaration>;
+};
 
-export interface PossibleCardClass extends Base {
+export interface PossibleCardClass {
   super: ClassReference;
   possibleFields: Map<string, PossibleField>;
+  localName: string | undefined;
+  exportedAs: string | undefined;
+  path: NodePath<t.ClassDeclaration>;
 }
 
 export interface PossibleField {
@@ -38,14 +41,8 @@ export interface PossibleField {
   path: NodePath<t.ClassProperty>;
 }
 
-export interface ClassExport extends Base {}
-
-export interface FunctionExport extends Base {}
-
-export type Export = ClassExport | FunctionExport;
-
 export interface Options {
-  possibleCards: PossibleCardClass[];
+  possibleCards: PossibleCardClass[]; //cards may not be exports
   exports: Export[];
 }
 

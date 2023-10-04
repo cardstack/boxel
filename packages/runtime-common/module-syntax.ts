@@ -4,10 +4,6 @@ import {
   schemaAnalysisPlugin,
   Options,
   PossibleCardClass,
-  ClassReference,
-  ExternalReference,
-  ClassExport,
-  FunctionExport,
   Export,
 } from './schema-analysis-plugin';
 import {
@@ -31,14 +27,7 @@ import type { types as t } from '@babel/core';
 import type { NodePath } from '@babel/traverse';
 import type { FieldType } from 'https://cardstack.com/base/card-api';
 
-export type {
-  ClassReference,
-  ExternalReference,
-  PossibleCardClass,
-  FunctionExport,
-  ClassExport,
-  Export,
-};
+export type { PossibleCardClass, Export };
 import { unionWith } from 'lodash';
 
 export class ModuleSyntax {
@@ -82,7 +71,6 @@ export class ModuleSyntax {
 
       return aLocalName === bLocalName;
     };
-    debugger;
     return unionWith(this.possibleCards, this.exports, compareByLocalName);
   }
 

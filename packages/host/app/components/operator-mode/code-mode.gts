@@ -41,11 +41,9 @@ import {
 } from '@cardstack/runtime-common';
 import {
   ModuleSyntax,
-  PossibleCardClass,
-  ClassExport,
-  FunctionExport,
+  type PossibleCardClass,
+  type Export,
 } from '@cardstack/runtime-common/module-syntax';
-import { isCardDef, isFieldDef } from '@cardstack/runtime-common/code-ref';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import config from '@cardstack/host/config/environment';
@@ -134,53 +132,24 @@ const defaultPanelWidths: PanelWidths = {
 
 const cardEditorSaveTimes = new Map<string, number>();
 
-export type Object = CardOrFieldObject | FunctionOrClassObject | UnknownObject;
-export type CardOrFieldObject = CardOrField & Partial<CardElement>;
-export type FunctionOrClassObject =
-  | ExportedFunctionElement
-  | ExportedClassElement;
-export type UnknownObject = UnknownElement;
+// an element should be (an item of focus within a module)
+// - exported function or class
+// - exported card or field
+// - unexported card or field
+export type Element = (CardOrField & Partial<PossibleCardClass>) | Export;
 
-// This currently represents the exported card or field from a module
-// We should make this to consider unexported card or field from a module
 export interface CardOrField {
   cardType: CardType;
   cardOrField: typeof BaseDef;
 }
 
-//This represents the type inside the file
-export enum ElementType {
-  Card = 'card',
-  Field = 'field',
-  FunctionExport = 'function',
-  ClassExport = 'class',
-  Unknown = 'unknown',
-}
-// an element should be (an item of focus within a module)
-// - exported function or class
-// - exported card or field
-// - unexported card or field
-interface FieldElement {
-  type: ElementType.Field;
-  value: PossibleCardClass;
-}
-interface CardElement {
-  type: ElementType.Card;
-  value: PossibleCardClass;
-}
-
-interface ExportedFunctionElement {
-  type: ElementType.FunctionExport;
-  value: FunctionExport;
-}
-
-interface ExportedClassElement {
-  type: ElementType.ClassExport;
-  value: ClassExport;
-}
-interface UnknownElement {
-  type: ElementType.Unknown;
-  value: any;
+export function isCardOrFieldElement(
+  element: Element,
+): element is CardOrField & Partial<PossibleCardClass> {
+  return (
+    (element as CardOrField).cardType !== undefined &&
+    (element as CardOrField).cardOrField !== undefined
+  );
 }
 
 export default class CodeMode extends Component<Signature> {
@@ -196,7 +165,7 @@ export default class CodeMode extends Component<Signature> {
   @tracked private card: CardDef | undefined;
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
-  @tracked private selectedElement: Object | undefined;
+  @tracked private selectedElement: Element | undefined;
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
@@ -403,7 +372,7 @@ export default class CodeMode extends Component<Signature> {
 
     const state: {
       isLoading: boolean;
-      value: Object[] | null;
+      value: Element[] | null;
       error: Error | undefined;
       load: () => Promise<void>;
     } = new TrackedObject({
@@ -420,7 +389,7 @@ export default class CodeMode extends Component<Signature> {
           if (isReady(this.openFile.current) && this.importedModule?.module) {
             let module = this.importedModule?.module;
             let cardsOrFields = cardsOrFieldsFromModule(module);
-            let elements: Object[] = [];
+            let elements: Element[] = [];
             if (
               this.openFile.current.url.endsWith('.json') &&
               isCardDocumentString(this.openFile.current.content)
@@ -433,10 +402,9 @@ export default class CodeMode extends Component<Signature> {
                     () => cardOrField as typeof BaseDef,
                   ),
                   cardOrField,
-                } as CardOrFieldObject,
+                },
               ];
             } else {
-              //gts case
               await this.importedModule.loaded;
               let moduleSyntax = new ModuleSyntax(
                 this.openFile.current.content,
@@ -449,21 +417,15 @@ export default class CodeMode extends Component<Signature> {
                 );
                 if (cardOrField !== undefined) {
                   return {
-                    type: isFieldDef(cardOrField)
-                      ? ElementType.Field
-                      : isCardDef(cardOrField)
-                      ? ElementType.Card
-                      : ElementType.Unknown,
-                    value,
+                    ...value,
                     cardType: getCardType(
                       this,
                       () => cardOrField as typeof BaseDef,
                     ),
                     cardOrField,
-                  } as CardOrFieldObject;
-                } else {
-                  return { value, type: ElementType.Unknown } as UnknownObject;
+                  } as CardOrField & Partial<PossibleCardClass>;
                 }
+                return value as Export;
               });
             }
             state.value = elements;
@@ -607,8 +569,17 @@ export default class CodeMode extends Component<Signature> {
     }
   }
 
+  private get selectedCardOrFieldInFile() {
+    if (this.selectedElementInFile) {
+      if (isCardOrFieldElement(this.selectedElementInFile)) {
+        return this.selectedElementInFile;
+      }
+    }
+    return;
+  }
+
   @action
-  private selectElementInFile(el: Object) {
+  private selectElementInFile(el: Element) {
     this.selectedElement = el;
   }
 
@@ -978,11 +949,11 @@ export default class CodeMode extends Component<Signature> {
                     @realmIconURL={{this.realmIconURL}}
                     data-test-card-resource-loaded
                   />
-                {{else if this.selectedElementInFile.cardOrField}}
+                {{else if this.selectedCardOrFieldInFile}}
                   <SchemaEditorColumn
                     @file={{this.readyFile}}
-                    @card={{this.selectedElementInFile.cardOrField}}
-                    @cardTypeResource={{this.selectedElementInFile.cardType}}
+                    @card={{this.selectedCardOrFieldInFile.cardOrField}}
+                    @cardTypeResource={{this.selectedCardOrFieldInFile.cardType}}
                   />
                 {{else if this.schemaEditorIncompatible}}
                   <div
