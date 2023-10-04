@@ -256,7 +256,6 @@ function makeClassReference(
 
   if (binding?.path.isClassDeclaration()) {
     let superClassNode = binding.path.node;
-    // only specific to finding cards
     let superClassIndex = state.opts.possibleCards.findIndex(
       (card) => card.path.node === superClassNode,
     );
