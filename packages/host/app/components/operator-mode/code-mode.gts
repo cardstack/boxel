@@ -426,7 +426,6 @@ export default class CodeMode extends Component<Signature> {
               isCardDocumentString(this.openFile.current.content)
             ) {
               let cardOrField = cardsOrFields[0];
-              console.log(cardOrField);
               elements = [
                 {
                   cardType: getCardType(
@@ -436,7 +435,6 @@ export default class CodeMode extends Component<Signature> {
                   cardOrField,
                 } as CardOrFieldObject,
               ];
-              console.log(elements);
             } else {
               //gts case
               await this.importedModule.loaded;
