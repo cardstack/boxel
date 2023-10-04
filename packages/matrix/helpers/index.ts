@@ -121,9 +121,13 @@ export async function validateEmail(
     .filter({ hasText: email })
     .first()
     .click();
+  await expect(
+    page.frameLocator('.messageview iframe').locator('body'),
+  ).toContainText('Verify Your Email Address');
   await expect(page.locator('.messageview .messageviewheader')).toContainText(
     `To:${email}`,
   );
+
   if (opts?.onEmailPage) {
     await opts.onEmailPage(page);
   }
@@ -141,6 +145,9 @@ export async function validateEmail(
     await opts.onValidationPage(validationPage);
   }
   await gotoRegistration(page);
+  await expect(page.locator('[data-test-email-validation]')).toContainText(
+    'The email address user1@example.com has been validated',
+  );
 }
 
 export async function gotoRegistration(page: Page) {

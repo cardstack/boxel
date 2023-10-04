@@ -43,10 +43,6 @@ test.describe('User Registration w/ Token', () => {
       },
     });
 
-    await expect(page.locator('[data-test-email-validation]')).toContainText(
-      'The email address user1@example.com has been validated',
-    );
-
     await expect(
       page.locator('[data-test-token-field]'),
       'token field is not displayed',

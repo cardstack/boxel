@@ -4,6 +4,7 @@ import {
   synapseStop,
   type SynapseInstance,
 } from '../docker/synapse';
+import { smtpStart, smtpStop } from '../docker/smtp4dev';
 import {
   clearLocalStorage,
   validateEmail,
@@ -18,12 +19,16 @@ test.describe('User Registration w/o Token', () => {
   test.beforeEach(async ({ page }) => {
     synapse = await synapseStart({
       template: 'test-without-registration-token',
+      containerName: 'boxel-synapse',
+      hostPort: 8008,
     });
+    await smtpStart();
     await setupMatrixOverride(page, synapse);
   });
 
   test.afterEach(async () => {
     await synapseStop(synapse.synapseId);
+    await smtpStop();
   });
 
   test('it can register a user without a registration token', async ({

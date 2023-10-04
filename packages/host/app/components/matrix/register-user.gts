@@ -586,6 +586,20 @@ export default class RegisterUser extends Component<Signature> {
             localStorage.removeItem('email-validation');
             this.isEmailValidated = true;
           }
+        } else if (isMatrixError(e) && e.errcode === 'M_MISSING_PARAM') {
+          if (
+            ['Missing params: password', 'Missing params: username'].includes(
+              e.data.error,
+            )
+          ) {
+            // this is an awkward aspect of the Matrix API, in which if
+            // there are no more uncompleted flows, then it will start checking
+            // for presence of user creds and will not return completed flows
+            // if you are missing creds. This scenario means you have passed
+            // validation check (this feels like a synapse bug to me...)
+            localStorage.removeItem('email-validation');
+            this.isEmailValidated = true;
+          }
         }
         if (!this.isEmailValidated) {
           await timeout(1000);
@@ -629,6 +643,7 @@ export default class RegisterUser extends Component<Signature> {
       });
     } catch (e: any) {
       let maybeRegistrationFlow = e.data;
+      debugger;
       if (
         isRegistrationFlows(maybeRegistrationFlow) &&
         maybeRegistrationFlow.flows.length > 0
