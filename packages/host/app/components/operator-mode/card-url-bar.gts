@@ -6,13 +6,13 @@ import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { and, bool, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { on } from '@ember/modifier';
 
-import { type RealmInfo } from '@cardstack/runtime-common';
-
 import URLBarResource, {
   urlBarResource,
 } from '@cardstack/host/resources/url-bar';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type CardService from '../../services/card-service';
+import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 
 interface Signature {
   Element: HTMLElement;
@@ -25,7 +25,7 @@ interface Signature {
     userHasDismissedError: boolean; // user driven state that indicates if we should show error message
     resetLoadFileError: () => void; // callback to reset upstream error state -- perform on keypress
     dismissURLError: () => void; // callback allow user to dismiss the error message
-    realmInfo: RealmInfo | null;
+    realmURL: string;
   };
 }
 
@@ -38,11 +38,20 @@ export default class CardURLBar extends Component<Signature> {
       ...attributes
     >
       <div class='realm-info' data-test-card-url-bar-realm-info>
-        <div class='realm-icon'>
-          <img src={{this.realmIcon}} alt='realm-icon' />
-        </div>
-        <span>in
-          {{if this.realmName this.realmName 'Unknown Workspace'}}</span>
+        <RealmInfoProvider @realmURL={{@realmURL}}>
+          <:ready as |realmInfo|>
+            <div class='realm-icon'>
+              <img src={{realmInfo.iconURL}} alt='realm-icon' />
+            </div>
+            <span>in {{realmInfo.name}}</span>
+          </:ready>
+          <:error>
+            <div class='realm-icon'>
+              {{svgJar 'icon-circle' width='22px' height='22px'}}
+            </div>
+            <span>in Unknown Workspace</span>
+          </:error>
+        </RealmInfoProvider>
       </div>
       <div class='input'>
         {{svgJar 'icon-globe' width='22px' height='22px'}}
@@ -112,6 +121,8 @@ export default class CardURLBar extends Component<Signature> {
 
         border: 1px solid var(--boxel-light);
         border-radius: 4px;
+
+        --icon-color: var(--boxel-light);
       }
       .realm-icon img {
         width: 20px;
@@ -178,6 +189,7 @@ export default class CardURLBar extends Component<Signature> {
   </template>
 
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare cardService: CardService;
 
   private urlBar: URLBarResource = urlBarResource(this, () => ({
     getValue: () => this.codePath,
@@ -192,13 +204,5 @@ export default class CardURLBar extends Component<Signature> {
     return this.operatorModeStateService.state.codePath
       ? this.operatorModeStateService.state.codePath.toString()
       : null;
-  }
-
-  private get realmIcon() {
-    return this.args.realmInfo?.iconURL;
-  }
-
-  private get realmName() {
-    return this.args.realmInfo?.name;
   }
 }

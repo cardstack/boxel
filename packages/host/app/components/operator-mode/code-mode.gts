@@ -34,6 +34,7 @@ import {
   type CodeRef,
   RealmPaths,
   logger,
+  isCardDocumentString,
   isSingleCardDocument,
   identifyCard,
   moduleFrom,
@@ -41,7 +42,6 @@ import {
 } from '@cardstack/runtime-common';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
-import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
 import config from '@cardstack/host/config/environment';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
@@ -87,6 +87,7 @@ import BinaryFileInfo from './binary-file-info';
 import CardPreviewPanel from './card-preview-panel';
 import CardURLBar from './card-url-bar';
 import DetailPanel from './detail-panel';
+import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
 
 interface Signature {
   Args: {
@@ -250,6 +251,17 @@ export default class CodeMode extends Component<Signature> {
     return this.maybeMonacoSDK && isReady(this.openFile.current);
   }
 
+  private get schemaEditorIncompatible() {
+    return this.readyFile.isBinary || this.isNonCardJson;
+  }
+
+  private isNonCardJson() {
+    return (
+      this.readyFile.name.endsWith('.json') &&
+      !isCardDocumentString(this.readyFile.content)
+    );
+  }
+
   private get emptyOrNotFound() {
     return !this.codePath || this.openFile.current?.state === 'not-found';
   }
@@ -409,7 +421,7 @@ export default class CodeMode extends Component<Signature> {
   @use private importedModule = resource(() => {
     if (isReady(this.openFile.current)) {
       let f: Ready = this.openFile.current;
-      if (f.url.endsWith('.json')) {
+      if (f.url.endsWith('.json') && isCardDocumentString(f.content)) {
         let ref = identifyCard(this.card?.constructor);
         if (ref !== undefined) {
           return importResource(this, () => moduleFrom(ref as CodeRef));
@@ -725,7 +737,7 @@ export default class CodeMode extends Component<Signature> {
       @resetLoadFileError={{this.resetLoadFileError}}
       @userHasDismissedError={{this.userHasDismissedURLError}}
       @dismissURLError={{this.dismissURLError}}
-      @realmInfo={{this.realmInfo}}
+      @realmURL={{this.realmURL}}
       class='card-url-bar'
     />
     <div
@@ -881,18 +893,19 @@ export default class CodeMode extends Component<Signature> {
                     @realmIconURL={{this.realmIconURL}}
                     data-test-card-resource-loaded
                   />
-                {{else if this.importedModule.module}}
-                  <CardAdoptionChain
+                {{else if this.selectedElementInFile}}
+                  <SchemaEditorColumn
                     @file={{this.readyFile}}
-                    @importedModule={{this.importedModule.module}}
+                    @card={{this.selectedElementInFile.card}}
+                    @cardTypeResource={{this.selectedElementInFile.cardType}}
                   />
+                {{else if this.schemaEditorIncompatible}}
+                  <div
+                    class='incompatible-schema-editor'
+                    data-test-schema-editor-incompatible
+                  >Schema Editor cannot be used with this file type</div>
                 {{else if this.cardError}}
                   {{this.cardError.message}}
-                {{else if this.readyFile.isBinary}}
-                  <div
-                    class='binary-file-schema-editor'
-                    data-test-binary-file-schema-editor
-                  >Schema Editor cannot be used with this file type</div>
                 {{/if}}
               {{/if}}
             </div>
@@ -1103,7 +1116,7 @@ export default class CodeMode extends Component<Signature> {
       .saved-msg {
         margin-right: var(--boxel-sp-xxs);
       }
-      .binary-file-schema-editor {
+      .incompatible-schema-editor {
         display: flex;
         flex-wrap: wrap;
         align-content: center;
