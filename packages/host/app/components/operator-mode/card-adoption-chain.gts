@@ -49,7 +49,7 @@ export default class CardAdoptionChain extends Component<Signature> {
         position: absolute;
         top: 50%;
         left: 0;
-        transform: translateX(-50%);
+        transform: translateX(-75px);
       }
 
       .right-line {
@@ -59,7 +59,7 @@ export default class CardAdoptionChain extends Component<Signature> {
         position: absolute;
         top: 50%;
         right: 0;
-        transform: translateX(50%);
+        transform: translateX(75px);
       }
     </style>
 
