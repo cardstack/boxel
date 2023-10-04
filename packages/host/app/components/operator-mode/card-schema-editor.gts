@@ -4,7 +4,9 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { internalKeyFor } from '@cardstack/runtime-common';
+import { gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
+import { internalKeyFor, getPlural } from '@cardstack/runtime-common';
 import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
 
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
@@ -16,6 +18,10 @@ import type { Ready } from '@cardstack/host/resources/file';
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
+import {
+  isOwnField,
+  calculateTotalOwnFields,
+} from '@cardstack/host/utils/schema-editor';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
@@ -111,34 +117,72 @@ export default class CardSchemaEditor extends Component<Signature> {
         height: 20px;
         width: 20px;
       }
+
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .total-fields {
+        display: flex;
+        align-items: baseline;
+        gap: var(--boxel-sp-xxxs);
+        margin-left: auto;
+      }
+
+      .total-fields > * {
+        margin: 0;
+      }
+
+      .total-fields-value {
+        font: 600 var(--boxel-font);
+      }
+
+      .total-fields-label {
+        font: var(--boxel-font-sm);
+      }
     </style>
 
     <div
       class='schema-editor-container'
       data-test-card-schema={{@cardType.displayName}}
     >
-      <button
-        class='pill'
-        data-test-card-schema-navigational-button
-        {{on 'click' (fn this.openCardDefinition @cardType.module)}}
-      >
-        <div class='realm-icon'>
-          <RealmInfoProvider @fileURL={{@cardType.module}}>
-            <:ready as |realmInfo|>
-              <img
-                src={{realmInfo.iconURL}}
-                alt='Realm icon'
-                data-test-realm-icon-url={{realmInfo.iconURL}}
-              />
-            </:ready>
-          </RealmInfoProvider>
+      <div class='header'>
+        <button
+          class='pill'
+          data-test-card-schema-navigational-button
+          {{on 'click' (fn this.openCardDefinition @cardType.module)}}
+        >
+          <div class='realm-icon'>
+            <RealmInfoProvider @fileURL={{@cardType.module}}>
+              <:ready as |realmInfo|>
+                <img
+                  src={{realmInfo.iconURL}}
+                  alt='Realm icon'
+                  data-test-realm-icon-url={{realmInfo.iconURL}}
+                />
+              </:ready>
+            </RealmInfoProvider>
+          </div>
+          <div>
+            <span>
+              {{@cardType.displayName}}
+            </span>
+          </div>
+        </button>
+        <div class='total-fields' data-test-total-fields>
+          {{#if (gt this.totalOwnFields 0)}}
+            <span class='total-fields-value'>+ {{this.totalOwnFields}}</span>
+            <span class='total-fields-label'>{{getPlural
+                'Field'
+                this.totalOwnFields
+              }}</span>
+          {{else}}
+            <span class='total-fields-label'>No Fields</span>
+          {{/if}}
         </div>
-        <div>
-          <span>
-            {{@cardType.displayName}}
-          </span>
-        </div>
-      </button>
+      </div>
 
       <div class='card-fields'>
         {{#each @cardType.fields as |field|}}
@@ -202,9 +246,11 @@ export default class CardSchemaEditor extends Component<Signature> {
 
   @action
   isOwnField(fieldName: string): boolean {
-    return Object.keys(
-      Object.getOwnPropertyDescriptors(this.args.card.prototype),
-    ).includes(fieldName);
+    return isOwnField(this.args.card, fieldName);
+  }
+
+  get totalOwnFields() {
+    return calculateTotalOwnFields(this.args.card, this.args.cardType);
   }
 
   fieldCardDisplayName(card: Type | CodeRef): string {
