@@ -1,9 +1,12 @@
-import { fn } from '@ember/helper';
+import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import { DropdownButton } from '@cardstack/boxel-ui';
+import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
+import menuDivider from '@cardstack/boxel-ui/helpers/menu-divider';
 import { gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import { internalKeyFor, getPlural } from '@cardstack/runtime-common';
@@ -53,12 +56,13 @@ export default class CardSchemaEditor extends Component<Signature> {
       }
 
       .pill {
-        border: 1px solid var(--boxel-400);
-        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
-        border-radius: 8px;
-        background-color: white;
-        font-weight: 600;
         display: inline-flex;
+        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
+        background-color: var(--boxel-light);
+        border: 1px solid var(--boxel-400);
+        border-radius: var(--boxel-border-radius-sm);
+        font: 700 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
       }
 
       .pill:hover {
@@ -69,48 +73,49 @@ export default class CardSchemaEditor extends Component<Signature> {
         display: flex;
       }
 
-      .pill > div > span {
-        margin: auto;
-      }
-
       .realm-icon {
         margin-right: var(--boxel-sp-xxxs);
       }
 
       .card-field {
-        background-color: white;
-      }
-
-      .card-field {
-        margin-bottom: var(--boxel-sp-xs);
-        padding: var(--boxel-sp);
-        border-radius: var(--boxel-border-radius);
         display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xxs);
+        margin-bottom: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius);
+        background-color: var(--boxel-light);
       }
 
       .card-fields {
         margin-top: var(--boxel-sp);
       }
 
+      .context-menu-trigger {
+        rotate: 90deg;
+      }
+
       .left {
         display: flex;
-        margin-top: auto;
-        margin-bottom: auto;
         flex-direction: column;
       }
 
       .right {
-        margin-left: auto;
-        margin-top: auto;
-        margin-bottom: auto;
+        display: flex;
+        align-items: center;
       }
 
       .field-name {
-        font-size: var(--boxel-font-size);
+        font: 500 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
       }
 
       .field-type {
-        color: #949494;
+        color: var(--boxel-450);
+        font: 500 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-xs);
       }
 
       .realm-icon > img {
@@ -227,6 +232,22 @@ export default class CardSchemaEditor extends Component<Signature> {
                       </span>
                     </div>
                   </button>
+                  <DropdownButton
+                    @icon='three-dots-horizontal'
+                    @label='field options'
+                    class='context-menu-trigger'
+                    as |dd|
+                  >
+                    <dd.Menu
+                      @items={{array
+                        (menuItem 'Edit Field Name' (fn this.noop))
+                        (menuItem 'Choose Field Type' (fn this.noop))
+                        (menuItem 'Allow Multiple Fields' (fn this.noop))
+                        (menuDivider)
+                        (menuItem 'Remove Field' (fn this.noop) dangerous=true)
+                      }}
+                    />
+                  </DropdownButton>
                 {{/let}}
               </div>
             </div>
@@ -247,6 +268,11 @@ export default class CardSchemaEditor extends Component<Signature> {
   @action
   isOwnField(fieldName: string): boolean {
     return isOwnField(this.args.card, fieldName);
+  }
+
+  @action
+  noop() {
+    return;
   }
 
   get totalOwnFields() {
