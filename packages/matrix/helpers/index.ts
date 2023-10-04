@@ -100,6 +100,7 @@ export async function validateEmail(
     onEmailPage?: (page: Page) => Promise<void>;
     onValidationPage?: (page: Page) => Promise<void>;
     sendAttempts?: number;
+    isLoggedInWhenValidated?: true;
   },
 ) {
   let sendAttempts = opts?.sendAttempts ?? 1;
@@ -110,6 +111,11 @@ export async function validateEmail(
   await expect(page.locator('[data-test-email-validation]')).toContainText(
     'The email address user1@example.com has not been validated',
   );
+
+  for (let i = 0; i < sendAttempts - 1; i++) {
+    await page.waitForTimeout(500);
+    await page.locator('[data-test-resend-validation]').click();
+  }
 
   await page.goto(mailHost);
   await expect(
@@ -144,9 +150,11 @@ export async function validateEmail(
     await opts.onValidationPage(validationPage);
   }
   await gotoRegistration(page);
-  await expect(page.locator('[data-test-email-validation]')).toContainText(
-    'The email address user1@example.com has been validated',
-  );
+  if (!opts?.isLoggedInWhenValidated) {
+    await expect(page.locator('[data-test-email-validation]')).toContainText(
+      'The email address user1@example.com has been validated',
+    );
+  }
 }
 
 export async function gotoRegistration(page: Page) {
