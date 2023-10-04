@@ -99,6 +99,51 @@ const employeeCardSource = `
   }
 `;
 
+const inThisFileSource = `
+  import {
+    contains,
+    field,
+    CardDef,
+    FieldDef,
+    Component,
+  } from 'https://cardstack.com/base/card-api';
+  import StringCard from 'https://cardstack.com/base/string';
+
+  export const exportedVar = 'exported var';
+  const localVar = 'local var';
+
+  class LocalClass {}
+  export class ExportedClass {}
+
+  function localFunction() {}
+  export function exportedFunction() {}
+
+  class LocalCard extends CardDef {
+    static displayName = 'local card';
+  }
+
+  export class ExportedCard extends CardDef {
+    static displayName = 'exported card';
+    @field someString = contains(StringCard);
+  }
+
+  export class ExportedCardInheritLocalCard extends LocalCard {
+    static displayName = 'exported card extends local card';
+  }
+
+  class LocalField extends FieldDef {
+    displayName = 'local field';
+  }
+  export class ExportedField extends FieldDef {
+    static displayName = 'exported field';
+    @field someString = contains(StringCard);
+  }
+
+  export class ExportedFieldInheritLocalField extends LocalField {
+    static displayName = 'exported card extends local card';
+  }
+`;
+
 module('Acceptance | code mode tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
@@ -122,6 +167,7 @@ module('Acceptance | code mode tests', function (hooks) {
       'pet-person.gts': personCardSource,
       'person.gts': personCardSource,
       'employee.gts': employeeCardSource,
+      'in-this-file.gts': inThisFileSource,
       'person-entry.json': {
         data: {
           type: 'card',
@@ -653,7 +699,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .containsText('file-97.txt');
   });
 
-  test('card inheritance panel will show json instance definition and module definition', async function (assert) {
+  test('inspector will show json instance definition and module definition in card inheritance panel', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [
         [
@@ -718,7 +764,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .hasClass('active');
   });
 
-  test('card inheritance panel will show module definition', async function (assert) {
+  test('inspector will show module definition in card inheritance panel', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [[]],
       submode: 'code',
@@ -762,6 +808,75 @@ module('Acceptance | code mode tests', function (hooks) {
       )
       .includesText('Test Workspace B');
     assert.dom('[data-test-card-instance-definition]').doesNotExist();
+  });
+
+  test('inspector displays elements "in-this-file" panel and can select', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-current-module-name]');
+    //default is the 1st index
+    let itemName = 'LocalCard';
+    assert.dom('[data-test-boxel-selector-item]').exists({ count: 8 });
+    assert
+      .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
+      .hasText(itemName);
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(itemName);
+    assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
+    // clicking on a card
+    itemName = 'exported card';
+    await click(`[data-test-boxel-selector-item-text="${itemName}"]`);
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(itemName);
+    await waitFor('[data-test-card-module-definition]');
+    assert.dom('[data-test-inheritance-panel-header]').exists();
+    assert.dom('[data-test-card-module-definition]').exists();
+    assert.dom('[data-test-definition-header]').includesText('Card Definition');
+    assert.dom('[data-test-card-module-definition]').includesText(itemName);
+    await waitFor('[data-test-card-schema]');
+    assert.dom('[data-test-card-schema]').exists({ count: 3 });
+    assert
+      .dom(
+        `[data-test-card-schema="${itemName}"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
+      )
+      .exists();
+    assert.dom(`[data-test-card-schema=Card]`).exists();
+    // clicking on a field
+    itemName = 'exported field';
+    await click(`[data-test-boxel-selector-item-text="${itemName}"]`);
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(itemName);
+    await waitFor('[data-test-card-module-definition]');
+    assert.dom('[data-test-inheritance-panel-header]').exists();
+    assert
+      .dom('[data-test-definition-header]')
+      .includesText('Field Definition');
+    assert.dom('[data-test-card-module-definition]').includesText(itemName);
+    await waitFor('[data-test-card-schema]');
+    assert.dom('[data-test-card-schema]').exists({ count: 3 });
+    //TODO: CS-6093 will fix this
+    // assert
+    //   .dom(
+    //     `[data-test-card-schema="${itemName}"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
+    //   )
+    //   .exists();
+    // assert.dom(`[data-test-card-schema=Card]`).exists();
+
+    // clicking on an exported function
+    itemName = 'exportedFunction';
+    await click(`[data-test-boxel-selector-item-text="${itemName}"]`);
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(itemName);
+    assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
+    assert.dom('[data-test-card-module-definition]').doesNotExist();
+    assert.dom('[data-test-schema-editor-incompatible]').exists();
   });
 
   test('non-card JSON is shown as just a file with empty schema editor', async function (assert) {

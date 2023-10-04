@@ -180,7 +180,11 @@ export default class DetailPanel extends Component<Signature> {
 
         {{#if (or this.isCardInstance this.isCard this.isField)}}
           <div class='inheritance-panel'>
-            <header class='panel-header' aria-label='Inheritance Panel Header'>
+            <header
+              class='panel-header'
+              aria-label='Inheritance Panel Header'
+              data-test-inheritance-panel-header
+            >
               Card Inheritance
             </header>
             {{#if this.isCardInstance}}
