@@ -23,18 +23,32 @@ export default class CardAdoptionChain extends Component<Signature> {
       .card-adoption-chain {
         background-color: var(--boxel-200);
       }
-      .inherits-from {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        padding: var(--boxel-sp) 0;
-        gap: var(--boxel-sp-xxxs);
-        font: var(--boxel-font-size-sm);
-
+      .content-with-line {
         position: relative;
+        transform: translateX(calc(var(--boxel-sp-sm) * -1));
+
+        display: flex;
+        align-items: center;
+        width: calc(100% + calc(var(--boxel-sp-sm) * 2));
+        height: 60px;
+        padding: var(--boxel-sp) 0;
       }
 
-      .chain:last-child .inherits-from {
+      .inherits-from {
+        display: flex;
+        align-items: center;
+        padding: 0 var(--boxel-sp-xs);
+        gap: var(--boxel-sp-xxxs);
+        font: var(--boxel-font-size-sm);
+        text-wrap: nowrap;
+        background: var(--boxel-200);
+
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+
+      .chain:last-child .content-with-line {
         display: none;
       }
 
@@ -42,24 +56,10 @@ export default class CardAdoptionChain extends Component<Signature> {
         height: 24px;
       }
 
-      .left-line {
-        width: 50%;
+      .line {
+        width: 100%;
         height: 1px;
         background-color: var(--boxel-purple-200);
-        position: absolute;
-        top: 50%;
-        left: 0;
-        transform: translateX(-75px);
-      }
-
-      .right-line {
-        width: 50%;
-        height: 1px;
-        background-color: var(--boxel-purple-200);
-        position: absolute;
-        top: 50%;
-        right: 0;
-        transform: translateX(75px);
       }
     </style>
 
@@ -72,15 +72,16 @@ export default class CardAdoptionChain extends Component<Signature> {
             @file={{@file}}
             @moduleSyntax={{this.moduleSyntax}}
           />
-          <div class='inherits-from'>
-            <span class='inherits-icon'>{{svgJar
-                'icon-inherit'
-                width='24px'
-                height='24px'
-              }}</span>
-            <span>Inherits From</span>
-            <div class='left-line' />
-            <div class='right-line' />
+          <div class='content-with-line'>
+            <div class='line' />
+            <div class='inherits-from'>
+              <span class='inherits-icon'>{{svgJar
+                  'icon-inherit'
+                  width='24px'
+                  height='24px'
+                }}</span>
+              <span>Inherits From</span>
+            </div>
           </div>
         </div>
       {{/each}}

@@ -168,8 +168,7 @@ export default class SchemaEditorColumn extends Component<Signature> {
       .accordion-item.opened .accordion-item-content {
         transition: 0.4s;
         opacity: 1;
-        overflow-y: auto;
-        overflow-x: hidden;
+        overflow: auto;
         pointer-events: all;
       }
 
