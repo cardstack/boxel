@@ -193,7 +193,7 @@ export default class DetailPanel extends Component<Signature> {
               <ClickableModuleDefinitionContainer
                 @fileURL={{this.cardType.type.module}}
                 @name={{this.cardType.type.displayName}}
-                @fileExtension={{this.cardType.type.moduleMeta.extension}}
+                @fileExtension={{this.cardType.type.moduleInfo.extension}}
                 @onSelectDefinition={{this.updateCodePath}}
                 @url={{this.cardType.type.module}}
               />
@@ -201,7 +201,7 @@ export default class DetailPanel extends Component<Signature> {
               <ModuleDefinitionContainer
                 @fileURL={{this.cardType.type.module}}
                 @name={{this.cardType.type.displayName}}
-                @fileExtension={{this.cardType.type.moduleMeta.extension}}
+                @fileExtension={{this.cardType.type.moduleInfo.extension}}
                 @infoText={{this.lastModified.value}}
                 @isActive={{true}}
                 @actions={{array
@@ -222,7 +222,7 @@ export default class DetailPanel extends Component<Signature> {
                 <ClickableModuleDefinitionContainer
                   @fileURL={{this.cardType.type.super.module}}
                   @name={{this.cardType.type.super.displayName}}
-                  @fileExtension={{this.cardType.type.super.moduleMeta.extension}}
+                  @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
                   @onSelectDefinition={{this.updateCodePath}}
                   @url={{this.cardType.type.super.module}}
                 />
