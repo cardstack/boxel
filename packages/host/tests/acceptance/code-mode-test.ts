@@ -971,7 +971,11 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-card-schema]');
 
     assert.dom('[data-test-card-schema]').exists({ count: 3 });
+    assert.dom('[data-test-total-fields]').containsText('5 Fields');
 
+    assert
+      .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
+      .containsText('+ 2 Fields');
     assert
       .dom(
         `[data-test-card-schema="Person"] [data-test-field-name="firstName"] [data-test-card-display-name="String"]`,
@@ -983,6 +987,9 @@ module('Acceptance | code mode tests', function (hooks) {
       )
       .exists();
 
+    assert
+      .dom('[data-test-card-schema="Card"] [data-test-total-fields]')
+      .containsText('+ 3 Fields');
     assert
       .dom(
         `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-card-display-name="String"]`,
@@ -999,6 +1006,9 @@ module('Acceptance | code mode tests', function (hooks) {
       )
       .exists();
 
+    assert
+      .dom('[data-test-card-schema="Base"] [data-test-total-fields]')
+      .containsText('No Fields');
     assert.dom(`[data-test-card-schema="Base"]`).exists();
 
     // Check that realm icons in the schema editor are correct (card and its fields)
