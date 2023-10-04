@@ -18,7 +18,7 @@ let EXCHANGE_RATES: Record<string, number> = {
 };
 
 class Asset extends CardDef {
-  static displayName = 'Asset Card (Local)';
+  static displayName = 'Asset';
   @field name = contains(StringCard);
   @field symbol = contains(StringCard);
   @field logoURL = contains(StringCard);
@@ -63,8 +63,8 @@ class Asset extends CardDef {
   };
 }
 
-export class AssetField extends FieldDef {
-  static displayName = 'Asset Field (Exported)';
+class AssetField extends FieldDef {
+  static displayName = 'Asset';
   @field name = contains(StringCard);
   @field symbol = contains(StringCard);
   @field logoURL = contains(StringCard);
@@ -111,27 +111,22 @@ export class AssetField extends FieldDef {
 
 // For fiat money
 export class Currency extends Asset {
-  static displayName = 'Currency Card Extends Asset Card (Exported)';
+  static displayName = 'Currency Card Type With Very Very Long Display Name';
   @field sign = contains(StringCard); // $, €, £, ¥, ₽, ₿ etc.
 }
 
 export class CurrencyField extends AssetField {
-  static displayName = 'Currency Field Extends Asset Field (Exported)';
+  static displayName = 'Currency Card Type With Very Very Long Display Name';
   @field sign = contains(StringCard); // $, €, £, ¥, ₽, ₿ etc.
 }
 
 // For crypto
 export class Token extends Asset {
-  static displayName = 'Token Card Extends Asset Card (Exported)';
+  static displayName = 'Token';
   @field address = contains(StringCard);
 }
 
 export class TokenField extends AssetField {
-  static displayName = 'Token Field Extends Asset Field (Exported)';
+  static displayName = 'Token';
   @field address = contains(StringCard);
 }
-
-export class ParentClass {}
-export class ChildClass extends ParentClass {}
-
-export function someRandomFunction() {}
