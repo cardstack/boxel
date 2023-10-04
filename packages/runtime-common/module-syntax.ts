@@ -6,8 +6,9 @@ import {
   PossibleCardClass,
   ClassReference,
   ExternalReference,
-  ExportedClass,
-  ExportedFunction,
+  ClassExport,
+  FunctionExport,
+  Export,
 } from './schema-analysis-plugin';
 import {
   removeFieldPlugin,
@@ -34,14 +35,15 @@ export type {
   ClassReference,
   ExternalReference,
   PossibleCardClass,
-  ExportedClass,
-  ExportedFunction,
+  FunctionExport,
+  ClassExport,
+  Export,
 };
 import { unionWith } from 'lodash';
 
 export class ModuleSyntax {
   declare possibleCards: PossibleCardClass[];
-  declare exports: (ExportedClass | ExportedFunction)[];
+  declare exports: Export[];
   private declare ast: t.File;
 
   constructor(src: string) {
@@ -70,21 +72,17 @@ export class ModuleSyntax {
     this.exports = moduleAnalysis.exports;
   }
 
-  elements(): (PossibleCardClass | Exports)[] {
-    // Create a custom comparison function to determine equality based on localName
+  elements(): (PossibleCardClass | Export)[] {
     const compareByLocalName = (
-      a: PossibleCardClass | Exports,
-      b: PossibleCardClass | Exports,
+      a: PossibleCardClass | Export,
+      b: PossibleCardClass | Export,
     ) => {
-      // Extract localName from elements
       const aLocalName = 'localName' in a ? a.localName : undefined;
       const bLocalName = 'localName' in b ? b.localName : undefined;
 
-      // Compare local names for equality, prioritizing PossibleCardClass instances
       return aLocalName === bLocalName;
     };
-
-    // Use _.unionWith to combine and deduplicate the arrays, prioritizing PossibleCardClass instances
+    debugger;
     return unionWith(this.possibleCards, this.exports, compareByLocalName);
   }
 

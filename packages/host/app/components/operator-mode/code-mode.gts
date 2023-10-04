@@ -42,8 +42,8 @@ import {
 import {
   ModuleSyntax,
   PossibleCardClass,
-  ExportedClass,
-  ExportedFunction,
+  ClassExport,
+  FunctionExport,
 } from '@cardstack/runtime-common/module-syntax';
 import { isCardDef, isFieldDef } from '@cardstack/runtime-common/code-ref';
 
@@ -152,8 +152,8 @@ export interface CardOrField {
 export enum ElementType {
   Card = 'card',
   Field = 'field',
-  ExportedFunction = 'function',
-  ExportedClass = 'class',
+  FunctionExport = 'function',
+  ClassExport = 'class',
   Unknown = 'unknown',
 }
 // an element should be (an item of focus within a module)
@@ -170,13 +170,13 @@ interface CardElement {
 }
 
 interface ExportedFunctionElement {
-  type: ElementType.ExportedFunction;
-  value: ExportedFunction;
+  type: ElementType.FunctionExport;
+  value: FunctionExport;
 }
 
 interface ExportedClassElement {
-  type: ElementType.ExportedClass;
-  value: ExportedClass;
+  type: ElementType.ClassExport;
+  value: ClassExport;
 }
 interface UnknownElement {
   type: ElementType.Unknown;

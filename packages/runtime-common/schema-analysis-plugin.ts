@@ -38,13 +38,15 @@ export interface PossibleField {
   path: NodePath<t.ClassProperty>;
 }
 
-export interface ExportedClass extends Base {}
+export interface ClassExport extends Base {}
 
-export interface ExportedFunction extends Base {}
+export interface FunctionExport extends Base {}
+
+export type Export = ClassExport | FunctionExport;
 
 export interface Options {
   possibleCards: PossibleCardClass[];
-  exports: Exports[];
+  exports: Export[];
 }
 
 export function schemaAnalysisPlugin(_babel: typeof Babel) {
