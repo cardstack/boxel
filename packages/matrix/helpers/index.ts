@@ -86,6 +86,11 @@ export async function openRoot(page: Page) {
   await page.goto(testHost);
 }
 
+export async function clearLocalStorage(page: Page) {
+  await openRoot(page);
+  await page.evaluate(() => window.localStorage.clear());
+}
+
 export async function gotoRegistration(page: Page) {
   await openRoot(page);
   await toggleOperatorMode(page);

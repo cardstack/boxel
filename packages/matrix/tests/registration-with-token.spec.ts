@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test';
 import {
+  clearLocalStorage,
   gotoRegistration,
   assertLoggedIn,
   assertLoggedOut,
@@ -22,6 +23,7 @@ test.describe('User Registration w/ Token', () => {
       admin.accessToken,
       REGISTRATION_TOKEN,
     );
+    await clearLocalStorage(page);
     await gotoRegistration(page);
     await expect(page.locator('[data-test-validate-btn]')).toBeDisabled();
     await page
@@ -53,14 +55,22 @@ test.describe('User Registration w/ Token', () => {
       mask: [page.locator('.messagelist')],
       maxDiffPixelRatio: 0.01,
     });
-    await page
-      .frameLocator('.messageview iframe.fill')
-      .getByText('Verify Your Email Address')
-      .click();
 
-    // playwright seems not able to update the `page` with the URL for the
-    // validation message--need to research that a bit more se we can make
-    // assertions here
+    let context = page.context();
+    const [validationPage] = await Promise.all([
+      context.waitForEvent('page'),
+      await page
+        .frameLocator('.messageview iframe')
+        .getByText('Verify Your Email Address')
+        .click(),
+    ]);
+    await validationPage.waitForLoadState();
+    await expect(validationPage.locator('body')).toContainText(
+      'Your email has now been validated',
+    );
+    await expect(validationPage).toHaveScreenshot('verification-page.png', {
+      maxDiffPixelRatio: 0.01,
+    });
 
     await gotoRegistration(page);
     await expect(page.locator('[data-test-email-validation]')).toContainText(
@@ -110,6 +120,7 @@ test.describe('User Registration w/ Token', () => {
       REGISTRATION_TOKEN,
     );
     await registerUser(synapse, 'user1', 'pass');
+    await clearLocalStorage(page);
 
     await gotoRegistration(page);
     await page.locator('[data-test-username-field] input').fill('user1');
@@ -169,6 +180,8 @@ test.describe('User Registration w/ Token', () => {
       admin.accessToken,
       REGISTRATION_TOKEN,
     );
+    await clearLocalStorage(page);
+
     await gotoRegistration(page);
     await page.locator('[data-test-username-field] input').fill('user1');
     await page.locator('[data-test-password-field] input').fill('mypassword');
