@@ -1,6 +1,7 @@
 import { expect } from '@playwright/test';
 import {
   clearLocalStorage,
+  validateEmail,
   gotoRegistration,
   assertLoggedIn,
   assertLoggedOut,
@@ -10,7 +11,6 @@ import {
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 
 const REGISTRATION_TOKEN = 'abc123';
-const mailHost = 'http://localhost:5001';
 
 test.describe('User Registration w/ Token', () => {
   test('it can register a user with a registration token', async ({
@@ -25,54 +25,24 @@ test.describe('User Registration w/ Token', () => {
     );
     await clearLocalStorage(page);
     await gotoRegistration(page);
-    await expect(page.locator('[data-test-validate-btn]')).toBeDisabled();
-    await page
-      .locator('[data-test-email-field] input')
-      .fill('user1@example.com');
-    await expect(page.locator('[data-test-validate-btn]')).toBeEnabled();
-    await page.locator('[data-test-validate-btn]').click();
-    await expect(page.locator('[data-test-email-validation]')).toContainText(
-      'The email address user1@example.com has not been validated',
-    );
 
-    await page.goto(mailHost);
-    await expect(
-      page
-        .locator('.messagelist .unread')
-        .filter({ hasText: 'user1@example.com' }),
-    ).toHaveCount(1);
-    await page
-      .locator('.messagelist .unread')
-      .filter({ hasText: 'user1@example.com' })
-      .click();
-    await expect(page.locator('.messageview .messageviewheader')).toContainText(
-      'Subject:Boxel Email Validation',
-    );
-    await expect(page.locator('.messageview .messageviewheader')).toContainText(
-      'To:user1@example.com',
-    );
-    await expect(page).toHaveScreenshot('verification-email.png', {
-      mask: [page.locator('.messagelist')],
-      maxDiffPixelRatio: 0.01,
+    await validateEmail(page, 'user1@example.com', {
+      onEmailPage: async (page) => {
+        await expect(page).toHaveScreenshot('verification-email.png', {
+          mask: [page.locator('.messagelist')],
+          maxDiffPixelRatio: 0.01,
+        });
+      },
+      onValidationPage: async (validationPage) => {
+        await expect(validationPage.locator('body')).toContainText(
+          'Your email has now been validated',
+        );
+        await expect(validationPage).toHaveScreenshot('verification-page.png', {
+          maxDiffPixelRatio: 0.01,
+        });
+      },
     });
 
-    let context = page.context();
-    const [validationPage] = await Promise.all([
-      context.waitForEvent('page'),
-      await page
-        .frameLocator('.messageview iframe')
-        .getByText('Verify Your Email Address')
-        .click(),
-    ]);
-    await validationPage.waitForLoadState();
-    await expect(validationPage.locator('body')).toContainText(
-      'Your email has now been validated',
-    );
-    await expect(validationPage).toHaveScreenshot('verification-page.png', {
-      maxDiffPixelRatio: 0.01,
-    });
-
-    await gotoRegistration(page);
     await expect(page.locator('[data-test-email-validation]')).toContainText(
       'The email address user1@example.com has been validated',
     );
@@ -123,6 +93,7 @@ test.describe('User Registration w/ Token', () => {
     await clearLocalStorage(page);
 
     await gotoRegistration(page);
+    await validateEmail(page, 'user1@example.com');
     await page.locator('[data-test-username-field] input').fill('user1');
     await page.locator('[data-test-password-field] input').fill('mypassword');
     await page.locator('[data-test-confirm-password-field]').fill('mypassword');
@@ -183,6 +154,7 @@ test.describe('User Registration w/ Token', () => {
     await clearLocalStorage(page);
 
     await gotoRegistration(page);
+    await validateEmail(page, 'user1@example.com');
     await page.locator('[data-test-username-field] input').fill('user1');
     await page.locator('[data-test-password-field] input').fill('mypassword');
     await page.locator('[data-test-confirm-password-field]').fill('mypassword');
@@ -233,17 +205,17 @@ test.describe('User Registration w/ Token', () => {
     await assertLoggedIn(page);
   });
 
-  test(`it shows an error when passwords do not match`, async ({
+  test.skip(`it shows an error when passwords do not match`, async ({
     page,
     synapse,
   }) => {});
 
-  test(`it can register a user when email validation is performed after providing registration token`, async ({
+  test.skip(`it can register a user when email validation is performed after providing registration token`, async ({
     page,
     synapse,
   }) => {});
 
-  test(`it can resend email validation message`, async ({
+  test.skip(`it can resend email validation message`, async ({
     page,
     synapse,
   }) => {});

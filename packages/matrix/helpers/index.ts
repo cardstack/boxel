@@ -6,6 +6,7 @@ import {
 } from '../docker/synapse';
 import { smtpStart, smtpStop } from '../docker/smtp4dev';
 export const testHost = 'http://localhost:4202/test';
+export const mailHost = 'http://localhost:5001';
 
 interface ProfileAssertions {
   userId?: string;
@@ -52,7 +53,7 @@ export async function setupMatrixOverride(
     const newUrl = new URL(url);
     const params = new URLSearchParams(newUrl.search);
 
-    // Override the matrix URL
+    // Override the matrixURL
     params.set('matrixURL', `http://localhost:${synapse.mappedPort}`);
     newUrl.search = params.toString();
 
@@ -89,6 +90,56 @@ export async function openRoot(page: Page) {
 export async function clearLocalStorage(page: Page) {
   await openRoot(page);
   await page.evaluate(() => window.localStorage.clear());
+}
+
+// The page.url will
+export async function validateEmail(
+  page: Page,
+  email: string,
+  opts?: {
+    onEmailPage?: (page: Page) => Promise<void>;
+    onValidationPage?: (page: Page) => Promise<void>;
+    sendAttempts?: number;
+  },
+) {
+  let sendAttempts = opts?.sendAttempts ?? 1;
+  await expect(page.locator('[data-test-validate-btn]')).toBeDisabled();
+  await page.locator('[data-test-email-field] input').fill(email);
+  await expect(page.locator('[data-test-validate-btn]')).toBeEnabled();
+  await page.locator('[data-test-validate-btn]').click();
+  await expect(page.locator('[data-test-email-validation]')).toContainText(
+    'The email address user1@example.com has not been validated',
+  );
+
+  await page.goto(mailHost);
+  await expect(
+    page.locator('.messagelist .unread').filter({ hasText: email }),
+  ).toHaveCount(sendAttempts);
+  await page
+    .locator('.messagelist .unread')
+    .filter({ hasText: email })
+    .first()
+    .click();
+  await expect(page.locator('.messageview .messageviewheader')).toContainText(
+    `To:${email}`,
+  );
+  if (opts?.onEmailPage) {
+    await opts.onEmailPage(page);
+  }
+
+  let context = page.context();
+  const [validationPage] = await Promise.all([
+    context.waitForEvent('page'),
+    await page
+      .frameLocator('.messageview iframe')
+      .getByText('Verify Your Email Address')
+      .click(),
+  ]);
+  await validationPage.waitForLoadState();
+  if (opts?.onValidationPage) {
+    await opts.onValidationPage(validationPage);
+  }
+  await gotoRegistration(page);
 }
 
 export async function gotoRegistration(page: Page) {

@@ -5,6 +5,8 @@ import {
   type SynapseInstance,
 } from '../docker/synapse';
 import {
+  clearLocalStorage,
+  validateEmail,
   gotoRegistration,
   assertLoggedIn,
   setupMatrixOverride,
@@ -27,7 +29,9 @@ test.describe('User Registration w/o Token', () => {
   test('it can register a user without a registration token', async ({
     page,
   }) => {
+    await clearLocalStorage(page);
     await gotoRegistration(page);
+    await validateEmail(page, 'user1@example.com');
     await expect(
       page.locator('[data-test-token-field]'),
       'token field is not displayed',
