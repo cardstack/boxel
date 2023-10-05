@@ -44,12 +44,10 @@ export default class RecentFilesService extends Service {
   }
 
   addRecentFileUrl(url: string) {
-    let realmURL = this.operatorModeStateService.currentRealmURL;
+    let realmURL = this.operatorModeStateService.realmURL;
 
     if (realmURL) {
-      let realmPaths = new RealmPaths(
-        new URL(this.operatorModeStateService.currentRealmURL),
-      );
+      let realmPaths = new RealmPaths(new URL(realmURL));
       if (realmPaths.inRealm(new URL(url))) {
         this.addRecentFile(realmPaths.local(url));
       }
@@ -57,7 +55,11 @@ export default class RecentFilesService extends Service {
   }
 
   addRecentFile(file: LocalPath) {
-    let currentRealmUrl = this.operatorModeStateService.currentRealmURL;
+    let currentRealmUrl = this.operatorModeStateService.realmURL;
+
+    if (!currentRealmUrl) {
+      return;
+    }
 
     const existingIndex = this.findRecentFileIndex(file);
 
@@ -90,7 +92,7 @@ export default class RecentFilesService extends Service {
   }
 
   private findRecentFileIndex(path: LocalPath) {
-    let currentRealmUrl = this.operatorModeStateService.currentRealmURL;
+    let currentRealmUrl = this.operatorModeStateService.realmURL;
 
     return this.recentFiles.findIndex(
       ({ realmURL, filePath }) =>
