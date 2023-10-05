@@ -293,12 +293,12 @@ function getUserMessage(event: IRoomEvent) {
   }
 }
 
-export function getModifyPrompt(history: IRoomEvent[], aiBotUsername: string) {
+export function getModifyPrompt(history: IRoomEvent[], aiBotUserId: string) {
   let historical_messages: OpenAIPromptMessage[] = [];
   for (let event of history) {
     let body = event.content.body;
     if (body) {
-      if (event.sender === aiBotUsername) {
+      if (event.sender === aiBotUserId) {
         historical_messages.push({
           role: 'assistant',
           content: body,
