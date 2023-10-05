@@ -253,17 +253,20 @@ export default class OperatorModeStateService extends Service {
   get codePathRelativeToRealm() {
     if (this.state.codePath) {
       let realmPath = new RealmPaths(this.cardService.defaultURL.href);
-      try {
-        return realmPath.local(this.state.codePath!);
-      } catch (err: any) {
-        if (err.status === 404) {
-          return undefined;
+
+      if (realmPath.inRealm(this.state.codePath)) {
+        try {
+          return realmPath.local(this.state.codePath!);
+        } catch (err: any) {
+          if (err.status === 404) {
+            return undefined;
+          }
+          throw err;
         }
-        throw err;
       }
-    } else {
-      return undefined;
     }
+
+    return undefined;
   }
 
   updateCodePath(codePath: URL | null) {

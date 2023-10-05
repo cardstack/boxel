@@ -469,6 +469,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
         border-radius: 7px;
       }
 
+      .edit .header-icon {
+        background: var(--boxel-light);
+        border: 1px solid var(--boxel-light);
+      }
+
       .header--icon-hovered {
         --boxel-header-text-color: var(--boxel-highlight);
         --boxel-header-text-size: var(--boxel-font);
