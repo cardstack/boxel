@@ -45,6 +45,7 @@ class CryptoPayment extends FieldDef {
 }
 
 class WireTransfer extends FieldDef {
+  static displayName = 'WireTransfer';
   @field currency = linksTo(Currency); // dropdown
   @field iban = contains(StringCard); // IBAN format
   @field bic = contains(StringCard); // BIC format

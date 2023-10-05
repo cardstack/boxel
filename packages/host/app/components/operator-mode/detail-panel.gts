@@ -113,6 +113,7 @@ export default class DetailPanel extends Component<Signature> {
     if (!this.args.elements) {
       return [];
     }
+    console.log(this.args.elements);
     return this.args.elements.map((el) => {
       const isSelected = this.args.selectedElement === el;
       return selectorItemFunc(
