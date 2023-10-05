@@ -15,7 +15,7 @@ interface Args {
 export default class FileTree extends Component<Args> {
   <template>
     <nav>
-      {{#unless this.operatorModeStateService.realmURLResource.isLoading}}
+      {{#unless this.operatorModeStateService.openFileIsReady}}
         <Directory @relativePath='' @realmURL={{@realmURL}} />
       {{/unless}}
     </nav>

@@ -536,6 +536,10 @@ export default class OperatorModeStateService extends Service {
     );
   }
 
+  get openFileIsReady() {
+    return isReady(this.openFile.current);
+  }
+
   get realmURL() {
     return isReady(this.openFile.current)
       ? this.readyFile.realmURL
