@@ -144,6 +144,10 @@ To stop the admin console run the following in the packages/matrix workspace:
 pnpm stop:admin
 ```
 
+#### SMTP Server
+
+Matrix requires an SMTP server in order to send emails. In order to facilitate this we leverage [smtp4dev](https://github.com/rnwood/smtp4dev) in dev and test (CI) environments . This is a docker container that includes both a local SMTP server and hosts a web app for viewing all emails send from the SMTP server (the emails never leave the docker container). smtp4dev runs in the same docker network as synapse, so the SMTP port is never projected to the docker host. smtp4dev also runs the web app used to view emails sent from the SMTP server at `http://localhost:5001`. You can open a browser tab with this URL to view any emails sent from the matrix server. As well as, our matrix tests leverage the mail web app in order to perform email assertions. smtp4dev is automatically started as part of running `pnpm start:all` in the `packages/realm-server` workspace.
+
 ## Boxel UI Component Explorer
 
 There is a ember-freestyle component explorer available to assist with development. In order to run the freestyle app:
