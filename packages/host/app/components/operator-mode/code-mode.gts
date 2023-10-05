@@ -26,7 +26,7 @@ import cn from '@cardstack/boxel-ui/helpers/cn';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { and } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import {
   type RealmInfo,
@@ -715,6 +715,10 @@ export default class CodeMode extends Component<Signature> {
     }
   }
 
+  private get showBrowser() {
+    return this.fileView === 'browser' || this.emptyOrNotFound;
+  }
+
   <template>
     <div class='code-mode-background' style={{this.backgroundURLStyle}}></div>
     <CardURLBar
@@ -747,7 +751,7 @@ export default class CodeMode extends Component<Signature> {
             {{! Move each container and styles to separate component }}
             <div
               class='inner-container file-view
-                {{if (eq this.fileView "browser") "file-browser"}}'
+                {{if this.showBrowser "file-browser"}}'
             >
               <header
                 class='file-view__header'
@@ -756,38 +760,29 @@ export default class CodeMode extends Component<Signature> {
               >
                 <Button
                   @disabled={{this.emptyOrNotFound}}
-                  @kind={{if
-                    (eq this.fileView 'inheritance')
-                    'primary-dark'
-                    'secondary'
-                  }}
+                  @kind={{if (not this.showBrowser) 'primary-dark' 'secondary'}}
                   @size='extra-small'
                   class={{cn
                     'file-view__header-btn'
-                    active=(eq this.fileView 'inheritance')
+                    active=(not this.showBrowser)
                   }}
                   {{on 'click' (fn this.setFileView 'inheritance')}}
                   data-test-inheritance-toggle
                 >
                   Inspector</Button>
                 <Button
-                  @kind={{if
-                    (eq this.fileView 'browser')
-                    'primary-dark'
-                    'secondary'
-                  }}
+                  @kind={{if this.showBrowser 'primary-dark' 'secondary'}}
                   @size='extra-small'
-                  class={{cn
-                    'file-view__header-btn'
-                    active=(eq this.fileView 'browser')
-                  }}
+                  class={{cn 'file-view__header-btn' active=this.showBrowser}}
                   {{on 'click' (fn this.setFileView 'browser')}}
                   data-test-file-browser-toggle
                 >
                   File Tree</Button>
               </header>
               <section class='inner-container__content'>
-                {{#if (eq this.fileView 'inheritance')}}
+                {{#if this.showBrowser}}
+                  <FileTree @realmURL={{this.realmURL}} />
+                {{else}}
                   {{#if this.isReady}}
                     <DetailPanel
                       @cardInstance={{this.card}}
@@ -799,11 +794,7 @@ export default class CodeMode extends Component<Signature> {
                       @delete={{this.delete}}
                       data-test-card-inheritance-panel
                     />
-                  {{else if this.emptyOrNotFound}}
-                    Inspector is not available
                   {{/if}}
-                {{else}}
-                  <FileTree @realmURL={{this.realmURL}} />
                 {{/if}}
               </section>
             </div>

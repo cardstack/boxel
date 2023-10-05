@@ -546,8 +546,6 @@ export default class OperatorModeStateService extends Service {
     let codePath = this.state.codePath;
 
     if (!codePath) {
-      // FIXME make this declarative in code-mode template?
-      // this.setFileView('browser');
       return undefined;
     }
 
