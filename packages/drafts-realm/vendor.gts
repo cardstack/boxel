@@ -98,6 +98,7 @@ class ContactMethod extends FieldDef {
 }
 
 export class Vendor extends CardDef {
+  static displayName = 'Vendor';
   @field vendor = contains(VendorDetails); // required
   @field contact = contains(Contact); // required
   @field contactMethod = containsMany(ContactMethod);
