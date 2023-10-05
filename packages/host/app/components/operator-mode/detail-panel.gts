@@ -71,9 +71,9 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   @action
-  async updateCodePath(url: URL | undefined) {
+  updateCodePath(url: URL | undefined) {
     if (url) {
-      await this.operatorModeStateService.updateCodePath(url);
+      this.operatorModeStateService.updateCodePath(url);
     }
   }
 

@@ -645,16 +645,16 @@ export default class OperatorModeContainer extends Component<Signature> {
     this.deleteModal = deleteModal;
   };
 
-  @action async updateSubmode(submode: Submode) {
+  @action updateSubmode(submode: Submode) {
     switch (submode) {
       case Submode.Interact:
-        await this.operatorModeStateService.updateCodePath(null);
+        this.operatorModeStateService.updateCodePath(null);
         break;
       case Submode.Code:
         let codePath = this.lastCardInRightMostStack
           ? new URL(this.lastCardInRightMostStack.id + '.json')
           : null;
-        await this.operatorModeStateService.updateCodePath(codePath);
+        this.operatorModeStateService.updateCodePath(codePath);
         break;
       default:
         throw assertNever(submode);

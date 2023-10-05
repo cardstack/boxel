@@ -6,13 +6,13 @@ import { BoxelInput } from '@cardstack/boxel-ui';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { and, bool, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
+import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import URLBarResource, {
   urlBarResource,
 } from '@cardstack/host/resources/url-bar';
 
-import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type CardService from '../../services/card-service';
-import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 interface Signature {
   Element: HTMLElement;
@@ -193,8 +193,8 @@ export default class CardURLBar extends Component<Signature> {
 
   private urlBar: URLBarResource = urlBarResource(this, () => ({
     getValue: () => this.codePath,
-    setValue: async (url: string) => {
-      await this.operatorModeStateService.updateCodePath(new URL(url));
+    setValue: (url: string) => {
+      this.operatorModeStateService.updateCodePath(new URL(url));
     },
     setValueError: this.args.loadFileError,
     resetValueError: this.args.resetLoadFileError,

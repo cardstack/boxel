@@ -45,10 +45,10 @@ export default class CardController extends Controller {
     });
   }
 
-  async openPath(newPath: string | undefined) {
+  openPath(newPath: string | undefined) {
     if (newPath) {
       let fileUrl = new URL(this.cardService.defaultURL + newPath);
-      await this.operatorModeStateService.updateCodePath(fileUrl);
+      this.operatorModeStateService.updateCodePath(fileUrl);
     }
   }
 

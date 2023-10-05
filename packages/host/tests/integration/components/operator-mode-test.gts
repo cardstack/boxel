@@ -2494,7 +2494,7 @@ module('Integration | operator-mode', function (hooks) {
     let operatorModeStateService = this.owner.lookup(
       'service:operator-mode-state-service',
     ) as OperatorModeStateService;
-    await operatorModeStateService.updateCodePath(
+    operatorModeStateService.updateCodePath(
       new URL(`${testRealmURL}person.gts`),
     );
     console.log(operatorModeStateService.state.codePath);
@@ -2544,7 +2544,7 @@ module('Integration | operator-mode', function (hooks) {
     let operatorModeStateService = this.owner.lookup(
       'service:operator-mode-state-service',
     ) as OperatorModeStateService;
-    await operatorModeStateService.updateCodePath(
+    operatorModeStateService.updateCodePath(
       new URL(`${testRealmURL}person.gts`),
     );
 

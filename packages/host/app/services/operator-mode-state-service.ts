@@ -276,31 +276,7 @@ export default class OperatorModeStateService extends Service {
     return undefined;
   }
 
-  async updateCodePath(codePath: URL | null) {
-    console.log('Update code path!', codePath);
-    let changingRealms = false;
-
-    if (!this.realmURL && codePath) {
-      changingRealms = true;
-    }
-
-    if (this.realmURL && codePath) {
-      let realmPaths = new RealmPaths(this.realmURL);
-
-      if (!realmPaths.inRealm(codePath)) {
-        console.log('changing realms!', codePath);
-        changingRealms = true;
-      }
-    }
-
-    if (changingRealms && codePath) {
-      try {
-        let newRealm = await this.realmInfoService.fetchRealmURL(codePath.href);
-      } catch (error) {
-        console.log('error changing realms', error);
-      }
-    }
-
+  updateCodePath(codePath: URL | null) {
     this.state.codePath = codePath;
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();

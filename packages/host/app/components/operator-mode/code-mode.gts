@@ -692,7 +692,7 @@ export default class CodeMode extends Component<Signature> {
   }
 
   @action
-  private async delete() {
+  private delete() {
     if (this.card) {
       return this.args.delete(this.card, async () => {
         let recentFile = this.recentFilesService.recentFiles[0];
@@ -700,11 +700,9 @@ export default class CodeMode extends Component<Signature> {
         if (recentFile) {
           let recentFileUrl = `${recentFile.realmURL}${recentFile.filePath}`;
 
-          await this.operatorModeStateService.updateCodePath(
-            new URL(recentFileUrl),
-          );
+          this.operatorModeStateService.updateCodePath(new URL(recentFileUrl));
         } else {
-          await this.operatorModeStateService.updateCodePath(null);
+          this.operatorModeStateService.updateCodePath(null);
         }
       });
     } else {
