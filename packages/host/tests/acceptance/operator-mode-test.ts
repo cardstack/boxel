@@ -814,7 +814,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-code-mode]').exists();
 
       // Submode is reflected in the URL
-      assert.strictEqual(
+      assert.equal(
         currentURL(),
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
           stringify({
@@ -835,7 +835,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             submode: 'code',
             codePath: `${testRealmURL}Pet/mango.json`,
             fileView: 'inheritance',
-            openDirs: { testRealmURL: ['Pet/'] },
+            openDirs: { [testRealmURL]: ['Pet/'] },
           })!,
         )}`,
       );
@@ -868,7 +868,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             ],
             submode: 'interact',
             fileView: 'inheritance',
-            openDirs: { testRealmURL: ['Pet/'] },
+            openDirs: { [testRealmURL]: ['Pet/'] },
           })!,
         )}`,
       );

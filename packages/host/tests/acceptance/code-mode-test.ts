@@ -354,7 +354,7 @@ module('Acceptance | code mode tests', function (hooks) {
       submode: 'code',
       fileView: 'browser',
       codePath: `${testRealmURL}Person/1.json`,
-      openDirs: { testRealmURL: ['Person/'] },
+      openDirs: { [testRealmURL]: ['Person/'] },
     })!;
 
     await visit(
@@ -390,7 +390,7 @@ module('Acceptance | code mode tests', function (hooks) {
       submode: 'code',
       fileView: 'browser',
       codePath: `${testRealmURL}Person/1.json`,
-      openDirs: { testRealmURL: ['Person/'] },
+      openDirs: { [testRealmURL]: ['Person/'] },
     })!;
 
     await visit(
@@ -418,7 +418,7 @@ module('Acceptance | code mode tests', function (hooks) {
       submode: 'code',
       codePath: `http://test-realm/test/${openFilename}`,
       fileView: 'browser',
-      openDirs: { testRealmURL: ['Person/'] },
+      openDirs: { [testRealmURL]: ['Person/'] },
     })!;
 
     await visit(
@@ -449,7 +449,7 @@ module('Acceptance | code mode tests', function (hooks) {
       ],
       submode: 'code',
       codePath: `http://test-realm/test/index`,
-      openDirs: { testRealmURL: ['Person/'] },
+      openDirs: { [testRealmURL]: ['Person/'] },
     })!;
 
     await visit(
@@ -502,7 +502,7 @@ module('Acceptance | code mode tests', function (hooks) {
       submode: 'code',
       codePath: `http://test-realm/test/${openFilename}`,
       fileView: 'browser',
-      openDirs: { testRealmURL: ['Person/'] },
+      openDirs: { [testRealmURL]: ['Person/'] },
     })!;
 
     await visit(
