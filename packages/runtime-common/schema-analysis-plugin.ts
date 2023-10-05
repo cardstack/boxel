@@ -20,17 +20,15 @@ export interface InternalReference {
 
 export type ClassReference = ExternalReference | InternalReference;
 
-export type Export = {
+export type BaseDeclaration = {
   localName: string | undefined;
   exportedAs: string | undefined;
-  path: NodePath<t.ExportDeclaration>;
+  path: NodePath;
 };
 
-export interface PossibleCardClass {
+export interface PossibleCardClass extends BaseDeclaration {
   super: ClassReference;
   possibleFields: Map<string, PossibleField>;
-  localName: string | undefined;
-  exportedAs: string | undefined;
   path: NodePath<t.ClassDeclaration>;
 }
 
@@ -41,82 +39,45 @@ export interface PossibleField {
   path: NodePath<t.ClassProperty>;
 }
 
+export type ModuleDeclaration = PossibleCardClass | BaseDeclaration;
+
 export interface Options {
   possibleCards: PossibleCardClass[]; //cards may not be exports
-  exports: Export[];
+  moduleDeclarations: ModuleDeclaration[];
 }
 
 export function schemaAnalysisPlugin(_babel: typeof Babel) {
-  // let t = babel.types;
   return {
     visitor: {
-      ExportNamedDeclaration: {
-        enter(path: NodePath<t.ExportNamedDeclaration>, state: State) {
-          const declaration = path.node.declaration;
-          if (
-            t.isClassDeclaration(declaration) ||
-            t.isFunctionDeclaration(declaration)
-          ) {
-            let exportedAs = declaration.id
-              ? getName(declaration.id)
-              : undefined;
-
-            let localName = declaration.id ? declaration.id.name : undefined;
-            state.opts.exports.push({
-              path,
-              exportedAs,
+      'FunctionDeclaration|ClassDeclaration': {
+        enter(
+          path: NodePath<t.ClassDeclaration> | NodePath<t.FunctionDeclaration>,
+          state: State,
+        ) {
+          let localName = path.node.id ? path.node.id.name : undefined;
+          if (t.isExportDeclaration(path.parentPath)) {
+            state.opts.moduleDeclarations.push({
               localName,
+              exportedAs: getExportedAs(path, localName),
+              path,
             });
+          } else if (t.isClassDeclaration(path)) {
+            let maybeCard = lookForCard(path, state);
+            if (maybeCard) {
+              state.opts.moduleDeclarations.push(maybeCard);
+            }
           }
+        },
+        exit(_path: NodePath<t.ClassDeclaration>, state: State) {
+          // This is essential for now because we are mutating state inside lookForCard
+          state.insideCard = false;
         },
       },
       ClassDeclaration: {
         enter(path: NodePath<t.ClassDeclaration>, state: State) {
-          if (!path.node.superClass) {
-            return;
-          }
-
-          let sc = path.get('superClass');
-          if (sc.isReferencedIdentifier()) {
-            let classRef = makeClassReference(path.scope, sc.node.name, state);
-            if (classRef) {
-              state.insideCard = true;
-              let exportedAs: string | undefined;
-              let { parentPath } = path;
-              let localName = path.node.id ? path.node.id.name : undefined;
-              if (parentPath.isExportNamedDeclaration()) {
-                // the class declaration is part of a named export
-                exportedAs = localName;
-              } else if (parentPath.isExportDefaultDeclaration()) {
-                // the class declaration is part of a default export
-                exportedAs = 'default';
-              } else {
-                // the class's identifier is referenced in a node whose parent is an ExportSpecifier
-                let binding = localName
-                  ? path.scope.getBinding(localName)
-                  : undefined;
-                if (binding) {
-                  let maybeExportSpecifierLocal = binding.referencePaths.find(
-                    (b) => b.parentPath?.isExportSpecifier(),
-                  ) as NodePath<t.Identifier> | undefined;
-                  if (maybeExportSpecifierLocal) {
-                    exportedAs = getName(
-                      (
-                        maybeExportSpecifierLocal.parentPath as NodePath<t.ExportSpecifier>
-                      ).node.exported,
-                    );
-                  }
-                }
-              }
-
-              state.opts.possibleCards.push({
-                super: classRef,
-                localName,
-                path,
-                possibleFields: new Map(),
-                exportedAs,
-              });
-            }
+          let maybeCard = lookForCard(path, state);
+          if (maybeCard) {
+            state.opts.possibleCards.push(maybeCard);
           }
         },
 
@@ -232,6 +193,58 @@ class CompilerError extends Error {
       this.stack = new Error(message).stack;
     }
   }
+}
+
+function lookForCard(path: NodePath<t.ClassDeclaration>, state: State) {
+  if (!path.node.superClass) {
+    return;
+  }
+
+  let sc = path.get('superClass');
+  if (sc.isReferencedIdentifier()) {
+    let classRef = makeClassReference(path.scope, sc.node.name, state);
+    if (classRef) {
+      state.insideCard = true;
+      let localName = path.node.id ? path.node.id.name : undefined;
+      return {
+        super: classRef,
+        localName,
+        path,
+        possibleFields: new Map(),
+        exportedAs: getExportedAs(path, localName),
+      };
+    }
+  }
+  return;
+}
+
+function getExportedAs(
+  path: NodePath<t.ClassDeclaration> | NodePath<t.FunctionDeclaration>,
+  localName: string | undefined,
+): string | undefined {
+  let { parentPath } = path;
+  if (parentPath.isExportNamedDeclaration()) {
+    // the class declaration is part of a named export
+    return localName;
+  } else if (parentPath.isExportDefaultDeclaration()) {
+    // the class declaration is part of a default export
+    return 'default';
+  } else {
+    // the class's identifier is referenced in a node whose parent is an ExportSpecifier
+    let binding = localName ? path.scope.getBinding(localName) : undefined;
+    if (binding) {
+      let maybeExportSpecifierLocal = binding.referencePaths.find(
+        (b) => b.parentPath?.isExportSpecifier(),
+      ) as NodePath<t.Identifier> | undefined;
+      if (maybeExportSpecifierLocal) {
+        return getName(
+          (maybeExportSpecifierLocal.parentPath as NodePath<t.ExportSpecifier>)
+            .node.exported,
+        );
+      }
+    }
+  }
+  return;
 }
 
 function makeClassReference(

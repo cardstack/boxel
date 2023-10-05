@@ -3,8 +3,9 @@ import * as Babel from '@babel/core';
 import {
   schemaAnalysisPlugin,
   Options,
-  PossibleCardClass,
-  Export,
+  type PossibleCardClass,
+  type ModuleDeclaration,
+  type BaseDeclaration,
 } from './schema-analysis-plugin';
 import {
   removeFieldPlugin,
@@ -27,12 +28,11 @@ import type { types as t } from '@babel/core';
 import type { NodePath } from '@babel/traverse';
 import type { FieldType } from 'https://cardstack.com/base/card-api';
 
-export type { PossibleCardClass, Export };
-import { unionWith } from 'lodash';
+export type { PossibleCardClass, BaseDeclaration };
 
 export class ModuleSyntax {
   declare possibleCards: PossibleCardClass[];
-  declare exports: Export[];
+  declare moduleDeclarations: ModuleDeclaration[];
   private declare ast: t.File;
 
   constructor(src: string) {
@@ -42,7 +42,7 @@ export class ModuleSyntax {
   private analyze(src: string) {
     let moduleAnalysis: Options = {
       possibleCards: [],
-      exports: [],
+      moduleDeclarations: [],
     };
     let preprocessedSrc = preprocessTemplateTags(src);
 
@@ -58,20 +58,11 @@ export class ModuleSyntax {
     });
     this.ast = r!.ast!;
     this.possibleCards = moduleAnalysis.possibleCards;
-    this.exports = moduleAnalysis.exports;
+    this.moduleDeclarations = moduleAnalysis.moduleDeclarations;
   }
 
-  elements(): (PossibleCardClass | Export)[] {
-    const compareByLocalName = (
-      a: PossibleCardClass | Export,
-      b: PossibleCardClass | Export,
-    ) => {
-      const aLocalName = 'localName' in a ? a.localName : undefined;
-      const bLocalName = 'localName' in b ? b.localName : undefined;
-
-      return aLocalName === bLocalName;
-    };
-    return unionWith(this.possibleCards, this.exports, compareByLocalName);
+  elements(): ModuleDeclaration[] {
+    return this.moduleDeclarations;
   }
 
   code(): string {

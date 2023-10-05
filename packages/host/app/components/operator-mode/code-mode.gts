@@ -42,7 +42,7 @@ import {
 import {
   ModuleSyntax,
   type PossibleCardClass,
-  type Export,
+  type BaseDeclaration,
 } from '@cardstack/runtime-common/module-syntax';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
@@ -136,7 +136,7 @@ const cardEditorSaveTimes = new Map<string, number>();
 // - exported function or class
 // - exported card or field
 // - unexported card or field
-export type Element = (CardOrField & Partial<PossibleCardClass>) | Export;
+export type Element = (CardOrField & Partial<PossibleCardClass>) | BaseDeclaration;
 
 export interface CardOrField {
   cardType: CardType;
@@ -425,7 +425,7 @@ export default class CodeMode extends Component<Signature> {
                     cardOrField,
                   } as CardOrField & Partial<PossibleCardClass>;
                 }
-                return value as Export;
+                return value as BaseDeclaration;
               });
             }
             state.value = elements;
