@@ -4,7 +4,7 @@ rules:
   line-length: disable
   document-start: disable
   quoted-strings:
-    quote-type: single
+    quote-type: double
     required: false
   truthy:
     check-keys: false
