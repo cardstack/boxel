@@ -335,7 +335,6 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.dom('[data-test-file="pet-person.gts"]').hasClass('selected');
     assert.dom('[data-test-file="person.gts"]').doesNotHaveClass('selected');
 
-    await click('[data-test-directory="Person/"]');
     await click('[data-test-file="Person/1.json"]');
 
     assert.dom('[data-test-person]').exists();
@@ -598,9 +597,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .exists({ count: 1 })
       .containsText('Person/1.json');
 
-    await click('[data-test-directory]');
     await waitFor('[data-test-file="Person/1.json"]');
-
     await click('[data-test-file="Person/1.json"]');
 
     assert
