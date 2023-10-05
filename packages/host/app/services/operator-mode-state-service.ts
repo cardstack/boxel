@@ -523,7 +523,7 @@ export default class OperatorModeStateService extends Service {
       return this.cachedRealmURL.href;
     }
 
-    return undefined;
+    return this.cardService.defaultURL.href;
   }
 
   openFile = maybe(this, (context) => {

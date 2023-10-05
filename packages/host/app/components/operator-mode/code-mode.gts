@@ -225,7 +225,7 @@ export default class CodeMode extends Component<Signature> {
   }
 
   get fileViewTitle() {
-    return this.fileView === 'inheritance' ? 'Inheritance' : 'File Browser';
+    return this.showBrowser ? 'File Browser' : 'Inheritance';
   }
 
   private get realmURL() {
