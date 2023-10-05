@@ -541,9 +541,13 @@ export default class OperatorModeStateService extends Service {
   }
 
   get realmURL() {
-    return isReady(this.openFile.current)
-      ? this.readyFile.realmURL
-      : this.cardService.defaultURL.href;
+    if (isReady(this.openFile.current)) {
+      return this.readyFile.realmURL;
+    } else if (this.cachedRealmURL) {
+      return this.cachedRealmURL.href;
+    }
+
+    return undefined;
   }
 
   openFile = maybe(this, (context) => {
@@ -555,7 +559,7 @@ export default class OperatorModeStateService extends Service {
 
     return file(context, () => ({
       url: codePath!.href,
-      onStateChange: (_state) => {
+      onStateChange: (state) => {
         /* FIXME how to mangage these code-mode properties?
         this.userHasDismissedURLError = false;
         if (state === 'not-found') {
@@ -565,6 +569,10 @@ export default class OperatorModeStateService extends Service {
           this.loadFileError = null;
         }
         */
+
+        if (state === 'ready') {
+          this.cachedRealmURL = new URL(this.readyFile.realmURL);
+        }
       },
       onRedirect: (url: string) => {
         this.replaceCodePath(new URL(url));
