@@ -48,22 +48,24 @@ export interface Options {
 export function schemaAnalysisPlugin(_babel: typeof Babel) {
   return {
     visitor: {
-      'FunctionDeclaration|ClassDeclaration': {
+      Declaration: {
         enter(
           path: NodePath<t.ClassDeclaration> | NodePath<t.FunctionDeclaration>,
           state: State,
         ) {
-          let localName = path.node.id ? path.node.id.name : undefined;
-          if (t.isExportDeclaration(path.parentPath)) {
-            state.opts.moduleDeclarations.push({
-              localName,
-              exportedAs: getExportedAs(path, localName),
-              path,
-            });
-          } else if (t.isClassDeclaration(path)) {
-            let maybeCard = lookForCard(path, state);
-            if (maybeCard) {
-              state.opts.moduleDeclarations.push(maybeCard);
+          if (t.isClassDeclaration(path) || t.isFunctionDeclaration(path)) {
+            let localName = path.node.id ? path.node.id.name : undefined;
+            if (t.isExportDeclaration(path.parentPath)) {
+              state.opts.moduleDeclarations.push({
+                localName,
+                exportedAs: getExportedAs(path, localName),
+                path,
+              });
+            } else if (t.isClassDeclaration(path)) {
+              let maybeCard = lookForCard(path, state);
+              if (maybeCard) {
+                state.opts.moduleDeclarations.push(maybeCard);
+              }
             }
           }
         },
