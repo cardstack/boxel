@@ -7,7 +7,6 @@ import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
-import { use, resource } from 'ember-resources';
 import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
@@ -15,6 +14,8 @@ import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
 import { Submode } from '@cardstack/host/components/submode-switcher';
+import { file, isReady } from '@cardstack/host/resources/file';
+import { maybe } from '@cardstack/host/resources/maybe';
 import type MessageService from '@cardstack/host/services/message-service';
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
@@ -257,8 +258,8 @@ export default class OperatorModeStateService extends Service {
   }
 
   get codePathRelativeToRealm() {
-    if (this.state.codePath && this.currentRealmURL) {
-      let realmPath = new RealmPaths(this.currentRealmURL);
+    if (this.state.codePath && this.realmURL) {
+      let realmPath = new RealmPaths(this.realmURL);
 
       if (realmPath.inRealm(this.state.codePath)) {
         try {
@@ -279,12 +280,12 @@ export default class OperatorModeStateService extends Service {
     console.log('Update code path!', codePath);
     let changingRealms = false;
 
-    if (!this.currentRealmURL && codePath) {
+    if (!this.realmURL && codePath) {
       changingRealms = true;
     }
 
-    if (this.currentRealmURL && codePath) {
-      let realmPaths = new RealmPaths(this.currentRealmURL);
+    if (this.realmURL && codePath) {
+      let realmPaths = new RealmPaths(this.realmURL);
 
       if (!realmPaths.inRealm(codePath)) {
         console.log('changing realms!', codePath);
@@ -335,8 +336,8 @@ export default class OperatorModeStateService extends Service {
   }
 
   get currentRealmOpenDirs() {
-    if (this.currentRealmURL) {
-      let currentRealmOpenDirs = this.openDirs.get(this.currentRealmURL);
+    if (this.realmURL) {
+      let currentRealmOpenDirs = this.openDirs.get(this.realmURL);
 
       if (currentRealmOpenDirs) {
         return currentRealmOpenDirs;
@@ -500,7 +501,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   toggleOpenDir(entryPath: string): void {
-    if (!this.currentRealmURL) {
+    if (!this.realmURL) {
       return;
     }
 
@@ -514,93 +515,58 @@ export default class OperatorModeStateService extends Service {
         } else {
           dirs.splice(i, 1);
         }
-        this.openDirs.set(this.currentRealmURL, new TrackedArray(dirs));
+        this.openDirs.set(this.realmURL, new TrackedArray(dirs));
         return;
       } else if (entryPath.startsWith(dirs[i])) {
         dirs[i] = entryPath;
-        this.openDirs.set(this.currentRealmURL, new TrackedArray(dirs));
+        this.openDirs.set(this.realmURL, new TrackedArray(dirs));
         return;
       }
     }
-    this.openDirs.set(
-      this.currentRealmURL,
-      new TrackedArray([...dirs, entryPath]),
-    );
+    this.openDirs.set(this.realmURL, new TrackedArray([...dirs, entryPath]));
     this.schedulePersist();
   }
 
-  get currentRealmURL(): string {
-    return this.realmURLResource.value;
+  private get readyFile() {
+    if (isReady(this.openFile.current)) {
+      return this.openFile.current;
+    }
+    throw new Error(
+      `cannot access file contents ${this.state.codePath} before file is open`,
+    );
   }
 
-  @use realmURLResource = resource(() => {
-    if (!this.state.codePath) {
-      return new TrackedObject({
-        error: null,
-        isLoading: false,
-        value: this.cachedRealmURL,
-        load: () => Promise<void>,
-      });
-    }
+  get realmURL() {
+    return isReady(this.openFile.current)
+      ? this.readyFile.realmURL
+      : this.cardService.defaultURL.href;
+  }
 
+  openFile = maybe(this, (context) => {
     let codePath = this.state.codePath;
 
-    // Avoid refetching realm info if we have not changed realms
-    if (this.cachedRealmURL) {
-      let realmPaths = new RealmPaths(this.cachedRealmURL);
-
-      if (realmPaths.inRealm(codePath)) {
-        return new TrackedObject({
-          error: null,
-          isLoading: false,
-          value: this.cachedRealmURL,
-          load: () => Promise<void>,
-        });
-      }
+    if (!codePath) {
+      // FIXME make this declarative in code-mode template?
+      // this.setFileView('browser');
+      return undefined;
     }
 
-    const state: {
-      isLoading: boolean;
-      value: RealmInfo | null;
-      error: Error | undefined;
-      load: () => Promise<void>;
-    } = new TrackedObject({
-      isLoading: true,
-      value: this.cachedRealmURL,
-      error: undefined,
-      load: async () => {
-        state.isLoading = true;
-
-        try {
-          let realmURL = (
-            await this.realmInfoService.fetchRealmInfo({
-              fileURL: this.state.codePath?.href,
-            })
-          ).id;
-
-          if (realmURL) {
-            this.cachedRealmURL = new URL(realmURL);
-
-            // FIXME can this be moved to toggleOpenDir?
-            if (!this.openDirs.has(realmURL)) {
-              let newOpenDirs = new TrackedArray<string>();
-              this.openDirs.set(realmURL, newOpenDirs);
-            }
-          }
-
-          state.value = realmURL;
-
-          // FIXME is it wrong to do this every time the realm changes?
-          this.updateOpenDirsForNestedPath();
-        } catch (error: any) {
-          state.error = error;
-        } finally {
-          state.isLoading = false;
+    return file(context, () => ({
+      url: codePath!.href,
+      onStateChange: (_state) => {
+        /* FIXME how to mangage these code-mode properties?
+        this.userHasDismissedURLError = false;
+        if (state === 'not-found') {
+          this.loadFileError = 'This resource does not exist';
+          this.setFileView('browser');
+        } else if (state === 'ready') {
+          this.loadFileError = null;
         }
+        */
       },
-    });
-
-    state.load();
-    return state;
+      onRedirect: (url: string) => {
+        this.replaceCodePath(new URL(url));
+      },
+    }));
   });
 }

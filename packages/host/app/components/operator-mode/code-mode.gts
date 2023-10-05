@@ -51,15 +51,12 @@ import {
   type CardType,
 } from '@cardstack/host/resources/card-type';
 import {
-  file,
   isReady,
   type Ready,
   type FileResource,
 } from '@cardstack/host/resources/file';
 
 import { importResource } from '@cardstack/host/resources/import';
-
-import { maybe } from '@cardstack/host/resources/maybe';
 
 import type CardService from '@cardstack/host/services/card-service';
 
@@ -231,9 +228,7 @@ export default class CodeMode extends Component<Signature> {
   }
 
   private get realmURL() {
-    return this.isReady
-      ? this.readyFile.realmURL
-      : this.cardService.defaultURL.href;
+    return this.operatorModeStateService.realmURL;
   }
 
   private get realmIconURL() {
@@ -242,16 +237,23 @@ export default class CodeMode extends Component<Signature> {
 
   private get isLoading() {
     return (
-      this.loadMonaco.isRunning || this.openFile.current?.state === 'loading'
+      this.loadMonaco.isRunning ||
+      this.operatorModeStateService.openFile.current?.state === 'loading'
     );
   }
 
   private get isReady() {
-    return this.maybeMonacoSDK && isReady(this.openFile.current);
+    return (
+      this.maybeMonacoSDK &&
+      isReady(this.operatorModeStateService.openFile.current)
+    );
   }
 
   private get emptyOrNotFound() {
-    return !this.codePath || this.openFile.current?.state === 'not-found';
+    return (
+      !this.codePath ||
+      this.operatorModeStateService.openFile.current?.state === 'not-found'
+    );
   }
 
   private loadMonaco = task(async () => {
@@ -259,8 +261,8 @@ export default class CodeMode extends Component<Signature> {
   });
 
   private get readyFile() {
-    if (isReady(this.openFile.current)) {
-      return this.openFile.current;
+    if (isReady(this.operatorModeStateService.openFile.current)) {
+      return this.operatorModeStateService.openFile.current;
     }
     throw new Error(
       `cannot access file contents ${this.codePath} before file is open`,
@@ -383,32 +385,9 @@ export default class CodeMode extends Component<Signature> {
     return state;
   });
 
-  private openFile = maybe(this, (context) => {
-    if (!this.codePath) {
-      this.setFileView('browser');
-      return undefined;
-    }
-
-    return file(context, () => ({
-      url: this.codePath!.href,
-      onStateChange: (state) => {
-        this.userHasDismissedURLError = false;
-        if (state === 'not-found') {
-          this.loadFileError = 'This resource does not exist';
-          this.setFileView('browser');
-        } else if (state === 'ready') {
-          this.loadFileError = null;
-        }
-      },
-      onRedirect: (url: string) => {
-        this.operatorModeStateService.replaceCodePath(new URL(url));
-      },
-    }));
-  });
-
   @use private importedModule = resource(() => {
-    if (isReady(this.openFile.current)) {
-      let f: Ready = this.openFile.current;
+    if (isReady(this.operatorModeStateService.openFile.current)) {
+      let f: Ready = this.operatorModeStateService.openFile.current;
       if (f.url.endsWith('.json')) {
         let ref = identifyCard(this.card?.constructor);
         if (ref !== undefined) {
@@ -451,18 +430,23 @@ export default class CodeMode extends Component<Signature> {
   private get openFileCardJSON() {
     this.cardError = undefined;
     if (
-      this.openFile.current?.state === 'ready' &&
-      this.openFile.current.name.endsWith('.json')
+      this.operatorModeStateService.openFile.current?.state === 'ready' &&
+      this.operatorModeStateService.openFile.current.name.endsWith('.json')
     ) {
       let maybeCard: any;
       try {
-        maybeCard = JSON.parse(this.openFile.current.content);
+        maybeCard = JSON.parse(
+          this.operatorModeStateService.openFile.current.content,
+        );
       } catch (err: any) {
         this.cardError = err;
         return undefined;
       }
       if (isSingleCardDocument(maybeCard)) {
-        let url = this.openFile.current.url.replace(/\.json$/, '');
+        let url = this.operatorModeStateService.openFile.current.url.replace(
+          /\.json$/,
+          '',
+        );
         if (!url) {
           return undefined;
         }
@@ -484,9 +468,13 @@ export default class CodeMode extends Component<Signature> {
 
   private get cardIsLoaded() {
     return (
-      isReady(this.openFile.current) &&
+      isReady(this.operatorModeStateService.openFile.current) &&
       this.openFileCardJSON &&
-      this.card?.id === this.openFile.current.url.replace(/\.json$/, '')
+      this.card?.id ===
+        this.operatorModeStateService.openFile.current.url.replace(
+          /\.json$/,
+          '',
+        )
     );
   }
 
@@ -565,13 +553,14 @@ export default class CodeMode extends Component<Signature> {
     this.hasUnsavedSourceChanges = true;
     await timeout(autoSaveDelayMs);
     if (
-      !isReady(this.openFile.current) ||
-      content === this.openFile.current?.content
+      !isReady(this.operatorModeStateService.openFile.current) ||
+      content === this.operatorModeStateService.openFile.current?.content
     ) {
       return;
     }
 
-    let isJSON = this.openFile.current.name.endsWith('.json');
+    let isJSON =
+      this.operatorModeStateService.openFile.current.name.endsWith('.json');
     let validJSON = isJSON && this.safeJSONParse(content);
     // Here lies the difference in how json files and other source code files
     // are treated during editing in the code editor
@@ -582,7 +571,10 @@ export default class CodeMode extends Component<Signature> {
     } else if (!isJSON || validJSON) {
       // writes source code and non-card instance valid JSON,
       // then updates the state of the file resource
-      this.writeSourceCodeToFile(this.openFile.current, content);
+      this.writeSourceCodeToFile(
+        this.operatorModeStateService.openFile.current,
+        content,
+      );
       this.waitForSourceCodeWrite.perform();
     }
     this.hasUnsavedSourceChanges = false;
@@ -591,8 +583,11 @@ export default class CodeMode extends Component<Signature> {
   // these saves can happen so fast that we'll make sure to wait at
   // least 500ms for human consumption
   private waitForSourceCodeWrite = restartableTask(async () => {
-    if (isReady(this.openFile.current)) {
-      await all([this.openFile.current.writing, timeout(500)]);
+    if (isReady(this.operatorModeStateService.openFile.current)) {
+      await all([
+        this.operatorModeStateService.openFile.current.writing,
+        timeout(500),
+      ]);
     }
   });
 
