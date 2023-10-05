@@ -162,6 +162,7 @@ export default class CodeMode extends Component<Signature> {
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
+    this.operatorModeStateService.subscribeToOpenFileStateChanges(this);
     this.panelWidths = localStorage.getItem(CodeModePanelWidths)
       ? // @ts-ignore Type 'null' is not assignable to type 'string'
         JSON.parse(localStorage.getItem(CodeModePanelWidths))
@@ -200,6 +201,7 @@ export default class CodeMode extends Component<Signature> {
         this.args.saveCardOnClose(this.card);
       }
       this.realmSubscription?.unsubscribe();
+      this.operatorModeStateService.unsubscribeFromOpenFileStateChanges(this);
     });
     this.loadMonaco.perform();
   }
@@ -727,6 +729,16 @@ export default class CodeMode extends Component<Signature> {
 
   private get showBrowser() {
     return this.fileView === 'browser' || this.emptyOrNotFound;
+  }
+
+  onStateChange(state: FileResource['state']) {
+    this.userHasDismissedURLError = false;
+    if (state === 'not-found') {
+      this.loadFileError = 'This resource does not exist';
+      this.setFileView('browser');
+    } else if (state === 'ready') {
+      this.loadFileError = null;
+    }
   }
 
   <template>

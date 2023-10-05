@@ -14,7 +14,7 @@ import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
 import { Submode } from '@cardstack/host/components/submode-switcher';
-import { file, isReady } from '@cardstack/host/resources/file';
+import { file, isReady, FileResource } from '@cardstack/host/resources/file';
 import { maybe } from '@cardstack/host/resources/maybe';
 import type MessageService from '@cardstack/host/services/message-service';
 import type RealmInfoService from '@cardstack/host/services/realm-info-service';
@@ -59,6 +59,10 @@ export type SerializedState = {
   openDirs?: Record<string, string[]>;
 };
 
+interface OpenFileSubscriber {
+  onStateChange: (state: FileResource['state']) => void;
+}
+
 export default class OperatorModeStateService extends Service {
   @tracked state: OperatorModeState = new TrackedObject({
     stacks: new TrackedArray([]),
@@ -77,6 +81,7 @@ export default class OperatorModeStateService extends Service {
   @service declare router: RouterService;
 
   private subscription: { url: string; unsubscribe: () => void } | undefined;
+  private openFileSubscribers: OpenFileSubscriber[] = [];
 
   constructor(properties: object) {
     super(properties);
@@ -526,6 +531,18 @@ export default class OperatorModeStateService extends Service {
     return this.cardService.defaultURL.href;
   }
 
+  subscribeToOpenFileStateChanges(subscriber: OpenFileSubscriber) {
+    this.openFileSubscribers.push(subscriber);
+  }
+
+  unsubscribeFromOpenFileStateChanges(subscriber: OpenFileSubscriber) {
+    let subscriberIndex = this.openFileSubscribers.indexOf(subscriber);
+
+    if (subscriberIndex > -1) {
+      this.openFileSubscribers.splice(subscriber, 1);
+    }
+  }
+
   openFile = maybe(this, (context) => {
     let codePath = this.state.codePath;
 
@@ -536,20 +553,14 @@ export default class OperatorModeStateService extends Service {
     return file(context, () => ({
       url: codePath!.href,
       onStateChange: (state) => {
-        /* FIXME how to mangage these code-mode properties?
-        this.userHasDismissedURLError = false;
-        if (state === 'not-found') {
-          this.loadFileError = 'This resource does not exist';
-          this.setFileView('browser');
-        } else if (state === 'ready') {
-          this.loadFileError = null;
-        }
-        */
-
         if (state === 'ready') {
           this.cachedRealmURL = new URL(this.readyFile.realmURL);
           this.updateOpenDirsForNestedPath();
         }
+
+        this.openFileSubscribers.forEach((subscriber) =>
+          subscriber.onStateChange(state),
+        );
       },
       onRedirect: (url: string) => {
         this.replaceCodePath(new URL(url));
