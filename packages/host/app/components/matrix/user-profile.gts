@@ -58,7 +58,7 @@ export default class UserProfile extends Component {
       {{#if this.isEditMode}}
         <Button
           class='user-button'
-          data-test-profile-canel-btn
+          data-test-profile-cancel-btn
           @disabled={{not this.displayName}}
           {{on 'click' this.cancel}}
         >Cancel</Button>

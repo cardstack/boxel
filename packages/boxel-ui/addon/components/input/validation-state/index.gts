@@ -80,7 +80,7 @@ export default class BoxelInputValidationState extends Component<Signature> {
         @placeholder={{@placeholder}}
         @onKeyPress={{@onKeyPress}}
         @onFocus={{@onFocus}}
-        {{! BoxelInput gets this from the ...attribues }}
+        {{! BoxelInput gets this from '...attribues' }}
         type={{@type}}
         autocomplete='off'
         autocorrect='off'

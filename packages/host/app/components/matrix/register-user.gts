@@ -221,7 +221,7 @@ export default class RegisterUser extends Component<Signature> {
       }
     </style>
   </template>
-
+  private isValidationStatusPollRunning = false;
   @tracked private email = '';
   @tracked private username = '';
   @tracked private password = '';
@@ -480,9 +480,7 @@ export default class RegisterUser extends Component<Signature> {
       }
       let { sid } = res;
 
-      // only need to kick off the check validation poll after
-      // the first vaidation attempt
-      if (sendAttempt === 1) {
+      if (!this.isValidationStatusPollRunning) {
         await this.checkEmailValidation.perform({
           sid,
           clientSecret,
@@ -559,6 +557,7 @@ export default class RegisterUser extends Component<Signature> {
           `bug: Missing sid/clientSecret param for checkEmailValidation() in state ${this.state.type}`,
         );
       }
+      this.isValidationStatusPollRunning = true;
       try {
         auth = await this.matrixService.client.registerRequest({
           username,
