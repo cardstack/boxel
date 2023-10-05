@@ -13,6 +13,6 @@ jobs:
       - uses: actions/checkout@v2.4.0
       - uses: ibiqlik/action-yamllint@v3.1
         with:
-          config_file: ".github/yamllint.yml"
+          config_file: ".github/.yamllint.yml"
           file_or_dir: ".github"
           strict: true
