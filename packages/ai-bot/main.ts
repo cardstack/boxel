@@ -151,8 +151,8 @@ function getLastUploadedCardID(history: IRoomEvent[]): String | undefined {
   return undefined;
 }
 
-async function getResponse(history: IRoomEvent[]) {
-  let messages = getModifyPrompt(history, aiBotUsername);
+async function getResponse(history: IRoomEvent[], aiBotUserId: string) {
+  let messages = getModifyPrompt(history, aiBotUserId);
   return await openai.chat.completions.create({
     model: 'gpt-4',
     messages: messages,
@@ -168,9 +168,9 @@ async function getResponse(history: IRoomEvent[]) {
     aiBotUsername,
     process.env.BOXEL_AIBOT_PASSWORD || 'pass',
   );
-  let { user_id } = auth;
+  let { aiBotUserId } = auth;
   client.on(RoomMemberEvent.Membership, function (_event, member) {
-    if (member.membership === 'invite' && member.userId === user_id) {
+    if (member.membership === 'invite' && member.userId === aiBotUserId) {
       client
         .joinRoom(member.roomId)
         .then(function () {
@@ -208,7 +208,7 @@ async function getResponse(history: IRoomEvent[]) {
       if (event.getType() !== 'm.room.message') {
         return; // only print messages
       }
-      if (event.getSender() === user_id) {
+      if (event.getSender() === aiBotUserId) {
         return;
       }
       let initialMessage: ISendEventResponse = await client.sendHtmlMessage(
@@ -262,7 +262,7 @@ async function getResponse(history: IRoomEvent[]) {
         );
       }
 
-      const stream = await getResponse(history);
+      const stream = await getResponse(history, aiBotUserId);
       return await sendStream(stream, client, room, initialMessage.event_id);
     },
   );
