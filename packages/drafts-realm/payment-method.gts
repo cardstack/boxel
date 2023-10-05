@@ -45,7 +45,7 @@ class CryptoPayment extends FieldDef {
 }
 
 class WireTransfer extends FieldDef {
-  static displayName = 'WireTransfer';
+  static displayName = 'Payment Method';
   @field currency = linksTo(Currency); // dropdown
   @field iban = contains(StringCard); // IBAN format
   @field bic = contains(StringCard); // BIC format
@@ -89,6 +89,7 @@ class EditPaymentMethod extends Component<typeof PaymentMethod> {
   </template>
 }
 export class PaymentMethod extends FieldDef {
+  static displayName = 'PaymentMethod';
   @field type = contains(StringCard); // dropdown
   @field cryptoPayment = contains(CryptoPayment);
   @field wireTransfer = contains(WireTransfer);
