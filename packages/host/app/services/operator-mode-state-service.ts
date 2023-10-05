@@ -548,6 +548,7 @@ export default class OperatorModeStateService extends Service {
 
         if (state === 'ready') {
           this.cachedRealmURL = new URL(this.readyFile.realmURL);
+          this.updateOpenDirsForNestedPath();
         }
       },
       onRedirect: (url: string) => {
