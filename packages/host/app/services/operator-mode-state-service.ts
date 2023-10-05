@@ -56,7 +56,7 @@ export type SerializedState = {
   submode?: Submode;
   codePath?: string;
   fileView?: FileView;
-  openDirs?: Map<string, string[]>;
+  openDirs?: Record<string, string[]>;
 };
 
 export default class OperatorModeStateService extends Service {
@@ -387,7 +387,7 @@ export default class OperatorModeStateService extends Service {
       submode: this.state.submode,
       codePath: this.state.codePath?.toString(),
       fileView: this.state.fileView?.toString() as FileView,
-      openDirs: new Map(this.state.openDirs),
+      openDirs: Object.fromEntries(this.state.openDirs.entries()),
     };
 
     for (let stack of this.state.stacks) {
