@@ -76,6 +76,29 @@ const personCardSource = `
   }
 `;
 
+const employeeCardSource = `
+  import {
+    contains,
+    field,
+    Component,
+  } from 'https://cardstack.com/base/card-api';
+  import StringCard from 'https://cardstack.com/base/string';
+  import { Person } from './person';
+
+  export class Employee extends Person {
+    static displayName = 'Employee';
+    @field department = contains(StringCard);
+
+    static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <@fields.firstName /> <@fields.lastName />
+
+        Department: <@fields.department />
+      </template>
+    };
+  }
+`;
+
 module('Acceptance | code mode tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
@@ -99,6 +122,7 @@ module('Acceptance | code mode tests', function (hooks) {
       'index.gts': indexCardSource,
       'pet-person.gts': personCardSource,
       'person.gts': personCardSource,
+      'employee.gts': employeeCardSource,
       'person-entry.json': {
         data: {
           type: 'card',
@@ -777,6 +801,68 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.dom('[data-test-card-instance-definition]').doesNotExist();
   });
 
+  test('non-card JSON is shown as just a file with empty schema editor', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}z01.json`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-file-definition]');
+
+    assert.dom('[data-test-definition-file-extension]').hasText('.json');
+    await waitFor('[data-test-definition-realm-name]');
+    assert
+      .dom('[data-test-definition-realm-name]')
+      .hasText('in Test Workspace B');
+
+    assert.dom('[data-test-schema-editor-incompatible]').exists();
+  });
+
+  test('invalid JSON is shown as just a file with empty schema editor', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}not-json.json`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-file-definition]');
+
+    assert.dom('[data-test-definition-file-extension]').hasText('.json');
+    await waitFor('[data-test-definition-realm-name]');
+    assert
+      .dom('[data-test-definition-realm-name]')
+      .hasText('in Test Workspace B');
+
+    assert.dom('[data-test-schema-editor-incompatible]').exists();
+  });
+
   test('empty state displays default realm info', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [],
@@ -922,7 +1008,11 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-card-schema]');
 
     assert.dom('[data-test-card-schema]').exists({ count: 3 });
+    assert.dom('[data-test-total-fields]').containsText('5 Fields');
 
+    assert
+      .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
+      .containsText('+ 2 Fields');
     assert
       .dom(
         `[data-test-card-schema="Person"] [data-test-field-name="firstName"] [data-test-card-display-name="String"]`,
@@ -934,6 +1024,9 @@ module('Acceptance | code mode tests', function (hooks) {
       )
       .exists();
 
+    assert
+      .dom('[data-test-card-schema="Card"] [data-test-total-fields]')
+      .containsText('+ 3 Fields');
     assert
       .dom(
         `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-card-display-name="String"]`,
@@ -950,6 +1043,9 @@ module('Acceptance | code mode tests', function (hooks) {
       )
       .exists();
 
+    assert
+      .dom('[data-test-card-schema="Base"] [data-test-total-fields]')
+      .containsText('No Fields');
     assert.dom(`[data-test-card-schema="Base"]`).exists();
 
     // Check that realm icons in the schema editor are correct (card and its fields)
@@ -995,6 +1091,51 @@ module('Acceptance | code mode tests', function (hooks) {
       .hasAttribute('data-test-realm-icon-url', realm2IconUrl);
   });
 
+  test('card type and fields are clickable and navigate to the correct file', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}employee.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor(
+      '[data-test-card-schema="Employee"] [data-test-card-schema-navigational-button]',
+    );
+
+    // Click on card definition button
+    await click(
+      '[data-test-card-schema="Employee"] [data-test-card-schema-navigational-button]',
+    );
+
+    await waitFor('[data-test-current-module-name]');
+
+    assert.dom('[data-test-current-module-name]').hasText('employee.gts');
+
+    // Go back so that we can test clicking on a field definition button
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor(
+      '[data-test-card-schema="Employee"] [data-test-field-name="department"] [data-test-card-display-name="String"]',
+    );
+
+    await click(
+      '[data-test-card-schema="Employee"] [data-test-field-name="department"] [data-test-card-display-name="String"]',
+    );
+
+    await waitFor('[data-test-current-module-name]');
+    assert.dom('[data-test-current-module-name]').hasText('string.ts');
+  });
+
   test('code mode handles binary files', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [],
@@ -1023,9 +1164,7 @@ module('Acceptance | code mode tests', function (hooks) {
     assert
       .dom('[data-test-binary-info] [data-test-last-modified]')
       .containsText('Last modified');
-    assert
-      .dom('[data-test-binary-file-schema-editor]')
-      .hasText('Schema Editor cannot be used with this file type');
+    assert.dom('[data-test-schema-editor-incompatible]').exists();
 
     await percySnapshot(assert);
   });

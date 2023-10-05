@@ -99,6 +99,7 @@ class File extends Component<FileArgs> {
         display: flex;
         align-items: center;
         overflow-wrap: anywhere;
+        overflow: hidden;
       }
 
       .icon {

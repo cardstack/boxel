@@ -15,7 +15,11 @@ import { or } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import { type RealmInfo } from '@cardstack/runtime-common';
 
-import { hasExecutableExtension, getPlural } from '@cardstack/runtime-common';
+import {
+  hasExecutableExtension,
+  getPlural,
+  isCardDocumentString,
+} from '@cardstack/runtime-common';
 
 import { type Ready } from '@cardstack/host/resources/file';
 
@@ -80,7 +84,8 @@ export default class DetailPanel extends Component<Signature> {
 
   get isCardInstance() {
     return (
-      this.args.readyFile.url.endsWith('.json') &&
+      this.isJSON &&
+      isCardDocumentString(this.args.readyFile.content) &&
       this.args.cardInstance !== undefined
     );
   }
@@ -90,6 +95,10 @@ export default class DetailPanel extends Component<Signature> {
 
   get isBinary() {
     return this.args.readyFile.isBinary;
+  }
+
+  get isJSON() {
+    return this.args.readyFile.url.endsWith('.json');
   }
 
   private get fileExtension() {
@@ -144,6 +153,7 @@ export default class DetailPanel extends Component<Signature> {
                 @title={{@readyFile.name}}
                 @hasBackground={{true}}
                 class='header'
+                data-test-current-module-name={{@readyFile.name}}
               />
               <Selector
                 @class='in-this-file-menu'
@@ -183,7 +193,7 @@ export default class DetailPanel extends Component<Signature> {
               <ClickableModuleDefinitionContainer
                 @fileURL={{this.cardType.type.module}}
                 @name={{this.cardType.type.displayName}}
-                @fileExtension={{this.cardType.type.moduleMeta.extension}}
+                @fileExtension={{this.cardType.type.moduleInfo.extension}}
                 @onSelectDefinition={{this.updateCodePath}}
                 @url={{this.cardType.type.module}}
               />
@@ -191,7 +201,7 @@ export default class DetailPanel extends Component<Signature> {
               <ModuleDefinitionContainer
                 @fileURL={{this.cardType.type.module}}
                 @name={{this.cardType.type.displayName}}
-                @fileExtension={{this.cardType.type.moduleMeta.extension}}
+                @fileExtension={{this.cardType.type.moduleInfo.extension}}
                 @infoText={{this.lastModified.value}}
                 @isActive={{true}}
                 @actions={{array
@@ -212,29 +222,29 @@ export default class DetailPanel extends Component<Signature> {
                 <ClickableModuleDefinitionContainer
                   @fileURL={{this.cardType.type.super.module}}
                   @name={{this.cardType.type.super.displayName}}
-                  @fileExtension={{this.cardType.type.super.moduleMeta.extension}}
+                  @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
                   @onSelectDefinition={{this.updateCodePath}}
                   @url={{this.cardType.type.super.module}}
                 />
               {{/if}}
             {{/if}}
           </div>
-        {{/if}}
-
-        {{#if this.isBinary}}
-          <div class='details-panel'>
-            <header class='panel-header' aria-label='Details Panel Header'>
-              Details
-            </header>
-            <FileDefinitionContainer
-              @fileURL={{@readyFile.url}}
-              @fileExtension={{this.fileExtension}}
-              @infoText={{this.lastModified.value}}
-              @actions={{array
-                (hash label='Delete' handler=@delete icon='icon-trash')
-              }}
-            />
-          </div>
+        {{else}}
+          {{#if (or this.isBinary this.isJSON)}}
+            <div class='details-panel'>
+              <header class='panel-header' aria-label='Details Panel Header'>
+                Details
+              </header>
+              <FileDefinitionContainer
+                @fileURL={{@readyFile.url}}
+                @fileExtension={{this.fileExtension}}
+                @infoText={{this.lastModified.value}}
+                @actions={{array
+                  (hash label='Delete' handler=@delete icon='icon-trash')
+                }}
+              />
+            </div>
+          {{/if}}
         {{/if}}
       {{/if}}
     </div>

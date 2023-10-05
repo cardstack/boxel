@@ -91,6 +91,7 @@ export {
   isRelationship,
   isCardCollectionDocument,
   isSingleCardDocument,
+  isCardDocumentString,
 } from './card-document';
 export { sanitizeHtml } from './dompurify';
 export { getPlural } from './pluralize';

@@ -1,3 +1,4 @@
+import Accordion from './components/accordion';
 import AddButton from './components/add-button';
 import BoxelInput from './components/input';
 import SearchInput, {
@@ -25,6 +26,7 @@ import ResizablePanelGroup, {
 } from './components/resizable-panel-group';
 
 export {
+  Accordion,
   AddButton,
   BoxelHeader,
   BoxelInput,
