@@ -168,9 +168,9 @@ async function getResponse(history: IRoomEvent[], aiBotUserId: string) {
     aiBotUsername,
     process.env.BOXEL_AIBOT_PASSWORD || 'pass',
   );
-  let { aiBotUserId } = auth;
+  let { user_id } = auth;
   client.on(RoomMemberEvent.Membership, function (_event, member) {
-    if (member.membership === 'invite' && member.userId === aiBotUserId) {
+    if (member.membership === 'invite' && member.userId === user_id) {
       client
         .joinRoom(member.roomId)
         .then(function () {
@@ -208,7 +208,7 @@ async function getResponse(history: IRoomEvent[], aiBotUserId: string) {
       if (event.getType() !== 'm.room.message') {
         return; // only print messages
       }
-      if (event.getSender() === aiBotUserId) {
+      if (event.getSender() === user_id) {
         return;
       }
       let initialMessage: ISendEventResponse = await client.sendHtmlMessage(
@@ -262,7 +262,7 @@ async function getResponse(history: IRoomEvent[], aiBotUserId: string) {
         );
       }
 
-      const stream = await getResponse(history, aiBotUserId);
+      const stream = await getResponse(history, user_id);
       return await sendStream(stream, client, room, initialMessage.event_id);
     },
   );
