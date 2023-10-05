@@ -12,6 +12,7 @@ interface Signature {
     icon: string;
     label: string;
     class?: string;
+    contentClass?: string;
     noHoverStyle?: boolean;
     size?: number;
     iconSize?: number;
@@ -27,7 +28,7 @@ interface Signature {
 }
 
 const DropdownButton: TemplateOnlyComponent<Signature> = <template>
-  <BoxelDropdown>
+  <BoxelDropdown @contentClass={{@contentClass}}>
     <:trigger as |bindings|>
       <button
         {{bindings}}

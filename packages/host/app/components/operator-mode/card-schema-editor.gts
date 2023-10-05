@@ -8,6 +8,7 @@ import { DropdownButton } from '@cardstack/boxel-ui';
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
 import menuDivider from '@cardstack/boxel-ui/helpers/menu-divider';
 import { gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
 import { internalKeyFor, getPlural } from '@cardstack/runtime-common';
 import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
@@ -93,8 +94,33 @@ export default class CardSchemaEditor extends Component<Signature> {
         margin-top: var(--boxel-sp);
       }
 
+      :global(.context-menu) {
+        width: 13.5rem;
+      }
+
       .context-menu-trigger {
         rotate: 90deg;
+      }
+
+      .context-menu-list {
+        --boxel-menu-item-content-padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        border-top-right-radius: 0;
+        border-top-left-radius: 0;
+      }
+
+      .warning-box {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--boxel-sp-xxxs);
+        padding: var(--boxel-sp-sm);
+        background-color: var(--boxel-warning-100);
+        border-top-right-radius: inherit;
+        border-top-left-radius: inherit;
+      }
+
+      .warning {
+        margin: 0;
       }
 
       .left {
@@ -235,16 +261,43 @@ export default class CardSchemaEditor extends Component<Signature> {
                   <DropdownButton
                     @icon='three-dots-horizontal'
                     @label='field options'
+                    @contentClass='context-menu'
                     class='context-menu-trigger'
                     as |dd|
                   >
+                    <div class='warning-box'>
+                      <p class='warning'>
+                        These actions will break compatibility with existing
+                        card instances.
+                      </p>
+                      <span class='warning-icon'>
+                        {{svgJar
+                          'warning'
+                          width='20'
+                          height='20'
+                          role='presentation'
+                        }}
+                      </span>
+                    </div>
                     <dd.Menu
+                      class='context-menu-list'
                       @items={{array
-                        (menuItem 'Edit Field Name' (fn this.noop))
-                        (menuItem 'Choose Field Type' (fn this.noop))
-                        (menuItem 'Allow Multiple Fields' (fn this.noop))
+                        (menuItem
+                          'Edit Field Name' (fn this.noop) disabled=true
+                        )
+                        (menuItem
+                          'Choose Field Type' (fn this.noop) disabled=true
+                        )
+                        (menuItem
+                          'Allow Multiple Fields' (fn this.noop) disabled=true
+                        )
                         (menuDivider)
-                        (menuItem 'Remove Field' (fn this.noop) dangerous=true)
+                        (menuItem
+                          'Remove Field'
+                          (fn this.noop)
+                          dangerous=true
+                          disabled=true
+                        )
                       }}
                     />
                   </DropdownButton>
