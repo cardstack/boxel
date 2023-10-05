@@ -356,7 +356,6 @@ export default class CodeMode extends Component<Signature> {
     return state;
   });
 
-  // this should only be for gts files
   @use private elements = resource(({ on }) => {
     on.cleanup(() => {
       this.selectedElement = undefined;
