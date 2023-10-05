@@ -9,7 +9,7 @@ import menuDivider from '@cardstack/boxel-ui/helpers/menu-divider';
 
 export default class DropdownButtonUsageComponent extends Component {
   @tracked label = 'Label';
-  @tracked icon: string = 'three-dots-horizontal';
+  @tracked icon = 'three-dots-horizontal';
   @tracked size = 30;
   @tracked iconSize = 16;
 

@@ -283,14 +283,12 @@ export default class CardSchemaEditor extends Component<Signature> {
                       class='context-menu-list'
                       @items={{array
                         (menuItem
-                          'Edit Field Name'
-                          (fn this.editFieldName)
-                          disabled=true
+                          'Edit Field Name' this.editFieldName disabled=true
                         )
                         (menuDivider)
                         (menuItem
                           'Remove Field'
-                          (fn this.removeField)
+                          this.removeField
                           dangerous=true
                           disabled=true
                         )
