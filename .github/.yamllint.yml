@@ -3,5 +3,7 @@ extends: default
 rules:
   line-length: disable
   document-start: disable
+  quoted-strings:
+    quote-type: double
   truthy:
     check-keys: false
