@@ -4,7 +4,6 @@ import type { NodePath, Scope } from '@babel/traverse';
 
 interface State {
   opts: Options;
-  insideCard: boolean;
 }
 
 export interface ExternalReference {
@@ -68,113 +67,104 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
             }
           }
         },
-        exit(_path: NodePath<t.ClassDeclaration>, state: State) {
-          // This is essential for now because we are mutating state inside lookForCard
-          state.insideCard = false;
-        },
       },
       ClassDeclaration: {
         enter(path: NodePath<t.ClassDeclaration>, state: State) {
           let maybeCard = lookForCard(path, state);
           if (maybeCard) {
             state.opts.possibleCards.push(maybeCard);
+            maybeCard.path.traverse({
+              Decorator: {
+                enter(path: NodePath<t.Decorator>) {
+                  let expression = path.get('expression');
+                  if (!expression.isIdentifier()) {
+                    return;
+                  }
+                  let decoratorInfo = getNamedImportInfo(
+                    path.scope,
+                    expression.node.name,
+                  );
+                  if (!decoratorInfo) {
+                    return; // our @field decorator must originate from a named import
+                  }
+
+                  let maybeClassProperty = path.parentPath;
+                  if (
+                    !maybeClassProperty.isClassProperty() ||
+                    maybeClassProperty.node.key.type !== 'Identifier'
+                  ) {
+                    return;
+                  }
+
+                  let maybeCallExpression = maybeClassProperty.node.value;
+                  if (
+                    maybeCallExpression?.type !== 'CallExpression' ||
+                    maybeCallExpression.arguments.length === 0
+                  ) {
+                    return; // our field type function (e.g. contains()) must have at least one argument (the field card)
+                  }
+
+                  let maybeFieldTypeFunction = maybeCallExpression.callee;
+                  if (maybeFieldTypeFunction.type !== 'Identifier') {
+                    return;
+                  }
+
+                  let fieldTypeInfo = getNamedImportInfo(
+                    path.scope,
+                    maybeFieldTypeFunction.name,
+                  );
+                  if (!fieldTypeInfo) {
+                    return; // our field type function (e.g. contains()) must originate from a named import
+                  }
+
+                  let [maybeFieldCard] = maybeCallExpression.arguments; // note that the 2nd argument is the computeVia
+                  let maybeFieldCardName;
+                  if (maybeFieldCard.type !== 'Identifier') {
+                    if (
+                      maybeFieldCard.type === 'ArrowFunctionExpression' &&
+                      maybeFieldCard.body.type === 'Identifier'
+                    ) {
+                      maybeFieldCardName = maybeFieldCard.body.name;
+                    } else {
+                      return;
+                    }
+                  } else {
+                    maybeFieldCardName = maybeFieldCard.name;
+                  }
+
+                  let fieldCard = makeClassReference(
+                    path.scope,
+                    maybeFieldCardName,
+                    state,
+                  );
+                  if (!fieldCard) {
+                    return; // the first argument to our field type function must be a card reference
+                  }
+
+                  let possibleField: PossibleField = {
+                    card: fieldCard,
+                    path: maybeClassProperty,
+                    type: {
+                      type: 'external',
+                      module: getName(fieldTypeInfo.declaration.node.source),
+                      name: getName(fieldTypeInfo.specifier.node.imported),
+                    },
+                    decorator: {
+                      type: 'external',
+                      module: getName(decoratorInfo.declaration.node.source),
+                      name: getName(decoratorInfo.specifier.node.imported),
+                    },
+                  };
+                  // the card that contains this field will always be the last card that
+                  // was added to possibleCards
+                  let [card] = state.opts.possibleCards.slice(-1);
+                  let fieldName = maybeClassProperty.node.key.name;
+                  card.possibleFields.set(fieldName, possibleField);
+                },
+              },
+            });
           }
         },
-
-        exit(_path: NodePath<t.ClassDeclaration>, state: State) {
-          state.insideCard = false;
-        },
-      },
-
-      Decorator(path: NodePath<t.Decorator>, state: State) {
-        if (!state.insideCard) {
-          return;
-        }
-
-        let expression = path.get('expression');
-        if (!expression.isIdentifier()) {
-          return;
-        }
-        let decoratorInfo = getNamedImportInfo(
-          path.scope,
-          expression.node.name,
-        );
-        if (!decoratorInfo) {
-          return; // our @field decorator must originate from a named import
-        }
-
-        let maybeClassProperty = path.parentPath;
-        if (
-          !maybeClassProperty.isClassProperty() ||
-          maybeClassProperty.node.key.type !== 'Identifier'
-        ) {
-          return;
-        }
-
-        let maybeCallExpression = maybeClassProperty.node.value;
-        if (
-          maybeCallExpression?.type !== 'CallExpression' ||
-          maybeCallExpression.arguments.length === 0
-        ) {
-          return; // our field type function (e.g. contains()) must have at least one argument (the field card)
-        }
-
-        let maybeFieldTypeFunction = maybeCallExpression.callee;
-        if (maybeFieldTypeFunction.type !== 'Identifier') {
-          return;
-        }
-
-        let fieldTypeInfo = getNamedImportInfo(
-          path.scope,
-          maybeFieldTypeFunction.name,
-        );
-        if (!fieldTypeInfo) {
-          return; // our field type function (e.g. contains()) must originate from a named import
-        }
-
-        let [maybeFieldCard] = maybeCallExpression.arguments; // note that the 2nd argument is the computeVia
-        let maybeFieldCardName;
-        if (maybeFieldCard.type !== 'Identifier') {
-          if (
-            maybeFieldCard.type === 'ArrowFunctionExpression' &&
-            maybeFieldCard.body.type === 'Identifier'
-          ) {
-            maybeFieldCardName = maybeFieldCard.body.name;
-          } else {
-            return;
-          }
-        } else {
-          maybeFieldCardName = maybeFieldCard.name;
-        }
-
-        let fieldCard = makeClassReference(
-          path.scope,
-          maybeFieldCardName,
-          state,
-        );
-        if (!fieldCard) {
-          return; // the first argument to our field type function must be a card reference
-        }
-
-        let possibleField: PossibleField = {
-          card: fieldCard,
-          path: maybeClassProperty,
-          type: {
-            type: 'external',
-            module: getName(fieldTypeInfo.declaration.node.source),
-            name: getName(fieldTypeInfo.specifier.node.imported),
-          },
-          decorator: {
-            type: 'external',
-            module: getName(decoratorInfo.declaration.node.source),
-            name: getName(decoratorInfo.specifier.node.imported),
-          },
-        };
-        // the card that contains this field will always be the last card that
-        // was added to possibleCards
-        let [card] = state.opts.possibleCards.slice(-1);
-        let fieldName = maybeClassProperty.node.key.name;
-        card.possibleFields.set(fieldName, possibleField);
       },
     },
   };
@@ -204,7 +194,6 @@ function lookForCard(path: NodePath<t.ClassDeclaration>, state: State) {
   if (sc.isReferencedIdentifier()) {
     let classRef = makeClassReference(path.scope, sc.node.name, state);
     if (classRef) {
-      state.insideCard = true;
       let localName = path.node.id ? path.node.id.name : undefined;
       return {
         super: classRef,
