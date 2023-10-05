@@ -1,5 +1,11 @@
 import { expect } from '@playwright/test';
 import {
+  synapseStart,
+  synapseStop,
+  type SynapseInstance,
+} from '../docker/synapse';
+import { smtpStart, smtpStop } from '../docker/smtp4dev';
+import {
   clearLocalStorage,
   validateEmail,
   gotoRegistration,
@@ -8,16 +14,32 @@ import {
   logout,
   test,
   mailHost,
+  setupMatrixOverride,
 } from '../helpers';
 import { registerUser, createRegistrationToken } from '../docker/synapse';
 
 const REGISTRATION_TOKEN = 'abc123';
 
 test.describe('User Registration w/ Token', () => {
-  test('it can register a user with a registration token', async ({
-    page,
-    synapse,
-  }) => {
+  let synapse: SynapseInstance;
+
+  test.beforeEach(async ({ page }) => {
+    synapse = await synapseStart({
+      template: 'test',
+      // user registration tests require a static synapse port in order for the
+      // link in the validation email to work
+      hostPort: 8008,
+    });
+    await smtpStart();
+    await setupMatrixOverride(page, synapse);
+  });
+
+  test.afterEach(async () => {
+    await synapseStop(synapse.synapseId);
+    await smtpStop();
+  });
+
+  test('it can register a user with a registration token', async ({ page }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await createRegistrationToken(
       synapse,
@@ -78,7 +100,6 @@ test.describe('User Registration w/ Token', () => {
 
   test('it shows an error when the username is already taken', async ({
     page,
-    synapse,
   }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await createRegistrationToken(
@@ -140,7 +161,6 @@ test.describe('User Registration w/ Token', () => {
 
   test(`it show an error when a invalid registration token is used`, async ({
     page,
-    synapse,
   }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await createRegistrationToken(
@@ -256,7 +276,6 @@ test.describe('User Registration w/ Token', () => {
 
   test(`it can register a user when email validation is performed after providing registration token`, async ({
     page,
-    synapse,
   }) => {
     let admin = await registerUser(synapse, 'admin', 'adminpass', true);
     await createRegistrationToken(

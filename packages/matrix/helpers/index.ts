@@ -4,7 +4,6 @@ import {
   synapseStop,
   type SynapseInstance,
 } from '../docker/synapse';
-import { smtpStart, smtpStop } from '../docker/smtp4dev';
 export const testHost = 'http://localhost:4202/test';
 export const mailHost = 'http://localhost:5001';
 
@@ -20,19 +19,9 @@ interface LoginOptions {
 export const test = base.extend<{ synapse: SynapseInstance }>({
   // eslint-disable-next-line no-empty-pattern
   synapse: async ({}, use) => {
-    let synapseInstance = await synapseStart({
-      template: 'test',
-      containerName: 'boxel-synapse',
-      hostPort: 8008,
-    });
-    // TODO parallelizing the SMTP container will involve leveraging a dynamic
-    // docker name wired into the homeserver.yaml config file, as we take
-    // advantage of the fact that we can use the docker-name as the hostname for
-    // the SMTP server via the shared docker network
-    await smtpStart();
+    let synapseInstance = await synapseStart();
     await use(synapseInstance);
     await synapseStop(synapseInstance.synapseId);
-    await smtpStop();
   },
 
   page: async ({ page, synapse }, use) => {
@@ -46,8 +35,10 @@ export async function setupMatrixOverride(
   page: Page,
   synapse: SynapseInstance,
 ) {
-  // Save the original goto function
-  const originalGoto = page.goto.bind(page);
+  // Save the original goto function keeping mind this override function may be
+  // called more than once
+  const originalGoto = (page as any).originalGoto ?? page.goto.bind(page);
+  (page as any).originalGoto = originalGoto;
 
   // Patch the goto function
   page.goto = async (url, options) => {
@@ -59,7 +50,7 @@ export async function setupMatrixOverride(
     newUrl.search = params.toString();
 
     // Call the original goto function with the new URL
-    return await originalGoto(newUrl.toString(), options);
+    return await originalGoto(newUrl.href, options);
   };
 
   // Patch the reload function
