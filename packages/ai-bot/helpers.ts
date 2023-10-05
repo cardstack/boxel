@@ -294,6 +294,12 @@ function getUserMessage(event: IRoomEvent) {
 }
 
 export function getModifyPrompt(history: IRoomEvent[], aiBotUserId: string) {
+  // The user ID must be a full ID, not just a username
+  if (!aiBotUserId.startsWith('@') && !aiBotUserId.includes(':')) {
+    throw new Error(
+      'The user ID must be a full ID, not just a username. The user ID should be in the format @username:domain',
+    );
+  }
   let historical_messages: OpenAIPromptMessage[] = [];
   for (let event of history) {
     let body = event.content.body;
