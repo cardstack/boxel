@@ -88,7 +88,7 @@ export default class Menu extends Component<Signature> {
                 data-test-boxel-menu-item
                 data-test-boxel-menu-item-selected={{menuItem.selected}}
               >
-                {{!-- template-lint-disable require-context-role --}}
+                {{! template-lint-disable require-context-role }}
                 <div
                   class='boxel-menu__item__content'
                   role='menuitem'
@@ -144,7 +144,6 @@ export default class Menu extends Component<Signature> {
           --boxel-menu-font: 500 var(--boxel-font-sm);
           --boxel-menu-item-gap: var(--boxel-sp-xxs);
           --boxel-menu-item-content-padding: var(--boxel-sp-xs) var(--boxel-sp);
-
           list-style-type: none;
           margin: 0;
           padding: 0;
@@ -155,6 +154,15 @@ export default class Menu extends Component<Signature> {
         .boxel-menu__item {
           font: var(--boxel-menu-font);
           letter-spacing: var(--boxel-lsp-sm);
+        }
+
+        .boxel-menu__item--selected {
+          background-color: var(--boxel-menu-selected-background-color);
+          color: var(--boxel-menu-selected-font-color);
+        }
+
+        .boxel-menu__item--selected:hover {
+          color: var(--boxel-menu-selected-hover-font-color);
         }
 
         .boxel-menu__item:hover {

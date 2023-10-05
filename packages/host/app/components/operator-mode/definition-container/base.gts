@@ -2,6 +2,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
 import { Button } from '@cardstack/boxel-ui';
+import { CardContainer, Header } from '@cardstack/boxel-ui';
 import Label from '@cardstack/boxel-ui/components/label';
 
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
@@ -31,30 +32,36 @@ interface BaseSignature {
 
 export class BaseDefinitionContainer extends Component<BaseSignature> {
   <template>
-    <div class='container {{if @isActive "active"}}' ...attributes>
-      <div class='banner'>
-        <Label class='banner-title'>
-          {{@title}}</Label>
-        <span
-          class='banner-title'
-          data-test-definition-file-extension
-        >{{@fileExtension}}</span>
-      </div>
+    <CardContainer class='card-container' ...attributes>
+      <Header
+        @title={{@title}}
+        @hasBackground={{true}}
+        class='header {{if @isActive "active"}}'
+        data-test-definition-header
+      >
+        <:detail>
+          <div data-test-definition-file-extension>
+            {{@fileExtension}}
+          </div>
+        </:detail>
+      </Header>
       <div class='content'>
         <div class='definition-info'>
-          <RealmInfoProvider @fileURL={{@fileURL}}>
-            <:ready as |realmInfo|>
-              <div class='realm-info'>
-                <img
-                  src={{realmInfo.iconURL}}
-                  alt='realm-icon'
-                  data-test-realm-icon-url={{realmInfo.iconURL}}
-                />
-                <Label class='realm-name' data-test-definition-realm-name>in
-                  {{realmInfo.name}}</Label>
-              </div>
-            </:ready>
-          </RealmInfoProvider>
+          {{#if @fileURL}}
+            <RealmInfoProvider @fileURL={{@fileURL}}>
+              <:ready as |realmInfo|>
+                <div class='realm-info'>
+                  <img
+                    src={{realmInfo.iconURL}}
+                    alt='realm-icon'
+                    data-test-realm-icon-url={{realmInfo.iconURL}}
+                  />
+                  <Label class='realm-name' data-test-definition-realm-name>in
+                    {{realmInfo.name}}</Label>
+                </div>
+              </:ready>
+            </RealmInfoProvider>
+          {{/if}}
           <div data-test-definition-name class='definition-name'>{{@name}}</div>
 
         </div>
@@ -62,43 +69,28 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
           {{yield to='activeContent'}}
         {{/if}}
       </div>
+    </CardContainer>
 
-    </div>
     <style>
-      .container {
-        background-color: var(--boxel-light);
-        border-radius: var(--boxel-border-radius);
-        gap: var(--boxel-sp-xxs);
+      .card-container {
+        overflow: hidden;
+        overflow-wrap: anywhere;
       }
-      .banner {
-        display: grid;
-        grid-template-columns: 1fr auto;
-        align-items: center;
-        padding: var(--boxel-sp-xxs) var(--boxel-sp-sm) var(--boxel-sp-xxs);
-        border-top-left-radius: var(--boxel-border-radius);
-        border-top-right-radius: var(--boxel-border-radius);
-        background-color: var(--boxel-100);
-      }
-      .banner-title {
-        color: var(--boxel-450);
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 200;
-        letter-spacing: var(--boxel-lsp-xxl);
-        text-transform: uppercase;
-      }
-      .active {
-        box-shadow: var(--boxel-box-shadow-hover);
+      .header {
+        --boxel-header-text-size: var(--boxel-font-size-sm);
+        --boxel-header-padding: var(--boxel-sp-xs);
+        --boxel-header-text-size: var(--boxel-font-size-sm);
+        --boxel-header-text-transform: uppercase;
+        --boxel-header-letter-spacing: var(--boxel-lsp-xxl);
+        --boxel-header-detail-margin-left: auto;
+        --boxel-header-detail-max-width: none;
+        --boxel-header-background-color: var(--boxel-100);
+        --boxel-header-text-color: var(--boxel-450);
       }
 
-      .active .banner {
-        background-color: var(--boxel-highlight);
-      }
-
-      .active .banner-title {
-        color: var(--boxel-light);
-      }
-      .active .file-extension {
-        color: var(--boxel-light);
+      .header.active {
+        --boxel-header-background-color: var(--boxel-highlight);
+        --boxel-header-text-color: var(--boxel-light);
       }
       .content {
         display: flex;

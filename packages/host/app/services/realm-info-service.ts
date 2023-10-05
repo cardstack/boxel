@@ -14,9 +14,7 @@ export default class RealmInfoService extends Service {
       return this.cachedRealmURLsForFileURL.get(fileURL)!;
     }
 
-    let response = await this.loaderService.loader.fetch(fileURL, {
-      headers: { Accept: SupportedMimeType.CardSource },
-    });
+    let response = await this.loaderService.loader.fetch(fileURL);
     let realmURL = response.headers.get('x-boxel-realm-url');
 
     if (!realmURL) {

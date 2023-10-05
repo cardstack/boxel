@@ -49,7 +49,9 @@ const Header: TemplateOnlyComponent<Signature> = <template>
     {{/if}}
 
     {{#if (has-block 'detail')}}
-      {{yield to='detail'}}
+      <div class='detail'>
+        {{yield to='detail'}}
+      </div>
     {{/if}}
 
     {{yield}}
@@ -80,21 +82,25 @@ const Header: TemplateOnlyComponent<Signature> = <template>
         gap: var(--boxel-sp-xs);
       }
       header .title {
-        max-width: calc(
-          100% - 10rem
+        max-width: var(
+          --boxel-header-max-width,
+          calc(100% - 10rem)
         ); /* this includes the space to show the header buttons */
         text-overflow: ellipsis;
         overflow: hidden;
         text-wrap: nowrap;
       }
       .header .title.with-detail {
-        max-width: calc(100% - 23rem); /* fits last saved message */
+        max-width: var(
+          --boxel-header-detail-max-width,
+          calc(100% - 23rem)
+        ); /* fits last saved message */
       }
       .large {
         padding: var(--boxel-header-padding, var(--boxel-sp-xl));
         font: 700 var(--boxel-header-text-size, var(--boxel-font-lg));
-        letter-spacing: normal;
-        text-transform: none;
+        letter-spacing: var(--boxel-header-letter-spacing, normal);
+        text-transform: var(--boxel-header-text-transform, none);
       }
       .has-background {
         background-color: var(
@@ -109,6 +115,9 @@ const Header: TemplateOnlyComponent<Signature> = <template>
         display: flex;
         align-items: center;
         margin-left: auto;
+      }
+      .detail {
+        margin-left: var(--boxel-header-detail-margin-left, 0);
       }
     }
   </style>

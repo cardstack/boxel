@@ -41,20 +41,22 @@ export interface Type {
   displayName: string;
   super: Type | undefined;
   fields: { name: string; card: Type | CodeRef; type: FieldType }[];
-  moduleMeta: {
-    extension: string;
-    realmInfo: RealmInfo;
-  };
   codeRef: CodeRef;
+  moduleInfo: ModuleInfo;
 }
+
+interface ModuleInfo {
+  extension: string;
+  realmInfo: RealmInfo;
+}
+
+const moduleInfoCache: Map<string, ModuleInfo> = new Map();
 
 export class CardType extends Resource<Args> {
   @tracked type: Type | undefined;
   @service declare cardService: CardService;
   declare loader: Loader;
   typeCache: Map<string, Type> = new Map();
-  moduleMetaCache: Map<string, { extension: string; realmInfo: RealmInfo }> =
-    new Map();
   ready: Promise<void> | undefined;
 
   modify(_positional: never[], named: Args['named']) {
@@ -92,6 +94,10 @@ export class CardType extends Resource<Args> {
     if (cached) {
       return cached;
     }
+    let moduleIdentifier = moduleFrom(ref);
+    let moduleInfo =
+      moduleInfoCache.get(moduleIdentifier) ??
+      (await this.fetchModuleInfo(new URL(moduleIdentifier)));
 
     let api = await this.loader.import<typeof CardAPI>(
       `${baseRealm.url}card-api`,
@@ -122,25 +128,20 @@ export class CardType extends Resource<Args> {
       ),
     );
 
-    let moduleIdentifier = moduleFrom(ref);
-    let moduleMeta =
-      this.moduleMetaCache.get(moduleIdentifier) ??
-      (await this.moduleMeta(new URL(moduleIdentifier)));
-    this.moduleMetaCache.set(moduleIdentifier, moduleMeta);
     let type: Type = {
       id,
       module: moduleIdentifier,
       super: superType,
       displayName: card.prototype.constructor.displayName || 'Card',
       fields: fieldTypes,
-      moduleMeta,
+      moduleInfo,
       codeRef: ref,
     };
     this.typeCache.set(id, type);
     return type;
   }
 
-  private moduleMeta = async (url: URL) => {
+  private fetchModuleInfo = async (url: URL) => {
     let response = await this.loader.fetch(url, {
       headers: { Accept: SupportedMimeType.CardSource },
     });
@@ -159,10 +160,12 @@ export class CardType extends Resource<Args> {
     let realmInfo = await this.cardService.getRealmInfoByRealmURL(
       new URL(realmURL),
     );
-    return {
+    let moduleInfo = {
       realmInfo,
       extension: '.' + new URL(response.url).pathname.split('.').pop() || '',
     };
+    moduleInfoCache.set(url.href, moduleInfo);
+    return moduleInfo;
   };
 }
 
