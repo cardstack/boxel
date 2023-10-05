@@ -10,6 +10,7 @@ import { CardInheritance } from '@cardstack/host/components/operator-mode/schema
 import type { Ready } from '@cardstack/host/resources/file';
 
 interface Signature {
+  Element: HTMLDivElement;
   Args: {
     file: Ready;
     cardInheritanceChain: CardInheritance[];
@@ -21,10 +22,11 @@ export default class CardAdoptionChain extends Component<Signature> {
     <style>
       .card-adoption-chain {
         background-color: var(--boxel-200);
+        height: 100%;
       }
     </style>
 
-    <div class='card-adoption-chain'>
+    <div class='card-adoption-chain' ...attributes>
       {{#each @cardInheritanceChain as |data|}}
         <CardSchemaEditor
           @card={{data.card}}
