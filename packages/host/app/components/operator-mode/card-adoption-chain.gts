@@ -39,7 +39,8 @@ export default class CardAdoptionChain extends Component<Signature> {
         align-items: center;
         padding: 0 var(--boxel-sp-xs);
         gap: var(--boxel-sp-xxxs);
-        font: var(--boxel-font-size-sm);
+        font: 500 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
         text-wrap: nowrap;
         background: var(--boxel-200);
 
@@ -58,8 +59,7 @@ export default class CardAdoptionChain extends Component<Signature> {
 
       .line {
         width: 100%;
-        height: 1px;
-        background-color: var(--boxel-purple-200);
+        border: 1px solid var(--boxel-purple-200);
       }
     </style>
 
@@ -73,7 +73,7 @@ export default class CardAdoptionChain extends Component<Signature> {
             @moduleSyntax={{this.moduleSyntax}}
           />
           <div class='content-with-line'>
-            <div class='line' />
+            <hr class='line' />
             <div class='inherits-from'>
               <span class='inherits-icon'>{{svgJar
                   'icon-inherit'
