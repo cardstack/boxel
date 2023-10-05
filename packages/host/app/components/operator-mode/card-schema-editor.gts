@@ -283,18 +283,14 @@ export default class CardSchemaEditor extends Component<Signature> {
                       class='context-menu-list'
                       @items={{array
                         (menuItem
-                          'Edit Field Name' (fn this.noop) disabled=true
-                        )
-                        (menuItem
-                          'Choose Field Type' (fn this.noop) disabled=true
-                        )
-                        (menuItem
-                          'Allow Multiple Fields' (fn this.noop) disabled=true
+                          'Edit Field Name'
+                          (fn this.editFieldName)
+                          disabled=true
                         )
                         (menuDivider)
                         (menuItem
                           'Remove Field'
-                          (fn this.noop)
+                          (fn this.removeField)
                           dangerous=true
                           disabled=true
                         )
@@ -324,7 +320,14 @@ export default class CardSchemaEditor extends Component<Signature> {
   }
 
   @action
-  noop() {
+  removeField() {
+    // TODO: implement
+    return;
+  }
+
+  @action
+  editFieldName() {
+    // TODO: implement
     return;
   }
 
