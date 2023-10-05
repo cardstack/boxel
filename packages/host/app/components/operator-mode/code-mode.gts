@@ -793,7 +793,7 @@ export default class CodeMode extends Component<Signature> {
       @resetLoadFileError={{this.resetLoadFileError}}
       @userHasDismissedError={{this.userHasDismissedURLError}}
       @dismissURLError={{this.dismissURLError}}
-      @realmInfo={{this.realmInfo}}
+      @realmURL={{this.realmURL}}
       class='card-url-bar'
     />
     <div
