@@ -1,9 +1,13 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { on } from '@ember/modifier';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import cn from '@cardstack/boxel-ui/helpers/cn';
 
 export interface AccordionItemSignature {
-  Element: HTMLDetailsElement;
+  Element: HTMLDivElement;
   Args: {
+    isOpen: boolean;
+    onClick: (event: MouseEvent) => void;
     className?: string;
   };
   Blocks: {
@@ -13,59 +17,58 @@ export interface AccordionItemSignature {
 }
 
 const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
-  <details class='accordion-item {{@className}}' ...attributes>
-    <summary class='title'>
+  <div class={{cn 'accordion-item' @className open=@isOpen}} ...attributes>
+    <button class='title' {{on 'click' @onClick}}>
       <span class='caret'>
         {{svgJar 'dropdown-arrow-down' width='20' height='20'}}
       </span>
       {{yield to='title'}}
-    </summary>
+    </button>
     <div class='content'>
       {{yield to='content'}}
     </div>
-  </details>
+  </div>
   <style>
     .accordion-item {
-      --accordion-item-closed-min-height: 2.5rem;
-      --accordion-item-open-min-height: var(
-        --item-open-min-height,
-        var(--accordion-default-item-height)
-      );
+      --accordion-item-closed-height: 2.75rem;
+      --accordion-item-open-height: 8rem;
       --accordion-item-border: var(--accordion-border);
       --accordion-item-title-font: 700 var(--boxel-font);
       --accordion-item-title-letter-spacing: var(--boxel-lsp-xs);
       --accordion-item-title-padding: var(--boxel-sp-xs);
-      --accordion-item-content-padding: var(--boxel-sp-sm);
 
-      min-height: var(--accordion-item-closed-min-height);
-      transition: min-height var(--boxel-transition);
+      height: var(--accordion-item-closed-height);
+      display: flex;
+      flex-direction: column;
+      transition: all var(--boxel-transition);
     }
-    .accordion-item[open] {
-      min-height: var(--accordion-item-open-min-height);
+    .accordion-item.open {
+      height: var(--accordion-item-open-height);
+      flex: 1;
     }
-    .accordion-item > .content {
-      height: 0;
-      transition: height var(--boxel-transition);
+    .content {
+      flex: 1;
+      opacity: 0;
+      display: none;
     }
-    .accordion-item[open] > .content {
-      height: calc(
-        var(--accordion-item-open-min-height) -
-          var(--accordion-item-closed-min-height)
-      );
+    .accordion-item.open > .content {
+      display: block;
+      opacity: 1;
       overflow-y: auto;
+      border-top: var(--accordion-item-border);
+      transition: all var(--boxel-transition);
     }
     .title {
       display: flex;
       padding: var(--accordion-item-title-padding);
       font: var(--accordion-item-title-font);
       letter-spacing: var(--accordion-item-title-letter-spacing);
+      background-color: transparent;
+      border: none;
+      text-align: left;
     }
     .title:hover {
       cursor: pointer;
-    }
-    ::marker {
-      display: none;
-      content: '';
     }
     .caret {
       --icon-color: var(--boxel-highlight);
@@ -76,12 +79,8 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
       transform: rotate(-90deg);
       transition: transform var(--boxel-transition);
     }
-    .accordion-item[open] > .title > .caret {
+    .accordion-item.open > .title > .caret {
       transform: rotate(0deg);
-    }
-    .content {
-      padding: var(--accordion-item-content-padding);
-      border-top: var(--accordion-item-border);
     }
   </style>
 </template>;
