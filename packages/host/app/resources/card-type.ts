@@ -35,12 +35,21 @@ interface Args {
     loader: Loader;
   };
 }
+
+export type CodeRefType = CodeRef & {
+  displayName: string;
+};
+
 export interface Type {
   id: string;
   module: string;
   displayName: string;
   super: Type | undefined;
-  fields: { name: string; card: Type | CodeRef; type: FieldType }[];
+  fields: {
+    name: string;
+    card: Type | CodeRefType;
+    type: FieldType;
+  }[];
   codeRef: CodeRef;
   moduleInfo: ModuleInfo;
 }
@@ -71,7 +80,7 @@ export class CardType extends Resource<Args> {
 
   private assembleType = restartableTask(async (card: typeof BaseDef) => {
     let maybeType = await this.toType(card);
-    if (isCodeRef(maybeType)) {
+    if (this.isCodeRefType(maybeType)) {
       throw new Error(`bug: should never get here`);
     }
     this.type = maybeType;
@@ -80,14 +89,17 @@ export class CardType extends Resource<Args> {
   private async toType(
     card: typeof BaseDef,
     stack: (typeof BaseDef)[] = [],
-  ): Promise<Type | CodeRef> {
+  ): Promise<Type | CodeRefType> {
     let maybeRef = identifyCard(card);
     if (!maybeRef) {
       throw new Error(`cannot identify card ${card.name}`);
     }
     let ref = maybeRef;
     if (stack.includes(card)) {
-      return ref;
+      return {
+        ...ref,
+        displayName: card.prototype.constructor.displayName,
+      };
     }
     let id = internalKeyFor(ref, undefined);
     let cached = this.typeCache.get(id);
@@ -104,11 +116,11 @@ export class CardType extends Resource<Args> {
     );
     let { id: _remove, ...fields } = api.getFields(card);
     let superCard = getAncestor(card);
-    let superType: Type | CodeRef | undefined;
+    let superType: Type | CodeRefType | undefined;
     if (superCard && card !== superCard) {
       superType = await this.toType(superCard, [card, ...stack]);
     }
-    if (isCodeRef(superType)) {
+    if (this.isCodeRefType(superType)) {
       throw new Error(
         `bug: encountered cycle in card ancestor: ${[
           superType,
@@ -167,6 +179,10 @@ export class CardType extends Resource<Args> {
     moduleInfoCache.set(url.href, moduleInfo);
     return moduleInfo;
   };
+
+  private isCodeRefType(type: any): type is CodeRefType {
+    return type && isCodeRef(type) && 'displayName' in type;
+  }
 }
 
 export function getCardType(parent: object, card: () => typeof BaseDef) {

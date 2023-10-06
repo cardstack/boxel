@@ -27,6 +27,7 @@ export default class DateField extends FieldDef {
   static [serialize](date: Date) {
     return format(date, dateFormat);
   }
+  static displayName = 'Date';
 
   static async [deserialize]<T extends BaseDefConstructor>(
     this: T,
