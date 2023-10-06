@@ -15,7 +15,7 @@ import { module, test } from 'qunit';
 
 import stringify from 'safe-stable-stringify';
 
-import { Loader, baseRealm } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -133,7 +133,6 @@ const friendCardSource = `
 module('Acceptance | code mode tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
-  let loader: Loader;
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -231,7 +230,7 @@ module('Acceptance | code mode tests', function (hooks) {
       },
     });
 
-    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
 
     realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
