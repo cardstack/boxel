@@ -49,12 +49,7 @@ export default class RealmInfoService extends Service {
         { headers: { Accept: SupportedMimeType.RealmInfo } },
       );
 
-      let responseJson = await realmInfoResponse.json();
-      let realmInfo = {
-        id: responseJson?.data?.id,
-        ...responseJson?.data?.attributes,
-      };
-
+      let realmInfo = (await realmInfoResponse.json())?.data?.attributes;
       this.cachedRealmInfos.set(realmURL, realmInfo);
       return realmInfo;
     }
