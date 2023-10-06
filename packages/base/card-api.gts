@@ -70,7 +70,7 @@ export type PartialBaseInstanceType<T extends BaseDefConstructor> = T extends {
   ? P | null
   : Partial<InstanceType<T>>;
 export type FieldsTypeFor<T extends BaseDef> = {
-  [Field in keyof T]: ComponentLike<{ Args: {}; Blocks: {} }> &
+  [Field in keyof T]: ComponentLike<{ Args: { format: Format }; Blocks: {} }> &
     (T[Field] extends ArrayLike<unknown>
       ? ComponentLike<{ Args: {}; Blocks: {} }>[]
       : T[Field] extends BaseDef

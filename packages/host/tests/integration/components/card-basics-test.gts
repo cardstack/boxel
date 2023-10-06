@@ -216,6 +216,57 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test="number"]').containsText('10');
   });
 
+  test('render primitive field in atom format', async function (assert) {
+    let { field, contains, CardDef, FieldDef, Component } = cardApi;
+    class EmphasizedString extends FieldDef {
+      static [primitive]: string;
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <em data-test-embedded='name'>{{@model}}</em>
+        </template>
+      };
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <em data-test-atom='name'>{{@model}}</em>
+        </template>
+      };
+    }
+
+    class StrongNumber extends FieldDef {
+      static [primitive]: number;
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <strong data-test-embedded='number'>{{@model}}</strong>
+        </template>
+      };
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <strong data-test-atom='number'>{{@model}}</strong>
+        </template>
+      };
+    }
+
+    class Person extends CardDef {
+      @field firstName = contains(EmphasizedString);
+      @field number = contains(StrongNumber);
+
+      static isolated = class Embedded extends Component<typeof this> {
+        <template>
+          <div>
+            <@fields.firstName @format='atom' />
+            <@fields.number @format='embedded' />
+          </div>
+        </template>
+      };
+    }
+
+    let arthur = new Person({ firstName: 'Arthur', number: 10 });
+
+    await renderCard(loader, arthur, 'isolated');
+    assert.dom('[data-test-atom="name"]').containsText('Arthur');
+    assert.dom('[data-test-embedded="number"]').containsText('10');
+  });
+
   test('can set the ID for an unsaved card', async function (assert) {
     let { field, contains, CardDef } = cardApi;
     let { default: StringField } = string;
