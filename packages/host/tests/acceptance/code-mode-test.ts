@@ -139,7 +139,7 @@ const inThisFileSource = `
   }
 
   export class ExportedFieldInheritLocalField extends LocalField {
-    static displayName = 'exported card extends local card';
+    static displayName = 'exported field extends local field';
 `;
 
 const friendCardSource = `
@@ -870,7 +870,7 @@ module('Acceptance | code mode tests', function (hooks) {
       'exported card extends local card',
       'LocalField', //TODO: CS-6009 will probably change this
       'exported field',
-      'exported card extends local card',
+      'exported field extends local field',
     ];
     expectedElementNames.forEach((elementName, index) => {
       assert
