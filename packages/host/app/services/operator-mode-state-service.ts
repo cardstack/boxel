@@ -539,7 +539,7 @@ export default class OperatorModeStateService extends Service {
     let subscriberIndex = this.openFileSubscribers.indexOf(subscriber);
 
     if (subscriberIndex > -1) {
-      this.openFileSubscribers.splice(subscriber, 1);
+      this.openFileSubscribers.splice(subscriberIndex, 1);
     }
   }
 
