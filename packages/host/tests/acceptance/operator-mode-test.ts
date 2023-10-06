@@ -814,7 +814,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-code-mode]').exists();
 
       // Submode is reflected in the URL
-      assert.equal(
+      assert.strictEqual(
         currentURL(),
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
           stringify({
