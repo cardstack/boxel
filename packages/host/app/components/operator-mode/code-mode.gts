@@ -41,8 +41,9 @@ import {
 } from '@cardstack/runtime-common';
 import {
   ModuleSyntax,
-  type PossibleCardClass,
-  type Export,
+  type PossibleCardOrFieldClass,
+  type BaseDeclaration,
+  type ElementDeclaration,
 } from '@cardstack/runtime-common/module-syntax';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
@@ -136,7 +137,10 @@ const cardEditorSaveTimes = new Map<string, number>();
 // - exported function or class
 // - exported card or field
 // - unexported card or field
-export type Element = (CardOrField & Partial<PossibleCardClass>) | Export;
+// This element (in code mode) is extended to include the cardType and cardOrField
+export type Element =
+  | (CardOrField & Partial<PossibleCardOrFieldClass>)
+  | BaseDeclaration;
 
 export interface CardOrField {
   cardType: CardType;
@@ -145,7 +149,7 @@ export interface CardOrField {
 
 export function isCardOrFieldElement(
   element: Element,
-): element is CardOrField & Partial<PossibleCardClass> {
+): element is CardOrField & Partial<PossibleCardOrFieldClass> {
   return (
     (element as CardOrField).cardType !== undefined &&
     (element as CardOrField).cardOrField !== undefined
@@ -409,23 +413,24 @@ export default class CodeMode extends Component<Signature> {
                 this.openFile.current.content,
               );
 
-              let values = moduleSyntax.elements();
-              elements = values.map((value) => {
-                let cardOrField = cardsOrFields.find(
-                  (c) => c.name === value.localName,
-                );
-                if (cardOrField !== undefined) {
-                  return {
-                    ...value,
-                    cardType: getCardType(
-                      this,
-                      () => cardOrField as typeof BaseDef,
-                    ),
-                    cardOrField,
-                  } as CardOrField & Partial<PossibleCardClass>;
-                }
-                return value as Export;
-              });
+              elements = moduleSyntax.elements.map(
+                (value: ElementDeclaration) => {
+                  let cardOrField = cardsOrFields.find(
+                    (c) => c.name === value.localName,
+                  );
+                  if (cardOrField !== undefined) {
+                    return {
+                      ...value,
+                      cardType: getCardType(
+                        this,
+                        () => cardOrField as typeof BaseDef,
+                      ),
+                      cardOrField,
+                    } as CardOrField & Partial<PossibleCardOrFieldClass>;
+                  }
+                  return value as BaseDeclaration;
+                },
+              );
             }
             state.value = elements;
           }

@@ -4,7 +4,6 @@ import type { NodePath, Scope } from '@babel/traverse';
 
 interface State {
   opts: Options;
-  insideCard: boolean;
 }
 
 export interface ExternalReference {
@@ -20,17 +19,15 @@ export interface InternalReference {
 
 export type ClassReference = ExternalReference | InternalReference;
 
-export type Export = {
+export type BaseDeclaration = {
   localName: string | undefined;
   exportedAs: string | undefined;
-  path: NodePath<t.ExportDeclaration>;
+  path: NodePath;
 };
 
-export interface PossibleCardClass {
+export interface PossibleCardOrFieldClass extends BaseDeclaration {
   super: ClassReference;
   possibleFields: Map<string, PossibleField>;
-  localName: string | undefined;
-  exportedAs: string | undefined;
   path: NodePath<t.ClassDeclaration>;
 }
 
@@ -41,179 +38,139 @@ export interface PossibleField {
   path: NodePath<t.ClassProperty>;
 }
 
+// an element should be (an item of focus within a module)
+// - exported function or class
+// - exported card or field
+// - unexported card or field
+export type ElementDeclaration = PossibleCardOrFieldClass | BaseDeclaration;
+
 export interface Options {
-  possibleCards: PossibleCardClass[]; //cards may not be exports
-  exports: Export[];
+  possibleCardsOrFields: PossibleCardOrFieldClass[]; //cards may not be exports
+  elements: ElementDeclaration[];
 }
 
 export function schemaAnalysisPlugin(_babel: typeof Babel) {
-  // let t = babel.types;
   return {
     visitor: {
-      ExportNamedDeclaration: {
-        enter(path: NodePath<t.ExportNamedDeclaration>, state: State) {
-          const declaration = path.node.declaration;
-          if (
-            t.isClassDeclaration(declaration) ||
-            t.isFunctionDeclaration(declaration)
-          ) {
-            let exportedAs = declaration.id
-              ? getName(declaration.id)
-              : undefined;
-
-            let localName = declaration.id ? declaration.id.name : undefined;
-            state.opts.exports.push({
-              path,
-              exportedAs,
-              localName,
-            });
+      Declaration: {
+        enter(
+          path: NodePath<t.ClassDeclaration> | NodePath<t.FunctionDeclaration>,
+          state: State,
+        ) {
+          if (t.isClassDeclaration(path) || t.isFunctionDeclaration(path)) {
+            let localName = path.node.id ? path.node.id.name : undefined;
+            if (t.isExportDeclaration(path.parentPath)) {
+              state.opts.elements.push({
+                localName,
+                exportedAs: getExportedAs(path, localName),
+                path,
+              });
+            } else if (t.isClassDeclaration(path)) {
+              let maybeCard = lookForCard(path, state);
+              if (maybeCard) {
+                state.opts.elements.push(maybeCard);
+              }
+            }
           }
         },
       },
       ClassDeclaration: {
         enter(path: NodePath<t.ClassDeclaration>, state: State) {
-          if (!path.node.superClass) {
-            return;
-          }
-
-          let sc = path.get('superClass');
-          if (sc.isReferencedIdentifier()) {
-            let classRef = makeClassReference(path.scope, sc.node.name, state);
-            if (classRef) {
-              state.insideCard = true;
-              let exportedAs: string | undefined;
-              let { parentPath } = path;
-              let localName = path.node.id ? path.node.id.name : undefined;
-              if (parentPath.isExportNamedDeclaration()) {
-                // the class declaration is part of a named export
-                exportedAs = localName;
-              } else if (parentPath.isExportDefaultDeclaration()) {
-                // the class declaration is part of a default export
-                exportedAs = 'default';
-              } else {
-                // the class's identifier is referenced in a node whose parent is an ExportSpecifier
-                let binding = localName
-                  ? path.scope.getBinding(localName)
-                  : undefined;
-                if (binding) {
-                  let maybeExportSpecifierLocal = binding.referencePaths.find(
-                    (b) => b.parentPath?.isExportSpecifier(),
-                  ) as NodePath<t.Identifier> | undefined;
-                  if (maybeExportSpecifierLocal) {
-                    exportedAs = getName(
-                      (
-                        maybeExportSpecifierLocal.parentPath as NodePath<t.ExportSpecifier>
-                      ).node.exported,
-                    );
+          let maybeCard = lookForCard(path, state);
+          if (maybeCard) {
+            state.opts.possibleCardsOrFields.push(maybeCard);
+            maybeCard.path.traverse({
+              Decorator: {
+                enter(path: NodePath<t.Decorator>) {
+                  let expression = path.get('expression');
+                  if (!expression.isIdentifier()) {
+                    return;
                   }
-                }
-              }
+                  let decoratorInfo = getNamedImportInfo(
+                    path.scope,
+                    expression.node.name,
+                  );
+                  if (!decoratorInfo) {
+                    return; // our @field decorator must originate from a named import
+                  }
 
-              state.opts.possibleCards.push({
-                super: classRef,
-                localName,
-                path,
-                possibleFields: new Map(),
-                exportedAs,
-              });
-            }
+                  let maybeClassProperty = path.parentPath;
+                  if (
+                    !maybeClassProperty.isClassProperty() ||
+                    maybeClassProperty.node.key.type !== 'Identifier'
+                  ) {
+                    return;
+                  }
+
+                  let maybeCallExpression = maybeClassProperty.node.value;
+                  if (
+                    maybeCallExpression?.type !== 'CallExpression' ||
+                    maybeCallExpression.arguments.length === 0
+                  ) {
+                    return; // our field type function (e.g. contains()) must have at least one argument (the field card)
+                  }
+
+                  let maybeFieldTypeFunction = maybeCallExpression.callee;
+                  if (maybeFieldTypeFunction.type !== 'Identifier') {
+                    return;
+                  }
+
+                  let fieldTypeInfo = getNamedImportInfo(
+                    path.scope,
+                    maybeFieldTypeFunction.name,
+                  );
+                  if (!fieldTypeInfo) {
+                    return; // our field type function (e.g. contains()) must originate from a named import
+                  }
+
+                  let [maybeFieldCard] = maybeCallExpression.arguments; // note that the 2nd argument is the computeVia
+                  let maybeFieldCardName;
+                  if (maybeFieldCard.type !== 'Identifier') {
+                    if (
+                      maybeFieldCard.type === 'ArrowFunctionExpression' &&
+                      maybeFieldCard.body.type === 'Identifier'
+                    ) {
+                      maybeFieldCardName = maybeFieldCard.body.name;
+                    } else {
+                      return;
+                    }
+                  } else {
+                    maybeFieldCardName = maybeFieldCard.name;
+                  }
+
+                  let fieldCard = makeClassReference(
+                    path.scope,
+                    maybeFieldCardName,
+                    state,
+                  );
+                  if (!fieldCard) {
+                    return; // the first argument to our field type function must be a card reference
+                  }
+
+                  let possibleField: PossibleField = {
+                    card: fieldCard,
+                    path: maybeClassProperty,
+                    type: {
+                      type: 'external',
+                      module: getName(fieldTypeInfo.declaration.node.source),
+                      name: getName(fieldTypeInfo.specifier.node.imported),
+                    },
+                    decorator: {
+                      type: 'external',
+                      module: getName(decoratorInfo.declaration.node.source),
+                      name: getName(decoratorInfo.specifier.node.imported),
+                    },
+                  };
+                  // the card that contains this field will always be the last card that
+                  // was added to possibleCardsOrFields
+                  let [card] = state.opts.possibleCardsOrFields.slice(-1);
+                  let fieldName = maybeClassProperty.node.key.name;
+                  card.possibleFields.set(fieldName, possibleField);
+                },
+              },
+            });
           }
         },
-
-        exit(_path: NodePath<t.ClassDeclaration>, state: State) {
-          state.insideCard = false;
-        },
-      },
-
-      Decorator(path: NodePath<t.Decorator>, state: State) {
-        if (!state.insideCard) {
-          return;
-        }
-
-        let expression = path.get('expression');
-        if (!expression.isIdentifier()) {
-          return;
-        }
-        let decoratorInfo = getNamedImportInfo(
-          path.scope,
-          expression.node.name,
-        );
-        if (!decoratorInfo) {
-          return; // our @field decorator must originate from a named import
-        }
-
-        let maybeClassProperty = path.parentPath;
-        if (
-          !maybeClassProperty.isClassProperty() ||
-          maybeClassProperty.node.key.type !== 'Identifier'
-        ) {
-          return;
-        }
-
-        let maybeCallExpression = maybeClassProperty.node.value;
-        if (
-          maybeCallExpression?.type !== 'CallExpression' ||
-          maybeCallExpression.arguments.length === 0
-        ) {
-          return; // our field type function (e.g. contains()) must have at least one argument (the field card)
-        }
-
-        let maybeFieldTypeFunction = maybeCallExpression.callee;
-        if (maybeFieldTypeFunction.type !== 'Identifier') {
-          return;
-        }
-
-        let fieldTypeInfo = getNamedImportInfo(
-          path.scope,
-          maybeFieldTypeFunction.name,
-        );
-        if (!fieldTypeInfo) {
-          return; // our field type function (e.g. contains()) must originate from a named import
-        }
-
-        let [maybeFieldCard] = maybeCallExpression.arguments; // note that the 2nd argument is the computeVia
-        let maybeFieldCardName;
-        if (maybeFieldCard.type !== 'Identifier') {
-          if (
-            maybeFieldCard.type === 'ArrowFunctionExpression' &&
-            maybeFieldCard.body.type === 'Identifier'
-          ) {
-            maybeFieldCardName = maybeFieldCard.body.name;
-          } else {
-            return;
-          }
-        } else {
-          maybeFieldCardName = maybeFieldCard.name;
-        }
-
-        let fieldCard = makeClassReference(
-          path.scope,
-          maybeFieldCardName,
-          state,
-        );
-        if (!fieldCard) {
-          return; // the first argument to our field type function must be a card reference
-        }
-
-        let possibleField: PossibleField = {
-          card: fieldCard,
-          path: maybeClassProperty,
-          type: {
-            type: 'external',
-            module: getName(fieldTypeInfo.declaration.node.source),
-            name: getName(fieldTypeInfo.specifier.node.imported),
-          },
-          decorator: {
-            type: 'external',
-            module: getName(decoratorInfo.declaration.node.source),
-            name: getName(decoratorInfo.specifier.node.imported),
-          },
-        };
-        // the card that contains this field will always be the last card that
-        // was added to possibleCards
-        let [card] = state.opts.possibleCards.slice(-1);
-        let fieldName = maybeClassProperty.node.key.name;
-        card.possibleFields.set(fieldName, possibleField);
       },
     },
   };
@@ -232,6 +189,57 @@ class CompilerError extends Error {
       this.stack = new Error(message).stack;
     }
   }
+}
+
+function lookForCard(path: NodePath<t.ClassDeclaration>, state: State) {
+  if (!path.node.superClass) {
+    return;
+  }
+
+  let sc = path.get('superClass');
+  if (sc.isReferencedIdentifier()) {
+    let classRef = makeClassReference(path.scope, sc.node.name, state);
+    if (classRef) {
+      let localName = path.node.id ? path.node.id.name : undefined;
+      return {
+        super: classRef,
+        localName,
+        path,
+        possibleFields: new Map(),
+        exportedAs: getExportedAs(path, localName),
+      };
+    }
+  }
+  return;
+}
+
+function getExportedAs(
+  path: NodePath<t.ClassDeclaration> | NodePath<t.FunctionDeclaration>,
+  localName: string | undefined,
+): string | undefined {
+  let { parentPath } = path;
+  if (parentPath.isExportNamedDeclaration()) {
+    // the class declaration is part of a named export
+    return localName;
+  } else if (parentPath.isExportDefaultDeclaration()) {
+    // the class declaration is part of a default export
+    return 'default';
+  } else {
+    // the class's identifier is referenced in a node whose parent is an ExportSpecifier
+    let binding = localName ? path.scope.getBinding(localName) : undefined;
+    if (binding) {
+      let maybeExportSpecifierLocal = binding.referencePaths.find(
+        (b) => b.parentPath?.isExportSpecifier(),
+      ) as NodePath<t.Identifier> | undefined;
+      if (maybeExportSpecifierLocal) {
+        return getName(
+          (maybeExportSpecifierLocal.parentPath as NodePath<t.ExportSpecifier>)
+            .node.exported,
+        );
+      }
+    }
+  }
+  return;
 }
 
 function makeClassReference(
@@ -256,7 +264,7 @@ function makeClassReference(
 
   if (binding?.path.isClassDeclaration()) {
     let superClassNode = binding.path.node;
-    let superClassIndex = state.opts.possibleCards.findIndex(
+    let superClassIndex = state.opts.possibleCardsOrFields.findIndex(
       (card) => card.path.node === superClassNode,
     );
     if (superClassIndex >= 0) {
