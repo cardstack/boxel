@@ -13,7 +13,6 @@ interface Signature {
     label: string;
     class?: string;
     contentClass?: string;
-    noHoverStyle?: boolean;
     size?: number;
     iconSize?: number;
   };
