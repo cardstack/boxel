@@ -237,11 +237,11 @@ export default class DetailPanel extends Component<Signature> {
               </div>
               <ClickableModuleDefinitionContainer
                 @title={{'Card Definition'}}
-                @fileURL={{this.args.cardInstanceType.type.module}}
-                @name={{this.args.cardInstanceType.type.displayName}}
-                @fileExtension={{this.args.cardInstanceType.type.moduleInfo.extension}}
+                @fileURL={{@cardInstanceType.type.module}}
+                @name={{@cardInstanceType.type.displayName}}
+                @fileExtension={{@cardInstanceType.type.moduleInfo.extension}}
                 @onSelectDefinition={{this.updateCodePath}}
-                @url={{this.args.cardInstanceType.type.module}}
+                @url={{@cardInstanceType.type.module}}
               />
 
             {{else if this.isField}}
