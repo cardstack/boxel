@@ -240,16 +240,12 @@ export default class CodeMode extends Component<Signature> {
 
   private get isLoading() {
     return (
-      this.loadMonaco.isRunning ||
-      this.operatorModeStateService.openFile.current?.state === 'loading'
+      this.loadMonaco.isRunning || this.currentOpenFile?.state === 'loading'
     );
   }
 
   private get isReady() {
-    return (
-      this.maybeMonacoSDK &&
-      isReady(this.operatorModeStateService.openFile.current)
-    );
+    return this.maybeMonacoSDK && isReady(this.currentOpenFile);
   }
 
   private get schemaEditorIncompatible() {
@@ -264,10 +260,7 @@ export default class CodeMode extends Component<Signature> {
   }
 
   private get emptyOrNotFound() {
-    return (
-      !this.codePath ||
-      this.operatorModeStateService.openFile.current?.state === 'not-found'
-    );
+    return !this.codePath || this.currentOpenFile?.state === 'not-found';
   }
 
   private loadMonaco = task(async () => {
@@ -275,8 +268,8 @@ export default class CodeMode extends Component<Signature> {
   });
 
   private get readyFile() {
-    if (isReady(this.operatorModeStateService.openFile.current)) {
-      return this.operatorModeStateService.openFile.current;
+    if (isReady(this.currentOpenFile)) {
+      return this.currentOpenFile;
     }
     throw new Error(
       `cannot access file contents ${this.codePath} before file is open`,
@@ -346,6 +339,10 @@ export default class CodeMode extends Component<Signature> {
     return state;
   });
 
+  private get currentOpenFile() {
+    return this.operatorModeStateService.openFile.current;
+  }
+
   @use private elements = resource(({ on }) => {
     on.cleanup(() => {
       this.selectedElement = undefined;
@@ -400,8 +397,8 @@ export default class CodeMode extends Component<Signature> {
   });
 
   @use private importedModule = resource(() => {
-    if (isReady(this.operatorModeStateService.openFile.current)) {
-      let f: Ready = this.operatorModeStateService.openFile.current;
+    if (isReady(this.currentOpenFile)) {
+      let f: Ready = this.currentOpenFile;
       if (f.url.endsWith('.json') && isCardDocumentString(f.content)) {
         let ref = identifyCard(this.card?.constructor);
         if (ref !== undefined) {
@@ -444,23 +441,18 @@ export default class CodeMode extends Component<Signature> {
   private get openFileCardJSON() {
     this.cardError = undefined;
     if (
-      this.operatorModeStateService.openFile.current?.state === 'ready' &&
-      this.operatorModeStateService.openFile.current.name.endsWith('.json')
+      this.currentOpenFile?.state === 'ready' &&
+      this.currentOpenFile.name.endsWith('.json')
     ) {
       let maybeCard: any;
       try {
-        maybeCard = JSON.parse(
-          this.operatorModeStateService.openFile.current.content,
-        );
+        maybeCard = JSON.parse(this.currentOpenFile.content);
       } catch (err: any) {
         this.cardError = err;
         return undefined;
       }
       if (isSingleCardDocument(maybeCard)) {
-        let url = this.operatorModeStateService.openFile.current.url.replace(
-          /\.json$/,
-          '',
-        );
+        let url = this.currentOpenFile.url.replace(/\.json$/, '');
         if (!url) {
           return undefined;
         }
@@ -482,13 +474,9 @@ export default class CodeMode extends Component<Signature> {
 
   private get cardIsLoaded() {
     return (
-      isReady(this.operatorModeStateService.openFile.current) &&
+      isReady(this.currentOpenFile) &&
       this.openFileCardJSON &&
-      this.card?.id ===
-        this.operatorModeStateService.openFile.current.url.replace(
-          /\.json$/,
-          '',
-        )
+      this.card?.id === this.currentOpenFile.url.replace(/\.json$/, '')
     );
   }
 
@@ -567,14 +555,13 @@ export default class CodeMode extends Component<Signature> {
     this.hasUnsavedSourceChanges = true;
     await timeout(autoSaveDelayMs);
     if (
-      !isReady(this.operatorModeStateService.openFile.current) ||
-      content === this.operatorModeStateService.openFile.current?.content
+      !isReady(this.currentOpenFile) ||
+      content === this.currentOpenFile?.content
     ) {
       return;
     }
 
-    let isJSON =
-      this.operatorModeStateService.openFile.current.name.endsWith('.json');
+    let isJSON = this.currentOpenFile.name.endsWith('.json');
     let validJSON = isJSON && this.safeJSONParse(content);
     // Here lies the difference in how json files and other source code files
     // are treated during editing in the code editor
@@ -585,10 +572,7 @@ export default class CodeMode extends Component<Signature> {
     } else if (!isJSON || validJSON) {
       // writes source code and non-card instance valid JSON,
       // then updates the state of the file resource
-      this.writeSourceCodeToFile(
-        this.operatorModeStateService.openFile.current,
-        content,
-      );
+      this.writeSourceCodeToFile(this.currentOpenFile, content);
       this.waitForSourceCodeWrite.perform();
     }
     this.hasUnsavedSourceChanges = false;
@@ -597,11 +581,8 @@ export default class CodeMode extends Component<Signature> {
   // these saves can happen so fast that we'll make sure to wait at
   // least 500ms for human consumption
   private waitForSourceCodeWrite = restartableTask(async () => {
-    if (isReady(this.operatorModeStateService.openFile.current)) {
-      await all([
-        this.operatorModeStateService.openFile.current.writing,
-        timeout(500),
-      ]);
+    if (isReady(this.currentOpenFile)) {
+      await all([this.currentOpenFile.writing, timeout(500)]);
     }
   });
 
