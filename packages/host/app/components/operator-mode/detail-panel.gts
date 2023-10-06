@@ -200,6 +200,7 @@ export default class DetailPanel extends Component<Signature> {
               <Selector
                 @class='in-this-file-menu'
                 @items={{this.buildSelectorItems}}
+                data-test-in-this-file-selector
               />
             </CardContainer>
           </div>
