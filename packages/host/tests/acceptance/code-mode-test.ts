@@ -825,54 +825,70 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-card-inheritance-panel]');
     await waitFor('[data-test-current-module-name]');
     //default is the 1st index
-    let itemName = 'LocalCard';
+    let elementName = 'ExportedClass';
     assert.dom('[data-test-boxel-selector-item]').exists({ count: 8 });
     assert
       .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
-      .hasText(itemName);
-    assert.dom('[data-test-boxel-selector-item-selected]').hasText(itemName);
+      .hasText(elementName);
+    // elements must be ordered by the way they appear in the source code
+    const expectedElementNames = [
+      'ExportedClass',
+      'exportedFunction',
+      'LocalCard', //TODO: CS-6009 will probably change this
+      'exported card',
+      'exported card extends local card',
+      'LocalField', //TODO: CS-6009 will probably change this
+      'exported field',
+      'exported card extends local card',
+    ];
+    expectedElementNames.forEach((elementName, index) => {
+      assert
+        .dom(`[data-test-boxel-selector-item]:nth-of-type(${index + 1})`)
+        .hasText(elementName);
+    });
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     // clicking on a card
-    itemName = 'exported card';
-    await click(`[data-test-boxel-selector-item-text="${itemName}"]`);
-    assert.dom('[data-test-boxel-selector-item-selected]').hasText(itemName);
+    elementName = 'exported card';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
     await waitFor('[data-test-card-module-definition]');
     assert.dom('[data-test-inheritance-panel-header]').exists();
     assert.dom('[data-test-card-module-definition]').exists();
     assert.dom('[data-test-definition-header]').includesText('Card Definition');
-    assert.dom('[data-test-card-module-definition]').includesText(itemName);
+    assert.dom('[data-test-card-module-definition]').includesText(elementName);
     await waitFor('[data-test-card-schema]');
     assert.dom('[data-test-card-schema]').exists({ count: 3 });
     assert
       .dom(
-        `[data-test-card-schema="${itemName}"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
+        `[data-test-card-schema="${elementName}"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
       )
       .exists();
     assert.dom(`[data-test-card-schema=Card]`).exists();
     // clicking on a field
-    itemName = 'exported field';
-    await click(`[data-test-boxel-selector-item-text="${itemName}"]`);
-    assert.dom('[data-test-boxel-selector-item-selected]').hasText(itemName);
+    elementName = 'exported field';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
     await waitFor('[data-test-card-module-definition]');
     assert.dom('[data-test-inheritance-panel-header]').exists();
     assert
       .dom('[data-test-definition-header]')
       .includesText('Field Definition');
-    assert.dom('[data-test-card-module-definition]').includesText(itemName);
+    assert.dom('[data-test-card-module-definition]').includesText(elementName);
     await waitFor('[data-test-card-schema]');
     assert.dom('[data-test-card-schema]').exists({ count: 3 });
     //TODO: CS-6093 will fix this
     // assert
     //   .dom(
-    //     `[data-test-card-schema="${itemName}"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
+    //     `[data-test-card-schema="${elementName}"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
     //   )
     //   .exists();
     // assert.dom(`[data-test-card-schema=Card]`).exists();
 
     // clicking on an exported function
-    itemName = 'exportedFunction';
-    await click(`[data-test-boxel-selector-item-text="${itemName}"]`);
-    assert.dom('[data-test-boxel-selector-item-selected]').hasText(itemName);
+    elementName = 'exportedFunction';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     assert.dom('[data-test-card-module-definition]').doesNotExist();
     assert.dom('[data-test-schema-editor-incompatible]').exists();
