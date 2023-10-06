@@ -28,11 +28,10 @@ import type { types as t } from '@babel/core';
 import type { NodePath } from '@babel/traverse';
 import type { FieldType } from 'https://cardstack.com/base/card-api';
 
-export type { PossibleCardOrFieldClass, BaseDeclaration };
+export type { PossibleCardOrFieldClass, ElementDeclaration, BaseDeclaration };
 
 export class ModuleSyntax {
   declare possibleCardsOrFields: PossibleCardOrFieldClass[];
-
   declare elements: ElementDeclaration[];
   private declare ast: t.File;
 

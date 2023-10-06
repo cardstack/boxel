@@ -43,6 +43,7 @@ import {
   ModuleSyntax,
   type PossibleCardOrFieldClass,
   type BaseDeclaration,
+  type ElementDeclaration,
 } from '@cardstack/runtime-common/module-syntax';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
@@ -413,23 +414,24 @@ export default class CodeMode extends Component<Signature> {
                 this.openFile.current.content,
               );
 
-              let values = moduleSyntax.elements();
-              elements = values.map((value) => {
-                let cardOrField = cardsOrFields.find(
-                  (c) => c.name === value.localName,
-                );
-                if (cardOrField !== undefined) {
-                  return {
-                    ...value,
-                    cardType: getCardType(
-                      this,
-                      () => cardOrField as typeof BaseDef,
-                    ),
-                    cardOrField,
-                  } as CardOrField & Partial<PossibleCardOrFieldClass>;
-                }
-                return value as BaseDeclaration;
-              });
+              elements = moduleSyntax.elements.map(
+                (value: ElementDeclaration) => {
+                  let cardOrField = cardsOrFields.find(
+                    (c) => c.name === value.localName,
+                  );
+                  if (cardOrField !== undefined) {
+                    return {
+                      ...value,
+                      cardType: getCardType(
+                        this,
+                        () => cardOrField as typeof BaseDef,
+                      ),
+                      cardOrField,
+                    } as CardOrField & Partial<PossibleCardOrFieldClass>;
+                  }
+                  return value as BaseDeclaration;
+                },
+              );
             }
             state.value = elements;
           }
