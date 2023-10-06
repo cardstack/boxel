@@ -555,7 +555,11 @@ module('Acceptance | code mode tests', function (hooks) {
   test('recent file links are shown', async function (assert) {
     window.localStorage.setItem(
       'recent-files',
-      JSON.stringify([[testRealmURL, 'index.json'], 'a-non-url-to-ignore']),
+      JSON.stringify([
+        [testRealmURL, 'index.json'],
+        ['http://localhost:4202/test/', 'person.gts'],
+        'a-non-url-to-ignore',
+      ]),
     );
 
     let codeModeStateParam = stringify({
@@ -581,28 +585,27 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-file]');
     await waitFor('[data-test-directory]');
 
-    assert
-      .dom('[data-test-recent-file]')
-      .exists({ count: 1 })
-      .containsText('index.json');
+    assert.dom('[data-test-recent-file]').exists({ count: 2 });
 
     assert
-      .dom('[data-test-recent-file] [data-test-realm-icon-url]')
+      .dom('[data-test-recent-file]:nth-child(1) [data-test-realm-icon-url]')
       .hasAttribute('src', 'https://i.postimg.cc/L8yXRvws/icon.png')
       .hasAttribute('alt', '');
 
+    assert
+      .dom('[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]')
+      .hasAttribute('src', 'https://i.postimg.cc/d0B9qMvy/icon.png');
+
     await click('[data-test-file="index.json"]');
     assert
-      .dom('[data-test-recent-file]')
-      .exists({ count: 1 })
+      .dom('[data-test-recent-file]:nth-child(1)')
       .containsText('Person/1.json');
 
     await waitFor('[data-test-file="Person/1.json"]');
     await click('[data-test-file="Person/1.json"]');
 
     assert
-      .dom('[data-test-recent-file]')
-      .exists({ count: 1 })
+      .dom('[data-test-recent-file]:nth-child(1)')
       .containsText('index.json');
 
     await waitFor('[data-test-file="person.gts"]');
@@ -632,6 +635,7 @@ module('Acceptance | code mode tests', function (hooks) {
         [testRealmURL, 'index.json'],
         [testRealmURL, 'person.gts'],
         [testRealmURL, 'Person/1.json'],
+        ['http://localhost:4202/test/', 'person.gts'],
       ],
     );
   });
