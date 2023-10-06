@@ -25,7 +25,7 @@ export type BaseDeclaration = {
   path: NodePath;
 };
 
-export interface PossibleCardClass extends BaseDeclaration {
+export interface PossibleCardOrFieldClass extends BaseDeclaration {
   super: ClassReference;
   possibleFields: Map<string, PossibleField>;
   path: NodePath<t.ClassDeclaration>;
@@ -38,11 +38,15 @@ export interface PossibleField {
   path: NodePath<t.ClassProperty>;
 }
 
-export type ModuleDeclaration = PossibleCardClass | BaseDeclaration;
+// an element should be (an item of focus within a module)
+// - exported function or class
+// - exported card or field
+// - unexported card or field
+export type ElementDeclaration = PossibleCardOrFieldClass | BaseDeclaration;
 
 export interface Options {
-  possibleCards: PossibleCardClass[]; //cards may not be exports
-  moduleDeclarations: ModuleDeclaration[];
+  possibleCardsOrFields: PossibleCardOrFieldClass[]; //cards may not be exports
+  elements: ElementDeclaration[];
 }
 
 export function schemaAnalysisPlugin(_babel: typeof Babel) {
@@ -56,7 +60,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
           if (t.isClassDeclaration(path) || t.isFunctionDeclaration(path)) {
             let localName = path.node.id ? path.node.id.name : undefined;
             if (t.isExportDeclaration(path.parentPath)) {
-              state.opts.moduleDeclarations.push({
+              state.opts.elements.push({
                 localName,
                 exportedAs: getExportedAs(path, localName),
                 path,
@@ -64,7 +68,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
             } else if (t.isClassDeclaration(path)) {
               let maybeCard = lookForCard(path, state);
               if (maybeCard) {
-                state.opts.moduleDeclarations.push(maybeCard);
+                state.opts.elements.push(maybeCard);
               }
             }
           }
@@ -74,7 +78,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
         enter(path: NodePath<t.ClassDeclaration>, state: State) {
           let maybeCard = lookForCard(path, state);
           if (maybeCard) {
-            state.opts.possibleCards.push(maybeCard);
+            state.opts.possibleCardsOrFields.push(maybeCard);
             maybeCard.path.traverse({
               Decorator: {
                 enter(path: NodePath<t.Decorator>) {
@@ -158,8 +162,8 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
                     },
                   };
                   // the card that contains this field will always be the last card that
-                  // was added to possibleCards
-                  let [card] = state.opts.possibleCards.slice(-1);
+                  // was added to possibleCardsOrFields
+                  let [card] = state.opts.possibleCardsOrFields.slice(-1);
                   let fieldName = maybeClassProperty.node.key.name;
                   card.possibleFields.set(fieldName, possibleField);
                 },
@@ -260,7 +264,7 @@ function makeClassReference(
 
   if (binding?.path.isClassDeclaration()) {
     let superClassNode = binding.path.node;
-    let superClassIndex = state.opts.possibleCards.findIndex(
+    let superClassIndex = state.opts.possibleCardsOrFields.findIndex(
       (card) => card.path.node === superClassNode,
     );
     if (superClassIndex >= 0) {

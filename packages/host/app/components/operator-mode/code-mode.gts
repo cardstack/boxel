@@ -41,7 +41,7 @@ import {
 } from '@cardstack/runtime-common';
 import {
   ModuleSyntax,
-  type PossibleCardClass,
+  type PossibleCardOrFieldClass,
   type BaseDeclaration,
 } from '@cardstack/runtime-common/module-syntax';
 
@@ -136,7 +136,10 @@ const cardEditorSaveTimes = new Map<string, number>();
 // - exported function or class
 // - exported card or field
 // - unexported card or field
-export type Element = (CardOrField & Partial<PossibleCardClass>) | BaseDeclaration;
+// This element (in code mode) is extended to include the cardType and cardOrField
+export type Element =
+  | (CardOrField & Partial<PossibleCardOrFieldClass>)
+  | BaseDeclaration;
 
 export interface CardOrField {
   cardType: CardType;
@@ -145,7 +148,7 @@ export interface CardOrField {
 
 export function isCardOrFieldElement(
   element: Element,
-): element is CardOrField & Partial<PossibleCardClass> {
+): element is CardOrField & Partial<PossibleCardOrFieldClass> {
   return (
     (element as CardOrField).cardType !== undefined &&
     (element as CardOrField).cardOrField !== undefined
@@ -423,7 +426,7 @@ export default class CodeMode extends Component<Signature> {
                       () => cardOrField as typeof BaseDef,
                     ),
                     cardOrField,
-                  } as CardOrField & Partial<PossibleCardClass>;
+                  } as CardOrField & Partial<PossibleCardOrFieldClass>;
                 }
                 return value as BaseDeclaration;
               });

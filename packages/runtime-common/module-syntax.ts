@@ -3,8 +3,8 @@ import * as Babel from '@babel/core';
 import {
   schemaAnalysisPlugin,
   Options,
-  type PossibleCardClass,
-  type ModuleDeclaration,
+  type PossibleCardOrFieldClass,
+  type ElementDeclaration,
   type BaseDeclaration,
 } from './schema-analysis-plugin';
 import {
@@ -28,11 +28,12 @@ import type { types as t } from '@babel/core';
 import type { NodePath } from '@babel/traverse';
 import type { FieldType } from 'https://cardstack.com/base/card-api';
 
-export type { PossibleCardClass, BaseDeclaration };
+export type { PossibleCardOrFieldClass, BaseDeclaration };
 
 export class ModuleSyntax {
-  declare possibleCards: PossibleCardClass[];
-  declare moduleDeclarations: ModuleDeclaration[];
+  declare possibleCardsOrFields: PossibleCardOrFieldClass[];
+
+  declare elements: ElementDeclaration[];
   private declare ast: t.File;
 
   constructor(src: string) {
@@ -41,8 +42,8 @@ export class ModuleSyntax {
 
   private analyze(src: string) {
     let moduleAnalysis: Options = {
-      possibleCards: [],
-      moduleDeclarations: [],
+      possibleCardsOrFields: [],
+      elements: [],
     };
     let preprocessedSrc = preprocessTemplateTags(src);
 
@@ -57,12 +58,8 @@ export class ModuleSyntax {
       ],
     });
     this.ast = r!.ast!;
-    this.possibleCards = moduleAnalysis.possibleCards;
-    this.moduleDeclarations = moduleAnalysis.moduleDeclarations;
-  }
-
-  elements(): ModuleDeclaration[] {
-    return this.moduleDeclarations;
+    this.possibleCardsOrFields = moduleAnalysis.possibleCardsOrFields;
+    this.elements = moduleAnalysis.elements;
   }
 
   code(): string {
@@ -165,13 +162,17 @@ export class ModuleSyntax {
     card:
       | { type: 'exportedName'; name: string }
       | { type: 'localName'; name: string },
-  ): PossibleCardClass {
+  ): PossibleCardOrFieldClass {
     let cardName = card.name;
-    let cardClass: PossibleCardClass | undefined;
+    let cardClass: PossibleCardOrFieldClass | undefined;
     if (card.type === 'exportedName') {
-      cardClass = this.possibleCards.find((c) => c.exportedAs === cardName);
+      cardClass = this.possibleCardsOrFields.find(
+        (c) => c.exportedAs === cardName,
+      );
     } else {
-      cardClass = this.possibleCards.find((c) => c.localName === cardName);
+      cardClass = this.possibleCardsOrFields.find(
+        (c) => c.localName === cardName,
+      );
     }
     if (!cardClass) {
       throw new Error(
