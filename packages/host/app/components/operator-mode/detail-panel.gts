@@ -43,12 +43,15 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 
 import { isCardDef, isFieldDef } from '@cardstack/runtime-common/code-ref';
 
+import { type CardType } from '@cardstack/host/resources/card-type';
+
 interface Signature {
   Element: HTMLElement;
   Args: {
     realmInfo: RealmInfo | null;
     readyFile: Ready;
     cardInstance: CardDef | undefined;
+    cardInstanceType: CardType | undefined;
     selectedElement?: Element;
     elements: Element[];
     selectElement: (el: Element) => void;
@@ -234,11 +237,11 @@ export default class DetailPanel extends Component<Signature> {
               </div>
               <ClickableModuleDefinitionContainer
                 @title={{'Card Definition'}}
-                @fileURL={{this.cardType.type.module}}
-                @name={{this.cardType.type.displayName}}
-                @fileExtension={{this.cardType.type.moduleInfo.extension}}
+                @fileURL={{this.args.cardInstanceType.type.module}}
+                @name={{this.args.cardInstanceType.type.displayName}}
+                @fileExtension={{this.args.cardInstanceType.type.moduleInfo.extension}}
                 @onSelectDefinition={{this.updateCodePath}}
-                @url={{this.cardType.type.module}}
+                @url={{this.args.cardInstanceType.type.module}}
               />
 
             {{else if this.isField}}

@@ -393,45 +393,26 @@ export default class CodeMode extends Component<Signature> {
             let module = this.importedModule?.module;
             let cardsOrFields = cardsOrFieldsFromModule(module);
             let elements: Element[] = [];
-            if (
-              this.openFile.current.url.endsWith('.json') &&
-              isCardDocumentString(this.openFile.current.content)
-            ) {
-              let cardOrField = cardsOrFields[0];
-              elements = [
-                {
-                  cardType: getCardType(
-                    this,
-                    () => cardOrField as typeof BaseDef,
-                  ),
-                  cardOrField,
-                },
-              ];
-            } else {
-              await this.importedModule.loaded;
-              let moduleSyntax = new ModuleSyntax(
-                this.openFile.current.content,
-              );
-
-              elements = moduleSyntax.elements.map(
-                (value: ElementDeclaration) => {
-                  let cardOrField = cardsOrFields.find(
-                    (c) => c.name === value.localName,
-                  );
-                  if (cardOrField !== undefined) {
-                    return {
-                      ...value,
-                      cardType: getCardType(
-                        this,
-                        () => cardOrField as typeof BaseDef,
-                      ),
-                      cardOrField,
-                    } as CardOrField & Partial<PossibleCardOrFieldClass>;
-                  }
-                  return value as BaseDeclaration;
-                },
-              );
-            }
+            await this.importedModule.loaded;
+            let moduleSyntax = new ModuleSyntax(this.openFile.current.content);
+            elements = moduleSyntax.elements.map(
+              (value: ElementDeclaration) => {
+                let cardOrField = cardsOrFields.find(
+                  (c) => c.name === value.localName,
+                );
+                if (cardOrField !== undefined) {
+                  return {
+                    ...value,
+                    cardType: getCardType(
+                      this,
+                      () => cardOrField as typeof BaseDef,
+                    ),
+                    cardOrField,
+                  } as CardOrField & Partial<PossibleCardOrFieldClass>;
+                }
+                return value as BaseDeclaration;
+              },
+            );
             state.value = elements;
           }
         } catch (error: any) {
@@ -472,16 +453,17 @@ export default class CodeMode extends Component<Signature> {
   @use private importedModule = resource(() => {
     if (isReady(this.openFile.current)) {
       let f: Ready = this.openFile.current;
-      if (f.url.endsWith('.json') && isCardDocumentString(f.content)) {
-        let ref = identifyCard(this.card?.constructor);
-        if (ref !== undefined) {
-          return importResource(this, () => moduleFrom(ref as CodeRef));
-        } else {
-          return;
-        }
-      } else if (hasExecutableExtension(f.url)) {
+      if (hasExecutableExtension(f.url)) {
         return importResource(this, () => f.url);
       }
+    }
+    return undefined;
+  });
+
+  @use private cardType = resource(() => {
+    if (this.card !== undefined) {
+      let cardDefinition = this.card.constructor as typeof BaseDef;
+      return getCardType(this, () => cardDefinition);
     }
     return undefined;
   });
@@ -564,9 +546,6 @@ export default class CodeMode extends Component<Signature> {
     if (this.selectedElement) {
       return this.selectedElement;
     } else {
-      if (this.elementsInFile === null) {
-        return;
-      }
       return this.elementsInFile.length > 0
         ? this.elementsInFile[0]
         : undefined;
@@ -866,6 +845,7 @@ export default class CodeMode extends Component<Signature> {
                   {{#if this.isReady}}
                     <DetailPanel
                       @cardInstance={{this.card}}
+                      @cardInstanceType={{this.cardType}}
                       @readyFile={{this.readyFile}}
                       @realmInfo={{this.realmInfo}}
                       @selectedElement={{this.selectedElementInFile}}
