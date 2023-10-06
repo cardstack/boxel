@@ -6,13 +6,15 @@ import Component from '@glimmer/component';
 
 import { gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
-import { internalKeyFor, getPlural } from '@cardstack/runtime-common';
-import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
+import { getPlural } from '@cardstack/runtime-common';
 
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
-import { type Type } from '@cardstack/host/resources/card-type';
+import {
+  type Type,
+  type CodeRefType,
+} from '@cardstack/host/resources/card-type';
 
 import type { Ready } from '@cardstack/host/resources/file';
 import type CardService from '@cardstack/host/services/card-service';
@@ -253,11 +255,8 @@ export default class CardSchemaEditor extends Component<Signature> {
     return calculateTotalOwnFields(this.args.card, this.args.cardType);
   }
 
-  fieldCardDisplayName(card: Type | CodeRef): string {
-    if (isCodeRef(card)) {
-      return internalKeyFor(card, undefined);
-    }
-    return card.displayName;
+  fieldCardDisplayName(fieldCard: Type | CodeRefType): string {
+    return fieldCard.displayName;
   }
 
   fieldModuleURL(field: Type['fields'][0]) {

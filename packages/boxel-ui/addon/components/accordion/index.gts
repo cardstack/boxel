@@ -16,11 +16,13 @@ const Accordion: TemplateOnlyComponent<Signature> = <template>
   </div>
   <style>
     .accordion {
-      --accordion-default-item-height: var(--item-open-min-height, 7rem);
       --accordion-background-color: var(--boxel-light);
       --accordion-border: var(--boxel-border);
       --accordion-border-radius: var(--boxel-border-radius-xl);
 
+      display: flex;
+      flex-direction: column;
+      height: 100%;
       background-color: var(--accordion-background-color);
       border: var(--accordion-border);
       border-radius: var(--accordion-border-radius);
