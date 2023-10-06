@@ -193,10 +193,8 @@ module('Acceptance | basic tests', function (hooks) {
     assert
       .dom('[data-test-file="person.gts"]')
       .exists('person.gts file entry is rendered');
-
-    await click('[data-test-file="index.json"]');
     await click('[data-test-directory="Person/"]');
-    await waitFor('[data-test-file="Person/1.json"]', { timeout: 2000 });
+    await waitFor('[data-test-file="Person/1.json"]');
     assert
       .dom('[data-test-file="Person/1.json"]')
       .exists('Person/1.json file entry is rendered');
@@ -264,13 +262,8 @@ module('Acceptance | basic tests', function (hooks) {
 
     await visit('/code');
     await waitFor('[data-test-file]');
-    await click('[data-test-file="index.json"]');
-    await click('[data-test-file="person-entry.json"]');
-    await waitUntil(
-      () => find('[data-test-title]')?.innerHTML.includes('Person'),
-    );
     await click('[data-test-directory="Person/"]');
-    await waitFor('[data-test-file="Person/1.json"]', { timeout: 2000 });
+    await waitFor('[data-test-file="Person/1.json"]');
     await click('[data-test-file="Person/1.json"]');
 
     await this.expectEvents(
