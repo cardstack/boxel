@@ -57,6 +57,7 @@ class VendorDetails extends FieldDef {
 }
 
 class Contact extends FieldDef {
+  static displayName = 'Contact';
   @field fullName = contains(StringCard);
   @field preferredName = contains(StringCard);
   @field jobTitle = contains(StringCard);
@@ -86,6 +87,7 @@ class Contact extends FieldDef {
 }
 
 class ContactMethod extends FieldDef {
+  static displayName = 'ContactMethod';
   @field platform = contains(StringCard); // Dropdown (Telegram, Discord, Facebook, LinkedIn, Twitter)
   @field username = contains(StringCard);
   static embedded = class Embedded extends Component<typeof this> {
@@ -96,6 +98,7 @@ class ContactMethod extends FieldDef {
 }
 
 export class Vendor extends CardDef {
+  static displayName = 'Vendor';
   @field vendor = contains(VendorDetails); // required
   @field contact = contains(Contact); // required
   @field contactMethod = containsMany(ContactMethod);
