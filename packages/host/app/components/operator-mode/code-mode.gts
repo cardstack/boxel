@@ -677,7 +677,7 @@ export default class CodeMode extends Component<Signature> {
   @action
   private delete() {
     if (this.card) {
-      return this.args.delete(this.card, async () => {
+      this.args.delete(this.card, () => {
         let recentFile = this.recentFilesService.recentFiles[0];
 
         if (recentFile) {
