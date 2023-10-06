@@ -398,12 +398,13 @@ export default class OperatorModeStateService extends Service {
   // Deserialize a stringified JSON version of OperatorModeState into a Glimmer tracked object
   // so that templates can react to changes in stacks and their items
   async deserialize(rawState: SerializedState): Promise<OperatorModeState> {
-    // FIXME why are intermediate variables needed?
-    let rawOpenDirsEntries = Object.entries(rawState.openDirs ?? {});
-    let entriesWithTrackedArrays = rawOpenDirsEntries.map(
-      ([realmURL, dirs]) => [realmURL, new TrackedArray(dirs)],
+    let openDirs = new TrackedMap<string, string[]>(
+      Object.entries(rawState.openDirs ?? {}).map(([realmURL, dirs]) => [
+        realmURL,
+        new TrackedArray(dirs),
+      ]),
     );
-    let openDirs = new TrackedMap<string, string[]>(entriesWithTrackedArrays);
+
     let newState: OperatorModeState = new TrackedObject({
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submode.Interact,
