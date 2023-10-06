@@ -268,9 +268,6 @@ module('Acceptance | basic tests', function (hooks) {
     await click('[data-test-file="person-entry.json"]');
     await waitUntil(
       () => find('[data-test-title]')?.innerHTML.includes('Person'),
-      {
-        timeout: 1000,
-      },
     );
     await click('[data-test-directory="Person/"]');
     await waitFor('[data-test-file="Person/1.json"]', { timeout: 2000 });
