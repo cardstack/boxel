@@ -19,6 +19,7 @@ import { TokenField, CurrencyField } from './asset';
 import GlimmerComponent from '@glimmer/component';
 
 class Details extends FieldDef {
+  static displayName = 'Details';
   @field invoiceNo = contains(StringCard);
   @field invoiceDate = contains(DateCard);
   @field dueDate = contains(DateCard);
@@ -120,6 +121,7 @@ class DetailsFieldsContainer extends GlimmerComponent<GenericContainerSignature>
 }
 
 class LineItem extends FieldDef {
+  static displayName = 'LineItem';
   @field name = contains(StringCard);
   @field quantity = contains(NumberCard);
   @field amount = contains(NumberCard);
@@ -198,6 +200,7 @@ class LineItem extends FieldDef {
 }
 
 class Note extends FieldDef {
+  static displayName = 'Note';
   @field text = contains(TextAreaCard);
   @field authorName = contains(StringCard); /* computed */
   @field authorImage = contains(StringCard); /* computed */

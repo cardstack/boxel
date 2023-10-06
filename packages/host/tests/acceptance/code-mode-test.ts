@@ -76,6 +76,60 @@ const personCardSource = `
   }
 `;
 
+const employeeCardSource = `
+  import {
+    contains,
+    field,
+    Component,
+  } from 'https://cardstack.com/base/card-api';
+  import StringCard from 'https://cardstack.com/base/string';
+  import { Person } from './person';
+
+  export class Employee extends Person {
+    static displayName = 'Employee';
+    @field department = contains(StringCard);
+
+    static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <@fields.firstName /> <@fields.lastName />
+
+        Department: <@fields.department />
+      </template>
+    };
+  }
+`;
+
+const friendCardSource = `
+  import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+  import StringCard from "https://cardstack.com/base/string";
+
+  export class Friend extends CardDef {
+    static displayName = 'Friend';
+    @field name = contains(StringCard);
+    @field friend = linksTo(() => Friend);
+    @field title = contains(StringCard, {
+      computeVia: function (this: Person) {
+        return name;
+      },
+    });
+    static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <div data-test-person>
+          <p>First name: <@fields.firstName /></p>
+          <p>Last name: <@fields.lastName /></p>
+          <p>Title: <@fields.title /></p>
+        </div>
+        <style>
+          div {
+            color: green;
+            content: '';
+          }
+        </style>
+      </template>
+    };
+  }
+`;
+
 module('Acceptance | code mode tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
@@ -98,6 +152,8 @@ module('Acceptance | code mode tests', function (hooks) {
       'index.gts': indexCardSource,
       'pet-person.gts': personCardSource,
       'person.gts': personCardSource,
+      'friend.gts': friendCardSource,
+      'employee.gts': employeeCardSource,
       'person-entry.json': {
         data: {
           type: 'card',
@@ -129,6 +185,7 @@ module('Acceptance | code mode tests', function (hooks) {
           },
         },
       },
+      'not-json.json': 'I am not JSON.',
       'Person/1.json': {
         data: {
           type: 'card',
@@ -492,14 +549,9 @@ module('Acceptance | code mode tests', function (hooks) {
   });
 
   test('recent file links are shown', async function (assert) {
-    let otherRealmCardUrl = 'http://example.com/other-realm-card.json';
     window.localStorage.setItem(
       'recent-files',
-      JSON.stringify([
-        `${testRealmURL}index.json`,
-        otherRealmCardUrl,
-        'a-non-url-to-ignore',
-      ]),
+      JSON.stringify([[testRealmURL, 'index.json'], 'a-non-url-to-ignore']),
     );
 
     let codeModeStateParam = stringify({
@@ -529,6 +581,11 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom('[data-test-recent-file]')
       .exists({ count: 1 })
       .containsText('index.json');
+
+    assert
+      .dom('[data-test-recent-file] [data-test-realm-icon-url]')
+      .hasAttribute('src', 'https://i.postimg.cc/L8yXRvws/icon.png')
+      .hasAttribute('alt', '');
 
     await click('[data-test-file="index.json"]');
     assert
@@ -570,12 +627,62 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.deepEqual(
       JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
       [
-        `${testRealmURL}index.json`,
-        `${testRealmURL}person.gts`,
-        `${testRealmURL}Person/1.json`,
-        otherRealmCardUrl,
+        [testRealmURL, 'index.json'],
+        [testRealmURL, 'person.gts'],
+        [testRealmURL, 'Person/1.json'],
       ],
     );
+  });
+
+  test('recent files are truncated at 100', async function (assert) {
+    let recentFilesEntries = [];
+
+    for (let i = 0; i < 100; i++) {
+      recentFilesEntries.push([testRealmURL, `file-${i}.txt`]);
+    }
+
+    window.localStorage.setItem(
+      'recent-files',
+      JSON.stringify(recentFilesEntries),
+    );
+
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}Person/1.json`,
+      fileView: 'browser',
+      openDirs: [],
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-file]');
+    await waitFor('[data-test-directory]');
+
+    await percySnapshot(assert);
+
+    assert.dom('[data-test-recent-file]').exists({ count: 99 });
+
+    await click('[data-test-file="index.json"]');
+    assert.dom('[data-test-recent-file]').exists({ count: 100 });
+
+    assert
+      .dom('[data-test-recent-file]:nth-child(1)')
+      .containsText('Person/1.json');
+
+    assert
+      .dom('[data-test-recent-file]:nth-child(99)')
+      .containsText('file-97.txt');
   });
 
   test('card inheritance panel will show json instance definition and module definition', async function (assert) {
@@ -608,6 +715,9 @@ module('Acceptance | code mode tests', function (hooks) {
         '[data-test-card-module-definition] [data-test-definition-file-extension]',
       )
       .includesText('.gts');
+    await waitFor(
+      '[data-test-card-module-definition] [data-test-definition-realm-name]',
+    );
     assert
       .dom(
         '[data-test-card-module-definition] [data-test-definition-realm-name]',
@@ -622,6 +732,9 @@ module('Acceptance | code mode tests', function (hooks) {
         '[data-test-card-instance-definition] [data-test-definition-file-extension]',
       )
       .includesText('.JSON');
+    await waitFor(
+      '[data-test-card-instance-definition] [data-test-definition-realm-name]',
+    );
     assert
       .dom(
         '[data-test-card-instance-definition] [data-test-definition-realm-name]',
@@ -632,8 +745,9 @@ module('Acceptance | code mode tests', function (hooks) {
         '[data-test-card-instance-definition] [data-test-definition-info-text]',
       )
       .includesText('Last saved just now');
-
-    assert.dom('[data-test-card-instance-definition]').hasClass('active');
+    assert
+      .dom('[data-test-card-instance-definition] [data-test-definition-header]')
+      .hasClass('active');
   });
 
   test('card inheritance panel will show module definition', async function (assert) {
@@ -658,7 +772,9 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}person.gts`);
 
-    assert.dom('[data-test-card-module-definition]').hasClass('active');
+    assert
+      .dom('[data-test-card-module-definition] [data-test-definition-header]')
+      .hasClass('active');
     assert
       .dom(
         '[data-test-card-module-definition] [data-test-definition-file-extension]',
@@ -669,12 +785,77 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}person.gts`);
     assert.dom('[data-test-card-module-definition]').includesText('Card');
+    await waitFor(
+      '[data-test-card-module-definition] [data-test-definition-realm-name]',
+    );
     assert
       .dom(
         '[data-test-card-module-definition] [data-test-definition-realm-name]',
       )
       .includesText('Test Workspace B');
     assert.dom('[data-test-card-instance-definition]').doesNotExist();
+  });
+
+  test('non-card JSON is shown as just a file with empty schema editor', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}z01.json`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-file-definition]');
+
+    assert.dom('[data-test-definition-file-extension]').hasText('.json');
+    await waitFor('[data-test-definition-realm-name]');
+    assert
+      .dom('[data-test-definition-realm-name]')
+      .hasText('in Test Workspace B');
+
+    assert.dom('[data-test-schema-editor-incompatible]').exists();
+  });
+
+  test('invalid JSON is shown as just a file with empty schema editor', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      codePath: `${testRealmURL}not-json.json`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-file-definition]');
+
+    assert.dom('[data-test-definition-file-extension]').hasText('.json');
+    await waitFor('[data-test-definition-realm-name]');
+    assert
+      .dom('[data-test-definition-realm-name]')
+      .hasText('in Test Workspace B');
+
+    assert.dom('[data-test-schema-editor-incompatible]').exists();
   });
 
   test('empty state displays default realm info', async function (assert) {
@@ -822,7 +1003,11 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-card-schema]');
 
     assert.dom('[data-test-card-schema]').exists({ count: 3 });
+    assert.dom('[data-test-total-fields]').containsText('5 Fields');
 
+    assert
+      .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
+      .containsText('+ 2 Fields');
     assert
       .dom(
         `[data-test-card-schema="Person"] [data-test-field-name="firstName"] [data-test-card-display-name="String"]`,
@@ -834,6 +1019,9 @@ module('Acceptance | code mode tests', function (hooks) {
       )
       .exists();
 
+    assert
+      .dom('[data-test-card-schema="Card"] [data-test-total-fields]')
+      .containsText('+ 3 Fields');
     assert
       .dom(
         `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-card-display-name="String"]`,
@@ -850,6 +1038,9 @@ module('Acceptance | code mode tests', function (hooks) {
       )
       .exists();
 
+    assert
+      .dom('[data-test-card-schema="Base"] [data-test-total-fields]')
+      .containsText('No Fields');
     assert.dom(`[data-test-card-schema="Base"]`).exists();
 
     // Check that realm icons in the schema editor are correct (card and its fields)
@@ -895,6 +1086,76 @@ module('Acceptance | code mode tests', function (hooks) {
       .hasAttribute('data-test-realm-icon-url', realm2IconUrl);
   });
 
+  test('shows displayName of CardResource when field contains itself', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}friend.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-card-schema]');
+
+    assert
+      .dom('[data-test-card-schema-navigational-button]')
+      .containsText('Friend');
+    assert
+      .dom(
+        `[data-test-card-schema="Friend"] [data-test-field-name="name"] [data-test-card-display-name="String"]`,
+      )
+      .exists();
+  });
+
+  test('card type and fields are clickable and navigate to the correct file', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}employee.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor(
+      '[data-test-card-schema="Employee"] [data-test-card-schema-navigational-button]',
+    );
+
+    // Click on card definition button
+    await click(
+      '[data-test-card-schema="Employee"] [data-test-card-schema-navigational-button]',
+    );
+
+    await waitFor('[data-test-current-module-name]');
+
+    assert.dom('[data-test-current-module-name]').hasText('employee.gts');
+
+    // Go back so that we can test clicking on a field definition button
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor(
+      '[data-test-card-schema="Employee"] [data-test-field-name="department"] [data-test-card-display-name="String"]',
+    );
+
+    await click(
+      '[data-test-card-schema="Employee"] [data-test-field-name="department"] [data-test-card-display-name="String"]',
+    );
+
+    await waitFor('[data-test-current-module-name]');
+    assert.dom('[data-test-current-module-name]').hasText('string.ts');
+  });
+
   test('code mode handles binary files', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [],
@@ -923,9 +1184,7 @@ module('Acceptance | code mode tests', function (hooks) {
     assert
       .dom('[data-test-binary-info] [data-test-last-modified]')
       .containsText('Last modified');
-    assert
-      .dom('[data-test-binary-file-schema-editor]')
-      .hasText('Schema Editor cannot be used with this file type');
+    assert.dom('[data-test-schema-editor-incompatible]').exists();
 
     await percySnapshot(assert);
   });
