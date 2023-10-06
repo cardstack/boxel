@@ -1,18 +1,18 @@
-import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { BoxelInput } from '@cardstack/boxel-ui';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { and, bool, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { on } from '@ember/modifier';
 
-import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import URLBarResource, {
   urlBarResource,
 } from '@cardstack/host/resources/url-bar';
 
-import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type CardService from '../../services/card-service';
+import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 
 interface Signature {
   Element: HTMLElement;
