@@ -11,7 +11,7 @@ import {
 } from './card-api';
 import StringField from './string';
 import BooleanField from './boolean';
-import CardRefCard from './code-ref';
+import CodeRef from './code-ref';
 import { baseCardRef, loadCard, Loader } from '@cardstack/runtime-common';
 import { isEqual } from 'lodash';
 import { FieldContainer } from '@cardstack/boxel-ui';
@@ -21,7 +21,7 @@ export class CatalogEntry extends CardDef {
   static displayName = 'Catalog Entry';
   @field title = contains(StringField);
   @field description = contains(StringField);
-  @field ref = contains(CardRefCard);
+  @field ref = contains(CodeRef);
   @field isPrimitive = contains(BooleanField, {
     computeVia: async function (this: CatalogEntry) {
       let loader = Loader.getLoaderFor(Object.getPrototypeOf(this).constructor);
