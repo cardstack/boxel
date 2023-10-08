@@ -68,6 +68,14 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
       ClassDeclaration: {
         enter(path: NodePath<t.ClassDeclaration>, state: State) {
           if (!path.node.superClass) {
+            let localName = path.node.id ? path.node.id.name : undefined;
+            if (t.isExportDeclaration(path.parentPath)) {
+              state.opts.elements.push({
+                localName,
+                exportedAs: getExportedAs(path, localName),
+                path,
+              });
+            }
             return;
           }
 
@@ -87,10 +95,19 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
               };
               state.opts.possibleCardsOrFields.push(possibleCardOrField);
               state.opts.elements.push(possibleCardOrField);
+            } else {
+              if (t.isExportDeclaration(path.parentPath)) {
+                let localName = path.node.id ? path.node.id.name : undefined;
+                state.opts.elements.push({
+                  localName,
+                  exportedAs: getExportedAs(path, localName),
+                  path,
+                });
+              }
             }
           } else {
-            let localName = path.node.id ? path.node.id.name : undefined;
             if (t.isExportDeclaration(path.parentPath)) {
+              let localName = path.node.id ? path.node.id.name : undefined;
               state.opts.elements.push({
                 localName,
                 exportedAs: getExportedAs(path, localName),
