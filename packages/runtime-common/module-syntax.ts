@@ -16,7 +16,7 @@ import startCase from 'lodash/startCase';
 import camelCase from 'lodash/camelCase';
 import upperFirst from 'lodash/upperFirst';
 import { parseTemplates } from '@cardstack/ember-template-imports/lib/parse-templates';
-import { baseRealm } from './index';
+import { baseRealm, maybeRelativeURL } from './index';
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from '@babel/plugin-syntax-decorators';
 //@ts-ignore unsure where these types live
@@ -70,8 +70,10 @@ export class ModuleSyntax {
       | { type: 'exportedName'; name: string }
       | { type: 'localName'; name: string },
     fieldName: string,
-    fieldRef: { name: string; module: string },
+    fieldRef: { name: string; module: string }, // module could be a relative path
     fieldType: FieldType,
+    incomingRelativeTo: URL,
+    outgoingRelativeTo: URL,
   ) {
     let card = this.getCard(cardName);
     if (card.possibleFields.has(fieldName)) {
@@ -87,6 +89,8 @@ export class ModuleSyntax {
       fieldType,
       fieldName,
       cardName.name,
+      incomingRelativeTo,
+      outgoingRelativeTo,
     );
     let src = this.code();
     this.analyze(src); // reanalyze to update node start/end positions based on AST mutation
@@ -203,6 +207,8 @@ function makeNewField(
   fieldType: FieldType,
   fieldName: string,
   cardName: string,
+  incomingRelativeTo: URL,
+  outgoingRelativeTo: URL,
 ): string {
   let programPath = getProgramPath(target);
   //@ts-ignore ImportUtil doesn't seem to believe our Babel.types is a
@@ -229,9 +235,15 @@ function makeNewField(
     return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(() => ${cardName});`;
   }
 
+  let relativeFieldModuleRef = maybeRelativeURL(
+    new URL(fieldRef.module, incomingRelativeTo),
+    outgoingRelativeTo,
+    undefined,
+  );
+
   let fieldCardIdentifier = importUtil.import(
     target as NodePath<any>,
-    fieldRef.module,
+    relativeFieldModuleRef,
     fieldRef.name,
     suggestedCardName(fieldRef),
   );
