@@ -7,9 +7,13 @@ import Component from '@glimmer/component';
 import { gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import { getPlural } from '@cardstack/runtime-common';
+import { tracked } from '@glimmer/tracking';
+
+import { internalKeyFor } from '@cardstack/runtime-common';
 
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
+import AddFieldModal from '@cardstack/host/components/operator-mode/add-field-modal';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import {
   type Type,
@@ -20,11 +24,11 @@ import type { Ready } from '@cardstack/host/resources/file';
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import {
   isOwnField,
   calculateTotalOwnFields,
 } from '@cardstack/host/utils/schema-editor';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
@@ -34,6 +38,7 @@ interface Signature {
     file: Ready;
     cardType: Type;
     moduleSyntax: ModuleSyntax;
+    allowAddingFields: boolean;
   };
 }
 
@@ -144,6 +149,13 @@ export default class CardSchemaEditor extends Component<Signature> {
       .total-fields-label {
         font: var(--boxel-font-sm);
       }
+
+      .add-field-button {
+        cursor: pointer;
+        color: var(--boxel-highlight);
+        font-size: var(--boxel-font-sm);
+        font-weight: 600;
+      }
     </style>
 
     <div
@@ -235,12 +247,32 @@ export default class CardSchemaEditor extends Component<Signature> {
           {{/if}}
         {{/each}}
       </div>
+
+      {{#if @allowAddingFields}}
+        <div class='add-field-button' {{on 'click' this.toggleAddFieldModal}}>
+          + Add a field
+        </div>
+
+        {{#if this.addFieldModalShown}}
+          <AddFieldModal
+            @file={{@file}}
+            @card={{@card}}
+            @moduleSyntax={{@moduleSyntax}}
+            @onClose={{this.toggleAddFieldModal}}
+          />
+        {{/if}}
+      {{/if}}
     </div>
   </template>
 
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
+
+  @tracked addFieldModalShown = false;
+  @action toggleAddFieldModal() {
+    this.addFieldModalShown = !this.addFieldModalShown;
+  }
 
   @action openCardDefinition(moduleURL: string) {
     this.operatorModeStateService.updateCodePath(new URL(moduleURL));

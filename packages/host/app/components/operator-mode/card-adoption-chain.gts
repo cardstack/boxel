@@ -2,7 +2,7 @@ import Component from '@glimmer/component';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
 
-import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
+import { type ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import CardSchemaEditor from '@cardstack/host/components/operator-mode/card-schema-editor';
 import { CardInheritance } from '@cardstack/host/components/operator-mode/schema-editor-column';
@@ -14,6 +14,7 @@ interface Signature {
   Args: {
     file: Ready;
     cardInheritanceChain: CardInheritance[];
+    moduleSyntax: ModuleSyntax;
   };
 }
 
@@ -32,14 +33,9 @@ export default class CardAdoptionChain extends Component<Signature> {
           @card={{data.card}}
           @cardType={{data.cardType}}
           @file={{@file}}
-          @moduleSyntax={{this.moduleSyntax}}
+          @moduleSyntax={{@moduleSyntax}}
         />
       {{/each}}
     </div>
   </template>
-
-  @cached
-  get moduleSyntax() {
-    return new ModuleSyntax(this.args.file.content);
-  }
 }

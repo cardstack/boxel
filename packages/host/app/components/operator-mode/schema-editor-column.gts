@@ -18,6 +18,9 @@ import LoaderService from '@cardstack/host/services/loader-service';
 import { calculateTotalOwnFields } from '@cardstack/host/utils/schema-editor';
 
 import { BaseDef } from 'https://cardstack.com/base/card-api';
+import CardSchemaEditor from '@cardstack/host/components/operator-mode/card-schema-editor';
+import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
+import { cached } from '@glimmer/tracking';
 
 interface Signature {
   Element: HTMLElement;
@@ -100,6 +103,11 @@ export default class SchemaEditorColumn extends Component<Signature> {
     );
   }
 
+  @cached
+  get moduleSyntax() {
+    return new ModuleSyntax(this.args.file.content);
+  }
+
   <template>
     <Accordion class='accordion' as |A|>
       <A.Item
@@ -118,16 +126,27 @@ export default class SchemaEditorColumn extends Component<Signature> {
           </div>
         </:title>
         <:content>
-          <CardAdoptionChain
-            class='accordion-content'
-            @file={{@file}}
-            @cardInheritanceChain={{this.cardInheritanceChain}}
-          />
+          <div class='card-adoption-chain'>
+            {{#each this.cardInheritanceChain as |item index|}}
+              <CardSchemaEditor
+                @card={{item.card}}
+                @cardType={{item.cardType}}
+                @file={{@file}}
+                @moduleSyntax={{this.moduleSyntax}}
+                @allowAddingFields={{eq index 0}}
+              />
+            {{/each}}
+          </div>
         </:content>
       </A.Item>
     </Accordion>
 
     <style>
+      .card-adoption-chain {
+        background-color: var(--boxel-200);
+        height: 100%;
+        padding: var(--boxel-sp-sm);
+      }
       .accordion-item:last-child {
         border-bottom: var(--boxel-border);
       }
