@@ -859,7 +859,6 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-in-this-file-selector]');
     //default is the 1st index
     let elementName = 'ExportedClass';
-    assert.dom('[data-test-boxel-selector-item]').exists({ count: 8 });
     assert
       .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
       .hasText(elementName);
@@ -882,6 +881,7 @@ module('Acceptance | code mode tests', function (hooks) {
         .dom(`[data-test-boxel-selector-item]:nth-of-type(${index + 1})`)
         .hasText(elementName);
     });
+    assert.dom('[data-test-boxel-selector-item]').exists({ count: 8 });
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     // clicking on a card
