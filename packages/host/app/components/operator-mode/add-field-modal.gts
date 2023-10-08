@@ -6,7 +6,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { BoxelButton, BoxelInput, FieldContainer } from '@cardstack/boxel-ui';
 import { restartableTask, task, timeout, all } from 'ember-concurrency';
-
+import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import {
   chooseCard,
   baseCardRef,
@@ -133,19 +133,15 @@ export default class AddFieldModal extends Component<Signature> {
         margin-bottom: auto;
         margin-left: auto;
       }
-
-      /* TODO fix this */
-      :global(.add-field-modal .dialog-box) {
-        height: 60% !important;
-        margin-top: 40% !important;
-      }
     </style>
 
     <ModalContainer
       @title='Add a Field'
       @onClose={{@onClose}}
       @size='small'
+      @centered={{true}}
       class='add-field-modal'
+      style={{cssVar boxel-modal-offset-top='40vh'}}
     >
       <:content>
         <FieldContainer @label='Field Type'>

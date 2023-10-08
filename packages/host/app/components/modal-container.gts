@@ -11,6 +11,7 @@ interface Signature {
     onClose: () => void;
     zIndex?: number;
     size?: 'small' | 'medium' | 'large';
+    centered?: boolean;
   };
   Blocks: {
     content: [];
@@ -29,6 +30,7 @@ export default class ModalContainer extends Component<Signature> {
       @size={{this.size}}
       @isOpen={{true}}
       @onClose={{@onClose}}
+      @centered={{@centered}}
       style={{this.styleString}}
       ...attributes
     >
