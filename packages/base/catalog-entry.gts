@@ -44,6 +44,27 @@ export class CatalogEntry extends CardDef {
       return primitive in card || isEqual(baseCardRef, this.ref);
     },
   });
+  @field isField = contains(BooleanField, {
+    computeVia: async function (this: CatalogEntry) {
+      let loader = Loader.getLoaderFor(Object.getPrototypeOf(this).constructor);
+
+      if (!loader) {
+        throw new Error(
+          'Could not find a loader for this instance’s class’s module',
+        );
+      }
+
+      let card: typeof BaseDef | undefined = await loadCard(this.ref, {
+        loader,
+        relativeTo: this[relativeTo],
+      });
+      if (!card) {
+        throw new Error(`Could not load card '${this.ref.name}'`);
+      }
+
+      return 'isFieldDef' in card.constructor; // todo test
+    },
+  });
   @field moduleHref = contains(StringField, {
     computeVia: function (this: CatalogEntry) {
       return new URL(this.ref.module, this[relativeTo]).href;
