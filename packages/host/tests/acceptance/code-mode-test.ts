@@ -109,13 +109,20 @@ const inThisFileSource = `
   import StringCard from 'https://cardstack.com/base/string';
 
   export const exportedVar = 'exported var';
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const localVar = 'local var';
 
   class LocalClass {}
   export class ExportedClass {}
 
+  export class ExportedClassInheritLocalClass extends LocalClass {}
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function localFunction() {}
   export function exportedFunction() {}
+
+  export { LocalClass as AClassWithExportName };
 
   class LocalCard extends CardDef {
     static displayName = 'local card';
@@ -866,7 +873,9 @@ module('Acceptance | code mode tests', function (hooks) {
       .hasText(elementName);
     // elements must be ordered by the way they appear in the source code
     const expectedElementNames = [
+      'LocalClass',
       'ExportedClass',
+      'ExportedClassInheritLocalClass',
       'exportedFunction',
       'LocalCard', //TODO: CS-6009 will probably change this
       'exported card',
