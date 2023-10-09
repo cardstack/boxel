@@ -11,7 +11,7 @@ import { CardContainer, LoadingIndicator, Header } from '@cardstack/boxel-ui';
 
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
-import { or } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { or, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import { type RealmInfo } from '@cardstack/runtime-common';
 
@@ -164,8 +164,12 @@ export default class DetailPanel extends Component<Signature> {
     });
   }
 
+  get numberOfElementsGreaterThanZero() {
+    return this.args.elements.length > 0;
+  }
+
   get numberOfElementsInFileString() {
-    let numberOfElements = this.args.elements?.length || 0;
+    let numberOfElements = this.args.elements.length || 0;
     return `${numberOfElements} ${getPlural('item', numberOfElements)}`;
   }
 
@@ -176,7 +180,7 @@ export default class DetailPanel extends Component<Signature> {
           <LoadingIndicator />
         </div>
       {{else}}
-        {{#if this.isModule}}
+        {{#if (and this.isModule this.numberOfElementsGreaterThanZero)}}
           <div class='in-this-file-panel'>
             <div class='in-this-file-panel-banner'>
               <header class='panel-header' aria-label='In This File Header'>
