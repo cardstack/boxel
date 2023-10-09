@@ -1,3 +1,4 @@
+import Accordion from './components/accordion';
 import AddButton from './components/add-button';
 import BoxelInput from './components/input';
 import SearchInput, {
@@ -8,6 +9,7 @@ import BoxelHeader from './components/header';
 import BoxelMessage from './components/message';
 import Button from './components/button';
 import CardContainer from './components/card-container';
+import DropdownButton from './components/dropdown-button';
 import FieldContainer from './components/field-container';
 import GridContainer from './components/grid-container';
 import Header from './components/header';
@@ -25,6 +27,7 @@ import ResizablePanelGroup, {
 } from './components/resizable-panel-group';
 
 export {
+  Accordion,
   AddButton,
   BoxelHeader,
   BoxelInput,
@@ -34,6 +37,7 @@ export {
   BoxelInputValidationState,
   Button,
   CardContainer,
+  DropdownButton,
   FieldContainer,
   GridContainer,
   Header,

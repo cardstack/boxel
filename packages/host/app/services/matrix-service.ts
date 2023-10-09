@@ -352,6 +352,38 @@ export default class MatrixService extends Service {
     return messages;
   }
 
+  // the matrix SDK is using an old version of this API that is not compatible
+  // with our current version matrix, so we use the API directly
+  async requestRegisterEmailToken(
+    email: string,
+    clientSecret: string,
+    sendAttempt: number,
+  ) {
+    let response = await fetch(
+      `${matrixURL}/_matrix/client/v3/register/email/requestToken`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          client_secret: clientSecret,
+          send_attempt: sendAttempt,
+        }),
+      },
+    );
+    if (response.ok) {
+      return (await response.json()) as MatrixSDK.IRequestTokenResponse;
+    } else {
+      let data = (await response.json()) as { errcode: string; error: string };
+      let error = new Error(data.error) as any;
+      error.data = data;
+      error.status = response.status;
+      throw error;
+    }
+  }
+
   async getPowerLevels(roomId: string): Promise<{ [userId: string]: number }> {
     let response = await fetch(
       `${matrixURL}/_matrix/client/v3/rooms/${roomId}/state/m.room.power_levels/`,

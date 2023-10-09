@@ -99,6 +99,37 @@ const employeeCardSource = `
   }
 `;
 
+const friendCardSource = `
+  import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+  import StringCard from "https://cardstack.com/base/string";
+
+  export class Friend extends CardDef {
+    static displayName = 'Friend';
+    @field name = contains(StringCard);
+    @field friend = linksTo(() => Friend);
+    @field title = contains(StringCard, {
+      computeVia: function (this: Person) {
+        return name;
+      },
+    });
+    static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <div data-test-person>
+          <p>First name: <@fields.firstName /></p>
+          <p>Last name: <@fields.lastName /></p>
+          <p>Title: <@fields.title /></p>
+        </div>
+        <style>
+          div {
+            color: green;
+            content: '';
+          }
+        </style>
+      </template>
+    };
+  }
+`;
+
 module('Acceptance | code mode tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
@@ -121,6 +152,7 @@ module('Acceptance | code mode tests', function (hooks) {
       'index.gts': indexCardSource,
       'pet-person.gts': personCardSource,
       'person.gts': personCardSource,
+      'friend.gts': friendCardSource,
       'employee.gts': employeeCardSource,
       'person-entry.json': {
         data: {
@@ -1052,6 +1084,31 @@ module('Acceptance | code mode tests', function (hooks) {
         `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-realm-icon-url]`,
       )
       .hasAttribute('data-test-realm-icon-url', realm2IconUrl);
+  });
+
+  test('shows displayName of CardResource when field contains itself', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}friend.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-card-schema]');
+
+    assert
+      .dom('[data-test-card-schema-navigational-button]')
+      .containsText('Friend');
+    assert
+      .dom(
+        `[data-test-card-schema="Friend"] [data-test-field-name="name"] [data-test-card-display-name="String"]`,
+      )
+      .exists();
   });
 
   test('card type and fields are clickable and navigate to the correct file', async function (assert) {

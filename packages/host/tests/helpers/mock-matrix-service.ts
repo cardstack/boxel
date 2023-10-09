@@ -14,8 +14,19 @@ let cardApi: typeof import('https://cardstack.com/base/card-api');
 
 class MockClient {
   public getProfileInfo(userId: string) {
-    return new Promise((resolveOuter) => {
-      resolveOuter({ displayname: userId });
+    return Promise.resolve({
+      displayname: userId,
+    });
+  }
+  public getThreePids() {
+    return Promise.resolve({
+      threepids: [
+        {
+          // there is also 'added_at' and 'validated_at' if we want those too
+          address: 'testuser@example.com',
+          medium: 'email',
+        },
+      ],
     });
   }
 }
