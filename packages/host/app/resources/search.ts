@@ -74,7 +74,7 @@ export class Search extends Resource<Args> {
 
           this.search.perform(query);
           if (doWhileRefreshing) {
-            doWhileRefreshing(this.ready);
+            this.doWhileRefreshing.perform(doWhileRefreshing);
           }
         }),
       }));
@@ -94,6 +94,14 @@ export class Search extends Resource<Args> {
   get instancesByRealm() {
     return this.isLoading ? this.staleInstancesByRealm : this._instancesByRealm;
   }
+
+  private doWhileRefreshing = restartableTask(
+    async (
+      doWhileRefreshing: (ready: Promise<void> | undefined) => Promise<void>,
+    ) => {
+      await doWhileRefreshing(this.ready);
+    },
+  );
 
   private search = restartableTask(async (query: Query) => {
     this._instances = flatMap(
