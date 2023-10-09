@@ -323,3 +323,21 @@ function getName(node: t.Identifier | t.StringLiteral) {
     return node.value;
   }
 }
+
+export function isPossibleCardOrFieldClass(
+  element: any,
+): element is PossibleCardOrFieldClass {
+  return (
+    element &&
+    element.super &&
+    typeof element.localName === 'string' &&
+    element.possibleFields instanceof Map &&
+    element.path
+  );
+}
+
+export function isInternalReference(
+  classReference: any,
+): classReference is InternalReference {
+  return classReference && classReference.type === 'internal';
+}

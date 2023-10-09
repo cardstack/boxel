@@ -7,11 +7,15 @@ import {
 import StringCard from 'https://cardstack.com/base/string';
 
 export const exportedVar = 'exported var';
+
+// tslint:disable-next-line:no-unused-variable
 const localVar = 'local var';
 
+// tslint:disable-next-line:no-unused-variable
 class LocalClass {}
 export class ExportedClass {}
 
+// tslint:disable-next-line:no-unused-variable
 function localFunction() {}
 export function exportedFunction() {}
 

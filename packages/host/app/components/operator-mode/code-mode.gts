@@ -42,6 +42,8 @@ import {
   type PossibleCardOrFieldClass,
   type BaseDeclaration,
   type ElementDeclaration,
+  isInternalReference,
+  isPossibleCardOrFieldClass,
 } from '@cardstack/runtime-common/module-syntax';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
@@ -91,7 +93,6 @@ import CardPreviewPanel from './card-preview-panel';
 import CardURLBar from './card-url-bar';
 import DetailPanel from './detail-panel';
 import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
-import { type InternalReference } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 interface Signature {
   Args: {
@@ -141,9 +142,6 @@ export type Element =
   | (CardOrField & Partial<PossibleCardOrFieldClass>)
   | BaseDeclaration;
 
-export type NoCardType = {
-  cardOrField: typeof BaseDef;
-} & PossibleCardOrFieldClass;
 export interface CardOrField {
   cardType: CardType;
   cardOrField: typeof BaseDef;
@@ -156,22 +154,6 @@ export function isCardOrFieldElement(
     (element as CardOrField).cardType !== undefined &&
     (element as CardOrField).cardOrField !== undefined
   );
-}
-
-export function isPossibleCardOrFieldClass(
-  element: any,
-): element is PossibleCardOrFieldClass {
-  return (
-    element &&
-    element.super &&
-    typeof element.localName === 'string' &&
-    element.possibleFields instanceof Map &&
-    element.path
-  );
-}
-
-export function isInternalReference(obj: any): obj is InternalReference {
-  return obj && obj.type === 'internal';
 }
 
 export default class CodeMode extends Component<Signature> {
@@ -419,15 +401,15 @@ export default class CodeMode extends Component<Signature> {
               typeof BaseDef
             > = new Map();
             // This loop
-            // - gets cards from already loaded cards
-            // - collects parents from cards that have been exported / loaded. This info will allow us to derive the cards and card types from locally defined cards
+            // - gets cards or fields which are already loaded in the module
+            // - collects parents from cards or fields that have been exported / loaded
             let elementsNoCardType = moduleSyntax.elements.map(
               (value: ElementDeclaration) => {
                 let cardOrField = cardsOrFields.find(
                   (c) => c.name === value.localName,
                 );
                 if (cardOrField !== undefined) {
-                  // these cards are not imported so we simply get them as ancestors from already loaded cards (ie the cards that are exported)
+                  // here we check if an element is a card or field and if it is we get the ancestor that exist in the same module
                   if (isPossibleCardOrFieldClass(value)) {
                     if (isInternalReference(value.super)) {
                       const indexOfParent = value.super.classIndex;
@@ -451,12 +433,14 @@ export default class CodeMode extends Component<Signature> {
                 }
                 return value;
               },
-            ) as NoCardType[];
+            ) as ({
+              cardOrField: typeof BaseDef;
+            } & PossibleCardOrFieldClass)[];
 
             // This loop
             // - loads card type
-            // - loads locally defined cards that were not imported
-            elements = elementsNoCardType.map((value: NoCardType) => {
+            // - includes card or field that was local to the module using parents collected in previous loop
+            elements = elementsNoCardType.map((value) => {
               if (value.cardOrField) {
                 return {
                   ...value,
