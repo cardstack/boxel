@@ -35,6 +35,7 @@ import {
   isCardDocumentString,
   isSingleCardDocument,
   hasExecutableExtension,
+  getAncestor,
 } from '@cardstack/runtime-common';
 import {
   ModuleSyntax,
@@ -90,6 +91,7 @@ import CardPreviewPanel from './card-preview-panel';
 import CardURLBar from './card-url-bar';
 import DetailPanel from './detail-panel';
 import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
+import { type InternalReference } from '@cardstack/runtime-common/schema-analysis-plugin';
 
 interface Signature {
   Args: {
@@ -139,6 +141,9 @@ export type Element =
   | (CardOrField & Partial<PossibleCardOrFieldClass>)
   | BaseDeclaration;
 
+export type NoCardType = {
+  cardOrField: typeof BaseDef;
+} & PossibleCardOrFieldClass;
 export interface CardOrField {
   cardType: CardType;
   cardOrField: typeof BaseDef;
@@ -151,6 +156,22 @@ export function isCardOrFieldElement(
     (element as CardOrField).cardType !== undefined &&
     (element as CardOrField).cardOrField !== undefined
   );
+}
+
+export function isPossibleCardOrFieldClass(
+  element: any,
+): element is PossibleCardOrFieldClass {
+  return (
+    element &&
+    element.super &&
+    typeof element.localName === 'string' &&
+    element.possibleFields instanceof Map &&
+    element.path
+  );
+}
+
+export function isInternalReference(obj: any): obj is InternalReference {
+  return obj && obj.type === 'internal';
 }
 
 export default class CodeMode extends Component<Signature> {
@@ -392,24 +413,72 @@ export default class CodeMode extends Component<Signature> {
             let elements: Element[] = [];
             await this.importedModule.loaded;
             let moduleSyntax = new ModuleSyntax(this.openFile.current.content);
-            elements = moduleSyntax.elements.map(
+            let possibleCardOrFields = moduleSyntax.possibleCardsOrFields;
+            const locallyLoadedCards: Map<
+              PossibleCardOrFieldClass,
+              typeof BaseDef
+            > = new Map();
+            // This loop
+            // - gets cards from already loaded cards
+            // - collects parents from cards that have been exported / loaded. This info will allow us to derive the cards and card types from locally defined cards
+            let elementsNoCardType = moduleSyntax.elements.map(
               (value: ElementDeclaration) => {
                 let cardOrField = cardsOrFields.find(
                   (c) => c.name === value.localName,
                 );
                 if (cardOrField !== undefined) {
+                  // these cards are not imported so we simply get them as ancestors from already loaded cards (ie the cards that are exported)
+                  if (isPossibleCardOrFieldClass(value)) {
+                    if (isInternalReference(value.super)) {
+                      const indexOfParent = value.super.classIndex;
+                      if (indexOfParent !== undefined) {
+                        const parentCardOrFieldClass =
+                          possibleCardOrFields[indexOfParent];
+                        const parentCardOrField = getAncestor(cardOrField);
+                        if (parentCardOrField) {
+                          locallyLoadedCards.set(
+                            parentCardOrFieldClass,
+                            parentCardOrField,
+                          );
+                        }
+                      }
+                    }
+                  }
                   return {
                     ...value,
-                    cardType: getCardType(
-                      this,
-                      () => cardOrField as typeof BaseDef,
-                    ),
                     cardOrField,
+                  };
+                }
+                return value;
+              },
+            ) as NoCardType[];
+
+            // This loop
+            // - loads card type
+            // - loads locally defined cards that were not imported
+            elements = elementsNoCardType.map((value: NoCardType) => {
+              if (value.cardOrField) {
+                return {
+                  ...value,
+                  cardType: getCardType(
+                    this,
+                    () => value.cardOrField as typeof BaseDef,
+                  ),
+                } as CardOrField & Partial<PossibleCardOrFieldClass>;
+              } else {
+                if (locallyLoadedCards.has(value)) {
+                  let cardOrField = locallyLoadedCards.get(
+                    value,
+                  ) as typeof BaseDef;
+                  return {
+                    ...value,
+                    cardOrField,
+                    cardType: getCardType(this, () => cardOrField),
                   } as CardOrField & Partial<PossibleCardOrFieldClass>;
                 }
-                return value as BaseDeclaration;
-              },
-            );
+              }
+              return value as BaseDeclaration;
+            });
             state.value = elements;
           }
         } catch (error: any) {
