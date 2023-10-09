@@ -10,13 +10,13 @@ export const exportedVar = 'exported var';
 
 // @ts-ignore
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const _localVar = 'local var';
+const localVar = 'local var';
 
-class _LocalClass {}
+class LocalClass {}
 
 export class ExportedClass {}
 
-export class ExportedClassInheritLocalClass extends _LocalClass {}
+export class ExportedClassInheritLocalClass extends LocalClass {}
 
 // @ts-ignore
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -24,7 +24,7 @@ function _localFunction() {}
 
 export function exportedFunction() {}
 
-export { _LocalClass as AClassWithExportName };
+export { LocalClass as AClassWithExportName };
 
 class LocalCard extends CardDef {
   static displayName = 'local card';
