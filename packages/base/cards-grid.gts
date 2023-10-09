@@ -196,7 +196,7 @@ class Isolated extends Component<typeof CardsGrid> {
       async (ready: Promise<void> | undefined) => {
         if (this.args.context?.actions) {
           this.args.context.actions.doWithStableScroll(
-            this.args.model,
+            this.args.model as CardDef,
             async () => {
               await ready;
             },
