@@ -152,14 +152,9 @@ export default class DetailPanel extends Component<Signature> {
     }
     return this.args.elements.map((el) => {
       const isSelected = this.args.selectedElement === el;
-      let localName =
-        (isCardOrFieldElement(el)
-          ? el.cardOrField.displayName
-          : el.localName) ?? '??';
-      // let exportedName = el.exportedAs ?? '??';
       return selectorItemFunc(
         [
-          localName,
+          resolveElementName(el),
           () => {
             this.args.selectElement(el);
           },
@@ -395,3 +390,11 @@ export default class DetailPanel extends Component<Signature> {
     </style>
   </template>
 }
+
+const resolveElementName = (el: Element) => {
+  let localName: string | undefined = el.localName;
+  if (isCardOrFieldElement(el)) {
+    localName = el.cardOrField.displayName;
+  }
+  return localName;
+};

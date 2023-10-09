@@ -141,6 +141,8 @@ const inThisFileSource = `
   export class ExportedFieldInheritLocalField extends LocalField {
     static displayName = 'exported field extends local field';
   }
+
+  export default class DefaultClass {}
 `;
 
 const friendCardSource = `
@@ -872,6 +874,7 @@ module('Acceptance | code mode tests', function (hooks) {
       'LocalField', //TODO: CS-6009 will probably change this
       'exported field',
       'exported field extends local field',
+      'DefaultClass',
     ];
     expectedElementNames.forEach(async (elementName, index) => {
       await waitFor(
@@ -881,7 +884,7 @@ module('Acceptance | code mode tests', function (hooks) {
         .dom(`[data-test-boxel-selector-item]:nth-of-type(${index + 1})`)
         .hasText(elementName);
     });
-    assert.dom('[data-test-boxel-selector-item]').exists({ count: 8 });
+    assert.dom('[data-test-boxel-selector-item]').exists({ count: 9 });
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     // clicking on a card
