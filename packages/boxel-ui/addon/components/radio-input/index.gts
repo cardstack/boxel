@@ -16,6 +16,8 @@ export interface Signature {
     name: string;
     orientation?: string;
     spacing?: string;
+    hideBorder?: boolean;
+    hideRadio?: boolean;
   };
   Blocks: {
     default: [
@@ -100,6 +102,8 @@ export default class RadioInput extends Component<Signature> {
                 name=@name
                 disabled=@disabled
                 checked=(if @checkedId (eq @checkedId item.id))
+                hideRadio=@hideRadio
+                hideBorder=@hideBorder
               )
               data=item
               index=i

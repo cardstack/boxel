@@ -1,6 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import { on } from '@ember/modifier';
+import { not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 export interface Signature {
   Element: HTMLLabelElement;
@@ -8,6 +9,8 @@ export interface Signature {
     checked?: boolean;
     disabled?: boolean;
     name: string;
+    hideBorder?: boolean;
+    hideRadio?: boolean;
     onChange: () => void;
   };
   Blocks: {
@@ -120,6 +123,8 @@ const RadioInputItem: TemplateOnlyComponent<Signature> = <template>
       'boxel-radio-option--has-radio'
       boxel-radio-option--checked=@checked
       boxel-radio-option--disabled=@disabled
+      boxel-radio-option--hidden-border=@hideBorder
+      boxel-radio-option--has-radio=(not @hideRadio)
     }}
     data-test-boxel-radio-option
     data-test-boxel-radio-option-checked={{@checked}}
@@ -129,6 +134,7 @@ const RadioInputItem: TemplateOnlyComponent<Signature> = <template>
     <input
       class={{cn
         'boxel-radio-option__input'
+        boxel-radio-option__input--hidden-radio=@hideRadio
         boxel-radio-option__input--checked=@checked
       }}
       type='radio'
