@@ -298,50 +298,16 @@ function getRelevantCards(history: IRoomEvent[]) {
   return cards;
 }
 
-function getUserMessage(event: IRoomEvent, last = false) {
-  const content = event.content;
-  if (content.msgtype === 'org.boxel.card') {
-    let card = content.instance.data;
-    let request = content.body;
-    return `
-    User request: ${request}
-    Full data: ${JSON.stringify(card)}
-    You may only patch the following fields: ${JSON.stringify(card.attributes)}
-    `;
-  } else {
-    if (last && content.msgtype === 'org.boxel.message') {
-      let request = content.body;
-      let body = `
-      User request: ${request}
-      Cards:\n`;
-      for (let card of content.context.openCards) {
-        body += `Full data: ${JSON.stringify(card.data)}
-      You may only patch the following fields for this card: ${JSON.stringify(
-        card.data.attributes,
-      )}
-      `;
-      }
-      return body;
-    } else {
-      return content.body;
-    }
-  }
-}
-
 export function getModifyPrompt(history: IRoomEvent[], aiBotUsername: string) {
-  let historical_messages: OpenAIPromptMessage[] = [];
-  let lastUserEventIndex = history.length;
-  let event = undefined;
-  for (let i = history.length - 1; i >= 0; i--) {
-    event = history[i];
-    if (event.sender !== aiBotUsername) {
-      lastUserEventIndex = i;
-      break;
-    }
+  // Need to make sure the passed in username is a full id
+  if (
+    aiBotUsername.indexOf(':') === -1 ||
+    aiBotUsername.startsWith('@') === false
+  ) {
+    throw new Error("Username must be a full id, e.g. '@ai-bot:localhost'");
   }
-
-  for (let i = 0; i < history.length; i++) {
-    event = history[i];
+  let historical_messages: OpenAIPromptMessage[] = [];
+  for (let event of history) {
     let body = event.content.body;
     if (body) {
       if (event.sender === aiBotUsername) {
@@ -352,7 +318,7 @@ export function getModifyPrompt(history: IRoomEvent[], aiBotUsername: string) {
       } else {
         historical_messages.push({
           role: 'user',
-          content: getUserMessage(event, i === lastUserEventIndex),
+          content: body,
         });
       }
     }
@@ -376,7 +342,6 @@ export function getModifyPrompt(history: IRoomEvent[], aiBotUsername: string) {
       content: systemMessage,
     },
   ];
-  console.log(systemMessage);
 
   messages = messages.concat(historical_messages);
   return messages;

@@ -25,7 +25,7 @@ module('getModifyPrompt', () => {
     assert.equal(result[1].content, 'Hey');
   });
 
-  test('should generate a more strucutred response if the user uploads a ', () => {
+  test('should generate a more strucutred response if the user uploads a card', () => {
     const history: IRoomEvent[] = [
       {
         type: 'm.room.message',
@@ -63,13 +63,13 @@ module('getModifyPrompt', () => {
     assert.equal(result[1].role, 'user');
     assert.true(result[1].content?.includes('Hey'));
     assert.true(
-      result[1].content?.includes(
+      result[0].content?.includes(
         JSON.stringify(history[0].content.instance.data),
       ),
     );
   });
 
-  test('should generate a prompt from the user', () => {
+  test('should raise an error if we do not pass in a full id', () => {
     const history: IRoomEvent[] = [
       {
         type: 'm.room.message',
