@@ -48,6 +48,7 @@ export interface Type {
   fields: {
     name: string;
     card: Type | CodeRefType;
+    isComputed: boolean;
     type: FieldType;
   }[];
   codeRef: CodeRef;
@@ -114,7 +115,9 @@ export class CardType extends Resource<Args> {
     let api = await this.loader.import<typeof CardAPI>(
       `${baseRealm.url}card-api`,
     );
-    let { id: _remove, ...fields } = api.getFields(card);
+    let { id: _remove, ...fields } = api.getFields(card, {
+      includeComputeds: true,
+    });
     let superCard = getAncestor(card);
     let superType: Type | CodeRefType | undefined;
     if (superCard && card !== superCard) {
@@ -135,6 +138,7 @@ export class CardType extends Resource<Args> {
         async ([name, field]: [string, Field<typeof BaseDef, any>]) => ({
           name,
           type: field.fieldType,
+          isComputed: field.computeVia != undefined,
           card: await this.toType(field.card, [card, ...stack]),
         }),
       ),

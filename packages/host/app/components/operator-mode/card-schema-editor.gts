@@ -38,6 +38,8 @@ interface Signature {
     file: Ready;
     cardType: Type;
     moduleSyntax: ModuleSyntax;
+    childFields: string[];
+    parentFields: string[];
   };
 }
 
@@ -133,11 +135,34 @@ export default class CardSchemaEditor extends Component<Signature> {
       .right {
         display: flex;
         align-items: center;
+        gap: var(--boxel-sp-xxs);
+      }
+
+      .computed-icon {
+        display: inline-flex;
+        font: 700 var(--boxel-font);
+        letter-spacing: var(--boxel-lsp-xs);
+        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
+        background-color: var(--boxel-200);
+        border-radius: var(--boxel-border-radius-sm);
+      }
+
+      .linked-icon {
+        --icon-color: var(--boxel-highlight);
+        display: flex;
+        align-items: center;
+        height: 20px;
+
+        margin-right: var(--boxel-sp-xxxs);
       }
 
       .field-name {
         font: 500 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
+      }
+
+      .overridden-field {
+        text-decoration: line-through;
       }
 
       .field-type {
@@ -222,20 +247,36 @@ export default class CardSchemaEditor extends Component<Signature> {
           {{#if (this.isOwnField field.name)}}
             <div class='card-field' data-test-field-name={{field.name}}>
               <div class='left'>
-                <div class='field-name'>
+                <div
+                  class={{if
+                    (this.isOverridden field)
+                    'field-name overridden-field'
+                    'field-name'
+                  }}
+                >
                   {{field.name}}
                 </div>
                 <div class='field-type'>
-                  {{field.type}}
+                  {{this.fieldTypes field}}
                 </div>
               </div>
               <div class='right'>
                 {{#let (this.fieldModuleURL field) as |moduleUrl|}}
+                  {{#if field.isComputed}}
+                    <span class='computed-icon'>
+                      =
+                    </span>
+                  {{/if}}
                   <button
                     class='pill'
                     data-test-card-schema-field-navigational-button
                     {{on 'click' (fn this.openCardDefinition moduleUrl)}}
                   >
+                    {{#if (this.isLinkedField field)}}
+                      <span class='linked-icon'>
+                        {{svgJar 'icon-link' width='16' height='16'}}
+                      </span>
+                    {{/if}}
                     <div class='realm-icon'>
                       <RealmInfoProvider @fileURL={{moduleUrl}}>
                         <:ready as |realmInfo|>
@@ -341,5 +382,45 @@ export default class CardSchemaEditor extends Component<Signature> {
 
   fieldModuleURL(field: Type['fields'][0]) {
     return (field.card as Type).module;
+  }
+
+  @action
+  fieldTypes(field: Type['fields'][0]) {
+    let types = [];
+    if (field.isComputed) {
+      types.push('Computed');
+    }
+
+    if (this.isLinkedField(field)) {
+      types.push('Linked');
+    }
+
+    if (field.type === 'containsMany') {
+      types.push('Collection');
+    }
+
+    if (this.isOverridden(field)) {
+      types.push('Overridden');
+    }
+
+    if (this.isOverriding(field)) {
+      types.push('Override');
+    }
+
+    return types.sort().join(', ');
+  }
+
+  @action
+  isOverriding(field: Type['fields'][0]) {
+    return this.args.parentFields.includes(field.name);
+  }
+
+  @action
+  isOverridden(field: Type['fields'][0]) {
+    return this.args.childFields.includes(field.name);
+  }
+
+  isLinkedField(field: Type['fields'][0]) {
+    return field.type === 'linksTo' || field.type === 'linksToMany';
   }
 }
