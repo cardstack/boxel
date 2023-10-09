@@ -4,7 +4,12 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { BoxelButton, BoxelInput, FieldContainer } from '@cardstack/boxel-ui';
+import {
+  BoxelButton,
+  BoxelInput,
+  FieldContainer,
+  RadioInput,
+} from '@cardstack/boxel-ui';
 import { restartableTask, task, timeout, all } from 'ember-concurrency';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import {
@@ -29,6 +34,8 @@ import { Ready } from '@cardstack/host/resources/file';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import { and, bool, eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 
 interface Signature {
   Args: {
@@ -41,6 +48,8 @@ interface Signature {
 
 export default class AddFieldModal extends Component<Signature> {
   @tracked chosenCatalogEntry: CatalogEntry | undefined = undefined;
+  @tracked chosenCatalogEntryCard: typeof BaseDef | undefined = undefined;
+  @tracked fieldModuleUrl: URL | undefined = undefined;
   @tracked newFieldName: string | undefined = undefined;
   @tracked cardinality: 'one' | 'many' = 'one';
   @service declare loaderService: LoaderService;
@@ -56,9 +65,19 @@ export default class AddFieldModal extends Component<Signature> {
   @action onCardinalityChange(value: string) {
     this.cardinality = value as 'one' | 'many';
   }
-
-  isCardDef(card: any): card is typeof CardDef {
-    return !('isFieldDef' in card) && isBaseDef(card);
+  items = [
+    {
+      id: 'one',
+      text: 'Limit to one',
+    },
+    {
+      id: 'many',
+      text: 'Allow multiple',
+    },
+  ];
+  @tracked checkedId = this.items[0].id;
+  @action onChange(id: 'one' | 'many'): void {
+    this.checkedId = id;
   }
 
   @cached
@@ -83,15 +102,29 @@ export default class AddFieldModal extends Component<Signature> {
 
     if (chosenCatalogEntry) {
       this.chosenCatalogEntry = chosenCatalogEntry;
+
+      let fieldModuleUrl = new URL(
+        chosenCatalogEntry.ref.module,
+        chosenCatalogEntry.id,
+      );
+      this.fieldModuleUrl = fieldModuleUrl;
+      let ref = {
+        module: fieldModuleUrl.href,
+        name: chosenCatalogEntry.ref.name,
+      };
+
+      this.chosenCatalogEntryCard = await loadCard(ref, {
+        loader: this.loaderService.loader,
+      });
     }
   });
 
-  @action onClose() {
-    debugger;
-  }
-
   // todo remove asyunc - use task
   @action async saveField() {
+    if (!this.chosenCatalogEntry) {
+      throw new Error('bug: no chosen catalog entry');
+    }
+
     let isField = this.chosenCatalogEntry.isField;
 
     let relationshipType: FieldType;
@@ -115,6 +148,27 @@ export default class AddFieldModal extends Component<Signature> {
     await this.write.perform(this.args.moduleSyntax.code());
   }
 
+  get nameErrorMessage() {
+    if (this.newFieldName) {
+      if (/\s/g.test(this.newFieldName)) {
+        return 'Field names cannot contain spaces';
+      }
+
+      if (this.newFieldName[0] === this.newFieldName[0].toUpperCase()) {
+        return 'Field names must start with a lowercase letter';
+      }
+    }
+  }
+
+  get submitDisabled() {
+    return (
+      !this.newFieldName ||
+      !this.chosenCatalogEntry ||
+      !this.chosenCatalogEntryCard ||
+      this.nameErrorMessage
+    );
+  }
+
   private write = restartableTask(async (src: string) => {
     // note that this write will cause the component to rerender, so
     // any code after this write will not be executed since the component will
@@ -133,25 +187,101 @@ export default class AddFieldModal extends Component<Signature> {
         margin-bottom: auto;
         margin-left: auto;
       }
+
+      .pill {
+        border: 1px solid var(--boxel-400);
+        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
+        border-radius: 8px;
+        background-color: white;
+        font-weight: 600;
+        display: inline-flex;
+      }
+
+      .pill > div {
+        display: flex;
+      }
+
+      .pill > div > span {
+        margin: auto;
+      }
+
+      .realm-icon {
+        margin-right: var(--boxel-sp-xxxs);
+      }
+
+      .realm-icon > img {
+        height: 20px;
+        width: 20px;
+      }
+
+      .card-chooser-area {
+        display: flex;
+        min-height: 3em;
+      }
+
+      .card-chooser-area button {
+        background-color: transparent;
+        border: none;
+        color: var(--boxel-highlight);
+        font-size: var(--boxel-font-sm);
+        font-weight: 600;
+        height: 1em;
+      }
+
+      .card-chooser-area button.pull-right {
+        margin-left: auto;
+      }
+
+      :global(.add-field-modal .boxel-field.horizontal) {
+        margin-bottom: var(--boxel-sp-lg);
+      }
     </style>
 
     <ModalContainer
       @title='Add a Field'
       @onClose={{@onClose}}
-      @size='small'
+      @size='medium'
       @centered={{true}}
       class='add-field-modal'
       style={{cssVar boxel-modal-offset-top='40vh'}}
     >
       <:content>
         <FieldContainer @label='Field Type'>
-          {{#if this.chosenCatalogEntry}}
-            {{this.chosenCatalogEntry.title}}
-          {{/if}}
+          <div class='card-chooser-area'>
+            {{#if this.chosenCatalogEntryCard}}
+              <div class='pill'>
+                <div class='realm-icon'>
+                  {{#if this.fieldModuleUrl.href}}
+                    <RealmInfoProvider @fileURL={{this.fieldModuleUrl.href}}>
+                      <:ready as |realmInfo|>
+                        <img
+                          src={{realmInfo.iconURL}}
+                          alt='Realm icon'
+                          data-test-realm-icon-url={{realmInfo.iconURL}}
+                        />
+                      </:ready>
+                    </RealmInfoProvider>
+                  {{/if}}
+                </div>
+                <div>
+                  <span>
+                    {{this.chosenCatalogEntryCard.displayName}}
+                  </span>
+                </div>
+              </div>
+            {{/if}}
 
-          <button {{on 'click' this.chooseCard}}>
-            Choose card
-          </button>
+            <button
+              {{on 'click' this.chooseCard}}
+              class='{{if this.chosenCatalogEntryCard "pull-right"}}'
+            >
+              {{#if this.chosenCatalogEntryCard}}
+                Change
+              {{else}}
+                Select a field
+              {{/if}}
+            </button>
+          </div>
 
         </FieldContainer>
 
@@ -159,31 +289,28 @@ export default class AddFieldModal extends Component<Signature> {
           <BoxelInput
             @value={{this.newFieldName}}
             @onInput={{this.onNewFieldNameInput}}
+            @errorMessage={{this.nameErrorMessage}}
+            @invalid={{bool this.nameErrorMessage}}
           />
         </FieldContainer>
 
-        <FieldContainer @label='Field cardinality'>
-          <div>
-            <label for='one'>Limit to one</label>
-            <input
-              type='radio'
-              id='one'
-              name='cardinality'
-              value='one'
-              {{on 'change' this.onCardinalityChange}}
-            />
-
-            <label for='many'>Allow multiple</label>
-            <input
-              type='radio'
-              id='many'
-              name='cardinality'
-              value='many'
-              {{on 'change' this.onCardinalityChange}}
-            />
-          </div>
+        <FieldContainer @label=''>
+          <RadioInput
+            @groupDescription='Field cardinality'
+            @items={{this.items}}
+            @name='cardinality-radio'
+            @checkedId={{this.checkedId}}
+            style={{cssVar
+              boxel-radio-input-option-padding='1em'
+              boxel-radio-input-option-gap='1em'
+            }}
+            as |item|
+          >
+            <item.component @onChange={{fn this.onChange item.data.id}}>
+              {{item.data.text}}
+            </item.component>
+          </RadioInput>
         </FieldContainer>
-
       </:content>
 
       <:footer>
@@ -197,7 +324,11 @@ export default class AddFieldModal extends Component<Signature> {
               Cancel
             </BoxelButton>
 
-            <BoxelButton @kind='primary' {{on 'click' this.saveField}}>
+            <BoxelButton
+              @kind='primary'
+              {{on 'click' this.saveField}}
+              @disabled={{this.submitDisabled}}
+            >
               Add
             </BoxelButton>
           </div>
