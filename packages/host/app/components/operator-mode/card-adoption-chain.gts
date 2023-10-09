@@ -99,7 +99,7 @@ export default class CardAdoptionChain extends Component<Signature> {
   }
 
   @action
-  childFields(cardIndex: number): string[][] {
+  childFields(cardIndex: number): string[] {
     const children = this.args.cardInheritanceChain.filter(
       (_data, index) => index < cardIndex,
     );
@@ -116,7 +116,7 @@ export default class CardAdoptionChain extends Component<Signature> {
   }
 
   @action
-  parentFields(cardIndex: number): string[][] {
+  parentFields(cardIndex: number): string[] {
     const parents = this.args.cardInheritanceChain.filter(
       (_data, index) => index > cardIndex,
     );
