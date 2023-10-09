@@ -400,5 +400,5 @@ const resolveElementName = (el: Element) => {
   if (isCardOrFieldElement(el)) {
     localName = el.cardOrField.displayName;
   }
-  return localName ?? '??';
+  return localName ?? '[No Name Found]';
 };

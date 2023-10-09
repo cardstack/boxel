@@ -549,7 +549,7 @@ export default class CodeMode extends Component<Signature> {
     }
   }
 
-  private get selectedCardOrFieldInFile() {
+  private get selectedCardOrField() {
     if (this.selectedElementInFile) {
       if (isCardOrFieldElement(this.selectedElementInFile)) {
         return this.selectedElementInFile;
@@ -559,7 +559,7 @@ export default class CodeMode extends Component<Signature> {
   }
 
   @action
-  private selectElementInFile(el: Element) {
+  private selectElement(el: Element) {
     this.selectedElement = el;
   }
 
@@ -847,7 +847,7 @@ export default class CodeMode extends Component<Signature> {
                       @realmInfo={{this.realmInfo}}
                       @selectedElement={{this.selectedElementInFile}}
                       @elements={{this.elementsInFile}}
-                      @selectElement={{this.selectElementInFile}}
+                      @selectElement={{this.selectElement}}
                       @delete={{this.delete}}
                       data-test-card-inheritance-panel
                     />
@@ -930,11 +930,11 @@ export default class CodeMode extends Component<Signature> {
                     @realmIconURL={{this.realmIconURL}}
                     data-test-card-resource-loaded
                   />
-                {{else if this.selectedCardOrFieldInFile}}
+                {{else if this.selectedCardOrField}}
                   <SchemaEditorColumn
                     @file={{this.readyFile}}
-                    @card={{this.selectedCardOrFieldInFile.cardOrField}}
-                    @cardTypeResource={{this.selectedCardOrFieldInFile.cardType}}
+                    @card={{this.selectedCardOrField.cardOrField}}
+                    @cardTypeResource={{this.selectedCardOrField.cardType}}
                   />
                 {{else if this.schemaEditorIncompatible}}
                   <div
