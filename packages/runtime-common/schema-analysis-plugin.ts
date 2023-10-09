@@ -57,6 +57,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
         enter(path: NodePath<t.FunctionDeclaration>, state: State) {
           let localName = path.node.id ? path.node.id.name : undefined;
           if (t.isExportDeclaration(path.parentPath)) {
+            // exported functions
             state.opts.elements.push({
               localName,
               exportedAs: getExportedAs(path, localName),
@@ -68,8 +69,20 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
       ClassDeclaration: {
         enter(path: NodePath<t.ClassDeclaration>, state: State) {
           if (!path.node.superClass) {
+            // any class which doesn't have a super class
             let localName = path.node.id ? path.node.id.name : undefined;
             if (t.isExportDeclaration(path.parentPath)) {
+              state.opts.elements.push({
+                localName,
+                exportedAs: getExportedAs(path, localName),
+                path,
+              });
+            }
+            let maybeExportSpecifierLocal = getExportSpecifierLocal(
+              path,
+              localName,
+            );
+            if (maybeExportSpecifierLocal !== undefined) {
               state.opts.elements.push({
                 localName,
                 exportedAs: getExportedAs(path, localName),
@@ -83,6 +96,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
           if (sc.isReferencedIdentifier()) {
             let classRef = makeClassReference(path.scope, sc.node.name, state);
             if (classRef) {
+              // card or field class which extends a card or field class
               state.insideCard = true;
               let localName = path.node.id ? path.node.id.name : undefined;
 
@@ -96,6 +110,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
               state.opts.possibleCardsOrFields.push(possibleCardOrField);
               state.opts.elements.push(possibleCardOrField);
             } else {
+              // non-card or non-field class which extends some class
               if (t.isExportDeclaration(path.parentPath)) {
                 let localName = path.node.id ? path.node.id.name : undefined;
                 state.opts.elements.push({
@@ -104,15 +119,6 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
                   path,
                 });
               }
-            }
-          } else {
-            if (t.isExportDeclaration(path.parentPath)) {
-              let localName = path.node.id ? path.node.id.name : undefined;
-              state.opts.elements.push({
-                localName,
-                exportedAs: getExportedAs(path, localName),
-                path,
-              });
             }
           }
         },
@@ -231,6 +237,20 @@ class CompilerError extends Error {
   }
 }
 
+function getExportSpecifierLocal(
+  path: NodePath<t.ClassDeclaration> | NodePath<t.FunctionDeclaration>,
+  localName: string | undefined,
+): NodePath<t.Identifier> | undefined {
+  // the class's identifier is referenced in a node whose parent is an ExportSpecifier
+  let binding = localName ? path.scope.getBinding(localName) : undefined;
+  if (binding) {
+    return binding.referencePaths.find(
+      (b) => b.parentPath?.isExportSpecifier(),
+    ) as NodePath<t.Identifier> | undefined;
+  }
+  return undefined;
+}
+
 function getExportedAs(
   path: NodePath<t.ClassDeclaration> | NodePath<t.FunctionDeclaration>,
   localName: string | undefined,
@@ -243,18 +263,12 @@ function getExportedAs(
     // the class declaration is part of a default export
     return 'default';
   } else {
-    // the class's identifier is referenced in a node whose parent is an ExportSpecifier
-    let binding = localName ? path.scope.getBinding(localName) : undefined;
-    if (binding) {
-      let maybeExportSpecifierLocal = binding.referencePaths.find(
-        (b) => b.parentPath?.isExportSpecifier(),
-      ) as NodePath<t.Identifier> | undefined;
-      if (maybeExportSpecifierLocal) {
-        return getName(
-          (maybeExportSpecifierLocal.parentPath as NodePath<t.ExportSpecifier>)
-            .node.exported,
-        );
-      }
+    let maybeExportSpecifierLocal = getExportSpecifierLocal(path, localName);
+    if (maybeExportSpecifierLocal !== undefined) {
+      return getName(
+        (maybeExportSpecifierLocal.parentPath as NodePath<t.ExportSpecifier>)
+          .node.exported,
+      );
     }
   }
   return;
