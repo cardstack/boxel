@@ -396,7 +396,7 @@ export default class CodeMode extends Component<Signature> {
             await this.importedModule.loaded;
             let moduleSyntax = new ModuleSyntax(this.openFile.current.content);
             let possibleCardOrFields = moduleSyntax.possibleCardsOrFields;
-            const locallyLoadedCards: Map<
+            const localParentsOfExportedCardsOrFields: Map<
               PossibleCardOrFieldClass,
               typeof BaseDef
             > = new Map();
@@ -418,7 +418,7 @@ export default class CodeMode extends Component<Signature> {
                           possibleCardOrFields[indexOfParent];
                         const parentCardOrField = getAncestor(cardOrField);
                         if (parentCardOrField) {
-                          locallyLoadedCards.set(
+                          localParentsOfExportedCardsOrFields.set(
                             parentCardOrFieldClass,
                             parentCardOrField,
                           );
