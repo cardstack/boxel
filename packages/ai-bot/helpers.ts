@@ -276,9 +276,29 @@ The data in the option block will be used to update things for the user behind a
 Return only JSON inside each option block, in a compatible format with the one you receive. The contents of any field will be automatically replaced with your changes, and must follow a subset of the same format - you may miss out fields but cannot add new ones. Do not add new nested components, it will fail validation.\
 Modify only the parts you are asked to. Only return modified fields.\
 You must not return any fields that you do not see in the input data.\
+Never prefix json responses with `json`\
 If the user hasn\'t shared any cards with you or what they\'re asking for doesn\'t make sense for the card type, you can ask them to "send their open cards" to you.';
 
-function getUserMessage(event: IRoomEvent) {
+function getRelevantCards(history: IRoomEvent[]) {
+  let cards = [];
+  for (let event of history) {
+    let content = event.content;
+    // If a user has uploaded a card, add it to the context
+    // It's the best we have
+    if (content.msgtype === 'org.boxel.card') {
+      cards.push(content.instance);
+    } else if (content.msgtype === 'org.boxel.message') {
+      // If a user has switched to sharing their current context
+      // and they have open cards then use those
+      if (content.context.openCards.length > 0) {
+        cards = content.context.openCards;
+      }
+    }
+  }
+  return cards;
+}
+
+function getUserMessage(event: IRoomEvent, last = false) {
   const content = event.content;
   if (content.msgtype === 'org.boxel.card') {
     let card = content.instance.data;
@@ -289,22 +309,42 @@ function getUserMessage(event: IRoomEvent) {
     You may only patch the following fields: ${JSON.stringify(card.attributes)}
     `;
   } else {
-    return content.body;
+    if (last && content.msgtype === 'org.boxel.message') {
+      let request = content.body;
+      let body = `
+      User request: ${request}
+      Cards:\n`;
+      for (let card of content.context.openCards) {
+        body += `Full data: ${JSON.stringify(card.data)}
+      You may only patch the following fields for this card: ${JSON.stringify(
+        card.data.attributes,
+      )}
+      `;
+      }
+      return body;
+    } else {
+      return content.body;
+    }
   }
 }
 
-export function getModifyPrompt(history: IRoomEvent[], aiBotUserId: string) {
-  // The user ID must be a full ID, not just a username
-  if (!aiBotUserId.startsWith('@') && !aiBotUserId.includes(':')) {
-    throw new Error(
-      'The user ID must be a full ID, not just a username. The user ID should be in the format @username:domain',
-    );
-  }
+export function getModifyPrompt(history: IRoomEvent[], aiBotUsername: string) {
   let historical_messages: OpenAIPromptMessage[] = [];
-  for (let event of history) {
+  let lastUserEventIndex = history.length;
+  let event = undefined;
+  for (let i = history.length - 1; i >= 0; i--) {
+    event = history[i];
+    if (event.sender !== aiBotUsername) {
+      lastUserEventIndex = i;
+      break;
+    }
+  }
+
+  for (let i = 0; i < history.length; i++) {
+    event = history[i];
     let body = event.content.body;
     if (body) {
-      if (event.sender === aiBotUserId) {
+      if (event.sender === aiBotUsername) {
         historical_messages.push({
           role: 'assistant',
           content: body,
@@ -312,17 +352,31 @@ export function getModifyPrompt(history: IRoomEvent[], aiBotUserId: string) {
       } else {
         historical_messages.push({
           role: 'user',
-          content: getUserMessage(event),
+          content: getUserMessage(event, i === lastUserEventIndex),
         });
       }
     }
   }
+
+  let systemMessage =
+    MODIFY_SYSTEM_MESSAGE +
+    `
+  The user currently has given you the following data to work with:
+  Cards:\n`;
+  for (let card of getRelevantCards(history)) {
+    systemMessage += `Full data: ${JSON.stringify(card)}
+  You may only patch the following fields for this card: ${JSON.stringify(
+    card.attributes,
+  )}`;
+  }
+
   let messages: OpenAIPromptMessage[] = [
     {
       role: 'system',
-      content: MODIFY_SYSTEM_MESSAGE,
+      content: systemMessage,
     },
   ];
+  console.log(systemMessage);
 
   messages = messages.concat(historical_messages);
   return messages;

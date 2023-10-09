@@ -151,8 +151,8 @@ function getLastUploadedCardID(history: IRoomEvent[]): String | undefined {
   return undefined;
 }
 
-async function getResponse(history: IRoomEvent[], aiBotUserId: string) {
-  let messages = getModifyPrompt(history, aiBotUserId);
+async function getResponse(history: IRoomEvent[], aiBotUsername: string) {
+  let messages = getModifyPrompt(history, aiBotUsername);
   return await openai.chat.completions.create({
     model: 'gpt-4',
     messages: messages,
