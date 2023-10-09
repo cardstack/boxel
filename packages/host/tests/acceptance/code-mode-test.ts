@@ -868,10 +868,10 @@ module('Acceptance | code mode tests', function (hooks) {
     const expectedElementNames = [
       'ExportedClass',
       'exportedFunction',
-      'LocalCard', //TODO: CS-6009 will probably change this
+      'local card', //TODO: CS-6009 will probably change this
       'exported card',
       'exported card extends local card',
-      'LocalField', //TODO: CS-6009 will probably change this
+      'local field', //TODO: CS-6009 will probably change this
       'exported field',
       'exported field extends local field',
       'DefaultClass',
