@@ -8,14 +8,14 @@ import StringCard from 'https://cardstack.com/base/string';
 
 export const exportedVar = 'exported var';
 
-// tslint:disable-next-line:no-unused-variable
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const localVar = 'local var';
 
-// tslint:disable-next-line:no-unused-variable
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 class LocalClass {}
 export class ExportedClass {}
 
-// tslint:disable-next-line:no-unused-variable
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function localFunction() {}
 export function exportedFunction() {}
 
