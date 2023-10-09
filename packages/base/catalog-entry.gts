@@ -62,7 +62,7 @@ export class CatalogEntry extends CardDef {
         throw new Error(`Could not load card '${this.ref.name}'`);
       }
 
-      return 'isFieldDef' in card.constructor; // todo test
+      return 'isFieldDef' in card && card.isFieldDef; // todo test
     },
   });
   @field moduleHref = contains(StringField, {
