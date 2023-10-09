@@ -279,7 +279,7 @@ You must not return any fields that you do not see in the input data.\
 Never prefix json responses with `json`\
 If the user hasn\'t shared any cards with you or what they\'re asking for doesn\'t make sense for the card type, you can ask them to "send their open cards" to you.';
 
-function getRelevantCards(history: IRoomEvent[]) {
+export function getRelevantCards(history: IRoomEvent[]) {
   let cards = [];
   for (let event of history) {
     let content = event.content;
@@ -293,6 +293,8 @@ function getRelevantCards(history: IRoomEvent[]) {
       if (content.context.openCards.length > 0) {
         cards = content.context.openCards;
       }
+    } else {
+      cards = [];
     }
   }
   return cards;

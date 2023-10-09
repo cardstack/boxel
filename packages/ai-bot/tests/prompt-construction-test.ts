@@ -1,5 +1,5 @@
 import { module, test, assert } from 'qunit';
-import { getModifyPrompt } from '../helpers';
+import { getModifyPrompt, getRelevantCards } from '../helpers';
 import { IRoomEvent } from 'matrix-js-sdk';
 
 module('getModifyPrompt', () => {
@@ -87,4 +87,407 @@ module('getModifyPrompt', () => {
       getModifyPrompt(history, 'ai-bot');
     });
   });
+
+  test('Gets only the latest shared cards in a context', () => {
+    const history: IRoomEvent[] = [
+      {
+        type: 'm.room.message',
+        sender: '@ian:localhost',
+        content: {
+          msgtype: 'org.boxel.message',
+          body: 'set the name to dave',
+          formatted_body: '<p>set the name to dave</p>\n',
+          context: {
+            openCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Friend/1',
+                  attributes: {
+                    firstName: 'Hassan',
+                    thumbnailURL: null,
+                  },
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: './2',
+                      },
+                      data: {
+                        type: 'card',
+                        id: 'http://localhost:4201/drafts/Friend/2',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+              },
+            ],
+            submode: 'interact',
+          },
+        },
+        origin_server_ts: 1696813813166,
+        unsigned: {
+          age: 115498,
+        },
+        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        age: 115498,
+      },
+      {
+        type: 'm.room.message',
+        sender: '@ian:localhost',
+        content: {
+          msgtype: 'org.boxel.message',
+          body: 'set the location to home',
+          context: {
+            openCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Meeting/2',
+                  attributes: {
+                    location: 'Work',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../meeting',
+                      name: 'Meeting',
+                    },
+                  },
+                },
+              },
+            ],
+            submode: 'interact',
+          },
+        },
+        origin_server_ts: 1696813813167,
+        unsigned: {
+          age: 115498,
+        },
+        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        age: 115498,
+      },
+    ];
+
+    const relevantCards = getRelevantCards(history);
+    assert.equal(relevantCards.length, 1);
+    assert.equal(relevantCards[0], history[1].content.context.openCards[0]);
+  });
+
+  test('Safely manages cases with no cards', () => {
+    const history: IRoomEvent[] = [
+      {
+        type: 'm.room.message',
+        sender: '@ian:localhost',
+        content: {
+          msgtype: 'org.boxel.message',
+          body: 'set the name to dave',
+          formatted_body: '<p>set the name to dave</p>\n',
+          context: {
+            openCards: [],
+            submode: 'interact',
+          },
+        },
+        origin_server_ts: 1696813813166,
+        unsigned: {
+          age: 115498,
+        },
+        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        age: 115498,
+      },
+      {
+        type: 'm.room.message',
+        sender: '@ian:localhost',
+        content: {
+          msgtype: 'org.boxel.message',
+          body: 'set the location to home',
+          context: {
+            openCards: [],
+            submode: 'interact',
+          },
+        },
+        origin_server_ts: 1696813813167,
+        unsigned: {
+          age: 115498,
+        },
+        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        age: 115498,
+      },
+    ];
+
+    const relevantCards = getRelevantCards(history);
+    assert.equal(relevantCards.length, 0);
+  });
+
+  test('Gets uploaded cards if no shared context', () => {
+    const history: IRoomEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1234567890,
+        content: {
+          msgtype: 'org.boxel.card',
+          body: 'Hey',
+          instance: {
+            data: {
+              type: 'card',
+              id: 'http://localhost:4201/drafts/Author/1',
+              attributes: {
+                firstName: 'Terry',
+                lastName: 'Pratchett',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../author',
+                  name: 'Author',
+                },
+              },
+            },
+          },
+        },
+        sender: '@user:localhost',
+      },
+    ];
+    const relevantCards = getRelevantCards(history);
+    assert.equal(relevantCards.length, 1);
+  });
+
+  test('Gets multiple uploaded cards', () => {
+    const history: IRoomEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1234567890,
+        content: {
+          msgtype: 'org.boxel.card',
+          body: 'Hey',
+          instance: {
+            data: {
+              type: 'card',
+              id: 'http://localhost:4201/drafts/Author/1',
+              attributes: {
+                firstName: 'Terry',
+                lastName: 'Pratchett',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../author',
+                  name: 'Author',
+                },
+              },
+            },
+          },
+        },
+        sender: '@user:localhost',
+      },
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1234567890,
+        content: {
+          msgtype: 'org.boxel.card',
+          body: 'Hey',
+          instance: {
+            data: {
+              type: 'card',
+              id: 'http://localhost:4201/drafts/Author/2',
+              attributes: {
+                firstName: 'Mr',
+                lastName: 'T',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../author',
+                  name: 'Author',
+                },
+              },
+            },
+          },
+        },
+        sender: '@user:localhost',
+      },
+    ];
+    const relevantCards = getRelevantCards(history);
+    assert.equal(relevantCards.length, 2);
+  });
+
+  test('Context overrides any uploaded cards', () => {
+    const history: IRoomEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1234567890,
+        content: {
+          msgtype: 'org.boxel.card',
+          body: 'Hey',
+          instance: {
+            data: {
+              type: 'card',
+              id: 'http://localhost:4201/drafts/Author/1',
+              attributes: {
+                firstName: 'Terry',
+                lastName: 'Pratchett',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../author',
+                  name: 'Author',
+                },
+              },
+            },
+          },
+        },
+        sender: '@user:localhost',
+      },
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1234567890,
+        content: {
+          msgtype: 'org.boxel.card',
+          body: 'Hey',
+          instance: {
+            data: {
+              type: 'card',
+              id: 'http://localhost:4201/drafts/Author/2',
+              attributes: {
+                firstName: 'Mr',
+                lastName: 'T',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../author',
+                  name: 'Author',
+                },
+              },
+            },
+          },
+        },
+        sender: '@user:localhost',
+      },
+      {
+        type: 'm.room.message',
+        sender: '@ian:localhost',
+        content: {
+          msgtype: 'org.boxel.message',
+          body: 'set the location to home',
+          context: {
+            openCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Meeting/2',
+                  attributes: {
+                    location: 'Work',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../meeting',
+                      name: 'Meeting',
+                    },
+                  },
+                },
+              },
+            ],
+            submode: 'interact',
+          },
+        },
+        origin_server_ts: 1696813813167,
+        unsigned: {
+          age: 115498,
+        },
+        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        age: 115498,
+      },
+    ];
+    const relevantCards = getRelevantCards(history);
+    assert.equal(relevantCards.length, 1);
+    assert.equal(relevantCards[0], history[2].content.context.openCards[0]);
+  });
+
+  test('If a user stops sharing their context then ignore older cards', () => {
+    const history: IRoomEvent[] = [
+      {
+        type: 'm.room.message',
+        sender: '@ian:localhost',
+        content: {
+          msgtype: 'org.boxel.message',
+          body: 'set the name to dave',
+          formatted_body: '<p>set the name to dave</p>\n',
+          context: {
+            openCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Friend/1',
+                  attributes: {
+                    firstName: 'Hassan',
+                    thumbnailURL: null,
+                  },
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: './2',
+                      },
+                      data: {
+                        type: 'card',
+                        id: 'http://localhost:4201/drafts/Friend/2',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: '../friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+              },
+            ],
+            submode: 'interact',
+          },
+        },
+        origin_server_ts: 1696813813166,
+        unsigned: {
+          age: 115498,
+        },
+        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        age: 115498,
+      },
+      {
+        type: 'm.room.message',
+        sender: '@ian:localhost',
+        content: {
+          body: 'Just a regular message',
+        },
+        origin_server_ts: 1696813813167,
+        unsigned: {
+          age: 115498,
+        },
+        event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
+        age: 115498,
+      },
+    ];
+    const relevantCards = getRelevantCards(history);
+    assert.equal(relevantCards.length, 0);
+  });
+
+  /*
+  test('Context overrides any uploaded cards', () => {});
+
+  test('Gets only the latest shared cards in a context', () => {});
+  test('Gets only the latest shared cards in a context', () => {});
+  test('Gets only the latest shared cards in a context', () => {});
+  test('Gets only the latest shared cards in a context', () => {});
+  test('Gets only the latest shared cards in a context', () => {});
+  test('Gets only the latest shared cards in a context', () => {});
+  test('Gets only the latest shared cards in a context', () => {});
+  test('Gets only the latest shared cards in a context', () => {});
+  test('Gets only the latest shared cards in a context', () => {});
+  test('Gets only the latest shared cards in a context', () => {});
+  */
 });
