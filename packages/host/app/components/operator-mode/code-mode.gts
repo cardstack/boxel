@@ -450,8 +450,8 @@ export default class CodeMode extends Component<Signature> {
                   ),
                 } as CardOrField & Partial<PossibleCardOrFieldClass>;
               } else {
-                if (locallyLoadedCards.has(value)) {
-                  let cardOrField = locallyLoadedCards.get(
+                if (localParentsOfExportedCardsOrFields.has(value)) {
+                  let cardOrField = localParentsOfExportedCardsOrFields.get(
                     value,
                   ) as typeof BaseDef;
                   return {
