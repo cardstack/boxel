@@ -173,9 +173,12 @@ module('getModifyPrompt', () => {
       },
     ];
 
-    const relevantCards = getRelevantCards(history);
+    const relevantCards = getRelevantCards(history, '@aibot:localhost');
     assert.equal(relevantCards.length, 1);
-    assert.equal(relevantCards[0], history[1].content.context.openCards[0]);
+    assert.equal(
+      relevantCards[0],
+      history[1].content.context.openCards[0]['data'],
+    );
   });
 
   test('Safely manages cases with no cards', () => {
@@ -219,7 +222,7 @@ module('getModifyPrompt', () => {
       },
     ];
 
-    const relevantCards = getRelevantCards(history);
+    const relevantCards = getRelevantCards(history, '@aibot:localhost');
     assert.equal(relevantCards.length, 0);
   });
 
@@ -252,7 +255,7 @@ module('getModifyPrompt', () => {
         sender: '@user:localhost',
       },
     ];
-    const relevantCards = getRelevantCards(history);
+    const relevantCards = getRelevantCards(history, '@aibot:localhost');
     assert.equal(relevantCards.length, 1);
   });
 
@@ -311,7 +314,7 @@ module('getModifyPrompt', () => {
         sender: '@user:localhost',
       },
     ];
-    const relevantCards = getRelevantCards(history);
+    const relevantCards = getRelevantCards(history, '@aibot:localhost');
     assert.equal(relevantCards.length, 2);
   });
 
@@ -404,9 +407,12 @@ module('getModifyPrompt', () => {
         age: 115498,
       },
     ];
-    const relevantCards = getRelevantCards(history);
+    const relevantCards = getRelevantCards(history, '@aibot:localhost');
     assert.equal(relevantCards.length, 1);
-    assert.equal(relevantCards[0], history[2].content.context.openCards[0]);
+    assert.equal(
+      relevantCards[0],
+      history[2].content.context.openCards[0]['data'],
+    );
   });
 
   test('If a user stops sharing their context then ignore older cards', () => {
@@ -472,22 +478,7 @@ module('getModifyPrompt', () => {
         age: 115498,
       },
     ];
-    const relevantCards = getRelevantCards(history);
+    const relevantCards = getRelevantCards(history, '@aibot:localhost');
     assert.equal(relevantCards.length, 0);
   });
-
-  /*
-  test('Context overrides any uploaded cards', () => {});
-
-  test('Gets only the latest shared cards in a context', () => {});
-  test('Gets only the latest shared cards in a context', () => {});
-  test('Gets only the latest shared cards in a context', () => {});
-  test('Gets only the latest shared cards in a context', () => {});
-  test('Gets only the latest shared cards in a context', () => {});
-  test('Gets only the latest shared cards in a context', () => {});
-  test('Gets only the latest shared cards in a context', () => {});
-  test('Gets only the latest shared cards in a context', () => {});
-  test('Gets only the latest shared cards in a context', () => {});
-  test('Gets only the latest shared cards in a context', () => {});
-  */
 });
