@@ -22,6 +22,7 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
+import { Submode } from '@cardstack/host/components/submode-switcher';
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -245,6 +246,23 @@ module('Integration | operator-mode', function (hooks) {
           }
         }
       `,
+      'Pet/withNulls.json': {
+        data: {
+          type: 'card',
+          id: `${testRealmURL}Pet/withNulls`,
+          attributes: {
+            description: null,
+            thumbnailURL: null,
+            name: 'Mango',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}pet`,
+              name: 'Pet',
+            },
+          },
+        },
+      },
       'Pet/mango.json': {
         data: {
           type: 'card',
@@ -773,6 +791,99 @@ module('Integration | operator-mode', function (hooks) {
 
     await waitFor('[data-test-person="Fadhlan"]');
     assert.dom('[data-test-person]').hasText('Fadhlan');
+  });
+
+  test('it sends regular messages without any context while the share checkbox is unticked', async function (assert) {
+    this.owner.register('service:matrixService', MockMatrixService);
+    let matrixService = this.owner.lookup(
+      'service:matrixService',
+    ) as MockMatrixService;
+    matrixService.cardAPI = cardApi;
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor('[data-test-person]');
+    assert.dom('[data-test-boxel-header-title]').hasText('Person');
+    assert.dom('[data-test-person]').hasText('Fadhlan');
+    await click('[data-test-open-chat]');
+
+    matrixService.createAndJoinRoom('testroom');
+
+    await waitFor('[data-test-enter-room="test_a"]');
+    await click('[data-test-enter-room="test_a"]');
+
+    // Add some text so that we can click the send button
+    // Do not share the context here
+    assert.dom('[data-test-message-field="test_a"]').exists();
+    await fillIn('[data-test-message-field="test_a"]', 'hello');
+
+    // Send message
+    await click('[data-test-send-message-btn]');
+    assert.deepEqual(matrixService.lastSentMessage, {
+      body: 'hello',
+      roomId: 'testroom',
+      card: undefined,
+      context: undefined,
+    });
+  });
+
+  test('sends the top stack cards when context sharing is on', async function (assert) {
+    this.owner.register('service:matrixService', MockMatrixService);
+    let matrixService = this.owner.lookup(
+      'service:matrixService',
+    ) as MockMatrixService;
+    matrixService.cardAPI = cardApi;
+    // The type work here is just to tell TS we know the
+    const petDir = adapter.files['Pet'];
+    if (typeof petDir === 'string') {
+      throw new Error('petDir is a string');
+    }
+    let card = JSON.parse(petDir['withNulls.json'].toString());
+    await setCardInOperatorModeState(`${testRealmURL}Pet/withNulls`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    assert.dom('[data-test-boxel-header-title]').hasText('Pet');
+    await click('[data-test-open-chat]');
+
+    matrixService.createAndJoinRoom('testroom');
+
+    await waitFor('[data-test-enter-room="test_a"]');
+    await click('[data-test-enter-room="test_a"]');
+
+    // Add some text so that we can click the send button
+    // Do not share the context here
+    assert.dom('[data-test-message-field="test_a"]').exists();
+    await fillIn('[data-test-message-field="test_a"]', 'hello');
+    await click('[data-test-share-context]');
+
+    // Send message
+    await click('[data-test-send-message-btn]');
+    // Serialising converts this to a relative url
+    // but it's not relevant for the test
+    card.data.meta.adoptsFrom.module = '../pet';
+    assert.propEqual(matrixService.client.lastSentEvent, {
+      body: 'hello',
+      msgtype: 'org.boxel.message',
+      formatted_body: '<p>hello</p>\n',
+      context: {
+        openCards: [card],
+        submode: Submode.Interact,
+      },
+    });
   });
 
   test('it can handle an error in a card attached to a matrix message', async function (assert) {
@@ -2497,7 +2608,6 @@ module('Integration | operator-mode', function (hooks) {
     operatorModeStateService.updateCodePath(
       new URL(`${testRealmURL}person.gts`),
     );
-    console.log(operatorModeStateService.state.codePath);
 
     await waitUntil(() =>
       document

@@ -1,4 +1,4 @@
-import Service, { service } from '@ember/service';
+import { service } from '@ember/service';
 
 import { TrackedMap } from 'tracked-built-ins';
 
@@ -7,12 +7,18 @@ import { type MatrixCardError } from '@cardstack/runtime-common';
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
+import MatrixService, {
+  OperatorModeContext,
+} from '@cardstack/host/services/matrix-service';
+
+import { CardDef } from 'https://cardstack.com/base/card-api';
 import type { RoomField } from 'https://cardstack.com/base/room';
 import type { RoomObjectiveField } from 'https://cardstack.com/base/room-objective';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 
 class MockClient {
+  lastSentEvent: any;
   public getProfileInfo(userId: string) {
     return Promise.resolve({
       displayname: userId,
@@ -29,27 +35,34 @@ class MockClient {
       ],
     });
   }
+  public async sendEvent(_roomId: string, _eventType: string, event: any) {
+    this.lastSentEvent = event;
+  }
 }
 
-export class MockMatrixService extends Service {
+export class MockMatrixService extends MatrixService {
   @service declare loaderService: LoaderService;
-
+  // @ts-ignore
+  client: MockClient = new MockClient();
+  // @ts-ignore
   cardAPI!: typeof cardApi;
   // These will be empty in the tests, but we need to define them to satisfy the interface
   rooms: TrackedMap<string, Promise<RoomField>> = new TrackedMap();
   roomObjectives: TrackedMap<string, RoomObjectiveField | MatrixCardError> =
     new TrackedMap();
 
+  public lastSentMessage: {
+    roomId: string;
+    body: string | undefined;
+    card?: CardDef;
+    context?: OperatorModeContext;
+  } | null = null;
+
   async start(_auth?: any) {}
 
   get isLoggedIn() {
     return true;
   }
-
-  get client() {
-    return new MockClient();
-  }
-
   get userId() {
     return '@testuser:staging';
   }
@@ -65,7 +78,21 @@ export class MockMatrixService extends Service {
   ): Promise<string> {
     return name;
   }
-
+  /*
+  async sendMessage(
+    roomId: string,
+    body: string | undefined,
+    card?: CardDef,
+    context?: OperatorModeContext,
+  ): Promise<void> {
+    this.lastSentMessage = {
+      roomId,
+      body,
+      card,
+      context,
+    };
+  }
+*/
   public createAndJoinRoom(roomId: string) {
     addRoomEvent(this, {
       event_id: 'eventname',

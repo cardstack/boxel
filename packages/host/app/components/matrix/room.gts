@@ -1,12 +1,16 @@
+import { Input } from '@ember/component';
 import { registerDestructor } from '@ember/destroyable';
+import { fn } from '@ember/helper';
+import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { guidFor } from '@ember/object/internals';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 //@ts-expect-error the types don't recognize the cached export
 import { tracked, cached } from '@glimmer/tracking';
-import { Input } from '@ember/component';
+
 import { restartableTask, task, timeout, all } from 'ember-concurrency';
 
 import { TrackedMap } from 'tracked-built-ins';
@@ -41,9 +45,6 @@ import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 import { getRoom } from '../../resources/room';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import { fn } from '@ember/helper';
-import { guidFor } from '@ember/object/internals';
-import { concat } from '@ember/helper';
 
 const { environment } = config;
 

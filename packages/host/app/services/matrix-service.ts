@@ -22,6 +22,7 @@ import {
   sanitizeHtml,
 } from '@cardstack/runtime-common';
 
+import { Submode } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
@@ -34,8 +35,6 @@ import type { RoomObjectiveField } from 'https://cardstack.com/base/room-objecti
 
 import { Timeline, Membership, addRoomEvent } from '../lib/matrix-handlers';
 import { importResource } from '../resources/import';
-
-import { Submode } from '@cardstack/host/components/submode-switcher';
 
 import type LoaderService from './loader-service';
 

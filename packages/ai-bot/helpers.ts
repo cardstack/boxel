@@ -279,22 +279,26 @@ You must not return any fields that you do not see in the input data.\
 Never prefix json responses with `json`\
 If the user hasn\'t shared any cards with you or what they\'re asking for doesn\'t make sense for the card type, you can ask them to "send their open cards" to you.';
 
-export function getRelevantCards(history: IRoomEvent[]) {
+export function getRelevantCards(history: IRoomEvent[], aiBotUsername: string) {
   let cards = [];
   for (let event of history) {
-    let content = event.content;
-    // If a user has uploaded a card, add it to the context
-    // It's the best we have
-    if (content.msgtype === 'org.boxel.card') {
-      cards.push(content.instance);
-    } else if (content.msgtype === 'org.boxel.message') {
-      // If a user has switched to sharing their current context
-      // and they have open cards then use those
-      if (content.context.openCards.length > 0) {
-        cards = content.context.openCards;
+    if (event.sender !== aiBotUsername) {
+      let content = event.content;
+      // If a user has uploaded a card, add it to the context
+      // It's the best we have
+      if (content.msgtype === 'org.boxel.card') {
+        cards.push(content.instance);
+      } else if (content.msgtype === 'org.boxel.message') {
+        // If a user has switched to sharing their current context
+        // and they have open cards then use those
+        if (content.context.openCards.length > 0) {
+          cards = content.context.openCards.map(
+            (card: { data: any }) => card.data,
+          );
+        }
+      } else {
+        cards = [];
       }
-    } else {
-      cards = [];
     }
   }
   return cards;
@@ -331,7 +335,7 @@ export function getModifyPrompt(history: IRoomEvent[], aiBotUsername: string) {
     `
   The user currently has given you the following data to work with:
   Cards:\n`;
-  for (let card of getRelevantCards(history)) {
+  for (let card of getRelevantCards(history, aiBotUsername)) {
     systemMessage += `Full data: ${JSON.stringify(card)}
   You may only patch the following fields for this card: ${JSON.stringify(
     card.attributes,
