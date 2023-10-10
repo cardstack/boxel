@@ -1,14 +1,18 @@
-import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { action } from '@ember/object';
+import Component from '@glimmer/component';
+//@ts-ignore cached not available yet in definitely typed
+import { cached } from '@glimmer/tracking';
 
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
-import { type ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
+import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import CardSchemaEditor from '@cardstack/host/components/operator-mode/card-schema-editor';
 import { CardInheritance } from '@cardstack/host/components/operator-mode/schema-editor-column';
 
 import type { Ready } from '@cardstack/host/resources/file';
+import { isOwnField } from '@cardstack/host/utils/schema-editor';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -19,76 +23,94 @@ interface Signature {
   };
 }
 
-const CardAdoptionChain: TemplateOnlyComponent<Signature> = <template>
-  <style>
-    .card-adoption-chain {
-      background-color: var(--boxel-200);
-      height: 100%;
-    }
-    .content-with-line {
-      position: relative;
-      transform: translateX(calc(var(--boxel-sp-sm) * -1));
+export default class CardAdoptionChain extends Component<Signature> {
+  <template>
+    <style>
+      .card-adoption-chain {
+        background-color: var(--boxel-200);
+      }
+      .content-with-line {
+        position: relative;
+        transform: translateX(calc(var(--boxel-sp-sm) * -1));
 
-      display: flex;
-      align-items: center;
-      width: calc(100% + calc(var(--boxel-sp-sm) * 2));
-      height: 60px;
-      padding: var(--boxel-sp) 0;
-    }
+        display: flex;
+        align-items: center;
+        width: calc(100% + calc(var(--boxel-sp-sm) * 2));
+        height: 60px;
+        padding: var(--boxel-sp) 0;
+      }
 
-    .inherits-from {
-      display: flex;
-      align-items: center;
-      padding: 0 var(--boxel-sp-xs);
-      gap: var(--boxel-sp-xxxs);
-      font: 500 var(--boxel-font-sm);
-      letter-spacing: var(--boxel-lsp-xs);
-      text-wrap: nowrap;
-      background: var(--boxel-200);
+      .inherits-from {
+        display: flex;
+        align-items: center;
+        padding: 0 var(--boxel-sp-xs);
+        gap: var(--boxel-sp-xxxs);
+        font: 500 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+        text-wrap: nowrap;
+        background: var(--boxel-200);
 
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
-    }
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+      }
 
-    .chain:last-child .content-with-line {
-      display: none;
-    }
+      .chain:last-child .content-with-line {
+        display: none;
+      }
 
-    .inherits-icon {
-      height: 24px;
-    }
+      .inherits-icon {
+        height: 24px;
+      }
 
-    .line {
-      width: 100%;
-      border: 1px solid var(--boxel-purple-200);
-    }
-  </style>
+      .line {
+        width: 100%;
+        border: 1px solid var(--boxel-purple-200);
+      }
+    </style>
 
-  <div class='card-adoption-chain' ...attributes>
-    {{#each @cardInheritanceChain as |item index|}}
-      <div class='chain'>
-        <CardSchemaEditor
-          @card={{item.card}}
-          @cardType={{item.cardType}}
-          @file={{@file}}
-          @moduleSyntax={{@moduleSyntax}}
-          @allowAddingFields={{eq index 0}}
-        />
-        <div class='content-with-line'>
-          <hr class='line' />
-          <div class='inherits-from'>
-            <span class='inherits-icon'>{{svgJar
-                'icon-inherit'
-                width='24px'
-                height='24px'
-              }}</span>
-            <span>Inherits From</span>
+    <div class='card-adoption-chain' ...attributes>
+      {{#each @cardInheritanceChain as |data index|}}
+        <div class='chain'>
+          <CardSchemaEditor
+            @card={{data.card}}
+            @cardType={{data.cardType}}
+            @file={{@file}}
+            @moduleSyntax={{@moduleSyntax}}
+            @childFields={{this.getFields index 'successors'}}
+            @parentFields={{this.getFields index 'ancestors'}}
+            @allowAddingFields={{eq index 0}}
+          />
+          <div class='content-with-line'>
+            <hr class='line' />
+            <div class='inherits-from'>
+              <span class='inherits-icon'>{{svgJar
+                  'icon-inherit'
+                  width='24px'
+                  height='24px'
+                }}</span>
+              <span>Inherits From</span>
+            </div>
           </div>
         </div>
-      </div>
-    {{/each}}
-  </div>
-</template>;
+      {{/each}}
+    </div>
+  </template>
 
-export default CardAdoptionChain;
+  @action
+  getFields(cardIndex: number, from: 'ancestors' | 'successors'): string[] {
+    const children = this.args.cardInheritanceChain.filter((_data, index) =>
+      from === 'ancestors' ? index > cardIndex : index < cardIndex,
+    );
+
+    const fields = children.reduce((result: string[], data) => {
+      return result.concat(
+        data.cardType.fields
+          .filter((field) => isOwnField(data.card, field.name))
+          .map((field) => field.name),
+      );
+    }, []);
+
+    return fields;
+  }
+}
