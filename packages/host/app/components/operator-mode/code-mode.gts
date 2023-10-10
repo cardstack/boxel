@@ -36,6 +36,7 @@ import {
   isSingleCardDocument,
   hasExecutableExtension,
   getAncestor,
+  getField,
 } from '@cardstack/runtime-common';
 import {
   ModuleSyntax,
@@ -390,7 +391,6 @@ export default class CodeMode extends Component<Signature> {
         }
         try {
           if (isReady(this.openFile.current) && this.importedModule?.module) {
-            debugger;
             let module = this.importedModule?.module;
             let cardsOrFields = cardsOrFieldsFromModule(module);
             let elements: Element[] = [];
@@ -402,17 +402,17 @@ export default class CodeMode extends Component<Signature> {
               typeof BaseDef
             > = new Map();
             // This loop
-            // - gets cards or fields which are already loaded in the module
-            // - collects parents from cards or fields that have been exported / loaded
+            // - collects super / fields from cards / fields that have been exported
             let elementsNoCardType = moduleSyntax.elements.map(
               (value: ElementDeclaration) => {
+                //here we loop thru all the exported cards or fields
                 let cardOrField = cardsOrFields.find(
                   (c) => c.name === value.localName,
                 );
                 if (cardOrField !== undefined) {
-                  // here we check if an element is a card or field and if it is we get the ancestor that exist in the same module
                   if (isPossibleCardOrFieldClass(value)) {
                     if (isInternalReference(value.super)) {
+                      // here we check an exported card or field inherits from a local one
                       const indexOfParent = value.super.classIndex;
                       if (indexOfParent !== undefined) {
                         const parentCardOrFieldClass =
@@ -423,6 +423,29 @@ export default class CodeMode extends Component<Signature> {
                             parentCardOrFieldClass,
                             parentCardOrField,
                           );
+                        }
+                      }
+                    } else {
+                      // here we check if a field of an exported card or field is a field of a local one
+                      if (value.possibleFields) {
+                        for (let [fieldName, v] of value.possibleFields) {
+                          if (isInternalReference(v.card)) {
+                            const indexOfParentField = v.card.classIndex;
+                            if (indexOfParentField !== undefined) {
+                              const parentFieldClass =
+                                possibleCardsOrFields[indexOfParentField];
+                              let localName = parentFieldClass.localName;
+                              if (localName) {
+                                let field = getField(cardOrField, fieldName);
+                                if (field && field.card) {
+                                  localParentsOfExportedCardsOrFields.set(
+                                    parentFieldClass,
+                                    field.card,
+                                  );
+                                }
+                              }
+                            }
+                          }
                         }
                       }
                     }
@@ -439,8 +462,8 @@ export default class CodeMode extends Component<Signature> {
             } & PossibleCardOrFieldClass)[];
 
             // This loop
-            // - loads card type
-            // - includes card or field that was local to the module using parents collected in previous loop
+            // - adds card type (not loaded tho)
+            // - includes card or field that was local but exported thru some relationship
             elements = elementsNoCardType.map((value) => {
               if (value.cardOrField) {
                 return {
