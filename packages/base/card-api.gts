@@ -1611,6 +1611,10 @@ export function isCard(card: any): card is CardDef {
   return isCardOrField(card) && !('isFieldDef' in card.constructor);
 }
 
+export function isFieldDef(field: any): field is FieldDef {
+  return isCardOrField(field) && 'isFieldDef' in field.constructor;
+}
+
 export function isCompoundField(card: any) {
   return (
     isCardOrField(card) &&

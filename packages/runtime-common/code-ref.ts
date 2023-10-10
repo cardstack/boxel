@@ -2,6 +2,8 @@ import {
   type BaseDefConstructor,
   type Field,
   type BaseDef,
+  type CardDef,
+  type FieldDef,
 } from 'https://cardstack.com/base/card-api';
 import { Loader } from './loader';
 import { isField } from './constants';
@@ -55,8 +57,16 @@ export function isCodeRef(ref: any): ref is CodeRef {
   return false;
 }
 
-export function isCard(card: any): card is typeof BaseDef {
-  return typeof card === 'function' && 'baseDef' in card;
+export function isBaseDef(cardOrField: any): cardOrField is typeof BaseDef {
+  return typeof cardOrField === 'function' && 'baseDef' in cardOrField;
+}
+
+export function isCardDef(card: any): card is typeof CardDef {
+  return !('isFieldDef' in card) && isBaseDef(card);
+}
+
+export function isFieldDef(field: any): field is typeof FieldDef {
+  return 'isFieldDef' in field && isBaseDef(field);
 }
 
 export async function loadCard(
@@ -81,7 +91,7 @@ export async function loadCard(
     throw assertNever(ref);
   }
 
-  if (isCard(maybeCard)) {
+  if (isBaseDef(maybeCard)) {
     return maybeCard;
   }
 
@@ -96,7 +106,7 @@ export function identifyCard(
   card: unknown,
   maybeRelativeURL?: ((possibleURL: string) => string) | null,
 ): CodeRef | undefined {
-  if (!isCard(card)) {
+  if (!isBaseDef(card)) {
     return undefined;
   }
 
@@ -139,7 +149,7 @@ export function getField<CardT extends BaseDefConstructor>(
     let result: Field<BaseDefConstructor> | undefined = (desc?.get as any)?.[
       isField
     ];
-    if (result !== undefined && isCard(result.card)) {
+    if (result !== undefined && isBaseDef(result.card)) {
       localIdentities.set(result.card, {
         type: 'fieldOf',
         field: fieldName,
@@ -156,7 +166,7 @@ export function getAncestor(
   card: BaseDefConstructor,
 ): BaseDefConstructor | undefined {
   let superCard = Reflect.getPrototypeOf(card);
-  if (isCard(superCard)) {
+  if (isBaseDef(superCard)) {
     localIdentities.set(superCard, {
       type: 'ancestorOf',
       card,
