@@ -868,7 +868,7 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
     //default is the 1st index
-    let elementName = 'ExportedClass';
+    let elementName = 'LocalClass';
     assert
       .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
       .hasText(elementName);
