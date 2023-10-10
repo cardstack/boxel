@@ -163,6 +163,7 @@ export default class CardSchemaEditor extends Component<Signature> {
       }
 
       .overridden-field {
+        cursor: pointer;
         text-decoration: line-through;
       }
 
@@ -200,6 +201,30 @@ export default class CardSchemaEditor extends Component<Signature> {
 
       .total-fields-label {
         font: var(--boxel-font-sm);
+      }
+
+      .overriding-field {
+        transition: border 1s;
+      }
+
+      .show-overriding-field-border {
+        border: 2px solid var(--boxel-highlight);
+      }
+
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.2);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+
+      .overriding-field .show-overriding-field-border {
+        animation: pulse 1s;
       }
     </style>
 
@@ -246,7 +271,14 @@ export default class CardSchemaEditor extends Component<Signature> {
       <div class='card-fields'>
         {{#each @cardType.fields as |field|}}
           {{#if (this.isOwnField field.name)}}
-            <div class='card-field' data-test-field-name={{field.name}}>
+            <div
+              class={{if
+                (this.isOverriding field)
+                'card-field overidding-field'
+                'card-field'
+              }}
+              data-test-field-name={{field.name}}
+            >
               <div class='left'>
                 <div
                   class={{if
@@ -254,6 +286,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                     'field-name overridden-field'
                     'field-name'
                   }}
+                  {{on 'click' (fn this.scrollIntoOveridingField field)}}
                 >
                   {{field.name}}
                 </div>
@@ -423,5 +456,27 @@ export default class CardSchemaEditor extends Component<Signature> {
 
   isLinkedField(field: FieldOfType) {
     return field.type === 'linksTo' || field.type === 'linksToMany';
+  }
+
+  @action
+  scrollIntoOveridingField(field: FieldOfType) {
+    if (!this.isOverridden(field)) {
+      return;
+    }
+
+    // This code assumes that the overriding field
+    // is always located in the top result returned by the query selector.
+    let element = document.querySelector(
+      `[data-test-field-name='${field.name}']`,
+    );
+    element?.classList.add('show-overriding-field-border');
+    setTimeout(() => {
+      element?.classList.remove('show-overriding-field-border');
+    }, 1000);
+    element?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'end',
+      inline: 'nearest',
+    });
   }
 }
