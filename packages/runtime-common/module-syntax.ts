@@ -72,8 +72,8 @@ export class ModuleSyntax {
     fieldName: string,
     fieldRef: { name: string; module: string }, // module could be a relative path
     fieldType: FieldType,
-    incomingRelativeTo: URL,
-    outgoingRelativeTo: URL,
+    incomingRelativeTo?: URL,
+    outgoingRelativeTo?: URL,
   ) {
     let card = this.getCard(cardName);
     if (card.possibleFields.has(fieldName)) {
@@ -207,8 +207,8 @@ function makeNewField(
   fieldType: FieldType,
   fieldName: string,
   cardName: string,
-  incomingRelativeTo: URL,
-  outgoingRelativeTo: URL,
+  incomingRelativeTo?: URL,
+  outgoingRelativeTo?: URL,
 ): string {
   let programPath = getProgramPath(target);
   //@ts-ignore ImportUtil doesn't seem to believe our Babel.types is a
@@ -235,11 +235,16 @@ function makeNewField(
     return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(() => ${cardName});`;
   }
 
-  let relativeFieldModuleRef = maybeRelativeURL(
-    new URL(fieldRef.module, incomingRelativeTo),
-    outgoingRelativeTo,
-    undefined,
-  );
+  let relativeFieldModuleRef;
+  if (incomingRelativeTo && outgoingRelativeTo) {
+    relativeFieldModuleRef = maybeRelativeURL(
+      new URL(fieldRef.module, incomingRelativeTo),
+      outgoingRelativeTo,
+      undefined,
+    );
+  } else {
+    relativeFieldModuleRef = fieldRef.module;
+  }
 
   let fieldCardIdentifier = importUtil.import(
     target as NodePath<any>,
