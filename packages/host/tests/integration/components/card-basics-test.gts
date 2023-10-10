@@ -250,7 +250,7 @@ module('Integration | card-basics', function (hooks) {
       @field firstName = contains(EmphasizedString);
       @field number = contains(StrongNumber);
 
-      static isolated = class Embedded extends Component<typeof this> {
+      static isolated = class Isolated extends Component<typeof this> {
         <template>
           <div>
             <@fields.firstName @format='atom' />
