@@ -5,10 +5,10 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { DropdownButton } from '@cardstack/boxel-ui';
-import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
 import menuDivider from '@cardstack/boxel-ui/helpers/menu-divider';
-import { gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import { gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import { getPlural } from '@cardstack/runtime-common';
 
@@ -25,11 +25,11 @@ import type { Ready } from '@cardstack/host/resources/file';
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import {
   isOwnField,
   calculateTotalOwnFields,
 } from '@cardstack/host/utils/schema-editor';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 

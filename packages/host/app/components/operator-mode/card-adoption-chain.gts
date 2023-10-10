@@ -1,7 +1,9 @@
-import Component from '@glimmer/component';
 import { action } from '@ember/object';
+import Component from '@glimmer/component';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
+
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
@@ -10,7 +12,6 @@ import { CardInheritance } from '@cardstack/host/components/operator-mode/schema
 
 import type { Ready } from '@cardstack/host/resources/file';
 import { isOwnField } from '@cardstack/host/utils/schema-editor';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
 interface Signature {
   Element: HTMLDivElement;
