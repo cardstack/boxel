@@ -253,7 +253,7 @@ module('Integration | operator-mode', function (hooks) {
           attributes: {
             description: null,
             thumbnailURL: null,
-            name: 'Mango',
+            name: 'Nully',
           },
           meta: {
             adoptsFrom: {
@@ -826,11 +826,11 @@ module('Integration | operator-mode', function (hooks) {
 
     // Send message
     await click('[data-test-send-message-btn]');
-    assert.deepEqual(matrixService.lastSentMessage, {
+    assert.deepEqual(matrixService.client.lastSentEvent, {
       body: 'hello',
-      roomId: 'testroom',
-      card: undefined,
-      context: undefined,
+      format: 'org.matrix.custom.html',
+      formatted_body: '<p>hello</p>\n',
+      msgtype: 'm.text',
     });
   });
 

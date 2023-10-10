@@ -59,13 +59,6 @@ export class MockMatrixService extends MatrixService {
   roomObjectives: TrackedMap<string, RoomObjectiveField | MatrixCardError> =
     new TrackedMap();
 
-  public lastSentMessage: {
-    roomId: string;
-    body: string | undefined;
-    card?: CardDef;
-    context?: OperatorModeContext;
-  } | null = null;
-
   async start(_auth?: any) {}
 
   get isLoggedIn() {
