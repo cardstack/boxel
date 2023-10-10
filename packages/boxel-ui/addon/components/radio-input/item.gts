@@ -6,6 +6,7 @@ import { not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 export interface Signature {
   Element: HTMLLabelElement;
   Args: {
+    id: string;
     checked?: boolean;
     disabled?: boolean;
     name: string;
@@ -129,6 +130,7 @@ const RadioInputItem: TemplateOnlyComponent<Signature> = <template>
     data-test-boxel-radio-option
     data-test-boxel-radio-option-checked={{@checked}}
     data-test-boxel-radio-option-disabled={{@disabled}}
+    data-test-boxel-radio-option-id={{@id}}
     ...attributes
   >
     <input

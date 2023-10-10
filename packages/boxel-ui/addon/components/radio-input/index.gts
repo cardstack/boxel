@@ -99,6 +99,7 @@ export default class RadioInput extends Component<Signature> {
             (hash
               component=(component
                 Item
+                id=item.id
                 name=@name
                 disabled=@disabled
                 checked=(if @checkedId (eq @checkedId item.id))
