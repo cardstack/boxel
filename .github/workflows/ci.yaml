@@ -15,6 +15,9 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    concurrency:
+      group: lint-${{ github.head_ref || github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/init
@@ -50,6 +53,9 @@ jobs:
   ai-bot-test:
     name: AI bot Tests
     runs-on: ubuntu-latest
+    concurrency:
+      group: ai-bot-test-${{ github.head_ref || github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/init
@@ -60,6 +66,9 @@ jobs:
   boxel-motion-test:
     name: Boxel Motion Tests
     runs-on: ubuntu-latest
+    concurrency:
+      group: boxel-motion-test-${{ github.head_ref || github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/init
@@ -70,6 +79,9 @@ jobs:
   boxel-ui-test:
     name: Boxel UI Tests
     runs-on: ubuntu-latest
+    concurrency:
+      group: boxel-ui-test-${{ github.head_ref || github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/init
@@ -80,6 +92,9 @@ jobs:
   host-test:
     name: Host Tests
     runs-on: ubuntu-latest
+    concurrency:
+      group: boxel-host-test-${{ github.head_ref || github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/init
@@ -105,6 +120,9 @@ jobs:
   matrix-client-test:
     name: Matrix Client Tests
     runs-on: ubuntu-latest
+    concurrency:
+      group: matrix-client-test-${{ github.head_ref || github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/init
@@ -132,6 +150,9 @@ jobs:
   realm-server-test:
     name: Realm Server Tests
     runs-on: ubuntu-latest
+    concurrency:
+      group: realm-server-test-${{ github.head_ref || github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/init
