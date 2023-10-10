@@ -1468,7 +1468,7 @@ module('Acceptance | code mode tests', function (hooks) {
 
     assert
       .dom(
-        `[data-test-card-schema="Person"] [data-test-field-name="birthdate"] .field-type`,
+        `[data-test-card-schema="Person"] [data-test-field-name="birthdate"] [data-test-field-types]`,
       )
       .hasText('Contains');
   });
@@ -1507,9 +1507,9 @@ module('Acceptance | code mode tests', function (hooks) {
     );
     assert
       .dom(
-        `[data-test-card-schema="Person"] [data-test-field-name="luckyNumbers"] .field-type`,
+        `[data-test-card-schema="Person"] [data-test-field-name="luckyNumbers"] [data-test-field-types]`,
       )
-      .hasText('containsMany');
+      .hasText('Collection');
 
     // Field is a card descending from CardDef (cardinality: one)
     await waitFor('[data-test-add-field-button]');
@@ -1529,9 +1529,9 @@ module('Acceptance | code mode tests', function (hooks) {
     );
     assert
       .dom(
-        `[data-test-card-schema="Person"] [data-test-field-name="favPerson"] .field-type`,
+        `[data-test-card-schema="Person"] [data-test-field-name="favPerson"] [data-test-field-types]`,
       )
-      .hasText('linksTo');
+      .hasText('Linked');
 
     // Field is a card descending from CardDef (cardinality: many)
     await waitFor('[data-test-add-field-button]');
@@ -1548,9 +1548,9 @@ module('Acceptance | code mode tests', function (hooks) {
     );
     assert
       .dom(
-        `[data-test-card-schema="Person"] [data-test-field-name="favPeople"] .field-type`,
+        `[data-test-card-schema="Person"] [data-test-field-name="favPeople"] [data-test-field-types]`,
       )
-      .hasText('linksToMany');
+      .hasText('Linked');
   });
 });
 

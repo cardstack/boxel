@@ -4,6 +4,8 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import { tracked } from '@glimmer/tracking';
+
 import { DropdownButton } from '@cardstack/boxel-ui';
 import menuDivider from '@cardstack/boxel-ui/helpers/menu-divider';
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
@@ -11,9 +13,6 @@ import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import { getPlural } from '@cardstack/runtime-common';
-import { tracked } from '@glimmer/tracking';
-
-import { internalKeyFor } from '@cardstack/runtime-common';
 
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 

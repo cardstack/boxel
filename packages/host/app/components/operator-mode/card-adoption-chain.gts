@@ -1,9 +1,9 @@
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
-//@ts-ignore cached not available yet in definitely typed
-import { cached } from '@glimmer/tracking';
 
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
@@ -11,8 +11,8 @@ import CardSchemaEditor from '@cardstack/host/components/operator-mode/card-sche
 import { CardInheritance } from '@cardstack/host/components/operator-mode/schema-editor-column';
 
 import type { Ready } from '@cardstack/host/resources/file';
+
 import { isOwnField } from '@cardstack/host/utils/schema-editor';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 interface Signature {
   Element: HTMLDivElement;
