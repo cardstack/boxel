@@ -74,8 +74,8 @@ export default class CardAdoptionChain extends Component<Signature> {
             @cardType={{data.cardType}}
             @file={{@file}}
             @moduleSyntax={{this.moduleSyntax}}
-            @childFields={{this.childFields index}}
-            @parentFields={{this.parentFields index}}
+            @childFields={{this.getInheritedFields index false}}
+            @parentFields={{this.getInheritedFields index true}}
           />
           <div class='content-with-line'>
             <hr class='line' />
@@ -99,12 +99,12 @@ export default class CardAdoptionChain extends Component<Signature> {
   }
 
   @action
-  childFields(cardIndex: number): string[] {
-    const children = this.args.cardInheritanceChain.filter(
-      (_data, index) => index < cardIndex,
+  getInheritedFields(cardIndex: number, isGetParentField: boolean): string[] {
+    const children = this.args.cardInheritanceChain.filter((_data, index) =>
+      isGetParentField ? index > cardIndex : index < cardIndex,
     );
 
-    const childFields = children.reduce((result: string[], data) => {
+    const fields = children.reduce((result: string[], data) => {
       return result.concat(
         data.cardType.fields
           .filter((field) => isOwnField(data.card, field.name))
@@ -112,23 +112,6 @@ export default class CardAdoptionChain extends Component<Signature> {
       );
     }, []);
 
-    return childFields;
-  }
-
-  @action
-  parentFields(cardIndex: number): string[] {
-    const parents = this.args.cardInheritanceChain.filter(
-      (_data, index) => index > cardIndex,
-    );
-
-    const parentFields = parents.reduce((result: string[], data) => {
-      return result.concat(
-        data.cardType.fields
-          .filter((field) => isOwnField(data.card, field.name))
-          .map((field) => field.name),
-      );
-    }, []);
-
-    return parentFields;
+    return fields;
   }
 }
