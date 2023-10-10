@@ -392,97 +392,47 @@ export default class CodeMode extends Component<Signature> {
         try {
           if (isReady(this.openFile.current) && this.importedModule?.module) {
             let module = this.importedModule?.module;
-            let cardsOrFields = cardsOrFieldsFromModule(module);
+            let exportedCardsOrFields = cardsOrFieldsFromModule(module);
             let elements: Element[] = [];
             await this.importedModule.loaded;
             let moduleSyntax = new ModuleSyntax(this.openFile.current.content);
-            let possibleCardsOrFields = moduleSyntax.possibleCardsOrFields;
-            const localParentsOfExportedCardsOrFields: Map<
-              PossibleCardOrFieldClass,
-              typeof BaseDef
-            > = new Map();
             // This loop
             // - collects super / fields from cards / fields that have been exported
-            let elementsNoCardType = moduleSyntax.elements.map(
-              (value: ElementDeclaration) => {
-                //here we loop thru all the exported cards or fields
-                let cardOrField = cardsOrFields.find(
-                  (c) => c.name === value.localName,
-                );
-                if (cardOrField !== undefined) {
-                  if (isPossibleCardOrFieldClass(value)) {
-                    if (isInternalReference(value.super)) {
-                      // here we check an exported card or field inherits from a local one
-                      const indexOfParent = value.super.classIndex;
-                      if (indexOfParent !== undefined) {
-                        const parentCardOrFieldClass =
-                          possibleCardsOrFields[indexOfParent];
-                        const parentCardOrField = getAncestor(cardOrField);
-                        if (parentCardOrField) {
-                          localParentsOfExportedCardsOrFields.set(
-                            parentCardOrFieldClass,
-                            parentCardOrField,
-                          );
-                        }
-                      }
-                    } else {
-                      // here we check if a field of an exported card or field is a field of a local one
-                      if (value.possibleFields) {
-                        for (let [fieldName, v] of value.possibleFields) {
-                          if (isInternalReference(v.card)) {
-                            const indexOfParentField = v.card.classIndex;
-                            if (indexOfParentField !== undefined) {
-                              const parentFieldClass =
-                                possibleCardsOrFields[indexOfParentField];
-                              let localName = parentFieldClass.localName;
-                              if (localName) {
-                                let field = getField(cardOrField, fieldName);
-                                if (field && field.card) {
-                                  localParentsOfExportedCardsOrFields.set(
-                                    parentFieldClass,
-                                    field.card,
-                                  );
-                                }
-                              }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                  return {
-                    ...value,
-                    cardOrField,
-                  };
-                }
-                return value;
-              },
-            ) as ({
-              cardOrField: typeof BaseDef;
-            } & PossibleCardOrFieldClass)[];
+            let localCardsOrFields = collectLocalCardsOrFields(
+              moduleSyntax,
+              exportedCardsOrFields,
+            );
 
             // This loop
             // - adds card type (not loaded tho)
-            // - includes card or field that was local but exported thru some relationship
-            elements = elementsNoCardType.map((value) => {
-              if (value.cardOrField) {
-                return {
-                  ...value,
-                  cardType: getCardType(
-                    this,
-                    () => value.cardOrField as typeof BaseDef,
-                  ),
-                } as CardOrField & Partial<PossibleCardOrFieldClass>;
-              } else {
-                if (localParentsOfExportedCardsOrFields.has(value)) {
-                  let cardOrField = localParentsOfExportedCardsOrFields.get(
-                    value,
-                  ) as typeof BaseDef;
+            // - includes card or field
+            //   - an already exported card or field
+            //   - an already that was local but exported thru some relationship
+            elements = moduleSyntax.elements.map((value) => {
+              if (isPossibleCardOrFieldClass(value)) {
+                const cardOrField = exportedCardsOrFields.find(
+                  (c) => c.name === value.localName,
+                );
+                if (cardOrField) {
                   return {
                     ...value,
                     cardOrField,
-                    cardType: getCardType(this, () => cardOrField),
+                    cardType: getCardType(
+                      this,
+                      () => cardOrField as typeof BaseDef,
+                    ),
                   } as CardOrField & Partial<PossibleCardOrFieldClass>;
+                } else {
+                  if (localCardsOrFields.has(value)) {
+                    let cardOrField = localCardsOrFields.get(
+                      value,
+                    ) as typeof BaseDef;
+                    return {
+                      ...value,
+                      cardOrField,
+                      cardType: getCardType(this, () => cardOrField),
+                    } as CardOrField & Partial<PossibleCardOrFieldClass>;
+                  }
                 }
               }
               return value as BaseDeclaration;
@@ -1261,4 +1211,83 @@ function cardsOrFieldsFromModule(
   _never?: never, // glint insists that w/o this last param that there are actually no params
 ): (typeof BaseDef)[] {
   return Object.values(module).filter(isCardOrField);
+}
+
+function collectLocalCardsOrFields(
+  moduleSyntax: ModuleSyntax,
+  exportedCardsOrFields: (typeof BaseDef)[],
+): Map<PossibleCardOrFieldClass, typeof BaseDef> {
+  const localCardsOrFields: Map<PossibleCardOrFieldClass, typeof BaseDef> =
+    new Map();
+  let possibleCardsOrFields = moduleSyntax.possibleCardsOrFields;
+
+  for (const value of moduleSyntax.elements) {
+    const cardOrField = exportedCardsOrFields.find(
+      (c) => c.name === value.localName,
+    );
+
+    if (cardOrField !== undefined) {
+      findLocalAncestor(
+        value,
+        cardOrField,
+        possibleCardsOrFields,
+        localCardsOrFields,
+      );
+      findLocalField(
+        value,
+        cardOrField,
+        possibleCardsOrFields,
+        localCardsOrFields,
+      );
+    }
+  }
+
+  return localCardsOrFields;
+}
+
+function findLocalAncestor(
+  value: ElementDeclaration,
+  cardOrField: typeof BaseDef,
+  possibleCardsOrFields: PossibleCardOrFieldClass[],
+  localCardsOrFields: Map<PossibleCardOrFieldClass, typeof BaseDef>,
+) {
+  if (isPossibleCardOrFieldClass(value) && isInternalReference(value.super)) {
+    const indexOfParent = value.super.classIndex;
+    if (indexOfParent !== undefined) {
+      const parentCardOrFieldClass = possibleCardsOrFields[indexOfParent];
+      const parentCardOrField = getAncestor(cardOrField);
+
+      if (parentCardOrField) {
+        localCardsOrFields.set(parentCardOrFieldClass, parentCardOrField);
+      }
+    }
+  }
+}
+
+function findLocalField(
+  value: ElementDeclaration,
+  cardOrField: typeof BaseDef,
+  possibleCardsOrFields: PossibleCardOrFieldClass[],
+  localCardsOrFields: Map<PossibleCardOrFieldClass, typeof BaseDef>,
+) {
+  if (isPossibleCardOrFieldClass(value)) {
+    if (value.possibleFields) {
+      for (const [fieldName, v] of value.possibleFields) {
+        if (isInternalReference(v.card)) {
+          const indexOfParentField = v.card.classIndex;
+          if (indexOfParentField !== undefined) {
+            const parentFieldClass = possibleCardsOrFields[indexOfParentField];
+            const localName = parentFieldClass.localName;
+
+            if (localName) {
+              const field = getField(cardOrField, fieldName);
+              if (field && field.card) {
+                localCardsOrFields.set(parentFieldClass, field.card);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 }
