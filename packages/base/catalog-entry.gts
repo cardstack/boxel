@@ -44,6 +44,7 @@ export class CatalogEntry extends CardDef {
       return primitive in card || isEqual(baseCardRef, this.ref);
     },
   });
+  // If it's not a field, then it's a card
   @field isField = contains(BooleanField, {
     computeVia: async function (this: CatalogEntry) {
       let loader = Loader.getLoaderFor(Object.getPrototypeOf(this).constructor);
@@ -62,7 +63,7 @@ export class CatalogEntry extends CardDef {
         throw new Error(`Could not load card '${this.ref.name}'`);
       }
 
-      return 'isFieldDef' in card && card.isFieldDef; // todo test
+      return 'isFieldDef' in card && card.isFieldDef;
     },
   });
   @field moduleHref = contains(StringField, {

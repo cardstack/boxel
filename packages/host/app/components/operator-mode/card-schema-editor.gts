@@ -249,7 +249,11 @@ export default class CardSchemaEditor extends Component<Signature> {
       </div>
 
       {{#if @allowAddingFields}}
-        <div class='add-field-button' {{on 'click' this.toggleAddFieldModal}}>
+        <div
+          class='add-field-button'
+          data-test-add-field-button
+          {{on 'click' this.toggleAddFieldModal}}
+        >
           + Add a field
         </div>
 

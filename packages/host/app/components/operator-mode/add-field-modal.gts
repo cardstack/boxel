@@ -48,25 +48,14 @@ interface Signature {
 
 export default class AddFieldModal extends Component<Signature> {
   @tracked chosenCatalogEntry: CatalogEntry | undefined = undefined;
-  @tracked chosenCatalogEntryCard: typeof BaseDef | undefined = undefined;
-  @tracked fieldModuleUrl: URL | undefined = undefined;
+  @tracked chosenCatalogEntryRefCard: typeof BaseDef | undefined = undefined;
+  @tracked fieldModuleURL: URL | undefined = undefined;
   @tracked fieldName: string | undefined = undefined;
   @tracked cardinality: 'one' | 'many' = 'one';
   @service declare loaderService: LoaderService;
   @service declare operatorModeStateService: OperatorModeStateService;
 
-  @action chooseCard() {
-    this.chooseCardTask.perform();
-  }
-
-  @action onFieldNameInput(value: string) {
-    this.fieldName = value;
-  }
-
-  @action onCardinalityChange(value: string) {
-    this.cardinality = value as 'one' | 'many';
-  }
-  items = [
+  cardinalityItems = [
     {
       id: 'one',
       text: 'Limit to one',
@@ -76,9 +65,17 @@ export default class AddFieldModal extends Component<Signature> {
       text: 'Allow multiple',
     },
   ];
-  @tracked checkedId = this.items[0].id;
-  @action onChange(id: 'one' | 'many'): void {
-    this.checkedId = id;
+
+  @action chooseCard() {
+    this.chooseCardTask.perform();
+  }
+
+  @action onFieldNameInput(value: string) {
+    this.fieldName = value;
+  }
+
+  @action onCardinalityChange(id: 'one' | 'many'): void {
+    this.cardinality = id;
   }
 
   private chooseCardTask = restartableTask(async () => {
@@ -95,17 +92,20 @@ export default class AddFieldModal extends Component<Signature> {
     if (chosenCatalogEntry) {
       this.chosenCatalogEntry = chosenCatalogEntry;
 
-      let fieldModuleUrl = new URL(
+      // This transforms relative module paths, such as "../person", to absolute ones -
+      // we need that absolute path because it is a requirement of the loadCard function
+      let fieldModuleURL = new URL(
         chosenCatalogEntry.ref.module,
         chosenCatalogEntry.id,
       );
-      this.fieldModuleUrl = fieldModuleUrl;
+      this.fieldModuleURL = fieldModuleURL;
+
       let ref = {
-        module: fieldModuleUrl.href,
+        module: fieldModuleURL.href,
         name: chosenCatalogEntry.ref.name,
       };
 
-      this.chosenCatalogEntryCard = await loadCard(ref, {
+      this.chosenCatalogEntryRefCard = await loadCard(ref, {
         loader: this.loaderService.loader,
       });
     }
@@ -164,7 +164,7 @@ export default class AddFieldModal extends Component<Signature> {
     return bool(
       !this.fieldName ||
         !this.chosenCatalogEntry ||
-        !this.chosenCatalogEntryCard ||
+        !this.chosenCatalogEntryRefCard ||
         this.nameErrorMessage,
     );
   }
@@ -173,6 +173,7 @@ export default class AddFieldModal extends Component<Signature> {
     // note that this write will cause the component to rerender, so
     // any code after this write will not be executed since the component will
     // get torn down before subsequent code can execute
+
     this.args.file.write(src, true);
   });
 
@@ -230,6 +231,7 @@ export default class AddFieldModal extends Component<Signature> {
 
       .card-chooser-area button.pull-right {
         margin-left: auto;
+        height: auto;
       }
 
       :global(.add-field-modal .boxel-field.horizontal) {
@@ -243,16 +245,17 @@ export default class AddFieldModal extends Component<Signature> {
       @size='medium'
       @centered={{true}}
       class='add-field-modal'
+      data-test-add-field-modal
       style={{cssVar boxel-modal-offset-top='40vh'}}
     >
       <:content>
         <FieldContainer @label='Field Type'>
           <div class='card-chooser-area'>
-            {{#if this.chosenCatalogEntryCard}}
+            {{#if this.chosenCatalogEntryRefCard}}
               <div class='pill'>
-                <div class='realm-icon'>
-                  {{#if this.fieldModuleUrl.href}}
-                    <RealmInfoProvider @fileURL={{this.fieldModuleUrl.href}}>
+                <div class='realm-icon' data-test-selected-field-realm-icon>
+                  {{#if this.fieldModuleURL.href}}
+                    <RealmInfoProvider @fileURL={{this.fieldModuleURL.href}}>
                       <:ready as |realmInfo|>
                         <img
                           src={{realmInfo.iconURL}}
@@ -264,8 +267,8 @@ export default class AddFieldModal extends Component<Signature> {
                   {{/if}}
                 </div>
                 <div>
-                  <span>
-                    {{this.chosenCatalogEntryCard.displayName}}
+                  <span data-test-selected-field-display-name>
+                    {{this.chosenCatalogEntryRefCard.displayName}}
                   </span>
                 </div>
               </div>
@@ -273,9 +276,10 @@ export default class AddFieldModal extends Component<Signature> {
 
             <button
               {{on 'click' this.chooseCard}}
-              class='{{if this.chosenCatalogEntryCard "pull-right"}}'
+              class='{{if this.chosenCatalogEntryRefCard "pull-right"}}'
+              data-test-choose-card-button
             >
-              {{#if this.chosenCatalogEntryCard}}
+              {{#if this.chosenCatalogEntryRefCard}}
                 Change
               {{else}}
                 Select a field
@@ -291,22 +295,25 @@ export default class AddFieldModal extends Component<Signature> {
             @onInput={{this.onFieldNameInput}}
             @errorMessage={{this.nameErrorMessage}}
             @invalid={{bool this.nameErrorMessage}}
+            data-test-field-name-input
           />
         </FieldContainer>
 
         <FieldContainer @label=''>
           <RadioInput
             @groupDescription='Field cardinality'
-            @items={{this.items}}
+            @items={{this.cardinalityItems}}
             @name='cardinality-radio'
-            @checkedId={{this.checkedId}}
+            @checkedId={{this.cardinality}}
             style={{cssVar
               boxel-radio-input-option-padding='1em'
               boxel-radio-input-option-gap='1em'
             }}
             as |item|
           >
-            <item.component @onChange={{fn this.onChange item.data.id}}>
+            <item.component
+              @onChange={{fn this.onCardinalityChange item.data.id}}
+            >
               {{item.data.text}}
             </item.component>
           </RadioInput>
@@ -315,11 +322,11 @@ export default class AddFieldModal extends Component<Signature> {
 
       <:footer>
         <div class='footer-buttons'>
-
           <div>
             <BoxelButton
               @kind='secondary-light'
               {{on 'click' this.args.onClose}}
+              data-test-cancel-adding-field-button
             >
               Cancel
             </BoxelButton>
@@ -328,7 +335,9 @@ export default class AddFieldModal extends Component<Signature> {
               @kind='primary'
               {{on 'click' this.saveField}}
               @disabled={{or this.submitDisabled this.writeTask.isRunning}}
+              data-test-save-field-button
             >
+              {{! isRunning will currently not actually be true because writeTask has no async commands   }}
               {{#if this.writeTask.isRunning}}
                 Adding…
               {{else}}
