@@ -430,7 +430,7 @@ export default class CardSchemaEditor extends Component<Signature> {
       types.push('Linked');
     }
 
-    if (field.type === 'containsMany') {
+    if (field.type === 'containsMany' || field.type === 'linksToMany') {
       types.push('Collection');
     }
 

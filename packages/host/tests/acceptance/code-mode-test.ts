@@ -46,7 +46,7 @@ const indexCardSource = `
 `;
 
 const personCardSource = `
-  import { contains, containsMany, field, linksTo, CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { contains, containsMany, field, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
   import StringCard from "https://cardstack.com/base/string";
   import { Friend } from './friend';
 
@@ -59,7 +59,7 @@ const personCardSource = `
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
     });
-    @field friend = linksTo(() => Friend);
+    @field friends = linksToMany(() => Friend);
     @field address = containsMany(StringCard);
     static isolated = class Isolated extends Component<typeof this> {
       <template>
@@ -68,7 +68,7 @@ const personCardSource = `
           <p>Last name: <@fields.lastName /></p>
           <p>Title: <@fields.title /></p>
           <p>Address List: <@fields.address /></p>
-          <p>Friend: <@fields.friend /></p>
+          <p>Friends: <@fields.friends /></p>
         </div>
         <style>
           div {
@@ -1188,17 +1188,17 @@ module('Acceptance | code mode tests', function (hooks) {
 
     assert
       .dom(
-        `[data-test-card-schema="Person"] [data-test-field-name="friend"] [data-test-card-display-name="Friend"]`,
+        `[data-test-card-schema="Person"] [data-test-field-name="friends"] [data-test-card-display-name="Friend"]`,
       )
       .exists();
     assert
       .dom(
-        `[data-test-card-schema="Person"] [data-test-field-name="friend"] [data-test-field-types]`,
+        `[data-test-card-schema="Person"] [data-test-field-name="friends"] [data-test-field-types]`,
       )
-      .hasText('Linked');
+      .hasText('Collection, Linked');
     assert
       .dom(
-        `[data-test-card-schema="Person"] [data-test-field-name="friend"] [data-test-linked-icon]`,
+        `[data-test-card-schema="Person"] [data-test-field-name="friends"] [data-test-linked-icon]`,
       )
       .exists();
 
