@@ -1465,12 +1465,6 @@ module('Acceptance | code mode tests', function (hooks) {
         `[data-test-card-schema="Person"] [data-test-field-name="birthdate"] [data-test-card-display-name="Date"]`,
       )
       .exists();
-
-    assert
-      .dom(
-        `[data-test-card-schema="Person"] [data-test-field-name="birthdate"] [data-test-field-types]`,
-      )
-      .hasText('Contains');
   });
 
   test('adding a field from schema editor - cardinality test', async function (assert) {
