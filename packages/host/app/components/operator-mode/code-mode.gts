@@ -169,7 +169,7 @@ export default class CodeMode extends Component<Signature> {
   @tracked private card: CardDef | undefined;
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
-  @tracked private selectedElement: Element | undefined;
+  @tracked private _selectedElement: Element | undefined;
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
@@ -362,7 +362,7 @@ export default class CodeMode extends Component<Signature> {
 
   @use private elements = resource(({ on }) => {
     on.cleanup(() => {
-      this.selectedElement = undefined;
+      this._selectedElement = undefined;
     });
     if (!this.importedModule) {
       return new TrackedObject({
@@ -592,9 +592,9 @@ export default class CodeMode extends Component<Signature> {
     return this.card;
   }
 
-  private get selectedElementInFile() {
-    if (this.selectedElement) {
-      return this.selectedElement;
+  private get selectedElement() {
+    if (this._selectedElement) {
+      return this._selectedElement;
     } else {
       return this.elementsInFile.length > 0
         ? this.elementsInFile[0]
@@ -602,18 +602,18 @@ export default class CodeMode extends Component<Signature> {
     }
   }
 
-  private get selectedCardOrFieldInFile() {
-    if (this.selectedElementInFile) {
-      if (isCardOrFieldElement(this.selectedElementInFile)) {
-        return this.selectedElementInFile;
+  private get selectedCardOrField() {
+    if (this.selectedElement) {
+      if (isCardOrFieldElement(this.selectedElement)) {
+        return this.selectedElement;
       }
     }
     return;
   }
 
   @action
-  private selectElementInFile(el: Element) {
-    this.selectedElement = el;
+  private selectElement(el: Element) {
+    this._selectedElement = el;
   }
 
   get elementsInFile() {
@@ -898,9 +898,9 @@ export default class CodeMode extends Component<Signature> {
                       @cardInstanceType={{this.cardType}}
                       @readyFile={{this.readyFile}}
                       @realmInfo={{this.realmInfo}}
-                      @selectedElement={{this.selectedElementInFile}}
+                      @selectedElement={{this.selectedElement}}
                       @elements={{this.elementsInFile}}
-                      @selectElement={{this.selectElementInFile}}
+                      @selectElement={{this.selectElement}}
                       @delete={{this.delete}}
                       data-test-card-inheritance-panel
                     />
@@ -983,11 +983,11 @@ export default class CodeMode extends Component<Signature> {
                     @realmIconURL={{this.realmIconURL}}
                     data-test-card-resource-loaded
                   />
-                {{else if this.selectedCardOrFieldInFile}}
+                {{else if this.selectedCardOrField}}
                   <SchemaEditorColumn
                     @file={{this.readyFile}}
-                    @card={{this.selectedCardOrFieldInFile.cardOrField}}
-                    @cardTypeResource={{this.selectedCardOrFieldInFile.cardType}}
+                    @card={{this.selectedCardOrField.cardOrField}}
+                    @cardTypeResource={{this.selectedCardOrField.cardType}}
                   />
                 {{else if this.schemaEditorIncompatible}}
                   <div

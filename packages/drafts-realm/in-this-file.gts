@@ -8,16 +8,23 @@ import StringCard from 'https://cardstack.com/base/string';
 
 export const exportedVar = 'exported var';
 
+// @ts-ignore
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const localVar = 'local var';
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 class LocalClass {}
+
 export class ExportedClass {}
 
+export class ExportedClassInheritLocalClass extends LocalClass {}
+
+// @ts-ignore
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function localFunction() {}
+
 export function exportedFunction() {}
+
+export { LocalClass as AClassWithExportName };
 
 class LocalCard extends CardDef {
   static displayName = 'local card';
