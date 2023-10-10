@@ -894,7 +894,7 @@ module('Acceptance | code mode tests', function (hooks) {
         .dom(`[data-test-boxel-selector-item]:nth-of-type(${index + 1})`)
         .hasText(elementName);
     });
-    assert.dom('[data-test-boxel-selector-item]').exists({ count: 9 });
+    assert.dom('[data-test-boxel-selector-item]').exists({ count: 11 });
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     // clicking on a card
