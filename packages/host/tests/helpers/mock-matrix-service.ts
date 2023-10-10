@@ -78,21 +78,7 @@ export class MockMatrixService extends MatrixService {
   ): Promise<string> {
     return name;
   }
-  /*
-  async sendMessage(
-    roomId: string,
-    body: string | undefined,
-    card?: CardDef,
-    context?: OperatorModeContext,
-  ): Promise<void> {
-    this.lastSentMessage = {
-      roomId,
-      body,
-      card,
-      context,
-    };
-  }
-*/
+
   public createAndJoinRoom(roomId: string) {
     addRoomEvent(this, {
       event_id: 'eventname',
