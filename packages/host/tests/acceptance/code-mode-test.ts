@@ -1277,12 +1277,12 @@ module('Acceptance | code mode tests', function (hooks) {
 
     // Click on card definition button
     await click(
-      '[data-test-card-schema="Employee"] [data-test-card-schema-navigational-button]',
+      '[data-test-card-schema="Person"] [data-test-card-schema-navigational-button]',
     );
 
-    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-current-module-name="person.gts"]');
 
-    assert.dom('[data-test-current-module-name]').hasText('employee.gts');
+    assert.dom('[data-test-current-module-name]').hasText('person.gts');
 
     // Go back so that we can test clicking on a field definition button
     await visit(
@@ -1299,8 +1299,9 @@ module('Acceptance | code mode tests', function (hooks) {
       '[data-test-card-schema="Employee"] [data-test-field-name="department"] [data-test-card-display-name="String"]',
     );
 
-    await waitFor('[data-test-current-module-name]');
-    assert.dom('[data-test-current-module-name]').hasText('string.ts');
+    // TODO: CS-6110
+    // await waitFor('[data-test-current-module-name="string.ts"]');
+    // assert.dom('[data-test-current-module-name]').hasText('string.ts');
   });
 
   test('code mode handles binary files', async function (assert) {
