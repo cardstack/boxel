@@ -1,41 +1,41 @@
-import ModalContainer from '@cardstack/host/components/modal-container';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+
+import { tracked } from '@glimmer/tracking';
+
+import { restartableTask } from 'ember-concurrency';
+
 import {
   BoxelButton,
   BoxelInput,
   FieldContainer,
   RadioInput,
 } from '@cardstack/boxel-ui';
-import { restartableTask, task, timeout, all } from 'ember-concurrency';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
+
+import { bool, or } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
 import {
   chooseCard,
-  baseCardRef,
-  baseRealm,
   loadCard,
   identifyCard,
   catalogEntryRef,
 } from '@cardstack/runtime-common';
-import { tracked, cached } from '@glimmer/tracking';
-
-import LoaderService from '@cardstack/host/services/loader-service';
-import {
-  BaseDef,
-  CardDef,
-  FieldDef,
-  FieldType,
-} from 'https://cardstack.com/base/card-api';
-import { Ready } from '@cardstack/host/resources/file';
-
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
-import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import { and, bool, eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+
+import ModalContainer from '@cardstack/host/components/modal-container';
+
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import { Ready } from '@cardstack/host/resources/file';
+import LoaderService from '@cardstack/host/services/loader-service';
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
+import { BaseDef, FieldType } from 'https://cardstack.com/base/card-api';
+
+import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
 interface Signature {
   Args: {
@@ -50,16 +50,17 @@ export default class AddFieldModal extends Component<Signature> {
   @tracked chosenCatalogEntry: CatalogEntry | undefined = undefined;
   @tracked chosenCatalogEntryCard: typeof BaseDef | undefined = undefined;
   @tracked fieldModuleUrl: URL | undefined = undefined;
-  @tracked newFieldName: string | undefined = undefined;
+  @tracked fieldName: string | undefined = undefined;
   @tracked cardinality: 'one' | 'many' = 'one';
   @service declare loaderService: LoaderService;
   @service declare operatorModeStateService: OperatorModeStateService;
+
   @action chooseCard() {
-    this.doChooseCard.perform();
+    this.chooseCardTask.perform();
   }
 
-  @action onNewFieldNameInput(value: string) {
-    this.newFieldName = value;
+  @action onFieldNameInput(value: string) {
+    this.fieldName = value;
   }
 
   @action onCardinalityChange(value: string) {
@@ -80,16 +81,7 @@ export default class AddFieldModal extends Component<Signature> {
     this.checkedId = id;
   }
 
-  @cached
-  get ref() {
-    let ref = identifyCard(this.args.card);
-    if (!ref) {
-      throw new Error(`bug: unable to identify card ${this.args.card.name}`);
-    }
-    return ref as { module: string; name: string };
-  }
-
-  private doChooseCard = restartableTask(async () => {
+  private chooseCardTask = restartableTask(async () => {
     let chosenCatalogEntry = await chooseCard<CatalogEntry>({
       filter: {
         any: [
@@ -119,10 +111,11 @@ export default class AddFieldModal extends Component<Signature> {
     }
   });
 
-  // todo remove asyunc - use task
-  @action async saveField() {
-    if (!this.chosenCatalogEntry) {
-      throw new Error('bug: no chosen catalog entry');
+  @action saveField() {
+    if (!this.chosenCatalogEntry || !this.args.card || !this.fieldName) {
+      throw new Error(
+        'bug: cannot save field without a selected card and a name',
+      );
     }
 
     let isField = this.chosenCatalogEntry.isField;
@@ -137,39 +130,46 @@ export default class AddFieldModal extends Component<Signature> {
     }
 
     this.args.moduleSyntax.addField(
-      { type: 'exportedName', name: identifyCard(this.args.card).name },
-      this.newFieldName,
+      {
+        type: 'exportedName',
+        name: (
+          identifyCard(this.args.card)! as { module: string; name: string }
+        ).name,
+      },
+      this.fieldName,
       this.chosenCatalogEntry.ref,
       relationshipType,
       new URL(this.chosenCatalogEntry.id),
-      this.operatorModeStateService.state.codePath,
+      this.operatorModeStateService.state.codePath!,
     );
 
-    await this.write.perform(this.args.moduleSyntax.code());
+    this.writeTask.perform(this.args.moduleSyntax.code());
   }
 
   get nameErrorMessage() {
-    if (this.newFieldName) {
-      if (/\s/g.test(this.newFieldName)) {
+    if (this.fieldName) {
+      if (/\s/g.test(this.fieldName)) {
         return 'Field names cannot contain spaces';
       }
 
-      if (this.newFieldName[0] === this.newFieldName[0].toUpperCase()) {
+      if (this.fieldName[0] === this.fieldName[0].toUpperCase()) {
         return 'Field names must start with a lowercase letter';
       }
     }
+
+    return undefined;
   }
 
-  get submitDisabled() {
-    return (
-      !this.newFieldName ||
-      !this.chosenCatalogEntry ||
-      !this.chosenCatalogEntryCard ||
-      this.nameErrorMessage
+  get submitDisabled(): boolean {
+    return bool(
+      !this.fieldName ||
+        !this.chosenCatalogEntry ||
+        !this.chosenCatalogEntryCard ||
+        this.nameErrorMessage,
     );
   }
 
-  private write = restartableTask(async (src: string) => {
+  private writeTask = restartableTask(async (src: string) => {
     // note that this write will cause the component to rerender, so
     // any code after this write will not be executed since the component will
     // get torn down before subsequent code can execute
@@ -287,8 +287,8 @@ export default class AddFieldModal extends Component<Signature> {
 
         <FieldContainer @label='Field name'>
           <BoxelInput
-            @value={{this.newFieldName}}
-            @onInput={{this.onNewFieldNameInput}}
+            @value={{this.fieldName}}
+            @onInput={{this.onFieldNameInput}}
             @errorMessage={{this.nameErrorMessage}}
             @invalid={{bool this.nameErrorMessage}}
           />
@@ -327,9 +327,13 @@ export default class AddFieldModal extends Component<Signature> {
             <BoxelButton
               @kind='primary'
               {{on 'click' this.saveField}}
-              @disabled={{this.submitDisabled}}
+              @disabled={{or this.submitDisabled this.writeTask.isRunning}}
             >
-              Add
+              {{#if this.writeTask.isRunning}}
+                Adding…
+              {{else}}
+                Add
+              {{/if}}
             </BoxelButton>
           </div>
         </div>
