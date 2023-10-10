@@ -24,22 +24,24 @@ import {
 } from '@cardstack/boxel-ui';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { and } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { eq, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import {
   type RealmInfo,
   type SingleCardDocument,
-  type CodeRef,
   RealmPaths,
   logger,
   isCardDocumentString,
   isSingleCardDocument,
-  identifyCard,
-  moduleFrom,
   hasExecutableExtension,
 } from '@cardstack/runtime-common';
+import {
+  ModuleSyntax,
+  type PossibleCardOrFieldClass,
+  type BaseDeclaration,
+  type ElementDeclaration,
+} from '@cardstack/runtime-common/module-syntax';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import config from '@cardstack/host/config/environment';
@@ -126,17 +128,30 @@ const defaultPanelWidths: PanelWidths = {
   emptyCodeModePanel: '80%',
 };
 
-interface ExportedCard {
-  cardType: CardType;
-  card: typeof BaseDef;
-}
-
 const cardEditorSaveTimes = new Map<string, number>();
 
-// Element
-// - exported / unexported card or field
-// - exported class or function
-export type ElementInFile = ExportedCard; // can add more types here
+// an element should be (an item of focus within a module)
+// - exported function or class
+// - exported card or field
+// - unexported card or field
+// This element (in code mode) is extended to include the cardType and cardOrField
+export type Element =
+  | (CardOrField & Partial<PossibleCardOrFieldClass>)
+  | BaseDeclaration;
+
+export interface CardOrField {
+  cardType: CardType;
+  cardOrField: typeof BaseDef;
+}
+
+export function isCardOrFieldElement(
+  element: Element,
+): element is CardOrField & Partial<PossibleCardOrFieldClass> {
+  return (
+    (element as CardOrField).cardType !== undefined &&
+    (element as CardOrField).cardOrField !== undefined
+  );
+}
 
 export default class CodeMode extends Component<Signature> {
   @service declare monacoService: MonacoService;
@@ -151,7 +166,7 @@ export default class CodeMode extends Component<Signature> {
   @tracked private card: CardDef | undefined;
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
-  @tracked private selectedElement: ElementInFile | undefined;
+  @tracked private selectedElement: Element | undefined;
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
@@ -357,7 +372,7 @@ export default class CodeMode extends Component<Signature> {
 
     const state: {
       isLoading: boolean;
-      value: ElementInFile[] | null;
+      value: Element[] | null;
       error: Error | undefined;
       load: () => Promise<void>;
     } = new TrackedObject({
@@ -371,16 +386,30 @@ export default class CodeMode extends Component<Signature> {
           return;
         }
         try {
-          await this.importedModule.loaded;
-          let module = this.importedModule?.module;
-          if (module) {
-            let cards = cardsOrFieldsFromModule(module);
-            let elements: ElementInFile[] = cards.map((card) => {
-              return {
-                cardType: getCardType(this, () => card),
-                card: card,
-              };
-            });
+          if (isReady(this.openFile.current) && this.importedModule?.module) {
+            let module = this.importedModule?.module;
+            let cardsOrFields = cardsOrFieldsFromModule(module);
+            let elements: Element[] = [];
+            await this.importedModule.loaded;
+            let moduleSyntax = new ModuleSyntax(this.openFile.current.content);
+            elements = moduleSyntax.elements.map(
+              (value: ElementDeclaration) => {
+                let cardOrField = cardsOrFields.find(
+                  (c) => c.name === value.localName,
+                );
+                if (cardOrField !== undefined) {
+                  return {
+                    ...value,
+                    cardType: getCardType(
+                      this,
+                      () => cardOrField as typeof BaseDef,
+                    ),
+                    cardOrField,
+                  } as CardOrField & Partial<PossibleCardOrFieldClass>;
+                }
+                return value as BaseDeclaration;
+              },
+            );
             state.value = elements;
           }
         } catch (error: any) {
@@ -421,16 +450,17 @@ export default class CodeMode extends Component<Signature> {
   @use private importedModule = resource(() => {
     if (isReady(this.openFile.current)) {
       let f: Ready = this.openFile.current;
-      if (f.url.endsWith('.json') && isCardDocumentString(f.content)) {
-        let ref = identifyCard(this.card?.constructor);
-        if (ref !== undefined) {
-          return importResource(this, () => moduleFrom(ref as CodeRef));
-        } else {
-          return;
-        }
-      } else if (hasExecutableExtension(f.url)) {
+      if (hasExecutableExtension(f.url)) {
         return importResource(this, () => f.url);
       }
+    }
+    return undefined;
+  });
+
+  @use private cardType = resource(() => {
+    if (this.card !== undefined) {
+      let cardDefinition = this.card.constructor as typeof BaseDef;
+      return getCardType(this, () => cardDefinition);
     }
     return undefined;
   });
@@ -513,17 +543,23 @@ export default class CodeMode extends Component<Signature> {
     if (this.selectedElement) {
       return this.selectedElement;
     } else {
-      if (this.elementsInFile === null) {
-        return;
-      }
       return this.elementsInFile.length > 0
         ? this.elementsInFile[0]
         : undefined;
     }
   }
 
+  private get selectedCardOrField() {
+    if (this.selectedElementInFile) {
+      if (isCardOrFieldElement(this.selectedElementInFile)) {
+        return this.selectedElementInFile;
+      }
+    }
+    return;
+  }
+
   @action
-  private selectElementInFile(el: ElementInFile) {
+  private selectElement(el: Element) {
     this.selectedElement = el;
   }
 
@@ -806,11 +842,12 @@ export default class CodeMode extends Component<Signature> {
                   {{#if this.isReady}}
                     <DetailPanel
                       @cardInstance={{this.card}}
+                      @cardInstanceType={{this.cardType}}
                       @readyFile={{this.readyFile}}
                       @realmInfo={{this.realmInfo}}
                       @selectedElement={{this.selectedElementInFile}}
                       @elements={{this.elementsInFile}}
-                      @selectElement={{this.selectElementInFile}}
+                      @selectElement={{this.selectElement}}
                       @delete={{this.delete}}
                       data-test-card-inheritance-panel
                     />
@@ -893,11 +930,11 @@ export default class CodeMode extends Component<Signature> {
                     @realmIconURL={{this.realmIconURL}}
                     data-test-card-resource-loaded
                   />
-                {{else if this.selectedElementInFile}}
+                {{else if this.selectedCardOrField}}
                   <SchemaEditorColumn
                     @file={{this.readyFile}}
-                    @card={{this.selectedElementInFile.card}}
-                    @cardTypeResource={{this.selectedElementInFile.cardType}}
+                    @card={{this.selectedCardOrField.cardOrField}}
+                    @cardTypeResource={{this.selectedCardOrField.cardType}}
                   />
                 {{else if this.schemaEditorIncompatible}}
                   <div

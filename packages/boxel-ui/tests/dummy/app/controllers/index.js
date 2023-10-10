@@ -2,6 +2,7 @@ import FreestyleController from 'ember-freestyle/controllers/freestyle';
 import AccordionUsage from '@cardstack/boxel-ui/components/accordion/usage';
 import AddButtonUsage from '@cardstack/boxel-ui/components/add-button/usage';
 import CardContainerUsage from '@cardstack/boxel-ui/components/card-container/usage';
+import DropdownButtonUsage from '@cardstack/boxel-ui/components/dropdown-button/usage';
 import FieldContainerUsage from '@cardstack/boxel-ui/components/field-container/usage';
 import GridContainerUsage from '@cardstack/boxel-ui/components/grid-container/usage';
 import HeaderUsage from '@cardstack/boxel-ui/components/header/usage';
@@ -26,6 +27,8 @@ export default class IndexController extends FreestyleController {
       ['Boxel::Accordion', AccordionUsage],
       ['Boxel::AddButton', AddButtonUsage],
       ['Boxel::CardContainer', CardContainerUsage],
+      ['Boxel::Dropdown', DropdownUsage],
+      ['Boxel::DropdownButton', DropdownButtonUsage],
       ['Boxel::FieldContainer', FieldContainerUsage],
       ['Boxel::GridContainer', GridContainerUsage],
       ['Boxel::Header', HeaderUsage],
@@ -38,7 +41,6 @@ export default class IndexController extends FreestyleController {
       ['Boxel::Modal', ModalUsage],
       ['Boxel::Message', MessageUsage],
       ['Boxel::Menu', MenuUsage],
-      ['Boxel::Dropdown', DropdownUsage],
       ['Boxel::Tooltip', TooltipUsage],
       ['Boxel::ResizablePanel', ResizablePanelGroupUsage],
       ['Boxel::RadioInput', RadioInput],

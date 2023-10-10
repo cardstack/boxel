@@ -9,6 +9,7 @@ import BoxelHeader from './components/header';
 import BoxelMessage from './components/message';
 import Button from './components/button';
 import CardContainer from './components/card-container';
+import DropdownButton from './components/dropdown-button';
 import FieldContainer from './components/field-container';
 import GridContainer from './components/grid-container';
 import Header from './components/header';
@@ -37,6 +38,7 @@ export {
   BoxelInputValidationState,
   Button,
   CardContainer,
+  DropdownButton,
   FieldContainer,
   GridContainer,
   Header,

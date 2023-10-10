@@ -72,7 +72,7 @@ module('module-syntax', function () {
       `,
     );
 
-    let card = mod.possibleCards.find((c) => c.exportedAs === 'Person');
+    let card = mod.possibleCardsOrFields.find((c) => c.exportedAs === 'Person');
     let field = card!.possibleFields.get('age');
     assert.ok(field, 'new field was added to syntax');
     assert.deepEqual(
@@ -253,7 +253,7 @@ module('module-syntax', function () {
         }
       `,
     );
-    let card = mod.possibleCards.find((c) => c.exportedAs === 'Person');
+    let card = mod.possibleCardsOrFields.find((c) => c.exportedAs === 'Person');
     let field = card!.possibleFields.get('aliases');
     assert.ok(field, 'new field was added to syntax');
     assert.deepEqual(
@@ -309,7 +309,7 @@ module('module-syntax', function () {
         }
       `,
     );
-    let card = mod.possibleCards.find((c) => c.exportedAs === 'Person');
+    let card = mod.possibleCardsOrFields.find((c) => c.exportedAs === 'Person');
     let field = card!.possibleFields.get('pet');
     assert.ok(field, 'new field was added to syntax');
     assert.deepEqual(
@@ -355,7 +355,7 @@ module('module-syntax', function () {
         }
       `,
     );
-    let card = mod.possibleCards.find((c) => c.exportedAs === 'Person');
+    let card = mod.possibleCardsOrFields.find((c) => c.exportedAs === 'Person');
     let field = card!.possibleFields.get('friend');
     assert.ok(field, 'new field was added to syntax');
     assert.deepEqual(
@@ -466,7 +466,7 @@ module('module-syntax', function () {
       `,
     );
 
-    let card = mod.possibleCards.find((c) => c.exportedAs === 'Person');
+    let card = mod.possibleCardsOrFields.find((c) => c.exportedAs === 'Person');
     let field = card!.possibleFields.get('firstName');
     assert.strictEqual(field, undefined, 'field does not exist in syntax');
   });
@@ -518,7 +518,7 @@ module('module-syntax', function () {
       `,
     );
 
-    let card = mod.possibleCards.find((c) => c.exportedAs === 'Friend');
+    let card = mod.possibleCardsOrFields.find((c) => c.exportedAs === 'Friend');
     let field = card!.possibleFields.get('friend');
     assert.strictEqual(field, undefined, 'field does not exist in syntax');
   });

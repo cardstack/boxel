@@ -1,6 +1,6 @@
 server_name: 'localhost'
 pid_file: /data/homeserver.pid
-public_baseurl: '{{PUBLIC_BASEURL}}'
+public_baseurl: 'http://localhost:8008'
 listeners:
   - port: 8008
     tls: false
@@ -63,6 +63,8 @@ enable_registration: true
 enable_registration_without_verification: true
 disable_msisdn_registration: false
 registration_shared_secret: '{{REGISTRATION_SECRET}}'
+registrations_require_3pid:
+  - email
 registration_requires_token: true
 report_stats: false
 macaroon_secret_key: '{{MACAROON_SECRET_KEY}}'
@@ -75,3 +77,16 @@ suppress_key_server_warning: true
 
 ui_auth:
   session_timeout: '300s'
+
+email:
+  smtp_host: 'boxel-smtp'
+  smtp_port: 25
+  enable_tls: false
+  notif_from: '%(app)s <noreply@example.com>'
+  app_name: 'Boxel'
+  enable_notifs: true
+  notif_for_new_users: false
+  client_base_url: 'http://localhost:4200'
+  validation_token_lifetime: '15m'
+  subjects:
+    email_validation: '%(app)s Email Validation'

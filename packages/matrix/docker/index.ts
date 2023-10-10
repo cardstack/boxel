@@ -7,12 +7,13 @@ export function dockerRun(args: {
   containerName: string;
   dockerParams?: string[];
   applicationParams?: string[];
+  runAsUser?: true;
 }): Promise<string> {
   const userInfo = os.userInfo();
   const params = args.dockerParams ?? [];
   const appParams = args.applicationParams ?? [];
 
-  if (userInfo.uid >= 0) {
+  if (args.runAsUser && userInfo.uid >= 0) {
     // On *nix we run the docker container as our uid:gid otherwise cleaning it up its media_store can be difficult
     params.push('-u', `${userInfo.uid}:${userInfo.gid}`);
   }

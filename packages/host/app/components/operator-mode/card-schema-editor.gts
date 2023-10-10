@@ -1,10 +1,14 @@
-import { fn } from '@ember/helper';
+import { fn, array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import { DropdownButton } from '@cardstack/boxel-ui';
+import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
+import menuDivider from '@cardstack/boxel-ui/helpers/menu-divider';
 import { gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
 import { getPlural } from '@cardstack/runtime-common';
 import { tracked } from '@glimmer/tracking';
@@ -60,12 +64,13 @@ export default class CardSchemaEditor extends Component<Signature> {
       }
 
       .pill {
-        border: 1px solid var(--boxel-400);
-        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
-        border-radius: 8px;
-        background-color: white;
-        font-weight: 600;
         display: inline-flex;
+        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
+        background-color: var(--boxel-light);
+        border: 1px solid var(--boxel-400);
+        border-radius: var(--boxel-border-radius-sm);
+        font: 700 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
       }
 
       .pill:hover {
@@ -76,48 +81,74 @@ export default class CardSchemaEditor extends Component<Signature> {
         display: flex;
       }
 
-      .pill > div > span {
-        margin: auto;
-      }
-
       .realm-icon {
         margin-right: var(--boxel-sp-xxxs);
       }
 
       .card-field {
-        background-color: white;
-      }
-
-      .card-field {
-        margin-bottom: var(--boxel-sp-xs);
-        padding: var(--boxel-sp);
-        border-radius: var(--boxel-border-radius);
         display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xxs);
+        margin-bottom: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius);
+        background-color: var(--boxel-light);
       }
 
       .card-fields {
         margin-top: var(--boxel-sp);
       }
 
+      :global(.context-menu) {
+        width: 13.5rem;
+      }
+
+      .context-menu-trigger {
+        rotate: 90deg;
+      }
+
+      .context-menu-list {
+        --boxel-menu-item-content-padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        border-top-right-radius: 0;
+        border-top-left-radius: 0;
+      }
+
+      .warning-box {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--boxel-sp-xxxs);
+        padding: var(--boxel-sp-sm);
+        background-color: var(--boxel-warning-100);
+        border-top-right-radius: inherit;
+        border-top-left-radius: inherit;
+      }
+
+      .warning {
+        margin: 0;
+      }
+
       .left {
         display: flex;
-        margin-top: auto;
-        margin-bottom: auto;
         flex-direction: column;
       }
 
       .right {
-        margin-left: auto;
-        margin-top: auto;
-        margin-bottom: auto;
+        display: flex;
+        align-items: center;
       }
 
       .field-name {
-        font-size: var(--boxel-font-size);
+        font: 500 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
       }
 
       .field-type {
-        color: #949494;
+        color: var(--boxel-450);
+        font: 500 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-xs);
       }
 
       .realm-icon > img {
@@ -241,6 +272,43 @@ export default class CardSchemaEditor extends Component<Signature> {
                       </span>
                     </div>
                   </button>
+                  <DropdownButton
+                    @icon='three-dots-horizontal'
+                    @label='field options'
+                    @contentClass='context-menu'
+                    class='context-menu-trigger'
+                    as |dd|
+                  >
+                    <div class='warning-box'>
+                      <p class='warning'>
+                        These actions will break compatibility with existing
+                        card instances.
+                      </p>
+                      <span class='warning-icon'>
+                        {{svgJar
+                          'warning'
+                          width='20'
+                          height='20'
+                          role='presentation'
+                        }}
+                      </span>
+                    </div>
+                    <dd.Menu
+                      class='context-menu-list'
+                      @items={{array
+                        (menuItem
+                          'Edit Field Name' this.editFieldName disabled=true
+                        )
+                        (menuDivider)
+                        (menuItem
+                          'Remove Field'
+                          this.removeField
+                          dangerous=true
+                          disabled=true
+                        )
+                      }}
+                    />
+                  </DropdownButton>
                 {{/let}}
               </div>
             </div>
@@ -285,6 +353,18 @@ export default class CardSchemaEditor extends Component<Signature> {
   @action
   isOwnField(fieldName: string): boolean {
     return isOwnField(this.args.card, fieldName);
+  }
+
+  @action
+  removeField() {
+    // TODO: implement
+    return;
+  }
+
+  @action
+  editFieldName() {
+    // TODO: implement
+    return;
   }
 
   get totalOwnFields() {
