@@ -128,7 +128,7 @@ export default class CardURLBar extends Component<Signature> {
 
         --icon-color: var(--boxel-light);
       }
-      :deep(.realm-icon) img {
+      .realm-icon img {
         width: 20px;
         height: 20px;
       }
