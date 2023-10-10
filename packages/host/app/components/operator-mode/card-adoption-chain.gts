@@ -74,8 +74,8 @@ export default class CardAdoptionChain extends Component<Signature> {
             @cardType={{data.cardType}}
             @file={{@file}}
             @moduleSyntax={{this.moduleSyntax}}
-            @childFields={{this.getInheritedFields index false}}
-            @parentFields={{this.getInheritedFields index true}}
+            @childFields={{this.getFields index 'successors'}}
+            @parentFields={{this.getFields index 'ancestors'}}
           />
           <div class='content-with-line'>
             <hr class='line' />
@@ -99,9 +99,9 @@ export default class CardAdoptionChain extends Component<Signature> {
   }
 
   @action
-  getInheritedFields(cardIndex: number, isGetParentField: boolean): string[] {
+  getFields(cardIndex: number, from: 'ancestors' | 'successors'): string[] {
     const children = this.args.cardInheritanceChain.filter((_data, index) =>
-      isGetParentField ? index > cardIndex : index < cardIndex,
+      from === 'ancestors' ? index > cardIndex : index < cardIndex,
     );
 
     const fields = children.reduce((result: string[], data) => {
