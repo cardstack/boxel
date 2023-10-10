@@ -277,6 +277,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                 'card-field overidding-field'
                 'card-field'
               }}
+              data-field-name={{field.name}}
               data-test-field-name={{field.name}}
             >
               <div class='left'>
@@ -467,9 +468,7 @@ export default class CardSchemaEditor extends Component<Signature> {
 
     // This code assumes that the overriding field
     // is always located in the top result returned by the query selector.
-    let element = document.querySelector(
-      `[data-test-field-name='${field.name}']`,
-    );
+    let element = document.querySelector(`[data-field-name='${field.name}']`);
     element?.classList.add('show-overriding-field-border');
     setTimeout(() => {
       element?.classList.remove('show-overriding-field-border');
