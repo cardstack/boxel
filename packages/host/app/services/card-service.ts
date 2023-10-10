@@ -1,4 +1,10 @@
+import { registerDestructor } from '@ember/destroyable';
+
 import Service, { service } from '@ember/service';
+
+import { task } from 'ember-concurrency';
+
+import intersection from 'lodash/intersection';
 
 import { stringify } from 'qs';
 
@@ -16,6 +22,8 @@ import {
 import type { Query } from '@cardstack/runtime-common/query';
 
 import ENV from '@cardstack/host/config/environment';
+
+import type MessageService from '@cardstack/host/services/message-service';
 
 import type {
   BaseDef,
@@ -35,9 +43,20 @@ export type CardSaveSubscriber = (content: SingleCardDocument | string) => void;
 const { ownRealmURL, otherRealmURLs } = ENV;
 
 export default class CardService extends Service {
-  @service declare loaderService: LoaderService;
+  @service private declare loaderService: LoaderService;
+  @service private declare messageService: MessageService;
   private subscriber: CardSaveSubscriber | undefined;
   private indexCards: Map<string, CardDef> = new Map();
+  private liveCards: Map<
+    string,
+    {
+      card: CardDef;
+      realmURL: URL;
+      subscribers: Set<any>;
+    }
+  > = new Map();
+  private realmSubscriptions: Map<string, { unsubscribe: () => void }> =
+    new Map();
 
   private apiModule = importResource(
     this,
@@ -123,6 +142,10 @@ export default class CardService extends Service {
   }
 
   async reloadModel(card: CardDef): Promise<CardDef> {
+    return await this.doReloadModel.perform(card);
+  }
+
+  private doReloadModel = task(async (card: CardDef) => {
     await this.apiModule.loaded;
     let json = await this.fetchJSON(card.id);
     if (!isSingleCardDocument(json)) {
@@ -132,8 +155,16 @@ export default class CardService extends Service {
       );
     }
     return await this.api.updateFromSerialized<typeof CardDef>(card, json);
+  });
+
+  // TODO remove this if we don't need it for testing...
+  get reloadingModel() {
+    return this.doReloadModel.isRunning;
   }
 
+  // TODO remove string type param--a URL type as a parameter leverages TS to
+  // assert the url param that we are given is actually a URL. The callers need
+  // to adhere to that
   async loadModel(url: URL | string): Promise<CardDef> {
     if (typeof url === 'string') {
       url = new URL(url);
@@ -158,6 +189,74 @@ export default class CardService extends Service {
     }
     return card;
   }
+
+  async loadLiveModel<T extends object>(parent: T, url: URL): Promise<CardDef> {
+    let entry = this.liveCards.get(url.href);
+    if (entry) {
+      entry.subscribers.add(parent);
+      registerDestructor(parent, () => this.unsubscribeFromCards(parent));
+      return entry.card;
+    }
+    let card = await this.loadModel(url);
+    let realmURL = await this.getRealmURL(card);
+    if (!realmURL) {
+      throw new Error(`bug: cannot determine realm URL for card ${card.id}`);
+    }
+    if (!this.realmSubscriptions.has(realmURL.href)) {
+      this.realmSubscriptions.set(realmURL.href, {
+        unsubscribe: this.messageService.subscribe(
+          `${realmURL.href}_message`,
+          ({ type, data: dataStr }) => {
+            if (type !== 'index') {
+              return;
+            }
+            let data = JSON.parse(dataStr);
+            if (data.type !== 'incremental') {
+              return;
+            }
+            let invalidations = data.invalidations as string[];
+            let updatedIds = intersection(invalidations, [
+              ...this.liveCards.keys(),
+            ]);
+            for (let id of updatedIds) {
+              this.doReloadModel.perform(this.liveCards.get(id)!.card);
+            }
+          },
+        ),
+      });
+    }
+    this.liveCards.set(card.id, {
+      card,
+      realmURL,
+      subscribers: new Set([parent]),
+    });
+    return card;
+  }
+
+  private unsubscribeFromCards = <T extends object>(parent: T) => {
+    let unsubscribeFromURLs: Set<string> = new Set();
+    // gather up all the realmURLs for the cards this parent subscribed to
+    for (let [id, { subscribers, realmURL }] of this.liveCards) {
+      if (subscribers.has(parent)) {
+        subscribers.delete(parent);
+        unsubscribeFromURLs.add(realmURL.href);
+        if (subscribers.size === 0) {
+          this.liveCards.delete(id);
+        }
+      }
+    }
+    // figure out which realms have no more subscribers
+    for (let { realmURL } of this.liveCards.values()) {
+      if (unsubscribeFromURLs.has(realmURL.href)) {
+        unsubscribeFromURLs.delete(realmURL.href);
+      }
+    }
+    // for realms with no more subscribers, unsubscribe from realm events
+    for (let realmURL of unsubscribeFromURLs) {
+      this.realmSubscriptions.get(realmURL)?.unsubscribe();
+      this.realmSubscriptions.delete(realmURL);
+    }
+  };
 
   async serializeCard(
     card: CardDef,
