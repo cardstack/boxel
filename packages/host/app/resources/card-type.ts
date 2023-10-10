@@ -40,17 +40,19 @@ export type CodeRefType = CodeRef & {
   displayName: string;
 };
 
+export interface FieldOfType {
+  name: string;
+  card: Type | CodeRefType;
+  isComputed: boolean;
+  type: FieldType;
+}
+
 export interface Type {
   id: string;
   module: string;
   displayName: string;
   super: Type | undefined;
-  fields: {
-    name: string;
-    card: Type | CodeRefType;
-    isComputed: boolean;
-    type: FieldType;
-  }[];
+  fields: FieldOfType[];
   codeRef: CodeRef;
   moduleInfo: ModuleInfo;
 }
@@ -133,7 +135,7 @@ export class CardType extends Resource<Args> {
           .join()}`,
       );
     }
-    let fieldTypes: Type['fields'] = await Promise.all(
+    let fieldTypes: FieldOfType[] = await Promise.all(
       Object.entries(fields).map(
         async ([name, field]: [string, Field<typeof BaseDef, any>]) => ({
           name,

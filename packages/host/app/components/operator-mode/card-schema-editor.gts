@@ -18,6 +18,7 @@ import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-in
 import {
   type Type,
   type CodeRefType,
+  type FieldOfType,
 } from '@cardstack/host/resources/card-type';
 
 import type { Ready } from '@cardstack/host/resources/file';
@@ -380,12 +381,12 @@ export default class CardSchemaEditor extends Component<Signature> {
     return fieldCard.displayName;
   }
 
-  fieldModuleURL(field: Type['fields'][0]) {
+  fieldModuleURL(field: FieldOfType) {
     return (field.card as Type).module;
   }
 
   @action
-  fieldTypes(field: Type['fields'][0]) {
+  fieldTypes(field: FieldOfType) {
     let types = [];
     if (field.isComputed) {
       types.push('Computed');
@@ -411,16 +412,16 @@ export default class CardSchemaEditor extends Component<Signature> {
   }
 
   @action
-  isOverriding(field: Type['fields'][0]) {
+  isOverriding(field: FieldOfType) {
     return this.args.parentFields.includes(field.name);
   }
 
   @action
-  isOverridden(field: Type['fields'][0]) {
+  isOverridden(field: FieldOfType) {
     return this.args.childFields.includes(field.name);
   }
 
-  isLinkedField(field: Type['fields'][0]) {
+  isLinkedField(field: FieldOfType) {
     return field.type === 'linksTo' || field.type === 'linksToMany';
   }
 }
