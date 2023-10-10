@@ -93,20 +93,15 @@ export default class AddFieldModal extends Component<Signature> {
       this.chosenCatalogEntry = chosenCatalogEntry;
 
       // This transforms relative module paths, such as "../person", to absolute ones -
-      // we need that absolute path because it is a requirement of the loadCard function
-      let fieldModuleURL = new URL(
+      // we need that absolute path to load realm info
+      this.fieldModuleURL = new URL(
         chosenCatalogEntry.ref.module,
         chosenCatalogEntry.id,
       );
-      this.fieldModuleURL = fieldModuleURL;
 
-      let ref = {
-        module: fieldModuleURL.href,
-        name: chosenCatalogEntry.ref.name,
-      };
-
-      this.chosenCatalogEntryRefCard = await loadCard(ref, {
+      this.chosenCatalogEntryRefCard = await loadCard(chosenCatalogEntry.ref, {
         loader: this.loaderService.loader,
+        relativeTo: new URL(chosenCatalogEntry.id),
       });
     }
   });

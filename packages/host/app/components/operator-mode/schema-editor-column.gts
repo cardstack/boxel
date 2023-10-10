@@ -4,12 +4,17 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+//@ts-ignore cached not available yet in definitely typed
+import { cached } from '@glimmer/tracking';
+
 import { restartableTask } from 'ember-concurrency';
 
 import { Accordion } from '@cardstack/boxel-ui';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import { getPlural, loadCard } from '@cardstack/runtime-common';
+
+import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
 import { CardType, Type } from '@cardstack/host/resources/card-type';
@@ -18,9 +23,6 @@ import LoaderService from '@cardstack/host/services/loader-service';
 import { calculateTotalOwnFields } from '@cardstack/host/utils/schema-editor';
 
 import { BaseDef } from 'https://cardstack.com/base/card-api';
-import CardSchemaEditor from '@cardstack/host/components/operator-mode/card-schema-editor';
-import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
-import { cached } from '@glimmer/tracking';
 
 interface Signature {
   Element: HTMLElement;
@@ -126,17 +128,12 @@ export default class SchemaEditorColumn extends Component<Signature> {
           </div>
         </:title>
         <:content>
-          <div class='card-adoption-chain'>
-            {{#each this.cardInheritanceChain as |item index|}}
-              <CardSchemaEditor
-                @card={{item.card}}
-                @cardType={{item.cardType}}
-                @file={{@file}}
-                @moduleSyntax={{this.moduleSyntax}}
-                @allowAddingFields={{eq index 0}}
-              />
-            {{/each}}
-          </div>
+          <CardAdoptionChain
+            class='accordion-content'
+            @file={{@file}}
+            @cardInheritanceChain={{this.cardInheritanceChain}}
+            @moduleSyntax={{this.moduleSyntax}}
+          />
         </:content>
       </A.Item>
     </Accordion>
