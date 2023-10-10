@@ -390,12 +390,13 @@ export default class CodeMode extends Component<Signature> {
         }
         try {
           if (isReady(this.openFile.current) && this.importedModule?.module) {
+            debugger;
             let module = this.importedModule?.module;
             let cardsOrFields = cardsOrFieldsFromModule(module);
             let elements: Element[] = [];
             await this.importedModule.loaded;
             let moduleSyntax = new ModuleSyntax(this.openFile.current.content);
-            let possibleCardOrFields = moduleSyntax.possibleCardsOrFields;
+            let possibleCardsOrFields = moduleSyntax.possibleCardsOrFields;
             const localParentsOfExportedCardsOrFields: Map<
               PossibleCardOrFieldClass,
               typeof BaseDef
@@ -415,7 +416,7 @@ export default class CodeMode extends Component<Signature> {
                       const indexOfParent = value.super.classIndex;
                       if (indexOfParent !== undefined) {
                         const parentCardOrFieldClass =
-                          possibleCardOrFields[indexOfParent];
+                          possibleCardsOrFields[indexOfParent];
                         const parentCardOrField = getAncestor(cardOrField);
                         if (parentCardOrField) {
                           localParentsOfExportedCardsOrFields.set(
@@ -467,6 +468,7 @@ export default class CodeMode extends Component<Signature> {
           }
         } catch (error: any) {
           state.error = error;
+          console.log(error);
         } finally {
           state.isLoading = false;
         }

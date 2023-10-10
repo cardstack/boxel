@@ -6,6 +6,8 @@ import {
   type PossibleCardOrFieldClass,
   type ElementDeclaration,
   type BaseDeclaration,
+  isPossibleCardOrFieldClass,
+  isInternalReference,
 } from './schema-analysis-plugin';
 import {
   removeFieldPlugin,
@@ -29,6 +31,7 @@ import type { NodePath } from '@babel/traverse';
 import type { FieldType } from 'https://cardstack.com/base/card-api';
 
 export type { PossibleCardOrFieldClass, ElementDeclaration, BaseDeclaration };
+export { isPossibleCardOrFieldClass, isInternalReference };
 
 export class ModuleSyntax {
   declare possibleCardsOrFields: PossibleCardOrFieldClass[];
