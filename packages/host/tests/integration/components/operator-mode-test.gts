@@ -865,9 +865,9 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-enter-room="test_a"]');
 
     // Add some text so that we can click the send button
-    // Do not share the context here
     assert.dom('[data-test-message-field="test_a"]').exists();
     await fillIn('[data-test-message-field="test_a"]', 'hello');
+    // Set sharing the context to true
     await click('[data-test-share-context]');
 
     // Send message
