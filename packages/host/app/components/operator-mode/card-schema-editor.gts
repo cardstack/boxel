@@ -280,6 +280,7 @@ export default class CardSchemaEditor extends Component<Signature> {
               data-test-field-name={{field.name}}
             >
               <div class='left'>
+                {{! template-lint-disable no-invalid-interactive}}
                 <div
                   class={{if
                     (this.isOverridden field)
