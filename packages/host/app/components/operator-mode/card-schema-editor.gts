@@ -208,7 +208,8 @@ export default class CardSchemaEditor extends Component<Signature> {
       }
 
       .add-field-button {
-        cursor: pointer;
+        background-color: transparent;
+        border: none;
         color: var(--boxel-highlight);
         font-size: var(--boxel-font-sm);
         font-weight: 600;
@@ -392,13 +393,13 @@ export default class CardSchemaEditor extends Component<Signature> {
       </div>
 
       {{#if @allowAddingFields}}
-        <div
+        <button
           class='add-field-button'
           data-test-add-field-button
           {{on 'click' this.toggleAddFieldModal}}
         >
           + Add a field
-        </div>
+        </button>
 
         {{#if this.addFieldModalShown}}
           <AddFieldModal

@@ -320,7 +320,7 @@ export default class AddFieldModal extends Component<Signature> {
           <div>
             <BoxelButton
               @kind='secondary-light'
-              {{on 'click' this.args.onClose}}
+              {{on 'click' @onClose}}
               data-test-cancel-adding-field-button
             >
               Cancel
