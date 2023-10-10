@@ -34,6 +34,8 @@ import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 
+import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
+
 import config from '@cardstack/host/config/environment';
 
 import type {
@@ -299,12 +301,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
         >
           <:icon>
             {{#if this.headerIcon.URL}}
-              <img
+              <RealmIcon
+                @realmIconURL={{this.headerIcon.URL}}
+                @realmName={{this.realmName}}
                 class='header-icon'
-                src={{this.headerIcon.URL}}
                 data-test-boxel-header-icon={{this.headerIcon.URL}}
-                alt=''
-                role='presentation'
                 {{on 'mouseenter' this.headerIcon.onMouseEnter}}
                 {{on 'mouseleave' this.headerIcon.onMouseLeave}}
               />
