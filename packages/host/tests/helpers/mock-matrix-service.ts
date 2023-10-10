@@ -38,6 +38,14 @@ class MockClient {
   public async sendEvent(_roomId: string, _eventType: string, event: any) {
     this.lastSentEvent = event;
   }
+  public async sendHtmlMessage(_roomId: string, body: string, html: string) {
+    this.lastSentEvent = {
+      body,
+      formatted_body: html,
+      format: 'org.matrix.custom.html',
+      msgtype: 'm.text',
+    };
+  }
 }
 
 export class MockMatrixService extends MatrixService {
