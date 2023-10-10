@@ -16,7 +16,7 @@ import {
 } from '@cardstack/boxel-ui';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 
-import { bool, or } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { bool } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import {
   chooseCard,
@@ -329,15 +329,10 @@ export default class AddFieldModal extends Component<Signature> {
             <BoxelButton
               @kind='primary'
               {{on 'click' this.saveField}}
-              @disabled={{or this.submitDisabled this.writeTask.isRunning}}
+              @disabled={{this.submitDisabled}}
               data-test-save-field-button
             >
-              {{! isRunning will currently not actually be true because writeTask has no async commands   }}
-              {{#if this.writeTask.isRunning}}
-                Adding…
-              {{else}}
-                Add
-              {{/if}}
+              Add
             </BoxelButton>
           </div>
         </div>
