@@ -166,7 +166,7 @@ export default class CardSchemaEditor extends Component<Signature> {
         text-decoration: line-through;
       }
 
-      .field-type {
+      .field-types {
         color: var(--boxel-450);
         font: 500 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-xs);
@@ -257,14 +257,14 @@ export default class CardSchemaEditor extends Component<Signature> {
                 >
                   {{field.name}}
                 </div>
-                <div class='field-type'>
+                <div class='field-types' data-test-field-types>
                   {{this.fieldTypes field}}
                 </div>
               </div>
               <div class='right'>
                 {{#let (this.fieldModuleURL field) as |moduleUrl|}}
                   {{#if field.isComputed}}
-                    <span class='computed-icon'>
+                    <span class='computed-icon' data-test-computed-icon>
                       =
                     </span>
                   {{/if}}
@@ -274,7 +274,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                     {{on 'click' (fn this.openCardDefinition moduleUrl)}}
                   >
                     {{#if (this.isLinkedField field)}}
-                      <span class='linked-icon'>
+                      <span class='linked-icon' data-test-linked-icon>
                         {{svgJar 'icon-link' width='16' height='16'}}
                       </span>
                     {{/if}}

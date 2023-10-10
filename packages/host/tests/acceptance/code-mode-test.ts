@@ -1030,12 +1030,12 @@ module('Acceptance | code mode tests', function (hooks) {
       .exists();
     assert
       .dom(
-        `[data-test-card-schema="Person"] [data-test-field-name="title"] .left .field-type`,
+        `[data-test-card-schema="Person"] [data-test-field-name="title"] [data-test-field-types]`,
       )
       .hasText('Computed, Override');
     assert
       .dom(
-        `[data-test-card-schema="Person"] [data-test-field-name="title"] .right .computed-icon`,
+        `[data-test-card-schema="Person"] [data-test-field-name="title"] [data-test-computed-icon]`,
       )
       .exists();
 
@@ -1046,12 +1046,12 @@ module('Acceptance | code mode tests', function (hooks) {
       .exists();
     assert
       .dom(
-        `[data-test-card-schema="Person"] [data-test-field-name="friend"] .left .field-type`,
+        `[data-test-card-schema="Person"] [data-test-field-name="friend"] [data-test-field-types]`,
       )
       .hasText('Linked');
     assert
       .dom(
-        `[data-test-card-schema="Person"] [data-test-field-name="friend"] .right .pill .linked-icon`,
+        `[data-test-card-schema="Person"] [data-test-field-name="friend"] [data-test-linked-icon]`,
       )
       .exists();
 
@@ -1062,7 +1062,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .exists();
     assert
       .dom(
-        `[data-test-card-schema="Person"] [data-test-field-name="address"] .left .field-type`,
+        `[data-test-card-schema="Person"] [data-test-field-name="address"] [data-test-field-types]`,
       )
       .hasText('Collection');
 
@@ -1076,7 +1076,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .exists();
     assert
       .dom(
-        `[data-test-card-schema="Card"] [data-test-field-name="title"] .left .field-type`,
+        `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-field-types]`,
       )
       .hasText('Overridden');
 
