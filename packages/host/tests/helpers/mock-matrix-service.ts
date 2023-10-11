@@ -1,4 +1,4 @@
-import { service } from '@ember/service';
+import Service, { service } from '@ember/service';
 
 import { TrackedMap } from 'tracked-built-ins';
 
@@ -35,21 +35,11 @@ class MockClient {
       ],
     });
   }
-  public async sendEvent(_roomId: string, _eventType: string, event: any) {
-    this.lastSentEvent = event;
-  }
-  public async sendHtmlMessage(_roomId: string, body: string, html: string) {
-    this.lastSentEvent = {
-      body,
-      formatted_body: html,
-      format: 'org.matrix.custom.html',
-      msgtype: 'm.text',
-    };
-  }
 }
 
-export class MockMatrixService extends MatrixService {
+export class MockMatrixService extends Service {
   @service declare loaderService: LoaderService;
+  lastMessageSent: any;
   // @ts-ignore
   client: MockClient = new MockClient();
   // @ts-ignore
@@ -78,6 +68,15 @@ export class MockMatrixService extends MatrixService {
     _topic?: string,
   ): Promise<string> {
     return name;
+  }
+
+  async sendMessage(
+    roomId: string,
+    body: string | undefined,
+    card?: CardDef,
+    context?: OperatorModeContext,
+  ) {
+    this.lastMessageSent = { roomId, body, card, context };
   }
 
   public createAndJoinRoom(roomId: string) {

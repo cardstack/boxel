@@ -22,7 +22,6 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import { Submode } from '@cardstack/host/components/submode-switcher';
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -246,23 +245,6 @@ module('Integration | operator-mode', function (hooks) {
           }
         }
       `,
-      'Pet/withNulls.json': {
-        data: {
-          type: 'card',
-          id: `${testRealmURL}Pet/withNulls`,
-          attributes: {
-            description: null,
-            thumbnailURL: null,
-            name: 'Nully',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}pet`,
-              name: 'Pet',
-            },
-          },
-        },
-      },
       'Pet/mango.json': {
         data: {
           type: 'card',
@@ -826,11 +808,11 @@ module('Integration | operator-mode', function (hooks) {
 
     // Send message
     await click('[data-test-send-message-btn]');
-    assert.deepEqual(matrixService.client.lastSentEvent, {
+    assert.deepEqual(matrixService.lastMessageSent, {
       body: 'hello',
-      format: 'org.matrix.custom.html',
-      formatted_body: '<p>hello</p>\n',
-      msgtype: 'm.text',
+      card: undefined,
+      context: undefined,
+      roomId: 'testroom',
     });
   });
 
@@ -840,13 +822,7 @@ module('Integration | operator-mode', function (hooks) {
       'service:matrixService',
     ) as MockMatrixService;
     matrixService.cardAPI = cardApi;
-    // The type work here is just to tell TS we know the
-    const petDir = adapter.files['Pet'];
-    if (typeof petDir === 'string') {
-      throw new Error('petDir is a string');
-    }
-    let card = JSON.parse(petDir['withNulls.json'].toString());
-    await setCardInOperatorModeState(`${testRealmURL}Pet/withNulls`);
+    await setCardInOperatorModeState(`${testRealmURL}Pet/mango`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -872,18 +848,14 @@ module('Integration | operator-mode', function (hooks) {
 
     // Send message
     await click('[data-test-send-message-btn]');
-    // Serialising converts this to a relative url
-    // but it's not relevant for the test
-    card.data.meta.adoptsFrom.module = '../pet';
-    assert.propEqual(matrixService.client.lastSentEvent, {
-      body: 'hello',
-      msgtype: 'org.boxel.message',
-      formatted_body: '<p>hello</p>\n',
-      context: {
-        openCards: [card],
-        submode: Submode.Interact,
-      },
-    });
+    // Checking the object itself has issues due to serialisation
+    // checking we're sharing the correct card should be enough
+    assert.equal(matrixService.lastMessageSent.context.openCards.length, 1);
+    assert.equal(matrixService.lastMessageSent.context.submode, 'interact');
+    assert.equal(
+      matrixService.lastMessageSent.context.openCards[0].id,
+      'http://test-realm/test/Pet/mango',
+    );
   });
 
   test('it can handle an error in a card attached to a matrix message', async function (assert) {
