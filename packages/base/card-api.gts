@@ -1724,7 +1724,6 @@ export type BaseDefComponent = ComponentLike<{
     model: any;
     set: Setter;
     fieldName: string | undefined;
-    format?: Format;
     context?: CardContext;
   };
 }>;

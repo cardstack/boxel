@@ -16,10 +16,10 @@ import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui';
 import Modifier from 'ember-modifier';
 
-type BoxComponentSignature = {
+interface BoxComponentSignature {
   Args: { Named: { format?: Format } };
   Blocks: {};
-};
+}
 
 export type BoxComponent = ComponentLike<BoxComponentSignature>;
 
@@ -55,88 +55,76 @@ export function getBoxComponent(
       modify() {}
     };
 
-  function getFieldImplementation(format: Format): BaseDefComponent {
-    return (card as any)[format];
-  }
+  let component: BoxComponent = <template>
+    {{#if (isCard model.value)}}
+      <CardContainer
+        @displayBoundaries={{true}}
+        class='field-component-card {{format}}-card'
+        {{cardComponentModifier
+          card=model.value
+          format=format
+          fieldType=field.fieldType
+          fieldName=field.name
+        }}
+        data-test-card-format={{format}}
+        data-test-field-component-card
+        {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
+        ...attributes
+      >
+        <Implementation
+          @model={{model.value}}
+          @fields={{internalFields}}
+          @set={{model.set}}
+          @fieldName={{model.name}}
+          @context={{context}}
+        />
+      </CardContainer>
+    {{else if (isCompoundField model.value)}}
+      <div
+        data-test-compound-field-format={{format}}
+        data-test-compound-field-component
+        {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
+        ...attributes
+      >
+        <Implementation
+          @model={{model.value}}
+          @fields={{internalFields}}
+          @set={{model.set}}
+          @fieldName={{model.name}}
+          @context={{context}}
+        />
+      </div>
+    {{else}}
+      <Implementation
+        @model={{model.value}}
+        @fields={{internalFields}}
+        @set={{model.set}}
+        @fieldName={{model.name}}
+        @context={{context}}
+      />
+    {{/if}}
+    <style>
+      .field-component-card {
+        padding: var(--boxel-sp);
+      }
 
-  let component: BoxComponent = class Component extends GlimmerComponent<BoxComponentSignature> {
-    get format() {
-      return this.args.format ?? defaultFieldFormat(format);
-    }
-    <template>
-      {{#if (isCard model.value)}}
-        <CardContainer
-          @displayBoundaries={{true}}
-          class='field-component-card {{format}}-card'
-          {{cardComponentModifier
-            card=model.value
-            format=format
-            fieldType=field.fieldType
-            fieldName=field.name
-          }}
-          data-test-card-format={{format}}
-          data-test-field-component-card
-          {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
-          ...attributes
-        >
-          <Implementation
-            @model={{model.value}}
-            @fields={{internalFields}}
-            @set={{model.set}}
-            @fieldName={{model.name}}
-            @context={{context}}
-          />
-        </CardContainer>
-      {{else if (isCompoundField model.value)}}
-        <div
-          data-test-compound-field-format={{format}}
-          data-test-compound-field-component
-          {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
-          ...attributes
-        >
-          <Implementation
-            @model={{model.value}}
-            @fields={{internalFields}}
-            @set={{model.set}}
-            @fieldName={{model.name}}
-            @context={{context}}
-          />
-        </div>
-      {{else}}
-        {{#let (getFieldImplementation this.format) as |FieldImplementation|}}
-          <FieldImplementation
-            @model={{model.value}}
-            @format={{this.format}}
-            @fields={{internalFields}}
-            @set={{model.set}}
-            @fieldName={{model.name}}
-            @context={{context}}
-          />
-        {{/let}}
-      {{/if}}
-      <style>
-        .field-component-card {
-          padding: var(--boxel-sp);
-        }
+      .isolated-card {
+        padding: var(--boxel-sp-xl);
+      }
 
-        .isolated-card {
-          padding: var(--boxel-sp-xl);
-        }
+      .edit-card {
+        padding: var(--boxel-sp-xl) var(--boxel-sp-xxl) var(--boxel-sp-xl)
+          var(--boxel-sp-xl);
+      }
 
-        .edit-card {
-          padding: var(--boxel-sp-xl) var(--boxel-sp-xxl) var(--boxel-sp-xl)
-            var(--boxel-sp-xl);
-        }
-
-        .atom-card {
-          font: 700 var(--boxel-font-sm);
-          letter-spacing: var(--boxel-lsp-xs);
-          padding: 4px var(--boxel-sp-sm);
-          background-color: var(--boxel-light);
-        }
-      </style>
-    </template>
-  };
+      .atom-card {
+        font: 700 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+        padding: 4px var(--boxel-sp-sm);
+        background-color: var(--boxel-light);
+      }
+    </style>
+  </template>;
 
   // when viewed from *outside*, our component is both an invokable component
   // and a proxy that makes our fields available for nested invocation, like
@@ -197,21 +185,26 @@ function fieldsComponentsFor<T extends BaseDef>(
       }
       let field = maybeField;
 
-      function fieldComponent(userFormat: string | undefined) {
-        let format: Format | undefined = field.computeVia
-          ? 'embedded'
-          : defaultFormat;
+      function fieldComponent(userFormat: Format | undefined): BoxComponent {
+        let fieldFormat =
+          userFormat && ['edit', 'embedded', 'atom'].includes(userFormat)
+            ? userFormat
+            : defaultFormat;
+        let format: Format = field.computeVia ? 'embedded' : fieldFormat;
         return field.component(
           model as unknown as Box<BaseDef>,
           format,
           context,
         );
       }
-
-      return <template>
-        {{#let (fieldComponent @format) as |FieldComponent|}}<FieldComponent
-          />{{/let}}
-      </template>;
+      let template: BoxComponent = class FieldComponent extends GlimmerComponent<BoxComponentSignature> {
+        <template>
+          {{#let (fieldComponent @format) as |FieldComponent|}}
+            <FieldComponent />
+          {{/let}}
+        </template>
+      };
+      return template;
     },
     getPrototypeOf() {
       // This is necessary for Ember to be able to locate the template associated

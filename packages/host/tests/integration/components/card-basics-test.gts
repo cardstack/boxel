@@ -254,7 +254,7 @@ module('Integration | card-basics', function (hooks) {
         <template>
           <div>
             <@fields.firstName @format='atom' />
-            <@fields.number @format='embedded' />
+            <@fields.number />
           </div>
         </template>
       };
