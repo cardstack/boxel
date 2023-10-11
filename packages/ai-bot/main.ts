@@ -18,6 +18,7 @@ import {
   processStream,
   ParsingMode,
   getModifyPrompt,
+  cleanContent,
 } from './helpers';
 
 let log = logger('ai-bot');
@@ -39,7 +40,6 @@ async function sendMessage(
   content: string,
   previous: string | undefined,
 ) {
-  content = content.replace('```', '');
   log.info('Sending', content);
   let messageObject: IContent = {
     body: content,
@@ -100,43 +100,54 @@ async function sendStream(
     // If we've not got a current message to edit and we're processing text
     // rather than structured data, start a new message to update.
     if (message.type == ParsingMode.Text) {
-      // If there's no message to append to, just send the message
-      // If there's more than 20 pending messages, send the message
-      if (!append_to) {
-        let initialMessage = await sendMessage(
-          client,
-          room,
-          message.content,
-          append_to,
-        );
-        unsent = 0;
-        lastUnsentMessage = undefined;
-        append_to = initialMessage.event_id;
-      }
+      // remove general cruft
+      let cleanedContent = cleanContent(message.content!);
+      // If we're left with nothing after cleaning, don't send anything
+      if (cleanedContent) {
+        // If there's no message to append to, just send the message
+        // If there's more than 20 pending messages, send the message
+        if (!append_to) {
+          let initialMessage = await sendMessage(
+            client,
+            room,
+            cleanedContent,
+            append_to,
+          );
+          unsent = 0;
+          lastUnsentMessage = undefined;
+          append_to = initialMessage.event_id;
+        }
 
-      if (unsent > 20) {
-        await sendMessage(client, room, message.content, append_to);
-        unsent = 0;
-      } else {
-        lastUnsentMessage = message;
-        unsent += 1;
+        if (unsent > 20) {
+          await sendMessage(client, room, cleanedContent, append_to);
+          unsent = 0;
+        } else {
+          lastUnsentMessage = message;
+          unsent += 1;
+        }
       }
-    }
-
-    if (message.type == ParsingMode.Command) {
-      if (lastUnsentMessage) {
-        await sendMessage(client, room, lastUnsentMessage.content, append_to);
+    } else {
+      if (lastUnsentMessage && lastUnsentMessage.content) {
+        let cleanedContent = cleanContent(lastUnsentMessage.content);
+        if (cleanedContent) {
+          await sendMessage(client, room, cleanedContent, append_to);
+        }
         lastUnsentMessage = undefined;
       }
-      await sendOption(client, room, message.content);
+      if (message.type == ParsingMode.Command) {
+        await sendOption(client, room, message.content);
+      }
       unsent = 0;
       append_to = undefined;
     }
   }
 
   // Make sure we send any remaining content at the end of the stream
-  if (lastUnsentMessage) {
-    await sendMessage(client, room, lastUnsentMessage.content, append_to);
+  if (lastUnsentMessage && lastUnsentMessage.content) {
+    let cleanedContent = cleanContent(lastUnsentMessage.content);
+    if (cleanedContent) {
+      await sendMessage(client, room, cleanedContent, append_to);
+    }
   }
 }
 
