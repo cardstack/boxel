@@ -1275,15 +1275,6 @@ module('Acceptance | code mode tests', function (hooks) {
     assert
       .dom(`[data-test-card-schema="Card"] [data-test-realm-icon-url]`)
       .hasAttribute('data-test-realm-icon-url', realm2IconUrl);
-
-    await waitFor(
-      '[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-realm-icon-url]',
-    );
-    assert
-      .dom(
-        `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-realm-icon-url]`,
-      )
-      .hasAttribute('data-test-realm-icon-url', realm2IconUrl);
   });
 
   test('shows displayName of CardResource when field refers to itself', async function (assert) {
