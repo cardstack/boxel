@@ -163,7 +163,6 @@ export default class CardSchemaEditor extends Component<Signature> {
       }
 
       .overridden-field {
-        cursor: pointer;
         text-decoration: line-through;
       }
 
@@ -423,17 +422,6 @@ export default class CardSchemaEditor extends Component<Signature> {
   @action
   fieldTypes(field: FieldOfType) {
     let types = [];
-    if (field.isComputed) {
-      types.push('Computed');
-    }
-
-    if (this.isLinkedField(field)) {
-      types.push('Linked');
-    }
-
-    if (field.type === 'containsMany' || field.type === 'linksToMany') {
-      types.push('Collection');
-    }
 
     if (this.isOverridden(field)) {
       types.push('Overridden');
@@ -443,7 +431,19 @@ export default class CardSchemaEditor extends Component<Signature> {
       types.push('Override');
     }
 
-    return types.sort().join(', ');
+    if (this.isLinkedField(field)) {
+      types.push('Link');
+    }
+
+    if (field.type === 'containsMany' || field.type === 'linksToMany') {
+      types.push('Collection');
+    }
+
+    if (field.isComputed) {
+      types.push('Computed');
+    }
+
+    return types.join(', ');
   }
 
   @action

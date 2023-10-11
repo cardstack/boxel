@@ -1179,7 +1179,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom(
         `[data-test-card-schema="Person"] [data-test-field-name="title"] [data-test-field-types]`,
       )
-      .hasText('Computed, Override');
+      .hasText('Override, Computed');
     assert
       .dom(
         `[data-test-card-schema="Person"] [data-test-field-name="title"] [data-test-computed-icon]`,
@@ -1195,7 +1195,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom(
         `[data-test-card-schema="Person"] [data-test-field-name="friends"] [data-test-field-types]`,
       )
-      .hasText('Collection, Linked');
+      .hasText('Link, Collection');
     assert
       .dom(
         `[data-test-card-schema="Person"] [data-test-field-name="friends"] [data-test-linked-icon]`,
