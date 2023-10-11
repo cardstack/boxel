@@ -216,8 +216,9 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test="number"]').containsText('10');
   });
 
-  test('render primitive field in atom format', async function (assert) {
+  test('render a field in atom format', async function (assert) {
     let { field, contains, CardDef, FieldDef, Component } = cardApi;
+    let { default: StringField } = string;
     class EmphasizedString extends FieldDef {
       static [primitive]: string;
       static embedded = class Embedded extends Component<typeof this> {
@@ -246,9 +247,20 @@ module('Integration | card-basics', function (hooks) {
       };
     }
 
+    class Guest extends FieldDef {
+      @field name = contains(EmphasizedString);
+      @field additionalGuestCount = contains(StrongNumber);
+      @field title = contains(StringField, {
+        computeVia: function (this: Guest) {
+          return `${this.name} - ${this.additionalGuestCount}`;
+        },
+      });
+    }
+
     class Person extends CardDef {
       @field firstName = contains(EmphasizedString);
       @field number = contains(StrongNumber);
+      @field guest = contains(Guest);
 
       static isolated = class Isolated extends Component<typeof this> {
         <template>
@@ -256,15 +268,31 @@ module('Integration | card-basics', function (hooks) {
             <@fields.firstName @format='atom' />
             <@fields.number />
           </div>
+          Guest:
+          <@fields.guest @format='atom' />
         </template>
       };
     }
 
-    let arthur = new Person({ firstName: 'Arthur', number: 10 });
+    let arthur = new Person({
+      firstName: 'Arthur',
+      number: 10,
+      guest: new Guest({
+        name: 'Madeleine',
+        additionalGuestCount: 3,
+      }),
+    });
 
     await renderCard(loader, arthur, 'isolated');
-    assert.dom('[data-test-atom="name"]').containsText('Arthur');
-    assert.dom('[data-test-embedded="number"]').containsText('10');
+    assert
+      .dom('[data-test-atom="name"]')
+      .containsText('Arthur', 'can render primitive field in atom format');
+    assert
+      .dom('[data-test-embedded="number"]')
+      .containsText('10', 'field has default format');
+    assert
+      .dom('[data-test-compound-field-format="atom"]')
+      .hasText('Madeleine - 3', 'can render compound field in atom format');
   });
 
   test('can set the ID for an unsaved card', async function (assert) {
