@@ -6,6 +6,7 @@ import Component from '@glimmer/component';
 
 import { RealmPaths } from '@cardstack/runtime-common';
 
+import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import { RecentFile } from '@cardstack/host/services/recent-files-service';
 
@@ -77,12 +78,10 @@ class File extends Component<FileArgs> {
       >
         <RealmInfoProvider @realmURL={{@recentFile.realmURL.href}}>
           <:ready as |realmInfo|>
-            <img
-              src={{realmInfo.iconURL}}
+            <RealmIcon
+              @realmIconURL={{realmInfo.iconURL}}
+              @realmName={{realmInfo.name}}
               class='icon'
-              alt=''
-              role='presentation'
-              data-test-realm-icon-url={{realmInfo.iconURL}}
             />
           </:ready>
         </RealmInfoProvider>
