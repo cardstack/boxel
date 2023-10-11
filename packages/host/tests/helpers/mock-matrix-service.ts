@@ -7,9 +7,7 @@ import { type MatrixCardError } from '@cardstack/runtime-common';
 import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
-import MatrixService, {
-  OperatorModeContext,
-} from '@cardstack/host/services/matrix-service';
+import { OperatorModeContext } from '@cardstack/host/services/matrix-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import type { RoomField } from 'https://cardstack.com/base/room';
