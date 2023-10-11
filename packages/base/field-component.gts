@@ -196,15 +196,22 @@ function fieldsComponentsFor<T extends BaseDef>(
         return Reflect.get(target, property, received);
       }
       let field = maybeField;
-      let format: Format | undefined = field.computeVia
-        ? 'embedded'
-        : defaultFormat;
-      let fieldComponent = field.component(
-        model as unknown as Box<BaseDef>,
-        format,
-        context,
-      );
-      return fieldComponent;
+
+      function fieldComponent(userFormat: string | undefined) {
+        let format: Format | undefined = field.computeVia
+          ? 'embedded'
+          : defaultFormat;
+        return field.component(
+          model as unknown as Box<BaseDef>,
+          format,
+          context,
+        );
+      }
+
+      return <template>
+        {{#let (fieldComponent @format) as |FieldComponent|}}<FieldComponent
+          />{{/let}}
+      </template>;
     },
     getPrototypeOf() {
       // This is necessary for Ember to be able to locate the template associated
