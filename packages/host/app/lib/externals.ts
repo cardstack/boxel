@@ -69,7 +69,6 @@ export function shimExternals(loader: Loader) {
   loader.shimModule('@ember/destroyable', emberDestroyable);
   loader.shimModule('marked', marked);
   loader.shimModule('ethers', ethers);
-  // FIXME is this correct?
   loader.shimModule('ember-source/types', { default: class {} });
   loader.shimModule('ember-source/types/preview', { default: class {} });
 }
