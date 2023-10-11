@@ -402,7 +402,7 @@ export default class CardService extends Service {
     if (!isSingleCardDocument(json)) {
       throw new Error(
         `bug: arg is not a card document:
-          ${JSON.stringify(json, null, 2)}`,
+        ${JSON.stringify(json, null, 2)}`,
       );
     }
     return json;
