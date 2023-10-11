@@ -105,6 +105,7 @@ export default class CardSchemaEditor extends Component<Signature> {
 
       .context-menu-trigger {
         rotate: 90deg;
+        --dropdown-button-size: 20px;
       }
 
       .context-menu-list {
@@ -136,7 +137,10 @@ export default class CardSchemaEditor extends Component<Signature> {
       .right {
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-xxs);
+      }
+
+      .right > *:not(:nth-last-child(3)) {
+        margin-right: var(--boxel-sp-xxs);
       }
 
       .computed-icon {
@@ -164,6 +168,16 @@ export default class CardSchemaEditor extends Component<Signature> {
 
       .overridden-field {
         text-decoration: line-through;
+      }
+
+      .overridden-field-link {
+        --icon-color: var(--boxel-highlight);
+        display: inline-flex;
+        align-items: center;
+        font: 500 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+        color: var(--boxel-highlight);
+        cursor: pointer;
       }
 
       .field-types {
@@ -280,14 +294,12 @@ export default class CardSchemaEditor extends Component<Signature> {
               data-test-field-name={{field.name}}
             >
               <div class='left'>
-                {{! template-lint-disable no-invalid-interactive}}
                 <div
                   class={{if
                     (this.isOverridden field)
                     'field-name overridden-field'
                     'field-name'
                   }}
-                  {{on 'click' (fn this.scrollIntoOveridingField field)}}
                 >
                   {{field.name}}
                 </div>
@@ -302,79 +314,94 @@ export default class CardSchemaEditor extends Component<Signature> {
                       =
                     </span>
                   {{/if}}
-                  <button
-                    class='pill'
-                    data-test-card-schema-field-navigational-button
-                    {{on 'click' (fn this.openCardDefinition moduleUrl)}}
-                  >
-                    {{#if (this.isLinkedField field)}}
-                      <span class='linked-icon' data-test-linked-icon>
-                        {{svgJar 'icon-link' width='16' height='16'}}
-                      </span>
-                    {{/if}}
-                    <div class='realm-icon'>
-                      <RealmInfoProvider @fileURL={{moduleUrl}}>
-                        <:ready as |realmInfo|>
-                          <img
-                            src={{realmInfo.iconURL}}
-                            alt='Realm icon'
-                            data-test-realm-icon-url={{realmInfo.iconURL}}
-                          />
-                        </:ready>
-                      </RealmInfoProvider>
-                    </div>
-                    <div>
-                      <span>
-                        {{#let
-                          (this.fieldCardDisplayName field.card)
-                          as |cardDisplayName|
-                        }}
-                          <span
-                            data-test-card-display-name={{cardDisplayName}}
-                          >{{cardDisplayName}}</span>
-                        {{/let}}
-                      </span>
-                    </div>
-                  </button>
-                  <DropdownButton
-                    @icon='three-dots-horizontal'
-                    @label='field options'
-                    @contentClass='context-menu'
-                    class='context-menu-trigger'
-                    as |dd|
-                  >
-                    <div class='warning-box'>
-                      <p class='warning'>
-                        These actions will break compatibility with existing
-                        card instances.
-                      </p>
-                      <span class='warning-icon'>
-                        {{svgJar
-                          'warning'
+                  {{#if (this.isOverridden field)}}
+                    <span
+                      class='overridden-field-link'
+                      data-test-overridden-field-link
+                      {{on 'click' (fn this.scrollIntoOveridingField field)}}
+                    >Jump to active field definition
+                      <span>{{svgJar
+                          'arrow-top-left'
                           width='20'
                           height='20'
                           role='presentation'
+                        }}</span></span>
+                  {{else}}
+                    <button
+                      class='pill'
+                      data-test-card-schema-field-navigational-button
+                      {{on 'click' (fn this.openCardDefinition moduleUrl)}}
+                    >
+                      {{#if (this.isLinkedField field)}}
+                        <span class='linked-icon' data-test-linked-icon>
+                          {{svgJar 'icon-link' width='16' height='16'}}
+                        </span>
+                      {{/if}}
+                      <div class='realm-icon'>
+                        <RealmInfoProvider @fileURL={{moduleUrl}}>
+                          <:ready as |realmInfo|>
+                            <img
+                              src={{realmInfo.iconURL}}
+                              alt='Realm icon'
+                              data-test-realm-icon-url={{realmInfo.iconURL}}
+                            />
+                          </:ready>
+                        </RealmInfoProvider>
+                      </div>
+                      <div>
+                        <span>
+                          {{#let
+                            (this.fieldCardDisplayName field.card)
+                            as |cardDisplayName|
+                          }}
+                            <span
+                              data-test-card-display-name={{cardDisplayName}}
+                            >{{cardDisplayName}}</span>
+                          {{/let}}
+                        </span>
+                      </div>
+                    </button>
+                    <DropdownButton
+                      @icon='three-dots-horizontal'
+                      @label='field options'
+                      @contentClass='context-menu'
+                      class='context-menu-trigger'
+                      as |dd|
+                    >
+                      <div class='warning-box'>
+                        <p class='warning'>
+                          These actions will break compatibility with existing
+                          card instances.
+                        </p>
+                        <span class='warning-icon'>
+                          {{svgJar
+                            'warning'
+                            width='20'
+                            height='20'
+                            role='presentation'
+                          }}
+                        </span>
+                      </div>
+                      <dd.Menu
+                        class='context-menu-list'
+                        @items={{array
+                          (menuItem
+                            'Edit Field Name' this.editFieldName disabled=true
+                          )
+                          (menuDivider)
+                          (menuItem
+                            'Remove Field'
+                            this.removeField
+                            dangerous=true
+                            disabled=true
+                          )
                         }}
-                      </span>
-                    </div>
-                    <dd.Menu
-                      class='context-menu-list'
-                      @items={{array
-                        (menuItem
-                          'Edit Field Name' this.editFieldName disabled=true
-                        )
-                        (menuDivider)
-                        (menuItem
-                          'Remove Field'
-                          this.removeField
-                          dangerous=true
-                          disabled=true
-                        )
-                      }}
-                    />
-                  </DropdownButton>
+                      />
+                    </DropdownButton>
+                  {{/if}}
                 {{/let}}
               </div>
+
             </div>
           {{/if}}
         {{/each}}

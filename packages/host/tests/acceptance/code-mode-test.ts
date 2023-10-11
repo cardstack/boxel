@@ -1218,7 +1218,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .containsText('+ 3 Fields');
     assert
       .dom(
-        `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-card-display-name="String"]`,
+        `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-overridden-field-link]`,
       )
       .exists();
     assert
