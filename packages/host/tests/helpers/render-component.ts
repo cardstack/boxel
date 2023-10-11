@@ -1,7 +1,10 @@
 // @ts-ignore
 import { precompileTemplate } from '@ember/template-compilation';
+
 import { render, getContext } from '@ember/test-helpers';
+
 import { baseRealm, Loader } from '@cardstack/runtime-common';
+
 import type {
   BaseDef,
   Format,
