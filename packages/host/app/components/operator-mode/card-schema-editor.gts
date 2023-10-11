@@ -139,10 +139,6 @@ export default class CardSchemaEditor extends Component<Signature> {
         align-items: center;
       }
 
-      .right > *:not(:nth-last-child(3)) {
-        margin-right: var(--boxel-sp-xxs);
-      }
-
       .computed-icon {
         display: inline-flex;
         font: 700 var(--boxel-font);
@@ -150,6 +146,7 @@ export default class CardSchemaEditor extends Component<Signature> {
         padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
         background-color: var(--boxel-200);
         border-radius: var(--boxel-border-radius-sm);
+        margin-right: var(--boxel-sp-xxs);
       }
 
       .linked-icon {
@@ -178,6 +175,9 @@ export default class CardSchemaEditor extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-xs);
         color: var(--boxel-highlight);
         cursor: pointer;
+        border: none;
+        background: none;
+        padding: 0;
       }
 
       .field-types {
@@ -315,8 +315,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                     </span>
                   {{/if}}
                   {{#if (this.isOverridden field)}}
-                    {{! template-lint-disable no-invalid-interactive}}
-                    <span
+                    <button
                       class='overridden-field-link'
                       data-test-overridden-field-link
                       {{on 'click' (fn this.scrollIntoOveridingField field)}}
@@ -326,7 +325,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                           width='20'
                           height='20'
                           role='presentation'
-                        }}</span></span>
+                        }}</span></button>
                   {{else}}
                     <button
                       class='pill'
