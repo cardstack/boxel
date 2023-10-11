@@ -1,6 +1,8 @@
 import { registerDestructor } from '@ember/destroyable';
 
 import Service, { service } from '@ember/service';
+import { buildWaiter } from '@ember/test-waiters';
+import { isTesting } from '@embroider/macros';
 
 import { task } from 'ember-concurrency';
 
@@ -40,7 +42,18 @@ import { importResource } from '../resources/import';
 import type LoaderService from './loader-service';
 
 export type CardSaveSubscriber = (content: SingleCardDocument | string) => void;
+
+// One of our challenges is that it is difficult to tell if the server sent
+// events that we receive are from out of band changes or just echos of the
+// changes we are making from the UI. We are using a simple heuristic to
+// identify if an event is our own--specifically a time window. If an SSE event
+// occurs more than `loadIfNewerThanSec` seconds after the last card model
+// save, then we will consider it as an event not tied to our own card model's
+// auto save.
+const loadIfNewerThanSec = 5;
 const { ownRealmURL, otherRealmURLs } = ENV;
+const waiter = buildWaiter('card-service:load-card-waiter');
+const cardSaveTimes = new WeakMap<CardDef, number>();
 
 export default class CardService extends Service {
   @service private declare loaderService: LoaderService;
@@ -142,10 +155,6 @@ export default class CardService extends Service {
   }
 
   async reloadModel(card: CardDef): Promise<CardDef> {
-    return await this.doReloadModel.perform(card);
-  }
-
-  private doReloadModel = task(async (card: CardDef) => {
     await this.apiModule.loaded;
     let json = await this.fetchJSON(card.id);
     if (!isSingleCardDocument(json)) {
@@ -155,16 +164,12 @@ export default class CardService extends Service {
       );
     }
     return await this.api.updateFromSerialized<typeof CardDef>(card, json);
-  });
-
-  // TODO remove this if we don't need it for testing...
-  get reloadingModel() {
-    return this.doReloadModel.isRunning;
   }
 
   // TODO remove string type param--a URL type as a parameter leverages TS to
   // assert the url param that we are given is actually a URL. The callers need
   // to adhere to that
+  // TODO rename to `loadStaticModel`
   async loadModel(url: URL | string): Promise<CardDef> {
     if (typeof url === 'string') {
       url = new URL(url);
@@ -190,11 +195,14 @@ export default class CardService extends Service {
     return card;
   }
 
+  // TODO consider exposing this as API in @cardstack/runtime-common/index
   async loadLiveModel<T extends object>(parent: T, url: URL): Promise<CardDef> {
     let entry = this.liveCards.get(url.href);
     if (entry) {
+      if (!entry.subscribers.has(parent)) {
+        registerDestructor(parent, () => this.unsubscribeFromCards(parent));
+      }
       entry.subscribers.add(parent);
-      registerDestructor(parent, () => this.unsubscribeFromCards(parent));
       return entry.card;
     }
     let card = await this.loadModel(url);
@@ -219,7 +227,7 @@ export default class CardService extends Service {
               ...this.liveCards.keys(),
             ]);
             for (let id of updatedIds) {
-              this.doReloadModel.perform(this.liveCards.get(id)!.card);
+              this.reloadIfNewer.perform(this.liveCards.get(id)!.card);
             }
           },
         ),
@@ -258,6 +266,39 @@ export default class CardService extends Service {
     }
   };
 
+  private reloadIfNewer = task(async (card: CardDef) => {
+    // we don't await this in the realm subscription callback, so this test
+    // waiter should catch otherwise leaky async in the tests
+    await this.withTestWaiters(async () => {
+      await this.apiModule.loaded;
+      let incomingDoc = (await this.fetchJSON(card.id)) as SingleCardDocument;
+      if (!isSingleCardDocument(incomingDoc)) {
+        throw new Error(
+          `bug: server returned a non card document for ${card.id}:
+        ${JSON.stringify(incomingDoc, null, 2)}`,
+        );
+      }
+      let saveTime = cardSaveTimes.get(card);
+      if (
+        saveTime != null &&
+        Date.now() - saveTime < loadIfNewerThanSec * 1000
+      ) {
+        return card;
+      }
+
+      let updated = await this.api.updateFromSerialized<typeof CardDef>(
+        card,
+        incomingDoc,
+      );
+      return updated;
+    });
+  });
+
+  // TODO remove if not necessary...currently used for tests
+  get modelReloadIsIdle() {
+    return this.reloadIfNewer.isIdle;
+  }
+
   async serializeCard(
     card: CardDef,
     opts?: SerializeOpts,
@@ -287,6 +328,7 @@ export default class CardService extends Service {
       // to relative URL's as it serializes the cards
       let realmUrl = await this.getRealmURL(card);
       let json = await this.saveCardDocument(doc, realmUrl);
+      cardSaveTimes.set(card, Date.now());
 
       let result: CardDef | undefined;
       // if the card changed while the save was in flight then don't load the
@@ -356,7 +398,7 @@ export default class CardService extends Service {
     if (!isSingleCardDocument(json)) {
       throw new Error(
         `bug: arg is not a card document:
-        ${JSON.stringify(json, null, 2)}`,
+          ${JSON.stringify(json, null, 2)}`,
       );
     }
     return json;
@@ -511,5 +553,20 @@ export default class CardService extends Service {
       );
     }
     return (await response.json()).data.attributes;
+  }
+
+  private async withTestWaiters<T>(cb: () => Promise<T>) {
+    let token = waiter.beginAsync();
+    try {
+      let result = await cb();
+      // only do this in test env--this makes sure that we also wait for any
+      // interior card instance async as part of our ember-test-waiters
+      if (isTesting()) {
+        await this.cardsSettled();
+      }
+      return result;
+    } finally {
+      waiter.endAsync(token);
+    }
   }
 }

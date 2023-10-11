@@ -132,6 +132,8 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
+  // TODO perhaps this goes away if we start using live models, which also means
+  // this.cardService.reloadModel can go away...
   reloadItem = task(async (item: StackItem) => {
     item.card = await this.cardService.reloadModel(item.card);
   });
