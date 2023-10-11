@@ -28,7 +28,7 @@ async function streamToArray(stream: AsyncIterable<string>) {
 
 async function assertProcessedStreamContains(
   stream: string[],
-  expected: { type: ParsingMode; content: string }[],
+  expected: { type: ParsingMode; content: string | null }[],
 ) {
   const result = [];
   for await (const chunk of processStream(streamGenerator(stream))) {
@@ -72,6 +72,7 @@ module('processStream', () => {
     ];
     const expectedResult: Message[] = [
       { type: ParsingMode.Text, content: 'Hello' },
+      { type: ParsingMode.Break, content: null },
       { type: ParsingMode.Command, content: { some: 'thing' } },
       { type: ParsingMode.Text, content: 'there' },
       { type: ParsingMode.Text, content: 'there ' },
@@ -112,8 +113,10 @@ module('processStream', () => {
     ];
     const expectedResult: Message[] = [
       { type: ParsingMode.Text, content: 'Option 1' },
+      { type: ParsingMode.Break, content: null },
       { type: ParsingMode.Command, content: { some: 'thing' } },
       { type: ParsingMode.Text, content: 'Option 2' },
+      { type: ParsingMode.Break, content: null },
       { type: ParsingMode.Command, content: { some: 'thing else' } },
     ];
     await assertProcessedStreamContains(stream, expectedResult);
@@ -204,6 +207,7 @@ module('processStream', () => {
         type: ParsingMode.Text,
         content: 'Certainly:\n\nOption 1:\n',
       },
+      { type: ParsingMode.Break, content: null },
       {
         type: ParsingMode.Command,
         content: {

@@ -16,6 +16,7 @@ type ChatCompletion = {
 export enum ParsingMode {
   Text,
   Command,
+  Break,
 }
 
 type CommandMessage = {
@@ -28,7 +29,12 @@ type TextMessage = {
   content: string;
 };
 
-export type Message = CommandMessage | TextMessage;
+type Break = {
+  type: ParsingMode.Break;
+  content: null;
+};
+
+export type Message = CommandMessage | TextMessage | Break;
 
 export function constructHistory(history: IRoomEvent[]) {
   /**
@@ -170,6 +176,9 @@ export async function* processStream(stream: AsyncGenerator<string>) {
     // Optimistically start parsing it, and if we hit an error
     // then roll back to the last checkpoint
     if (part == '{') {
+      if (currentMessage) {
+        yield { type: ParsingMode.Break, content: null };
+      }
       let commands: string[] = [];
       const pipeline = chain([
         Readable.from(prependedStream(part, tokenStream)), // We need to prepend the { back on
@@ -351,4 +360,14 @@ export function getModifyPrompt(history: IRoomEvent[], aiBotUsername: string) {
 
   messages = messages.concat(historical_messages);
   return messages;
+}
+
+export function cleanContent(content: string) {
+  content = content.trim();
+  content = content.replace(/```json/g, '');
+  content = content.replace(/`/g, '');
+  if (content.endsWith('json')) {
+    content = content.slice(0, -4);
+  }
+  return content;
 }
