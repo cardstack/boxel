@@ -132,8 +132,8 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
-  // TODO perhaps this goes away if we start using live models, which also means
-  // this.cardService.reloadModel can go away...
+  // TODO perhaps this goes away if we start using live models in interact mode,
+  // which also means this.cardService.reloadModel can go away...
   reloadItem = task(async (item: StackItem) => {
     item.card = await this.cardService.reloadModel(item.card);
   });
@@ -389,7 +389,7 @@ export default class OperatorModeStateService extends Service {
       let newStack: Stack = new TrackedArray([]);
       for (let item of stack) {
         let { format } = item;
-        let card = await this.cardService.loadModel(new URL(item.id));
+        let card = await this.cardService.loadStaticModel(new URL(item.id));
         newStack.push({
           card,
           format,
@@ -411,7 +411,9 @@ export default class OperatorModeStateService extends Service {
 
     const recentCardIds = JSON.parse(recentCardIdsString) as string[];
     for (const recentCardId of recentCardIds) {
-      const card = await this.cardService.loadModel(new URL(recentCardId));
+      const card = await this.cardService.loadStaticModel(
+        new URL(recentCardId),
+      );
       this.recentCards.push(card);
     }
   }

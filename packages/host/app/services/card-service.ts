@@ -169,8 +169,7 @@ export default class CardService extends Service {
   // TODO remove string type param--a URL type as a parameter leverages TS to
   // assert the url param that we are given is actually a URL. The callers need
   // to adhere to that
-  // TODO rename to `loadStaticModel`
-  async loadModel(url: URL | string): Promise<CardDef> {
+  async loadStaticModel(url: URL | string): Promise<CardDef> {
     if (typeof url === 'string') {
       url = new URL(url);
     }
@@ -205,7 +204,7 @@ export default class CardService extends Service {
       entry.subscribers.add(parent);
       return entry.card;
     }
-    let card = await this.loadModel(url);
+    let card = await this.loadStaticModel(url);
     let realmURL = await this.getRealmURL(card);
     if (!realmURL) {
       throw new Error(`bug: cannot determine realm URL for card ${card.id}`);
