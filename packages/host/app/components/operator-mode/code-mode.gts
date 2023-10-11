@@ -704,7 +704,6 @@ export default class CodeMode extends Component<Signature> {
       data-test-code-mode
       data-test-save-idle={{and
         this.contentChangedTask.isIdle
-        this.cardService.modelReloadIsIdle
         this.doWhenCardChanges.isIdle
       }}
     >

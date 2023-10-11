@@ -1090,8 +1090,19 @@ module('Acceptance | operator mode tests', function (hooks) {
     await percySnapshot(assert);
   });
 
-  test<TestContextWithSave>('card instance change made in monaco editor is auto-saved', async function (assert) {
-    assert.expect(2);
+  test<
+    TestContextWithSave & TestContextWithSSE
+  >('card instance change made in monaco editor is auto-saved', async function (assert) {
+    assert.expect(3);
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Pet/mango`],
+        },
+      },
+    ];
 
     let expected: LooseSingleCardDocument = {
       data: {
@@ -1132,7 +1143,15 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.strictEqual(json.data.attributes?.name, 'MangoXXX');
     });
 
-    setMonacoContent(JSON.stringify(expected));
+    await this.expectEvents(
+      assert,
+      realm,
+      adapter,
+      expectedEvents,
+      async () => {
+        setMonacoContent(JSON.stringify(expected));
+      },
+    );
 
     await waitFor('[data-test-save-idle]');
 

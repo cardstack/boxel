@@ -271,7 +271,17 @@ export default class CardService extends Service {
     // waiter should catch otherwise leaky async in the tests
     await this.withTestWaiters(async () => {
       await this.apiModule.loaded;
-      let incomingDoc = (await this.fetchJSON(card.id)) as SingleCardDocument;
+      let incomingDoc: SingleCardDocument;
+      try {
+        incomingDoc = (await this.fetchJSON(card.id)) as SingleCardDocument;
+      } catch (err: any) {
+        if (err.status !== 404) {
+          throw err;
+        }
+        // in this case the document was invalidated in the index because the
+        // file was deleted
+        return;
+      }
       if (!isSingleCardDocument(incomingDoc)) {
         throw new Error(
           `bug: server returned a non card document for ${card.id}:
@@ -293,11 +303,6 @@ export default class CardService extends Service {
       return updated;
     });
   });
-
-  // TODO remove if not necessary...currently used for tests
-  get modelReloadIsIdle() {
-    return this.reloadIfNewer.isIdle;
-  }
 
   async serializeCard(
     card: CardDef,
