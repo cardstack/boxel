@@ -315,6 +315,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                     </span>
                   {{/if}}
                   {{#if (this.isOverridden field)}}
+                    {{! template-lint-disable no-invalid-interactive}}
                     <span
                       class='overridden-field-link'
                       data-test-overridden-field-link
