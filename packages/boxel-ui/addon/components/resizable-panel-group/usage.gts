@@ -24,7 +24,7 @@ export default class ResizablePanelUsage extends Component {
   @cssVariable declare boxelPanelResizeHandlerBackgroundColor: CSSVariableInfo;
 
   <template>
-    <FreestyleUsage @name='ThreadMessage'>
+    <FreestyleUsage @name='ResizablePanelGroup'>
       <:example>
         <ResizablePanelGroup as |ResizablePanel|>
           <ResizablePanel
