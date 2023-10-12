@@ -155,7 +155,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
 
     let leftElId = Number(this.currentResizeHandler.leftEl?.id);
     let rightElId = Number(this.currentResizeHandler.rightEl?.id);
-    this.setLeftAndRighPanelContext(
+    this.setLeftAndRightPanelContext(
       leftElId,
       rightElId,
       `${newLeftElWidth}px`,
@@ -181,7 +181,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
     let rightElContext = this.listPanelContext.get(Number(rightEl.id));
 
     if (buttonId.includes('1') && leftElWidth > 0) {
-      this.setLeftAndRighPanelContext(
+      this.setLeftAndRightPanelContext(
         Number(leftEl.id),
         Number(rightEl.id),
         '0px',
@@ -189,7 +189,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
         `0px`,
       );
     } else if (buttonId.includes('1') && leftElWidth <= 0 && leftElContext) {
-      this.setLeftAndRighPanelContext(
+      this.setLeftAndRightPanelContext(
         Number(leftEl.id),
         Number(rightEl.id),
         leftElContext.defaultWidth,
@@ -199,7 +199,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
       buttonId.includes(String(this.listPanelContext.size - 1)) &&
       rightElWidth > 0
     ) {
-      this.setLeftAndRighPanelContext(
+      this.setLeftAndRightPanelContext(
         Number(leftEl.id),
         Number(rightEl.id),
         `${leftElWidth + rightElWidth}px`,
@@ -212,7 +212,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
       rightElWidth <= 0 &&
       rightElContext
     ) {
-      this.setLeftAndRighPanelContext(
+      this.setLeftAndRightPanelContext(
         Number(leftEl.id),
         Number(rightEl.id),
         `calc(${leftElWidth}px - ${rightElContext.defaultWidth})`,
@@ -222,7 +222,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
   }
 
   @action
-  setLeftAndRighPanelContext(
+  setLeftAndRightPanelContext(
     leftElId: number,
     rightElId: number,
     newLeftElWidth: string,
