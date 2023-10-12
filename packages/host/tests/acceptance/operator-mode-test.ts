@@ -299,20 +299,17 @@ module('Acceptance | operator mode tests', function (hooks) {
       await waitFor(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`);
       await percySnapshot(assert);
 
-      assert.operatorModeParametersMatch(
-        currentURL().replace('operatorModeState', 'operatorModeNonstate'),
-        {
-          stacks: [
-            [
-              {
-                id: `${testRealmURL}index`,
-                format: 'isolated',
-              },
-            ],
+      assert.operatorModeParametersMatch(currentURL(), {
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}index`,
+              format: 'isolated',
+            },
           ],
-          submode: Submode.Interact,
-        },
-      );
+        ],
+        submode: Submode.Interact,
+      });
     });
 
     test('restoring the stack from query param', async function (assert) {
@@ -351,7 +348,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       await click('[data-test-stack-card-index="1"] [data-test-close-button]');
 
       // The stack should be updated in the URL
-      assert.operatorModeParametersMatch(currentURL().replace(/%22/g, ''), {
+      assert.operatorModeParametersMatch(currentURL(), {
         stacks: [
           [
             {
@@ -831,28 +828,25 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
 
       // Submode is reflected in the URL
-      assert.operatorModeParametersMatch(
-        currentURL().replace('true', 'false'),
-        {
-          stacks: [
-            [
-              {
-                id: `${testRealmURL}Person/fadhlan`,
-                format: 'isolated',
-              },
-            ],
-            [
-              {
-                id: `${testRealmURL}Pet/mango`,
-                format: 'isolated',
-              },
-            ],
+      assert.operatorModeParametersMatch(currentURL(), {
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
           ],
-          submode: Submode.Interact,
-          fileView: 'inheritance',
-          openDirs: { [testRealmURL]: ['Pet/'] },
-        },
-      );
+          [
+            {
+              id: `${testRealmURL}Pet/mango`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: Submode.Interact,
+        fileView: 'inheritance',
+        openDirs: { [testRealmURL]: ['Pet/'] },
+      });
     });
 
     test('card preview will show in the 3rd column when submode is set to code', async function (assert) {

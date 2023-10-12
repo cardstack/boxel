@@ -34,7 +34,6 @@ export default function (assert: Assert) {
       try {
         actualOperatorModeState = JSON.parse(operatorModeStateString);
 
-        // FIXME this is serialising as [object Object] in CI
         assert.deepEqual(
           actualOperatorModeState,
           operatorModeState,

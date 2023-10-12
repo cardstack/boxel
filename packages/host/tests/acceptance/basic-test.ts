@@ -164,9 +164,6 @@ module('Acceptance | basic tests', function (hooks) {
   test('visiting / (there is no realm here)', async function (assert) {
     await visit('/');
 
-    // FIXME remove me
-    assert.deepEqual({ a: 3 }, { b: 3 });
-
     assert.strictEqual(currentURL(), '/');
     assert
       .dom('[data-test-moved]')
