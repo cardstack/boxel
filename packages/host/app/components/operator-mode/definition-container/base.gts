@@ -7,6 +7,7 @@ import Label from '@cardstack/boxel-ui/components/label';
 
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
+import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 
 interface Action {
@@ -51,10 +52,9 @@ export class BaseDefinitionContainer extends Component<BaseSignature> {
             <RealmInfoProvider @fileURL={{@fileURL}}>
               <:ready as |realmInfo|>
                 <div class='realm-info'>
-                  <img
-                    src={{realmInfo.iconURL}}
-                    alt='realm-icon'
-                    data-test-realm-icon-url={{realmInfo.iconURL}}
+                  <RealmIcon
+                    @realmIconURL={{realmInfo.iconURL}}
+                    @realmName={{realmInfo.name}}
                   />
                   <Label class='realm-name' data-test-definition-realm-name>in
                     {{realmInfo.name}}</Label>

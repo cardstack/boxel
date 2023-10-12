@@ -248,10 +248,6 @@ export default class CodeMode extends Component<Signature> {
     return this.operatorModeStateService.realmURL;
   }
 
-  private get realmIconURL() {
-    return this.realmInfo?.iconURL;
-  }
-
   private get isLoading() {
     return (
       this.loadMonaco.isRunning || this.currentOpenFile?.state === 'loading'
@@ -905,7 +901,7 @@ export default class CodeMode extends Component<Signature> {
                 {{#if this.cardIsLoaded}}
                   <CardPreviewPanel
                     @card={{this.loadedCard}}
-                    @realmIconURL={{this.realmIconURL}}
+                    @realmInfo={{this.realmInfo}}
                     data-test-card-resource-loaded
                   />
                 {{else if this.selectedCardOrField}}

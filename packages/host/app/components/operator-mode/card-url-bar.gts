@@ -6,6 +6,7 @@ import { BoxelInput } from '@cardstack/boxel-ui';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { and, bool, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
+import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import URLBarResource, {
   urlBarResource,
@@ -41,7 +42,10 @@ export default class CardURLBar extends Component<Signature> {
         <RealmInfoProvider @realmURL={{@realmURL}}>
           <:ready as |realmInfo|>
             <div class='realm-icon'>
-              <img src={{realmInfo.iconURL}} alt='realm-icon' />
+              <RealmIcon
+                @realmIconURL={{realmInfo.iconURL}}
+                @realmName={{realmInfo.name}}
+              />
             </div>
             <span>in {{realmInfo.name}}</span>
           </:ready>
