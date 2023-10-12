@@ -16,11 +16,8 @@ import { getPlural } from '@cardstack/runtime-common';
 
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
-<<<<<<< HEAD
 import AddFieldModal from '@cardstack/host/components/operator-mode/add-field-modal';
-=======
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
->>>>>>> main
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import {
   type Type,

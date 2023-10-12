@@ -12,7 +12,12 @@ import {
 import StringField from './string';
 import BooleanField from './boolean';
 import CodeRef from './code-ref';
-import { baseCardRef, loadCard, Loader } from '@cardstack/runtime-common';
+import {
+  baseCardRef,
+  isFieldDef,
+  loadCard,
+  Loader,
+} from '@cardstack/runtime-common';
 import { isEqual } from 'lodash';
 import { FieldContainer } from '@cardstack/boxel-ui';
 import GlimmerComponent from '@glimmer/component';
