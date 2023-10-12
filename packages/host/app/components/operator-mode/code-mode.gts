@@ -44,6 +44,7 @@ import {
 } from '@cardstack/runtime-common/module-syntax';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
+import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
 import config from '@cardstack/host/config/environment';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
@@ -89,7 +90,6 @@ import BinaryFileInfo from './binary-file-info';
 import CardPreviewPanel from './card-preview-panel';
 import CardURLBar from './card-url-bar';
 import DetailPanel from './detail-panel';
-import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
 
 interface Signature {
   Args: {
@@ -250,10 +250,6 @@ export default class CodeMode extends Component<Signature> {
     return this.isReady
       ? this.readyFile.realmURL
       : this.cardService.defaultURL.href;
-  }
-
-  private get realmIconURL() {
-    return this.realmInfo?.iconURL;
   }
 
   private get isLoading() {
@@ -927,7 +923,7 @@ export default class CodeMode extends Component<Signature> {
                 {{#if this.cardIsLoaded}}
                   <CardPreviewPanel
                     @card={{this.loadedCard}}
-                    @realmIconURL={{this.realmIconURL}}
+                    @realmInfo={{this.realmInfo}}
                     data-test-card-resource-loaded
                   />
                 {{else if this.selectedCardOrField}}

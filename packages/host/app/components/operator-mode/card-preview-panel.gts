@@ -16,8 +16,9 @@ import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
 
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
-import { cardTypeDisplayName } from '@cardstack/runtime-common';
+import { RealmInfo, cardTypeDisplayName } from '@cardstack/runtime-common';
 
+import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import Preview from '@cardstack/host/components/preview';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
@@ -26,7 +27,7 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     card: CardDef;
-    realmIconURL: string | null | undefined;
+    realmInfo: RealmInfo | null;
   };
   Blocks: {};
 }
@@ -49,7 +50,13 @@ export default class CardPreviewPanel extends Component<Signature> {
       ...attributes
     >
       <div class='header-icon'>
-        <img src={{@realmIconURL}} alt='Realm icon' />
+        {{#if @realmInfo}}
+          <RealmIcon
+            @realmIconURL={{@realmInfo.iconURL}}
+            @realmName={{@realmInfo.name}}
+            class='icon'
+          />
+        {{/if}}
       </div>
       <div class='header-title'>
         {{cardTypeDisplayName @card}}
