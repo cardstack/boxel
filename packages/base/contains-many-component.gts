@@ -40,7 +40,7 @@ class ContainsManyEditor extends GlimmerComponent<Signature> {
                 )
                 as |Item|
               }}
-                <Item />
+                <Item @format={{@format}} />
               {{/let}}
               <div class='remove-button-container'>
                 <IconButton

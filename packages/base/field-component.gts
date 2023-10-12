@@ -197,10 +197,11 @@ function fieldsComponentsFor<T extends BaseDef>(
           context,
         );
       }
+
       let template: BoxComponent = class FieldComponent extends GlimmerComponent<BoxComponentSignature> {
         <template>
           {{#let (fieldComponent @format) as |FieldComponent|}}
-            <FieldComponent />
+            <FieldComponent @format={{@format}} />
           {{/let}}
         </template>
       };
@@ -257,30 +258,30 @@ export function getPluralViewComponent(
   ) => typeof BaseDef,
   context?: CardContext,
 ): BoxComponent {
-  let components = model.children.map((child) =>
-    getBoxComponent(cardTypeFor(field, child), format, child, field, context),
-  );
-  let defaultComponent = class PluralView extends GlimmerComponent {
+  let components: BoxComponent[];
+  function getComponents(format: Format) {
+    components = model.children.map((child) =>
+      getBoxComponent(cardTypeFor(field, child), format, child, field, context),
+    );
+    return components;
+  }
+  let defaultComponent = class PluralView extends GlimmerComponent<BoxComponentSignature> {
+    get format() {
+      return this.args.format ?? format;
+    }
     <template>
       <div
         class='plural-field
           {{field.fieldType}}-field
-          {{format}}-format
+          {{this.format}}-format
           {{unless model.children.length "empty"}}'
         data-test-plural-view={{field.fieldType}}
-        data-test-plural-view-format={{format}}
+        data-test-plural-view-format={{this.format}}
       >
-        {{#each model.children as |child i|}}
-          {{#let
-            (getBoxComponent
-              (cardTypeFor field child) format child field context
-            )
-            as |Item|
-          }}
-            <div data-test-plural-view-item={{i}}>
-              <Item />
-            </div>
-          {{/let}}
+        {{#each (getComponents this.format) as |Item i|}}
+          <div data-test-plural-view-item={{i}}>
+            <Item @format={{this.format}} />
+          </div>
         {{/each}}
       </div>
       <style>
