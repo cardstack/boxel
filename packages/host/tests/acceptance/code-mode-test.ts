@@ -426,10 +426,45 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.dom('[data-test-file="pet-person.gts"]').hasClass('selected');
     assert.dom('[data-test-file="person.gts"]').doesNotHaveClass('selected');
 
-    await click('[data-test-directory="Person/"]');
     await click('[data-test-file="Person/1.json"]');
 
     assert.dom('[data-test-person]').exists();
+  });
+
+  test('navigating to a file in a different realm causes it to become active in the file tree', async function (assert) {
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
+      openDirs: { [testRealmURL]: ['Person/'] },
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `http://localhost:4202/test/mango.png`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+
+    await waitFor('[data-test-file="mango.png"]');
+    assert.dom('[data-test-file="mango.png"]').hasClass('selected');
   });
 
   test('open directories are persisted', async function (assert) {
@@ -445,7 +480,7 @@ module('Acceptance | code mode tests', function (hooks) {
       submode: 'code',
       fileView: 'browser',
       codePath: `${testRealmURL}Person/1.json`,
-      openDirs: ['Person/'],
+      openDirs: { [testRealmURL]: ['Person/'] },
     })!;
 
     await visit(
@@ -473,7 +508,7 @@ module('Acceptance | code mode tests', function (hooks) {
       submode: 'code',
       codePath: `http://test-realm/test/${openFilename}`,
       fileView: 'browser',
-      openDirs: ['Person/'],
+      openDirs: { [testRealmURL]: ['Person/'] },
     })!;
 
     await visit(
@@ -504,7 +539,7 @@ module('Acceptance | code mode tests', function (hooks) {
       ],
       submode: 'code',
       codePath: `http://test-realm/test/index`,
-      openDirs: ['Person/'],
+      openDirs: { [testRealmURL]: ['Person/'] },
     })!;
 
     await visit(
@@ -557,7 +592,7 @@ module('Acceptance | code mode tests', function (hooks) {
       submode: 'code',
       codePath: `http://test-realm/test/${openFilename}`,
       fileView: 'browser',
-      openDirs: ['Person/'],
+      openDirs: { [testRealmURL]: ['Person/'] },
     })!;
 
     await visit(
@@ -611,7 +646,11 @@ module('Acceptance | code mode tests', function (hooks) {
   test('recent file links are shown', async function (assert) {
     window.localStorage.setItem(
       'recent-files',
-      JSON.stringify([[testRealmURL, 'index.json'], 'a-non-url-to-ignore']),
+      JSON.stringify([
+        [testRealmURL, 'index.json'],
+        ['http://localhost:4202/test/', 'person.gts'],
+        'a-non-url-to-ignore',
+      ]),
     );
 
     let codeModeStateParam = stringify({
@@ -626,7 +665,7 @@ module('Acceptance | code mode tests', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}Person/1.json`,
       fileView: 'browser',
-      openDirs: [],
+      openDirs: {},
     })!;
 
     await visit(
@@ -637,30 +676,27 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-file]');
     await waitFor('[data-test-directory]');
 
-    assert
-      .dom('[data-test-recent-file]')
-      .exists({ count: 1 })
-      .containsText('index.json');
+    assert.dom('[data-test-recent-file]').exists({ count: 2 });
 
     assert
-      .dom('[data-test-recent-file] [data-test-realm-icon-url]')
+      .dom('[data-test-recent-file]:nth-child(1) [data-test-realm-icon-url]')
       .hasAttribute('src', 'https://i.postimg.cc/L8yXRvws/icon.png')
       .hasAttribute('alt', 'Icon for realm Test Workspace B');
 
+    assert
+      .dom('[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]')
+      .hasAttribute('src', 'https://i.postimg.cc/d0B9qMvy/icon.png');
+
     await click('[data-test-file="index.json"]');
     assert
-      .dom('[data-test-recent-file]')
-      .exists({ count: 1 })
+      .dom('[data-test-recent-file]:nth-child(1)')
       .containsText('Person/1.json');
 
-    await click('[data-test-directory]');
     await waitFor('[data-test-file="Person/1.json"]');
-
     await click('[data-test-file="Person/1.json"]');
 
     assert
-      .dom('[data-test-recent-file]')
-      .exists({ count: 1 })
+      .dom('[data-test-recent-file]:nth-child(1)')
       .containsText('index.json');
 
     await waitFor('[data-test-file="person.gts"]');
@@ -690,6 +726,7 @@ module('Acceptance | code mode tests', function (hooks) {
         [testRealmURL, 'index.json'],
         [testRealmURL, 'person.gts'],
         [testRealmURL, 'Person/1.json'],
+        ['http://localhost:4202/test/', 'person.gts'],
       ],
     );
   });
@@ -718,7 +755,7 @@ module('Acceptance | code mode tests', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}Person/1.json`,
       fileView: 'browser',
-      openDirs: [],
+      openDirs: {},
     })!;
 
     await visit(

@@ -19,7 +19,7 @@ const log = logger('resource:directory');
 interface Args {
   named: {
     relativePath: string;
-    realmURL: string;
+    realmURL: URL;
   };
 }
 
@@ -31,7 +31,7 @@ export interface Entry {
 
 export class DirectoryResource extends Resource<Args> {
   @tracked entries: Entry[] = [];
-  private directoryURL: string | undefined;
+  private directoryURL: URL | undefined;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
 
   @service declare loaderService: LoaderService;
@@ -48,7 +48,7 @@ export class DirectoryResource extends Resource<Args> {
   }
 
   modify(_positional: never[], named: Args['named']) {
-    this.directoryURL = new URL(named.relativePath, named.realmURL).href;
+    this.directoryURL = new URL(named.relativePath, named.realmURL);
     this.readdir.perform();
 
     let path = `${named.realmURL}_message`;
@@ -86,7 +86,7 @@ export class DirectoryResource extends Resource<Args> {
     this.entries = entries;
   });
 
-  private async getEntries(url: string): Promise<Entry[]> {
+  private async getEntries(url: URL): Promise<Entry[]> {
     let response: Response | undefined;
     response = await this.loaderService.loader.fetch(url, {
       headers: { Accept: SupportedMimeType.DirectoryListing },
@@ -116,7 +116,7 @@ export class DirectoryResource extends Resource<Args> {
 export function directory(
   parent: object,
   relativePath: () => string,
-  realmURL: () => string,
+  realmURL: () => URL,
 ) {
   return DirectoryResource.from(parent, () => ({
     relativePath: relativePath(),

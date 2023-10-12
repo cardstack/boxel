@@ -13,7 +13,7 @@ import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 const waiter = buildWaiter('realm-info-provider:load-waiter');
 
 interface RealmURLArg {
-  realmURL: string;
+  realmURL: URL;
   fileURL?: never;
 }
 
