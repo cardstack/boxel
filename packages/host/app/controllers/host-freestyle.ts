@@ -10,7 +10,7 @@ interface UsageComponent {
   component: ComponentLike;
 }
 
-export default class IndexController extends FreestyleController {
+export default class HostFreestyleController extends FreestyleController {
   formatComponentName = formatComponentName;
   usageComponents: UsageComponent[];
   constructor(...args: any[]) {
