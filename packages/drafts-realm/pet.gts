@@ -7,7 +7,7 @@ import {
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import NumberCard from 'https://cardstack.com/base/number';
 import StringCard from 'https://cardstack.com/base/string';
-import { GridContainer } from '@cardstack/boxel-ui';
+import GridContainer from '@cardstack/boxel-ui/components/grid-container';
 
 export class Pet extends CardDef {
   static displayName = 'Pet';

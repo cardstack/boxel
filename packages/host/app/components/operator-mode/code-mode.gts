@@ -14,12 +14,11 @@ import perform from 'ember-concurrency/helpers/perform';
 import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
 
-import {
-  LoadingIndicator,
-  Button,
-  ResizablePanelGroup,
-  PanelContext,
-} from '@cardstack/boxel-ui';
+import Button from '@cardstack/boxel-ui/components/button';
+import LoadingIndicator from '@cardstack/boxel-ui/components/loading-indicator';
+import ResizablePanelGroup from '@cardstack/boxel-ui/components/resizable-panel-group';
+import type { PanelContext } from '@cardstack/boxel-ui/components/resizable-panel-group';
+
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import CheckMark from '@cardstack/boxel-ui/icons/check-mark';
 import File from '@cardstack/boxel-ui/icons/file';

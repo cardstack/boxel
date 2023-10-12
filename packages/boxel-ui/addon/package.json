@@ -104,35 +104,7 @@
   "ember-addon": {
     "app-js": {},
     "main": "addon-main.cjs",
-    "public-assets": {
-      "./public/assets/arrow-left.svg": "/@cardstack/boxel-ui/assets/arrow-left.svg",
-      "./public/assets/arrow-right.svg": "/@cardstack/boxel-ui/assets/arrow-right.svg",
-      "./public/assets/cardbot-lg.svg": "/@cardstack/boxel-ui/assets/cardbot-lg.svg",
-      "./public/assets/check-mark.svg": "/@cardstack/boxel-ui/assets/check-mark.svg",
-      "./public/assets/download.svg": "/@cardstack/boxel-ui/assets/download.svg",
-      "./public/assets/dropdown-arrow-down.svg": "/@cardstack/boxel-ui/assets/dropdown-arrow-down.svg",
-      "./public/assets/dropdown-arrow-up.svg": "/@cardstack/boxel-ui/assets/dropdown-arrow-up.svg",
-      "./public/assets/eye.svg": "/@cardstack/boxel-ui/assets/eye.svg",
-      "./public/assets/failure-bordered.svg": "/@cardstack/boxel-ui/assets/failure-bordered.svg",
-      "./public/assets/icon-circle-selected.svg": "/@cardstack/boxel-ui/assets/icon-circle-selected.svg",
-      "./public/assets/icon-circle.svg": "/@cardstack/boxel-ui/assets/icon-circle.svg",
-      "./public/assets/icon-code.svg": "/@cardstack/boxel-ui/assets/icon-code.svg",
-      "./public/assets/icon-link.svg": "/@cardstack/boxel-ui/assets/icon-link.svg",
-      "./public/assets/icon-minus-circle.svg": "/@cardstack/boxel-ui/assets/icon-minus-circle.svg",
-      "./public/assets/icon-pencil.svg": "/@cardstack/boxel-ui/assets/icon-pencil.svg",
-      "./public/assets/icon-plus-circle.svg": "/@cardstack/boxel-ui/assets/icon-plus-circle.svg",
-      "./public/assets/icon-plus.svg": "/@cardstack/boxel-ui/assets/icon-plus.svg",
-      "./public/assets/icon-search.svg": "/@cardstack/boxel-ui/assets/icon-search.svg",
-      "./public/assets/icon-trash.svg": "/@cardstack/boxel-ui/assets/icon-trash.svg",
-      "./public/assets/icon-turn-down-right.svg": "/@cardstack/boxel-ui/assets/icon-turn-down-right.svg",
-      "./public/assets/icon-x.svg": "/@cardstack/boxel-ui/assets/icon-x.svg",
-      "./public/assets/loading-indicator.svg": "/@cardstack/boxel-ui/assets/loading-indicator.svg",
-      "./public/assets/profile.svg": "/@cardstack/boxel-ui/assets/profile.svg",
-      "./public/assets/search.svg": "/@cardstack/boxel-ui/assets/search.svg",
-      "./public/assets/sparkle.svg": "/@cardstack/boxel-ui/assets/sparkle.svg",
-      "./public/assets/success-bordered.svg": "/@cardstack/boxel-ui/assets/success-bordered.svg",
-      "./public/assets/three-dots-horizontal.svg": "/@cardstack/boxel-ui/assets/three-dots-horizontal.svg"
-    },
+    "public-assets": {},
     "type": "addon",
     "version": 2
   },
@@ -144,6 +116,10 @@
     "./*": {
       "types": "./declarations/*.d.ts",
       "default": "./dist/*.js"
+    },
+    "./components/*": {
+      "types": "./declarations/components/*.d.ts",
+      "default": "./dist/components/*/index.js"
     },
     "./styles/*.css": "./dist/styles/*.css",
     "./addon-main.js": "./addon-main.cjs"

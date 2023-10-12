@@ -15,7 +15,7 @@ import { directory } from '@cardstack/host/resources/directory';
 
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import DropdownArrowDown from '../../icons/dropdown-arrow-down.gts';
+import DropdownArrowDown from '@cardstack/boxel-ui/icons/dropdown-arrow-down';
 
 interface Args {
   Args: {

@@ -3,7 +3,7 @@ import Component from '@glimmer/component';
 
 import { trackedFunction } from 'ember-resources/util/function';
 
-import { CardContainer } from '@cardstack/boxel-ui';
+import CardContainer from '@cardstack/boxel-ui/components/card-container';
 
 import cn from '@cardstack/boxel-ui/helpers/cn';
 

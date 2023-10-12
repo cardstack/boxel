@@ -1,4 +1,5 @@
-import { FieldContainer, GridContainer } from '@cardstack/boxel-ui';
+import FieldContainer from '@cardstack/boxel-ui/components/field-container';
+import GridContainer from '@cardstack/boxel-ui/components/grid-container';
 import {
   contains,
   linksToMany,

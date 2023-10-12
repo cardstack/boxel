@@ -11,7 +11,10 @@ import DropdownArrowDown from '@cardstack/boxel-ui/icons/dropdown-arrow-down';
 import Eye from '@cardstack/boxel-ui/icons/eye';
 import IconCode from '@cardstack/boxel-ui/icons/icon-code';
 
-import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui';
+import Button from '@cardstack/boxel-ui/components/button';
+import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
+import Menu from '@cardstack/boxel-ui/components/menu';
+
 import { menuItemFunc, MenuItem } from '@cardstack/boxel-ui/helpers/menu-item';
 
 export enum Submode {

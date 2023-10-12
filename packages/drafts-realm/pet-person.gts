@@ -9,7 +9,7 @@ import {
 import StringCard from 'https://cardstack.com/base/string';
 import { Pet } from './pet';
 import { Person } from './person';
-import { GridContainer } from '@cardstack/boxel-ui';
+import GridContainer from '@cardstack/boxel-ui/components/grid-container';
 
 export class PetPerson extends CardDef {
   static displayName = 'Pet Person';

@@ -7,7 +7,9 @@ import { tracked } from '@glimmer/tracking';
 import { velcro } from 'ember-velcro';
 import { type TrackedArray } from 'tracked-built-ins';
 
-import { IconButton, BoxelDropdown, Menu } from '@cardstack/boxel-ui';
+import IconButton from '@cardstack/boxel-ui/components/icon-button';
+import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
+import Menu from '@cardstack/boxel-ui/components/menu';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
 import { and, bool, eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
@@ -116,10 +118,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
                   @closeMenu={{dd.close}}
                   @items={{array
                     (menuItem
-                      'Delete'
-                      (fn @delete card)
-                      icon=IconTrash
-                      dangerous=true
+                      'Delete' (fn @delete card) icon=IconTrash dangerous=true
                     )
                   }}
                   {{on

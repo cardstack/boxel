@@ -28,7 +28,8 @@ export default {
       'helpers/optional.js',
       'helpers/pick.js',
       'helpers/truth-helpers.js',
-      'components/**/usage.gts',
+      'components/**/*.js',
+      'icons/*.js',
       'index.js',
     ]),
 

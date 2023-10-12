@@ -6,7 +6,7 @@ import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
-import { DropdownButton } from '@cardstack/boxel-ui';
+import { DropdownButton } from '@cardstack/boxel-ui/components';
 import menuDivider from '@cardstack/boxel-ui/helpers/menu-divider';
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
 import { gt } from '@cardstack/boxel-ui/helpers/truth-helpers';

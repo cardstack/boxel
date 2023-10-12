@@ -11,12 +11,10 @@ import { restartableTask, task, timeout, all } from 'ember-concurrency';
 
 import { TrackedMap } from 'tracked-built-ins';
 
-import {
-  BoxelInput,
-  LoadingIndicator,
-  FieldContainer,
-  Button,
-} from '@cardstack/boxel-ui';
+import Button from '@cardstack/boxel-ui/components/button';
+import FieldContainer from '@cardstack/boxel-ui/components/field-container';
+import LoadingIndicator from '@cardstack/boxel-ui/components/loading-indicator';
+import BoxelInput from '@cardstack/boxel-ui/components/input';
 
 import {
   isMatrixCardError,
@@ -26,7 +24,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
-import { not, and, eq } from '@cardstack/host/helpers/truth-helpers';
+import { not, and, eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';

@@ -2,7 +2,11 @@ import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
-import { Modal, CardContainer, Header, IconButton } from '@cardstack/boxel-ui';
+import CardContainer from '@cardstack/boxel-ui/components/card-container';
+import Header from '@cardstack/boxel-ui/components/header';
+import IconButton from '@cardstack/boxel-ui/components/icon-button';
+import Modal from '@cardstack/boxel-ui/components/modal';
+
 import IconX from '@cardstack/boxel-ui/icons/icon-x';
 
 interface Signature {

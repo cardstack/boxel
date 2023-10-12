@@ -2,7 +2,8 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { BoxelInput } from '@cardstack/boxel-ui';
+import BoxelInput from '@cardstack/boxel-ui/components/input';
+
 import { and, bool, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';

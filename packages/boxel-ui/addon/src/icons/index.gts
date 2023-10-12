@@ -30,6 +30,7 @@ import Search from './search.gts';
 import Sparkle from './sparkle.gts';
 import SuccessBordered from './success-bordered.gts';
 import ThreeDotsHorizontal from './three-dots-horizontal.gts';
+import Warning from './warning.gts';
 
 export const ALL_ICON_COMPONENTS = [
   ArrowLeft,
@@ -64,4 +65,5 @@ export const ALL_ICON_COMPONENTS = [
   Sparkle,
   SuccessBordered,
   ThreeDotsHorizontal,
+  Warning,
 ];

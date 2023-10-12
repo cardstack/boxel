@@ -19,12 +19,10 @@ import { trackedFunction } from 'ember-resources/util/function';
 
 import { TrackedArray } from 'tracked-built-ins';
 
-import {
-  IconButton,
-  Header,
-  CardContainer,
-  Tooltip,
-} from '@cardstack/boxel-ui';
+import CardContainer from '@cardstack/boxel-ui/components/card-container';
+import Tooltip from '@cardstack/boxel-ui/components/tooltip';
+import IconButton from '@cardstack/boxel-ui/components/icon-button';
+import Header from '@cardstack/boxel-ui/components/header';
 import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
 import BoxelMenu from '@cardstack/boxel-ui/components/menu';
 import cn from '@cardstack/boxel-ui/helpers/cn';

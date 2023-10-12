@@ -106,7 +106,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { ShippingInfo } from "./shipping-info";
-        import { FieldContainer } from '@cardstack/boxel-ui';
+        import FieldContainer from '@cardstack/boxel-ui/components/field-container';
 
         export class Address extends FieldDef {
           static displayName = 'Address';

@@ -10,7 +10,7 @@ import {
 import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Address } from './address';
-import { FieldContainer } from '@cardstack/boxel-ui';
+import FieldContainer from '@cardstack/boxel-ui/components/field-container';
 import { startCase } from 'lodash';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { PaymentMethod } from './payment-method';

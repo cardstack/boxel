@@ -13,18 +13,16 @@ import { restartableTask, timeout } from 'ember-concurrency';
 
 import { TrackedMap } from 'tracked-built-ins';
 
-import {
-  BoxelHeader,
-  BoxelInput,
-  LoadingIndicator,
-  BoxelInputValidationState,
-  Button,
-  FieldContainer,
-} from '@cardstack/boxel-ui';
+import BoxelHeader from '@cardstack/boxel-ui/components/header';
+import BoxelInput from '@cardstack/boxel-ui/components/input';
+import BoxelInputValidationState from '@cardstack/boxel-ui/components/input/validation-state';
+import Button from '@cardstack/boxel-ui/components/button';
+import FieldContainer from '@cardstack/boxel-ui/components/field-container';
+import LoadingIndicator from '@cardstack/boxel-ui/components/loading-indicator';
 
 import { aiBotUsername } from '@cardstack/runtime-common';
 
-import { not, eq } from '@cardstack/host/helpers/truth-helpers';
+import { not, eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import {
   isMatrixError,

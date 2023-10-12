@@ -14,7 +14,10 @@ import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Vendor } from './vendor';
 import { formatUSD, balanceInCurrency } from './currency-format';
-import { FieldContainer, Label, Message } from '@cardstack/boxel-ui';
+import FieldContainer from '@cardstack/boxel-ui/components/field-container';
+import Label from '@cardstack/boxel-ui/components/label';
+import Message from '@cardstack/boxel-ui/components/message';
+
 import { TokenField, CurrencyField } from './asset';
 import GlimmerComponent from '@glimmer/component';
 

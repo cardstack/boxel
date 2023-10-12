@@ -7,7 +7,9 @@ import Component from '@glimmer/component';
 // @ts-expect-error cached doesn't have type yet
 import { tracked, cached } from '@glimmer/tracking';
 
-import { CardContainer, LoadingIndicator, Header } from '@cardstack/boxel-ui';
+import CardContainer from '@cardstack/boxel-ui/components/card-container';
+import Header from '@cardstack/boxel-ui/components/header';
+import LoadingIndicator from '@cardstack/boxel-ui/components/loading-indicator';
 
 import { or, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
 

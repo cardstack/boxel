@@ -12,13 +12,11 @@ import { cached, tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 
-import {
-  BoxelInput,
-  Button,
-  CardContainer,
-  FieldContainer,
-  Label,
-} from '@cardstack/boxel-ui';
+import BoxelInput from '@cardstack/boxel-ui/components/input';
+import Button from '@cardstack/boxel-ui/components/button';
+import CardContainer from '@cardstack/boxel-ui/components/card-container';
+import FieldContainer from '@cardstack/boxel-ui/components/field-container';
+import Label from '@cardstack/boxel-ui/components/label';
 
 import {
   chooseCard,
@@ -32,7 +30,7 @@ import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type { Filter } from '@cardstack/runtime-common/query';
 
-import { eq } from '@cardstack/host/helpers/truth-helpers';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import { getCardType, type Type } from '@cardstack/host/resources/card-type';
 import type { Ready } from '@cardstack/host/resources/file';

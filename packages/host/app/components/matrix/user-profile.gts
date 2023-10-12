@@ -8,14 +8,12 @@ import { tracked } from '@glimmer/tracking';
 
 import { dropTask, restartableTask, all } from 'ember-concurrency';
 
-import {
-  Button,
-  FieldContainer,
-  BoxelInput,
-  LoadingIndicator,
-} from '@cardstack/boxel-ui';
+import Button from '@cardstack/boxel-ui/components/button';
+import FieldContainer from '@cardstack/boxel-ui/components/field-container';
+import LoadingIndicator from '@cardstack/boxel-ui/components/loading-indicator';
+import BoxelInput from '@cardstack/boxel-ui/components/input';
 
-import { not } from '@cardstack/host/helpers/truth-helpers';
+import { not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 export default class UserProfile extends Component {

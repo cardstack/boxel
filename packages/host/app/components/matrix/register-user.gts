@@ -13,15 +13,13 @@ import { restartableTask, timeout } from 'ember-concurrency';
 import difference from 'lodash/difference';
 import { type IAuthData, type IRequestTokenResponse } from 'matrix-js-sdk';
 
-import {
-  BoxelHeader,
-  BoxelInputValidationState,
-  LoadingIndicator,
-  Button,
-  FieldContainer,
-} from '@cardstack/boxel-ui';
+import BoxelHeader from '@cardstack/boxel-ui/components/header';
+import Button from '@cardstack/boxel-ui/components/button';
+import FieldContainer from '@cardstack/boxel-ui/components/field-container';
+import LoadingIndicator from '@cardstack/boxel-ui/components/loading-indicator';
+import BoxelInputValidationState from '@cardstack/boxel-ui/components/input/validation-state';
 
-import { eq } from '@cardstack/host/helpers/truth-helpers';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 

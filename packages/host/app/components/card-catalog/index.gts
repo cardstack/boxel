@@ -6,9 +6,11 @@ import Component from '@glimmer/component';
 
 import { TrackedArray } from 'tracked-built-ins';
 
-import { Button, IconButton } from '@cardstack/boxel-ui';
-import cn from '../../helpers/cn.ts';
-import { eq, gt } from '../../helpers/truth-helpers.ts';
+import Button from '@cardstack/boxel-ui/components/button';
+import IconButton from '@cardstack/boxel-ui/components/icon-button';
+
+import cn from '@cardstack/boxel-ui/helpers/cn';
+import { eq, gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import type { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
 

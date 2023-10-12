@@ -19,7 +19,9 @@ import get from 'lodash/get';
 
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
-import { Modal, IconButton } from '@cardstack/boxel-ui';
+import IconButton from '@cardstack/boxel-ui/components/icon-button';
+import Modal from '@cardstack/boxel-ui/components/modal';
+
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import {

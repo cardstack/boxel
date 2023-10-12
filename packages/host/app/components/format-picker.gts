@@ -4,7 +4,7 @@ import Component from '@glimmer/component';
 
 import type { Format } from 'https://cardstack.com/base/card-api';
 
-import { eq } from '../helpers/truth-helpers';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 interface Signature {
   Args: {

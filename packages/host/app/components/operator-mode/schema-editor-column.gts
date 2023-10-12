@@ -10,7 +10,7 @@ import { cached } from '@glimmer/tracking';
 import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
 
-import { Accordion } from '@cardstack/boxel-ui';
+import Accordion from '@cardstack/boxel-ui/components/accordion';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import { getPlural, loadCard } from '@cardstack/runtime-common';

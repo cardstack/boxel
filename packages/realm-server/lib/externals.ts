@@ -8,7 +8,42 @@ import * as ethers from 'ethers';
 
 export function shimExternals(loader: Loader) {
   loader.shimModule('@cardstack/runtime-common', runtime);
-  loader.shimModule('@cardstack/boxel-ui', {});
+  loader.shimModule('@cardstack/boxel-ui/components/add-button', {
+    default() {},
+  });
+  loader.shimModule('@cardstack/boxel-ui/components/button', {
+    default() {},
+  });
+  loader.shimModule('@cardstack/boxel-ui/components/card-container', {
+    default() {},
+  });
+  loader.shimModule('@cardstack/boxel-ui/components/field-container', {
+    default() {},
+  });
+  loader.shimModule('@cardstack/boxel-ui/components/grid-container', {
+    default() {},
+  });
+  loader.shimModule('@cardstack/boxel-ui/components/icon-button', {
+    default() {},
+  });
+  loader.shimModule('@cardstack/boxel-ui/components/input', {
+    default() {},
+  });
+  loader.shimModule('@cardstack/boxel-ui/components/label', {
+    default() {},
+  });
+  loader.shimModule('@cardstack/boxel-ui/components/message', {
+    default() {},
+  });
+  loader.shimModule('@cardstack/boxel-ui/components/tooltip', {
+    default() {},
+  });
+  loader.shimModule('@cardstack/boxel-ui/icons/icon-trash', {
+    default() {},
+  });
+  loader.shimModule('@cardstack/boxel-ui/icons/icon-minus-circle', {
+    default() {},
+  });
   // import * as boxelCssVar from '@cardstack/boxel-ui/helpers/css-var';
   loader.shimModule('@cardstack/boxel-ui/helpers/css-var', {
     cssVar() {},

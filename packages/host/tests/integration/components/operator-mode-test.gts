@@ -174,7 +174,7 @@ module('Integration | operator-mode', function (hooks) {
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { ShippingInfo } from "./shipping-info";
-        import { FieldContainer } from '@cardstack/boxel-ui';
+        import FieldContainer from '@cardstack/boxel-ui/components/field-container';
 
         export class Address extends CardDef {
           static displayName = 'Address';

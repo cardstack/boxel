@@ -13,7 +13,7 @@ import StringField from './string';
 import DateTimeCard from './datetime';
 import NumberField from './number';
 import MarkdownField from './markdown';
-import { BoxelMessage } from '@cardstack/boxel-ui';
+import BoxelMessage from '@cardstack/boxel-ui/components/message';
 import cssVar from '@cardstack/boxel-ui/helpers/css-var';
 import { formatRFC3339 } from 'date-fns';
 import Modifier from 'ember-modifier';

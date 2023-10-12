@@ -8,7 +8,8 @@ import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 
-import { IconButton, LoadingIndicator } from '@cardstack/boxel-ui';
+import IconButton from '@cardstack/boxel-ui/components/icon-button';
+import LoadingIndicator from '@cardstack/boxel-ui/components/loading-indicator';
 
 import Login from './login';
 import RegisterUser from './register-user';

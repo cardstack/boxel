@@ -1,8 +1,9 @@
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
-import { Button } from '@cardstack/boxel-ui';
-import { CardContainer, Header } from '@cardstack/boxel-ui';
+import Button from '@cardstack/boxel-ui/components/button';
+import CardContainer from '@cardstack/boxel-ui/components/card-container';
+import Header from '@cardstack/boxel-ui/components/header';
 import Label from '@cardstack/boxel-ui/components/label';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';

@@ -6,7 +6,9 @@ import Component from '@glimmer/component';
 
 import { trackedFunction } from 'ember-resources/util/function';
 
-import { BoxelDropdown, IconButton, Menu } from '@cardstack/boxel-ui';
+import IconButton from '@cardstack/boxel-ui/components/icon-button';
+import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
+import Menu from '@cardstack/boxel-ui/components/menu';
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 

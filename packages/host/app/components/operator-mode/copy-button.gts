@@ -6,7 +6,8 @@ import Component from '@glimmer/component';
 
 import { task } from 'ember-concurrency';
 
-import { BoxelButton } from '@cardstack/boxel-ui';
+import BoxelButton from '@cardstack/boxel-ui/components/button';
+
 import { eq, gt, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
