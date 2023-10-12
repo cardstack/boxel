@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "es2020",
     "allowJs": true,
-    "moduleResolution": "node",
+    "moduleResolution": "node16",
     "allowSyntheticDefaultImports": true,
     "noImplicitAny": true,
     "noImplicitThis": true,
@@ -26,11 +26,8 @@
       "@cardstack/host/tests/*": ["tests/*"],
       "@cardstack/host/*": ["app/*"],
       "https://cardstack.com/base/*": ["../base/*"],
-      "*": ["types/*"],
-      "@cardstack/boxel-ui": ["../boxel-ui/addon"],
-      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"]
+      "*": ["types/*"]
     },
-    "typeRoots": ["../boxel-ui/types"]
   },
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"],
@@ -39,7 +36,6 @@
         "../drafts-realm/**",
         "../published-realm/**",
         "../base/**",
-        "../boxel-ui/addon/**",
         "app/**",
         "tests/**"
       ]
@@ -49,7 +45,6 @@
     "../base/**/*",
     "../drafts-realm/**/*",
     "../published-realm/**/*",
-    "../boxel-ui/addon/*",
     "app/**/*",
     "tests/**/*",
     "types/**/*"

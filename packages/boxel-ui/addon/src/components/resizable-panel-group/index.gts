@@ -8,6 +8,7 @@ import { TrackedMap } from 'tracked-built-ins';
 import ResizablePanel from './panel.gts';
 
 import type { PanelContext } from './panel.gts';
+export { PanelContext };
 
 interface Signature {
   Args: {

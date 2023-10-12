@@ -118,7 +118,7 @@
       "default": "./dist/*.js"
     },
     "./components/*": {
-      "types": "./declarations/components/*.d.ts",
+      "types": "./declarations/components/*/index.d.ts",
       "default": "./dist/components/*/index.js"
     },
     "./styles/*.css": "./dist/styles/*.css",
