@@ -318,7 +318,7 @@ export default class OperatorModeStateService extends Service {
 
   get currentRealmOpenDirs() {
     if (this.realmURL) {
-      let currentRealmOpenDirs = this.openDirs.get(this.realmURL);
+      let currentRealmOpenDirs = this.openDirs.get(this.realmURL.href);
 
       if (currentRealmOpenDirs) {
         return currentRealmOpenDirs;
@@ -497,15 +497,18 @@ export default class OperatorModeStateService extends Service {
         } else {
           dirs.splice(i, 1);
         }
-        this.openDirs.set(this.realmURL, new TrackedArray(dirs));
+        this.openDirs.set(this.realmURL.href, new TrackedArray(dirs));
         return;
       } else if (entryPath.startsWith(dirs[i])) {
         dirs[i] = entryPath;
-        this.openDirs.set(this.realmURL, new TrackedArray(dirs));
+        this.openDirs.set(this.realmURL.href, new TrackedArray(dirs));
         return;
       }
     }
-    this.openDirs.set(this.realmURL, new TrackedArray([...dirs, entryPath]));
+    this.openDirs.set(
+      this.realmURL.href,
+      new TrackedArray([...dirs, entryPath]),
+    );
     this.schedulePersist();
   }
 
@@ -524,12 +527,12 @@ export default class OperatorModeStateService extends Service {
 
   get realmURL() {
     if (isReady(this.openFile.current)) {
-      return this.readyFile.realmURL;
+      return new URL(this.readyFile.realmURL);
     } else if (this.cachedRealmURL) {
-      return this.cachedRealmURL.href;
+      return this.cachedRealmURL;
     }
 
-    return this.cardService.defaultURL.href;
+    return this.cardService.defaultURL;
   }
 
   subscribeToOpenFileStateChanges(subscriber: OpenFileSubscriber) {

@@ -20,7 +20,7 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 interface Args {
   Args: {
     relativePath: string;
-    realmURL: string;
+    realmURL: URL;
   };
 }
 

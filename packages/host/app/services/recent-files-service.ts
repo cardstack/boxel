@@ -96,7 +96,7 @@ export default class RecentFilesService extends Service {
 
     return this.recentFiles.findIndex(
       ({ realmURL, filePath }) =>
-        realmURL.href === currentRealmUrl && filePath === path,
+        realmURL.href === currentRealmUrl.href && filePath === path,
     );
   }
 
