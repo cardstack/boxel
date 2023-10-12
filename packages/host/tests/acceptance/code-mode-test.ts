@@ -46,8 +46,9 @@ const indexCardSource = `
 `;
 
 const personCardSource = `
-  import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { contains, containsMany, field, linksTo, CardDef, Component } from "https://cardstack.com/base/card-api";
   import StringCard from "https://cardstack.com/base/string";
+  import { Friend } from './friend';
 
   export class Person extends CardDef {
     static displayName = 'Person';
@@ -58,12 +59,16 @@ const personCardSource = `
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
     });
+    @field friend = linksTo(() => Friend);
+    @field address = containsMany(StringCard);
     static isolated = class Isolated extends Component<typeof this> {
       <template>
         <div data-test-person>
           <p>First name: <@fields.firstName /></p>
           <p>Last name: <@fields.lastName /></p>
           <p>Title: <@fields.title /></p>
+          <p>Address List: <@fields.address /></p>
+          <p>Friend: <@fields.friend /></p>
         </div>
         <style>
           div {
@@ -637,7 +642,7 @@ module('Acceptance | code mode tests', function (hooks) {
     assert
       .dom('[data-test-recent-file] [data-test-realm-icon-url]')
       .hasAttribute('src', 'https://i.postimg.cc/L8yXRvws/icon.png')
-      .hasAttribute('alt', '');
+      .hasAttribute('alt', 'Icon for realm Test Workspace B');
 
     await click('[data-test-file="index.json"]');
     assert
@@ -1147,11 +1152,11 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-card-schema]');
 
     assert.dom('[data-test-card-schema]').exists({ count: 3 });
-    assert.dom('[data-test-total-fields]').containsText('5 Fields');
+    assert.dom('[data-test-total-fields]').containsText('8 Fields');
 
     assert
       .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
-      .containsText('+ 2 Fields');
+      .containsText('+ 5 Fields');
     assert
       .dom(
         `[data-test-card-schema="Person"] [data-test-field-name="firstName"] [data-test-card-display-name="String"]`,
@@ -1162,6 +1167,48 @@ module('Acceptance | code mode tests', function (hooks) {
         `[data-test-card-schema="Person"] [data-test-field-name="lastName"] [data-test-card-display-name="String"]`,
       )
       .exists();
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="title"] [data-test-card-display-name="String"]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="title"] [data-test-field-types]`,
+      )
+      .hasText('Computed, Override');
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="title"] [data-test-computed-icon]`,
+      )
+      .exists();
+
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="friend"] [data-test-card-display-name="Friend"]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="friend"] [data-test-field-types]`,
+      )
+      .hasText('Linked');
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="friend"] [data-test-linked-icon]`,
+      )
+      .exists();
+
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="address"] [data-test-card-display-name="String"]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="address"] [data-test-field-types]`,
+      )
+      .hasText('Collection');
 
     assert
       .dom('[data-test-card-schema="Card"] [data-test-total-fields]')
@@ -1171,6 +1218,12 @@ module('Acceptance | code mode tests', function (hooks) {
         `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-card-display-name="String"]`,
       )
       .exists();
+    assert
+      .dom(
+        `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-field-types]`,
+      )
+      .hasText('Overridden');
+
     assert
       .dom(
         `[data-test-card-schema="Card"] [data-test-field-name="description"] [data-test-card-display-name="String"]`,
@@ -1230,7 +1283,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .hasAttribute('data-test-realm-icon-url', realm2IconUrl);
   });
 
-  test('shows displayName of CardResource when field contains itself', async function (assert) {
+  test('shows displayName of CardResource when field refers to itself', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [],
       submode: 'code',
