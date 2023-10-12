@@ -14,6 +14,7 @@ import { getPlural } from '@cardstack/runtime-common';
 
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
+import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import {
   type Type,
@@ -254,10 +255,9 @@ export default class CardSchemaEditor extends Component<Signature> {
           <div class='realm-icon'>
             <RealmInfoProvider @fileURL={{@cardType.module}}>
               <:ready as |realmInfo|>
-                <img
-                  src={{realmInfo.iconURL}}
-                  alt='Realm icon'
-                  data-test-realm-icon-url={{realmInfo.iconURL}}
+                <RealmIcon
+                  @realmIconURL={{realmInfo.iconURL}}
+                  @realmName={{realmInfo.name}}
                 />
               </:ready>
             </RealmInfoProvider>
@@ -326,6 +326,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                           height='20'
                           role='presentation'
                         }}</span></button>
+
                   {{else}}
                     <button
                       class='pill'
@@ -340,10 +341,9 @@ export default class CardSchemaEditor extends Component<Signature> {
                       <div class='realm-icon'>
                         <RealmInfoProvider @fileURL={{moduleUrl}}>
                           <:ready as |realmInfo|>
-                            <img
-                              src={{realmInfo.iconURL}}
-                              alt='Realm icon'
-                              data-test-realm-icon-url={{realmInfo.iconURL}}
+                            <RealmIcon
+                              @realmIconURL={{realmInfo.iconURL}}
+                              @realmName={{realmInfo.name}}
                             />
                           </:ready>
                         </RealmInfoProvider>

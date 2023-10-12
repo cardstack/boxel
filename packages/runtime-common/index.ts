@@ -166,12 +166,30 @@ export interface CardSearch {
     ready: Promise<void>;
     isLoading: boolean;
   };
+  getLiveCards(
+    query: Query,
+    realms?: string[],
+    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
+  ): {
+    instances: CardDef[];
+    isLoading: boolean;
+  };
 }
 
 export function getCards(query: Query, realms?: string[]) {
   let here = globalThis as any;
   let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
   return finder?.getCards(query, realms);
+}
+
+export function getLiveCards(
+  query: Query,
+  realms?: string[],
+  doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
+) {
+  let here = globalThis as any;
+  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
+  return finder?.getLiveCards(query, realms, doWhileRefreshing);
 }
 
 export interface CardCreator {

@@ -645,7 +645,7 @@ module('Acceptance | code mode tests', function (hooks) {
     assert
       .dom('[data-test-recent-file] [data-test-realm-icon-url]')
       .hasAttribute('src', 'https://i.postimg.cc/L8yXRvws/icon.png')
-      .hasAttribute('alt', '');
+      .hasAttribute('alt', 'Icon for realm Test Workspace B');
 
     await click('[data-test-file="index.json"]');
     assert
