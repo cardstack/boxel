@@ -155,7 +155,7 @@ export default class VerticalResizablePanelGroup extends Component<Signature> {
 
     let topElId = Number(this.currentResizeHandler.topEl?.id);
     let bottomElId = Number(this.currentResizeHandler.bottomEl?.id);
-    this.setTopAndRighPanelContext(
+    this.setTopAndBottomPanelContext(
       topElId,
       bottomElId,
       `${newTopElHeight}px`,
@@ -181,7 +181,7 @@ export default class VerticalResizablePanelGroup extends Component<Signature> {
     let bottomElContext = this.listPanelContext.get(Number(bottomEl.id));
 
     if (buttonId.includes('1') && topElHeight > 0) {
-      this.setTopAndRighPanelContext(
+      this.setTopAndBottomPanelContext(
         Number(topEl.id),
         Number(bottomEl.id),
         '0px',
@@ -189,7 +189,7 @@ export default class VerticalResizablePanelGroup extends Component<Signature> {
         `0px`,
       );
     } else if (buttonId.includes('1') && topElHeight <= 0 && topElContext) {
-      this.setTopAndRighPanelContext(
+      this.setTopAndBottomPanelContext(
         Number(topEl.id),
         Number(bottomEl.id),
         topElContext.defaultHeight,
@@ -199,7 +199,7 @@ export default class VerticalResizablePanelGroup extends Component<Signature> {
       buttonId.includes(String(this.listPanelContext.size - 1)) &&
       bottomElHeight > 0
     ) {
-      this.setTopAndRighPanelContext(
+      this.setTopAndBottomPanelContext(
         Number(topEl.id),
         Number(bottomEl.id),
         `${topElHeight + bottomElHeight}px`,
@@ -212,7 +212,7 @@ export default class VerticalResizablePanelGroup extends Component<Signature> {
       bottomElHeight <= 0 &&
       bottomElContext
     ) {
-      this.setTopAndRighPanelContext(
+      this.setTopAndBottomPanelContext(
         Number(topEl.id),
         Number(bottomEl.id),
         `calc(${topElHeight}px - ${bottomElContext.defaultHeight})`,
@@ -222,7 +222,7 @@ export default class VerticalResizablePanelGroup extends Component<Signature> {
   }
 
   @action
-  setTopAndRighPanelContext(
+  setTopAndBottomPanelContext(
     topElId: number,
     bottomElId: number,
     newTopElHeight: string,
