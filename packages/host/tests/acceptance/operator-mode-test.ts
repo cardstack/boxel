@@ -652,7 +652,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         stacks: [
           [
             {
-              id: `${testRealmURL}Person/not-fadhlan`,
+              id: `${testRealmURL}Person/fadhlan`,
               format: 'isolated',
             },
           ],
