@@ -4,13 +4,13 @@ import { fn } from '@ember/helper';
 import {
   primitive,
   type Box,
+  type BoxComponent,
   type Format,
   type Field,
   type FieldDef,
   type BaseDef,
 } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
-import type { ComponentLike } from '@glint/template';
 import { AddButton, IconButton } from '@cardstack/boxel-ui';
 import { getPlural } from '@cardstack/runtime-common';
 
@@ -126,7 +126,7 @@ export function getContainsManyComponent({
     field: Field<typeof BaseDef>,
     boxedElement: Box<BaseDef>,
   ): typeof BaseDef;
-}): ComponentLike<{ Args: {}; Blocks: {} }> {
+}): BoxComponent {
   if (format === 'edit') {
     return class ContainsManyEditorTemplate extends GlimmerComponent {
       <template>

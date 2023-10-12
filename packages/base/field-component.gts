@@ -256,7 +256,7 @@ export function getPluralViewComponent(
     boxedElement: Box<BaseDef>,
   ) => typeof BaseDef,
   context?: CardContext,
-): ComponentLike<{ Args: {}; Blocks: {} }> {
+): BoxComponent {
   let components = model.children.map((child) =>
     getBoxComponent(cardTypeFor(field, child), format, child, field, context),
   );
