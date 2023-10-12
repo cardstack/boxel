@@ -35,7 +35,13 @@ export default function (assert: Assert) {
         actualOperatorModeState = JSON.parse(operatorModeStateString);
 
         // FIXME this is serialising as [object Object] in CI
-        assert.deepEqual(actualOperatorModeState, operatorModeState);
+        assert.deepEqual(
+          actualOperatorModeState,
+          operatorModeState,
+          `expected current URL ${currentURL} to match operator mode state ${encodeURIComponent(
+            JSON.stringify(operatorModeState),
+          )}`,
+        );
       } catch (error: any) {
         this.pushResult({
           result: false,
