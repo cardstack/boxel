@@ -1,19 +1,20 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
+
 import cn from '../../../helpers/cn.ts';
 import DropdownArrowDown from '../../../icons/dropdown-arrow-down.gts';
 
 export interface AccordionItemSignature {
-  Element: HTMLDivElement;
   Args: {
+    className?: string;
     isOpen: boolean;
     onClick: (event: MouseEvent) => void;
-    className?: string;
   };
   Blocks: {
     content: [];
     title: [];
   };
+  Element: HTMLDivElement;
 }
 
 const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>

@@ -13,6 +13,12 @@ interface ValidationStateInputArgs {
   errorMessage?: string;
   helperText?: string;
   id?: string;
+  onBlur?: (ev: Event) => void;
+  onFocus?: (ev: Event) => void;
+  onInput?: (val: string) => void;
+  onKeyPress?: (ev: KeyboardEvent) => void;
+  placeholder?: string;
+  state: InputValidationState;
   // from https://developer.mozilla.org/en-US/docs/Web/HTML/Element/Input (add more as needed)
   type?:
     | 'password'
@@ -29,12 +35,6 @@ interface ValidationStateInputArgs {
     | 'radio'
     | 'range'
     | 'search';
-  onBlur?: (ev: Event) => void;
-  onFocus?: (ev: Event) => void;
-  onInput?: (val: string) => void;
-  onKeyPress?: (ev: KeyboardEvent) => void;
-  placeholder?: string;
-  state: InputValidationState;
   value: string;
 }
 

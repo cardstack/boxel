@@ -1,17 +1,13 @@
 import { registerDestructor } from '@ember/destroyable';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
-import { WithBoundArgs } from '@glint/template';
+import type { WithBoundArgs } from '@glint/template';
 import didResizeModifier from 'ember-resize-modifier/modifiers/did-resize';
 import { TrackedMap } from 'tracked-built-ins';
 
 import ResizablePanel from './panel.gts';
 
-export type PanelContext = {
-  defaultWidth: string;
-  minWidth?: string;
-  width: string;
-};
+import type { PanelContext } from './panel.gts';
 
 interface Signature {
   Args: {

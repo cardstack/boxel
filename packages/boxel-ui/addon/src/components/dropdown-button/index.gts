@@ -1,20 +1,20 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { type WithBoundArgs } from '@glint/template';
 import { hash } from '@ember/helper';
-import BoxelDropdown from '../dropdown';
-import BoxelMenu from '../menu';
-import cn from '../../helpers/cn';
-import type { Icon } from '../../icons/types';
+import type { WithBoundArgs } from '@glint/template';
+
+import cn from '../../helpers/cn.ts';
+import type { Icon } from '../../icons/types.ts';
+import BoxelDropdown from '../dropdown/index.gts';
+import BoxelMenu from '../menu/index.gts';
 
 interface Signature {
-  Element: HTMLButtonElement;
   Args: {
-    icon: Icon | undefined;
-    label: string;
     class?: string;
     contentClass?: string;
-    size?: number;
+    icon: Icon | undefined;
     iconSize?: number;
+    label: string;
+    size?: number;
   };
   Blocks: {
     default: [
@@ -24,6 +24,7 @@ interface Signature {
       },
     ];
   };
+  Element: HTMLButtonElement;
 }
 
 const DropdownButton: TemplateOnlyComponent<Signature> = <template>
@@ -43,14 +44,8 @@ const DropdownButton: TemplateOnlyComponent<Signature> = <template>
       >
         {{#if @icon}}
           <@icon
-            width='(if'
-            @iconSize
-            @iconSize
-            16)
-            height='(if'
-            @iconSize
-            @iconSize
-            16)
+            width={{if @iconSize @iconSize 16}}
+            height={{if @iconSize @iconSize 16}}
           />
         {{/if}}
       </button>

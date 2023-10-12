@@ -9,8 +9,6 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import { CardContainer, LoadingIndicator, Header } from '@cardstack/boxel-ui';
 
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-
 import { or, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import { type RealmInfo } from '@cardstack/runtime-common';
@@ -22,6 +20,8 @@ import {
 } from '@cardstack/runtime-common';
 
 import { type Ready } from '@cardstack/host/resources/file';
+import IconInherit from '@cardstack/boxel-ui/icons/icon-inherit';
+import IconTrash from '@cardstack/boxel-ui/icons/icon-trash';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -227,17 +227,16 @@ export default class DetailPanel extends Component<Signature> {
                 @fileExtension='.JSON'
                 @infoText={{this.lastModified.value}}
                 @actions={{array
-                  (hash label='Delete' handler=@delete icon='icon-trash')
+                  (hash label='Delete' handler=@delete icon=IconTrash)
                 }}
               />
               <div class='chain'>
-                {{svgJar
-                  'icon-inherit'
+                <IconInherit
                   class='chain-icon'
                   width='24px'
                   height='24px'
                   role='presentation'
-                }}
+                />
                 Adopts from
               </div>
               <ClickableModuleDefinitionContainer
@@ -259,18 +258,17 @@ export default class DetailPanel extends Component<Signature> {
                   @infoText={{this.lastModified.value}}
                   @isActive={{true}}
                   @actions={{array
-                    (hash label='Delete' handler=@delete icon='icon-trash')
+                    (hash label='Delete' handler=@delete icon=IconTrash)
                   }}
                 />
                 {{#if this.cardType.type.super}}
                   <div class='chain'>
-                    {{svgJar
-                      'icon-inherit'
+                    <IconInherit
                       class='chain-icon'
                       width='24px'
                       height='24px'
                       role='presentation'
-                    }}
+                    />
                     Inherits from
                   </div>
                   <ClickableModuleDefinitionContainer
@@ -293,18 +291,17 @@ export default class DetailPanel extends Component<Signature> {
                   @infoText={{this.lastModified.value}}
                   @isActive={{true}}
                   @actions={{array
-                    (hash label='Delete' handler=@delete icon='icon-trash')
+                    (hash label='Delete' handler=@delete icon=IconTrash)
                   }}
                 />
                 {{#if this.cardType.type.super}}
                   <div class='chain'>
-                    {{svgJar
-                      'icon-inherit'
+                    <IconInherit
                       class='chain-icon'
                       width='24px'
                       height='24px'
                       role='presentation'
-                    }}
+                    />
                     Inherits from
                   </div>
                   <ClickableModuleDefinitionContainer
@@ -330,7 +327,7 @@ export default class DetailPanel extends Component<Signature> {
                 @fileExtension={{this.fileExtension}}
                 @infoText={{this.lastModified.value}}
                 @actions={{array
-                  (hash label='Delete' handler=@delete icon='icon-trash')
+                  (hash label='Delete' handler=@delete icon=IconTrash)
                 }}
               />
             </div>

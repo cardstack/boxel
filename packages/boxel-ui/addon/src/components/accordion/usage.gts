@@ -1,11 +1,12 @@
-import Component from '@glimmer/component';
-import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
-import cssVars from '../../helpers/css-var.gts';
-import { eq } from '../..//helpers/truth-helpers.gts';
-import Accordion from './index';
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
+
+import cssVars from '../../helpers/css-var.ts';
+import { eq } from '../../helpers/truth-helpers.ts';
+import Accordion from './index.gts';
 
 export default class AccordionUsage extends Component {
   <template>

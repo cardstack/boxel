@@ -2,12 +2,13 @@ import { fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-import ResizablePanelGroup from './index.gts';
-import cssVar from '../../helpers/css-var.ts';
 import {
   cssVariable,
   CSSVariableInfo,
 } from 'ember-freestyle/decorators/css-variable';
+
+import cssVar from '../../helpers/css-var.ts';
+import ResizablePanelGroup from './index.gts';
 
 export default class ResizablePanelUsage extends Component {
   @tracked panel1DefaultWidth = '25%';
@@ -24,7 +25,7 @@ export default class ResizablePanelUsage extends Component {
   @cssVariable declare boxelPanelResizeHandlerBackgroundColor: CSSVariableInfo;
 
   <template>
-    <FreestyleUsage @name='ThreadMessage'>
+    <FreestyleUsage @name='ResizablePanel'>
       <:example>
         <ResizablePanelGroup as |ResizablePanel|>
           <ResizablePanel

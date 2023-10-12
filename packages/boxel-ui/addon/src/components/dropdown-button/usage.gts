@@ -1,15 +1,18 @@
-import Component from '@glimmer/component';
+import type { Icon } from '@cardstack/boxel-ui/icons/types';
+import { array, fn } from '@ember/helper';
 import { action } from '@ember/object';
+import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-import BoxelDropdownButton from './index';
-import { fn, array } from '@ember/helper';
-import menuItem from '../../helpers/menu-item.ts';
+
 import menuDivider from '../..//helpers/menu-divider.ts';
+import menuItem from '../../helpers/menu-item.ts';
+import ThreeDotsHorizontal from '../../icons/three-dots-horizontal.gts';
+import BoxelDropdownButton from './index.gts';
 
 export default class DropdownButtonUsageComponent extends Component {
   @tracked label = 'Label';
-  @tracked icon = 'three-dots-horizontal';
+  @tracked icon: Icon = ThreeDotsHorizontal;
   @tracked size = 30;
   @tracked iconSize = 16;
 

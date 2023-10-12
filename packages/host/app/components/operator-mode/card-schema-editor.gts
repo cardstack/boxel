@@ -9,7 +9,6 @@ import { tracked } from '@glimmer/tracking';
 import { DropdownButton } from '@cardstack/boxel-ui';
 import menuDivider from '@cardstack/boxel-ui/helpers/menu-divider';
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import { getPlural } from '@cardstack/runtime-common';
@@ -24,6 +23,9 @@ import {
   type CodeRefType,
   type FieldOfType,
 } from '@cardstack/host/resources/card-type';
+import ArrowTopLeft from '@cardstack/boxel-ui/icons/arrow-top-left';
+import IconLink from '@cardstack/boxel-ui/icons/icon-link';
+import WarningIcon from '@cardstack/boxel-ui/icons/warning';
 
 import type { Ready } from '@cardstack/host/resources/file';
 import type CardService from '@cardstack/host/services/card-service';
@@ -332,12 +334,11 @@ export default class CardSchemaEditor extends Component<Signature> {
                       data-test-overridden-field-link
                       {{on 'click' (fn this.scrollIntoOveridingField field)}}
                     >Jump to active field definition
-                      <span>{{svgJar
-                          'arrow-top-left'
-                          width='20'
-                          height='20'
+                      <span><ArrowTopLeft
+                          width='20px'
+                          height='20px'
                           role='presentation'
-                        }}</span></button>
+                        /></span></button>
 
                   {{else}}
                     <button
@@ -347,7 +348,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                     >
                       {{#if (this.isLinkedField field)}}
                         <span class='linked-icon' data-test-linked-icon>
-                          {{svgJar 'icon-link' width='16' height='16'}}
+                          <IconLink width='16px' height='16px' />
                         </span>
                       {{/if}}
                       <div class='realm-icon'>
@@ -386,12 +387,11 @@ export default class CardSchemaEditor extends Component<Signature> {
                           card instances.
                         </p>
                         <span class='warning-icon'>
-                          {{svgJar
-                            'warning'
-                            width='20'
-                            height='20'
+                          <WarningIcon
+                            width='20px'
+                            height='20px'
                             role='presentation'
-                          }}
+                          />
                         </span>
                       </div>
                       <dd.Menu

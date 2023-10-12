@@ -1,10 +1,10 @@
 import { on } from '@ember/modifier';
 import { v4 as uuidv4 } from 'uuid';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
+import CheckMark from '@cardstack/boxel-ui/icons/check-mark';
 
 import { tracked } from '@glimmer/tracking';
 
@@ -60,7 +60,7 @@ export default class RegisterUser extends Component<Signature> {
               has been validated.
               <span class='validated-check' data-test-email-validated>
                 <span>
-                  {{svgJar 'check-mark' width='27' height='27'}}
+                  <CheckMark width='27px' height='27px' />
                 </span>
               </span>
             </p>

@@ -2,8 +2,14 @@ import { on } from '@ember/modifier';
 import { scheduleOnce } from '@ember/runloop';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { PanelContext } from './index';
+
 import cssVars from '../../helpers/css-var.ts';
+
+export type PanelContext = {
+  defaultWidth: string;
+  minWidth?: string;
+  width: string;
+};
 
 interface Signature {
   Args: {

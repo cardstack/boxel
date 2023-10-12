@@ -2,7 +2,8 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { hash } from '@ember/helper';
 import type { ComponentLike } from '@glint/template';
 
-import AccordionItem, { type AccordionItemSignature } from './item/index.gts';
+import AccordionItem from './item/index.gts';
+import type { AccordionItemSignature } from './item/index.gts';
 
 interface Signature {
   Blocks: {

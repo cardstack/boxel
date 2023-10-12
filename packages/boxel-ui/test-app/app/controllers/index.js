@@ -16,7 +16,6 @@ import MessageUsage from '@cardstack/boxel-ui/components/message/usage';
 import ModalUsage from '@cardstack/boxel-ui/components/modal/usage';
 import MenuUsage from '@cardstack/boxel-ui/components/menu/usage';
 import DropdownUsage from '@cardstack/boxel-ui/components/dropdown/usage';
-import DropdownTriggerUsage from '@cardstack/boxel-ui/components/dropdown/trigger/usage';
 import TooltipUsage from '@cardstack/boxel-ui/components/tooltip/usage';
 import ResizablePanelGroupUsage from '@cardstack/boxel-ui/components/resizable-panel-group/usage';
 <<<<<<< HEAD
@@ -42,7 +41,9 @@ export default class IndexController extends FreestyleController {
       ['Boxel::Input::ValidationState', InputValidationStateUsage],
       ['Boxel::Input', InputUsage],
       ['Boxel::LoadingIndicator', LoadingIndicatorUsage],
+      ['Boxel::Message', MessageUsage],
       ['Boxel::Menu', MenuUsage],
+      ['Boxel::Modal', ModalUsage],
       ['Boxel::Tooltip', TooltipUsage],
       ['Boxel::ResizablePanel', ResizablePanelGroupUsage],
 <<<<<<< HEAD
