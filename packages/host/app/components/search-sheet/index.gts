@@ -16,10 +16,12 @@ import flatMap from 'lodash/flatMap';
 
 import { TrackedArray } from 'tracked-built-ins';
 
-import Button from '@cardstack/boxel-ui/components/button';
-import Label from '@cardstack/boxel-ui/components/label';
-import SearchInput from '@cardstack/boxel-ui/components/input/search-input';
-import { SearchInputBottomTreatment } from '@cardstack/boxel-ui/components/input/search-input';
+import {
+  Button,
+  Label,
+  SearchInput,
+  SearchInputBottomTreatment,
+} from '@cardstack/boxel-ui/components';
 
 import {
   isSingleCardDocument,
@@ -32,7 +34,7 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { eq, gt, or } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { eq, gt, or } from '@cardstack/boxel-ui/helpers';
 
 import UrlSearch from '../url-search';
 

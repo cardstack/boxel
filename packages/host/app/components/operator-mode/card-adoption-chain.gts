@@ -11,7 +11,7 @@ import { CardInheritance } from '@cardstack/host/components/operator-mode/schema
 import type { Ready } from '@cardstack/host/resources/file';
 
 import { isOwnField } from '@cardstack/host/utils/schema-editor';
-import InheritIcon from '@cardstack/boxel-ui/icons/icon-inherit';
+import { IconInherit as InheritIcon } from '@cardstack/boxel-ui/icons';
 
 interface Signature {
   Element: HTMLDivElement;

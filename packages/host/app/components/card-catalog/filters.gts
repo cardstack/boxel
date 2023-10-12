@@ -1,8 +1,7 @@
 import Component from '@glimmer/component';
 
-import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
-import Menu from '@cardstack/boxel-ui/components/menu';
-import { MenuItem } from '@cardstack/boxel-ui/helpers/menu-item';
+import { BoxelDropdown, Menu } from '@cardstack/boxel-ui/components';
+import { MenuItem } from '@cardstack/boxel-ui/helpers';
 
 import { type RealmCards } from './modal';
 

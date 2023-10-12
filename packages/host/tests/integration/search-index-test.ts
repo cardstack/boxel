@@ -2573,15 +2573,9 @@ module('Integration | search-index', function (hooks) {
         // Exclude synthetic imports that encapsulate scoped CSS
         .filter((key) => !key.includes('glimmer-scoped.css')),
       [
-        '@cardstack/boxel-ui/components/add-button',
-        '@cardstack/boxel-ui/components/card-container',
-        '@cardstack/boxel-ui/components/field-container',
-        '@cardstack/boxel-ui/components/icon-button',
-        '@cardstack/boxel-ui/components/input',
-        '@cardstack/boxel-ui/helpers/pick',
-        '@cardstack/boxel-ui/helpers/truth-helpers',
-        '@cardstack/boxel-ui/icons/icon-minus-circle',
-        '@cardstack/boxel-ui/icons/icon-trash',
+        '@cardstack/boxel-ui/components',
+        '@cardstack/boxel-ui/helpers',
+        '@cardstack/boxel-ui/icons',
         '@cardstack/runtime-common',
         '@ember/component',
         '@ember/component/template-only',

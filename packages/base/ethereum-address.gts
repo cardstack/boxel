@@ -10,7 +10,7 @@ import {
   queryableValue,
   FieldDef,
 } from './card-api';
-import BoxelInput from '@cardstack/boxel-ui/components/input';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputFilter, DeserializedResult } from './text-input-filter';
 
 function isChecksumAddress(address: string): boolean {

@@ -8,8 +8,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 
-import IconButton from '@cardstack/boxel-ui/components/icon-button';
-import LoadingIndicator from '@cardstack/boxel-ui/components/loading-indicator';
+import { IconButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 import Login from './login';
 import RegisterUser from './register-user';
@@ -18,7 +17,7 @@ import RoomsManager from './rooms-manager';
 import UserProfile from './user-profile';
 
 import type MatrixService from '../../services/matrix-service';
-import IconX from '@cardstack/boxel-ui/icons/icon-x';
+import { IconX } from '@cardstack/boxel-ui/icons';
 
 interface Args {
   Args: {

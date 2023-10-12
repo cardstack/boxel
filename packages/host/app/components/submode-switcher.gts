@@ -6,16 +6,16 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import get from 'lodash/get';
-import DropdownArrowUp from '@cardstack/boxel-ui/icons/dropdown-arrow-up';
-import DropdownArrowDown from '@cardstack/boxel-ui/icons/dropdown-arrow-down';
-import Eye from '@cardstack/boxel-ui/icons/eye';
-import IconCode from '@cardstack/boxel-ui/icons/icon-code';
+import {
+  DropdownArrowUp,
+  DropdownArrowDown,
+  Eye,
+  IconCode,
+} from '@cardstack/boxel-ui/icons';
 
-import Button from '@cardstack/boxel-ui/components/button';
-import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
-import Menu from '@cardstack/boxel-ui/components/menu';
+import { BoxelDropdown, Button, Menu } from '@cardstack/boxel-ui/components';
 
-import { menuItemFunc, MenuItem } from '@cardstack/boxel-ui/helpers/menu-item';
+import { menuItemFunc, MenuItem } from '@cardstack/boxel-ui/helpers';
 
 export enum Submode {
   Interact = 'interact',

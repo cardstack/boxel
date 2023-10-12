@@ -6,7 +6,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import NumberCard from 'https://cardstack.com/base/number';
-import FieldContainer from '@cardstack/boxel-ui/components/field-container';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 let CHAIN_IDS: Record<string, number> = {
   'Ethereum Mainnet': 1,

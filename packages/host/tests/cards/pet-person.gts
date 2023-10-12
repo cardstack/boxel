@@ -1,4 +1,4 @@
-import GridContainer from '@cardstack/boxel-ui/components/grid-container';
+import { GridContainer } from '@cardstack/boxel-ui/components';
 
 import {
   contains,

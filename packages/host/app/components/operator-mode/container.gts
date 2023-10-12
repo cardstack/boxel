@@ -19,10 +19,9 @@ import get from 'lodash/get';
 
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
-import IconButton from '@cardstack/boxel-ui/components/icon-button';
-import Modal from '@cardstack/boxel-ui/components/modal';
+import { IconButton, Modal } from '@cardstack/boxel-ui/components';
 
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   Deferred,
@@ -68,9 +67,11 @@ import type LoaderService from '../../services/loader-service';
 
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import SparkleIcon from '@cardstack/boxel-ui/icons/sparkle';
-import IconPlus from '@cardstack/boxel-ui/icons/icon-plus';
-import Download from '@cardstack/boxel-ui/icons/download';
+import {
+  Sparkle as SparkleIcon,
+  IconPlus,
+  Download,
+} from '@cardstack/boxel-ui/icons';
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
 

@@ -3,9 +3,9 @@ import Component from '@glimmer/component';
 
 import { trackedFunction } from 'ember-resources/util/function';
 
-import CardContainer from '@cardstack/boxel-ui/components/card-container';
+import { CardContainer } from '@cardstack/boxel-ui/components';
 
-import cn from '@cardstack/boxel-ui/helpers/cn';
+import { cn } from '@cardstack/boxel-ui/helpers';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
 

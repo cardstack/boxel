@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "es2020",
     "allowJs": true,
-    "moduleResolution": "node16",
+    "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
     "noImplicitAny": true,
     "noImplicitThis": true,
@@ -37,7 +37,8 @@
         "../published-realm/**",
         "../base/**",
         "app/**",
-        "tests/**"
+        "tests/**",
+        "types/**/*"
       ]
     }
   },

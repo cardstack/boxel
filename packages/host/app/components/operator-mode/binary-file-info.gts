@@ -3,7 +3,7 @@ import Component from '@glimmer/component';
 import { format } from 'date-fns';
 import { filesize } from 'filesize';
 
-import File from '@cardstack/boxel-ui/icons/file';
+import { File } from '@cardstack/boxel-ui/icons';
 
 import { type Ready } from '@cardstack/host/resources/file';
 

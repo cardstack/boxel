@@ -3,10 +3,9 @@ import GlimmerComponent from '@glimmer/component';
 import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
-import BoxelInput from '@cardstack/boxel-ui/components/input';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { eq, pick } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
-import pick from '@cardstack/boxel-ui/helpers/pick';
 import { startCase } from 'lodash';
 import { getBoxComponent, type BoxComponent } from './field-component';
 import { getContainsManyComponent } from './contains-many-component';
@@ -43,7 +42,7 @@ import {
   type RealmInfo,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
-import FieldContainer from '@cardstack/boxel-ui/components/field-container';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 export { primitive, isField, type BoxComponent };
 export const serialize = Symbol('cardstack-serialize');

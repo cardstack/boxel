@@ -1,14 +1,16 @@
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
-import Button from '@cardstack/boxel-ui/components/button';
-import CardContainer from '@cardstack/boxel-ui/components/card-container';
-import Header from '@cardstack/boxel-ui/components/header';
-import Label from '@cardstack/boxel-ui/components/label';
+import {
+  Button,
+  CardContainer,
+  Header,
+  Label,
+} from '@cardstack/boxel-ui/components';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
-import type { Icon } from '@cardstack/boxel-ui/icons/types';
+import type { Icon } from '@cardstack/boxel-ui/icons';
 
 interface Action {
   label: string;

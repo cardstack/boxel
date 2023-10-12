@@ -7,7 +7,7 @@ import Component from '@glimmer/component';
 
 import Modifier, { PositionalArgs } from 'ember-modifier';
 
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { RealmPaths, type LocalPath } from '@cardstack/runtime-common/paths';
 
@@ -15,7 +15,7 @@ import { directory } from '@cardstack/host/resources/directory';
 
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import DropdownArrowDown from '@cardstack/boxel-ui/icons/dropdown-arrow-down';
+import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 
 interface Args {
   Args: {

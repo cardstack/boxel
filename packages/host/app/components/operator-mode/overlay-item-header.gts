@@ -6,11 +6,12 @@ import Component from '@glimmer/component';
 
 import { trackedFunction } from 'ember-resources/util/function';
 
-import IconButton from '@cardstack/boxel-ui/components/icon-button';
-import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
-import Menu from '@cardstack/boxel-ui/components/menu';
-import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import {
+  BoxelDropdown,
+  IconButton,
+  Menu,
+} from '@cardstack/boxel-ui/components';
+import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
@@ -22,9 +23,11 @@ import type {
   FieldType,
 } from 'https://cardstack.com/base/card-api';
 import { type RenderedCardForOverlayActions } from './stack-item';
-import IconPencil from '@cardstack/boxel-ui/icons/icon-pencil';
-import ThreeDotsHorizontal from '@cardstack/boxel-ui/icons/three-dots-horizontal';
-import IconTurnDownRight from '@cardstack/boxel-ui/icons/icon-turn-down-right';
+import {
+  IconPencil,
+  IconTurnDownRight,
+  ThreeDotsHorizontal,
+} from '@cardstack/boxel-ui/icons';
 
 interface Signature {
   item: RenderedCardForOverlayActions;

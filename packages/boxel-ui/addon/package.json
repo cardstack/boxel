@@ -24,7 +24,8 @@
     "lint:js": "eslint . --cache",
     "lint:js:fix": "eslint . --fix",
     "lint:types": "glint",
-    "rebuild-icons": "node bin/rebuild-icons.mjs",
+    "rebuild:icons": "node bin/rebuild-icons.mjs",
+    "rebuild:usage": "node bin/rebuild-usage.mjs",
     "prepack": "rollup --config",
     "start": "concurrently \"npm:start:*\" --names \"start:\"",
     "start:js": "rollup --config --watch --no-watch.clearScreen",
@@ -35,7 +36,7 @@
   "dependencies": {
     "@embroider/addon-shim": "^1.8.6",
     "@floating-ui/dom": "^1.4.3",
-    "@glint/template": "^1.2.0",
+    "@glint/template": "^1.2.1",
     "classnames": "^2.3.2",
     "dayjs": "^1.11.7",
     "ember-basic-dropdown": "^7.1.0",
@@ -109,17 +110,9 @@
     "version": 2
   },
   "exports": {
-    ".": {
-      "types": "./declarations/index.d.ts",
-      "default": "./dist/index.js"
-    },
     "./*": {
       "types": "./declarations/*.d.ts",
       "default": "./dist/*.js"
-    },
-    "./components/*": {
-      "types": "./declarations/components/*/index.d.ts",
-      "default": "./dist/components/*/index.js"
     },
     "./styles/*.css": "./dist/styles/*.css",
     "./addon-main.js": "./addon-main.cjs"

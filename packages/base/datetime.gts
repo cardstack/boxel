@@ -10,7 +10,7 @@ import {
 } from './card-api';
 import { format, parseISO } from 'date-fns';
 import { fn } from '@ember/helper';
-import BoxelInput from '@cardstack/boxel-ui/components/input';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 
 // The Intl API is supported in all modern browsers. In older ones, we polyfill
 // it in the application route at app startup.

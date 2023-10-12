@@ -10,8 +10,8 @@ import {
 } from 'ember-freestyle/decorators/css-variable';
 
 import cssVar from '../../helpers/css-var.ts';
+import { ALL_ICON_COMPONENTS } from '../../icons.gts';
 import IconPlusCircle from '../../icons/icon-plus-circle.gts';
-import { ALL_ICON_COMPONENTS } from '../../icons/index.gts';
 import type { Icon } from '../../icons/types.ts';
 import BoxelIconButton from './index.gts';
 

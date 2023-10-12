@@ -18,9 +18,8 @@ import {
   identifyCard,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
-import AddButton from '@cardstack/boxel-ui/components/add-button';
-import IconButton from '@cardstack/boxel-ui/components/icon-button';
-import IconMinusCircle from '@cardstack/boxel-ui/icons/icon-minus-circle';
+import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
+import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
 
 interface Signature {
   Args: {

@@ -7,23 +7,25 @@ import { tracked } from '@glimmer/tracking';
 import { velcro } from 'ember-velcro';
 import { type TrackedArray } from 'tracked-built-ins';
 
-import IconButton from '@cardstack/boxel-ui/components/icon-button';
-import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
-import Menu from '@cardstack/boxel-ui/components/menu';
-import cn from '@cardstack/boxel-ui/helpers/cn';
-import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
-import { and, bool, eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import {
+  BoxelDropdown,
+  IconButton,
+  Menu,
+} from '@cardstack/boxel-ui/components';
+import { and, bool, cn, eq, menuItem, not } from '@cardstack/boxel-ui/helpers';
 
 import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import OperatorModeOverlayItemHeader from './overlay-item-header';
 import { RenderedCardForOverlayActions } from './stack-item';
-import EyeIcon from '@cardstack/boxel-ui/icons/eye';
-import ThreeDotsHorizontal from '@cardstack/boxel-ui/icons/three-dots-horizontal';
-import IconCircle from '@cardstack/boxel-ui/icons/icon-circle';
-import IconCircleSelected from '@cardstack/boxel-ui/icons/icon-circle-selected';
-import IconTrash from '@cardstack/boxel-ui/icons/icon-trash';
+import {
+  Eye as EyeIcon,
+  ThreeDotsHorizontal,
+  IconCircle,
+  IconCircleSelected,
+  IconTrash,
+} from '@cardstack/boxel-ui/icons';
 
 import type { MiddlewareState } from '@floating-ui/dom';
 

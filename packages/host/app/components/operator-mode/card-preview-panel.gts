@@ -8,16 +8,15 @@ import { task } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
 
-import BoxelMenu from '@cardstack/boxel-ui/components/menu';
-import IconButton from '@cardstack/boxel-ui/components/icon-button';
-import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
-import Tooltip from '@cardstack/boxel-ui/components/tooltip';
+import {
+  BoxelDropdown,
+  IconButton,
+  Menu as BoxelMenu,
+  Tooltip,
+} from '@cardstack/boxel-ui/components';
 
-import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
-
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import ThreeDotsHorizontal from '@cardstack/boxel-ui/icons/three-dots-horizontal';
-import IconLink from '@cardstack/boxel-ui/icons/icon-link';
+import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
+import { IconLink, ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
 
 import { RealmInfo, cardTypeDisplayName } from '@cardstack/runtime-common';
 

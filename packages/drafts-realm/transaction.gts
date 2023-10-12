@@ -7,8 +7,8 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import StringCard from 'https://cardstack.com/base/string';
-import FieldContainer from '@cardstack/boxel-ui/components/field-container';
-import GridContainer from '@cardstack/boxel-ui/components/grid-container';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { GridContainer } from '@cardstack/boxel-ui/components';
 import BigIntegerCard from 'https://cardstack.com/base/big-integer';
 import NumberCard from 'https://cardstack.com/base/number';
 import { Chain } from './chain';

@@ -5,10 +5,8 @@ import type { WithBoundArgs } from '@glint/template';
 import didResizeModifier from 'ember-resize-modifier/modifiers/did-resize';
 import { TrackedMap } from 'tracked-built-ins';
 
-import ResizablePanel from './panel.gts';
-
 import type { PanelContext } from './panel.gts';
-export { PanelContext };
+import ResizablePanel from './panel.gts';
 
 interface Signature {
   Args: {

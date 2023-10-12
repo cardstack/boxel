@@ -8,11 +8,13 @@ import { restartableTask } from 'ember-concurrency';
 
 import { type IAuthData } from 'matrix-js-sdk';
 
-import Button from '@cardstack/boxel-ui/components/button';
-import FieldContainer from '@cardstack/boxel-ui/components/field-container';
-import LoadingIndicator from '@cardstack/boxel-ui/components/loading-indicator';
-import BoxelInput from '@cardstack/boxel-ui/components/input';
-import BoxelHeader from '@cardstack/boxel-ui/components/header';
+import {
+  Button,
+  FieldContainer,
+  BoxelHeader,
+  BoxelInput,
+  LoadingIndicator,
+} from '@cardstack/boxel-ui/components';
 
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';

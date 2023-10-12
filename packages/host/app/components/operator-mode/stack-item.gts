@@ -19,16 +19,15 @@ import { trackedFunction } from 'ember-resources/util/function';
 
 import { TrackedArray } from 'tracked-built-ins';
 
-import CardContainer from '@cardstack/boxel-ui/components/card-container';
-import Tooltip from '@cardstack/boxel-ui/components/tooltip';
-import IconButton from '@cardstack/boxel-ui/components/icon-button';
-import Header from '@cardstack/boxel-ui/components/header';
-import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
-import BoxelMenu from '@cardstack/boxel-ui/components/menu';
-import cn from '@cardstack/boxel-ui/helpers/cn';
-import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
-import optional from '@cardstack/boxel-ui/helpers/optional';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import {
+  BoxelDropdown,
+  Menu as BoxelMenu,
+  CardContainer,
+  Header,
+  IconButton,
+  Tooltip,
+} from '@cardstack/boxel-ui/components';
+import { cn, eq, menuItem, optional } from '@cardstack/boxel-ui/helpers';
 
 import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 
@@ -50,11 +49,13 @@ import { type StackItem } from './container';
 import OperatorModeOverlays from './overlays';
 
 import type CardService from '../../services/card-service';
-import ThreeDotsHorizontal from '@cardstack/boxel-ui/icons/three-dots-horizontal';
-import IconPencil from '@cardstack/boxel-ui/icons/icon-pencil';
-import IconX from '@cardstack/boxel-ui/icons/icon-x';
-import IconTrash from '@cardstack/boxel-ui/icons/icon-trash';
-import IconLink from '@cardstack/boxel-ui/icons/icon-link';
+import {
+  IconPencil,
+  IconX,
+  IconTrash,
+  IconLink,
+  ThreeDotsHorizontal,
+} from '@cardstack/boxel-ui/icons';
 
 interface Signature {
   Args: {

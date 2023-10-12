@@ -2,18 +2,20 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import BoxelInput from '@cardstack/boxel-ui/components/input';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 
-import { and, bool, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { and, bool, not } from '@cardstack/boxel-ui/helpers';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import URLBarResource, {
   urlBarResource,
 } from '@cardstack/host/resources/url-bar';
-import IconCircle from '@cardstack/boxel-ui/icons/icon-circle';
-import IconGlobe from '@cardstack/boxel-ui/icons/icon-globe';
-import IconWarning from '@cardstack/boxel-ui/icons/warning';
+import {
+  IconCircle,
+  IconGlobe,
+  Warning as IconWarning,
+} from '@cardstack/boxel-ui/icons';
 
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';

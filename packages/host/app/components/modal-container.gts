@@ -2,12 +2,14 @@ import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
-import CardContainer from '@cardstack/boxel-ui/components/card-container';
-import Header from '@cardstack/boxel-ui/components/header';
-import IconButton from '@cardstack/boxel-ui/components/icon-button';
-import Modal from '@cardstack/boxel-ui/components/modal';
+import {
+  CardContainer,
+  Header,
+  IconButton,
+  Modal,
+} from '@cardstack/boxel-ui/components';
 
-import IconX from '@cardstack/boxel-ui/icons/icon-x';
+import { IconX } from '@cardstack/boxel-ui/icons';
 
 interface Signature {
   Element: HTMLElement;

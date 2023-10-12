@@ -7,11 +7,13 @@ import Component from '@glimmer/component';
 // @ts-expect-error cached doesn't have type yet
 import { tracked, cached } from '@glimmer/tracking';
 
-import CardContainer from '@cardstack/boxel-ui/components/card-container';
-import Header from '@cardstack/boxel-ui/components/header';
-import LoadingIndicator from '@cardstack/boxel-ui/components/loading-indicator';
+import {
+  CardContainer,
+  Header,
+  LoadingIndicator,
+} from '@cardstack/boxel-ui/components';
 
-import { or, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { or, and } from '@cardstack/boxel-ui/helpers';
 
 import { type RealmInfo } from '@cardstack/runtime-common';
 
@@ -22,8 +24,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import { type Ready } from '@cardstack/host/resources/file';
-import IconInherit from '@cardstack/boxel-ui/icons/icon-inherit';
-import IconTrash from '@cardstack/boxel-ui/icons/icon-trash';
+import { IconInherit, IconTrash } from '@cardstack/boxel-ui/icons';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 

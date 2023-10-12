@@ -19,18 +19,10 @@ export default {
     // These are the modules that users should be able to import from your
     // addon. Anything not listed here may get optimized away.
     addon.publicEntrypoints([
-      'helpers/cn.js',
-      'helpers/css-var.js',
-      'helpers/dayjs-format.js',
-      'helpers/element.js',
-      'helpers/menu-divider.js',
-      'helpers/menu-item.js',
-      'helpers/optional.js',
-      'helpers/pick.js',
-      'helpers/truth-helpers.js',
-      'components/**/*.js',
-      'icons/*.js',
-      'index.js',
+      'components.js',
+      'helpers.js',
+      'icons.js',
+      'usage.js',
     ]),
 
     // These are the modules that should get reexported into the traditional

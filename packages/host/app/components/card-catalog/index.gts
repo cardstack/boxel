@@ -6,11 +6,9 @@ import Component from '@glimmer/component';
 
 import { TrackedArray } from 'tracked-built-ins';
 
-import Button from '@cardstack/boxel-ui/components/button';
-import IconButton from '@cardstack/boxel-ui/components/icon-button';
+import { Button, IconButton } from '@cardstack/boxel-ui/components';
 
-import cn from '@cardstack/boxel-ui/helpers/cn';
-import { eq, gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { cn, eq, gt } from '@cardstack/boxel-ui/helpers';
 
 import type { CardDef, CardContext } from 'https://cardstack.com/base/card-api';
 
@@ -20,7 +18,7 @@ import CardCatalogResultsHeader from './results-header';
 import type CardService from '../../services/card-service';
 
 import type { RealmCards } from '../card-catalog/modal';
-import EyeIcon from '@cardstack/boxel-ui/icons/eye';
+import { Eye as EyeIcon } from '@cardstack/boxel-ui/icons';
 
 interface Signature {
   Args: {

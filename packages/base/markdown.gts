@@ -1,5 +1,5 @@
 import { primitive, Component, useIndexBasedKey, FieldDef } from './card-api';
-import BoxelInput from '@cardstack/boxel-ui/components/input';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { marked } from 'marked';
 import { sanitizeHtml } from '@cardstack/runtime-common';
 

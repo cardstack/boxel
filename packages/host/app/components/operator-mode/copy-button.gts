@@ -6,9 +6,8 @@ import Component from '@glimmer/component';
 
 import { task } from 'ember-concurrency';
 
-import BoxelButton from '@cardstack/boxel-ui/components/button';
-
-import { eq, gt, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { BoxelButton } from '@cardstack/boxel-ui/components';
+import { eq, gt, and } from '@cardstack/boxel-ui/helpers';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -16,8 +15,7 @@ import type { StackItem } from './container';
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import ArrowLeft from '@cardstack/boxel-ui/icons/arrow-left';
-import ArrowRight from '@cardstack/boxel-ui/icons/arrow-right';
+import { ArrowLeft, ArrowRight } from '@cardstack/boxel-ui/icons';
 
 interface Signature {
   Args: {

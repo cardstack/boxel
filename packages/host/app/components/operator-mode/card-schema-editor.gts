@@ -5,11 +5,8 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
-
 import { DropdownButton } from '@cardstack/boxel-ui/components';
-import menuDivider from '@cardstack/boxel-ui/helpers/menu-divider';
-import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
-import { gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { gt, menuDivider, menuItem } from '@cardstack/boxel-ui/helpers';
 
 import { getPlural } from '@cardstack/runtime-common';
 
@@ -23,9 +20,11 @@ import {
   type CodeRefType,
   type FieldOfType,
 } from '@cardstack/host/resources/card-type';
-import ArrowTopLeft from '@cardstack/boxel-ui/icons/arrow-top-left';
-import IconLink from '@cardstack/boxel-ui/icons/icon-link';
-import WarningIcon from '@cardstack/boxel-ui/icons/warning';
+import {
+  ArrowTopLeft,
+  IconLink,
+  Warning as WarningIcon,
+} from '@cardstack/boxel-ui/icons';
 
 import type { Ready } from '@cardstack/host/resources/file';
 import type CardService from '@cardstack/host/services/card-service';

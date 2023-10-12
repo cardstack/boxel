@@ -50,9 +50,9 @@
     "@floating-ui/dom": "^1.4.3",
     "@glimmer/component": "^1.1.2",
     "@glimmer/tracking": "^1.1.2",
-    "@glint/core": "^1.2.0",
-    "@glint/environment-ember-template-imports": "^1.2.0",
-    "@glint/template": "^1.2.0",
+    "@glint/core": "^1.2.1",
+    "@glint/environment-ember-template-imports": "^1.2.1",
+    "@glint/template": "^1.2.1",
     "@percy/cli": "^1.26.1",
     "@percy/ember": "^4.2.0",
     "@simple-dom/interface": "^1.4.0",
@@ -98,6 +98,7 @@
     "ember-cli-terser": "^4.0.2",
     "ember-cli-typescript-blueprints": "^3.0.0",
     "ember-click-outside": "^6.0.1",
+    "ember-composable-helpers": "^5.0.0",
     "ember-concurrency": "^3.1.0",
     "ember-css-url": "^1.0.0",
     "ember-focus-trap": "^1.0.1",
@@ -154,10 +155,10 @@
     "tracked-built-ins": "^3.2.0",
     "typescript": "^5.1.6",
     "uuid": "^9.0.1",
-    "webpack": "^5.78.0"
+    "webpack": "^5.88.2"
   },
   "peerDependencies": {
-    "@glint/environment-ember-loose": "^1.0.0"
+    "@glint/environment-ember-loose": "^1.2.1"
   },
   "dependenciesMeta": {
     "@cardstack/base": {

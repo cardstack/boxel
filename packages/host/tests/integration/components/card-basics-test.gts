@@ -12,7 +12,7 @@ import parseISO from 'date-fns/parseISO';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
-import BoxelInput from '@cardstack/boxel-ui/components/input';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 
 import { baseRealm } from '@cardstack/runtime-common';
 

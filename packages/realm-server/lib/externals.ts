@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-empty-function */
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import * as runtime from '@cardstack/runtime-common';
@@ -8,53 +9,15 @@ import * as ethers from 'ethers';
 
 export function shimExternals(loader: Loader) {
   loader.shimModule('@cardstack/runtime-common', runtime);
-  loader.shimModule('@cardstack/boxel-ui/components/add-button', {
-    default() {},
+  loader.shimModule('@cardstack/boxel-ui/components', {
+    Button() {},
   });
-  loader.shimModule('@cardstack/boxel-ui/components/button', {
-    default() {},
-  });
-  loader.shimModule('@cardstack/boxel-ui/components/card-container', {
-    default() {},
-  });
-  loader.shimModule('@cardstack/boxel-ui/components/field-container', {
-    default() {},
-  });
-  loader.shimModule('@cardstack/boxel-ui/components/grid-container', {
-    default() {},
-  });
-  loader.shimModule('@cardstack/boxel-ui/components/icon-button', {
-    default() {},
-  });
-  loader.shimModule('@cardstack/boxel-ui/components/input', {
-    default() {},
-  });
-  loader.shimModule('@cardstack/boxel-ui/components/label', {
-    default() {},
-  });
-  loader.shimModule('@cardstack/boxel-ui/components/message', {
-    default() {},
-  });
-  loader.shimModule('@cardstack/boxel-ui/components/tooltip', {
-    default() {},
-  });
-  loader.shimModule('@cardstack/boxel-ui/icons/icon-trash', {
-    default() {},
-  });
-  loader.shimModule('@cardstack/boxel-ui/icons/icon-minus-circle', {
-    default() {},
-  });
-  // import * as boxelCssVar from '@cardstack/boxel-ui/helpers/css-var';
-  loader.shimModule('@cardstack/boxel-ui/helpers/css-var', {
+  loader.shimModule('@cardstack/boxel-ui/helpers', {
     cssVar() {},
-  });
-  // import * as boxelPickHelper from "@cardstack/boxel-ui/helpers/pick";
-  loader.shimModule('@cardstack/boxel-ui/helpers/pick', {
-    default() {},
-  });
-  // import * as boxelTruthHelpers from "@cardstack/boxel-ui/helpers/truth-helpers";
-  loader.shimModule('@cardstack/boxel-ui/helpers/truth-helpers', {
     eq() {},
+  });
+  loader.shimModule('@cardstack/boxel-ui/icons', {
+    default() {},
   });
   // import * as glimmerComponent from "@glimmer/component";
   loader.shimModule('@glimmer/component', {

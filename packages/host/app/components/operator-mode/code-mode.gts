@@ -14,16 +14,16 @@ import perform from 'ember-concurrency/helpers/perform';
 import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
 
-import Button from '@cardstack/boxel-ui/components/button';
-import LoadingIndicator from '@cardstack/boxel-ui/components/loading-indicator';
-import ResizablePanelGroup from '@cardstack/boxel-ui/components/resizable-panel-group';
-import type { PanelContext } from '@cardstack/boxel-ui/components/resizable-panel-group';
+import {
+  Button,
+  LoadingIndicator,
+  ResizablePanelGroup,
+} from '@cardstack/boxel-ui/components';
+import type { PanelContext } from '@cardstack/boxel-ui/components';
 
-import cn from '@cardstack/boxel-ui/helpers/cn';
-import CheckMark from '@cardstack/boxel-ui/icons/check-mark';
-import File from '@cardstack/boxel-ui/icons/file';
+import { CheckMark, File } from '@cardstack/boxel-ui/icons';
 
-import { and, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { cn, and, not } from '@cardstack/boxel-ui/helpers';
 
 import {
   type RealmInfo,

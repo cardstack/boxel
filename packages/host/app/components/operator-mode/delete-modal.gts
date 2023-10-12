@@ -7,10 +7,8 @@ import { tracked } from '@glimmer/tracking';
 
 import { enqueueTask, dropTask, timeout, all } from 'ember-concurrency';
 
-import BoxelButton from '@cardstack/boxel-ui/components/button';
-import Modal from '@cardstack/boxel-ui/components/modal';
-
-import cssVar from '@cardstack/boxel-ui/helpers/css-var';
+import { BoxelButton, Modal } from '@cardstack/boxel-ui/components';
+import { cssVar } from '@cardstack/boxel-ui/helpers';
 
 import { Deferred } from '@cardstack/runtime-common';
 

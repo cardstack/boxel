@@ -21,7 +21,7 @@ export class Person extends CardDef {
   };
 }`.trim();
 
-export function compiledCard(id = 'null', moduleName = '/dir/person.gts') {
+export function compiledCard(_id = 'null', _moduleName = '/dir/person.gts') {
   return `
   var _class, _descriptor, _descriptor2, _class2;
   import { setComponentTemplate } from \"@ember/component\";

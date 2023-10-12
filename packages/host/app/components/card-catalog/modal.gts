@@ -12,11 +12,10 @@ import debounce from 'lodash/debounce';
 
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
-import Button from '@cardstack/boxel-ui/components/button';
-import SearchInput from '@cardstack/boxel-ui/components/input/search-input';
-import IconPlus from '@cardstack/boxel-ui/icons/icon-plus';
+import { Button, SearchInput } from '@cardstack/boxel-ui/components';
+import { IconPlus } from '@cardstack/boxel-ui/icons';
 
-import { and, eq, gt, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { and, eq, gt, not } from '@cardstack/boxel-ui/helpers';
 
 import {
   createNewCard,
