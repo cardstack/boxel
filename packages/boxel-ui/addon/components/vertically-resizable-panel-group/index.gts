@@ -15,7 +15,9 @@ export type VerticalPanelContext = {
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    onListPanelContextChange?: (listPanelContext: PanelContext[]) => void;
+    onListPanelContextChange?: (
+      listPanelContext: VerticalPanelContext[],
+    ) => void;
   };
   Blocks: {
     default: [
@@ -71,7 +73,7 @@ export default class VerticalResizablePanelGroup extends Component<Signature> {
     });
   }
 
-  listPanelContext = new TrackedMap<number, PanelContext>();
+  listPanelContext = new TrackedMap<number, VerticalPanelContext>();
   currentResizeHandler: {
     id: string;
     initialYPosition: number;
@@ -80,7 +82,7 @@ export default class VerticalResizablePanelGroup extends Component<Signature> {
   } | null = null;
 
   @action
-  registerPanel(context: PanelContext) {
+  registerPanel(context: VerticalPanelContext) {
     let id = Number(this.listPanelContext.size + 1);
     this.listPanelContext.set(id, context);
 
