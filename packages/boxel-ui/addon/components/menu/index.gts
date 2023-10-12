@@ -161,11 +161,11 @@ export default class Menu extends Component<Signature> {
           color: var(--boxel-menu-selected-font-color);
         }
 
-        .boxel-menu__item--selected:hover {
+        .boxel-menu__item--selected:not(.boxel-menu__item--disabled):hover {
           color: var(--boxel-menu-selected-hover-font-color);
         }
 
-        .boxel-menu__item:hover {
+        .boxel-menu__item:not(.boxel-menu__item--disabled):hover {
           background-color: var(--boxel-menu-current-color);
           cursor: pointer;
         }

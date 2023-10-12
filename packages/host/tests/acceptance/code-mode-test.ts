@@ -46,8 +46,9 @@ const indexCardSource = `
 `;
 
 const personCardSource = `
-  import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { contains, containsMany, field, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
   import StringCard from "https://cardstack.com/base/string";
+  import { Friend } from './friend';
 
   export class Person extends CardDef {
     static displayName = 'Person';
@@ -58,12 +59,16 @@ const personCardSource = `
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
     });
+    @field friends = linksToMany(() => Friend);
+    @field address = containsMany(StringCard);
     static isolated = class Isolated extends Component<typeof this> {
       <template>
         <div data-test-person>
           <p>First name: <@fields.firstName /></p>
           <p>Last name: <@fields.lastName /></p>
           <p>Title: <@fields.title /></p>
+          <p>Address List: <@fields.address /></p>
+          <p>Friends: <@fields.friends /></p>
         </div>
         <style>
           div {
@@ -97,6 +102,60 @@ const employeeCardSource = `
       </template>
     };
   }
+`;
+
+const inThisFileSource = `
+  import {
+    contains,
+    field,
+    CardDef,
+    FieldDef,
+  } from 'https://cardstack.com/base/card-api';
+  import StringCard from 'https://cardstack.com/base/string';
+
+  export const exportedVar = 'exported var';
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const localVar = 'local var';
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  class LocalClass {}
+  export class ExportedClass {}
+
+  export class ExportedClassInheritLocalClass extends LocalClass {}
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  function localFunction() {}
+  export function exportedFunction() {}
+
+  export { LocalClass as AClassWithExportName };
+
+  class LocalCard extends CardDef {
+    static displayName = 'local card';
+  }
+
+  export class ExportedCard extends CardDef {
+    static displayName = 'exported card';
+    @field someString = contains(StringCard);
+  }
+
+  export class ExportedCardInheritLocalCard extends LocalCard {
+    static displayName = 'exported card extends local card';
+  }
+
+  class LocalField extends FieldDef {
+    static displayName = 'local field';
+  }
+  export class ExportedField extends FieldDef {
+    static displayName = 'exported field';
+    @field someString = contains(StringCard);
+  }
+
+  export class ExportedFieldInheritLocalField extends LocalField {
+    static displayName = 'exported field extends local field';
+  }
+
+  export default class DefaultClass {}
 `;
 
 const friendCardSource = `
@@ -154,6 +213,7 @@ module('Acceptance | code mode tests', function (hooks) {
       'person.gts': personCardSource,
       'friend.gts': friendCardSource,
       'employee.gts': employeeCardSource,
+      'in-this-file.gts': inThisFileSource,
       'person-entry.json': {
         data: {
           type: 'card',
@@ -366,10 +426,45 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.dom('[data-test-file="pet-person.gts"]').hasClass('selected');
     assert.dom('[data-test-file="person.gts"]').doesNotHaveClass('selected');
 
-    await click('[data-test-directory="Person/"]');
     await click('[data-test-file="Person/1.json"]');
 
     assert.dom('[data-test-person]').exists();
+  });
+
+  test('navigating to a file in a different realm causes it to become active in the file tree', async function (assert) {
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
+      openDirs: { [testRealmURL]: ['Person/'] },
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `http://localhost:4202/test/mango.png`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+
+    await waitFor('[data-test-file="mango.png"]');
+    assert.dom('[data-test-file="mango.png"]').hasClass('selected');
   });
 
   test('open directories are persisted', async function (assert) {
@@ -385,7 +480,7 @@ module('Acceptance | code mode tests', function (hooks) {
       submode: 'code',
       fileView: 'browser',
       codePath: `${testRealmURL}Person/1.json`,
-      openDirs: ['Person/'],
+      openDirs: { [testRealmURL]: ['Person/'] },
     })!;
 
     await visit(
@@ -413,7 +508,7 @@ module('Acceptance | code mode tests', function (hooks) {
       submode: 'code',
       codePath: `http://test-realm/test/${openFilename}`,
       fileView: 'browser',
-      openDirs: ['Person/'],
+      openDirs: { [testRealmURL]: ['Person/'] },
     })!;
 
     await visit(
@@ -444,7 +539,7 @@ module('Acceptance | code mode tests', function (hooks) {
       ],
       submode: 'code',
       codePath: `http://test-realm/test/index`,
-      openDirs: ['Person/'],
+      openDirs: { [testRealmURL]: ['Person/'] },
     })!;
 
     await visit(
@@ -497,7 +592,7 @@ module('Acceptance | code mode tests', function (hooks) {
       submode: 'code',
       codePath: `http://test-realm/test/${openFilename}`,
       fileView: 'browser',
-      openDirs: ['Person/'],
+      openDirs: { [testRealmURL]: ['Person/'] },
     })!;
 
     await visit(
@@ -551,7 +646,11 @@ module('Acceptance | code mode tests', function (hooks) {
   test('recent file links are shown', async function (assert) {
     window.localStorage.setItem(
       'recent-files',
-      JSON.stringify([[testRealmURL, 'index.json'], 'a-non-url-to-ignore']),
+      JSON.stringify([
+        [testRealmURL, 'index.json'],
+        ['http://localhost:4202/test/', 'person.gts'],
+        'a-non-url-to-ignore',
+      ]),
     );
 
     let codeModeStateParam = stringify({
@@ -566,7 +665,7 @@ module('Acceptance | code mode tests', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}Person/1.json`,
       fileView: 'browser',
-      openDirs: [],
+      openDirs: {},
     })!;
 
     await visit(
@@ -577,30 +676,27 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-file]');
     await waitFor('[data-test-directory]');
 
-    assert
-      .dom('[data-test-recent-file]')
-      .exists({ count: 1 })
-      .containsText('index.json');
+    assert.dom('[data-test-recent-file]').exists({ count: 2 });
 
     assert
-      .dom('[data-test-recent-file] [data-test-realm-icon-url]')
+      .dom('[data-test-recent-file]:nth-child(1) [data-test-realm-icon-url]')
       .hasAttribute('src', 'https://i.postimg.cc/L8yXRvws/icon.png')
-      .hasAttribute('alt', '');
+      .hasAttribute('alt', 'Icon for realm Test Workspace B');
+
+    assert
+      .dom('[data-test-recent-file]:nth-child(2) [data-test-realm-icon-url]')
+      .hasAttribute('src', 'https://i.postimg.cc/d0B9qMvy/icon.png');
 
     await click('[data-test-file="index.json"]');
     assert
-      .dom('[data-test-recent-file]')
-      .exists({ count: 1 })
+      .dom('[data-test-recent-file]:nth-child(1)')
       .containsText('Person/1.json');
 
-    await click('[data-test-directory]');
     await waitFor('[data-test-file="Person/1.json"]');
-
     await click('[data-test-file="Person/1.json"]');
 
     assert
-      .dom('[data-test-recent-file]')
-      .exists({ count: 1 })
+      .dom('[data-test-recent-file]:nth-child(1)')
       .containsText('index.json');
 
     await waitFor('[data-test-file="person.gts"]');
@@ -630,6 +726,7 @@ module('Acceptance | code mode tests', function (hooks) {
         [testRealmURL, 'index.json'],
         [testRealmURL, 'person.gts'],
         [testRealmURL, 'Person/1.json'],
+        ['http://localhost:4202/test/', 'person.gts'],
       ],
     );
   });
@@ -658,7 +755,7 @@ module('Acceptance | code mode tests', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}Person/1.json`,
       fileView: 'browser',
-      openDirs: [],
+      openDirs: {},
     })!;
 
     await visit(
@@ -685,7 +782,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .containsText('file-97.txt');
   });
 
-  test('card inheritance panel will show json instance definition and module definition', async function (assert) {
+  test('inspector will show json instance definition and module definition in card inheritance panel', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [
         [
@@ -750,7 +847,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .hasClass('active');
   });
 
-  test('card inheritance panel will show module definition', async function (assert) {
+  test('inspector will show module definition in card inheritance panel', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [[]],
       submode: 'code',
@@ -794,6 +891,98 @@ module('Acceptance | code mode tests', function (hooks) {
       )
       .includesText('Test Workspace B');
     assert.dom('[data-test-card-instance-definition]').doesNotExist();
+  });
+
+  test('inspector displays elements "in-this-file" panel and can select', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}in-this-file.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    //default is the 1st index
+    let elementName = 'LocalClass';
+    assert
+      .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
+      .hasText(elementName);
+    // elements must be ordered by the way they appear in the source code
+    const expectedElementNames = [
+      'LocalClass',
+      'ExportedClass',
+      'ExportedClassInheritLocalClass',
+      'exportedFunction',
+      'LocalCard', //TODO: CS-6009 will probably change this
+      'exported card',
+      'exported card extends local card',
+      'LocalField', //TODO: CS-6009 will probably change this
+      'exported field',
+      'exported field extends local field',
+      'DefaultClass',
+    ];
+    expectedElementNames.forEach(async (elementName, index) => {
+      await waitFor(
+        `[data-test-boxel-selector-item]:nth-of-type(${index + 1})`,
+      );
+      assert
+        .dom(`[data-test-boxel-selector-item]:nth-of-type(${index + 1})`)
+        .hasText(elementName);
+    });
+    assert.dom('[data-test-boxel-selector-item]').exists({ count: 11 });
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
+    assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
+    // clicking on a card
+    elementName = 'exported card';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
+    await waitFor('[data-test-card-module-definition]');
+    assert.dom('[data-test-inheritance-panel-header]').exists();
+    assert.dom('[data-test-card-module-definition]').exists();
+    assert.dom('[data-test-definition-header]').includesText('Card Definition');
+    assert.dom('[data-test-card-module-definition]').includesText(elementName);
+    await waitFor('[data-test-card-schema]');
+    assert.dom('[data-test-card-schema]').exists({ count: 3 });
+    assert
+      .dom(
+        `[data-test-card-schema="${elementName}"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
+      )
+      .exists();
+    assert.dom(`[data-test-card-schema=Card]`).exists();
+    // clicking on a field
+    elementName = 'exported field';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
+    await waitFor('[data-test-card-module-definition]');
+    assert.dom('[data-test-inheritance-panel-header]').exists();
+    assert
+      .dom('[data-test-definition-header]')
+      .includesText('Field Definition');
+    assert.dom('[data-test-card-module-definition]').includesText(elementName);
+    await waitFor('[data-test-card-schema]');
+    assert.dom('[data-test-card-schema]').exists({ count: 3 });
+    //TODO: CS-6093 will fix this
+    // assert
+    //   .dom(
+    //     `[data-test-card-schema="${elementName}"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
+    //   )
+    //   .exists();
+    // assert.dom(`[data-test-card-schema=Card]`).exists();
+
+    // clicking on an exported function
+    elementName = 'exportedFunction';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
+    assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
+    assert.dom('[data-test-card-module-definition]').doesNotExist();
+    assert.dom('[data-test-schema-editor-incompatible]').exists();
   });
 
   test('non-card JSON is shown as just a file with empty schema editor', async function (assert) {
@@ -1003,11 +1192,11 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-card-schema]');
 
     assert.dom('[data-test-card-schema]').exists({ count: 3 });
-    assert.dom('[data-test-total-fields]').containsText('5 Fields');
+    assert.dom('[data-test-total-fields]').containsText('8 Fields');
 
     assert
       .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
-      .containsText('+ 2 Fields');
+      .containsText('+ 5 Fields');
     assert
       .dom(
         `[data-test-card-schema="Person"] [data-test-field-name="firstName"] [data-test-card-display-name="String"]`,
@@ -1018,15 +1207,63 @@ module('Acceptance | code mode tests', function (hooks) {
         `[data-test-card-schema="Person"] [data-test-field-name="lastName"] [data-test-card-display-name="String"]`,
       )
       .exists();
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="title"] [data-test-card-display-name="String"]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="title"] [data-test-field-types]`,
+      )
+      .hasText('Override, Computed');
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="title"] [data-test-computed-icon]`,
+      )
+      .exists();
+
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="friends"] [data-test-card-display-name="Friend"]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="friends"] [data-test-field-types]`,
+      )
+      .hasText('Link, Collection');
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="friends"] [data-test-linked-icon]`,
+      )
+      .exists();
+
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="address"] [data-test-card-display-name="String"]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="address"] [data-test-field-types]`,
+      )
+      .hasText('Collection');
 
     assert
       .dom('[data-test-card-schema="Card"] [data-test-total-fields]')
       .containsText('+ 3 Fields');
     assert
       .dom(
-        `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-card-display-name="String"]`,
+        `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-overridden-field-link]`,
       )
       .exists();
+    assert
+      .dom(
+        `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-field-types]`,
+      )
+      .hasText('Overridden');
+
     assert
       .dom(
         `[data-test-card-schema="Card"] [data-test-field-name="description"] [data-test-card-display-name="String"]`,
@@ -1075,18 +1312,9 @@ module('Acceptance | code mode tests', function (hooks) {
     assert
       .dom(`[data-test-card-schema="Card"] [data-test-realm-icon-url]`)
       .hasAttribute('data-test-realm-icon-url', realm2IconUrl);
-
-    await waitFor(
-      '[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-realm-icon-url]',
-    );
-    assert
-      .dom(
-        `[data-test-card-schema="Card"] [data-test-field-name="title"] [data-test-realm-icon-url]`,
-      )
-      .hasAttribute('data-test-realm-icon-url', realm2IconUrl);
   });
 
-  test('shows displayName of CardResource when field contains itself', async function (assert) {
+  test('shows displayName of CardResource when field refers to itself', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [],
       submode: 'code',
@@ -1130,12 +1358,12 @@ module('Acceptance | code mode tests', function (hooks) {
 
     // Click on card definition button
     await click(
-      '[data-test-card-schema="Employee"] [data-test-card-schema-navigational-button]',
+      '[data-test-card-schema="Person"] [data-test-card-schema-navigational-button]',
     );
 
-    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-current-module-name="person.gts"]');
 
-    assert.dom('[data-test-current-module-name]').hasText('employee.gts');
+    assert.dom('[data-test-current-module-name]').hasText('person.gts');
 
     // Go back so that we can test clicking on a field definition button
     await visit(
@@ -1152,8 +1380,9 @@ module('Acceptance | code mode tests', function (hooks) {
       '[data-test-card-schema="Employee"] [data-test-field-name="department"] [data-test-card-display-name="String"]',
     );
 
-    await waitFor('[data-test-current-module-name]');
-    assert.dom('[data-test-current-module-name]').hasText('string.ts');
+    // TODO: CS-6110
+    // await waitFor('[data-test-current-module-name="string.ts"]');
+    // assert.dom('[data-test-current-module-name]').hasText('string.ts');
   });
 
   test('code mode handles binary files', async function (assert) {

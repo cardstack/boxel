@@ -362,7 +362,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         ],
         submode: Submode.Interact,
         fileView: 'inheritance',
-        openDirs: [],
+        openDirs: {},
       });
 
       await waitFor('[data-test-pet="Mango"]');
@@ -387,7 +387,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             ],
             submode: 'interact',
             fileView: 'inheritance',
-            openDirs: [],
+            openDirs: {},
           })!,
         )}`,
       );
@@ -414,7 +414,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             ],
             submode: 'interact',
             fileView: 'inheritance',
-            openDirs: [],
+            openDirs: {},
           })!,
         )}`,
       );
@@ -662,7 +662,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         ],
         submode: Submode.Interact,
         fileView: 'inheritance',
-        openDirs: [],
+        openDirs: {},
       });
 
       // Close the last card in the last stack that is left - should get the empty state
@@ -820,7 +820,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         submode: Submode.Code,
         codePath: `${testRealmURL}Pet/mango.json`,
         fileView: 'inheritance',
-        openDirs: ['Pet/'],
+        openDirs: { [testRealmURL]: ['Pet/'] },
       });
 
       // Toggle back to interactive mode
@@ -850,7 +850,7 @@ module('Acceptance | operator mode tests', function (hooks) {
           ],
           submode: Submode.Interact,
           fileView: 'inheritance',
-          openDirs: ['Pet/'],
+          openDirs: { [testRealmURL]: ['Pet/'] },
         },
       );
     });

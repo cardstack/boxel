@@ -1,6 +1,9 @@
+import { action } from '@ember/object';
 import Component from '@glimmer/component';
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
+
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
@@ -8,7 +11,7 @@ import CardSchemaEditor from '@cardstack/host/components/operator-mode/card-sche
 import { CardInheritance } from '@cardstack/host/components/operator-mode/schema-editor-column';
 
 import type { Ready } from '@cardstack/host/resources/file';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import { isOwnField } from '@cardstack/host/utils/schema-editor';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -23,7 +26,6 @@ export default class CardAdoptionChain extends Component<Signature> {
     <style>
       .card-adoption-chain {
         background-color: var(--boxel-200);
-        height: 100%;
       }
       .content-with-line {
         position: relative;
@@ -66,13 +68,15 @@ export default class CardAdoptionChain extends Component<Signature> {
     </style>
 
     <div class='card-adoption-chain' ...attributes>
-      {{#each @cardInheritanceChain as |data|}}
+      {{#each @cardInheritanceChain as |data index|}}
         <div class='chain'>
           <CardSchemaEditor
             @card={{data.card}}
             @cardType={{data.cardType}}
             @file={{@file}}
             @moduleSyntax={{this.moduleSyntax}}
+            @childFields={{this.getFields index 'successors'}}
+            @parentFields={{this.getFields index 'ancestors'}}
           />
           <div class='content-with-line'>
             <hr class='line' />
@@ -93,5 +97,22 @@ export default class CardAdoptionChain extends Component<Signature> {
   @cached
   get moduleSyntax() {
     return new ModuleSyntax(this.args.file.content);
+  }
+
+  @action
+  getFields(cardIndex: number, from: 'ancestors' | 'successors'): string[] {
+    const children = this.args.cardInheritanceChain.filter((_data, index) =>
+      from === 'ancestors' ? index > cardIndex : index < cardIndex,
+    );
+
+    const fields = children.reduce((result: string[], data) => {
+      return result.concat(
+        data.cardType.fields
+          .filter((field) => isOwnField(data.card, field.name))
+          .map((field) => field.name),
+      );
+    }, []);
+
+    return fields;
   }
 }

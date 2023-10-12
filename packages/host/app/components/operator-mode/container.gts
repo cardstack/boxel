@@ -40,6 +40,7 @@ import CodeMode from '@cardstack/host/components/operator-mode/code-mode';
 import ENV from '@cardstack/host/config/environment';
 
 import {
+  getLiveSearchResults,
   getSearchResults,
   type Search,
 } from '@cardstack/host/resources/search';
@@ -137,6 +138,20 @@ export default class OperatorModeContainer extends Component<Signature> {
       this,
       () => query,
       realms ? () => realms : undefined,
+    );
+  }
+
+  @action
+  getLiveCards(
+    query: Query,
+    realms?: string[],
+    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
+  ): Search {
+    return getLiveSearchResults(
+      this,
+      () => query,
+      realms ? () => realms : undefined,
+      doWhileRefreshing ? () => doWhileRefreshing : undefined,
     );
   }
 

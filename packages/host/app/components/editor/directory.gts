@@ -20,7 +20,7 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 interface Args {
   Args: {
     relativePath: string;
-    realmURL: string;
+    realmURL: URL;
   };
 }
 
@@ -160,7 +160,7 @@ function isOpen(
   operatorModeStateService: OperatorModeStateService,
 ) {
   let directoryIsPersistedOpen = (
-    operatorModeStateService.state.openDirs ?? []
+    operatorModeStateService.currentRealmOpenDirs ?? []
   ).find((item) => item.startsWith(path));
 
   return directoryIsPersistedOpen;

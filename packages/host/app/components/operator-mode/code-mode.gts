@@ -24,24 +24,26 @@ import {
 } from '@cardstack/boxel-ui';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { and } from '@cardstack/boxel-ui/helpers/truth-helpers';
-
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { and, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import {
   type RealmInfo,
   type SingleCardDocument,
-  type CodeRef,
   RealmPaths,
   logger,
   isCardDocumentString,
   isSingleCardDocument,
-  identifyCard,
-  moduleFrom,
   hasExecutableExtension,
 } from '@cardstack/runtime-common';
+import {
+  ModuleSyntax,
+  type PossibleCardOrFieldClass,
+  type BaseDeclaration,
+  type ElementDeclaration,
+} from '@cardstack/runtime-common/module-syntax';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
+import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
 import config from '@cardstack/host/config/environment';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
@@ -51,15 +53,12 @@ import {
   type CardType,
 } from '@cardstack/host/resources/card-type';
 import {
-  file,
   isReady,
   type Ready,
   type FileResource,
 } from '@cardstack/host/resources/file';
 
 import { importResource } from '@cardstack/host/resources/import';
-
-import { maybe } from '@cardstack/host/resources/maybe';
 
 import type CardService from '@cardstack/host/services/card-service';
 
@@ -87,7 +86,6 @@ import BinaryFileInfo from './binary-file-info';
 import CardPreviewPanel from './card-preview-panel';
 import CardURLBar from './card-url-bar';
 import DetailPanel from './detail-panel';
-import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
 
 interface Signature {
   Args: {
@@ -126,17 +124,30 @@ const defaultPanelWidths: PanelWidths = {
   emptyCodeModePanel: '80%',
 };
 
-interface ExportedCard {
-  cardType: CardType;
-  card: typeof BaseDef;
-}
-
 const cardEditorSaveTimes = new Map<string, number>();
 
-// Element
-// - exported / unexported card or field
-// - exported class or function
-export type ElementInFile = ExportedCard; // can add more types here
+// an element should be (an item of focus within a module)
+// - exported function or class
+// - exported card or field
+// - unexported card or field
+// This element (in code mode) is extended to include the cardType and cardOrField
+export type Element =
+  | (CardOrField & Partial<PossibleCardOrFieldClass>)
+  | BaseDeclaration;
+
+export interface CardOrField {
+  cardType: CardType;
+  cardOrField: typeof BaseDef;
+}
+
+export function isCardOrFieldElement(
+  element: Element,
+): element is CardOrField & Partial<PossibleCardOrFieldClass> {
+  return (
+    (element as CardOrField).cardType !== undefined &&
+    (element as CardOrField).cardOrField !== undefined
+  );
+}
 
 export default class CodeMode extends Component<Signature> {
   @service declare monacoService: MonacoService;
@@ -151,7 +162,7 @@ export default class CodeMode extends Component<Signature> {
   @tracked private card: CardDef | undefined;
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
-  @tracked private selectedElement: ElementInFile | undefined;
+  @tracked private selectedElement: Element | undefined;
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
@@ -165,6 +176,7 @@ export default class CodeMode extends Component<Signature> {
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
+    this.operatorModeStateService.subscribeToOpenFileStateChanges(this);
     this.panelWidths = localStorage.getItem(CodeModePanelWidths)
       ? // @ts-ignore Type 'null' is not assignable to type 'string'
         JSON.parse(localStorage.getItem(CodeModePanelWidths))
@@ -203,6 +215,7 @@ export default class CodeMode extends Component<Signature> {
         this.args.saveCardOnClose(this.card);
       }
       this.realmSubscription?.unsubscribe();
+      this.operatorModeStateService.unsubscribeFromOpenFileStateChanges(this);
     });
     this.loadMonaco.perform();
   }
@@ -228,27 +241,21 @@ export default class CodeMode extends Component<Signature> {
   }
 
   get fileViewTitle() {
-    return this.fileView === 'inheritance' ? 'Inheritance' : 'File Browser';
+    return this.showBrowser ? 'File Browser' : 'Inheritance';
   }
 
   private get realmURL() {
-    return this.isReady
-      ? this.readyFile.realmURL
-      : this.cardService.defaultURL.href;
-  }
-
-  private get realmIconURL() {
-    return this.realmInfo?.iconURL;
+    return this.operatorModeStateService.realmURL;
   }
 
   private get isLoading() {
     return (
-      this.loadMonaco.isRunning || this.openFile.current?.state === 'loading'
+      this.loadMonaco.isRunning || this.currentOpenFile?.state === 'loading'
     );
   }
 
   private get isReady() {
-    return this.maybeMonacoSDK && isReady(this.openFile.current);
+    return this.maybeMonacoSDK && isReady(this.currentOpenFile);
   }
 
   private get schemaEditorIncompatible() {
@@ -263,7 +270,7 @@ export default class CodeMode extends Component<Signature> {
   }
 
   private get emptyOrNotFound() {
-    return !this.codePath || this.openFile.current?.state === 'not-found';
+    return !this.codePath || this.currentOpenFile?.state === 'not-found';
   }
 
   private loadMonaco = task(async () => {
@@ -271,8 +278,8 @@ export default class CodeMode extends Component<Signature> {
   });
 
   private get readyFile() {
-    if (isReady(this.openFile.current)) {
-      return this.openFile.current;
+    if (isReady(this.currentOpenFile)) {
+      return this.currentOpenFile;
     }
     throw new Error(
       `cannot access file contents ${this.codePath} before file is open`,
@@ -342,6 +349,10 @@ export default class CodeMode extends Component<Signature> {
     return state;
   });
 
+  private get currentOpenFile() {
+    return this.operatorModeStateService.openFile.current;
+  }
+
   @use private elements = resource(({ on }) => {
     on.cleanup(() => {
       this.selectedElement = undefined;
@@ -357,7 +368,7 @@ export default class CodeMode extends Component<Signature> {
 
     const state: {
       isLoading: boolean;
-      value: ElementInFile[] | null;
+      value: Element[] | null;
       error: Error | undefined;
       load: () => Promise<void>;
     } = new TrackedObject({
@@ -371,16 +382,30 @@ export default class CodeMode extends Component<Signature> {
           return;
         }
         try {
-          await this.importedModule.loaded;
-          let module = this.importedModule?.module;
-          if (module) {
-            let cards = cardsOrFieldsFromModule(module);
-            let elements: ElementInFile[] = cards.map((card) => {
-              return {
-                cardType: getCardType(this, () => card),
-                card: card,
-              };
-            });
+          if (isReady(this.currentOpenFile) && this.importedModule?.module) {
+            let module = this.importedModule?.module;
+            let cardsOrFields = cardsOrFieldsFromModule(module);
+            let elements: Element[] = [];
+            await this.importedModule.loaded;
+            let moduleSyntax = new ModuleSyntax(this.currentOpenFile.content);
+            elements = moduleSyntax.elements.map(
+              (value: ElementDeclaration) => {
+                let cardOrField = cardsOrFields.find(
+                  (c) => c.name === value.localName,
+                );
+                if (cardOrField !== undefined) {
+                  return {
+                    ...value,
+                    cardType: getCardType(
+                      this,
+                      () => cardOrField as typeof BaseDef,
+                    ),
+                    cardOrField,
+                  } as CardOrField & Partial<PossibleCardOrFieldClass>;
+                }
+                return value as BaseDeclaration;
+              },
+            );
             state.value = elements;
           }
         } catch (error: any) {
@@ -395,42 +420,20 @@ export default class CodeMode extends Component<Signature> {
     return state;
   });
 
-  private openFile = maybe(this, (context) => {
-    if (!this.codePath) {
-      this.setFileView('browser');
-      return undefined;
-    }
-
-    return file(context, () => ({
-      url: this.codePath!.href,
-      onStateChange: (state) => {
-        this.userHasDismissedURLError = false;
-        if (state === 'not-found') {
-          this.loadFileError = 'This resource does not exist';
-          this.setFileView('browser');
-        } else if (state === 'ready') {
-          this.loadFileError = null;
-        }
-      },
-      onRedirect: (url: string) => {
-        this.operatorModeStateService.replaceCodePath(new URL(url));
-      },
-    }));
-  });
-
   @use private importedModule = resource(() => {
-    if (isReady(this.openFile.current)) {
-      let f: Ready = this.openFile.current;
-      if (f.url.endsWith('.json') && isCardDocumentString(f.content)) {
-        let ref = identifyCard(this.card?.constructor);
-        if (ref !== undefined) {
-          return importResource(this, () => moduleFrom(ref as CodeRef));
-        } else {
-          return;
-        }
-      } else if (hasExecutableExtension(f.url)) {
+    if (isReady(this.currentOpenFile)) {
+      let f: Ready = this.currentOpenFile;
+      if (hasExecutableExtension(f.url)) {
         return importResource(this, () => f.url);
       }
+    }
+    return undefined;
+  });
+
+  @use private cardType = resource(() => {
+    if (this.card !== undefined) {
+      let cardDefinition = this.card.constructor as typeof BaseDef;
+      return getCardType(this, () => cardDefinition);
     }
     return undefined;
   });
@@ -463,18 +466,18 @@ export default class CodeMode extends Component<Signature> {
   private get openFileCardJSON() {
     this.cardError = undefined;
     if (
-      this.openFile.current?.state === 'ready' &&
-      this.openFile.current.name.endsWith('.json')
+      this.currentOpenFile?.state === 'ready' &&
+      this.currentOpenFile.name.endsWith('.json')
     ) {
       let maybeCard: any;
       try {
-        maybeCard = JSON.parse(this.openFile.current.content);
+        maybeCard = JSON.parse(this.currentOpenFile.content);
       } catch (err: any) {
         this.cardError = err;
         return undefined;
       }
       if (isSingleCardDocument(maybeCard)) {
-        let url = this.openFile.current.url.replace(/\.json$/, '');
+        let url = this.currentOpenFile.url.replace(/\.json$/, '');
         if (!url) {
           return undefined;
         }
@@ -496,9 +499,9 @@ export default class CodeMode extends Component<Signature> {
 
   private get cardIsLoaded() {
     return (
-      isReady(this.openFile.current) &&
+      isReady(this.currentOpenFile) &&
       this.openFileCardJSON &&
-      this.card?.id === this.openFile.current.url.replace(/\.json$/, '')
+      this.card?.id === this.currentOpenFile.url.replace(/\.json$/, '')
     );
   }
 
@@ -513,17 +516,23 @@ export default class CodeMode extends Component<Signature> {
     if (this.selectedElement) {
       return this.selectedElement;
     } else {
-      if (this.elementsInFile === null) {
-        return;
-      }
       return this.elementsInFile.length > 0
         ? this.elementsInFile[0]
         : undefined;
     }
   }
 
+  private get selectedCardOrField() {
+    if (this.selectedElementInFile) {
+      if (isCardOrFieldElement(this.selectedElementInFile)) {
+        return this.selectedElementInFile;
+      }
+    }
+    return;
+  }
+
   @action
-  private selectElementInFile(el: ElementInFile) {
+  private selectElement(el: Element) {
     this.selectedElement = el;
   }
 
@@ -577,13 +586,13 @@ export default class CodeMode extends Component<Signature> {
     this.hasUnsavedSourceChanges = true;
     await timeout(autoSaveDelayMs);
     if (
-      !isReady(this.openFile.current) ||
-      content === this.openFile.current?.content
+      !isReady(this.currentOpenFile) ||
+      content === this.currentOpenFile?.content
     ) {
       return;
     }
 
-    let isJSON = this.openFile.current.name.endsWith('.json');
+    let isJSON = this.currentOpenFile.name.endsWith('.json');
     let validJSON = isJSON && this.safeJSONParse(content);
     // Here lies the difference in how json files and other source code files
     // are treated during editing in the code editor
@@ -594,7 +603,7 @@ export default class CodeMode extends Component<Signature> {
     } else if (!isJSON || validJSON) {
       // writes source code and non-card instance valid JSON,
       // then updates the state of the file resource
-      this.writeSourceCodeToFile(this.openFile.current, content);
+      this.writeSourceCodeToFile(this.currentOpenFile, content);
       this.waitForSourceCodeWrite.perform();
     }
     this.hasUnsavedSourceChanges = false;
@@ -603,8 +612,8 @@ export default class CodeMode extends Component<Signature> {
   // these saves can happen so fast that we'll make sure to wait at
   // least 500ms for human consumption
   private waitForSourceCodeWrite = restartableTask(async () => {
-    if (isReady(this.openFile.current)) {
-      await all([this.openFile.current.writing, timeout(500)]);
+    if (isReady(this.currentOpenFile)) {
+      await all([this.currentOpenFile.writing, timeout(500)]);
     }
   });
 
@@ -730,6 +739,20 @@ export default class CodeMode extends Component<Signature> {
     }
   }
 
+  private get showBrowser() {
+    return this.fileView === 'browser' || this.emptyOrNotFound;
+  }
+
+  onStateChange(state: FileResource['state']) {
+    this.userHasDismissedURLError = false;
+    if (state === 'not-found') {
+      this.loadFileError = 'This resource does not exist';
+      this.setFileView('browser');
+    } else if (state === 'ready') {
+      this.loadFileError = null;
+    }
+  }
+
   <template>
     <div class='code-mode-background' style={{this.backgroundURLStyle}}></div>
     <CardURLBar
@@ -762,7 +785,7 @@ export default class CodeMode extends Component<Signature> {
             {{! Move each container and styles to separate component }}
             <div
               class='inner-container file-view
-                {{if (eq this.fileView "browser") "file-browser"}}'
+                {{if this.showBrowser "file-browser"}}'
             >
               <header
                 class='file-view__header'
@@ -771,54 +794,42 @@ export default class CodeMode extends Component<Signature> {
               >
                 <Button
                   @disabled={{this.emptyOrNotFound}}
-                  @kind={{if
-                    (eq this.fileView 'inheritance')
-                    'primary-dark'
-                    'secondary'
-                  }}
+                  @kind={{if (not this.showBrowser) 'primary-dark' 'secondary'}}
                   @size='extra-small'
                   class={{cn
                     'file-view__header-btn'
-                    active=(eq this.fileView 'inheritance')
+                    active=(not this.showBrowser)
                   }}
                   {{on 'click' (fn this.setFileView 'inheritance')}}
                   data-test-inheritance-toggle
                 >
                   Inspector</Button>
                 <Button
-                  @kind={{if
-                    (eq this.fileView 'browser')
-                    'primary-dark'
-                    'secondary'
-                  }}
+                  @kind={{if this.showBrowser 'primary-dark' 'secondary'}}
                   @size='extra-small'
-                  class={{cn
-                    'file-view__header-btn'
-                    active=(eq this.fileView 'browser')
-                  }}
+                  class={{cn 'file-view__header-btn' active=this.showBrowser}}
                   {{on 'click' (fn this.setFileView 'browser')}}
                   data-test-file-browser-toggle
                 >
                   File Tree</Button>
               </header>
               <section class='inner-container__content'>
-                {{#if (eq this.fileView 'inheritance')}}
+                {{#if this.showBrowser}}
+                  <FileTree @realmURL={{this.realmURL}} />
+                {{else}}
                   {{#if this.isReady}}
                     <DetailPanel
                       @cardInstance={{this.card}}
+                      @cardInstanceType={{this.cardType}}
                       @readyFile={{this.readyFile}}
                       @realmInfo={{this.realmInfo}}
                       @selectedElement={{this.selectedElementInFile}}
                       @elements={{this.elementsInFile}}
-                      @selectElement={{this.selectElementInFile}}
+                      @selectElement={{this.selectElement}}
                       @delete={{this.delete}}
                       data-test-card-inheritance-panel
                     />
-                  {{else if this.emptyOrNotFound}}
-                    Inspector is not available
                   {{/if}}
-                {{else}}
-                  <FileTree @realmURL={{this.realmURL}} />
                 {{/if}}
               </section>
             </div>
@@ -890,14 +901,14 @@ export default class CodeMode extends Component<Signature> {
                 {{#if this.cardIsLoaded}}
                   <CardPreviewPanel
                     @card={{this.loadedCard}}
-                    @realmIconURL={{this.realmIconURL}}
+                    @realmInfo={{this.realmInfo}}
                     data-test-card-resource-loaded
                   />
-                {{else if this.selectedElementInFile}}
+                {{else if this.selectedCardOrField}}
                   <SchemaEditorColumn
                     @file={{this.readyFile}}
-                    @card={{this.selectedElementInFile.card}}
-                    @cardTypeResource={{this.selectedElementInFile.cardType}}
+                    @card={{this.selectedCardOrField.cardOrField}}
+                    @cardTypeResource={{this.selectedCardOrField.cardType}}
                   />
                 {{else if this.schemaEditorIncompatible}}
                   <div

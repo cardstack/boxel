@@ -3,9 +3,9 @@ import * as Babel from '@babel/core';
 import {
   schemaAnalysisPlugin,
   Options,
-  PossibleCardClass,
-  ClassReference,
-  ExternalReference,
+  type PossibleCardOrFieldClass,
+  type ElementDeclaration,
+  type BaseDeclaration,
 } from './schema-analysis-plugin';
 import {
   removeFieldPlugin,
@@ -28,10 +28,11 @@ import type { types as t } from '@babel/core';
 import type { NodePath } from '@babel/traverse';
 import type { FieldType } from 'https://cardstack.com/base/card-api';
 
-export type { ClassReference, ExternalReference };
+export type { PossibleCardOrFieldClass, ElementDeclaration, BaseDeclaration };
 
 export class ModuleSyntax {
-  declare possibleCards: PossibleCardClass[];
+  declare possibleCardsOrFields: PossibleCardOrFieldClass[];
+  declare elements: ElementDeclaration[];
   private declare ast: t.File;
 
   constructor(src: string) {
@@ -40,11 +41,12 @@ export class ModuleSyntax {
 
   private analyze(src: string) {
     let moduleAnalysis: Options = {
-      possibleCards: [],
+      possibleCardsOrFields: [],
+      elements: [],
     };
     let preprocessedSrc = preprocessTemplateTags(src);
 
-    this.ast = Babel.transformSync(preprocessedSrc, {
+    let r = Babel.transformSync(preprocessedSrc, {
       code: false,
       ast: true,
       plugins: [
@@ -53,8 +55,10 @@ export class ModuleSyntax {
         classPropertiesPlugin,
         [schemaAnalysisPlugin, moduleAnalysis],
       ],
-    })!.ast!;
-    this.possibleCards = moduleAnalysis.possibleCards;
+    });
+    this.ast = r!.ast!;
+    this.possibleCardsOrFields = moduleAnalysis.possibleCardsOrFields;
+    this.elements = moduleAnalysis.elements;
   }
 
   code(): string {
@@ -157,13 +161,17 @@ export class ModuleSyntax {
     card:
       | { type: 'exportedName'; name: string }
       | { type: 'localName'; name: string },
-  ): PossibleCardClass {
+  ): PossibleCardOrFieldClass {
     let cardName = card.name;
-    let cardClass: PossibleCardClass | undefined;
+    let cardClass: PossibleCardOrFieldClass | undefined;
     if (card.type === 'exportedName') {
-      cardClass = this.possibleCards.find((c) => c.exportedAs === cardName);
+      cardClass = this.possibleCardsOrFields.find(
+        (c) => c.exportedAs === cardName,
+      );
     } else {
-      cardClass = this.possibleCards.find((c) => c.localName === cardName);
+      cardClass = this.possibleCardsOrFields.find(
+        (c) => c.localName === cardName,
+      );
     }
     if (!cardClass) {
       throw new Error(
