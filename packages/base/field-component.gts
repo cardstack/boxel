@@ -53,8 +53,14 @@ export function getBoxComponent(
     fields: FieldsTypeFor<BaseDef>;
     format: Format;
   } {
-    let format =
-      userFormat && formats.includes(userFormat) ? userFormat : defaultFormat;
+    let format: Format;
+
+    if (field?.computeVia) {
+      format = 'embedded';
+    } else {
+      format =
+        userFormat && formats.includes(userFormat) ? userFormat : defaultFormat;
+    }
 
     let fields: FieldsTypeFor<BaseDef>;
     if (internalFieldsCache?.format === format) {
@@ -209,7 +215,6 @@ function fieldsComponentsFor<T extends BaseDef>(
       }
       let field = maybeField;
 
-      // let format: Format = field.computeVia ? 'embedded' : defaultFormat;
       return field.component(
         model as unknown as Box<BaseDef>,
         defaultFormat,
