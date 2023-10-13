@@ -165,13 +165,13 @@ function findLocalField(
       for (const [fieldName, v] of value.possibleFields) {
         if (isInternalReference(v.card)) {
           const indexOfParentField = v.card.classIndex;
-          if (indexOfParentField == undefined) return;
+          if (indexOfParentField === undefined) return;
           const parentFieldClass = possibleCardsOrFields[indexOfParentField];
           const localName = parentFieldClass.localName;
 
-          if (localName == undefined) return;
+          if (localName === undefined) return;
           const field = getField(cardOrField, fieldName);
-          if (field == undefined || field.card == undefined) return;
+          if (field === undefined || field.card === undefined) return;
           localCardsOrFields.set(parentFieldClass, field.card);
         }
       }
