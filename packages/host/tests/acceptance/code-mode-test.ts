@@ -1553,7 +1553,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom(
         `[data-test-card-schema="Person"] [data-test-field-name="favPerson"] [data-test-field-types]`,
       )
-      .hasText('Linked');
+      .hasText('Link');
 
     // Field is a card descending from CardDef (cardinality: many)
     await waitFor('[data-test-add-field-button]');
@@ -1572,7 +1572,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom(
         `[data-test-card-schema="Person"] [data-test-field-name="favPeople"] [data-test-field-types]`,
       )
-      .hasText('Linked');
+      .hasText('Link, Collection');
   });
 });
 
