@@ -40,8 +40,8 @@ export default class IndexController extends FreestyleController {
       ['Boxel::Modal', ModalUsage],
       ['Boxel::Message', MessageUsage],
       ['Boxel::Menu', MenuUsage],
-      ['Boxel::Tooltip', TooltipUsage],
       ['Boxel::ResizablePanel', ResizablePanelGroupUsage],
+      ['Boxel::Tooltip', TooltipUsage],
     ].map(([name, c]) => {
       return {
         title: name,
