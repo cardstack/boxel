@@ -38,7 +38,10 @@ import Selector from './detail-panel-selector';
 
 import { SelectorItem, selectorItemFunc } from './detail-panel-selector';
 
-import { type Element, isCardOrFieldElement } from './code-mode';
+import {
+  type Element,
+  isCardOrFieldElement,
+} from '@cardstack/host/resources/in-this-file';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 import { isCardDef, isFieldDef } from '@cardstack/runtime-common/code-ref';

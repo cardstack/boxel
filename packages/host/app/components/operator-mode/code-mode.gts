@@ -35,17 +35,7 @@ import {
   isCardDocumentString,
   isSingleCardDocument,
   hasExecutableExtension,
-  getAncestor,
-  getField,
 } from '@cardstack/runtime-common';
-import {
-  ModuleSyntax,
-  type PossibleCardOrFieldClass,
-  type BaseDeclaration,
-  type ElementDeclaration,
-  isInternalReference,
-  isPossibleCardOrFieldClass,
-} from '@cardstack/runtime-common/module-syntax';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
@@ -53,10 +43,7 @@ import config from '@cardstack/host/config/environment';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 
-import {
-  getCardType,
-  type CardType,
-} from '@cardstack/host/resources/card-type';
+import { getCardType } from '@cardstack/host/resources/card-type';
 import {
   file,
   isReady,
@@ -66,17 +53,18 @@ import {
 
 import { importResource } from '@cardstack/host/resources/import';
 
+import {
+  inThisFileResource,
+  isCardOrFieldElement,
+  type Element,
+} from '@cardstack/host/resources/in-this-file';
+
 import { maybe } from '@cardstack/host/resources/maybe';
 
 import type CardService from '@cardstack/host/services/card-service';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 
-// host components
-
-// host resources
-
-// host services
 import type MessageService from '@cardstack/host/services/message-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -133,29 +121,6 @@ const defaultPanelWidths: PanelWidths = {
 };
 
 const cardEditorSaveTimes = new Map<string, number>();
-
-// an element should be (an item of focus within a module)
-// - exported function or class
-// - exported card or field
-// - unexported card or field
-// This element (in code mode) is extended to include the cardType and cardOrField
-export type Element =
-  | (CardOrField & Partial<PossibleCardOrFieldClass>)
-  | BaseDeclaration;
-
-export interface CardOrField {
-  cardType: CardType;
-  cardOrField: typeof BaseDef;
-}
-
-export function isCardOrFieldElement(
-  element: Element,
-): element is CardOrField & Partial<PossibleCardOrFieldClass> {
-  return (
-    (element as CardOrField).cardType !== undefined &&
-    (element as CardOrField).cardOrField !== undefined
-  );
-}
 
 export default class CodeMode extends Component<Signature> {
   @service declare monacoService: MonacoService;
@@ -357,95 +322,22 @@ export default class CodeMode extends Component<Signature> {
     return state;
   });
 
-  @use private elements = resource(({ on }) => {
+  @use private inThisFileResource = resource(({ on }) => {
     on.cleanup(() => {
       this._selectedElement = undefined;
     });
-    if (!this.importedModule) {
-      return new TrackedObject({
-        error: null,
-        isLoading: false,
-        value: [],
-        load: () => Promise<void>,
-      });
+
+    if (isReady(this.openFile.current) && this.importedModule?.module) {
+      let f: Ready = this.openFile.current;
+      if (hasExecutableExtension(f.url)) {
+        return inThisFileResource(this, () => ({
+          file: f,
+          exportedCardsOrFields:
+            this.importedModule?.cardsOrFieldsFromModule || [],
+        }));
+      }
     }
-
-    const state: {
-      isLoading: boolean;
-      value: Element[] | null;
-      error: Error | undefined;
-      load: () => Promise<void>;
-    } = new TrackedObject({
-      isLoading: true,
-      value: [],
-      error: undefined,
-      load: async () => {
-        state.isLoading = true;
-        if (this.importedModule === undefined) {
-          state.value = [];
-          return;
-        }
-        try {
-          if (isReady(this.openFile.current) && this.importedModule?.module) {
-            let module = this.importedModule?.module;
-            let exportedCardsOrFields = cardsOrFieldsFromModule(module);
-            let elements: Element[] = [];
-            await this.importedModule.loaded;
-            let moduleSyntax = new ModuleSyntax(this.openFile.current.content);
-            // This loop
-            // - collects super / fields from cards / fields that have been exported
-            let localCardsOrFields = collectLocalCardsOrFields(
-              moduleSyntax,
-              exportedCardsOrFields,
-            );
-
-            // This loop
-            // - adds card type (not loaded tho)
-            // - includes card or field
-            //   - an already exported card or field
-            //   - an already that was local but exported thru some relationship
-            elements = moduleSyntax.elements.map((value) => {
-              if (isPossibleCardOrFieldClass(value)) {
-                const cardOrField = exportedCardsOrFields.find(
-                  (c) => c.name === value.localName,
-                );
-                if (cardOrField) {
-                  return {
-                    ...value,
-                    cardOrField,
-                    cardType: getCardType(
-                      this,
-                      () => cardOrField as typeof BaseDef,
-                    ),
-                  } as CardOrField & Partial<PossibleCardOrFieldClass>;
-                } else {
-                  if (localCardsOrFields.has(value)) {
-                    let cardOrField = localCardsOrFields.get(
-                      value,
-                    ) as typeof BaseDef;
-                    return {
-                      ...value,
-                      cardOrField,
-                      cardType: getCardType(this, () => cardOrField),
-                    } as CardOrField & Partial<PossibleCardOrFieldClass>;
-                  }
-                }
-              }
-              return value as BaseDeclaration;
-            });
-            state.value = elements;
-          }
-        } catch (error: any) {
-          state.error = error;
-          console.log(error);
-        } finally {
-          state.isLoading = false;
-        }
-      },
-    });
-
-    state.load();
-    return state;
+    return;
   });
 
   private openFile = maybe(this, (context) => {
@@ -563,13 +455,15 @@ export default class CodeMode extends Component<Signature> {
     return this.card;
   }
 
+  private get elements() {
+    return this.inThisFileResource?._elements || [];
+  }
+
   private get selectedElement() {
     if (this._selectedElement) {
       return this._selectedElement;
     } else {
-      return this.elementsInFile.length > 0
-        ? this.elementsInFile[0]
-        : undefined;
+      return this.elements.length > 0 ? this.elements[0] : undefined;
     }
   }
 
@@ -585,13 +479,6 @@ export default class CodeMode extends Component<Signature> {
   @action
   private selectElement(el: Element) {
     this._selectedElement = el;
-  }
-
-  get elementsInFile() {
-    if (this.elements.value === null) {
-      return [];
-    }
-    return this.elements.value;
   }
 
   private loadIfNewer = restartableTask(
@@ -870,7 +757,7 @@ export default class CodeMode extends Component<Signature> {
                       @readyFile={{this.readyFile}}
                       @realmInfo={{this.realmInfo}}
                       @selectedElement={{this.selectedElement}}
-                      @elements={{this.elementsInFile}}
+                      @elements={{this.elements}}
                       @selectElement={{this.selectElement}}
                       @delete={{this.delete}}
                       data-test-card-inheritance-panel
@@ -1196,94 +1083,4 @@ export default class CodeMode extends Component<Signature> {
 
 function getMonacoContent() {
   return (window as any).monaco.editor.getModels()[0].getValue();
-}
-
-function isCardOrField(cardOrField: any): cardOrField is typeof BaseDef {
-  return typeof cardOrField === 'function' && 'baseDef' in cardOrField;
-}
-
-function cardsOrFieldsFromModule(
-  module: Record<string, any>,
-  _never?: never, // glint insists that w/o this last param that there are actually no params
-): (typeof BaseDef)[] {
-  return Object.values(module).filter(isCardOrField);
-}
-
-function collectLocalCardsOrFields(
-  moduleSyntax: ModuleSyntax,
-  exportedCardsOrFields: (typeof BaseDef)[],
-): Map<PossibleCardOrFieldClass, typeof BaseDef> {
-  const localCardsOrFields: Map<PossibleCardOrFieldClass, typeof BaseDef> =
-    new Map();
-  let possibleCardsOrFields = moduleSyntax.possibleCardsOrFields;
-
-  for (const value of moduleSyntax.elements) {
-    const cardOrField = exportedCardsOrFields.find(
-      (c) => c.name === value.localName,
-    );
-
-    if (cardOrField !== undefined) {
-      findLocalAncestor(
-        value,
-        cardOrField,
-        possibleCardsOrFields,
-        localCardsOrFields,
-      );
-      findLocalField(
-        value,
-        cardOrField,
-        possibleCardsOrFields,
-        localCardsOrFields,
-      );
-    }
-  }
-
-  return localCardsOrFields;
-}
-
-function findLocalAncestor(
-  value: ElementDeclaration,
-  cardOrField: typeof BaseDef,
-  possibleCardsOrFields: PossibleCardOrFieldClass[],
-  localCardsOrFields: Map<PossibleCardOrFieldClass, typeof BaseDef>,
-) {
-  if (isPossibleCardOrFieldClass(value) && isInternalReference(value.super)) {
-    const indexOfParent = value.super.classIndex;
-    if (indexOfParent !== undefined) {
-      const parentCardOrFieldClass = possibleCardsOrFields[indexOfParent];
-      const parentCardOrField = getAncestor(cardOrField);
-
-      if (parentCardOrField) {
-        localCardsOrFields.set(parentCardOrFieldClass, parentCardOrField);
-      }
-    }
-  }
-}
-
-function findLocalField(
-  value: ElementDeclaration,
-  cardOrField: typeof BaseDef,
-  possibleCardsOrFields: PossibleCardOrFieldClass[],
-  localCardsOrFields: Map<PossibleCardOrFieldClass, typeof BaseDef>,
-) {
-  if (isPossibleCardOrFieldClass(value)) {
-    if (value.possibleFields) {
-      for (const [fieldName, v] of value.possibleFields) {
-        if (isInternalReference(v.card)) {
-          const indexOfParentField = v.card.classIndex;
-          if (indexOfParentField !== undefined) {
-            const parentFieldClass = possibleCardsOrFields[indexOfParentField];
-            const localName = parentFieldClass.localName;
-
-            if (localName) {
-              const field = getField(cardOrField, fieldName);
-              if (field && field.card) {
-                localCardsOrFields.set(parentFieldClass, field.card);
-              }
-            }
-          }
-        }
-      }
-    }
-  }
 }
