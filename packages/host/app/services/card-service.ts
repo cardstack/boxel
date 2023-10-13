@@ -154,48 +154,8 @@ export default class CardService extends Service {
     return card as CardDef;
   }
 
-  async reloadModel(card: CardDef): Promise<CardDef> {
-    await this.apiModule.loaded;
-    let json = await this.fetchJSON(card.id);
-    if (!isSingleCardDocument(json)) {
-      throw new Error(
-        `bug: server returned a non card document for ${card.id}:
-        ${JSON.stringify(json, null, 2)}`,
-      );
-    }
-    return await this.api.updateFromSerialized<typeof CardDef>(card, json);
-  }
-
-  // TODO remove string type param--a URL type as a parameter leverages TS to
-  // assert the url param that we are given is actually a URL. The callers need
-  // to adhere to that
-  async loadStaticModel(url: URL | string): Promise<CardDef> {
-    if (typeof url === 'string') {
-      url = new URL(url);
-    }
-
-    let index = this.indexCards.get(url.href);
-    if (index) {
-      return index;
-    }
-
-    await this.apiModule.loaded;
-    let json = await this.fetchJSON(url);
-    if (!isSingleCardDocument(json)) {
-      throw new Error(
-        `bug: server returned a non card document for ${url}:
-        ${JSON.stringify(json, null, 2)}`,
-      );
-    }
-    let card = await this.createFromSerialized(json.data, json, url);
-    if (this.isIndexCard(card)) {
-      this.indexCards.set(url.href, card);
-    }
-    return card;
-  }
-
   // TODO consider exposing this as API in @cardstack/runtime-common/index
-  async loadLiveModel<T extends object>(parent: T, url: URL): Promise<CardDef> {
+  async loadModel<T extends object>(parent: T, url: URL): Promise<CardDef> {
     let entry = this.liveCards.get(url.href);
     if (entry) {
       if (!entry.subscribers.has(parent)) {
@@ -237,6 +197,32 @@ export default class CardService extends Service {
       realmURL,
       subscribers: new Set([parent]),
     });
+    return card;
+  }
+
+  // unsure if this is public API--let's leave it private for now...
+  private async loadStaticModel(url: URL): Promise<CardDef> {
+    if (typeof url === 'string') {
+      url = new URL(url);
+    }
+
+    let index = this.indexCards.get(url.href);
+    if (index) {
+      return index;
+    }
+
+    await this.apiModule.loaded;
+    let json = await this.fetchJSON(url);
+    if (!isSingleCardDocument(json)) {
+      throw new Error(
+        `bug: server returned a non card document for ${url}:
+        ${JSON.stringify(json, null, 2)}`,
+      );
+    }
+    let card = await this.createFromSerialized(json.data, json, url);
+    if (this.isIndexCard(card)) {
+      this.indexCards.set(url.href, card);
+    }
     return card;
   }
 

@@ -928,6 +928,7 @@ module('Acceptance | operator mode tests', function (hooks) {
   });
 
   test<TestContextWithSSE>('stack item live updates when index changes', async function (assert) {
+    assert.expect(3);
     let expectedEvents = [
       {
         type: 'index',
@@ -947,10 +948,6 @@ module('Acceptance | operator mode tests', function (hooks) {
         ],
       ],
     })!;
-    let operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
-
     await visit(
       `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
         operatorModeStateParam,
@@ -984,7 +981,14 @@ module('Acceptance | operator mode tests', function (hooks) {
         );
       },
     );
-    await waitUntil(() => operatorModeStateService.reloadItem.isIdle);
+    await waitUntil(
+      () =>
+        document
+          .querySelector(
+            '[data-test-operator-mode-stack="0"] [data-test-person]',
+          )
+          ?.textContent?.includes('FadhlanXXX'),
+    );
     assert
       .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
       .hasText('FadhlanXXX');
