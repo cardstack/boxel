@@ -22,6 +22,7 @@ interface Signature {
     default: [
       WithBoundArgs<
         typeof ResizablePanel,
+        | 'orientation'
         | 'registerPanel'
         | 'panelContext'
         | 'isLastPanel'
