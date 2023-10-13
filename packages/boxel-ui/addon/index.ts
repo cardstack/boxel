@@ -25,9 +25,6 @@ import Tooltip from './components/tooltip';
 import ResizablePanelGroup, {
   PanelContext,
 } from './components/resizable-panel-group';
-import VerticallyResizablePanelGroup, {
-  VerticalPanelContext,
-} from './components/vertically-resizable-panel-group';
 
 export {
   Accordion,
@@ -55,6 +52,4 @@ export {
   Tooltip,
   ResizablePanelGroup,
   PanelContext,
-  VerticallyResizablePanelGroup,
-  VerticalPanelContext,
 };
