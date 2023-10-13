@@ -110,6 +110,7 @@ export default class CardSchemaEditor extends Component<Signature> {
 
       .context-menu-trigger {
         rotate: 90deg;
+        --dropdown-button-size: 20px;
       }
 
       .context-menu-list {
@@ -141,7 +142,6 @@ export default class CardSchemaEditor extends Component<Signature> {
       .right {
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-xxs);
       }
 
       .computed-icon {
@@ -151,6 +151,7 @@ export default class CardSchemaEditor extends Component<Signature> {
         padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
         background-color: var(--boxel-200);
         border-radius: var(--boxel-border-radius-sm);
+        margin-right: var(--boxel-sp-xxs);
       }
 
       .linked-icon {
@@ -168,8 +169,20 @@ export default class CardSchemaEditor extends Component<Signature> {
       }
 
       .overridden-field {
-        cursor: pointer;
         text-decoration: line-through;
+      }
+
+      .overridden-field-link {
+        --icon-color: var(--boxel-highlight);
+        display: inline-flex;
+        align-items: center;
+        font: 500 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+        color: var(--boxel-highlight);
+        cursor: pointer;
+        border: none;
+        background: none;
+        padding: 0;
       }
 
       .field-types {
@@ -289,17 +302,16 @@ export default class CardSchemaEditor extends Component<Signature> {
                 'card-field overidding-field'
                 'card-field'
               }}
+              data-field-name={{field.name}}
               data-test-field-name={{field.name}}
             >
               <div class='left'>
-                {{! template-lint-disable no-invalid-interactive}}
                 <div
                   class={{if
                     (this.isOverridden field)
                     'field-name overridden-field'
                     'field-name'
                   }}
-                  {{on 'click' (fn this.scrollIntoOveridingField field)}}
                 >
                   {{field.name}}
                 </div>
@@ -314,78 +326,94 @@ export default class CardSchemaEditor extends Component<Signature> {
                       =
                     </span>
                   {{/if}}
-                  <button
-                    class='pill'
-                    data-test-card-schema-field-navigational-button
-                    {{on 'click' (fn this.openCardDefinition moduleUrl)}}
-                  >
-                    {{#if (this.isLinkedField field)}}
-                      <span class='linked-icon' data-test-linked-icon>
-                        {{svgJar 'icon-link' width='16' height='16'}}
-                      </span>
-                    {{/if}}
-                    <div class='realm-icon'>
-                      <RealmInfoProvider @fileURL={{moduleUrl}}>
-                        <:ready as |realmInfo|>
-                          <RealmIcon
-                            @realmIconURL={{realmInfo.iconURL}}
-                            @realmName={{realmInfo.name}}
-                          />
-                        </:ready>
-                      </RealmInfoProvider>
-                    </div>
-                    <div>
-                      <span>
-                        {{#let
-                          (this.fieldCardDisplayName field.card)
-                          as |cardDisplayName|
-                        }}
-                          <span
-                            data-test-card-display-name={{cardDisplayName}}
-                          >{{cardDisplayName}}</span>
-                        {{/let}}
-                      </span>
-                    </div>
-                  </button>
-                  <DropdownButton
-                    @icon='three-dots-horizontal'
-                    @label='field options'
-                    @contentClass='context-menu'
-                    class='context-menu-trigger'
-                    as |dd|
-                  >
-                    <div class='warning-box'>
-                      <p class='warning'>
-                        These actions will break compatibility with existing
-                        card instances.
-                      </p>
-                      <span class='warning-icon'>
-                        {{svgJar
-                          'warning'
+                  {{#if (this.isOverridden field)}}
+                    <button
+                      class='overridden-field-link'
+                      data-test-overridden-field-link
+                      {{on 'click' (fn this.scrollIntoOveridingField field)}}
+                    >Jump to active field definition
+                      <span>{{svgJar
+                          'arrow-top-left'
                           width='20'
                           height='20'
                           role='presentation'
+                        }}</span></button>
+
+                  {{else}}
+                    <button
+                      class='pill'
+                      data-test-card-schema-field-navigational-button
+                      {{on 'click' (fn this.openCardDefinition moduleUrl)}}
+                    >
+                      {{#if (this.isLinkedField field)}}
+                        <span class='linked-icon' data-test-linked-icon>
+                          {{svgJar 'icon-link' width='16' height='16'}}
+                        </span>
+                      {{/if}}
+                      <div class='realm-icon'>
+                        <RealmInfoProvider @fileURL={{moduleUrl}}>
+                          <:ready as |realmInfo|>
+                            <RealmIcon
+                              @realmIconURL={{realmInfo.iconURL}}
+                              @realmName={{realmInfo.name}}
+                            />
+                          </:ready>
+                        </RealmInfoProvider>
+                      </div>
+                      <div>
+                        <span>
+                          {{#let
+                            (this.fieldCardDisplayName field.card)
+                            as |cardDisplayName|
+                          }}
+                            <span
+                              data-test-card-display-name={{cardDisplayName}}
+                            >{{cardDisplayName}}</span>
+                          {{/let}}
+                        </span>
+                      </div>
+                    </button>
+                    <DropdownButton
+                      @icon='three-dots-horizontal'
+                      @label='field options'
+                      @contentClass='context-menu'
+                      class='context-menu-trigger'
+                      as |dd|
+                    >
+                      <div class='warning-box'>
+                        <p class='warning'>
+                          These actions will break compatibility with existing
+                          card instances.
+                        </p>
+                        <span class='warning-icon'>
+                          {{svgJar
+                            'warning'
+                            width='20'
+                            height='20'
+                            role='presentation'
+                          }}
+                        </span>
+                      </div>
+                      <dd.Menu
+                        class='context-menu-list'
+                        @items={{array
+                          (menuItem
+                            'Edit Field Name' this.editFieldName disabled=true
+                          )
+                          (menuDivider)
+                          (menuItem
+                            'Remove Field'
+                            this.removeField
+                            dangerous=true
+                            disabled=true
+                          )
                         }}
-                      </span>
-                    </div>
-                    <dd.Menu
-                      class='context-menu-list'
-                      @items={{array
-                        (menuItem
-                          'Edit Field Name' this.editFieldName disabled=true
-                        )
-                        (menuDivider)
-                        (menuItem
-                          'Remove Field'
-                          this.removeField
-                          dangerous=true
-                          disabled=true
-                        )
-                      }}
-                    />
-                  </DropdownButton>
+                      />
+                    </DropdownButton>
+                  {{/if}}
                 {{/let}}
               </div>
+
             </div>
           {{/if}}
         {{/each}}
@@ -457,17 +485,6 @@ export default class CardSchemaEditor extends Component<Signature> {
   @action
   fieldTypes(field: FieldOfType) {
     let types = [];
-    if (field.isComputed) {
-      types.push('Computed');
-    }
-
-    if (this.isLinkedField(field)) {
-      types.push('Linked');
-    }
-
-    if (field.type === 'containsMany') {
-      types.push('Collection');
-    }
 
     if (this.isOverridden(field)) {
       types.push('Overridden');
@@ -477,7 +494,19 @@ export default class CardSchemaEditor extends Component<Signature> {
       types.push('Override');
     }
 
-    return types.sort().join(', ');
+    if (this.isLinkedField(field)) {
+      types.push('Link');
+    }
+
+    if (field.type === 'containsMany' || field.type === 'linksToMany') {
+      types.push('Collection');
+    }
+
+    if (field.isComputed) {
+      types.push('Computed');
+    }
+
+    return types.join(', ');
   }
 
   @action
@@ -502,9 +531,7 @@ export default class CardSchemaEditor extends Component<Signature> {
 
     // This code assumes that the overriding field
     // is always located in the top result returned by the query selector.
-    let element = document.querySelector(
-      `[data-test-field-name='${field.name}']`,
-    );
+    let element = document.querySelector(`[data-field-name='${field.name}']`);
     element?.classList.add('show-overriding-field-border');
     setTimeout(() => {
       element?.classList.remove('show-overriding-field-border');
