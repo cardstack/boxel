@@ -6,30 +6,20 @@ import { scheduleOnce } from '@ember/runloop';
 import { on } from '@ember/modifier';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
-interface SharedArgs {
-  defaultLength: string;
-  length?: string;
-  minLength?: string;
-  // The following arguments will be supplied by the parent ResizablePanelGroup that yields this component
-  registerPanel: (context: PanelContext) => number;
-  panelContext: (panelId: number) => PanelContext | undefined;
-  isLastPanel: (panelId: number) => boolean;
-  onResizeHandlerMouseDown: (event: MouseEvent) => void;
-  onResizeHandlerDblClick: (event: MouseEvent) => void;
-}
-
-// FIXME now overkill without width/height argument names, collapse into Signature
-interface HorizontalPanelArgs extends SharedArgs {
-  orientation: 'horizontal';
-}
-
-interface VerticalPanelArgs extends SharedArgs {
-  orientation: 'vertical';
-}
-
 interface Signature {
   Element: HTMLDivElement;
-  Args: HorizontalPanelArgs | VerticalPanelArgs;
+  Args: {
+    orientation: 'horizontal' | 'vertical';
+    defaultLength: string;
+    length?: string;
+    minLength?: string;
+    // The following arguments will be supplied by the parent ResizablePanelGroup that yields this component
+    registerPanel: (context: PanelContext) => number;
+    panelContext: (panelId: number) => PanelContext | undefined;
+    isLastPanel: (panelId: number) => boolean;
+    onResizeHandlerMouseDown: (event: MouseEvent) => void;
+    onResizeHandlerDblClick: (event: MouseEvent) => void;
+  };
   Blocks: {
     default: [];
   };
