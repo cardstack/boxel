@@ -400,14 +400,8 @@ export default class DetailPanel extends Component<Signature> {
 
 const resolveElementName = (el: Element) => {
   let localName: string | undefined = el.localName;
-  let type: 'card' | 'field' | undefined;
   if (isCardOrFieldElement(el)) {
     localName = el.cardOrField.displayName;
-    type = isFieldDef(el.cardOrField) ? 'field' : 'card';
   }
-  let exportedName = el.exportedAs;
-  let resolvedName = `${localName ?? '??'} 
-  (type: ${type ?? '??'}) 
-  (exported name: ${exportedName ?? '??'})`;
-  return resolvedName;
+  return localName ?? '[No Name Found]';
 };
