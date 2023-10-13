@@ -136,6 +136,7 @@ export default class AddFieldModal extends Component<Signature> {
       relationshipType,
       new URL(this.chosenCatalogEntry.id),
       this.operatorModeStateService.state.codePath!,
+      new URL(this.args.file.realmURL),
     );
 
     this.writeTask.perform(this.args.moduleSyntax.code());

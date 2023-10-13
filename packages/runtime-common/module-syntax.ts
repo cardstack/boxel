@@ -78,6 +78,7 @@ export class ModuleSyntax {
     fieldType: FieldType,
     incomingRelativeTo?: URL,
     outgoingRelativeTo?: URL,
+    outgoingRealmURL?: URL,
   ) {
     let card = this.getCard(cardName);
     if (card.possibleFields.has(fieldName)) {
@@ -95,6 +96,7 @@ export class ModuleSyntax {
       cardName.name,
       incomingRelativeTo,
       outgoingRelativeTo,
+      outgoingRealmURL,
     );
     let src = this.code();
     this.analyze(src); // reanalyze to update node start/end positions based on AST mutation
@@ -217,6 +219,7 @@ function makeNewField(
   cardName: string,
   incomingRelativeTo?: URL,
   outgoingRelativeTo?: URL,
+  outgoingRealmURL?: URL,
 ): string {
   let programPath = getProgramPath(target);
   //@ts-ignore ImportUtil doesn't seem to believe our Babel.types is a
@@ -248,7 +251,7 @@ function makeNewField(
     relativeFieldModuleRef = maybeRelativeURL(
       new URL(fieldRef.module, incomingRelativeTo),
       outgoingRelativeTo,
-      undefined,
+      outgoingRealmURL,
     );
   } else {
     relativeFieldModuleRef = fieldRef.module;
