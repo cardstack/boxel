@@ -9,12 +9,15 @@ import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
 import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
-import { TrackedArray, TrackedObject } from 'tracked-built-ins';
+import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
 import { Submode } from '@cardstack/host/components/submode-switcher';
+import { file, isReady, FileResource } from '@cardstack/host/resources/file';
+import { maybe } from '@cardstack/host/resources/maybe';
 import type MessageService from '@cardstack/host/services/message-service';
+import type RealmInfoService from '@cardstack/host/services/realm-info-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -35,7 +38,7 @@ export interface OperatorModeState {
   submode: Submode;
   codePath: URL | null;
   fileView?: FileView;
-  openDirs: string[];
+  openDirs: Map<string, string[]>;
 }
 
 interface CardItem {
@@ -53,23 +56,32 @@ export type SerializedState = {
   submode?: Submode;
   codePath?: string;
   fileView?: FileView;
-  openDirs?: string[];
+  openDirs?: Record<string, string[]>;
 };
+
+interface OpenFileSubscriber {
+  onStateChange: (state: FileResource['state']) => void;
+}
 
 export default class OperatorModeStateService extends Service {
   @tracked state: OperatorModeState = new TrackedObject({
     stacks: new TrackedArray([]),
     submode: Submode.Interact,
     codePath: null,
-    openDirs: [],
+    openDirs: new TrackedMap<string, string[]>(),
   });
   @tracked recentCards = new TrackedArray<CardDef>([]);
+
+  private cachedRealmURL: URL | null = null;
+
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
   @service declare recentFilesService: RecentFilesService;
+  @service declare realmInfoService: RealmInfoService;
   @service declare router: RouterService;
 
   private subscription: { url: string; unsubscribe: () => void } | undefined;
+  private openFileSubscribers: OpenFileSubscriber[] = [];
 
   constructor(properties: object) {
     super(properties);
@@ -132,6 +144,8 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
+  // TODO perhaps this goes away if we start using live models in interact mode,
+  // which also means this.cardService.reloadModel can go away...
   reloadItem = task(async (item: StackItem) => {
     item.card = await this.cardService.reloadModel(item.card);
   });
@@ -251,8 +265,8 @@ export default class OperatorModeStateService extends Service {
   }
 
   get codePathRelativeToRealm() {
-    if (this.state.codePath) {
-      let realmPath = new RealmPaths(this.cardService.defaultURL.href);
+    if (this.state.codePath && this.realmURL) {
+      let realmPath = new RealmPaths(this.realmURL);
 
       if (realmPath.inRealm(this.state.codePath)) {
         try {
@@ -297,11 +311,23 @@ export default class OperatorModeStateService extends Service {
       if (containingDirectory) {
         containingDirectory += '/';
 
-        if (!this.openDirs.includes(containingDirectory)) {
+        if (!this.currentRealmOpenDirs.includes(containingDirectory)) {
           this.toggleOpenDir(containingDirectory);
         }
       }
     }
+  }
+
+  get currentRealmOpenDirs() {
+    if (this.realmURL) {
+      let currentRealmOpenDirs = this.openDirs.get(this.realmURL.href);
+
+      if (currentRealmOpenDirs) {
+        return currentRealmOpenDirs;
+      }
+    }
+
+    return new TrackedArray([]);
   }
 
   updateFileView(fileView: FileView) {
@@ -344,7 +370,7 @@ export default class OperatorModeStateService extends Service {
       submode: this.state.submode,
       codePath: this.state.codePath?.toString(),
       fileView: this.state.fileView?.toString() as FileView,
-      openDirs: this.state.openDirs,
+      openDirs: Object.fromEntries(this.state.openDirs.entries()),
     };
 
     for (let stack of this.state.stacks) {
@@ -374,12 +400,19 @@ export default class OperatorModeStateService extends Service {
   // Deserialize a stringified JSON version of OperatorModeState into a Glimmer tracked object
   // so that templates can react to changes in stacks and their items
   async deserialize(rawState: SerializedState): Promise<OperatorModeState> {
+    let openDirs = new TrackedMap<string, string[]>(
+      Object.entries(rawState.openDirs ?? {}).map(([realmURL, dirs]) => [
+        realmURL,
+        new TrackedArray(dirs),
+      ]),
+    );
+
     let newState: OperatorModeState = new TrackedObject({
       stacks: new TrackedArray([]),
       submode: rawState.submode ?? Submode.Interact,
       codePath: rawState.codePath ? new URL(rawState.codePath) : null,
       fileView: rawState.fileView ?? 'inheritance',
-      openDirs: rawState.openDirs ?? [],
+      openDirs,
     });
 
     let stackIndex = 0;
@@ -387,7 +420,7 @@ export default class OperatorModeStateService extends Service {
       let newStack: Stack = new TrackedArray([]);
       for (let item of stack) {
         let { format } = item;
-        let card = await this.cardService.loadModel(new URL(item.id));
+        let card = await this.cardService.loadStaticModel(new URL(item.id));
         newStack.push({
           card,
           format,
@@ -409,7 +442,9 @@ export default class OperatorModeStateService extends Service {
 
     const recentCardIds = JSON.parse(recentCardIdsString) as string[];
     for (const recentCardId of recentCardIds) {
-      const card = await this.cardService.loadModel(new URL(recentCardId));
+      const card = await this.cardService.loadStaticModel(
+        new URL(recentCardId),
+      );
       this.recentCards.push(card);
     }
   }
@@ -448,11 +483,15 @@ export default class OperatorModeStateService extends Service {
   }
 
   get openDirs() {
-    return this.state.openDirs ?? [];
+    return this.state.openDirs ?? new TrackedMap();
   }
 
   toggleOpenDir(entryPath: string): void {
-    let dirs = this.openDirs.slice();
+    if (!this.realmURL) {
+      return;
+    }
+
+    let dirs = this.currentRealmOpenDirs.slice();
     for (let i = 0; i < dirs.length; i++) {
       if (dirs[i].startsWith(entryPath)) {
         let localParts = entryPath.split('/').filter((p) => p.trim() != '');
@@ -462,15 +501,78 @@ export default class OperatorModeStateService extends Service {
         } else {
           dirs.splice(i, 1);
         }
-        this.state.openDirs = dirs;
+        this.openDirs.set(this.realmURL.href, new TrackedArray(dirs));
         return;
       } else if (entryPath.startsWith(dirs[i])) {
         dirs[i] = entryPath;
-        this.state.openDirs = dirs;
+        this.openDirs.set(this.realmURL.href, new TrackedArray(dirs));
         return;
       }
     }
-    this.state.openDirs = [...dirs, entryPath];
+    this.openDirs.set(
+      this.realmURL.href,
+      new TrackedArray([...dirs, entryPath]),
+    );
     this.schedulePersist();
   }
+
+  private get readyFile() {
+    if (isReady(this.openFile.current)) {
+      return this.openFile.current;
+    }
+    throw new Error(
+      `cannot access file contents ${this.state.codePath} before file is open`,
+    );
+  }
+
+  get openFileIsReady() {
+    return isReady(this.openFile.current);
+  }
+
+  get realmURL() {
+    if (isReady(this.openFile.current)) {
+      return new URL(this.readyFile.realmURL);
+    } else if (this.cachedRealmURL) {
+      return this.cachedRealmURL;
+    }
+
+    return this.cardService.defaultURL;
+  }
+
+  subscribeToOpenFileStateChanges(subscriber: OpenFileSubscriber) {
+    this.openFileSubscribers.push(subscriber);
+  }
+
+  unsubscribeFromOpenFileStateChanges(subscriber: OpenFileSubscriber) {
+    let subscriberIndex = this.openFileSubscribers.indexOf(subscriber);
+
+    if (subscriberIndex > -1) {
+      this.openFileSubscribers.splice(subscriberIndex, 1);
+    }
+  }
+
+  openFile = maybe(this, (context) => {
+    let codePath = this.state.codePath;
+
+    if (!codePath) {
+      return undefined;
+    }
+
+    return file(context, () => ({
+      url: codePath!.href,
+      onStateChange: (state) => {
+        if (state === 'ready') {
+          this.cachedRealmURL = new URL(this.readyFile.realmURL);
+          this.updateOpenDirsForNestedPath();
+        }
+
+        this.openFileSubscribers.forEach((subscriber) =>
+          subscriber.onStateChange(state),
+        );
+      },
+      onRedirect: (url: string) => {
+        this.replaceCodePath(new URL(url));
+      },
+    }));
+  });
 }

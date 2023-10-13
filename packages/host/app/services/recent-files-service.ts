@@ -9,7 +9,7 @@ import { TrackedArray } from 'tracked-built-ins';
 import { RealmPaths } from '@cardstack/runtime-common';
 import { LocalPath } from '@cardstack/runtime-common/paths';
 
-import type CardService from '@cardstack/host/services/card-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 type SerialRecentFile = [URL, string];
 
@@ -19,7 +19,7 @@ export interface RecentFile {
 }
 
 export default class RecentFilesService extends Service {
-  @service declare cardService: CardService;
+  @service declare operatorModeStateService: OperatorModeStateService;
 
   @tracked recentFiles = new TrackedArray<RecentFile>([]);
 
@@ -44,14 +44,22 @@ export default class RecentFilesService extends Service {
   }
 
   addRecentFileUrl(url: string) {
-    let realmPaths = new RealmPaths(this.cardService.defaultURL);
-    if (realmPaths.inRealm(new URL(url))) {
-      this.addRecentFile(realmPaths.local(url));
+    let realmURL = this.operatorModeStateService.realmURL;
+
+    if (realmURL) {
+      let realmPaths = new RealmPaths(new URL(realmURL));
+      if (realmPaths.inRealm(new URL(url))) {
+        this.addRecentFile(realmPaths.local(url));
+      }
     }
   }
 
   addRecentFile(file: LocalPath) {
-    let currentRealmUrl = this.cardService.defaultURL;
+    let currentRealmUrl = this.operatorModeStateService.realmURL;
+
+    if (!currentRealmUrl) {
+      return;
+    }
 
     const existingIndex = this.findRecentFileIndex(file);
 
@@ -59,7 +67,10 @@ export default class RecentFilesService extends Service {
       this.recentFiles.splice(existingIndex, 1);
     }
 
-    this.recentFiles.unshift({ realmURL: currentRealmUrl, filePath: file });
+    this.recentFiles.unshift({
+      realmURL: new URL(currentRealmUrl),
+      filePath: file,
+    });
 
     if (this.recentFiles.length > 100) {
       this.recentFiles.pop();
@@ -81,7 +92,7 @@ export default class RecentFilesService extends Service {
   }
 
   private findRecentFileIndex(path: LocalPath) {
-    let currentRealmUrl = this.cardService.defaultURL;
+    let currentRealmUrl = this.operatorModeStateService.realmURL;
 
     return this.recentFiles.findIndex(
       ({ realmURL, filePath }) =>

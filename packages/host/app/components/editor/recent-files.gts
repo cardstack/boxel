@@ -76,7 +76,7 @@ class File extends Component<FileArgs> {
         role='button'
         {{on 'click' (fn this.openFile this.fullUrl)}}
       >
-        <RealmInfoProvider @realmURL={{@recentFile.realmURL.href}}>
+        <RealmInfoProvider @realmURL={{@recentFile.realmURL}}>
           <:ready as |realmInfo|>
             <RealmIcon
               @realmIconURL={{realmInfo.iconURL}}

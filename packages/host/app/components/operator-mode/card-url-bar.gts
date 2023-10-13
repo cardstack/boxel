@@ -26,7 +26,7 @@ interface Signature {
     userHasDismissedError: boolean; // user driven state that indicates if we should show error message
     resetLoadFileError: () => void; // callback to reset upstream error state -- perform on keypress
     dismissURLError: () => void; // callback allow user to dismiss the error message
-    realmURL: string;
+    realmURL: URL;
   };
 }
 
