@@ -346,7 +346,7 @@ export default class Go extends Component<Signature> {
 
   private loadCard = restartableTask(async (url: URL) => {
     await this.withTestWaiters(async () => {
-      this.card = await this.cardService.loadModel(url);
+      this.card = await this.cardService.loadStaticModel(url);
     });
   });
 

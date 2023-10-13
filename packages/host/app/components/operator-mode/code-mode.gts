@@ -5,8 +5,6 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
-import { buildWaiter } from '@ember/test-waiters';
-import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 //@ts-expect-error cached type not available yet
 import { cached, tracked } from '@glimmer/tracking';
@@ -94,20 +92,8 @@ interface Signature {
     saveCardOnClose: (card: CardDef) => void;
   };
 }
-// One of our challeges is that it is difficult to tell if the server sent events that
-// we receive are from out of band changes or just echos of the changes we are making
-// from the UI. A monotonically increasing version number could help to make it more
-// clear if SSE events are just echo or not. Barring that, we are using a simple heuristic
-// to identify if an event is our own--specifically a time window. If an SSE event occurs
-// more than `loadIfNewerThanSec` seconds after the last card editor save, then we will
-// consider it as an event not tied to our own card editor's auto save. The drawback is that
-// this does mean it will take `loadIfNewerThanSec` seconds for auto saves made in monaco to
-// to be visible in the card editor after a subsequent auto save made in the card editor.
-// Probably that is ok for now...
-const loadIfNewerThanSec = 5;
 const log = logger('component:code-mode');
-const waiter = buildWaiter('code-mode:load-card-waiter');
-let { autoSaveDelayMs } = config;
+const { autoSaveDelayMs } = config;
 
 type PanelWidths = {
   rightPanel: string;
@@ -166,9 +152,6 @@ export default class CodeMode extends Component<Signature> {
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
-  private realmSubscription:
-    | { url: string; unsubscribe: () => void }
-    | undefined;
   // This is to cache realm info during reload after code path change so
   // that realm assets don't produce a flicker when code patch changes and
   // the realm is the same
@@ -181,27 +164,6 @@ export default class CodeMode extends Component<Signature> {
       ? // @ts-ignore Type 'null' is not assignable to type 'string'
         JSON.parse(localStorage.getItem(CodeModePanelWidths))
       : defaultPanelWidths;
-
-    let url = `${this.cardService.defaultURL}_message`;
-    this.realmSubscription = {
-      url,
-      unsubscribe: this.messageService.subscribe(
-        url,
-        ({ type, data: dataStr }) => {
-          if (type !== 'index') {
-            return;
-          }
-          let data = JSON.parse(dataStr);
-          if (!this.card || data.type !== 'incremental') {
-            return;
-          }
-          let invalidations = data.invalidations as string[];
-          if (invalidations.includes(this.card.id)) {
-            this.maybeReloadCard.perform(this.card.id);
-          }
-        },
-      ),
-    };
     registerDestructor(this, () => {
       // destructor functons are called synchronously. in order to save,
       // which is async, we leverage an EC task that is running in a
@@ -214,7 +176,6 @@ export default class CodeMode extends Component<Signature> {
       } else if (this.hasUnsavedCardChanges && this.card) {
         this.args.saveCardOnClose(this.card);
       }
-      this.realmSubscription?.unsubscribe();
       this.operatorModeStateService.unsubscribeFromOpenFileStateChanges(this);
     });
     this.loadMonaco.perform();
@@ -438,22 +399,6 @@ export default class CodeMode extends Component<Signature> {
     return undefined;
   });
 
-  private maybeReloadCard = restartableTask(async (id: string) => {
-    if (this.card?.id === id) {
-      try {
-        // we need to be careful that we are not responding to our own echo which is what loadIfNewer tries to do
-        await this.loadIfNewer.perform(
-          new URL(id),
-          (await this.cardService.fetchJSON(id)) as SingleCardDocument,
-        );
-      } catch (e: any) {
-        if ('status' in e && e.status === 404) {
-          return; // card has been deleted
-        }
-        throw e;
-      }
-    }
-  });
   // We are actually loading cards using a side-effect of this cached getter
   // instead of a resource because with a resource it becomes impossible
   // to ignore our own auto-save echoes, since the act of auto-saving triggers
@@ -477,22 +422,35 @@ export default class CodeMode extends Component<Signature> {
         return undefined;
       }
       if (isSingleCardDocument(maybeCard)) {
-        let url = this.currentOpenFile.url.replace(/\.json$/, '');
-        if (!url) {
-          return undefined;
-        }
-        this.loadIfNewer.perform(new URL(url), maybeCard);
+        let url = new URL(this.currentOpenFile.url.replace(/\.json$/, ''));
+        // in order to not get trapped in a glimmer invalidation cycle we need to
+        // load the card in a different execution frame
+        this.loadLiveCard.perform(url);
         return maybeCard;
       }
     }
     // in order to not get trapped in a glimmer invalidation cycle we need to
-    // unload the card in a different closure
+    // unload the card in a different execution frame
     this.unloadCard.perform();
     return undefined;
   }
 
-  private unloadCard = task(async () => {
+  private loadLiveCard = restartableTask(async (url: URL) => {
+    let card = await this.cardService.loadLiveModel(this, url);
+    if (card !== this.card) {
+      if (this.card) {
+        this.cardService.unsubscribe(this.card, this.onCardChange);
+      }
+      this.card = card;
+      this.cardService.subscribe(this.card, this.onCardChange);
+    }
+  });
+
+  private unloadCard = restartableTask(async () => {
     await Promise.resolve();
+    if (this.card) {
+      this.cardService.unsubscribe(this.card, this.onCardChange);
+    }
     this.card = undefined;
     this.cardError = undefined;
   });
@@ -542,25 +500,6 @@ export default class CodeMode extends Component<Signature> {
     }
     return this.elements.value;
   }
-
-  private loadIfNewer = restartableTask(
-    async (url: URL, incomingDoc?: SingleCardDocument) => {
-      await this.withTestWaiters(async () => {
-        let card = await this.cardService.loadModel(url);
-        let saveTime = cardEditorSaveTimes.get(url.href);
-        if (this.card && incomingDoc && saveTime != null) {
-          if (Date.now() - saveTime < loadIfNewerThanSec * 1000) {
-            return;
-          }
-        }
-        if (this.card) {
-          this.cardService.unsubscribe(this.card, this.onCardChange);
-        }
-        this.card = card;
-        this.cardService.subscribe(this.card, this.onCardChange);
-      });
-    },
-  );
 
   private onCardChange = () => {
     this.doWhenCardChanges.perform();
@@ -670,7 +609,6 @@ export default class CodeMode extends Component<Signature> {
       // these saves can happen so fast that we'll make sure to wait at
       // least 500ms for human consumption
       await all([this.cardService.saveModel(card), timeout(500)]);
-      await this.maybeReloadCard.perform(card.id);
     } catch (e) {
       console.error('Failed to save single card document', e);
     }
@@ -724,21 +662,6 @@ export default class CodeMode extends Component<Signature> {
     }
   }
 
-  private async withTestWaiters<T>(cb: () => Promise<T>) {
-    let token = waiter.beginAsync();
-    try {
-      let result = await cb();
-      // only do this in test env--this makes sure that we also wait for any
-      // interior card instance async as part of our ember-test-waiters
-      if (isTesting()) {
-        await this.cardService.cardsSettled();
-      }
-      return result;
-    } finally {
-      waiter.endAsync(token);
-    }
-  }
-
   private get showBrowser() {
     return this.fileView === 'browser' || this.emptyOrNotFound;
   }
@@ -768,7 +691,6 @@ export default class CodeMode extends Component<Signature> {
       data-test-code-mode
       data-test-save-idle={{and
         this.contentChangedTask.isIdle
-        this.maybeReloadCard.isIdle
         this.doWhenCardChanges.isIdle
       }}
     >
