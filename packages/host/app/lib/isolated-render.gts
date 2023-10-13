@@ -6,24 +6,20 @@ import { createConstRef } from '@glimmer/reference';
 // @ts-expect-error
 import { renderMain, inTransaction } from '@glimmer/runtime';
 
-import Component from '@glimmer/component';
+import { type ComponentLike } from '@glint/template';
 
 import { CardError } from '@cardstack/runtime-common/error';
 
 import type { SimpleElement } from '@simple-dom/interface';
 
-import type { BoxComponent } from 'https://cardstack.com/base/card-api';
-
 export function render(
-  C: BoxComponent,
+  C: ComponentLike,
   element: SimpleElement,
   owner: Owner,
 ): void {
-  const root = class RenderComponent extends Component {
-    <template>
-      <C />
-    </template>
-  };
+  // this needs to be a template-only component because the way we're invoking it	  const root = class RenderComponent extends Component {
+  // just grabs the template and would drop any associated class.	    <template>
+  const root = <template><C /></template>;
 
   // clear any previous render work
   removeChildren(element);

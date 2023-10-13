@@ -1,7 +1,8 @@
 // @ts-ignore
 import { precompileTemplate } from '@ember/template-compilation';
-
 import { render, getContext } from '@ember/test-helpers';
+
+import { ComponentLike } from '@glint/template';
 
 import { baseRealm, Loader } from '@cardstack/runtime-common';
 
@@ -10,7 +11,6 @@ import type {
   Format,
   Field,
   CardContext,
-  BoxComponent,
 } from 'https://cardstack.com/base/card-api';
 
 async function cardApi(
@@ -19,8 +19,8 @@ async function cardApi(
   return await loader.import(`${baseRealm.url}card-api`);
 }
 
-export async function renderComponent(C: BoxComponent) {
-  await render(precompileTemplate(`<C />`, { scope: () => ({ C }) }));
+export async function renderComponent(C: ComponentLike) {
+  await render(precompileTemplate(`<C/>`, { scope: () => ({ C }) }));
 }
 
 export async function renderCard(
