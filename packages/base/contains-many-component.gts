@@ -128,17 +128,15 @@ export function getContainsManyComponent({
   ): typeof BaseDef;
 }): BoxComponent {
   if (format === 'edit') {
-    return class ContainsManyEditorTemplate extends GlimmerComponent {
-      <template>
-        <ContainsManyEditor
-          @model={{model}}
-          @arrayField={{arrayField}}
-          @field={{field}}
-          @format={{format}}
-          @cardTypeFor={{cardTypeFor}}
-        />
-      </template>
-    };
+    return <template>
+      <ContainsManyEditor
+        @model={{model}}
+        @arrayField={{arrayField}}
+        @field={{field}}
+        @format={{format}}
+        @cardTypeFor={{cardTypeFor}}
+      />
+    </template>;
   } else {
     return getPluralViewComponent(arrayField, field, format, cardTypeFor);
   }

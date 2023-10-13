@@ -1,4 +1,3 @@
-import GlimmerComponent from '@glimmer/component';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import {
   type Box,
@@ -11,6 +10,7 @@ import {
   CardContext,
   isCard,
   isCompoundField,
+  formats,
 } from './card-api';
 import { getField } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
@@ -37,7 +37,6 @@ export function getBoxComponent(
   if (stable) {
     return stable;
   }
-
   let internalFieldsCache:
     | { fields: FieldsTypeFor<BaseDef>; format: Format }
     | undefined;
@@ -55,10 +54,7 @@ export function getBoxComponent(
     format: Format;
   } {
     let format =
-      userFormat &&
-      ['isolated', 'edit', 'embedded', 'atom'].includes(userFormat)
-        ? userFormat
-        : defaultFormat;
+      userFormat && formats.includes(userFormat) ? userFormat : defaultFormat;
 
     let fields: FieldsTypeFor<BaseDef>;
     if (internalFieldsCache?.format === format) {
@@ -108,7 +104,7 @@ export function getBoxComponent(
           </CardContainer>
         {{else if (isCompoundField model.value)}}
           <div
-            data-test-compound-field-format={{@format}}
+            data-test-compound-field-format={{f.format}}
             data-test-compound-field-component
             {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
             ...attributes
@@ -271,32 +267,27 @@ export function getPluralViewComponent(
   ) => typeof BaseDef,
   context?: CardContext,
 ): BoxComponent {
-  let components: BoxComponent[];
-  function getComponents(format: Format) {
-    components = model.children.map((child) =>
-      getBoxComponent(cardTypeFor(field, child), format, child, field, context),
-    );
-    return components;
-  }
-  let defaultComponent = class PluralView extends GlimmerComponent<BoxComponentSignature> {
-    get format() {
-      return this.args.format ?? format;
-    }
+  let components = model.children.map((child) =>
+    getBoxComponent(cardTypeFor(field, child), format, child, field, context),
+  );
+  let pluralViewComponent: TemplateOnlyComponent<BoxComponentSignature> =
     <template>
-      <div
-        class='plural-field
-          {{field.fieldType}}-field
-          {{this.format}}-format
-          {{unless model.children.length "empty"}}'
-        data-test-plural-view={{field.fieldType}}
-        data-test-plural-view-format={{this.format}}
-      >
-        {{#each (getComponents this.format) as |Item i|}}
-          <div data-test-plural-view-item={{i}}>
-            <Item @format={{this.format}} />
-          </div>
-        {{/each}}
-      </div>
+      {{#let (if @format @format format) as |format|}}
+        <div
+          class='plural-field
+            {{field.fieldType}}-field
+            {{format}}-format
+            {{unless model.children.length "empty"}}'
+          data-test-plural-view={{field.fieldType}}
+          data-test-plural-view-format={{format}}
+        >
+          {{#each components as |Item i|}}
+            <div data-test-plural-view-item={{i}}>
+              <Item @format={{format}} />
+            </div>
+          {{/each}}
+        </div>
+      {{/let}}
       <style>
         .linksToMany-field.embedded-format > div + div {
           margin-top: var(--boxel-sp);
@@ -314,9 +305,8 @@ export function getPluralViewComponent(
           border-radius: var(--boxel-border-radius);
         }
       </style>
-    </template>
-  };
-  return new Proxy(defaultComponent, {
+    </template>;
+  return new Proxy(pluralViewComponent, {
     get(target, property, received) {
       // proxying the bare minimum of an Array in order to render within a
       // template. add more getters as necessary...
@@ -336,7 +326,7 @@ export function getPluralViewComponent(
       // with a proxied component. Our Proxy object won't be in the template WeakMap,
       // but we can pretend our Proxy object inherits from the true component, and
       // Ember's template lookup respects inheritance.
-      return defaultComponent;
+      return pluralViewComponent;
     },
   });
 }

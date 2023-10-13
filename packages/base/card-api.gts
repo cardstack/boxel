@@ -77,6 +77,7 @@ export type FieldsTypeFor<T extends BaseDef> = {
       ? FieldsTypeFor<T[Field]>
       : unknown);
 };
+export const formats: Format[] = ['isolated', 'embedded', 'edit', 'atom'];
 export type Format = 'isolated' | 'embedded' | 'edit' | 'atom';
 export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
 
