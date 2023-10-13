@@ -260,7 +260,7 @@ export interface Field<
   validate(instance: BaseDef, value: any): void;
   component(
     model: Box<BaseDef>,
-    format: Format,
+    defaultFormat: Format,
     context?: CardContext,
   ): BoxComponent;
   getter(instance: BaseDef): BaseInstanceType<CardT>;
@@ -1399,7 +1399,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
 function fieldComponent(
   field: Field<typeof BaseDef>,
   model: Box<BaseDef>,
-  format: Format,
+  defaultFormat: Format,
   context?: CardContext,
 ): BoxComponent {
   let fieldName = field.name as keyof BaseDef;
@@ -1411,7 +1411,7 @@ function fieldComponent(
       (model.value[fieldName]?.constructor as typeof BaseDef) ?? field.card;
   }
   let innerModel = model.field(fieldName) as unknown as Box<BaseDef>;
-  return getBoxComponent(card, format, innerModel, field, context);
+  return getBoxComponent(card, defaultFormat, innerModel, field, context);
 }
 
 // our decorators are implemented by Babel, not TypeScript, so they have a

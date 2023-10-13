@@ -1,4 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import {
   type Box,
   type Field,
@@ -27,7 +28,7 @@ const componentCache = new WeakMap<Box<BaseDef>, BoxComponent>();
 
 export function getBoxComponent(
   card: typeof BaseDef,
-  format: Format,
+  defaultFormat: Format,
   model: Box<BaseDef>,
   field: Field | undefined,
   context: CardContext = {},
@@ -37,16 +38,9 @@ export function getBoxComponent(
     return stable;
   }
 
-  let Implementation: BaseDefComponent = (card as any)[format];
-
-  // *inside* our own component, @fields is a proxy object that looks
-  // up our fields on demand.
-  let internalFields = fieldsComponentsFor(
-    {},
-    model,
-    defaultFieldFormat(format),
-    context,
-  );
+  let internalFieldsCache:
+    | { fields: FieldsTypeFor<BaseDef>; format: Format }
+    | undefined;
 
   // cardComponentModifier, when provided, is used for the host environment to get access to card's rendered elements
   let cardComponentModifier =
@@ -55,76 +49,110 @@ export function getBoxComponent(
       modify() {}
     };
 
-  let component: BoxComponent = <template>
-    {{#if (isCard model.value)}}
-      <CardContainer
-        @displayBoundaries={{true}}
-        class='field-component-card {{format}}-card'
-        {{cardComponentModifier
-          card=model.value
-          format=format
-          fieldType=field.fieldType
-          fieldName=field.name
-        }}
-        data-test-card-format={{format}}
-        data-test-field-component-card
-        {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
-        ...attributes
-      >
-        <Implementation
-          @model={{model.value}}
-          @fields={{internalFields}}
-          @set={{model.set}}
-          @fieldName={{model.name}}
-          @context={{context}}
-        />
-      </CardContainer>
-    {{else if (isCompoundField model.value)}}
-      <div
-        data-test-compound-field-format={{format}}
-        data-test-compound-field-component
-        {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
-        ...attributes
-      >
-        <Implementation
-          @model={{model.value}}
-          @fields={{internalFields}}
-          @set={{model.set}}
-          @fieldName={{model.name}}
-          @context={{context}}
-        />
-      </div>
-    {{else}}
-      <Implementation
-        @model={{model.value}}
-        @fields={{internalFields}}
-        @set={{model.set}}
-        @fieldName={{model.name}}
-        @context={{context}}
-      />
-    {{/if}}
-    <style>
-      .field-component-card {
-        padding: var(--boxel-sp);
-      }
+  function lookupFormat(userFormat: Format | undefined): {
+    Implementation: BaseDefComponent;
+    fields: FieldsTypeFor<BaseDef>;
+    format: Format;
+  } {
+    let format =
+      userFormat &&
+      ['isolated', 'edit', 'embedded', 'atom'].includes(userFormat)
+        ? userFormat
+        : defaultFormat;
 
-      .isolated-card {
-        padding: var(--boxel-sp-xl);
-      }
+    let fields: FieldsTypeFor<BaseDef>;
+    if (internalFieldsCache?.format === format) {
+      fields = internalFieldsCache.fields;
+    } else {
+      fields = fieldsComponentsFor(
+        {},
+        model,
+        defaultFieldFormat(format),
+        context,
+      );
+      internalFieldsCache = { fields, format };
+    }
 
-      .edit-card {
-        padding: var(--boxel-sp-xl) var(--boxel-sp-xxl) var(--boxel-sp-xl)
-          var(--boxel-sp-xl);
-      }
+    return {
+      Implementation: (card as any)[format],
+      fields,
+      format,
+    };
+  }
 
-      .atom-card {
-        font: 700 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-        padding: 4px var(--boxel-sp-sm);
-        background-color: var(--boxel-light);
-      }
-    </style>
-  </template>;
+  let component: TemplateOnlyComponent<{ Args: { format?: Format } }> =
+    <template>
+      {{#let (lookupFormat @format) as |f|}}
+        {{#if (isCard model.value)}}
+          <CardContainer
+            @displayBoundaries={{true}}
+            class='field-component-card {{f.format}}-card'
+            {{cardComponentModifier
+              card=model.value
+              format=f.format
+              fieldType=field.fieldType
+              fieldName=field.name
+            }}
+            data-test-card-format={{f.format}}
+            data-test-field-component-card
+            {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
+            ...attributes
+          >
+            <f.Implementation
+              @model={{model.value}}
+              @fields={{f.fields}}
+              @set={{model.set}}
+              @fieldName={{model.name}}
+              @context={{context}}
+            />
+          </CardContainer>
+        {{else if (isCompoundField model.value)}}
+          <div
+            data-test-compound-field-format={{@format}}
+            data-test-compound-field-component
+            {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
+            ...attributes
+          >
+            <f.Implementation
+              @model={{model.value}}
+              @fields={{f.fields}}
+              @set={{model.set}}
+              @fieldName={{model.name}}
+              @context={{context}}
+            />
+          </div>
+        {{else}}
+          <f.Implementation
+            @model={{model.value}}
+            @fields={{f.fields}}
+            @set={{model.set}}
+            @fieldName={{model.name}}
+            @context={{context}}
+          />
+        {{/if}}
+      {{/let}}
+      <style>
+        .field-component-card {
+          padding: var(--boxel-sp);
+        }
+
+        .isolated-card {
+          padding: var(--boxel-sp-xl);
+        }
+
+        .edit-card {
+          padding: var(--boxel-sp-xl) var(--boxel-sp-xxl) var(--boxel-sp-xl)
+            var(--boxel-sp-xl);
+        }
+
+        .atom-card {
+          font: 700 var(--boxel-font-sm);
+          letter-spacing: var(--boxel-lsp-xs);
+          padding: 4px var(--boxel-sp-sm);
+          background-color: var(--boxel-light);
+        }
+      </style>
+    </template>;
 
   // when viewed from *outside*, our component is both an invokable component
   // and a proxy that makes our fields available for nested invocation, like
@@ -136,7 +164,7 @@ export function getBoxComponent(
   let externalFields = fieldsComponentsFor(
     component,
     model,
-    defaultFieldFormat(format),
+    defaultFormat,
     context,
   );
 
@@ -185,27 +213,12 @@ function fieldsComponentsFor<T extends BaseDef>(
       }
       let field = maybeField;
 
-      function fieldComponent(userFormat: Format | undefined): BoxComponent {
-        let fieldFormat =
-          userFormat && ['edit', 'embedded', 'atom'].includes(userFormat)
-            ? userFormat
-            : defaultFormat;
-        let format: Format = field.computeVia ? 'embedded' : fieldFormat;
-        return field.component(
-          model as unknown as Box<BaseDef>,
-          format,
-          context,
-        );
-      }
-
-      let template: BoxComponent = class FieldComponent extends GlimmerComponent<BoxComponentSignature> {
-        <template>
-          {{#let (fieldComponent @format) as |FieldComponent|}}
-            <FieldComponent @format={{@format}} />
-          {{/let}}
-        </template>
-      };
-      return template;
+      // let format: Format = field.computeVia ? 'embedded' : defaultFormat;
+      return field.component(
+        model as unknown as Box<BaseDef>,
+        defaultFormat,
+        context,
+      );
     },
     getPrototypeOf() {
       // This is necessary for Ember to be able to locate the template associated
