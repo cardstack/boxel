@@ -52,7 +52,8 @@ import Module from './module';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
-const { ownRealmURL } = ENV;
+const { ownRealmURL: ownRealmURLString } = ENV;
+const ownRealmURL = new URL(ownRealmURLString);
 const log = logger('component:go');
 const waiter = buildWaiter('code-route:load-card-waiter');
 
@@ -428,7 +429,7 @@ export default class Go extends Component<Signature> {
         )}`,
       );
     }
-    let path = `${newCard.id.slice(ownRealmURL.length)}.json`;
+    let path = `${newCard.id.slice(ownRealmURLString.length)}.json`;
     this.operatorModeStateService.state.codePath = new URL(path);
   });
 }
