@@ -145,14 +145,12 @@ function findLocalAncestor(
 ) {
   if (isPossibleCardOrFieldClass(value) && isInternalReference(value.super)) {
     const indexOfParent = value.super.classIndex;
-    if (indexOfParent !== undefined) {
-      const parentCardOrFieldClass = possibleCardsOrFields[indexOfParent];
-      const parentCardOrField = getAncestor(cardOrField);
+    if (indexOfParent === undefined) return;
+    const parentCardOrFieldClass = possibleCardsOrFields[indexOfParent];
+    const parentCardOrField = getAncestor(cardOrField);
 
-      if (parentCardOrField) {
-        localCardsOrFields.set(parentCardOrFieldClass, parentCardOrField);
-      }
-    }
+    if (parentCardOrField == undefined) return;
+    localCardsOrFields.set(parentCardOrFieldClass, parentCardOrField);
   }
 }
 
@@ -167,17 +165,14 @@ function findLocalField(
       for (const [fieldName, v] of value.possibleFields) {
         if (isInternalReference(v.card)) {
           const indexOfParentField = v.card.classIndex;
-          if (indexOfParentField !== undefined) {
-            const parentFieldClass = possibleCardsOrFields[indexOfParentField];
-            const localName = parentFieldClass.localName;
+          if (indexOfParentField == undefined) return;
+          const parentFieldClass = possibleCardsOrFields[indexOfParentField];
+          const localName = parentFieldClass.localName;
 
-            if (localName) {
-              const field = getField(cardOrField, fieldName);
-              if (field && field.card) {
-                localCardsOrFields.set(parentFieldClass, field.card);
-              }
-            }
-          }
+          if (localName == undefined) return;
+          const field = getField(cardOrField, fieldName);
+          if (field == undefined || field.card == undefined) return;
+          localCardsOrFields.set(parentFieldClass, field.card);
         }
       }
     }
