@@ -20,6 +20,7 @@ import stringify from 'safe-stable-stringify';
 import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 
+import { Submode } from '@cardstack/host/components/submode-switcher';
 import config from '@cardstack/host/config/environment';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -298,23 +299,17 @@ module('Acceptance | operator mode tests', function (hooks) {
       await waitFor(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`);
       await percySnapshot(assert);
 
-      // In the URL, operatorModeEnabled is set to true and operatorModeState is set to the current stack
-      assert.strictEqual(
-        currentURL(),
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          stringify({
-            stacks: [
-              [
-                {
-                  id: `${testRealmURL}index`,
-                  format: 'isolated',
-                },
-              ],
-            ],
-            submode: 'interact',
-          })!,
-        )}`,
-      );
+      assert.operatorModeParametersMatch(currentURL(), {
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}index`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: Submode.Interact,
+      });
     });
 
     test('restoring the stack from query param', async function (assert) {
@@ -353,24 +348,19 @@ module('Acceptance | operator mode tests', function (hooks) {
       await click('[data-test-stack-card-index="1"] [data-test-close-button]');
 
       // The stack should be updated in the URL
-      assert.strictEqual(
-        currentURL(),
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          stringify({
-            stacks: [
-              [
-                {
-                  id: `${testRealmURL}Person/fadhlan`,
-                  format: 'isolated',
-                },
-              ],
-            ],
-            submode: 'interact',
-            fileView: 'inheritance',
-            openDirs: [],
-          })!,
-        )}`,
-      );
+      assert.operatorModeParametersMatch(currentURL(), {
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: Submode.Interact,
+        fileView: 'inheritance',
+        openDirs: {},
+      });
 
       await waitFor('[data-test-pet="Mango"]');
       await click('[data-test-pet="Mango"]');
@@ -394,7 +384,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             ],
             submode: 'interact',
             fileView: 'inheritance',
-            openDirs: [],
+            openDirs: {},
           })!,
         )}`,
       );
@@ -421,7 +411,7 @@ module('Acceptance | operator mode tests', function (hooks) {
             ],
             submode: 'interact',
             fileView: 'inheritance',
-            openDirs: [],
+            openDirs: {},
           })!,
         )}`,
       );
@@ -658,24 +648,19 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-operator-mode-stack="0"]').includesText('Fadhlan');
 
       // The stack should be updated in the URL
-      assert.strictEqual(
-        currentURL(),
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          stringify({
-            stacks: [
-              [
-                {
-                  id: `${testRealmURL}Person/fadhlan`,
-                  format: 'isolated',
-                },
-              ],
-            ],
-            submode: 'interact',
-            fileView: 'inheritance',
-            openDirs: [],
-          })!,
-        )}`,
-      );
+      assert.operatorModeParametersMatch(currentURL(), {
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: Submode.Interact,
+        fileView: 'inheritance',
+        openDirs: {},
+      });
 
       // Close the last card in the last stack that is left - should get the empty state
       await click(
@@ -814,31 +799,26 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-code-mode]').exists();
 
       // Submode is reflected in the URL
-      assert.strictEqual(
-        currentURL(),
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          stringify({
-            stacks: [
-              [
-                {
-                  id: `${testRealmURL}Person/fadhlan`,
-                  format: 'isolated',
-                },
-              ],
-              [
-                {
-                  id: `${testRealmURL}Pet/mango`,
-                  format: 'isolated',
-                },
-              ],
-            ],
-            submode: 'code',
-            codePath: `${testRealmURL}Pet/mango.json`,
-            fileView: 'inheritance',
-            openDirs: ['Pet/'],
-          })!,
-        )}`,
-      );
+      assert.operatorModeParametersMatch(currentURL(), {
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+          ],
+          [
+            {
+              id: `${testRealmURL}Pet/mango`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: Submode.Code,
+        codePath: `${testRealmURL}Pet/mango.json`,
+        fileView: 'inheritance',
+        openDirs: { [testRealmURL]: ['Pet/'] },
+      });
 
       // Toggle back to interactive mode
       await click('[data-test-submode-switcher] button');
@@ -848,30 +828,25 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 2 });
 
       // Submode is reflected in the URL
-      assert.strictEqual(
-        currentURL(),
-        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
-          stringify({
-            stacks: [
-              [
-                {
-                  id: `${testRealmURL}Person/fadhlan`,
-                  format: 'isolated',
-                },
-              ],
-              [
-                {
-                  id: `${testRealmURL}Pet/mango`,
-                  format: 'isolated',
-                },
-              ],
-            ],
-            submode: 'interact',
-            fileView: 'inheritance',
-            openDirs: ['Pet/'],
-          })!,
-        )}`,
-      );
+      assert.operatorModeParametersMatch(currentURL(), {
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+          ],
+          [
+            {
+              id: `${testRealmURL}Pet/mango`,
+              format: 'isolated',
+            },
+          ],
+        ],
+        submode: Submode.Interact,
+        fileView: 'inheritance',
+        openDirs: { [testRealmURL]: ['Pet/'] },
+      });
     });
 
     test('card preview will show in the 3rd column when submode is set to code', async function (assert) {
@@ -1090,8 +1065,19 @@ module('Acceptance | operator mode tests', function (hooks) {
     await percySnapshot(assert);
   });
 
-  test<TestContextWithSave>('card instance change made in monaco editor is auto-saved', async function (assert) {
-    assert.expect(2);
+  test<
+    TestContextWithSave & TestContextWithSSE
+  >('card instance change made in monaco editor is auto-saved', async function (assert) {
+    assert.expect(3);
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Pet/mango`],
+        },
+      },
+    ];
 
     let expected: LooseSingleCardDocument = {
       data: {
@@ -1132,7 +1118,15 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.strictEqual(json.data.attributes?.name, 'MangoXXX');
     });
 
-    setMonacoContent(JSON.stringify(expected));
+    await this.expectEvents(
+      assert,
+      realm,
+      adapter,
+      expectedEvents,
+      async () => {
+        setMonacoContent(JSON.stringify(expected));
+      },
+    );
 
     await waitFor('[data-test-save-idle]');
 
