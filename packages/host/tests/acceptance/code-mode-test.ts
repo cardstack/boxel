@@ -29,6 +29,7 @@ import {
   testRealmURL,
   sourceFetchRedirectHandle,
   sourceFetchReturnUrlHandle,
+  getMonacoContent,
 } from '../helpers';
 
 const indexCardSource = `
@@ -1493,6 +1494,8 @@ module('Acceptance | code mode tests', function (hooks) {
         `[data-test-card-schema="Person"] [data-test-field-name="birthdate"] [data-test-card-display-name="Date"]`,
       )
       .exists();
+
+    assert.ok(getMonacoContent().includes('birthdate = contains(DateCard)'));
   });
 
   test('adding a field from schema editor - cardinality test', async function (assert) {
@@ -1533,6 +1536,12 @@ module('Acceptance | code mode tests', function (hooks) {
       )
       .hasText('Collection');
 
+    assert.ok(
+      getMonacoContent().includes(
+        'luckyNumbers = containsMany(BigIntegerCard)',
+      ),
+    );
+
     // Field is a card descending from CardDef (cardinality: one)
     await waitFor('[data-test-add-field-button]');
     await click('[data-test-add-field-button]');
@@ -1555,6 +1564,10 @@ module('Acceptance | code mode tests', function (hooks) {
       )
       .hasText('Link');
 
+    assert.ok(
+      getMonacoContent().includes('favPerson = linksTo(() => Person);'),
+    );
+
     // Field is a card descending from CardDef (cardinality: many)
     await waitFor('[data-test-add-field-button]');
     await click('[data-test-add-field-button]');
@@ -1573,6 +1586,10 @@ module('Acceptance | code mode tests', function (hooks) {
         `[data-test-card-schema="Person"] [data-test-field-name="favPeople"] [data-test-field-types]`,
       )
       .hasText('Link, Collection');
+
+    assert.ok(
+      getMonacoContent().includes('favPeople = linksToMany(() => Person);'),
+    );
   });
 });
 
