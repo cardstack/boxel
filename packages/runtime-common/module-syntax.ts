@@ -69,6 +69,8 @@ export class ModuleSyntax {
     );
   }
 
+  // A note about incomingRelativeTo and outgoingRelativeTo - path parameters in input (e.g. field module path) and output (e.g. field import path) are
+  // relative to some path, and we use these parameters to determine what that path is so that the emitted code has correct relative paths.
   addField(
     cardName:
       | { type: 'exportedName'; name: string }
@@ -76,9 +78,9 @@ export class ModuleSyntax {
     fieldName: string,
     fieldRef: { name: string; module: string }, // module could be a relative path
     fieldType: FieldType,
-    incomingRelativeTo?: URL,
-    outgoingRelativeTo?: URL,
-    outgoingRealmURL?: URL,
+    incomingRelativeTo: URL | undefined, // can be undefined when you know the url is not going to be relative
+    outgoingRelativeTo: URL | undefined, // can be undefined when you know url is not going to be relative
+    outgoingRealmURL: URL | undefined, // should be provided when the other 2 params are provided
   ) {
     let card = this.getCard(cardName);
     if (card.possibleFields.has(fieldName)) {
@@ -217,9 +219,9 @@ function makeNewField(
   fieldType: FieldType,
   fieldName: string,
   cardName: string,
-  incomingRelativeTo?: URL,
-  outgoingRelativeTo?: URL,
-  outgoingRealmURL?: URL,
+  incomingRelativeTo: URL | undefined,
+  outgoingRelativeTo: URL | undefined,
+  outgoingRealmURL: URL | undefined,
 ): string {
   let programPath = getProgramPath(target);
   //@ts-ignore ImportUtil doesn't seem to believe our Babel.types is a
