@@ -21,7 +21,7 @@ function isResolvedURL(url: URL | ResolvedURL): url is ResolvedURL {
   return '_isResolved' in url;
 }
 
-function makeResolvedURL(unresolvedURL: URL | string): ResolvedURL {
+export function makeResolvedURL(unresolvedURL: URL | string): ResolvedURL {
   let resolvedURL = new URL(unresolvedURL) as ResolvedURL;
   resolvedURL._isResolved = undefined;
   return resolvedURL;

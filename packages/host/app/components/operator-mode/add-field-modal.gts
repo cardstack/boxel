@@ -24,6 +24,7 @@ import {
   identifyCard,
   catalogEntryRef,
 } from '@cardstack/runtime-common';
+import { makeResolvedURL } from '@cardstack/runtime-common/loader';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
@@ -135,7 +136,9 @@ export default class AddFieldModal extends Component<Signature> {
       this.chosenCatalogEntry.ref,
       relationshipType,
       new URL(this.chosenCatalogEntry.id),
-      this.operatorModeStateService.state.codePath!,
+      this.loaderService.loader.reverseResolution(
+        makeResolvedURL(this.operatorModeStateService.state.codePath!).href,
+      ),
       new URL(this.args.file.realmURL),
     );
 
