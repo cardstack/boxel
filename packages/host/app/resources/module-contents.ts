@@ -8,7 +8,7 @@ import {
   ModuleSyntax,
   type PossibleCardOrFieldClass,
   type BaseDeclaration,
-  type ElementDeclaration,
+  type Declaration,
   isInternalReference,
   isPossibleCardOrFieldClass,
 } from '@cardstack/runtime-common/module-syntax';
@@ -22,12 +22,12 @@ import { Ready as ReadyFile } from '@cardstack/host/resources/file';
 
 import { type BaseDef } from 'https://cardstack.com/base/card-api';
 
-// an element should be (an item of focus within a module)
+// an declaration should be (an item of focus within a module)
 // - exported function or class
 // - exported card or field
 // - unexported card or field
-// This element (in code mode) is extended to include the cardType and cardOrField
-export type Element =
+// This declaration (in code mode) is extended to include the cardType and cardOrField
+export type ModuleDeclaration =
   | (CardOrField & Partial<PossibleCardOrFieldClass>)
   | BaseDeclaration;
 
@@ -36,12 +36,12 @@ export interface CardOrField {
   cardOrField: typeof BaseDef;
 }
 
-export function isCardOrFieldElement(
-  element: Element,
-): element is CardOrField & Partial<PossibleCardOrFieldClass> {
+export function isCardOrFieldDeclaration(
+  declaration: ModuleDeclaration,
+): declaration is CardOrField & Partial<PossibleCardOrFieldClass> {
   return (
-    (element as CardOrField).cardType !== undefined &&
-    (element as CardOrField).cardOrField !== undefined
+    (declaration as CardOrField).cardType !== undefined &&
+    (declaration as CardOrField).cardOrField !== undefined
   );
 }
 
@@ -49,11 +49,11 @@ interface Args {
   named: { file: ReadyFile; exportedCardsOrFields: (typeof BaseDef)[] };
 }
 
-export class InThisFileResource extends Resource<Args> {
-  @tracked _elements: Element[] = [];
+export class ModuleContentsResource extends Resource<Args> {
+  @tracked private _declarations: ModuleDeclaration[] = [];
 
-  get elements() {
-    return this._elements;
+  get declarations() {
+    return this._declarations;
   }
 
   modify(_positional: never[], named: Args['named']) {
@@ -69,7 +69,7 @@ export class InThisFileResource extends Resource<Args> {
     // - includes card or field
     //   - an already exported card or field
     //   - an already that was local but exported thru some relationship
-    this._elements = moduleSyntax.elements.map((value) => {
+    this._declarations = moduleSyntax.declarations.map((value: Declaration) => {
       if (isPossibleCardOrFieldClass(value)) {
         const cardOrField = exportedCardsOrFields.find(
           (c) => c.name === value.localName,
@@ -96,13 +96,13 @@ export class InThisFileResource extends Resource<Args> {
   }
 }
 
-export function inThisFileResource(
+export function moduleContentsResource(
   parent: object,
   args: () => Args['named'],
-): InThisFileResource {
-  return InThisFileResource.from(parent, () => ({
+): ModuleContentsResource {
+  return ModuleContentsResource.from(parent, () => ({
     named: args(),
-  })) as unknown as InThisFileResource;
+  })) as unknown as ModuleContentsResource;
 }
 
 function collectLocalCardsOrFields(
@@ -113,7 +113,7 @@ function collectLocalCardsOrFields(
     new Map();
   let possibleCardsOrFields = moduleSyntax.possibleCardsOrFields;
 
-  for (const value of moduleSyntax.elements) {
+  for (const value of moduleSyntax.declarations) {
     const cardOrField = exportedCardsOrFields.find(
       (c) => c.name === value.localName,
     );
@@ -138,7 +138,7 @@ function collectLocalCardsOrFields(
 }
 
 function findLocalAncestor(
-  value: ElementDeclaration,
+  value: ModuleDeclaration,
   cardOrField: typeof BaseDef,
   possibleCardsOrFields: PossibleCardOrFieldClass[],
   localCardsOrFields: Map<PossibleCardOrFieldClass, typeof BaseDef>,
@@ -155,7 +155,7 @@ function findLocalAncestor(
 }
 
 function findLocalField(
-  value: ElementDeclaration,
+  value: ModuleDeclaration,
   cardOrField: typeof BaseDef,
   possibleCardsOrFields: PossibleCardOrFieldClass[],
   localCardsOrFields: Map<PossibleCardOrFieldClass, typeof BaseDef>,

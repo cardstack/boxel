@@ -39,15 +39,15 @@ export interface PossibleField {
   path: NodePath<t.ClassProperty>;
 }
 
-// an element should be (an item of focus within a module)
+// a module declaration should be (an item of focus within a module)
 // - exported function or class
 // - exported card or field
 // - unexported card or field
-export type ElementDeclaration = PossibleCardOrFieldClass | BaseDeclaration;
+export type Declaration = PossibleCardOrFieldClass | BaseDeclaration;
 
 export interface Options {
   possibleCardsOrFields: PossibleCardOrFieldClass[]; //cards may not be exports
-  elements: ElementDeclaration[];
+  declarations: Declaration[];
 }
 
 export function schemaAnalysisPlugin(_babel: typeof Babel) {
@@ -58,7 +58,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
           let localName = path.node.id ? path.node.id.name : undefined;
           if (t.isExportDeclaration(path.parentPath)) {
             // exported functions
-            state.opts.elements.push({
+            state.opts.declarations.push({
               localName,
               exportedAs: getExportedAs(path, localName),
               path,
@@ -72,7 +72,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
             // any class which doesn't have a super class
             let localName = path.node.id ? path.node.id.name : undefined;
             if (t.isExportDeclaration(path.parentPath)) {
-              state.opts.elements.push({
+              state.opts.declarations.push({
                 localName,
                 exportedAs: getExportedAs(path, localName),
                 path,
@@ -83,7 +83,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
               localName,
             );
             if (maybeExportSpecifierLocal !== undefined) {
-              state.opts.elements.push({
+              state.opts.declarations.push({
                 localName,
                 exportedAs: getExportedAs(path, localName),
                 path,
@@ -108,12 +108,12 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
                 exportedAs: getExportedAs(path, localName),
               };
               state.opts.possibleCardsOrFields.push(possibleCardOrField);
-              state.opts.elements.push(possibleCardOrField);
+              state.opts.declarations.push(possibleCardOrField);
             } else {
               // non-card or non-field class which extends some class
               if (t.isExportDeclaration(path.parentPath)) {
                 let localName = path.node.id ? path.node.id.name : undefined;
-                state.opts.elements.push({
+                state.opts.declarations.push({
                   localName,
                   exportedAs: getExportedAs(path, localName),
                   path,
@@ -339,14 +339,14 @@ function getName(node: t.Identifier | t.StringLiteral) {
 }
 
 export function isPossibleCardOrFieldClass(
-  element: any,
-): element is PossibleCardOrFieldClass {
+  declaration: any,
+): declaration is PossibleCardOrFieldClass {
   return (
-    element &&
-    element.super &&
-    typeof element.localName === 'string' &&
-    element.possibleFields instanceof Map &&
-    element.path
+    declaration &&
+    declaration.super &&
+    typeof declaration.localName === 'string' &&
+    declaration.possibleFields instanceof Map &&
+    declaration.path
   );
 }
 

@@ -4,7 +4,7 @@ import {
   schemaAnalysisPlugin,
   Options,
   type PossibleCardOrFieldClass,
-  type ElementDeclaration,
+  type Declaration,
   type BaseDeclaration,
   isPossibleCardOrFieldClass,
   isInternalReference,
@@ -30,12 +30,12 @@ import type { types as t } from '@babel/core';
 import type { NodePath } from '@babel/traverse';
 import type { FieldType } from 'https://cardstack.com/base/card-api';
 
-export type { PossibleCardOrFieldClass, ElementDeclaration, BaseDeclaration };
+export type { PossibleCardOrFieldClass, Declaration, BaseDeclaration };
 export { isPossibleCardOrFieldClass, isInternalReference };
 
 export class ModuleSyntax {
   declare possibleCardsOrFields: PossibleCardOrFieldClass[];
-  declare elements: ElementDeclaration[];
+  declare declarations: Declaration[];
   private declare ast: t.File;
 
   constructor(src: string) {
@@ -45,7 +45,7 @@ export class ModuleSyntax {
   private analyze(src: string) {
     let moduleAnalysis: Options = {
       possibleCardsOrFields: [],
-      elements: [],
+      declarations: [],
     };
     let preprocessedSrc = preprocessTemplateTags(src);
 
@@ -61,7 +61,7 @@ export class ModuleSyntax {
     });
     this.ast = r!.ast!;
     this.possibleCardsOrFields = moduleAnalysis.possibleCardsOrFields;
-    this.elements = moduleAnalysis.elements;
+    this.declarations = moduleAnalysis.declarations;
   }
 
   code(): string {

@@ -50,10 +50,10 @@ import {
 import { importResource } from '@cardstack/host/resources/import';
 
 import {
-  inThisFileResource,
-  isCardOrFieldElement,
-  type Element,
-} from '@cardstack/host/resources/in-this-file';
+  moduleContentsResource,
+  isCardOrFieldDeclaration,
+  type ModuleDeclaration,
+} from '@cardstack/host/resources/module-contents';
 
 import type CardService from '@cardstack/host/services/card-service';
 
@@ -117,7 +117,7 @@ export default class CodeMode extends Component<Signature> {
   @tracked private card: CardDef | undefined;
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
-  @tracked private _selectedElement: Element | undefined;
+  @tracked private _selectedDeclaration: ModuleDeclaration | undefined;
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
@@ -283,15 +283,15 @@ export default class CodeMode extends Component<Signature> {
     return this.operatorModeStateService.openFile.current;
   }
 
-  @use private inThisFileResource = resource(({ on }) => {
+  @use private moduleContentsResource = resource(({ on }) => {
     on.cleanup(() => {
-      this._selectedElement = undefined;
+      this._selectedDeclaration = undefined;
     });
 
     if (isReady(this.currentOpenFile) && this.importedModule?.module) {
       let f: Ready = this.currentOpenFile;
       if (hasExecutableExtension(f.url)) {
-        return inThisFileResource(this, () => ({
+        return moduleContentsResource(this, () => ({
           file: f,
           exportedCardsOrFields:
             this.importedModule?.cardsOrFieldsFromModule || [],
@@ -390,30 +390,31 @@ export default class CodeMode extends Component<Signature> {
     return this.card;
   }
 
-  private get elements() {
-    return this.inThisFileResource?._elements || [];
+  private get declarations() {
+    return this.moduleContentsResource?.declarations || [];
   }
 
-  private get selectedElement() {
-    if (this._selectedElement) {
-      return this._selectedElement;
+  private get selectedDeclaration() {
+    if (this._selectedDeclaration) {
+      return this._selectedDeclaration;
     } else {
-      return this.elements.length > 0 ? this.elements[0] : undefined;
+      return this.declarations.length > 0 ? this.declarations[0] : undefined;
     }
   }
 
   private get selectedCardOrField() {
-    if (this.selectedElement) {
-      if (isCardOrFieldElement(this.selectedElement)) {
-        return this.selectedElement;
-      }
+    if (
+      this.selectedDeclaration &&
+      isCardOrFieldDeclaration(this.selectedDeclaration)
+    ) {
+      return this.selectedDeclaration;
     }
     return;
   }
 
   @action
-  private selectElement(el: Element) {
-    this._selectedElement = el;
+  private selectDeclaration(dec: ModuleDeclaration) {
+    this._selectedDeclaration = dec;
   }
 
   private onCardChange = () => {
@@ -448,7 +449,7 @@ export default class CodeMode extends Component<Signature> {
 
     let isJSON = this.currentOpenFile.name.endsWith('.json');
     let validJSON = isJSON && this.safeJSONParse(content);
-    // Here lies the difference in how json files and other source code files
+    // Here lies the difference n how json files and other source code files
     // are treated during editing in the code editor
     if (validJSON && isSingleCardDocument(validJSON)) {
       // writes json instance but doesn't update state of the file resource
@@ -660,9 +661,9 @@ export default class CodeMode extends Component<Signature> {
                       @cardInstanceType={{this.cardType}}
                       @readyFile={{this.readyFile}}
                       @realmInfo={{this.realmInfo}}
-                      @selectedElement={{this.selectedElement}}
-                      @elements={{this.elements}}
-                      @selectElement={{this.selectElement}}
+                      @selectedDeclaration={{this.selectedDeclaration}}
+                      @declarations={{this.declarations}}
+                      @selectDeclaration={{this.selectDeclaration}}
                       @delete={{this.delete}}
                       data-test-card-inheritance-panel
                     />

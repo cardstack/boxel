@@ -39,9 +39,9 @@ import Selector from './detail-panel-selector';
 import { SelectorItem, selectorItemFunc } from './detail-panel-selector';
 
 import {
-  type Element,
-  isCardOrFieldElement,
-} from '@cardstack/host/resources/in-this-file';
+  type ModuleDeclaration,
+  isCardOrFieldDeclaration,
+} from '@cardstack/host/resources/module-contents';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 import { isCardDef, isFieldDef } from '@cardstack/runtime-common/code-ref';
@@ -55,9 +55,9 @@ interface Signature {
     readyFile: Ready;
     cardInstance: CardDef | undefined;
     cardInstanceType: CardType | undefined;
-    selectedElement?: Element;
-    elements: Element[];
-    selectElement: (el: Element) => void;
+    selectedDeclaration?: ModuleDeclaration;
+    declarations: ModuleDeclaration[];
+    selectDeclaration: (dec: ModuleDeclaration) => void;
     delete: () => void;
   };
 }
@@ -68,19 +68,19 @@ export default class DetailPanel extends Component<Signature> {
 
   get cardType() {
     if (
-      this.args.selectedElement &&
-      isCardOrFieldElement(this.args.selectedElement)
+      this.args.selectedDeclaration &&
+      isCardOrFieldDeclaration(this.args.selectedDeclaration)
     ) {
-      return this.args.selectedElement.cardType;
+      return this.args.selectedDeclaration.cardType;
     }
     return;
   }
 
   get isLoading() {
     return (
-      this.args.elements.some((el) => {
-        if (isCardOrFieldElement(el)) {
-          return el.cardType?.isLoading;
+      this.args.declarations.some((dec) => {
+        if (isCardOrFieldDeclaration(dec)) {
+          return dec.cardType?.isLoading;
         } else {
           return false;
         }
@@ -96,8 +96,8 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   @action
-  isSelected(el: Element) {
-    return this.args.selectedElement === el;
+  isSelected(dec: ModuleDeclaration) {
+    return this.args.selectedDeclaration === dec;
   }
 
   get isCardInstance() {
@@ -121,11 +121,11 @@ export default class DetailPanel extends Component<Signature> {
 
   get isField() {
     if (
-      this.args.selectedElement &&
-      isCardOrFieldElement(this.args.selectedElement)
+      this.args.selectedDeclaration &&
+      isCardOrFieldDeclaration(this.args.selectedDeclaration)
     ) {
       return (
-        this.isModule && isFieldDef(this.args.selectedElement?.cardOrField)
+        this.isModule && isFieldDef(this.args.selectedDeclaration?.cardOrField)
       );
     }
     return false;
@@ -133,10 +133,12 @@ export default class DetailPanel extends Component<Signature> {
 
   get isCard() {
     if (
-      this.args.selectedElement &&
-      isCardOrFieldElement(this.args.selectedElement)
+      this.args.selectedDeclaration &&
+      isCardOrFieldDeclaration(this.args.selectedDeclaration)
     ) {
-      return this.isModule && isCardDef(this.args.selectedElement?.cardOrField);
+      return (
+        this.isModule && isCardDef(this.args.selectedDeclaration?.cardOrField)
+      );
     }
     return false;
   }
@@ -150,16 +152,16 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   get buildSelectorItems(): SelectorItem[] {
-    if (!this.args.elements) {
+    if (!this.args.declarations) {
       return [];
     }
-    return this.args.elements.map((el) => {
-      const isSelected = this.args.selectedElement === el;
+    return this.args.declarations.map((dec) => {
+      const isSelected = this.args.selectedDeclaration === dec;
       return selectorItemFunc(
         [
-          resolveElementName(el),
+          resolveElementName(dec),
           () => {
-            this.args.selectElement(el);
+            this.args.selectDeclaration(dec);
           },
         ],
         { selected: isSelected },
@@ -168,11 +170,11 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   get numberOfElementsGreaterThanZero() {
-    return this.args.elements.length > 0;
+    return this.args.declarations.length > 0;
   }
 
   get numberOfElementsInFileString() {
-    let numberOfElements = this.args.elements.length || 0;
+    let numberOfElements = this.args.declarations.length || 0;
     return `${numberOfElements} ${getPlural('item', numberOfElements)}`;
   }
 
@@ -398,10 +400,10 @@ export default class DetailPanel extends Component<Signature> {
   </template>
 }
 
-const resolveElementName = (el: Element) => {
-  let localName: string | undefined = el.localName;
-  if (isCardOrFieldElement(el)) {
-    localName = el.cardOrField.displayName;
+const resolveElementName = (dec: ModuleDeclaration) => {
+  let localName: string | undefined = dec.localName;
+  if (isCardOrFieldDeclaration(dec)) {
+    localName = dec.cardOrField.displayName;
   }
   return localName ?? '[No Name Found]';
 };
