@@ -1,5 +1,5 @@
 import { module, test } from 'qunit';
-import { click, find, visit } from '@ember/test-helpers';
+import { find, visit } from '@ember/test-helpers';
 import { setupApplicationTest } from 'ember-qunit';
 import { a11yAudit } from 'ember-a11y-testing/test-support';
 
@@ -23,10 +23,8 @@ module('Acceptance | Docs', function (hooks) {
 
   test('glimmer-scoped-css smoke test', async function (assert) {
     await visit('/');
-    await click('a[href$="%3AButton%3E"]');
 
     const buttonElement = find('[data-test-boxel-button]');
-
     assert.ok(buttonElement);
 
     if (!buttonElement) {

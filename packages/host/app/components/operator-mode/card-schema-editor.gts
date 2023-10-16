@@ -23,6 +23,7 @@ import {
 import {
   ArrowTopLeft,
   IconLink,
+  ThreeDotsHorizontal,
   Warning as WarningIcon,
 } from '@cardstack/boxel-ui/icons';
 
@@ -374,7 +375,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                       </div>
                     </button>
                     <DropdownButton
-                      @icon='three-dots-horizontal'
+                      @icon={{ThreeDotsHorizontal}}
                       @label='field options'
                       @contentClass='context-menu'
                       class='context-menu-trigger'

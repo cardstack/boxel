@@ -1,7 +1,7 @@
 {
-  "name": "test-app",
+  "name": "boxel-motion-demo-app",
   "version": "0.0.0",
-  "description": "Boxel UI component library",
+  "description": "Boxel Motion demo app",
   "keywords": [],
   "repository": "",
   "license": "MIT",
@@ -28,7 +28,7 @@
     "@babel/core": "^7.17.10",
     "@babel/eslint-parser": "^7.21.3",
     "@babel/plugin-proposal-decorators": "^7.21.0",
-    "@cardstack/boxel-ui": "workspace:*",
+    "@cardstack/boxel-motion": "workspace:*",
     "@ember/optional-features": "^2.0.0",
     "@ember/string": "^3.1.1",
     "@ember/test-helpers": "^2.9.3",
@@ -78,6 +78,7 @@
     "eslint-plugin-prettier": "^5.0.0",
     "eslint-plugin-qunit": "^7.3.4",
     "loader.js": "^4.7.0",
+    "normalize.css": "8.0.1",
     "prettier": "^2.8.7",
     "prettier-plugin-ember-template-tag": "^1.0.0",
     "qunit": "^2.19.4",
@@ -94,7 +95,7 @@
     "node": "14.* || 16.* || >= 18"
   },
   "volta": {
-    "extends": "../../../package.json"
+    "extends": "../../package.json"
   },
   "ember": {
     "edition": "octane"
