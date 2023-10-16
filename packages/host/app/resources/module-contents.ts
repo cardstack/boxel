@@ -66,7 +66,7 @@ export class ModuleContentsResource extends Resource<Args> {
 
     // This loop
     // - adds card type (not necessarily loaded)
-    // - includes card/field, either 
+    // - includes card/field, either
     //   - an exported card/field
     //   - a card/field that was local but related to another card/field which was exported, e.g. inherited OR a field of the exported card/field
     this._declarations = moduleSyntax.declarations.map((value: Declaration) => {
