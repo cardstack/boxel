@@ -67,7 +67,6 @@ import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
 
 import type MatrixService from '../../services/matrix-service';
-import type MessageService from '../../services/message-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
@@ -105,7 +104,6 @@ const stackItemStableScrolls = new WeakMap<
 export default class OperatorModeContainer extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
-  @service declare messageService: MessageService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
   @service declare recentFilesService: RecentFilesService;
@@ -118,8 +116,6 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
-
-    this.messageService.register();
     (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
     this.constructRecentCards.perform();
     registerDestructor(this, () => {
