@@ -41,10 +41,6 @@ export default class SchemaEditorColumn extends Component<Signature> {
 
   @service declare loaderService: LoaderService;
 
-  constructor(owner: unknown, args: Signature['Args']) {
-    super(owner, args);
-  }
-
   @action selectItem(item: SelectedItem) {
     if (this.selectedItem === item) {
       this.selectedItem = null;
