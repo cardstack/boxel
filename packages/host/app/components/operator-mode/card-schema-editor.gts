@@ -4,13 +4,15 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import { restartableTask } from 'ember-concurrency';
+
 import { DropdownButton } from '@cardstack/boxel-ui';
 import menuDivider from '@cardstack/boxel-ui/helpers/menu-divider';
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
-import { getPlural } from '@cardstack/runtime-common';
+import { getPlural, identifyCard } from '@cardstack/runtime-common';
 
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
@@ -366,6 +368,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                       @label='field options'
                       @contentClass='context-menu'
                       class='context-menu-trigger'
+                      data-test-schema-editor-field-contextual-button
                       as |dd|
                     >
                       <div class='warning-box'>
@@ -391,9 +394,9 @@ export default class CardSchemaEditor extends Component<Signature> {
                           (menuDivider)
                           (menuItem
                             'Remove Field'
-                            this.removeField
+                            (fn this.removeField field)
                             dangerous=true
-                            disabled=true
+                            disabled=false
                           )
                         }}
                       />
@@ -401,7 +404,6 @@ export default class CardSchemaEditor extends Component<Signature> {
                   {{/if}}
                 {{/let}}
               </div>
-
             </div>
           {{/if}}
         {{/each}}
@@ -413,6 +415,10 @@ export default class CardSchemaEditor extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
 
+  private writeTask = restartableTask(async (src: string) => {
+    this.args.file.write(src, true);
+  });
+
   @action openCardDefinition(moduleURL: string) {
     this.operatorModeStateService.updateCodePath(new URL(moduleURL));
   }
@@ -423,9 +429,18 @@ export default class CardSchemaEditor extends Component<Signature> {
   }
 
   @action
-  removeField() {
-    // TODO: implement
-    return;
+  removeField(field: FieldOfType) {
+    let identifiedCard = identifyCard(this.args.card) as {
+      module: string;
+      name: string;
+    };
+
+    this.args.moduleSyntax.removeField(
+      { type: 'exportedName', name: identifiedCard.name },
+      field.name,
+    );
+
+    this.writeTask.perform(this.args.moduleSyntax.code());
   }
 
   @action

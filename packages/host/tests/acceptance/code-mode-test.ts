@@ -29,6 +29,7 @@ import {
   testRealmURL,
   sourceFetchRedirectHandle,
   sourceFetchReturnUrlHandle,
+  getMonacoContent,
 } from '../helpers';
 
 const indexCardSource = `
@@ -1453,6 +1454,51 @@ module('Acceptance | code mode tests', function (hooks) {
     assert
       .dom('[data-test-card-url-bar-error]')
       .containsText('This resource does not exist');
+  });
+
+  test('deleting a field from schema editor', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-card-schema]');
+
+    await click(
+      '[data-test-card-schema="Person"] [data-test-field-name="firstName"] [data-test-schema-editor-field-contextual-button]',
+    );
+
+    assert
+      .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
+      .containsText('+ 5 Fields');
+
+    assert.true(
+      getMonacoContent().includes('firstName = contains(StringCard)'),
+    );
+
+    await click('[data-test-boxel-menu-item-text="Remove Field"]');
+
+    await waitFor('[data-test-card-schema]');
+    assert
+      .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
+      .containsText('+ 4 Fields'); // One field less
+
+    assert.false(
+      getMonacoContent().includes('firstName = contains(StringCard)'),
+    );
+
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="firstName"]`,
+      )
+      .doesNotExist();
   });
 });
 
