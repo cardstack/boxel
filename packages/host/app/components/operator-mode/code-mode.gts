@@ -449,7 +449,7 @@ export default class CodeMode extends Component<Signature> {
 
     let isJSON = this.currentOpenFile.name.endsWith('.json');
     let validJSON = isJSON && this.safeJSONParse(content);
-    // Here lies the difference n how json files and other source code files
+    // Here lies the difference in how json files and other source code files
     // are treated during editing in the code editor
     if (validJSON && isSingleCardDocument(validJSON)) {
       // writes json instance but doesn't update state of the file resource
