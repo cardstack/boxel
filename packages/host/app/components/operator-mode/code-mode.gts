@@ -668,11 +668,11 @@ export default class CodeMode extends Component<Signature> {
 
   onStateChange(state: FileResource['state']) {
     this.userHasDismissedURLError = false;
-    if (state === 'not-found') {
+    if (state === 'ready') {
+      this.loadFileError = null;
+    } else {
       this.loadFileError = 'This resource does not exist';
       this.setFileView('browser');
-    } else if (state === 'ready') {
-      this.loadFileError = null;
     }
   }
 
