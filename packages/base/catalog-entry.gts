@@ -164,6 +164,10 @@ export class CatalogEntry extends CardDef {
         {{#if @model.showDemo}}
           <div data-test-demo><@fields.demo /></div>
         {{/if}}
+        {{! field needs to be used in order to be indexed }}
+        {{#if @model.isPrimitive}}
+          <div>Field is primitive</div>
+        {{/if}}
       </CatalogEntryContainer>
       <style>
         .realm-name {
