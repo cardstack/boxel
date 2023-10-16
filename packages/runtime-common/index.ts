@@ -262,7 +262,7 @@ export interface Actions {
 
 export function hasExecutableExtension(path: string): boolean {
   for (let extension of executableExtensions) {
-    if (path.endsWith(extension)) {
+    if (path.endsWith(extension) && !path.endsWith('.d.ts')) {
       return true;
     }
   }
