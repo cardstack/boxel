@@ -166,7 +166,7 @@ export function getBoxComponent(
   let externalFields = fieldsComponentsFor(
     component,
     model,
-    defaultFormat,
+    defaultFieldFormat(defaultFormat),
     context,
   );
 

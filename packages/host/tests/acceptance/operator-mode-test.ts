@@ -1068,7 +1068,7 @@ module('Acceptance | operator mode tests', function (hooks) {
   test<
     TestContextWithSave & TestContextWithSSE
   >('card instance change made in monaco editor is auto-saved', async function (assert) {
-    assert.expect(3);
+    assert.expect(4);
     let expectedEvents = [
       {
         type: 'index',
@@ -1109,7 +1109,11 @@ module('Acceptance | operator mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+
     await waitFor('[data-test-editor]');
+    assert
+      .dom('[data-test-code-mode-card-preview-body] [data-test-field="name"]')
+      .containsText('Mango');
 
     this.onSave((json) => {
       if (typeof json === 'string') {
