@@ -1549,7 +1549,6 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom('[data-test-save-field-button]')
       .doesNotHaveAttribute('disabled');
 
-    // await click('[data-test-save-field-button]');
     await saveField(this, assert, expectedEvents);
     await waitFor(
       '[data-test-card-schema="Person"] [data-test-field-name="birthdate"] [data-test-card-display-name="Date"]',
