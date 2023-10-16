@@ -31,7 +31,7 @@ interface Signature {
 
 class LinksToEditor extends GlimmerComponent<Signature> {
   <template>
-    <div class='links-to-editor'>
+    <div class='links-to-editor' data-test-links-to-editor>
       {{#if this.isEmpty}}
         <AddButton
           class='add-new'

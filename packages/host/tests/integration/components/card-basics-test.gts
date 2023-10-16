@@ -427,6 +427,158 @@ module('Integration | card-basics', function (hooks) {
       .containsText('Marcus');
   });
 
+  test('render a singular linked card in a composite field in edit mode', async function (assert) {
+    let { field, contains, linksTo, CardDef, FieldDef, Component } = cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
+
+    class CurrencyCard extends CardDef {
+      @field denomination = contains(StringField);
+      @field currencyName = contains(StringField);
+      @field icon = contains(StringField);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
+          <div class='currency' data-test-currency-embedded>
+            <@fields.icon />
+            <@fields.denomination />
+            -
+            <@fields.currencyName />
+          </div>
+          <style>
+            .currency {
+              display: flex;
+              font-weight: bold;
+            }
+          </style>
+        </template>
+      };
+    }
+
+    class TxAmountField extends FieldDef {
+      @field quantity = contains(NumberField);
+      @field denomination = linksTo(CurrencyCard);
+    }
+
+    class TxCard extends CardDef {
+      @field name = contains(StringField);
+      @field transferAmount = contains(TxAmountField);
+    }
+
+    let usdCard = new CurrencyCard({
+      denomination: 'USD',
+      currencyName: 'United States Dollar',
+      icon: '🇺🇸',
+    });
+
+    let txCard = new TxCard({
+      name: 'Transfer',
+      transferAmount: new TxAmountField({
+        quantity: 250,
+        denomination: usdCard,
+      }),
+    });
+
+    await shimModule(
+      `${testRealmURL}test-cards`,
+      { CurrencyCard, TxCard },
+      loader,
+    );
+    await saveCard(usdCard, `${testRealmURL}Currency/usd`, loader);
+    await saveCard(txCard, `${testRealmURL}Transaction/1`, loader);
+
+    await renderCard(loader, txCard, 'edit');
+    assert
+      .dom('[data-test-card-format="edit"][data-test-field-component-card]')
+      .exists();
+    assert
+      .dom('[data-test-field="transferAmount"] > [data-test-boxel-field-label]')
+      .hasText('Transfer Amount');
+    assert
+      .dom(
+        '[data-test-field="transferAmount"] > [data-test-compound-field-format="edit"] [data-test-field="quantity"] input',
+      )
+      .hasValue('250');
+    assert.dom('[data-test-field="quantity"]').hasClass('vertical');
+
+    assert
+      .dom(
+        '[data-test-field="transferAmount"] [data-test-field="denomination"]',
+      )
+      .exists();
+    assert
+      .dom(
+        '[data-test-field="denomination"] [data-test-links-to-editor] [data-test-currency-embedded]',
+      )
+      .containsText('🇺🇸 USD - United States Dollar');
+    assert
+      .dom(
+        '[data-test-field="denomination"] [data-test-links-to-editor] [data-test-remove-card]',
+      )
+      .exists('has remove button');
+  });
+
+  test('render a linksToMany field in atom format', async function (assert) {
+    let { field, contains, linksToMany, CardDef, Component } = cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
+
+    class Guest extends CardDef {
+      @field name = contains(StringField);
+      @field additionalGuestCount = contains(NumberField);
+      @field title = contains(StringField, {
+        computeVia: function (this: Guest) {
+          return this.name;
+        },
+      });
+    }
+
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      @field number = contains(NumberField);
+      @field guests = linksToMany(Guest);
+
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          Guests: <@fields.guests @format='atom' />
+        </template>
+      };
+    }
+
+    await shimModule(`${testRealmURL}test-cards`, { Guest, Person }, loader);
+
+    let g1 = new Guest({
+      name: 'Madeleine',
+      additionalGuestCount: 3,
+    });
+    let g2 = new Guest({
+      name: 'Marcus',
+      additionalGuestCount: 1,
+    });
+
+    await saveCard(g1, `${testRealmURL}Guest/g1`, loader);
+    await saveCard(g2, `${testRealmURL}Guest/g2`, loader);
+
+    let arthur = new Person({
+      firstName: 'Arthur',
+      number: 10,
+      guests: [g1, g2],
+    });
+
+    await renderCard(loader, arthur, 'isolated');
+    assert
+      .dom(
+        '[data-test-card-format="isolated"] > [data-test-plural-view="linksToMany"][data-test-plural-view-format="atom"]',
+      )
+      .exists();
+    assert
+      .dom('[data-test-plural-view-item="0"] > [data-test-card-format="atom"]')
+      .containsText('Madeleine');
+    assert
+      .dom('[data-test-plural-view-item="1"] > [data-test-card-format="atom"]')
+      .containsText('Marcus');
+  });
+
   test('can set the ID for an unsaved card', async function (assert) {
     let { field, contains, CardDef } = cardApi;
     let { default: StringField } = string;
