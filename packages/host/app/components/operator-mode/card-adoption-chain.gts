@@ -26,6 +26,7 @@ export default class CardAdoptionChain extends Component<Signature> {
     <style>
       .card-adoption-chain {
         background-color: var(--boxel-200);
+        min-height: 100%;
       }
       .content-with-line {
         position: relative;
