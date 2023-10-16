@@ -115,16 +115,13 @@ const inThisFileSource = `
 
   export const exportedVar = 'exported var';
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const localVar = 'local var';
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   class LocalClass {}
   export class ExportedClass {}
 
   export class ExportedClassInheritLocalClass extends LocalClass {}
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function localFunction() {}
   export function exportedFunction() {}
 
@@ -920,10 +917,10 @@ module('Acceptance | code mode tests', function (hooks) {
       'ExportedClass',
       'ExportedClassInheritLocalClass',
       'exportedFunction',
-      'LocalCard', //TODO: CS-6009 will probably change this
+      'local card', //TODO: CS-6009 will probably change this
       'exported card',
       'exported card extends local card',
-      'LocalField', //TODO: CS-6009 will probably change this
+      'local field', //TODO: CS-6009 will probably change this
       'exported field',
       'exported field extends local field',
       'DefaultClass',
@@ -939,6 +936,7 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.dom('[data-test-boxel-selector-item]').exists({ count: 11 });
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
+
     // clicking on a card
     elementName = 'exported card';
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
@@ -948,14 +946,15 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.dom('[data-test-card-module-definition]').exists();
     assert.dom('[data-test-definition-header]').includesText('Card Definition');
     assert.dom('[data-test-card-module-definition]').includesText(elementName);
-    await waitFor('[data-test-card-schema]');
-    assert.dom('[data-test-card-schema]').exists({ count: 3 });
+    await waitFor('[data-test-card-schema="exported card"]');
+    assert.dom('[data-test-card-schema="exported card"]').exists({ count: 1 });
     assert
       .dom(
         `[data-test-card-schema="${elementName}"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
       )
       .exists();
-    assert.dom(`[data-test-card-schema=Card]`).exists();
+    assert.dom(`[data-test-total-fields]`).containsText('4 Fields');
+
     // clicking on a field
     elementName = 'exported field';
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
@@ -966,15 +965,14 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom('[data-test-definition-header]')
       .includesText('Field Definition');
     assert.dom('[data-test-card-module-definition]').includesText(elementName);
-    await waitFor('[data-test-card-schema]');
-    assert.dom('[data-test-card-schema]').exists({ count: 3 });
-    //TODO: CS-6093 will fix this
-    // assert
-    //   .dom(
-    //     `[data-test-card-schema="${elementName}"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
-    //   )
-    //   .exists();
-    // assert.dom(`[data-test-card-schema=Card]`).exists();
+    await waitFor('[data-test-card-schema="exported field"]');
+    assert.dom('[data-test-card-schema="exported field"]').exists({ count: 1 });
+    assert.dom(`[data-test-total-fields]`).containsText('1 Field');
+    assert
+      .dom(
+        `[data-test-card-schema="${elementName}"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
+      )
+      .exists();
 
     // clicking on an exported function
     elementName = 'exportedFunction';
@@ -1416,6 +1414,43 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.dom('[data-test-schema-editor-incompatible]').exists();
 
     await percySnapshot(assert);
+  });
+
+  test('can handle error when user puts unidentified domain in card URL bar', async function (assert) {
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
+      openDirs: { [testRealmURL]: ['Person/'] },
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `http://unknown-domain.com/test/mango.png`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    await waitFor('[data-test-card-url-bar-error]');
+    assert
+      .dom('[data-test-card-url-bar-error]')
+      .containsText('This resource does not exist');
   });
 });
 
