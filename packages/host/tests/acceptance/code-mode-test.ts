@@ -1414,6 +1414,43 @@ module('Acceptance | code mode tests', function (hooks) {
 
     await percySnapshot(assert);
   });
+
+  test('can handle error when user puts unidentified domain in card URL bar', async function (assert) {
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `${testRealmURL}Person/1.json`,
+      openDirs: { [testRealmURL]: ['Person/'] },
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      `http://unknown-domain.com/test/mango.png`,
+    );
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    await waitFor('[data-test-card-url-bar-error]');
+    assert
+      .dom('[data-test-card-url-bar-error]')
+      .containsText('This resource does not exist');
+  });
 });
 
 async function elementIsVisible(element: Element) {

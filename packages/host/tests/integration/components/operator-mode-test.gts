@@ -833,7 +833,7 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom('[data-test-card-error]')
       .hasText(
-        'Error: cannot render card http://this-is-not-a-real-card.com: Failed to fetch',
+        'Error: cannot render card http://this-is-not-a-real-card.com: status: 500 - Failed to fetch.',
       );
   });
 
