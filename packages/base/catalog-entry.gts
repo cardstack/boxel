@@ -67,7 +67,6 @@ export class CatalogEntry extends CardDef {
       if (!card) {
         throw new Error(`Could not load card '${this.ref.name}'`);
       }
-
       return isFieldDef(card);
     },
   });
@@ -85,7 +84,7 @@ export class CatalogEntry extends CardDef {
   @field thumbnailURL = contains(StringField, { computeVia: () => null }); // remove this if we want card type entries to have images
 
   get showDemo() {
-    return !this.isPrimitive;
+    return !this.isField;
   }
 
   // An explicit edit template is provided since computed isPrimitive bool

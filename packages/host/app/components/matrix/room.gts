@@ -534,10 +534,19 @@ export default class Room extends Component<RoomArgs> {
   });
 
   private doSetObjective = restartableTask(async () => {
+    // objective are currently non-primitive fields
     let catalogEntry = await chooseCard<CatalogEntry>({
       filter: {
-        on: catalogEntryRef,
-        eq: { isPrimitive: false },
+        every: [
+          {
+            on: catalogEntryRef,
+            eq: { isField: true },
+          },
+          {
+            on: catalogEntryRef,
+            eq: { isPrimitive: false },
+          },
+        ],
       },
     });
     if (catalogEntry) {

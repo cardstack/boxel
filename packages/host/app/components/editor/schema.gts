@@ -311,7 +311,7 @@ export default class Schema extends Component<Signature> {
       this.newFieldType === 'linksTo' || this.newFieldType === 'linksToMany'
         ? {
             on: catalogEntryRef,
-            eq: { isPrimitive: false },
+            eq: { isField: false },
           }
         : {
             on: catalogEntryRef,

@@ -19,6 +19,7 @@ import { and, eq, gt, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import {
   createNewCard,
+  baseRealm,
   type CodeRef,
   type CreateNewCard,
   Deferred,
@@ -281,7 +282,24 @@ export default class CardCatalogModal extends Component<Signature> {
     },
   ): Promise<undefined | T> {
     this.zIndex++;
-    return (await this._chooseCard.perform(query, opts)) as T | undefined;
+    return (await this._chooseCard.perform(
+      {
+        // default to title sort so that we can maintain stability in
+        // the ordering of the search results (server sorts results
+        // by order indexed by default)
+        sort: [
+          {
+            on: {
+              module: `${baseRealm.url}card-api`,
+              name: 'CardDef',
+            },
+            by: 'title',
+          },
+        ],
+        ...query,
+      },
+      opts,
+    )) as T | undefined;
   }
 
   private _chooseCard = task(
