@@ -939,6 +939,7 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.dom('[data-test-boxel-selector-item]').exists({ count: 11 });
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
+
     // clicking on a card
     elementName = 'exported card';
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
@@ -948,14 +949,15 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.dom('[data-test-card-module-definition]').exists();
     assert.dom('[data-test-definition-header]').includesText('Card Definition');
     assert.dom('[data-test-card-module-definition]').includesText(elementName);
-    await waitFor('[data-test-card-schema]');
-    assert.dom('[data-test-card-schema]').exists({ count: 3 });
+    await waitFor('[data-test-card-schema="exported card"]');
+    assert.dom('[data-test-card-schema="exported card"]').exists({ count: 1 });
     assert
       .dom(
         `[data-test-card-schema="${elementName}"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
       )
       .exists();
-    assert.dom(`[data-test-card-schema=Card]`).exists();
+    assert.dom(`[data-test-total-fields]`).containsText('4 Fields');
+
     // clicking on a field
     elementName = 'exported field';
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
@@ -966,15 +968,14 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom('[data-test-definition-header]')
       .includesText('Field Definition');
     assert.dom('[data-test-card-module-definition]').includesText(elementName);
-    await waitFor('[data-test-card-schema]');
-    assert.dom('[data-test-card-schema]').exists({ count: 3 });
-    //TODO: CS-6093 will fix this
-    // assert
-    //   .dom(
-    //     `[data-test-card-schema="${elementName}"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
-    //   )
-    //   .exists();
-    // assert.dom(`[data-test-card-schema=Card]`).exists();
+    await waitFor('[data-test-card-schema="exported field"]');
+    assert.dom('[data-test-card-schema="exported field"]').exists({ count: 1 });
+    assert.dom(`[data-test-total-fields]`).containsText('1 Field');
+    assert
+      .dom(
+        `[data-test-card-schema="${elementName}"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
+      )
+      .exists();
 
     // clicking on an exported function
     elementName = 'exportedFunction';
