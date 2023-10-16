@@ -181,4 +181,31 @@ module('loader', function (hooks) {
     let testingLoader = Loader.getLoaderFor(card);
     assert.strictEqual(testingLoader, loader, 'the loaders are the same');
   });
+
+  test('identity of module does not get overriden by another import', async function (assert) {
+    let loader = new Loader();
+    shimExternals(loader);
+    loader.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
+    let { ConsumingCard } = await loader.import<any>(
+      `${testRealmHref}re-export/consuming-module`,
+    );
+    assert.deepEqual(loader.identify(ConsumingCard), {
+      module: `${testRealmHref}re-export/consuming-module`,
+      name: 'ConsumingCard',
+    });
+    let { RenamedCard } = await loader.import<any>(
+      `${testRealmHref}re-export/re-export`,
+    );
+    assert.deepEqual(loader.identify(RenamedCard), {
+      module: `${testRealmHref}re-export/module`,
+      name: 'SomeCard',
+    });
+    let { SomeCard } = await loader.import<any>(
+      `${testRealmHref}re-export/module`,
+    );
+    assert.deepEqual(loader.identify(SomeCard), {
+      module: `${testRealmHref}re-export/module`,
+      name: 'SomeCard',
+    });
+  });
 });
