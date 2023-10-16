@@ -17,8 +17,8 @@ export function render(
   element: SimpleElement,
   owner: Owner,
 ): void {
-  // this needs to be a template-only component because the way we're invoking it	  const root = class RenderComponent extends Component {
-  // just grabs the template and would drop any associated class.	    <template>
+  // this needs to be a template-only component because the way we're invoking it
+  // just grabs the template and would drop any associated class.
   const root = <template><C /></template>;
 
   // clear any previous render work
