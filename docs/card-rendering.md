@@ -7,11 +7,15 @@ To render a card, the primary step is to obtain a Glimmer component identified b
 - Isolated format renders a card as a root component.
 - Embedded format is useful when a card is embedded within another card.
 - Edit format is used when the user wants to update the value of the card.
-- Atom format is used to render the smallest format of a card or a field, using the `title` field. Nested `linksToMany` and nested `containsMany` fields use this format.
+- Atom format is used to render the smallest format of a card or a field, using the computed `title` field. Nested `linksToMany` and nested `containsMany` fields use this format.
 
 ## Field
 
 A card object can serve as a field within another card object. To establish a card as a field for another card, you can use the @field decorator and specify one of the following field types: `contains`, `containsMany`, `linksTo`, or `linksToMany`. The main difference between a contained field and a linked field is that a linked field refers to another card instance in the realm, whereas a contained field creates a new card instance within the root component of the original card. In other words, a linked field has an identity to refer to, while a contained field doesn't. In edit mode, a contained field will provide inputs for updating its value, while a linked field will provide a modal to search for an existing card instance.
+
+## Field Rendering
+
+A field component can optionally take in a `format` argument, as described in the "Format" section above. If no `format` argument is provided, the field format will be determined based on the card's format. For example, an `isolated` card will have `embedded` fields by default. An `edit` card will have `edit` fields. Computed fields can not be edited and will always render in `embedded` format.
 
 ## Rendering process
 
