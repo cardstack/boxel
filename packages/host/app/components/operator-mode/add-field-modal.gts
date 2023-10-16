@@ -164,7 +164,8 @@ export default class AddFieldModal extends Component<Signature> {
       !this.fieldName ||
         !this.chosenCatalogEntry ||
         !this.chosenCatalogEntryRefCard ||
-        this.nameErrorMessage,
+        this.nameErrorMessage ||
+        this.writeTask.isRunning,
     );
   }
 
@@ -173,7 +174,7 @@ export default class AddFieldModal extends Component<Signature> {
     // any code after this write will not be executed since the component will
     // get torn down before subsequent code can execute
 
-    this.args.file.write(src, true);
+    await this.args.file.write(src, true);
   });
 
   <template>
@@ -336,7 +337,11 @@ export default class AddFieldModal extends Component<Signature> {
               @disabled={{this.submitDisabled}}
               data-test-save-field-button
             >
-              Add
+              {{#if this.writeTask.isRunning}}
+                Adding…
+              {{else}}
+                Add
+              {{/if}}
             </BoxelButton>
           </div>
         </div>
