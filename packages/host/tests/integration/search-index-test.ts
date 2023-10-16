@@ -399,6 +399,7 @@ module('Integration | search-index', function (hooks) {
           moduleHref: `${testRealmURL}person`,
           realmName: 'Unnamed Workspace',
           isField: false,
+          isPrimitive: false,
           ref: {
             module: `./person`,
             name: 'Person',
@@ -1279,6 +1280,7 @@ module('Integration | search-index', function (hooks) {
       },
       description: 'Catalog entry for Booking',
       isField: false,
+      isPrimitive: false,
       moduleHref: 'http://localhost:4202/test/booking',
       realmName: 'Unnamed Workspace',
       ref: 'http://localhost:4202/test/booking/Booking',
@@ -1611,6 +1613,7 @@ module('Integration | search-index', function (hooks) {
           },
           demo: { firstName: 'Hassan' },
           isField: false,
+          isPrimitive: false,
           moduleHref: `${testModuleRealm}pet-person`,
           realmName: 'Unnamed Workspace',
         },
@@ -1714,6 +1717,7 @@ module('Integration | search-index', function (hooks) {
           friend: null,
         },
         isField: false,
+        isPrimitive: false,
         moduleHref: `${testModuleRealm}pet-person`,
         realmName: 'Unnamed Workspace',
       });
