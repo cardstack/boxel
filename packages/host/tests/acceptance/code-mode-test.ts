@@ -115,16 +115,13 @@ const inThisFileSource = `
 
   export const exportedVar = 'exported var';
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const localVar = 'local var';
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   class LocalClass {}
   export class ExportedClass {}
 
   export class ExportedClassInheritLocalClass extends LocalClass {}
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   function localFunction() {}
   export function exportedFunction() {}
 
@@ -920,10 +917,10 @@ module('Acceptance | code mode tests', function (hooks) {
       'ExportedClass',
       'ExportedClassInheritLocalClass',
       'exportedFunction',
-      'LocalCard', //TODO: CS-6009 will probably change this
+      'local card', //TODO: CS-6009 will probably change this
       'exported card',
       'exported card extends local card',
-      'LocalField', //TODO: CS-6009 will probably change this
+      'local field', //TODO: CS-6009 will probably change this
       'exported field',
       'exported field extends local field',
       'DefaultClass',

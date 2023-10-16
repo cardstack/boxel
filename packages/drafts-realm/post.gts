@@ -1,4 +1,4 @@
-import {
+ import {
   contains,
   linksTo,
   field,
@@ -22,6 +22,7 @@ class BasicCard extends FieldDef {
 }
 
 class VeryBasicCard extends BasicCard {
+  static displayName = 'Very Basic Card'
   @field description = contains(StringCard);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
