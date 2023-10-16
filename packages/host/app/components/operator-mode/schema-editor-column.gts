@@ -4,6 +4,9 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+//@ts-ignore cached not available yet in definitely typed
+import { cached } from '@glimmer/tracking';
+
 import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
 
@@ -11,6 +14,8 @@ import { Accordion } from '@cardstack/boxel-ui';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import { getPlural, loadCard } from '@cardstack/runtime-common';
+
+import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
 import { CardType, Type } from '@cardstack/host/resources/card-type';
@@ -116,6 +121,11 @@ export default class SchemaEditorColumn extends Component<Signature> {
     );
   }
 
+  @cached
+  get moduleSyntax() {
+    return new ModuleSyntax(this.args.file.content);
+  }
+
   <template>
     <Accordion class='accordion' as |A|>
       <A.Item
@@ -137,6 +147,7 @@ export default class SchemaEditorColumn extends Component<Signature> {
           <CardAdoptionChain
             class='accordion-content'
             @file={{@file}}
+            @moduleSyntax={{this.moduleSyntax}}
             @cardInheritanceChain={{this.cardInheritanceChain.value}}
           />
         </:content>
@@ -144,6 +155,11 @@ export default class SchemaEditorColumn extends Component<Signature> {
     </Accordion>
 
     <style>
+      .card-adoption-chain {
+        background-color: var(--boxel-200);
+        height: 100%;
+        padding: var(--boxel-sp-sm);
+      }
       .accordion-item:last-child {
         border-bottom: var(--boxel-border);
       }

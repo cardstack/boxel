@@ -15,6 +15,7 @@ interface Signature {
     onClose: () => void;
     boxelModalOverlayColor?: string;
     backgroundImageURL?: string;
+    centered?: boolean;
   };
   Blocks: {
     default: [];
@@ -53,7 +54,7 @@ export default class Modal extends Component<Signature> {
         </button>
 
         <dialog
-          class={{@size}}
+          class='{{@size}} {{if @centered "centered"}}'
           open={{@isOpen}}
           aria-modal='true'
           ...attributes
@@ -83,6 +84,11 @@ export default class Modal extends Component<Signature> {
         overflow: hidden;
         z-index: var(--boxel-modal-z-index);
         pointer-events: none;
+      }
+
+      .centered {
+        top: 50%;
+        transform: translateY(-50%);
       }
 
       .overlay {
