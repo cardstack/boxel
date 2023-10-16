@@ -497,13 +497,23 @@ export class Loader {
     urlOrRequest: string | URL | Request,
     init?: RequestInit,
   ): Promise<Response> {
-    for (let handler of this.urlHandlers) {
-      let result = await handler(this.asUnresolvedRequest(urlOrRequest, init));
-      if (result) {
-        return result;
+    try {
+      for (let handler of this.urlHandlers) {
+        let result = await handler(
+          this.asUnresolvedRequest(urlOrRequest, init),
+        );
+        if (result) {
+          return result;
+        }
       }
+      return await getNativeFetch()(this.asResolvedRequest(urlOrRequest, init));
+    } catch (err: any) {
+      this.log.error(`fetch failed for ${urlOrRequest}`, err);
+      return new Response(new Blob(), {
+        status: 500,
+        statusText: err.message,
+      });
     }
-    return await getNativeFetch()(this.asResolvedRequest(urlOrRequest, init));
   }
 
   resolve(moduleIdentifier: string | URL, relativeTo?: URL): ResolvedURL {
