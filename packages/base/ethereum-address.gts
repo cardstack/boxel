@@ -43,6 +43,12 @@ function _deserialize(
   return { value: address };
 }
 
+class View extends Component<typeof EthereumAddressField> {
+  <template>
+    {{@model}}
+  </template>
+}
+
 class Edit extends Component<typeof EthereumAddressField> {
   <template>
     <BoxelInput
@@ -87,11 +93,7 @@ export default class EthereumAddressField extends FieldDef {
     }
   }
 
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      {{@model}}
-    </template>
-  };
-
+  static embedded = View;
+  static atom = View;
   static edit = Edit;
 }

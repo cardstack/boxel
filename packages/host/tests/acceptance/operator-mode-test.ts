@@ -903,6 +903,7 @@ module('Acceptance | operator mode tests', function (hooks) {
   });
 
   test<TestContextWithSSE>('stack item live updates when index changes', async function (assert) {
+    assert.expect(3);
     let expectedEvents = [
       {
         type: 'index',
@@ -922,10 +923,6 @@ module('Acceptance | operator mode tests', function (hooks) {
         ],
       ],
     })!;
-    let operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
-
     await visit(
       `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
         operatorModeStateParam,
@@ -959,7 +956,14 @@ module('Acceptance | operator mode tests', function (hooks) {
         );
       },
     );
-    await waitUntil(() => operatorModeStateService.reloadItem.isIdle);
+    await waitUntil(
+      () =>
+        document
+          .querySelector(
+            '[data-test-operator-mode-stack="0"] [data-test-person]',
+          )
+          ?.textContent?.includes('FadhlanXXX'),
+    );
     assert
       .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
       .hasText('FadhlanXXX');
@@ -1068,7 +1072,7 @@ module('Acceptance | operator mode tests', function (hooks) {
   test<
     TestContextWithSave & TestContextWithSSE
   >('card instance change made in monaco editor is auto-saved', async function (assert) {
-    assert.expect(3);
+    assert.expect(4);
     let expectedEvents = [
       {
         type: 'index',
@@ -1109,7 +1113,11 @@ module('Acceptance | operator mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+
     await waitFor('[data-test-editor]');
+    assert
+      .dom('[data-test-code-mode-card-preview-body] [data-test-field="name"]')
+      .containsText('Mango');
 
     this.onSave((json) => {
       if (typeof json === 'string') {

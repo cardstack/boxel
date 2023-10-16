@@ -1,5 +1,4 @@
 import { getOwner } from '@ember/application';
-import { registerDestructor } from '@ember/destroyable';
 import type RouterService from '@ember/routing/router-service';
 import { scheduleOnce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
@@ -80,55 +79,7 @@ export default class OperatorModeStateService extends Service {
   @service declare realmInfoService: RealmInfoService;
   @service declare router: RouterService;
 
-  private subscription: { url: string; unsubscribe: () => void } | undefined;
   private openFileSubscribers: OpenFileSubscriber[] = [];
-
-  constructor(properties: object) {
-    super(properties);
-
-    let url = `${this.cardService.defaultURL}_message`;
-    this.subscription = {
-      url,
-      unsubscribe: this.messageService.subscribe(
-        url,
-        ({ type, data: dataStr }) => {
-          if (type !== 'index') {
-            return;
-          }
-          let data = JSON.parse(dataStr);
-          if (data.type !== 'incremental') {
-            return;
-          }
-          let items = new Map<string, StackItem[]>();
-          for (let stack of this.state.stacks) {
-            for (let item of stack) {
-              let itemList = items.get(item.card.id);
-              if (!itemList) {
-                itemList = [];
-                items.set(item.card.id, itemList);
-              }
-              itemList.push(item);
-            }
-          }
-          let invalidations = data.invalidations as string[];
-          for (let id of invalidations) {
-            let itemList = items.get(id);
-            if (!itemList) {
-              continue;
-            }
-            for (let item of itemList) {
-              this.reloadItem.perform(item);
-            }
-          }
-        },
-      ),
-    };
-    // technically services are never destroyed, but it seems good to be
-    // complete...
-    registerDestructor(this, () => {
-      this.subscription?.unsubscribe();
-    });
-  }
 
   async restore(rawState: SerializedState) {
     this.state = await this.deserialize(rawState);
@@ -143,12 +94,6 @@ export default class OperatorModeStateService extends Service {
     this.addRecentCard(item.card);
     this.schedulePersist();
   }
-
-  // TODO perhaps this goes away if we start using live models in interact mode,
-  // which also means this.cardService.reloadModel can go away...
-  reloadItem = task(async (item: StackItem) => {
-    item.card = await this.cardService.reloadModel(item.card);
-  });
 
   patchCard = task({ enqueue: true }, async (id: string, attributes: any) => {
     let stackItems = this.state?.stacks.flat() ?? [];
@@ -420,7 +365,7 @@ export default class OperatorModeStateService extends Service {
       let newStack: Stack = new TrackedArray([]);
       for (let item of stack) {
         let { format } = item;
-        let card = await this.cardService.loadStaticModel(new URL(item.id));
+        let card = await this.cardService.loadModel(this, new URL(item.id));
         newStack.push({
           card,
           format,
@@ -442,7 +387,8 @@ export default class OperatorModeStateService extends Service {
 
     const recentCardIds = JSON.parse(recentCardIdsString) as string[];
     for (const recentCardId of recentCardIds) {
-      const card = await this.cardService.loadStaticModel(
+      const card = await this.cardService.loadModel(
+        this,
         new URL(recentCardId),
       );
       this.recentCards.push(card);

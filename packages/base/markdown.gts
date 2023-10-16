@@ -12,6 +12,14 @@ function toHtml(markdown: string | null) {
   return markdown ? sanitizeHtml(marked(markdown, markdownOpts)) : '';
 }
 
+class View extends Component<typeof MarkdownField> {
+  <template>
+    <div>
+      {{{toHtml @model}}}
+    </div>
+  </template>
+}
+
 export default class MarkdownField extends FieldDef {
   static displayName = 'Markdown';
   static [primitive]: string;
@@ -25,13 +33,8 @@ export default class MarkdownField extends FieldDef {
     </template>
   };
 
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      <div>
-        {{{toHtml @model}}}
-      </div>
-    </template>
-  };
+  static embedded = View;
+  static atom = View;
 
   static edit = class Edit extends Component<typeof this> {
     <template>
