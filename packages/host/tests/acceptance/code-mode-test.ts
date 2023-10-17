@@ -986,7 +986,6 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     assert.dom('[data-test-card-module-definition]').doesNotExist();
     assert.dom('[data-test-schema-editor-incompatible]').exists();
-    await this.pauseTest();
   });
 
   test('non-card JSON is shown as just a file with empty schema editor', async function (assert) {
