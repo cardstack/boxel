@@ -17,6 +17,7 @@ interface Signature {
   Args: {
     orientation: 'horizontal' | 'vertical';
     onListPanelContextChange?: (listPanelContext: PanelContext[]) => void;
+    reverseCollapse?: boolean;
   };
   Blocks: {
     default: [
@@ -28,6 +29,7 @@ interface Signature {
         | 'isLastPanel'
         | 'onResizeHandlerMouseDown'
         | 'onResizeHandlerDblClick'
+        | 'reverseHandlerArrow'
       >,
     ];
   };
@@ -49,6 +51,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
           isLastPanel=this.isLastPanel
           onResizeHandlerMouseDown=this.onResizeHandlerMouseDown
           onResizeHandlerDblClick=this.onResizeHandlerDblClick
+          reverseHandlerArrow=this.args.reverseCollapse
         )
       }}
     </div>
@@ -218,7 +221,11 @@ export default class ResizablePanelGroup extends Component<Signature> {
     let prevElContext = this.listPanelContext.get(Number(prevEl.id));
     let nextElContext = this.listPanelContext.get(Number(nextEl.id));
 
-    if (buttonId.includes('1') && prevElLength > 0) {
+    if (
+      buttonId.includes('1') &&
+      prevElLength > 0 &&
+      !this.args.reverseCollapse
+    ) {
       this.setSiblingPanelContexts(
         Number(prevEl.id),
         Number(nextEl.id),

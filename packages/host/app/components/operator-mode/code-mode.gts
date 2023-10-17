@@ -737,6 +737,7 @@ export default class CodeMode extends Component<Signature> {
             <ResizablePanelGroup
               @orientation='vertical'
               @onListPanelContextChange={{this.onFilePanelContextChange}}
+              @reverseCollapse={{true}}
               as |VerticallyResizablePanel|
             >
               <VerticallyResizablePanel

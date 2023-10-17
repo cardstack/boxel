@@ -19,6 +19,7 @@ interface Signature {
     isLastPanel: (panelId: number) => boolean;
     onResizeHandlerMouseDown: (event: MouseEvent) => void;
     onResizeHandlerDblClick: (event: MouseEvent) => void;
+    reverseHandlerArrow: boolean;
   };
   Blocks: {
     default: [];
@@ -221,6 +222,7 @@ export default class Panel extends Component<Signature> {
 
   get arrowResizeHandlerClass() {
     let horizontal = this.args.orientation === 'horizontal';
+    // FIXME updated to support reversed handle
 
     if (
       (this.id === 1 && this.panelContext?.length !== '0px') ||
