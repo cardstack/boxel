@@ -3,7 +3,7 @@ import Component from '@glimmer/component';
 import { format } from 'date-fns';
 import { filesize } from 'filesize';
 
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import { File } from '@cardstack/boxel-ui/icons';
 
 import { type Ready } from '@cardstack/host/resources/file';
 
@@ -36,7 +36,7 @@ export default class BinaryFileInfo extends Component<Signature> {
   <template>
     <div class='binary-info' data-test-binary-info>
       <div class='file-icon'>
-        {{svgJar 'file' width='50' height='60'}}
+        <File width='50px' height='60px' />
       </div>
       <div class='file-name' data-test-file-name>{{this.baseName}}</div>
       <div class='info size' data-test-size>{{this.size}}</div>

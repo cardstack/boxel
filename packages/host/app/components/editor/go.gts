@@ -14,7 +14,7 @@ import { restartableTask, timeout } from 'ember-concurrency';
 
 import momentFrom from 'ember-moment/helpers/moment-from';
 
-import { AddButton, Tooltip } from '@cardstack/boxel-ui';
+import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
 
 import {
   SupportedMimeType,

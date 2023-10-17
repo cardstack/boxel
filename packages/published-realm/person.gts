@@ -8,7 +8,7 @@ import {
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import StringCard from 'https://cardstack.com/base/string';
 import { Pet } from './pet';
-import { GridContainer } from '@cardstack/boxel-ui';
+import { GridContainer } from '@cardstack/boxel-ui/components';
 
 export class Person extends FieldDef {
   static displayName = 'Person';

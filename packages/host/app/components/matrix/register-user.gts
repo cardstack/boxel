@@ -1,10 +1,10 @@
 import { on } from '@ember/modifier';
 import { v4 as uuidv4 } from 'uuid';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
+import { CheckMark } from '@cardstack/boxel-ui/icons';
 
 import { tracked } from '@glimmer/tracking';
 
@@ -16,12 +16,12 @@ import { type IAuthData, type IRequestTokenResponse } from 'matrix-js-sdk';
 import {
   BoxelHeader,
   BoxelInputValidationState,
-  LoadingIndicator,
   Button,
   FieldContainer,
-} from '@cardstack/boxel-ui';
+  LoadingIndicator,
+} from '@cardstack/boxel-ui/components';
 
-import { eq } from '@cardstack/host/helpers/truth-helpers';
+import { eq } from '@cardstack/boxel-ui/helpers';
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
@@ -60,7 +60,7 @@ export default class RegisterUser extends Component<Signature> {
               has been validated.
               <span class='validated-check' data-test-email-validated>
                 <span>
-                  {{svgJar 'check-mark' width='27' height='27'}}
+                  <CheckMark width='27px' height='27px' />
                 </span>
               </span>
             </p>

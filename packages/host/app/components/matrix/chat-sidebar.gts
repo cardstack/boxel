@@ -8,7 +8,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 
-import { IconButton, LoadingIndicator } from '@cardstack/boxel-ui';
+import { IconButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 import Login from './login';
 import RegisterUser from './register-user';
@@ -17,6 +17,7 @@ import RoomsManager from './rooms-manager';
 import UserProfile from './user-profile';
 
 import type MatrixService from '../../services/matrix-service';
+import { IconX } from '@cardstack/boxel-ui/icons';
 
 interface Args {
   Args: {
@@ -29,7 +30,7 @@ export default class ChatSidebar extends Component<Args> {
       <div class='chat-sidebar__inner'>
         <div class='close-chat-wrapper'>
           <IconButton
-            @icon='icon-x'
+            @icon={{IconX}}
             @width='20px'
             @height='20px'
             class='icon-button'

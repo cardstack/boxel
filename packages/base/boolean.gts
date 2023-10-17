@@ -9,7 +9,7 @@ import {
 import { on } from '@ember/modifier';
 import Modifier from 'ember-modifier';
 import { fn } from '@ember/helper';
-import pick from '@cardstack/boxel-ui/helpers/pick';
+import { pick } from '@cardstack/boxel-ui/helpers';
 
 // this allows multiple radio groups rendered on the page
 // to stay independent of one another.
