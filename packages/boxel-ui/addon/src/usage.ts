@@ -19,6 +19,7 @@ import LoadingIndicatorUsage from './components/loading-indicator/usage.gts';
 import MenuUsage from './components/menu/usage.gts';
 import MessageUsage from './components/message/usage.gts';
 import ModalUsage from './components/modal/usage.gts';
+import RadioInputUsage from './components/radio-input/usage.gts';
 import ResizablePanelGroupUsage from './components/resizable-panel-group/usage.gts';
 import TooltipUsage from './components/tooltip/usage.gts';
 
@@ -41,6 +42,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['Menu', MenuUsage],
   ['Message', MessageUsage],
   ['Modal', ModalUsage],
+  ['RadioInput', RadioInputUsage],
   ['ResizablePanelGroup', ResizablePanelGroupUsage],
   ['Tooltip', TooltipUsage],
 ];

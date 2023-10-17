@@ -1,8 +1,8 @@
-import cssVar from '@cardstack/boxel-ui/helpers/css-var';
+import Component from '@glimmer/component';
+import cssVar from '../../helpers/css-var.ts';
 import { fn } from '@ember/helper';
 import { array } from '@ember/helper';
 import { action } from '@ember/object';
-import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import {
@@ -10,7 +10,7 @@ import {
   CSSVariableInfo,
 } from 'ember-freestyle/decorators/css-variable';
 
-import RadioInput from '../radio-input';
+import RadioInput from './index.gts';
 
 export default class RadioInputUsage extends Component {
   @tracked items = [
@@ -29,7 +29,7 @@ export default class RadioInputUsage extends Component {
   ];
   @tracked groupDescription =
     'Select one of these options for breakfast sandwiches';
-  @tracked checkedId = this.items[0].id;
+  @tracked checkedId = this.items[0]?.id;
   @tracked disabled = false;
   @tracked hideRadio = false;
   @tracked hideBorder = false;

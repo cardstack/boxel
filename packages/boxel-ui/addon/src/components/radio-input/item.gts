@@ -1,7 +1,7 @@
-import cn from '@cardstack/boxel-ui/helpers/cn';
-import { not } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
+import cn from '../../helpers/cn.ts';
+import { not } from '../../helpers/truth-helpers.ts';
 
 export interface Signature {
   Args: {

@@ -1,9 +1,9 @@
-import cn from '@cardstack/boxel-ui/helpers/cn';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { hash } from '@ember/helper';
 import Component from '@glimmer/component';
+import { hash } from '@ember/helper';
+import cn from '../../helpers/cn.ts';
+import { eq } from '../../helpers/truth-helpers.ts';
 
-import Item from './item';
+import Item from './item.gts';
 
 export interface Signature {
   Args: {
