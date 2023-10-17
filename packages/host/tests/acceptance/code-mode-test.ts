@@ -1656,7 +1656,21 @@ module('Acceptance | code mode tests', function (hooks) {
 
     await click('[data-test-boxel-menu-item-text="Remove Field"]');
 
+    assert.dom('[data-test-remove-field-modal]').exists();
+
+    // Test closing the modal works (cancel removing a field)
+    await click('[data-test-cancel-remove-field-button]');
+    assert.dom('[data-test-remove-field-modal]').doesNotExist();
+
+    // Open the modal again
+    await click(
+      '[data-test-card-schema="Person"] [data-test-field-name="firstName"] [data-test-schema-editor-field-contextual-button]',
+    );
+    await click('[data-test-boxel-menu-item-text="Remove Field"]');
+
+    await click('[data-test-remove-field-button]');
     await waitFor('[data-test-card-schema]');
+
     assert
       .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
       .containsText('+ 4 Fields'); // One field less

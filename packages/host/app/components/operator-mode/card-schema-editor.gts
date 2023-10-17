@@ -6,21 +6,20 @@ import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
-
 import { DropdownButton } from '@cardstack/boxel-ui';
 import menuDivider from '@cardstack/boxel-ui/helpers/menu-divider';
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
-import { getPlural, identifyCard } from '@cardstack/runtime-common';
+import { getPlural } from '@cardstack/runtime-common';
 
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import AddFieldModal from '@cardstack/host/components/operator-mode/add-field-modal';
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import RemoveFieldModal from '@cardstack/host/components/operator-mode/remove-field-modal';
 import {
   type Type,
   type CodeRefType,
@@ -406,9 +405,8 @@ export default class CardSchemaEditor extends Component<Signature> {
                           (menuDivider)
                           (menuItem
                             'Remove Field'
-                            (fn this.removeField field)
+                            (fn this.toggleRemoveFieldModalShown field)
                             dangerous=true
-                            disabled=false
                           )
                         }}
                       />
@@ -439,6 +437,17 @@ export default class CardSchemaEditor extends Component<Signature> {
           />
         {{/if}}
       {{/if}}
+
+      {{#if this.removeFieldModalShown}}
+        <RemoveFieldModal
+          @file={{@file}}
+          @card={{@card}}
+          @field={{this.fieldForRemoval}}
+          @moduleSyntax={{@moduleSyntax}}
+          @onClose={{this.toggleRemoveFieldModalShown}}
+          data-test-remove-field-modal
+        />
+      {{/if}}
     </div>
   </template>
 
@@ -447,8 +456,16 @@ export default class CardSchemaEditor extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
 
   @tracked addFieldModalShown = false;
+  @tracked removeFieldModalShown = false;
+  @tracked private _fieldForRemoval?: FieldOfType = undefined;
+
   @action toggleAddFieldModal() {
     this.addFieldModalShown = !this.addFieldModalShown;
+  }
+
+  @action toggleRemoveFieldModalShown(field?: FieldOfType) {
+    this._fieldForRemoval = field;
+    this.removeFieldModalShown = !this.removeFieldModalShown;
   }
 
   @action openCardDefinition(moduleURL: string) {
@@ -458,21 +475,6 @@ export default class CardSchemaEditor extends Component<Signature> {
   @action
   isOwnField(fieldName: string): boolean {
     return isOwnField(this.args.card, fieldName);
-  }
-
-  @action
-  removeField(field: FieldOfType) {
-    let identifiedCard = identifyCard(this.args.card) as {
-      module: string;
-      name: string;
-    };
-
-    this.args.moduleSyntax.removeField(
-      { type: 'exportedName', name: identifiedCard.name },
-      field.name,
-    );
-
-    this.writeTask.perform(this.args.moduleSyntax.code());
   }
 
   @action
@@ -554,7 +556,11 @@ export default class CardSchemaEditor extends Component<Signature> {
     });
   }
 
-  private writeTask = restartableTask(async (src: string) => {
-    await this.args.file.write(src, true);
-  });
+  get fieldForRemoval(): FieldOfType {
+    if (!this._fieldForRemoval) {
+      throw new Error('fieldForRemoval should be set');
+    }
+
+    return this._fieldForRemoval;
+  }
 }
