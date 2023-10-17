@@ -8,7 +8,7 @@ import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 import { on } from '@ember/modifier';
 import pick from '@cardstack/boxel-ui/helpers/pick';
 import { startCase } from 'lodash';
-import { getBoxComponent } from './field-component';
+import { getBoxComponent, type BoxComponent } from './field-component';
 import { getContainsManyComponent } from './contains-many-component';
 import { getLinksToEditor } from './links-to-editor';
 import { getLinksToManyComponent } from './links-to-many-component';
@@ -45,7 +45,7 @@ import {
 import type { ComponentLike } from '@glint/template';
 import { FieldContainer } from '@cardstack/boxel-ui';
 
-export { primitive, isField };
+export { primitive, isField, type BoxComponent };
 export const serialize = Symbol('cardstack-serialize');
 export const deserialize = Symbol('cardstack-deserialize');
 export const useIndexBasedKey = Symbol('cardstack-use-index-based-key');
@@ -70,14 +70,15 @@ export type PartialBaseInstanceType<T extends BaseDefConstructor> = T extends {
   ? P | null
   : Partial<InstanceType<T>>;
 export type FieldsTypeFor<T extends BaseDef> = {
-  [Field in keyof T]: ComponentLike<{ Args: {}; Blocks: {} }> &
+  [Field in keyof T]: BoxComponent &
     (T[Field] extends ArrayLike<unknown>
-      ? ComponentLike<{ Args: {}; Blocks: {} }>[]
+      ? BoxComponent[]
       : T[Field] extends BaseDef
       ? FieldsTypeFor<T[Field]>
       : unknown);
 };
-export type Format = 'isolated' | 'embedded' | 'edit';
+export const formats: Format[] = ['isolated', 'embedded', 'edit', 'atom'];
+export type Format = 'isolated' | 'embedded' | 'edit' | 'atom';
 export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
 
 type Setter = (value: any) => void;
@@ -260,9 +261,9 @@ export interface Field<
   validate(instance: BaseDef, value: any): void;
   component(
     model: Box<BaseDef>,
-    format: Format,
+    defaultFormat: Format,
     context?: CardContext,
-  ): ComponentLike<{ Args: {}; Blocks: {} }>;
+  ): BoxComponent;
   getter(instance: BaseDef): BaseInstanceType<CardT>;
   queryableValue(value: any, stack: BaseDef[]): SearchT;
   queryMatcher(
@@ -556,10 +557,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     );
   }
 
-  component(
-    model: Box<BaseDef>,
-    format: Format,
-  ): ComponentLike<{ Args: {}; Blocks: {} }> {
+  component(model: Box<BaseDef>, format: Format): BoxComponent {
     let fieldName = this.name as keyof BaseDef;
     let arrayField = model.field(
       fieldName,
@@ -572,7 +570,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       'isFieldDef' in model.value.constructor &&
       model.value.constructor.isFieldDef
     ) {
-      renderFormat = 'embedded';
+      renderFormat = 'atom';
     }
 
     return getContainsManyComponent({
@@ -735,7 +733,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     model: Box<BaseDef>,
     format: Format,
     context?: CardContext,
-  ): ComponentLike<{ Args: {}; Blocks: {} }> {
+  ): BoxComponent {
     return fieldComponent(this, model, format, context);
   }
 }
@@ -1011,7 +1009,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     model: Box<CardDef>,
     format: Format,
     context?: CardContext,
-  ): ComponentLike<{ Args: {}; Blocks: {} }> {
+  ): BoxComponent {
     if (format === 'edit') {
       let innerModel = model.field(
         this.name as keyof BaseDef,
@@ -1374,17 +1372,25 @@ class LinksToMany<FieldT extends CardDefConstructor>
     model: Box<CardDef>,
     format: Format,
     context?: CardContext,
-  ): ComponentLike<{ Args: {}; Blocks: {} }> {
+  ): BoxComponent {
     let fieldName = this.name as keyof BaseDef;
     let arrayField = model.field(
       fieldName,
       useIndexBasedKey in this.card,
     ) as unknown as Box<CardDef[]>;
+    let renderFormat: Format | undefined = undefined;
+    if (
+      format === 'edit' &&
+      'isFieldDef' in model.value.constructor &&
+      model.value.constructor.isFieldDef
+    ) {
+      renderFormat = 'atom';
+    }
     return getLinksToManyComponent({
       model,
       arrayField,
       field: this,
-      format,
+      format: renderFormat ?? format,
       cardTypeFor,
       context,
     });
@@ -1394,9 +1400,9 @@ class LinksToMany<FieldT extends CardDefConstructor>
 function fieldComponent(
   field: Field<typeof BaseDef>,
   model: Box<BaseDef>,
-  format: Format,
+  defaultFormat: Format,
   context?: CardContext,
-): ComponentLike<{ Args: {}; Blocks: {} }> {
+): BoxComponent {
   let fieldName = field.name as keyof BaseDef;
   let card: typeof BaseDef;
   if (primitive in field.card) {
@@ -1406,7 +1412,7 @@ function fieldComponent(
       (model.value[fieldName]?.constructor as typeof BaseDef) ?? field.card;
   }
   let innerModel = model.field(fieldName) as unknown as Box<BaseDef>;
-  return getBoxComponent(card, format, innerModel, field, context);
+  return getBoxComponent(card, defaultFormat, innerModel, field, context);
 }
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
@@ -1652,6 +1658,21 @@ class DefaultCardDefTemplate extends GlimmerComponent<{
   </template>
 }
 
+class DefaultAtomViewTemplate extends GlimmerComponent<{
+  Args: {
+    model: CardDef;
+    fields: Record<string, new () => GlimmerComponent>;
+  };
+}> {
+  <template>
+    {{#each-in @fields as |key Field|}}
+      {{#if (eq key 'title')}}
+        <Field />
+      {{/if}}
+    {{/each-in}}
+  </template>
+}
+
 class FieldDefEditTemplate extends GlimmerComponent<{
   Args: {
     model: FieldDef;
@@ -1722,6 +1743,7 @@ export class FieldDef extends BaseDef {
     </template>
   };
   static edit: BaseDefComponent = FieldDefEditTemplate;
+  static atom: BaseDefComponent = DefaultAtomViewTemplate;
 }
 
 class IDField extends FieldDef {
@@ -1756,6 +1778,11 @@ export class StringField extends FieldDef {
   static edit = class Edit extends Component<typeof this> {
     <template>
       <BoxelInput @value={{@model}} @onInput={{@set}} />
+    </template>
+  };
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      {{@model}}
     </template>
   };
 }
@@ -1799,6 +1826,7 @@ export class CardDef extends BaseDef {
   };
   static isolated: BaseDefComponent = DefaultCardDefTemplate;
   static edit: BaseDefComponent = DefaultCardDefTemplate;
+  static atom: BaseDefComponent = DefaultAtomViewTemplate;
 }
 
 export type BaseDefConstructor = typeof BaseDef;
@@ -2465,16 +2493,16 @@ export function getComponent(
   format: Format,
   field?: Field,
   context?: CardContext,
-): ComponentLike<{ Args: {}; Blocks: {} }> {
+): BoxComponent {
   let box = Box.create(model);
-  let component = getBoxComponent(
+  let boxComponent = getBoxComponent(
     model.constructor as BaseDefConstructor,
     format,
     box,
     field,
     context,
   );
-  return component;
+  return boxComponent;
 }
 
 interface RecomputeOptions {

@@ -4,7 +4,7 @@ import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 
-import { logger } from '@cardstack/runtime-common';
+import { isBaseDef, logger } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import type LoaderService from '../services/loader-service';
@@ -27,6 +27,10 @@ export class ImportResource extends Resource<Args> {
 
   get loaded() {
     return this.#loaded;
+  }
+
+  get cardsOrFieldsFromModule() {
+    return Object.values(this.module || {}).filter(isBaseDef);
   }
 
   private load = task(async (url: string, loader: Loader) => {

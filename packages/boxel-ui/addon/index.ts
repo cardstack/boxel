@@ -25,6 +25,7 @@ import Tooltip from './components/tooltip';
 import ResizablePanelGroup, {
   PanelContext,
 } from './components/resizable-panel-group';
+import RadioInput from './components/radio-input';
 
 export {
   Accordion,
@@ -52,4 +53,5 @@ export {
   Tooltip,
   ResizablePanelGroup,
   PanelContext,
+  RadioInput,
 };

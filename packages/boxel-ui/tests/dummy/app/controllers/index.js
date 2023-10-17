@@ -18,6 +18,7 @@ import MenuUsage from '@cardstack/boxel-ui/components/menu/usage';
 import DropdownUsage from '@cardstack/boxel-ui/components/dropdown/usage';
 import TooltipUsage from '@cardstack/boxel-ui/components/tooltip/usage';
 import ResizablePanelGroupUsage from '@cardstack/boxel-ui/components/resizable-panel-group/usage';
+import RadioInput from '@cardstack/boxel-ui/components/radio-input/usage';
 
 export default class IndexController extends FreestyleController {
   constructor() {
@@ -42,6 +43,7 @@ export default class IndexController extends FreestyleController {
       ['Boxel::Menu', MenuUsage],
       ['Boxel::Tooltip', TooltipUsage],
       ['Boxel::ResizablePanel', ResizablePanelGroupUsage],
+      ['Boxel::RadioInput', RadioInput],
     ].map(([name, c]) => {
       return {
         title: name,

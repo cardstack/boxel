@@ -25,6 +25,18 @@ const Format = new Intl.DateTimeFormat('en-US', {
 
 const datetimeFormat = `yyyy-MM-dd'T'HH:mm`;
 
+class View extends Component<typeof DatetimeField> {
+  <template>
+    {{this.formatted}}
+  </template>
+  get formatted() {
+    if (this.args.model == null) {
+      return '[no date-time]';
+    }
+    return this.args.model ? Format.format(this.args.model) : undefined;
+  }
+}
+
 export default class DatetimeField extends FieldDef {
   static displayName = 'DateTime';
   static [primitive]: Date;
@@ -49,17 +61,8 @@ export default class DatetimeField extends FieldDef {
     return undefined;
   }
 
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      {{this.formatted}}
-    </template>
-    get formatted() {
-      if (this.args.model == null) {
-        return '[no date-time]';
-      }
-      return this.args.model ? Format.format(this.args.model) : undefined;
-    }
-  };
+  static embedded = View;
+  static atom = View;
 
   static edit = class Edit extends Component<typeof this> {
     <template>

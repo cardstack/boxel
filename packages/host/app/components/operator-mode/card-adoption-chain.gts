@@ -1,9 +1,9 @@
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
-//@ts-ignore cached not available yet in definitely typed
-import { cached } from '@glimmer/tracking';
 
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
@@ -11,6 +11,7 @@ import CardSchemaEditor from '@cardstack/host/components/operator-mode/card-sche
 import { CardInheritance } from '@cardstack/host/components/operator-mode/schema-editor-column';
 
 import type { Ready } from '@cardstack/host/resources/file';
+
 import { isOwnField } from '@cardstack/host/utils/schema-editor';
 
 interface Signature {
@@ -18,6 +19,7 @@ interface Signature {
   Args: {
     file: Ready;
     cardInheritanceChain: CardInheritance[];
+    moduleSyntax: ModuleSyntax;
   };
 }
 
@@ -74,9 +76,10 @@ export default class CardAdoptionChain extends Component<Signature> {
             @card={{data.card}}
             @cardType={{data.cardType}}
             @file={{@file}}
-            @moduleSyntax={{this.moduleSyntax}}
+            @moduleSyntax={{@moduleSyntax}}
             @childFields={{this.getFields index 'successors'}}
             @parentFields={{this.getFields index 'ancestors'}}
+            @allowAddingFields={{eq index 0}}
           />
           <div class='content-with-line'>
             <hr class='line' />
@@ -93,11 +96,6 @@ export default class CardAdoptionChain extends Component<Signature> {
       {{/each}}
     </div>
   </template>
-
-  @cached
-  get moduleSyntax() {
-    return new ModuleSyntax(this.args.file.content);
-  }
 
   @action
   getFields(cardIndex: number, from: 'ancestors' | 'successors'): string[] {

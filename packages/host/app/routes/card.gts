@@ -62,7 +62,7 @@ export default class RenderCard extends Route<Model | null> {
       : new URL('./', ownRealmURL);
 
     try {
-      let model = await this.cardService.loadStaticModel(url);
+      let model = await this.cardService.loadModel(this, url);
 
       if (operatorModeEnabled) {
         let operatorModeStateObject = JSON.parse(operatorModeState);
