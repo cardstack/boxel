@@ -723,6 +723,7 @@ export default class CodeMode extends Component<Signature> {
               <VerticallyResizablePanel
                 @defaultLength={{defaultPanelHeights.recentPanel}}
                 @length={{this.panelHeights.recentPanel}}
+                @minLength='100px'
               >
                 <aside class='inner-container recent-files'>
                   <header
