@@ -7,7 +7,8 @@ import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
-import { Button, CardContainer } from '@cardstack/boxel-ui';
+import { CardContainer } from '@cardstack/boxel-ui/components';
+import { Button } from '@cardstack/boxel-ui/components';
 
 import {
   catalogEntryRef,

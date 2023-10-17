@@ -2,6 +2,7 @@
   "name": "@cardstack/ai-bot",
   "devDependencies": {
     "@cardstack/runtime-common": "workspace:^",
+    "@types/node": "^18.18.5",
     "@types/stream-chain": "^2.0.1",
     "@types/stream-json": "^1.7.3",
     "matrix-js-sdk": "^25.0.0",

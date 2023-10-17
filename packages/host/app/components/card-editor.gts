@@ -6,7 +6,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
-import Button from '@cardstack/boxel-ui/components/button';
+import { Button } from '@cardstack/boxel-ui/components';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 

@@ -19,7 +19,7 @@ import {
   Loader,
 } from '@cardstack/runtime-common';
 import { isEqual } from 'lodash';
-import { FieldContainer } from '@cardstack/boxel-ui';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
 import GlimmerComponent from '@glimmer/component';
 
 export class CatalogEntry extends CardDef {

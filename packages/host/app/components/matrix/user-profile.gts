@@ -9,13 +9,13 @@ import { tracked } from '@glimmer/tracking';
 import { dropTask, restartableTask, all } from 'ember-concurrency';
 
 import {
+  BoxelInput,
   Button,
   FieldContainer,
-  BoxelInput,
   LoadingIndicator,
-} from '@cardstack/boxel-ui';
+} from '@cardstack/boxel-ui/components';
 
-import { not } from '@cardstack/host/helpers/truth-helpers';
+import { not } from '@cardstack/boxel-ui/helpers';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 export default class UserProfile extends Component {
