@@ -40,6 +40,19 @@ function _serialize(val: bigint): string {
   return val.toString();
 }
 
+class View extends Component<typeof BigIntegerField> {
+  <template>
+    {{this.formatted}}
+  </template>
+
+  get formatted() {
+    if (!this.args.model) {
+      return;
+    }
+    return _serialize(this.args.model);
+  }
+}
+
 class Edit extends Component<typeof BigIntegerField> {
   <template>
     <BoxelInput
@@ -78,18 +91,7 @@ export default class BigIntegerField extends FieldDef {
     }
   }
 
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      {{this.formatted}}
-    </template>
-
-    get formatted() {
-      if (!this.args.model) {
-        return;
-      }
-      return _serialize(this.args.model);
-    }
-  };
-
+  static embedded = View;
+  static atom = View;
   static edit = Edit;
 }

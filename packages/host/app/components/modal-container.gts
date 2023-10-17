@@ -10,6 +10,8 @@ interface Signature {
     title: string;
     onClose: () => void;
     zIndex?: number;
+    size?: 'small' | 'medium' | 'large';
+    centered?: boolean;
   };
   Blocks: {
     content: [];
@@ -19,11 +21,16 @@ interface Signature {
 }
 
 export default class ModalContainer extends Component<Signature> {
+  get size() {
+    return this.args.size ?? 'large';
+  }
+
   <template>
     <Modal
-      @size='large'
+      @size={{this.size}}
       @isOpen={{true}}
       @onClose={{@onClose}}
+      @centered={{@centered}}
       style={{this.styleString}}
       ...attributes
     >

@@ -216,6 +216,217 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test="number"]').containsText('10');
   });
 
+  test('render a field in atom format', async function (assert) {
+    let { field, contains, CardDef, FieldDef, Component } = cardApi;
+    let { default: StringField } = string;
+    class EmphasizedString extends FieldDef {
+      static [primitive]: string;
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <em data-test-embedded='name'>{{@model}}</em>
+        </template>
+      };
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <em data-test-atom='name'>{{@model}}</em>
+        </template>
+      };
+    }
+
+    class StrongNumber extends FieldDef {
+      static [primitive]: number;
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <strong data-test-embedded='number'>{{@model}}</strong>
+        </template>
+      };
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <strong data-test-atom='number'>{{@model}}</strong>
+        </template>
+      };
+    }
+
+    class Guest extends FieldDef {
+      @field name = contains(EmphasizedString);
+      @field additionalGuestCount = contains(StrongNumber);
+      @field title = contains(StringField, {
+        computeVia: function (this: Guest) {
+          return `${this.name} - ${this.additionalGuestCount}`;
+        },
+      });
+    }
+
+    class Person extends CardDef {
+      @field firstName = contains(EmphasizedString);
+      @field number = contains(StrongNumber);
+      @field guest = contains(Guest);
+
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div>
+            <@fields.firstName @format='atom' />
+            <@fields.number />
+          </div>
+          Guest:
+          <@fields.guest @format='atom' />
+        </template>
+      };
+    }
+
+    let arthur = new Person({
+      firstName: 'Arthur',
+      number: 10,
+      guest: new Guest({
+        name: 'Madeleine',
+        additionalGuestCount: 3,
+      }),
+    });
+
+    await renderCard(loader, arthur, 'isolated');
+    assert
+      .dom('[data-test-atom="name"]')
+      .containsText('Arthur', 'can render primitive field in atom format');
+    assert
+      .dom('[data-test-embedded="number"]')
+      .containsText('10', 'field has default format');
+    assert
+      .dom('[data-test-compound-field-format="atom"]')
+      .hasText('Madeleine - 3', 'can render compound field in atom format');
+  });
+
+  test('render a containsMany field in atom format', async function (assert) {
+    let { field, contains, containsMany, CardDef, FieldDef, Component } =
+      cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
+
+    class Guest extends FieldDef {
+      @field name = contains(StringField);
+      @field additionalGuestCount = contains(NumberField);
+      @field title = contains(StringField, {
+        computeVia: function (this: Guest) {
+          return `${this.name} - ${this.additionalGuestCount}`;
+        },
+      });
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <@fields.name />
+        </template>
+      };
+    }
+
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      @field number = contains(NumberField);
+      @field guests = containsMany(Guest);
+
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          Guests: <@fields.guests @format='atom' />
+        </template>
+      };
+    }
+
+    let arthur = new Person({
+      firstName: 'Arthur',
+      number: 10,
+      guests: [
+        new Guest({
+          name: 'Madeleine',
+          additionalGuestCount: 3,
+        }),
+        new Guest({
+          name: 'Marcus',
+          additionalGuestCount: 1,
+        }),
+        new Guest({
+          name: 'Melinda',
+          additionalGuestCount: 2,
+        }),
+      ],
+    });
+
+    await renderCard(loader, arthur, 'isolated');
+    assert
+      .dom(
+        '[data-test-card-format="isolated"] > [data-test-plural-view-format="atom"]',
+      )
+      .exists();
+    assert
+      .dom(
+        '[data-test-plural-view-item="0"] > [data-test-compound-field-format="atom"]',
+      )
+      .exists();
+
+    assert
+      .dom('[data-test-plural-view-item="0"]')
+      .containsText('Madeleine - 3');
+    assert.dom('[data-test-plural-view-item="1"]').containsText('Marcus - 1');
+    assert.dom('[data-test-plural-view-item="2"]').hasText('Melinda - 2');
+  });
+
+  test('render a linksToMany field in atom format', async function (assert) {
+    let { field, contains, linksToMany, CardDef, Component } = cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
+
+    class Guest extends CardDef {
+      @field name = contains(StringField);
+      @field additionalGuestCount = contains(NumberField);
+      @field title = contains(StringField, {
+        computeVia: function (this: Guest) {
+          return this.name;
+        },
+      });
+    }
+
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      @field number = contains(NumberField);
+      @field guests = linksToMany(Guest);
+
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          Guests: <@fields.guests @format='atom' />
+        </template>
+      };
+    }
+
+    await shimModule(`${testRealmURL}test-cards`, { Guest, Person }, loader);
+
+    let g1 = new Guest({
+      name: 'Madeleine',
+      additionalGuestCount: 3,
+    });
+    let g2 = new Guest({
+      name: 'Marcus',
+      additionalGuestCount: 1,
+    });
+
+    await saveCard(g1, `${testRealmURL}Guest/g1`, loader);
+    await saveCard(g2, `${testRealmURL}Guest/g2`, loader);
+
+    let arthur = new Person({
+      firstName: 'Arthur',
+      number: 10,
+      guests: [g1, g2],
+    });
+
+    await renderCard(loader, arthur, 'isolated');
+    assert
+      .dom(
+        '[data-test-card-format="isolated"] > [data-test-plural-view="linksToMany"][data-test-plural-view-format="atom"]',
+      )
+      .exists();
+    assert
+      .dom('[data-test-plural-view-item="0"] > [data-test-card-format="atom"]')
+      .containsText('Madeleine');
+    assert
+      .dom('[data-test-plural-view-item="1"] > [data-test-card-format="atom"]')
+      .containsText('Marcus');
+  });
+
   test('can set the ID for an unsaved card', async function (assert) {
     let { field, contains, CardDef } = cardApi;
     let { default: StringField } = string;
@@ -760,17 +971,17 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-pet="Van Gogh"]').containsText('Van Gogh');
   });
 
-  test('catalog entry isPrimitive indicates if the catalog entry is a primitive field card', async function (assert) {
+  test('catalog entry isField indicates if the catalog entry is a field card', async function (assert) {
     let { CatalogEntry } = catalogEntry;
 
-    let nonPrimitiveEntry = new CatalogEntry({
+    let cardEntry = new CatalogEntry({
       title: 'CatalogEntry Card',
       ref: {
         module: 'https://cardstack.com/base/catalog-entry',
         name: 'CatalogEntry',
       },
     });
-    let primitiveEntry = new CatalogEntry({
+    let fieldEntry = new CatalogEntry({
       title: 'String Card',
       ref: {
         module: 'https://cardstack.com/base/string',
@@ -778,19 +989,36 @@ module('Integration | card-basics', function (hooks) {
       },
     });
 
-    await cardApi.recompute(nonPrimitiveEntry, { recomputeAllFields: true });
-    await cardApi.recompute(primitiveEntry, { recomputeAllFields: true });
+    await cardApi.recompute(cardEntry, { recomputeAllFields: true });
+    await cardApi.recompute(fieldEntry, { recomputeAllFields: true });
 
-    assert.strictEqual(
-      nonPrimitiveEntry.isPrimitive,
-      false,
-      'isPrimitive is correct',
-    );
-    assert.strictEqual(
-      primitiveEntry.isPrimitive,
-      true,
-      'isPrimitive is correct',
-    );
+    assert.strictEqual(cardEntry.isField, false, 'isField is correct');
+    assert.strictEqual(fieldEntry.isField, true, 'isField is correct');
+  });
+
+  test('catalog entry isField indicates if the catalog entry references a card descended from FieldDef', async function (assert) {
+    let { CatalogEntry } = catalogEntry;
+
+    let cardFromCardDef = new CatalogEntry({
+      title: 'CatalogEntry Card',
+      ref: {
+        module: 'https://cardstack.com/base/catalog-entry',
+        name: 'CatalogEntry',
+      },
+    });
+    let cardFromFieldDef = new CatalogEntry({
+      title: 'String Card',
+      ref: {
+        module: 'https://cardstack.com/base/string',
+        name: 'default',
+      },
+    });
+
+    await cardApi.recompute(cardFromCardDef, { recomputeAllFields: true });
+    await cardApi.recompute(cardFromFieldDef, { recomputeAllFields: true });
+
+    assert.strictEqual(cardFromCardDef.isField, false, 'isField is correct');
+    assert.strictEqual(cardFromFieldDef.isField, true, 'isField is correct');
   });
 
   test('render whole composite field', async function (assert) {
@@ -913,6 +1141,70 @@ module('Integration | card-basics', function (hooks) {
     await renderCard(loader, helloWorld, 'isolated');
     assert.dom('[data-test="first-name"]').containsText('Arthur');
     assert.dom('[data-test="title"]').containsText('First Post');
+  });
+
+  test('render default atom view template', async function (assert) {
+    let { field, contains, FieldDef } = cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field lastName = contains(StringField);
+      @field age = contains(NumberField);
+      @field title = contains(StringField, {
+        computeVia: function (this: Person) {
+          return `${this.firstName} ${this.lastName}`;
+        },
+      });
+    }
+    await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
+    let helloWorld = new Person({
+      firstName: 'Arthur',
+      lastName: 'M',
+      age: 10,
+    });
+
+    await renderCard(loader, helloWorld, 'atom');
+    assert.dom('[data-test-compound-field-component]').hasText('Arthur M');
+    assert.dom('[data-test-compound-field-component]').doesNotContainText('10');
+    assert.dom('[data-test-compound-field-format="atom"]').exists();
+  });
+
+  test('render user-provided atom view template', async function (assert) {
+    let { field, contains, FieldDef, Component } = cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field age = contains(NumberField);
+      @field title = contains(StringField, {
+        computeVia: function (this: Person) {
+          return this.firstName;
+        },
+      });
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <div class='name' data-test-template>
+            <@fields.firstName />
+            <@fields.age />
+          </div>
+          <style>
+            .name {
+              color: red;
+              font-weight: bold;
+            }
+          </style>
+        </template>
+      };
+    }
+    await shimModule(`${testRealmURL}test-cards`, { Person }, loader);
+    let helloWorld = new Person({ firstName: 'Arthur', age: 10 });
+
+    await renderCard(loader, helloWorld, 'atom');
+    assert
+      .dom('[data-test-compound-field-format="atom"] [data-test-template]')
+      .hasText('Arthur 10');
+    assert.dom('[data-test-template]').hasClass('name');
   });
 
   test('render a containsMany primitive field', async function (assert) {
@@ -1773,8 +2065,7 @@ module('Integration | card-basics', function (hooks) {
   });
 
   test('primitive containsMany field inside another field is read-only', async function (assert) {
-    let { field, contains, containsMany, CardDef, FieldDef, Component } =
-      cardApi;
+    let { field, contains, containsMany, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;
 
     class Guest extends FieldDef {
@@ -1790,14 +2081,6 @@ module('Integration | card-basics', function (hooks) {
       @field banned = containsMany(StringField);
       @field guest = contains(Guest);
       @field bannedGuest = contains(Guest);
-
-      static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <@fields.name />
-          <@fields.vip />
-          <@fields.guest />
-        </template>
-      };
     }
 
     let card = new ContactCard({
@@ -1849,9 +2132,231 @@ module('Integration | card-basics', function (hooks) {
       .doesNotExist('edit');
     assert
       .dom(
+        '[data-test-field="bannedGuest"] [data-test-plural-view="containsMany"]',
+      )
+      .hasClass('empty');
+    assert
+      .dom(
         '[data-test-field="bannedGuest"] [data-test-plural-view="containsMany"] [data-test-plural-view-item]',
       )
       .doesNotExist();
+  });
+
+  test('nested containsMany field items in a compound field render in atom layout', async function (assert) {
+    let { field, contains, containsMany, CardDef, FieldDef } = cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
+
+    class PersonField extends FieldDef {
+      @field fullName = contains(StringField);
+      @field guestCount = contains(NumberField);
+      @field title = contains(StringField, {
+        computeVia: function (this: PersonField) {
+          return this.guestCount
+            ? `${this.fullName} + ${this.guestCount}`
+            : this.fullName;
+        },
+      });
+    }
+
+    class Guest extends FieldDef {
+      @field name = contains(StringField);
+      @field additionalNames = containsMany(PersonField);
+    }
+
+    class ContactCard extends CardDef {
+      static displayName = 'Contact';
+      @field name = contains(StringField);
+      @field guest = contains(Guest);
+      @field guest2 = contains(Guest);
+      @field vip = containsMany(StringField);
+    }
+
+    let card = new ContactCard({
+      name: 'Marcelius Wilde',
+      guest: new Guest({
+        name: 'Mama Leone',
+        additionalNames: [
+          new PersonField({
+            fullName: 'Felicity Shaw',
+            guestCount: 1,
+          }),
+          new PersonField({
+            fullName: 'Grant Kingston',
+            guestCount: 1,
+          }),
+          new PersonField({
+            fullName: 'Valerie Storm',
+            guestCount: 2,
+          }),
+        ],
+      }),
+      guest2: new Guest({ name: 'Papa Leone' }),
+      vip: ['Cornelius Wilde', 'Dominique Wilde', 'Esmeralda Wilde'],
+    });
+
+    await renderCard(loader, card, 'edit');
+    await percySnapshot(assert);
+
+    assert
+      .dom('[data-test-field="guest"] [data-test-field="name"] input')
+      .hasValue('Mama Leone');
+    assert
+      .dom('[data-test-field="guest"] [data-test-plural-view-format="atom"]')
+      .exists('atom layout is rendered');
+    assert
+      .dom('[data-test-field="guest"] [data-test-plural-view="containsMany"]')
+      .hasClass('atom-format', 'field has correct class');
+    assert
+      .dom(
+        '[data-test-field="guest"] [data-test-plural-view="containsMany"] [data-test-plural-view-item]',
+      )
+      .exists({ count: 3 });
+    assert
+      .dom('[data-test-field="guest"] [data-test-plural-view-item="0"]')
+      .containsText('Felicity Shaw + 1');
+    assert
+      .dom(
+        '[data-test-field="guest"] [data-test-plural-view-item="0"] > [data-test-compound-field-format="atom"]',
+      )
+      .exists('atom layout is rendered for items');
+    assert
+      .dom('[data-test-field="guest"] [data-test-plural-view-item="1"]')
+      .containsText('Grant Kingston + 1');
+    assert
+      .dom('[data-test-field="guest"] [data-test-plural-view-item="2"]')
+      .containsText('Valerie Storm + 2');
+
+    assert
+      .dom('[data-test-field="guest2"] [data-test-field="name"] input')
+      .hasValue('Papa Leone');
+    assert
+      .dom('[data-test-field="guest2"] [data-test-plural-view-format="atom"]')
+      .hasClass('empty', 'empty containsMany field has correct class');
+    assert
+      .dom('[data-test-field="guest2"] [data-test-plural-view-format="atom"]')
+      .hasText('', 'field is empty');
+
+    assert
+      .dom('[data-test-field="vip"] [data-test-contains-many="vip"]')
+      .exists('top level containsMany field is rendered in edit format');
+    assert
+      .dom('[data-test-contains-many="vip"] [data-test-add-new]')
+      .exists('top level containsMany field has add button');
+    assert
+      .dom('[data-test-contains-many="vip"] [data-test-remove="0"]')
+      .exists('top level containsMany field item has remove button');
+  });
+
+  test('nested linksToMany field items in a compound field render in atom layout', async function (assert) {
+    let { field, contains, linksToMany, CardDef, FieldDef, Component } =
+      cardApi;
+    let { default: StringField } = string;
+
+    class Country extends CardDef {
+      @field countryName = contains(StringField);
+      @field flag = contains(StringField);
+      @field title = contains(StringField, {
+        computeVia: function (this: Country) {
+          return `${this.flag} ${this.countryName}`;
+        },
+      });
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <@fields.countryName />
+        </template>
+      };
+    }
+
+    class Traveler extends FieldDef {
+      @field travelerName = contains(StringField);
+      @field countriesVisited = linksToMany(Country);
+    }
+
+    class ContactCard extends CardDef {
+      @field name = contains(StringField);
+      @field traveler = contains(Traveler);
+      @field traveler2 = contains(Traveler);
+      @field favoritePlaces = linksToMany(Country);
+    }
+
+    await shimModule(
+      `${testRealmURL}test-cards`,
+      { Country, ContactCard },
+      loader,
+    );
+
+    let us = new Country({ countryName: 'United States', flag: '🇺🇸' });
+    let canada = new Country({ countryName: 'Canada', flag: '🇨🇦' });
+    let brazil = new Country({ countryName: 'Brazil', flag: '🇧🇷' });
+
+    await saveCard(us, `${testRealmURL}Country/us`, loader);
+    await saveCard(canada, `${testRealmURL}Country/canada`, loader);
+    await saveCard(brazil, `${testRealmURL}Country/brazil`, loader);
+
+    let card = new ContactCard({
+      name: 'Marcelius Wilde',
+      traveler: new Traveler({
+        travelerName: 'Mama Leone',
+        countriesVisited: [us, canada, brazil],
+      }),
+      traveler2: new Traveler({ travelerName: 'Papa Leone' }),
+      favoritePlaces: [brazil, us, canada],
+    });
+
+    await renderCard(loader, card, 'edit');
+    await percySnapshot(assert);
+
+    assert.dom('[data-test-field="name"] input').hasValue('Marcelius Wilde');
+    assert
+      .dom(
+        '[data-test-field="traveler"] [data-test-field="travelerName"] input',
+      )
+      .hasValue('Mama Leone');
+    assert
+      .dom(
+        '[data-test-field="countriesVisited"] [data-test-plural-view-format="atom"]',
+      )
+      .exists('atom layout is rendered');
+    assert
+      .dom(
+        '[data-test-field="countriesVisited"] [data-test-plural-view="linksToMany"]',
+      )
+      .hasClass('atom-format', 'field has correct class');
+    assert
+      .dom(
+        '[data-test-field="countriesVisited"] [data-test-plural-view-format="atom"] [data-test-plural-view-item]',
+      )
+      .exists({ count: 3 });
+    assert
+      .dom(
+        '[data-test-plural-view-format="atom"] [data-test-plural-view-item="0"]',
+      )
+      .hasText('🇺🇸 United States');
+    assert
+      .dom(
+        '[data-test-plural-view-format="atom"] [data-test-plural-view-item="0"] > [data-test-field-component-card]',
+      )
+      .hasClass('atom-card', 'atom view field item has correct class');
+    assert
+      .dom(
+        '[data-test-plural-view-format="atom"] [data-test-plural-view-item="1"]',
+      )
+      .hasText('🇨🇦 Canada');
+    // TODO: Add assertions for add/remove buttons when design is implemented
+
+    assert
+      .dom(
+        '[data-test-field="traveler2"] [data-test-field="travelerName"] input',
+      )
+      .hasValue('Papa Leone');
+    // TODO: Add assertions for empty nested linksToMany field
+
+    assert
+      .dom(
+        '[data-test-field="favoritePlaces"] [data-test-links-to-many="favoritePlaces"]',
+      )
+      .exists('top level linksToMany field is in edit format');
   });
 
   test('can get a queryable value for a field', async function (assert) {

@@ -311,7 +311,7 @@ export default class Schema extends Component<Signature> {
       this.newFieldType === 'linksTo' || this.newFieldType === 'linksToMany'
         ? {
             on: catalogEntryRef,
-            eq: { isPrimitive: false },
+            eq: { isField: false },
           }
         : {
             on: catalogEntryRef,
@@ -332,6 +332,9 @@ export default class Schema extends Component<Signature> {
       this.newFieldName,
       fieldEntry.ref,
       this.newFieldType,
+      undefined,
+      undefined,
+      undefined,
     );
     await this.write.perform(this.args.moduleSyntax.code());
   });

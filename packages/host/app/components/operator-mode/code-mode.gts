@@ -33,12 +33,6 @@ import {
   isSingleCardDocument,
   hasExecutableExtension,
 } from '@cardstack/runtime-common';
-import {
-  ModuleSyntax,
-  type PossibleCardOrFieldClass,
-  type BaseDeclaration,
-  type ElementDeclaration,
-} from '@cardstack/runtime-common/module-syntax';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
@@ -46,10 +40,7 @@ import config from '@cardstack/host/config/environment';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 
-import {
-  getCardType,
-  type CardType,
-} from '@cardstack/host/resources/card-type';
+import { getCardType } from '@cardstack/host/resources/card-type';
 import {
   isReady,
   type Ready,
@@ -58,15 +49,16 @@ import {
 
 import { importResource } from '@cardstack/host/resources/import';
 
+import {
+  moduleContentsResource,
+  isCardOrFieldDeclaration,
+  type ModuleDeclaration,
+} from '@cardstack/host/resources/module-contents';
+
 import type CardService from '@cardstack/host/services/card-service';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 
-// host components
-
-// host resources
-
-// host services
 import type MessageService from '@cardstack/host/services/message-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -123,29 +115,6 @@ const defaultPanelHeights: PanelHeights = {
 
 const cardEditorSaveTimes = new Map<string, number>();
 
-// an element should be (an item of focus within a module)
-// - exported function or class
-// - exported card or field
-// - unexported card or field
-// This element (in code mode) is extended to include the cardType and cardOrField
-export type Element =
-  | (CardOrField & Partial<PossibleCardOrFieldClass>)
-  | BaseDeclaration;
-
-export interface CardOrField {
-  cardType: CardType;
-  cardOrField: typeof BaseDef;
-}
-
-export function isCardOrFieldElement(
-  element: Element,
-): element is CardOrField & Partial<PossibleCardOrFieldClass> {
-  return (
-    (element as CardOrField).cardType !== undefined &&
-    (element as CardOrField).cardOrField !== undefined
-  );
-}
-
 export default class CodeMode extends Component<Signature> {
   @service declare monacoService: MonacoService;
   @service declare cardService: CardService;
@@ -159,7 +128,7 @@ export default class CodeMode extends Component<Signature> {
   @tracked private card: CardDef | undefined;
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
-  @tracked private selectedElement: Element | undefined;
+  @tracked private _selectedDeclaration: ModuleDeclaration | undefined;
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
@@ -332,71 +301,22 @@ export default class CodeMode extends Component<Signature> {
     return this.operatorModeStateService.openFile.current;
   }
 
-  @use private elements = resource(({ on }) => {
+  @use private moduleContentsResource = resource(({ on }) => {
     on.cleanup(() => {
-      this.selectedElement = undefined;
+      this._selectedDeclaration = undefined;
     });
-    if (!this.importedModule) {
-      return new TrackedObject({
-        error: null,
-        isLoading: false,
-        value: [],
-        load: () => Promise<void>,
-      });
+
+    if (isReady(this.currentOpenFile) && this.importedModule?.module) {
+      let f: Ready = this.currentOpenFile;
+      if (hasExecutableExtension(f.url)) {
+        return moduleContentsResource(this, () => ({
+          file: f,
+          exportedCardsOrFields:
+            this.importedModule?.cardsOrFieldsFromModule || [],
+        }));
+      }
     }
-
-    const state: {
-      isLoading: boolean;
-      value: Element[] | null;
-      error: Error | undefined;
-      load: () => Promise<void>;
-    } = new TrackedObject({
-      isLoading: true,
-      value: [],
-      error: undefined,
-      load: async () => {
-        state.isLoading = true;
-        if (this.importedModule === undefined) {
-          state.value = [];
-          return;
-        }
-        try {
-          if (isReady(this.currentOpenFile) && this.importedModule?.module) {
-            let module = this.importedModule?.module;
-            let cardsOrFields = cardsOrFieldsFromModule(module);
-            let elements: Element[] = [];
-            await this.importedModule.loaded;
-            let moduleSyntax = new ModuleSyntax(this.currentOpenFile.content);
-            elements = moduleSyntax.elements.map(
-              (value: ElementDeclaration) => {
-                let cardOrField = cardsOrFields.find(
-                  (c) => c.name === value.localName,
-                );
-                if (cardOrField !== undefined) {
-                  return {
-                    ...value,
-                    cardType: getCardType(
-                      this,
-                      () => cardOrField as typeof BaseDef,
-                    ),
-                    cardOrField,
-                  } as CardOrField & Partial<PossibleCardOrFieldClass>;
-                }
-                return value as BaseDeclaration;
-              },
-            );
-            state.value = elements;
-          }
-        } catch (error: any) {
-          state.error = error;
-        } finally {
-          state.isLoading = false;
-        }
-      },
-    });
-
-    state.load();
-    return state;
+    return;
   });
 
   @use private importedModule = resource(() => {
@@ -454,7 +374,7 @@ export default class CodeMode extends Component<Signature> {
   }
 
   private loadLiveCard = restartableTask(async (url: URL) => {
-    let card = await this.cardService.loadLiveModel(this, url);
+    let card = await this.cardService.loadModel(this, url);
     if (card !== this.card) {
       if (this.card) {
         this.cardService.unsubscribe(this.card, this.onCardChange);
@@ -488,35 +408,31 @@ export default class CodeMode extends Component<Signature> {
     return this.card;
   }
 
-  private get selectedElementInFile() {
-    if (this.selectedElement) {
-      return this.selectedElement;
+  private get declarations() {
+    return this.moduleContentsResource?.declarations || [];
+  }
+
+  private get selectedDeclaration() {
+    if (this._selectedDeclaration) {
+      return this._selectedDeclaration;
     } else {
-      return this.elementsInFile.length > 0
-        ? this.elementsInFile[0]
-        : undefined;
+      return this.declarations.length > 0 ? this.declarations[0] : undefined;
     }
   }
 
   private get selectedCardOrField() {
-    if (this.selectedElementInFile) {
-      if (isCardOrFieldElement(this.selectedElementInFile)) {
-        return this.selectedElementInFile;
-      }
+    if (
+      this.selectedDeclaration &&
+      isCardOrFieldDeclaration(this.selectedDeclaration)
+    ) {
+      return this.selectedDeclaration;
     }
     return;
   }
 
   @action
-  private selectElement(el: Element) {
-    this.selectedElement = el;
-  }
-
-  get elementsInFile() {
-    if (this.elements.value === null) {
-      return [];
-    }
-    return this.elements.value;
+  private selectDeclaration(dec: ModuleDeclaration) {
+    this._selectedDeclaration = dec;
   }
 
   private onCardChange = () => {
@@ -697,11 +613,11 @@ export default class CodeMode extends Component<Signature> {
 
   onStateChange(state: FileResource['state']) {
     this.userHasDismissedURLError = false;
-    if (state === 'not-found') {
+    if (state === 'ready') {
+      this.loadFileError = null;
+    } else {
       this.loadFileError = 'This resource does not exist';
       this.setFileView('browser');
-    } else if (state === 'ready') {
-      this.loadFileError = null;
     }
   }
 
@@ -793,9 +709,9 @@ export default class CodeMode extends Component<Signature> {
                           @cardInstanceType={{this.cardType}}
                           @readyFile={{this.readyFile}}
                           @realmInfo={{this.realmInfo}}
-                          @selectedElement={{this.selectedElementInFile}}
-                          @elements={{this.elementsInFile}}
-                          @selectElement={{this.selectElement}}
+                          @selectedDeclaration={{this.selectedDeclaration}}
+                          @declarations={{this.declarations}}
+                          @selectDeclaration={{this.selectDeclaration}}
                           @delete={{this.delete}}
                           data-test-card-inheritance-panel
                         />
@@ -1122,15 +1038,4 @@ export default class CodeMode extends Component<Signature> {
 
 function getMonacoContent() {
   return (window as any).monaco.editor.getModels()[0].getValue();
-}
-
-function isCardOrField(cardOrField: any): cardOrField is typeof BaseDef {
-  return typeof cardOrField === 'function' && 'baseDef' in cardOrField;
-}
-
-function cardsOrFieldsFromModule(
-  module: Record<string, any>,
-  _never?: never, // glint insists that w/o this last param that there are actually no params
-): (typeof BaseDef)[] {
-  return Object.values(module).filter(isCardOrField);
 }

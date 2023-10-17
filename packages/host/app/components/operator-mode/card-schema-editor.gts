@@ -4,6 +4,8 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import { tracked } from '@glimmer/tracking';
+
 import { DropdownButton } from '@cardstack/boxel-ui';
 import menuDivider from '@cardstack/boxel-ui/helpers/menu-divider';
 import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
@@ -14,6 +16,7 @@ import { getPlural } from '@cardstack/runtime-common';
 
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
+import AddFieldModal from '@cardstack/host/components/operator-mode/add-field-modal';
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import {
@@ -40,6 +43,7 @@ interface Signature {
     file: Ready;
     cardType: Type;
     moduleSyntax: ModuleSyntax;
+    allowAddingFields: boolean;
     childFields: string[];
     parentFields: string[];
   };
@@ -215,6 +219,14 @@ export default class CardSchemaEditor extends Component<Signature> {
 
       .total-fields-label {
         font: var(--boxel-font-sm);
+      }
+
+      .add-field-button {
+        background-color: transparent;
+        border: none;
+        color: var(--boxel-highlight);
+        font-size: var(--boxel-font-sm);
+        font-weight: 600;
       }
 
       .overriding-field {
@@ -406,12 +418,36 @@ export default class CardSchemaEditor extends Component<Signature> {
           {{/if}}
         {{/each}}
       </div>
+
+      {{#if @allowAddingFields}}
+        <button
+          class='add-field-button'
+          data-test-add-field-button
+          {{on 'click' this.toggleAddFieldModal}}
+        >
+          + Add a field
+        </button>
+
+        {{#if this.addFieldModalShown}}
+          <AddFieldModal
+            @file={{@file}}
+            @card={{@card}}
+            @moduleSyntax={{@moduleSyntax}}
+            @onClose={{this.toggleAddFieldModal}}
+          />
+        {{/if}}
+      {{/if}}
     </div>
   </template>
 
   @service declare loaderService: LoaderService;
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
+
+  @tracked addFieldModalShown = false;
+  @action toggleAddFieldModal() {
+    this.addFieldModalShown = !this.addFieldModalShown;
+  }
 
   @action openCardDefinition(moduleURL: string) {
     this.operatorModeStateService.updateCodePath(new URL(moduleURL));
