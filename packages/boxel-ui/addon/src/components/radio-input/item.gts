@@ -1,5 +1,6 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
+
 import cn from '../../helpers/cn.ts';
 import { not } from '../../helpers/truth-helpers.ts';
 

@@ -1,8 +1,8 @@
-import Component from '@glimmer/component';
 import { hash } from '@ember/helper';
+import Component from '@glimmer/component';
+
 import cn from '../../helpers/cn.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
-
 import Item from './item.gts';
 
 export interface Signature {

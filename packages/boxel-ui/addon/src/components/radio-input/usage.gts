@@ -1,8 +1,7 @@
-import Component from '@glimmer/component';
-import cssVar from '../../helpers/css-var.ts';
 import { fn } from '@ember/helper';
 import { array } from '@ember/helper';
 import { action } from '@ember/object';
+import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import {
@@ -10,6 +9,7 @@ import {
   CSSVariableInfo,
 } from 'ember-freestyle/decorators/css-variable';
 
+import cssVar from '../../helpers/css-var.ts';
 import RadioInput from './index.gts';
 
 export default class RadioInputUsage extends Component {
