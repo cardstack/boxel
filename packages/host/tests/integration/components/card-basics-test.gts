@@ -436,6 +436,7 @@ module('Integration | card-basics', function (hooks) {
       @field denomination = contains(StringField);
       @field currencyName = contains(StringField);
       @field icon = contains(StringField);
+      static displayName = 'Currency';
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           {{! @glint-ignore  Argument of type 'unknown' is not assignable to parameter of type 'Element'}}
@@ -511,11 +512,17 @@ module('Integration | card-basics', function (hooks) {
         '[data-test-field="denomination"] [data-test-links-to-editor] [data-test-currency-embedded]',
       )
       .containsText('🇺🇸 USD - United States Dollar');
+
+    await click(
+      '[data-test-field="denomination"] [data-test-links-to-editor] [data-test-remove-card]',
+    );
+
     assert
-      .dom(
-        '[data-test-field="denomination"] [data-test-links-to-editor] [data-test-remove-card]',
-      )
-      .exists('has remove button');
+      .dom('[data-test-currency-embedded]')
+      .doesNotExist('currency card is removed');
+    assert
+      .dom('[data-test-field="denomination"] [data-test-links-to-editor]')
+      .containsText('Link Currency', 'empty state is correct');
   });
 
   test('render a linksToMany field in atom format', async function (assert) {

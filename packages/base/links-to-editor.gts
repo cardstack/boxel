@@ -40,7 +40,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
           {{on 'click' this.add}}
           data-test-add-new
         >
-          Choose
+          Link
           {{@field.card.displayName}}
         </AddButton>
       {{else}}
