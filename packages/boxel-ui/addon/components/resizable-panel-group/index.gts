@@ -45,13 +45,13 @@ export default class ResizablePanelGroup extends Component<Signature> {
       {{yield
         (component
           ResizablePanel
-          orientation=this.args.orientation
+          orientation=@orientation
           registerPanel=this.registerPanel
           panelContext=this.panelContext
           isLastPanel=this.isLastPanel
           onResizeHandlerMouseDown=this.onResizeHandlerMouseDown
           onResizeHandlerDblClick=this.onResizeHandlerDblClick
-          reverseHandlerArrow=this.args.reverseCollapse
+          reverseHandlerArrow=@reverseCollapse
         )
       }}
     </div>
