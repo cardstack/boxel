@@ -807,7 +807,7 @@ export default class CodeMode extends Component<Signature> {
                 @defaultLength={{defaultPanelHeights.recentPanel}}
                 @length={{this.panelHeights.recentPanel}}
               >
-                <aside class='inner-container'>
+                <aside class='inner-container recent-files'>
                   <header
                     class='inner-container__header'
                     aria-label='Recent Files Header'
@@ -966,15 +966,7 @@ export default class CodeMode extends Component<Signature> {
       }
       .column:last-child {
         flex: 1.2;
-      }
-      .column:first-child > *:first-child {
-        max-height: 50%;
-      }
-      .column:first-child > *:last-child {
-        max-height: calc(50% - var(--boxel-sp));
-        background-color: var(--boxel-200);
-      }
-      */
+      }*/
 
       .inner-container {
         height: 100%;
@@ -986,6 +978,11 @@ export default class CodeMode extends Component<Signature> {
         box-shadow: var(--boxel-deep-box-shadow);
         overflow: hidden;
       }
+
+      .inner-container.recent-files {
+        background-color: var(--boxel-200);
+      }
+
       .inner-container__header {
         padding: var(--boxel-sp-sm) var(--boxel-sp-xs);
         font: 700 var(--boxel-font);
