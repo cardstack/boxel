@@ -21,7 +21,15 @@ import {
   isCardDocumentString,
 } from '@cardstack/runtime-common';
 
+import { isCardDef, isFieldDef } from '@cardstack/runtime-common/code-ref';
+
+import { type CardType } from '@cardstack/host/resources/card-type';
 import { type Ready } from '@cardstack/host/resources/file';
+
+import {
+  type ModuleDeclaration,
+  isCardOrFieldDeclaration,
+} from '@cardstack/host/resources/module-contents';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -38,15 +46,7 @@ import Selector from './detail-panel-selector';
 
 import { SelectorItem, selectorItemFunc } from './detail-panel-selector';
 
-import {
-  type ModuleDeclaration,
-  isCardOrFieldDeclaration,
-} from '@cardstack/host/resources/module-contents';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-
-import { isCardDef, isFieldDef } from '@cardstack/runtime-common/code-ref';
-
-import { type CardType } from '@cardstack/host/resources/card-type';
 
 interface Signature {
   Element: HTMLElement;
@@ -159,10 +159,11 @@ export default class DetailPanel extends Component<Signature> {
       const isSelected = this.args.selectedDeclaration === dec;
       return selectorItemFunc(
         [
-          resolveElementName(dec),
           () => {
             this.args.selectDeclaration(dec);
           },
+          dec.localName,
+          dec.exportedAs,
         ],
         { selected: isSelected },
       );
@@ -399,11 +400,3 @@ export default class DetailPanel extends Component<Signature> {
     </style>
   </template>
 }
-
-const resolveElementName = (dec: ModuleDeclaration) => {
-  let localName: string | undefined = dec.localName;
-  if (isCardOrFieldDeclaration(dec)) {
-    localName = dec.cardOrField.displayName;
-  }
-  return localName ?? '[No Name Found]';
-};

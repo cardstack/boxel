@@ -1,10 +1,14 @@
-import Component from '@glimmer/component';
-import { action } from '@ember/object';
 import { type EmptyObject } from '@ember/component/helper';
-import compact from 'ember-composable-helpers/helpers/compact';
-import { on } from '@ember/modifier';
-import cn from '@cardstack/boxel-ui/helpers/cn';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import Component from '@glimmer/component';
+
+import compact from 'ember-composable-helpers/helpers/compact';
+
+import cn from '@cardstack/boxel-ui/helpers/cn';
+import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 interface SelectorItemOptions {
   action: Function;
@@ -13,13 +17,19 @@ interface SelectorItemOptions {
   disabled: boolean;
 }
 export class SelectorItem {
-  text: string;
   selected: boolean;
   disabled: boolean;
+  localName?: string;
+  exportedAs?: string;
   action: Function | undefined;
 
-  constructor(text: string, options: Partial<SelectorItemOptions>) {
-    this.text = text;
+  constructor(
+    options: Partial<SelectorItemOptions>,
+    localName?: string,
+    exportedAs?: string,
+  ) {
+    this.localName = localName;
+    this.exportedAs = exportedAs;
     this.action = options.action;
     this.selected = options.selected || false;
     this.disabled = options.disabled || false;
@@ -27,13 +37,14 @@ export class SelectorItem {
 }
 
 export function selectorItemFunc(
-  params: [string, Function],
+  params: [Function, string?, string?],
   named: Partial<SelectorItemOptions>,
 ): SelectorItem {
-  let text = params[0];
   let opts = Object.assign({}, named);
-  opts.action = params[1];
-  return new SelectorItem(text, opts);
+  opts.action = params[0];
+  let localName = params[1];
+  let exportedAs = params[2];
+  return new SelectorItem(opts, localName, exportedAs);
 }
 
 class SelectorItemRenderer extends Component<{
@@ -94,7 +105,7 @@ export default class Selector extends Component<Signature> {
                   class='boxel-selector__item__content'
                   role='menuitem'
                   href='#'
-                  data-test-boxel-selector-item-text={{selectorItem.text}}
+                  data-test-boxel-selector-item-text={{selectorItem.localName}}
                   {{on
                     'click'
                     (fn this.invokeSelectorItemAction selectorItem.action)
@@ -105,9 +116,27 @@ export default class Selector extends Component<Signature> {
                   }}
                   disabled={{selectorItem.disabled}}
                 >
-                  <span class='selector-item'>
-                    {{selectorItem.text}}
-                  </span>
+                  <div class='selector-item'>
+                    {{#if selectorItem.exportedAs}}
+                      <span class='exported-arrow'>
+                        {{svgJar
+                          'diagonal-arrow-left-up'
+                          width='20'
+                          height='20'
+                        }}
+                      </span>
+                      <span class='exported'>{{selectorItem.exportedAs}}</span>
+                      {{#unless
+                        (eq selectorItem.exportedAs selectorItem.localName)
+                      }}<span>({{selectorItem.localName}})</span>{{/unless}}
+                    {{else}}
+                      <span class='non-exported'>{{if
+                          selectorItem.localName
+                          selectorItem.localName
+                          '??'
+                        }}</span>
+                    {{/if}}
+                  </div>
                 </div>
               </li>
             </:item>
@@ -125,8 +154,7 @@ export default class Selector extends Component<Signature> {
           --boxel-selector-disabled-color: var(--boxel-highlight);
           --boxel-selector-font: 500 var(--boxel-font-sm);
           --boxel-selector-item-gap: var(--boxel-sp-xxs);
-          --boxel-selector-item-content-padding: var(--boxel-sp-xs)
-            var(--boxel-sp);
+          --boxel-selector-item-content-padding: var(--boxel-sp-xs);
           --boxel-selector-selected-background-color: var(--boxel-highlight);
           --boxel-selector-selected-font-color: var(--boxel-light-100);
           --boxel-selector-selected-hover-font-color: var(--boxel-light);
@@ -191,9 +219,26 @@ export default class Selector extends Component<Signature> {
         }
 
         .selector-item {
+          --icon-color: var(--boxel-highlight);
+
           display: flex;
           align-items: center;
+          flex-wrap: wrap;
+          text-wrap: nowrap;
           gap: var(--boxel-selector-item-gap);
+        }
+
+        .boxel-selector__item--selected .selector-item {
+          color: var(--boxel-light);
+          --icon-color: var(--boxel-light);
+        }
+
+        .exported {
+          font-weight: 700;
+        }
+
+        .non-exported {
+          padding-left: calc(var(--boxel-selector-item-gap) + 20px);
         }
       }
     </style>
