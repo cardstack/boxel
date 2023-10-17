@@ -222,7 +222,7 @@ class Isolated extends Component<typeof CardsGrid> {
     let card = await chooseCard<CatalogEntry>({
       filter: {
         on: catalogEntryRef,
-        eq: { isPrimitive: false },
+        eq: { isField: false },
       },
     });
     if (!card) {

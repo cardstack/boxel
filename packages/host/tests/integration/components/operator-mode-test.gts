@@ -36,6 +36,7 @@ import {
   setupLocalIndexing,
   setupServerSentEvents,
   setupOnSave,
+  showSearchResult,
   TestRealmAdapter,
   TestRealm,
   type TestContextWithSave,
@@ -489,7 +490,7 @@ module('Integration | operator-mode', function (hooks) {
         data: {
           type: 'card',
           attributes: {
-            title: 'Pet Room',
+            title: 'General Pet Room',
             description: 'Catalog entry for Pet Room Card',
             ref: {
               module: `${testRealmURL}pet-room`,
@@ -950,7 +951,11 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-add-card-button]');
     assert.dom('[data-test-card-catalog-modal]').isVisible();
 
-    await waitFor(`[data-test-select="${testRealmURL}Person/fadhlan"]`);
+    await waitFor(`[data-test-select]`);
+    await showSearchResult(
+      'Operator Mode Workspace',
+      `${testRealmURL}Person/fadhlan`,
+    );
 
     await percySnapshot(assert);
 
@@ -1712,7 +1717,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-card-catalog-item]`);
     await fillIn(
       `[data-test-url-search] input`,
-      `https://cardstack.com/base/types/room-objective`,
+      `https://cardstack.com/base/types/card`,
     );
     await waitUntil(
       () =>
@@ -1724,10 +1729,14 @@ module('Integration | operator-mode', function (hooks) {
     );
     await click(`[data-test-card-catalog-go-button]`);
     assert
-      .dom(
-        `[data-test-stack-card-index="1"] [data-test-compound-field-component]`,
-      )
-      .containsText('Objective', 'the card is rendered in the stack');
+      .dom(`[data-test-stack-card-index="1"] [data-test-field="title"]`)
+      .exists();
+    assert
+      .dom(`[data-test-stack-card-index="1"] [data-test-field="description"]`)
+      .exists();
+    assert
+      .dom(`[data-test-stack-card-index="1"] [data-test-field="thumbnailURL"]`)
+      .exists();
   });
 
   test(`error message is shown when invalid card URL is entered in card chooser`, async function (assert) {
@@ -1782,27 +1791,27 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-card-catalog-item]`);
 
     await click(
-      `[data-test-card-catalog-item="https://cardstack.com/base/types/room-objective"] button`,
+      `[data-test-card-catalog-item="https://cardstack.com/base/types/card"] button`,
     );
     assert
       .dom(
-        `[data-test-card-catalog-item="https://cardstack.com/base/types/room-objective"].selected`,
+        `[data-test-card-catalog-item="https://cardstack.com/base/types/card"].selected`,
       )
       .exists('card is selected');
 
     await fillIn(
       `[data-test-url-search] input`,
-      `https://cardstack.com/base/types/room-objective`,
+      `https://cardstack.com/base/types/card`,
     );
 
     assert
       .dom(
-        `[data-test-card-catalog-item="https://cardstack.com/base/types/room-objective"].selected`,
+        `[data-test-card-catalog-item="https://cardstack.com/base/types/card"].selected`,
       )
       .doesNotExist('card is not selected');
 
     await click(
-      `[data-test-card-catalog-item="https://cardstack.com/base/types/room-objective"] button`,
+      `[data-test-card-catalog-item="https://cardstack.com/base/types/card"] button`,
     );
     assert
       .dom(`[data-test-url-search] input`)
@@ -1928,7 +1937,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-card-catalog-item]');
     assert.dom(`[data-test-card-catalog-item]`).exists({ count: 4 });
 
-    await fillIn(`[data-test-search-field] input`, `room`);
+    await fillIn(`[data-test-search-field] input`, `general`);
     await waitFor(
       `[data-test-card-catalog-item="${testRealmURL}CatalogEntry/pet-card"]`,
       { count: 0 },
@@ -1952,7 +1961,7 @@ module('Integration | operator-mode', function (hooks) {
       .hasText('1 result');
     assert
       .dom(
-        `[data-test-realm="Base Workspace"] [data-test-select="${baseRealm.url}types/room-objective"]`,
+        `[data-test-realm="Base Workspace"] [data-test-select="${baseRealm.url}types/card"]`,
       )
       .exists();
 
@@ -1961,9 +1970,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-realm]`).exists({ count: 1 });
     assert.dom('[data-test-realm="Operator Mode Workspace"]').doesNotExist();
     assert.dom('[data-test-realm="Base Workspace"]').exists();
-    assert
-      .dom(`[data-test-select="${baseRealm.url}types/room-objective"]`)
-      .exists();
+    assert.dom(`[data-test-select="${baseRealm.url}types/card"]`).exists();
 
     await click('[data-test-realm-filter-button]');
     await click('[data-test-boxel-menu-item-text="Operator Mode Workspace"]');
