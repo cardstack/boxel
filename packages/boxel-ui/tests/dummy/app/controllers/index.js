@@ -2,6 +2,7 @@ import FreestyleController from 'ember-freestyle/controllers/freestyle';
 import AccordionUsage from '@cardstack/boxel-ui/components/accordion/usage';
 import AddButtonUsage from '@cardstack/boxel-ui/components/add-button/usage';
 import CardContainerUsage from '@cardstack/boxel-ui/components/card-container/usage';
+import DropdownButtonUsage from '@cardstack/boxel-ui/components/dropdown-button/usage';
 import FieldContainerUsage from '@cardstack/boxel-ui/components/field-container/usage';
 import GridContainerUsage from '@cardstack/boxel-ui/components/grid-container/usage';
 import HeaderUsage from '@cardstack/boxel-ui/components/header/usage';
@@ -17,6 +18,7 @@ import MenuUsage from '@cardstack/boxel-ui/components/menu/usage';
 import DropdownUsage from '@cardstack/boxel-ui/components/dropdown/usage';
 import TooltipUsage from '@cardstack/boxel-ui/components/tooltip/usage';
 import ResizablePanelGroupUsage from '@cardstack/boxel-ui/components/resizable-panel-group/usage';
+import RadioInput from '@cardstack/boxel-ui/components/radio-input/usage';
 
 export default class IndexController extends FreestyleController {
   constructor() {
@@ -25,6 +27,8 @@ export default class IndexController extends FreestyleController {
       ['Boxel::Accordion', AccordionUsage],
       ['Boxel::AddButton', AddButtonUsage],
       ['Boxel::CardContainer', CardContainerUsage],
+      ['Boxel::Dropdown', DropdownUsage],
+      ['Boxel::DropdownButton', DropdownButtonUsage],
       ['Boxel::FieldContainer', FieldContainerUsage],
       ['Boxel::GridContainer', GridContainerUsage],
       ['Boxel::Header', HeaderUsage],
@@ -37,9 +41,9 @@ export default class IndexController extends FreestyleController {
       ['Boxel::Modal', ModalUsage],
       ['Boxel::Message', MessageUsage],
       ['Boxel::Menu', MenuUsage],
-      ['Boxel::Dropdown', DropdownUsage],
       ['Boxel::Tooltip', TooltipUsage],
       ['Boxel::ResizablePanel', ResizablePanelGroupUsage],
+      ['Boxel::RadioInput', RadioInput],
     ].map(([name, c]) => {
       return {
         title: name,

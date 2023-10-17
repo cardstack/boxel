@@ -36,7 +36,7 @@ export class AttachedCards extends Resource<Args> {
       for (let id of ids) {
         let pendingCard = RoomFieldClazz.getAttachedCard(id);
         if (!pendingCard) {
-          pendingCard = this.cardService.loadModel(new URL(id));
+          pendingCard = this.cardService.loadModel(this, new URL(id));
           RoomFieldClazz.setAttachedCard(id, pendingCard);
         }
         pendingCards.push(pendingCard);

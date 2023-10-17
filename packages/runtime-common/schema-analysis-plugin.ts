@@ -1,5 +1,5 @@
 import type * as Babel from '@babel/core';
-import type { types as t } from '@babel/core';
+import { types as t } from '@babel/core';
 import type { NodePath, Scope } from '@babel/traverse';
 
 interface State {
@@ -13,19 +13,23 @@ export interface ExternalReference {
   name: string;
 }
 
-export type ClassReference =
-  | ExternalReference
-  | {
-      type: 'internal';
-      classIndex: number;
-    };
+export interface InternalReference {
+  type: 'internal';
+  classIndex?: number;
+}
 
-export interface PossibleCardClass {
-  super: ClassReference;
+export type ClassReference = ExternalReference | InternalReference;
+
+export type BaseDeclaration = {
   localName: string | undefined;
   exportedAs: string | undefined;
-  path: NodePath<t.ClassDeclaration>;
+  path: NodePath;
+};
+
+export interface PossibleCardOrFieldClass extends BaseDeclaration {
+  super: ClassReference;
   possibleFields: Map<string, PossibleField>;
+  path: NodePath<t.ClassDeclaration>;
 }
 
 export interface PossibleField {
@@ -35,17 +39,56 @@ export interface PossibleField {
   path: NodePath<t.ClassProperty>;
 }
 
+// a module declaration should be (an item of focus within a module)
+// - exported function or class
+// - exported card or field
+// - unexported card or field
+export type Declaration = PossibleCardOrFieldClass | BaseDeclaration;
+
 export interface Options {
-  possibleCards: PossibleCardClass[];
+  possibleCardsOrFields: PossibleCardOrFieldClass[]; //cards may not be exports
+  declarations: Declaration[];
 }
 
 export function schemaAnalysisPlugin(_babel: typeof Babel) {
-  // let t = babel.types;
   return {
     visitor: {
+      FunctionDeclaration: {
+        enter(path: NodePath<t.FunctionDeclaration>, state: State) {
+          let localName = path.node.id ? path.node.id.name : undefined;
+          if (t.isExportDeclaration(path.parentPath)) {
+            // exported functions
+            state.opts.declarations.push({
+              localName,
+              exportedAs: getExportedAs(path, localName),
+              path,
+            });
+          }
+        },
+      },
       ClassDeclaration: {
         enter(path: NodePath<t.ClassDeclaration>, state: State) {
           if (!path.node.superClass) {
+            // any class which doesn't have a super class
+            let localName = path.node.id ? path.node.id.name : undefined;
+            if (t.isExportDeclaration(path.parentPath)) {
+              state.opts.declarations.push({
+                localName,
+                exportedAs: getExportedAs(path, localName),
+                path,
+              });
+            }
+            let maybeExportSpecifierLocal = getExportSpecifierLocal(
+              path,
+              localName,
+            );
+            if (maybeExportSpecifierLocal !== undefined) {
+              state.opts.declarations.push({
+                localName,
+                exportedAs: getExportedAs(path, localName),
+                path,
+              });
+            }
             return;
           }
 
@@ -53,42 +96,29 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
           if (sc.isReferencedIdentifier()) {
             let classRef = makeClassReference(path.scope, sc.node.name, state);
             if (classRef) {
+              // card or field class which extends a card or field class
               state.insideCard = true;
-              let exportedAs: string | undefined;
-              let { parentPath } = path;
               let localName = path.node.id ? path.node.id.name : undefined;
-              if (parentPath.isExportNamedDeclaration()) {
-                // the class declaration is part of a named export
-                exportedAs = localName;
-              } else if (parentPath.isExportDefaultDeclaration()) {
-                // the class declaration is part of a default export
-                exportedAs = 'default';
-              } else {
-                // the class's identifier is referenced in a node whose parent is an ExportSpecifier
-                let binding = localName
-                  ? path.scope.getBinding(localName)
-                  : undefined;
-                if (binding) {
-                  let maybeExportSpecifierLocal = binding.referencePaths.find(
-                    (b) => b.parentPath?.isExportSpecifier(),
-                  ) as NodePath<t.Identifier> | undefined;
-                  if (maybeExportSpecifierLocal) {
-                    exportedAs = getName(
-                      (
-                        maybeExportSpecifierLocal.parentPath as NodePath<t.ExportSpecifier>
-                      ).node.exported,
-                    );
-                  }
-                }
-              }
 
-              state.opts.possibleCards.push({
+              let possibleCardOrField = {
                 super: classRef,
                 localName,
                 path,
                 possibleFields: new Map(),
-                exportedAs,
-              });
+                exportedAs: getExportedAs(path, localName),
+              };
+              state.opts.possibleCardsOrFields.push(possibleCardOrField);
+              state.opts.declarations.push(possibleCardOrField);
+            } else {
+              // non-card or non-field class which extends some class
+              if (t.isExportDeclaration(path.parentPath)) {
+                let localName = path.node.id ? path.node.id.name : undefined;
+                state.opts.declarations.push({
+                  localName,
+                  exportedAs: getExportedAs(path, localName),
+                  path,
+                });
+              }
             }
           }
         },
@@ -183,8 +213,8 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
           },
         };
         // the card that contains this field will always be the last card that
-        // was added to possibleCards
-        let [card] = state.opts.possibleCards.slice(-1);
+        // was added to possibleCardsOrFields
+        let [card] = state.opts.possibleCardsOrFields.slice(-1);
         let fieldName = maybeClassProperty.node.key.name;
         card.possibleFields.set(fieldName, possibleField);
       },
@@ -205,6 +235,43 @@ class CompilerError extends Error {
       this.stack = new Error(message).stack;
     }
   }
+}
+
+function getExportSpecifierLocal(
+  path: NodePath<t.ClassDeclaration> | NodePath<t.FunctionDeclaration>,
+  localName: string | undefined,
+): NodePath<t.Identifier> | undefined {
+  // the class's identifier is referenced in a node whose parent is an ExportSpecifier
+  let binding = localName ? path.scope.getBinding(localName) : undefined;
+  if (binding) {
+    return binding.referencePaths.find(
+      (b) => b.parentPath?.isExportSpecifier(),
+    ) as NodePath<t.Identifier> | undefined;
+  }
+  return undefined;
+}
+
+function getExportedAs(
+  path: NodePath<t.ClassDeclaration> | NodePath<t.FunctionDeclaration>,
+  localName: string | undefined,
+): string | undefined {
+  let { parentPath } = path;
+  if (parentPath.isExportNamedDeclaration()) {
+    // the class declaration is part of a named export
+    return localName;
+  } else if (parentPath.isExportDefaultDeclaration()) {
+    // the class declaration is part of a default export
+    return 'default';
+  } else {
+    let maybeExportSpecifierLocal = getExportSpecifierLocal(path, localName);
+    if (maybeExportSpecifierLocal !== undefined) {
+      return getName(
+        (maybeExportSpecifierLocal.parentPath as NodePath<t.ExportSpecifier>)
+          .node.exported,
+      );
+    }
+  }
+  return;
 }
 
 function makeClassReference(
@@ -229,7 +296,7 @@ function makeClassReference(
 
   if (binding?.path.isClassDeclaration()) {
     let superClassNode = binding.path.node;
-    let superClassIndex = state.opts.possibleCards.findIndex(
+    let superClassIndex = state.opts.possibleCardsOrFields.findIndex(
       (card) => card.path.node === superClassNode,
     );
     if (superClassIndex >= 0) {
@@ -269,4 +336,22 @@ function getName(node: t.Identifier | t.StringLiteral) {
   } else {
     return node.value;
   }
+}
+
+export function isPossibleCardOrFieldClass(
+  declaration: any,
+): declaration is PossibleCardOrFieldClass {
+  return (
+    declaration &&
+    declaration.super &&
+    typeof declaration.localName === 'string' &&
+    declaration.possibleFields instanceof Map &&
+    declaration.path
+  );
+}
+
+export function isInternalReference(
+  classReference: any,
+): classReference is InternalReference {
+  return classReference && classReference.type === 'internal';
 }

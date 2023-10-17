@@ -1,18 +1,19 @@
+import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { BoxelInput } from '@cardstack/boxel-ui';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { and, bool, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { on } from '@ember/modifier';
 
+import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
+import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import URLBarResource, {
   urlBarResource,
 } from '@cardstack/host/resources/url-bar';
 
-import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type CardService from '../../services/card-service';
-import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 interface Signature {
   Element: HTMLElement;
@@ -25,7 +26,7 @@ interface Signature {
     userHasDismissedError: boolean; // user driven state that indicates if we should show error message
     resetLoadFileError: () => void; // callback to reset upstream error state -- perform on keypress
     dismissURLError: () => void; // callback allow user to dismiss the error message
-    realmURL: string;
+    realmURL: URL;
   };
 }
 
@@ -41,7 +42,10 @@ export default class CardURLBar extends Component<Signature> {
         <RealmInfoProvider @realmURL={{@realmURL}}>
           <:ready as |realmInfo|>
             <div class='realm-icon'>
-              <img src={{realmInfo.iconURL}} alt='realm-icon' />
+              <RealmIcon
+                @realmIconURL={{realmInfo.iconURL}}
+                @realmName={{realmInfo.name}}
+              />
             </div>
             <span>in {{realmInfo.name}}</span>
           </:ready>

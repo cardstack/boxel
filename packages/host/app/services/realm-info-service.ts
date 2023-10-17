@@ -31,7 +31,7 @@ export default class RealmInfoService extends Service {
   // When realmUrl is provided, it will fetch realm info from that url, otherwise it will first
   // try to fetch the realm url from the file url
   async fetchRealmInfo(params: {
-    realmURL?: string;
+    realmURL?: URL;
     fileURL?: string;
   }): Promise<RealmInfo> {
     let { realmURL, fileURL } = params;
@@ -39,18 +39,20 @@ export default class RealmInfoService extends Service {
       throw new Error("Must provide either 'realmUrl' or 'fileUrl'");
     }
 
-    realmURL = realmURL ? realmURL : await this.fetchRealmURL(fileURL!);
+    let realmURLString = realmURL
+      ? realmURL.href
+      : await this.fetchRealmURL(fileURL!);
 
-    if (this.cachedRealmInfos.has(realmURL)) {
-      return this.cachedRealmInfos.get(realmURL)!;
+    if (this.cachedRealmInfos.has(realmURLString)) {
+      return this.cachedRealmInfos.get(realmURLString)!;
     } else {
       let realmInfoResponse = await this.loaderService.loader.fetch(
-        `${realmURL}_info`,
+        `${realmURLString}_info`,
         { headers: { Accept: SupportedMimeType.RealmInfo } },
       );
 
       let realmInfo = (await realmInfoResponse.json())?.data?.attributes;
-      this.cachedRealmInfos.set(realmURL, realmInfo);
+      this.cachedRealmInfos.set(realmURLString, realmInfo);
       return realmInfo;
     }
   }

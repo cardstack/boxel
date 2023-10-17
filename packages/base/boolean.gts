@@ -44,6 +44,7 @@ export default class BooleanField extends FieldDef {
 
   static embedded = View;
   static isolated = View;
+  static atom = View;
 
   static edit = class Edit extends Component<typeof this> {
     <template>

@@ -332,6 +332,9 @@ export default class Schema extends Component<Signature> {
       this.newFieldName,
       fieldEntry.ref,
       this.newFieldType,
+      undefined,
+      undefined,
+      undefined,
     );
     await this.write.perform(this.args.moduleSyntax.code());
   });

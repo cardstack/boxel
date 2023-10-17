@@ -108,12 +108,26 @@ class BoxelDropdown extends Component<Signature> {
           box-shadow: 0 5px 15px 0 rgb(0 0 0 / 25%);
         }
 
-        .boxel-dropdown__content.ember-basic-dropdown-content--below.ember-basic-dropdown--transitioning-in {
-          animation: drop-fade-below var(0.2s ease);
+        @media (prefers-reduced-motion: no-preference) {
+          .boxel-dropdown__content.ember-basic-dropdown-content--below.ember-basic-dropdown--transitioned-in {
+            animation: drop-fade-below var(--boxel-transition);
+          }
+
+          .boxel-dropdown__content.ember-basic-dropdown-content--below.ember-basic-dropdown--transitioning-out {
+            animation: drop-fade-below var(--boxel-transition) reverse;
+          }
         }
 
-        .boxel-dropdown__content.ember-basic-dropdown-content--below.ember-basic-dropdown--transitioning-out {
-          animation: drop-fade-below var(0.2s ease) reverse;
+        @keyframes drop-fade-below {
+          0% {
+            opacity: 0;
+            transform: translateY(-20px);
+          }
+
+          100% {
+            opacity: 1;
+            transform: translateY(0);
+          }
         }
       }
     </style>

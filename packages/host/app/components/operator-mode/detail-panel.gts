@@ -11,7 +11,7 @@ import { CardContainer, LoadingIndicator, Header } from '@cardstack/boxel-ui';
 
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 
-import { or } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { or, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
 import { type RealmInfo } from '@cardstack/runtime-common';
 
@@ -38,8 +38,15 @@ import Selector from './detail-panel-selector';
 
 import { SelectorItem, selectorItemFunc } from './detail-panel-selector';
 
-import type { ElementInFile } from './code-mode';
+import {
+  type ModuleDeclaration,
+  isCardOrFieldDeclaration,
+} from '@cardstack/host/resources/module-contents';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+
+import { isCardDef, isFieldDef } from '@cardstack/runtime-common/code-ref';
+
+import { type CardType } from '@cardstack/host/resources/card-type';
 
 interface Signature {
   Element: HTMLElement;
@@ -47,9 +54,10 @@ interface Signature {
     realmInfo: RealmInfo | null;
     readyFile: Ready;
     cardInstance: CardDef | undefined;
-    selectedElement?: ElementInFile;
-    elements: ElementInFile[];
-    selectElement: (el: ElementInFile) => void;
+    cardInstanceType: CardType | undefined;
+    selectedDeclaration?: ModuleDeclaration;
+    declarations: ModuleDeclaration[];
+    selectDeclaration: (dec: ModuleDeclaration) => void;
     delete: () => void;
   };
 }
@@ -59,13 +67,23 @@ export default class DetailPanel extends Component<Signature> {
   private lastModified = lastModifiedDate(this, () => this.args.readyFile);
 
   get cardType() {
-    return this.args.selectedElement?.cardType;
+    if (
+      this.args.selectedDeclaration &&
+      isCardOrFieldDeclaration(this.args.selectedDeclaration)
+    ) {
+      return this.args.selectedDeclaration.cardType;
+    }
+    return;
   }
 
   get isLoading() {
     return (
-      this.args.elements.some(({ cardType }) => {
-        return cardType?.isLoading;
+      this.args.declarations.some((dec) => {
+        if (isCardOrFieldDeclaration(dec)) {
+          return dec.cardType?.isLoading;
+        } else {
+          return false;
+        }
       }) || this.cardType?.isLoading
     );
   }
@@ -78,8 +96,8 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   @action
-  isSelected(el: ElementInFile) {
-    return this.args.selectedElement === el;
+  isSelected(dec: ModuleDeclaration) {
+    return this.args.selectedDeclaration === dec;
   }
 
   get isCardInstance() {
@@ -101,6 +119,30 @@ export default class DetailPanel extends Component<Signature> {
     return this.args.readyFile.url.endsWith('.json');
   }
 
+  get isField() {
+    if (
+      this.args.selectedDeclaration &&
+      isCardOrFieldDeclaration(this.args.selectedDeclaration)
+    ) {
+      return (
+        this.isModule && isFieldDef(this.args.selectedDeclaration?.cardOrField)
+      );
+    }
+    return false;
+  }
+
+  get isCard() {
+    if (
+      this.args.selectedDeclaration &&
+      isCardOrFieldDeclaration(this.args.selectedDeclaration)
+    ) {
+      return (
+        this.isModule && isCardDef(this.args.selectedDeclaration?.cardOrField)
+      );
+    }
+    return false;
+  }
+
   private get fileExtension() {
     if (!this.args.cardInstance) {
       return '.' + this.args.readyFile.url.split('.').pop() || '';
@@ -110,16 +152,16 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   get buildSelectorItems(): SelectorItem[] {
-    if (!this.args.elements) {
+    if (!this.args.declarations) {
       return [];
     }
-    return this.args.elements.map((el) => {
-      const isSelected = this.args.selectedElement === el;
+    return this.args.declarations.map((dec) => {
+      const isSelected = this.args.selectedDeclaration === dec;
       return selectorItemFunc(
         [
-          el.card.displayName,
+          resolveElementName(dec),
           () => {
-            this.args.selectElement(el);
+            this.args.selectDeclaration(dec);
           },
         ],
         { selected: isSelected },
@@ -127,8 +169,12 @@ export default class DetailPanel extends Component<Signature> {
     });
   }
 
+  get numberOfElementsGreaterThanZero() {
+    return this.args.declarations.length > 0;
+  }
+
   get numberOfElementsInFileString() {
-    let numberOfElements = this.args.elements?.length || 0;
+    let numberOfElements = this.args.declarations.length || 0;
     return `${numberOfElements} ${getPlural('item', numberOfElements)}`;
   }
 
@@ -139,7 +185,7 @@ export default class DetailPanel extends Component<Signature> {
           <LoadingIndicator />
         </div>
       {{else}}
-        {{#if this.isModule}}
+        {{#if (and this.isModule this.numberOfElementsGreaterThanZero)}}
           <div class='in-this-file-panel'>
             <div class='in-this-file-panel-banner'>
               <header class='panel-header' aria-label='In This File Header'>
@@ -148,7 +194,7 @@ export default class DetailPanel extends Component<Signature> {
               <span class='number-items'>{{this.numberOfElementsInFileString}}
               </span>
             </div>
-            <CardContainer>
+            <CardContainer class='in-this-file-card-container'>
               <Header
                 @title={{@readyFile.name}}
                 @hasBackground={{true}}
@@ -158,14 +204,19 @@ export default class DetailPanel extends Component<Signature> {
               <Selector
                 @class='in-this-file-menu'
                 @items={{this.buildSelectorItems}}
+                data-test-in-this-file-selector
               />
             </CardContainer>
           </div>
         {{/if}}
 
-        {{#if (or this.isCardInstance this.isModule)}}
+        {{#if (or this.isCardInstance this.isCard this.isField)}}
           <div class='inheritance-panel'>
-            <header class='panel-header' aria-label='Inheritance Panel Header'>
+            <header
+              class='panel-header'
+              aria-label='Inheritance Panel Header'
+              data-test-inheritance-panel-header
+            >
               Card Inheritance
             </header>
             {{#if this.isCardInstance}}
@@ -189,44 +240,83 @@ export default class DetailPanel extends Component<Signature> {
                 }}
                 Adopts from
               </div>
-
               <ClickableModuleDefinitionContainer
-                @fileURL={{this.cardType.type.module}}
-                @name={{this.cardType.type.displayName}}
-                @fileExtension={{this.cardType.type.moduleInfo.extension}}
+                @title={{'Card Definition'}}
+                @fileURL={{@cardInstanceType.type.module}}
+                @name={{@cardInstanceType.type.displayName}}
+                @fileExtension={{@cardInstanceType.type.moduleInfo.extension}}
                 @onSelectDefinition={{this.updateCodePath}}
-                @url={{this.cardType.type.module}}
+                @url={{@cardInstanceType.type.module}}
               />
-            {{else if this.isModule}}
-              <ModuleDefinitionContainer
-                @fileURL={{this.cardType.type.module}}
-                @name={{this.cardType.type.displayName}}
-                @fileExtension={{this.cardType.type.moduleInfo.extension}}
-                @infoText={{this.lastModified.value}}
-                @isActive={{true}}
-                @actions={{array
-                  (hash label='Delete' handler=@delete icon='icon-trash')
-                }}
-              />
-              {{#if this.cardType.type.super}}
-                <div class='chain'>
-                  {{svgJar
-                    'icon-inherit'
-                    class='chain-icon'
-                    width='24px'
-                    height='24px'
-                    role='presentation'
+
+            {{else if this.isField}}
+              {{#let 'Field Definition' as |definitionTitle|}}
+                <ModuleDefinitionContainer
+                  @title={{definitionTitle}}
+                  @fileURL={{this.cardType.type.module}}
+                  @name={{this.cardType.type.displayName}}
+                  @fileExtension={{this.cardType.type.moduleInfo.extension}}
+                  @infoText={{this.lastModified.value}}
+                  @isActive={{true}}
+                  @actions={{array
+                    (hash label='Delete' handler=@delete icon='icon-trash')
                   }}
-                  Inherits from
-                </div>
-                <ClickableModuleDefinitionContainer
-                  @fileURL={{this.cardType.type.super.module}}
-                  @name={{this.cardType.type.super.displayName}}
-                  @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
-                  @onSelectDefinition={{this.updateCodePath}}
-                  @url={{this.cardType.type.super.module}}
                 />
-              {{/if}}
+                {{#if this.cardType.type.super}}
+                  <div class='chain'>
+                    {{svgJar
+                      'icon-inherit'
+                      class='chain-icon'
+                      width='24px'
+                      height='24px'
+                      role='presentation'
+                    }}
+                    Inherits from
+                  </div>
+                  <ClickableModuleDefinitionContainer
+                    @title={{definitionTitle}}
+                    @fileURL={{this.cardType.type.super.module}}
+                    @name={{this.cardType.type.super.displayName}}
+                    @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
+                    @onSelectDefinition={{this.updateCodePath}}
+                    @url={{this.cardType.type.super.module}}
+                  />
+                {{/if}}
+              {{/let}}
+            {{else if this.isCard}}
+              {{#let 'Card Definition' as |definitionTitle|}}
+                <ModuleDefinitionContainer
+                  @title={{definitionTitle}}
+                  @fileURL={{this.cardType.type.module}}
+                  @name={{this.cardType.type.displayName}}
+                  @fileExtension={{this.cardType.type.moduleInfo.extension}}
+                  @infoText={{this.lastModified.value}}
+                  @isActive={{true}}
+                  @actions={{array
+                    (hash label='Delete' handler=@delete icon='icon-trash')
+                  }}
+                />
+                {{#if this.cardType.type.super}}
+                  <div class='chain'>
+                    {{svgJar
+                      'icon-inherit'
+                      class='chain-icon'
+                      width='24px'
+                      height='24px'
+                      role='presentation'
+                    }}
+                    Inherits from
+                  </div>
+                  <ClickableModuleDefinitionContainer
+                    @title={{definitionTitle}}
+                    @fileURL={{this.cardType.type.super.module}}
+                    @name={{this.cardType.type.super.displayName}}
+                    @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
+                    @onSelectDefinition={{this.updateCodePath}}
+                    @url={{this.cardType.type.super.module}}
+                  />
+                {{/if}}
+              {{/let}}
             {{/if}}
           </div>
         {{else}}
@@ -257,6 +347,10 @@ export default class DetailPanel extends Component<Signature> {
         --boxel-header-background-color: var(--boxel-100);
         --boxel-header-text-color: var(--boxel-dark);
         --boxel-header-max-width: none;
+      }
+      .in-this-file-card-container {
+        overflow: hidden;
+        overflow-wrap: anywhere;
       }
       .in-this-file-panel-banner {
         display: flex;
@@ -305,3 +399,11 @@ export default class DetailPanel extends Component<Signature> {
     </style>
   </template>
 }
+
+const resolveElementName = (dec: ModuleDeclaration) => {
+  let localName: string | undefined = dec.localName;
+  if (isCardOrFieldDeclaration(dec)) {
+    localName = dec.cardOrField.displayName;
+  }
+  return localName ?? '[No Name Found]';
+};

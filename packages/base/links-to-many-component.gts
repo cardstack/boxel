@@ -5,13 +5,13 @@ import {
   type CardDef,
   BaseDef,
   type Box,
+  type BoxComponent,
   type Format,
   type Field,
   CardContext,
   isCard,
 } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
-import type { ComponentLike } from '@glint/template';
 import { AddButton, IconButton } from '@cardstack/boxel-ui';
 import {
   restartableTask,
@@ -251,7 +251,7 @@ export function getLinksToManyComponent({
     boxedElement: Box<BaseDef>,
   ): typeof BaseDef;
   context?: CardContext;
-}): ComponentLike<{ Args: {}; Blocks: {} }> {
+}): BoxComponent {
   if (format === 'edit') {
     return class LinksToManyEditorTemplate extends GlimmerComponent {
       <template>
