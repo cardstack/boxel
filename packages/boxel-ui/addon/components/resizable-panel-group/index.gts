@@ -210,51 +210,51 @@ export default class ResizablePanelGroup extends Component<Signature> {
   onResizeHandlerDblClick(event: MouseEvent) {
     let buttonId = (event.target as HTMLElement).id;
     let parentElement = document.querySelector(`#${buttonId}`)?.parentElement;
-    let leftEl = parentElement?.previousElementSibling as HTMLElement;
-    let rightEl = parentElement?.nextElementSibling as HTMLElement;
+    let prevEl = parentElement?.previousElementSibling as HTMLElement;
+    let nextEl = parentElement?.nextElementSibling as HTMLElement;
 
-    let leftElLength = leftEl[this.offsetLengthProperty];
-    let rightElLength = rightEl[this.offsetLengthProperty];
-    let leftElContext = this.listPanelContext.get(Number(leftEl.id));
-    let rightElContext = this.listPanelContext.get(Number(rightEl.id));
+    let prevElLength = prevEl[this.offsetLengthProperty];
+    let nextElLength = nextEl[this.offsetLengthProperty];
+    let prevElContext = this.listPanelContext.get(Number(prevEl.id));
+    let nextElContext = this.listPanelContext.get(Number(nextEl.id));
 
-    if (buttonId.includes('1') && leftElLength > 0) {
+    if (buttonId.includes('1') && prevElLength > 0) {
       this.setSiblingPanelContexts(
-        Number(leftEl.id),
-        Number(rightEl.id),
+        Number(prevEl.id),
+        Number(nextEl.id),
         '0px',
-        `${leftElLength + rightElLength}px`,
+        `${prevElLength + nextElLength}px`,
         `0px`,
       );
-    } else if (buttonId.includes('1') && leftElLength <= 0 && leftElContext) {
+    } else if (buttonId.includes('1') && prevElLength <= 0 && prevElContext) {
       this.setSiblingPanelContexts(
-        Number(leftEl.id),
-        Number(rightEl.id),
-        leftElContext.defaultLength,
-        `calc(${rightElLength}px - ${leftElContext.defaultLength})`,
+        Number(prevEl.id),
+        Number(nextEl.id),
+        prevElContext.defaultLength,
+        `calc(${nextElLength}px - ${prevElContext.defaultLength})`,
       );
     } else if (
       buttonId.includes(String(this.listPanelContext.size - 1)) &&
-      rightElLength > 0
+      nextElLength > 0
     ) {
       this.setSiblingPanelContexts(
-        Number(leftEl.id),
-        Number(rightEl.id),
-        `${leftElLength + rightElLength}px`,
+        Number(prevEl.id),
+        Number(nextEl.id),
+        `${prevElLength + nextElLength}px`,
         '0px',
         undefined,
         '0px',
       );
     } else if (
       buttonId.includes(String(this.listPanelContext.size - 1)) &&
-      rightElLength <= 0 &&
-      rightElContext
+      nextElLength <= 0 &&
+      nextElContext
     ) {
       this.setSiblingPanelContexts(
-        Number(leftEl.id),
-        Number(rightEl.id),
-        `calc(${leftElLength}px - ${rightElContext.defaultLength})`,
-        rightElContext.defaultLength,
+        Number(prevEl.id),
+        Number(nextEl.id),
+        `calc(${prevElLength}px - ${nextElContext.defaultLength})`,
+        nextElContext.defaultLength,
       );
     }
   }
