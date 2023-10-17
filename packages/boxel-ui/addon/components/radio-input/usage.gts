@@ -1,16 +1,16 @@
+import cssVar from '@cardstack/boxel-ui/helpers/css-var';
+import { fn } from '@ember/helper';
+import { array } from '@ember/helper';
+import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-
-import { fn } from '@ember/helper';
 import {
   cssVariable,
   CSSVariableInfo,
 } from 'ember-freestyle/decorators/css-variable';
-import { action } from '@ember/object';
+
 import RadioInput from '../radio-input';
-import cssVar from '@cardstack/boxel-ui/helpers/css-var';
-import { array } from '@ember/helper';
 
 export default class RadioInputUsage extends Component {
   @tracked items = [

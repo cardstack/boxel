@@ -1,22 +1,22 @@
-import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import cn from '@cardstack/boxel-ui/helpers/cn';
-import { on } from '@ember/modifier';
 import { not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { on } from '@ember/modifier';
 
 export interface Signature {
-  Element: HTMLLabelElement;
   Args: {
-    id: string;
     checked?: boolean;
     disabled?: boolean;
-    name: string;
     hideBorder?: boolean;
     hideRadio?: boolean;
+    id: string;
+    name: string;
     onChange: () => void;
   };
   Blocks: {
     default: [];
   };
+  Element: HTMLLabelElement;
 }
 
 const RadioInputItem: TemplateOnlyComponent<Signature> = <template>

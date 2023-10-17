@@ -1,23 +1,23 @@
-import Component from '@glimmer/component';
 import cn from '@cardstack/boxel-ui/helpers/cn';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import Item from './item';
 import { hash } from '@ember/helper';
+import Component from '@glimmer/component';
+
+import Item from './item';
 
 export interface Signature {
-  Element: HTMLFieldSetElement;
   Args: {
     checkedId?: string;
     disabled?: boolean;
     errorMessage?: string;
+    groupDescription: string;
+    hideBorder?: boolean;
+    hideRadio?: boolean;
     invalid?: boolean;
     items: any[];
-    groupDescription: string;
     name: string;
     orientation?: string;
     spacing?: string;
-    hideBorder?: boolean;
-    hideRadio?: boolean;
   };
   Blocks: {
     default: [
@@ -28,6 +28,7 @@ export interface Signature {
       },
     ];
   };
+  Element: HTMLFieldSetElement;
 }
 
 export default class RadioInput extends Component<Signature> {
