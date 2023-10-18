@@ -24,6 +24,7 @@ jobs:
       - name: Lint AI Bot
         if: always()
         run: pnpm run lint
+        working-directory: packages/ai-bot
       - name: Lint Boxel Motion
         # This addition to each step causes the job to proceed even if one lint job fails so we can see all errors
         if: always()
@@ -37,6 +38,19 @@ jobs:
         if: always()
         run: pnpm run lint
         working-directory: packages/boxel-motion-demo-app
+      - name: Lint Boxel UI
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/boxel-ui/addon
+      - name: Build Boxel UI
+        # To faciliate linting of projects that depend on Boxel UI
+        if: always()
+        run: pnpm run build
+        working-directory: packages/boxel-ui/addon
+      - name: Lint Boxel UI Test App
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/boxel-ui/test-app
       - name: Lint Host
         if: always()
         run: pnpm run lint
@@ -85,9 +99,12 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/init
+      - name: Build boxel-ui
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
       - name: Run test suite
         run: pnpm test
-        working-directory: packages/boxel-ui
+        working-directory: packages/boxel-ui/test-app
 
   host-test:
     name: Host Tests
@@ -98,6 +115,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/init
+      - name: Build boxel-ui
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
       - name: Build host dist/ for fastboot
         run: pnpm build
         env:
@@ -129,6 +149,9 @@ jobs:
       - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps
         working-directory: packages/matrix
+      - name: Build boxel-ui
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
       - name: Build host dist/ for fastboot
         run: pnpm build
         env:
@@ -156,6 +179,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: ./.github/actions/init
+      - name: Build boxel-ui
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
       - name: Build host dist/ for fastboot
         run: pnpm build
         env:

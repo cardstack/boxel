@@ -33,7 +33,7 @@
     "ember-cli-babel-plugin-helpers": "^1.1.1",
     "ember-cli-version-checker": "^5.1.2",
     "line-column": "^1.0.2",
-    "magic-string": "^0.25.7",
+    "magic-string": "0.25.9",
     "parse-static-imports": "^1.1.0",
     "string.prototype.matchall": "^4.0.6",
     "validate-peer-dependencies": "^1.1.0"
@@ -86,7 +86,7 @@
     "release-it": "^14.2.1",
     "release-it-lerna-changelog": "^3.1.0",
     "typescript": "^5.1.6",
-    "webpack": "^5.64.4"
+    "webpack": "^5.78.0"
   },
   "engines": {
     "node": "12.* || >= 14"

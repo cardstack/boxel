@@ -1,19 +1,21 @@
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
-import { Button } from '@cardstack/boxel-ui';
-import { CardContainer, Header } from '@cardstack/boxel-ui';
-import Label from '@cardstack/boxel-ui/components/label';
-
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
+import {
+  Button,
+  CardContainer,
+  Header,
+  Label,
+} from '@cardstack/boxel-ui/components';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import type { Icon } from '@cardstack/boxel-ui/icons';
 
 interface Action {
   label: string;
   handler: () => void;
-  icon: string;
+  icon: Icon;
 }
 export interface BaseArgs {
   title: string | undefined;
@@ -144,7 +146,7 @@ export class Active extends Component<ActiveSignature> {
           class='action-button'
           {{on 'click' actionButton.handler}}
         >
-          {{svgJar actionButton.icon width='24px' height='24px'}}
+          <actionButton.icon width='24px' height='24px' />
           {{actionButton.label}}
         </Button>
       {{/each}}

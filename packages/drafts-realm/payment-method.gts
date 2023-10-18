@@ -8,8 +8,8 @@ import {
 import StringCard from 'https://cardstack.com/base/string';
 import { Chain } from './chain';
 import { Token, Currency } from './asset';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-import { FieldContainer } from '@cardstack/boxel-ui';
+import { eq } from '@cardstack/boxel-ui/helpers';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
 
 class CryptoPayment extends FieldDef {
   static displayName = 'Payment Method';

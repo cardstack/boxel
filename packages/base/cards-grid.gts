@@ -11,7 +11,7 @@ import {
   relativeTo,
   type BaseDef,
 } from './card-api';
-import { AddButton, Tooltip } from '@cardstack/boxel-ui';
+import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
 import {
   chooseCard,
   catalogEntryRef,
