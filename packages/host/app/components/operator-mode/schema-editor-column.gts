@@ -157,7 +157,7 @@ export default class SchemaEditorColumn extends Component<Signature> {
     <style>
       .card-adoption-chain {
         background-color: var(--boxel-200);
-        height: 100%;
+        min-height: 100%;
         padding: var(--boxel-sp-sm);
       }
       .accordion-item:last-child {
