@@ -390,7 +390,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         for (let [index, card] of sources.entries()) {
           let newCard = await this.cardService.copyCard(card, realmURL);
           if (index === 0) {
-            scrollToCard = newCard;
+            scrollToCard = newCard; // we scroll to the first card lexically by title
           }
         }
         let clearSelection = clearSelections.get(sourceItem);
