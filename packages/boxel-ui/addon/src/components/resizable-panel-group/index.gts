@@ -189,11 +189,11 @@ export default class ResizablePanelGroup extends Component<Signature> {
       return;
     }
 
-    let leftElId = Number(this.currentResizeHandler.firstEl?.id);
-    let rightElId = Number(this.currentResizeHandler.secondEl?.id);
+    let firstElId = Number(this.currentResizeHandler.firstEl?.id);
+    let secondElId = Number(this.currentResizeHandler.secondEl?.id);
     this.setSiblingPanelContexts(
-      leftElId,
-      rightElId,
+      firstElId,
+      secondElId,
       `${newFirstElLength}px`,
       `${newSecondElLength}px`,
     );
