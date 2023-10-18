@@ -58,7 +58,7 @@ export default class Panel extends Component<Signature> {
       <div class='separator-{{@orientation}}' ...attributes>
         <button
           id={{this.resizeHandlerId}}
-          class='resize-handler-{{@orientation}}'
+          class='resize-handler {{@orientation}}'
           aria-label={{this.resizeHandlerId}}
           {{on 'mousedown' @onResizeHandlerMouseDown}}
           {{on 'dblclick' @onResizeHandlerDblClick}}
@@ -74,6 +74,14 @@ export default class Panel extends Component<Signature> {
         min-width: var(--boxel-panel-min-width);
       }
 
+      .boxel-panel-vertical {
+        --boxel-panel-height: '300px';
+        --boxel-panel-min-height: 'none';
+
+        height: var(--boxel-panel-height);
+        min-height: var(--boxel-panel-min-height);
+      }
+
       .separator-horizontal {
         display: flex;
         align-items: center;
@@ -82,58 +90,6 @@ export default class Panel extends Component<Signature> {
         --boxel-panel-resize-handler-background-color: var(--boxel-highlight);
 
         padding: var(--boxel-sp-xxxs);
-      }
-
-      .resize-handler-horizontal {
-        cursor: col-resize;
-
-        height: var(--boxel-panel-resize-handler-height);
-        width: var(--boxel-panel-resize-handler-width);
-        border: none;
-        border-radius: var(--boxel-border-radius-xl);
-        padding: 0;
-        background-color: var(--boxel-panel-resize-handler-background-color);
-
-        position: relative;
-        z-index: 2;
-      }
-
-      .arrow-right {
-        content: '';
-        position: absolute;
-        top: 50%;
-        right: calc(var(--boxel-panel-resize-handler-width) * -1);
-        transform: translateY(-50%);
-        width: 0;
-        height: 0;
-        border-top: 6px solid transparent;
-        border-bottom: 6px solid transparent;
-        border-left: 10px solid
-          var(--boxel-panel-resize-handler-background-color);
-        pointer-events: none;
-      }
-
-      .arrow-left {
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: calc(var(--boxel-panel-resize-handler-width) * -1);
-        transform: translateY(-50%);
-        width: 0;
-        height: 0;
-        border-top: 6px solid transparent;
-        border-bottom: 6px solid transparent;
-        border-right: 10px solid
-          var(--boxel-panel-resize-handler-background-color);
-        pointer-events: none;
-      }
-
-      .boxel-panel-vertical {
-        --boxel-panel-height: '300px';
-        --boxel-panel-min-height: 'none';
-
-        height: var(--boxel-panel-height);
-        min-height: var(--boxel-panel-min-height);
       }
 
       .separator-vertical {
@@ -146,11 +102,7 @@ export default class Panel extends Component<Signature> {
         padding: var(--boxel-sp-xxxs);
       }
 
-      .resize-handler-vertical {
-        cursor: row-resize;
-
-        width: var(--boxel-panel-resize-handler-width);
-        height: var(--boxel-panel-resize-handler-height);
+      .resize-handler {
         border: none;
         border-radius: var(--boxel-border-radius-xl);
         padding: 0;
@@ -160,34 +112,66 @@ export default class Panel extends Component<Signature> {
         z-index: 2;
       }
 
-      .arrow-top {
+      .resize-handler.horizontal {
+        cursor: col-resize;
+
+        height: var(--boxel-panel-resize-handler-height);
+        width: var(--boxel-panel-resize-handler-width);
+      }
+
+      .resize-handler.vertical {
+        cursor: row-resize;
+
+        width: var(--boxel-panel-resize-handler-width);
+        height: var(--boxel-panel-resize-handler-height);
+      }
+
+      .arrow {
         content: '';
         position: absolute;
+        width: 0;
+        height: 0;
+        pointer-events: none;
+      }
+
+      .arrow.right {
+        top: 50%;
+        right: calc(var(--boxel-panel-resize-handler-width) * -1);
+        transform: translateY(-50%);
+        border-top: 6px solid transparent;
+        border-bottom: 6px solid transparent;
+        border-left: 10px solid
+          var(--boxel-panel-resize-handler-background-color);
+      }
+
+      .arrow.left {
+        top: 50%;
+        left: calc(var(--boxel-panel-resize-handler-width) * -1);
+        transform: translateY(-50%);
+        border-top: 6px solid transparent;
+        border-bottom: 6px solid transparent;
+        border-right: 10px solid
+          var(--boxel-panel-resize-handler-background-color);
+      }
+
+      .arrow.top {
         left: 50%;
         top: calc(var(--boxel-panel-resize-handler-height) * -1);
         transform: translateX(-50%);
-        width: 0;
-        height: 0;
         border-left: 6px solid transparent;
         border-right: 6px solid transparent;
         border-bottom: 10px solid
           var(--boxel-panel-resize-handler-background-color);
-        pointer-events: none;
       }
 
-      .arrow-bottom {
-        content: '';
-        position: absolute;
+      .arrow.bottom {
         left: 50%;
         bottom: calc(var(--boxel-panel-resize-handler-height) * -1);
         transform: translateX(-50%);
-        height: 0;
-        width: 0;
         border-left: 6px solid transparent;
         border-right: 6px solid transparent;
         border-top: 10px solid
           var(--boxel-panel-resize-handler-background-color);
-        pointer-events: none;
       }
     </style>
   </template>
@@ -252,9 +236,9 @@ export default class Panel extends Component<Signature> {
 
     if (toward) {
       if (toward === 'beginning') {
-        return horizontal ? 'arrow-left' : 'arrow-top';
+        return horizontal ? 'arrow left' : 'arrow top';
       } else {
-        return horizontal ? 'arrow-right' : 'arrow-bottom';
+        return horizontal ? 'arrow right' : 'arrow bottom';
       }
     } else {
       return '';
