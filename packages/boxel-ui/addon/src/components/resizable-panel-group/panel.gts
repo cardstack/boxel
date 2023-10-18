@@ -12,24 +12,18 @@ export type PanelContext = {
   minLength?: string;
 };
 
-// The following arguments will be supplied by the parent ResizablePanelGroup that yields this component
-interface InheritedFromResizablePanelGroup {
-  Args: {
-    onResizeHandlerDblClick: (event: MouseEvent) => void;
-    onResizeHandlerMouseDown: (event: MouseEvent) => void;
-    panelContext: (panelId: number) => PanelContext | undefined;
-    registerPanel: (context: PanelContext) => number;
-    reverseHandlerArrow: boolean;
-  };
-}
-
-interface Signature extends InheritedFromResizablePanelGroup {
+interface Signature {
   Args: {
     defaultLength: string;
     isLastPanel: (panelId: number) => boolean;
     length?: string;
     minLength?: string;
+    onResizeHandlerDblClick: (event: MouseEvent) => void;
+    onResizeHandlerMouseDown: (event: MouseEvent) => void;
     orientation: 'horizontal' | 'vertical';
+    panelContext: (panelId: number) => PanelContext | undefined;
+    registerPanel: (context: PanelContext) => number;
+    reverseHandlerArrow: boolean;
   };
   Blocks: {
     default: [];
