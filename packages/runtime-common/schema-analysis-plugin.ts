@@ -24,6 +24,7 @@ export type BaseDeclaration = {
   localName: string | undefined;
   exportedAs: string | undefined;
   path: NodePath;
+  type: 'class' | 'function';
 };
 
 export interface PossibleCardOrFieldClass extends BaseDeclaration {
@@ -62,12 +63,14 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
               localName,
               exportedAs: getExportedAs(path, localName),
               path,
+              type: 'function',
             });
           }
         },
       },
       ClassDeclaration: {
         enter(path: NodePath<t.ClassDeclaration>, state: State) {
+          let type = 'class' as 'class';
           if (!path.node.superClass) {
             // any class which doesn't have a super class
             let localName = path.node.id ? path.node.id.name : undefined;
@@ -76,6 +79,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
                 localName,
                 exportedAs: getExportedAs(path, localName),
                 path,
+                type,
               });
             }
             let maybeExportSpecifierLocal = getExportSpecifierLocal(
@@ -87,6 +91,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
                 localName,
                 exportedAs: getExportedAs(path, localName),
                 path,
+                type,
               });
             }
             return;
@@ -106,6 +111,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
                 path,
                 possibleFields: new Map(),
                 exportedAs: getExportedAs(path, localName),
+                type,
               };
               state.opts.possibleCardsOrFields.push(possibleCardOrField);
               state.opts.declarations.push(possibleCardOrField);
@@ -117,6 +123,7 @@ export function schemaAnalysisPlugin(_babel: typeof Babel) {
                   localName,
                   exportedAs: getExportedAs(path, localName),
                   path,
+                  type,
                 });
               }
             }

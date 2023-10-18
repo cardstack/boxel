@@ -10,6 +10,13 @@ import cn from '@cardstack/boxel-ui/helpers/cn';
 import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
 import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
 
+import { isCardDef } from '@cardstack/runtime-common/code-ref';
+
+import {
+  type ModuleDeclaration,
+  isCardOrFieldDeclaration,
+} from '@cardstack/host/resources/module-contents';
+
 interface SelectorItemOptions {
   action: Function;
   url: string;
@@ -17,19 +24,16 @@ interface SelectorItemOptions {
   disabled: boolean;
 }
 export class SelectorItem {
+  declaration: ModuleDeclaration;
   selected: boolean;
   disabled: boolean;
-  localName?: string;
-  exportedAs?: string;
   action: Function | undefined;
 
   constructor(
+    declaration: ModuleDeclaration,
     options: Partial<SelectorItemOptions>,
-    localName?: string,
-    exportedAs?: string,
   ) {
-    this.localName = localName;
-    this.exportedAs = exportedAs;
+    this.declaration = declaration;
     this.action = options.action;
     this.selected = options.selected || false;
     this.disabled = options.disabled || false;
@@ -37,14 +41,12 @@ export class SelectorItem {
 }
 
 export function selectorItemFunc(
-  params: [Function, string?, string?],
+  params: [ModuleDeclaration, Function],
   named: Partial<SelectorItemOptions>,
 ): SelectorItem {
   let opts = Object.assign({}, named);
-  opts.action = params[0];
-  let localName = params[1];
-  let exportedAs = params[2];
-  return new SelectorItem(opts, localName, exportedAs);
+  opts.action = params[1];
+  return new SelectorItem(params[0], opts);
 }
 
 class SelectorItemRenderer extends Component<{
@@ -84,6 +86,14 @@ export default class Selector extends Component<Signature> {
     (action as () => never)();
   }
 
+  getType(declaration: ModuleDeclaration) {
+    let type = declaration.type as string;
+    if (isCardOrFieldDeclaration(declaration)) {
+      type = isCardDef(declaration.cardOrField) ? 'card' : 'field';
+    }
+    return type;
+  }
+
   <template>
     <ul role='menu' class={{cn 'boxel-selector' @class}} ...attributes>
       {{#if @items}}
@@ -105,7 +115,7 @@ export default class Selector extends Component<Signature> {
                   class='boxel-selector__item__content'
                   role='menuitem'
                   href='#'
-                  data-test-boxel-selector-item-text={{selectorItem.localName}}
+                  data-test-boxel-selector-item-text={{selectorItem.declaration.localName}}
                   {{on
                     'click'
                     (fn this.invokeSelectorItemAction selectorItem.action)
@@ -117,7 +127,7 @@ export default class Selector extends Component<Signature> {
                   disabled={{selectorItem.disabled}}
                 >
                   <div class='selector-item'>
-                    {{#if selectorItem.exportedAs}}
+                    {{#if selectorItem.declaration.exportedAs}}
                       <span class='exported-arrow'>
                         {{svgJar
                           'diagonal-arrow-left-up'
@@ -125,17 +135,26 @@ export default class Selector extends Component<Signature> {
                           height='20'
                         }}
                       </span>
-                      <span class='exported'>{{selectorItem.exportedAs}}</span>
+                      <span
+                        class='exported'
+                      >{{selectorItem.declaration.exportedAs}}</span>
                       {{#unless
-                        (eq selectorItem.exportedAs selectorItem.localName)
-                      }}<span>({{selectorItem.localName}})</span>{{/unless}}
+                        (eq
+                          selectorItem.declaration.exportedAs
+                          selectorItem.declaration.localName
+                        )
+                      }}<span
+                        >({{selectorItem.declaration.localName}})</span>{{/unless}}
                     {{else}}
                       <span class='non-exported'>{{if
-                          selectorItem.localName
-                          selectorItem.localName
+                          selectorItem.declaration.localName
+                          selectorItem.declaration.localName
                           '??'
                         }}</span>
                     {{/if}}
+                    <span class='type'>{{this.getType
+                        selectorItem.declaration
+                      }}</span>
                   </div>
                 </div>
               </li>
@@ -239,6 +258,16 @@ export default class Selector extends Component<Signature> {
 
         .non-exported {
           padding-left: calc(var(--boxel-selector-item-gap) + 20px);
+        }
+
+        .type {
+          margin-left: auto;
+          text-transform: uppercase;
+          color: var(--boxel-450);
+        }
+
+        .boxel-selector__item--selected .selector-item .type {
+          color: var(--boxel-light);
         }
       }
     </style>

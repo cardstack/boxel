@@ -159,11 +159,10 @@ export default class DetailPanel extends Component<Signature> {
       const isSelected = this.args.selectedDeclaration === dec;
       return selectorItemFunc(
         [
+          dec,
           () => {
             this.args.selectDeclaration(dec);
           },
-          dec.localName,
-          dec.exportedAs,
         ],
         { selected: isSelected },
       );

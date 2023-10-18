@@ -908,23 +908,23 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
     //default is the 1st index
-    let elementName = 'AClassWithExportName (LocalClass)';
+    let elementName = 'AClassWithExportName (LocalClass) class';
     assert
       .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
       .hasText(elementName);
     // elements must be ordered by the way they appear in the source code
     const expectedElementNames = [
-      'AClassWithExportName (LocalClass)',
-      'ExportedClass',
-      'ExportedClassInheritLocalClass',
-      'exportedFunction',
-      'LocalCard', //TODO: CS-6009 will probably change this
-      'ExportedCard',
-      'ExportedCardInheritLocalCard',
-      'LocalField', //TODO: CS-6009 will probably change this
-      'ExportedField',
-      'ExportedFieldInheritLocalField',
-      'default (DefaultClass)',
+      'AClassWithExportName (LocalClass) class',
+      'ExportedClass class',
+      'ExportedClassInheritLocalClass class',
+      'exportedFunction function',
+      'LocalCard card', //TODO: CS-6009 will probably change this
+      'ExportedCard card',
+      'ExportedCardInheritLocalCard card',
+      'LocalField field', //TODO: CS-6009 will probably change this
+      'ExportedField field',
+      'ExportedFieldInheritLocalField field',
+      'default (DefaultClass) class',
     ];
     expectedElementNames.forEach(async (elementName, index) => {
       await waitFor(
@@ -941,7 +941,9 @@ module('Acceptance | code mode tests', function (hooks) {
     // clicking on a card
     elementName = 'ExportedCard';
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
-    assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} card`);
     await waitFor('[data-test-card-module-definition]');
     assert.dom('[data-test-inheritance-panel-header]').exists();
     assert.dom('[data-test-card-module-definition]').exists();
@@ -961,7 +963,9 @@ module('Acceptance | code mode tests', function (hooks) {
     // clicking on a field
     elementName = 'ExportedField';
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
-    assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} field`);
     await waitFor('[data-test-card-module-definition]');
     assert.dom('[data-test-inheritance-panel-header]').exists();
     assert
@@ -982,7 +986,9 @@ module('Acceptance | code mode tests', function (hooks) {
     // clicking on an exported function
     elementName = 'exportedFunction';
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
-    assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} function`);
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     assert.dom('[data-test-card-module-definition]').doesNotExist();
     assert.dom('[data-test-schema-editor-incompatible]').exists();
