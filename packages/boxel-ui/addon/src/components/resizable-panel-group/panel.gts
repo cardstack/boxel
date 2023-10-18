@@ -227,7 +227,14 @@ export default class Panel extends Component<Signature> {
 
   get arrowResizeHandlerClass() {
     let horizontal = this.args.orientation === 'horizontal';
-    // FIXME updated to support reversed handle
+    let reverse = this.args.reverseHandlerArrow;
+    // FIXME is this way too confusing??
+
+    if (!this.id) {
+      return '';
+    }
+
+    let toward: string | null = null;
 
     if (
       (this.id === 1 && this.panelContext?.length !== '0px') ||
@@ -235,12 +242,20 @@ export default class Panel extends Component<Signature> {
         this.args.isLastPanel(this.id + 1) &&
         this.args.panelContext(this.id + 1)?.length === '0px')
     ) {
-      return horizontal ? 'arrow-left' : 'arrow-top';
+      toward = reverse ? 'end' : 'beginning';
     } else if (
       (this.id && this.args.isLastPanel(this.id + 1)) ||
       (this.id === 1 && this.panelContext?.length === '0px')
     ) {
-      return horizontal ? 'arrow-right' : 'arrow-bottom';
+      toward = reverse ? 'beginning' : 'end';
+    }
+
+    if (toward) {
+      if (toward === 'beginning') {
+        return horizontal ? 'arrow-left' : 'arrow-top';
+      } else {
+        return horizontal ? 'arrow-right' : 'arrow-bottom';
+      }
     } else {
       return '';
     }
