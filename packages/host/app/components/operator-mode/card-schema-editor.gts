@@ -15,6 +15,7 @@ import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import AddFieldModal from '@cardstack/host/components/operator-mode/add-field-modal';
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import RemoveFieldModal from '@cardstack/host/components/operator-mode/remove-field-modal';
 import {
   type Type,
   type CodeRefType,
@@ -379,6 +380,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                       @label='field options'
                       @contentClass='context-menu'
                       class='context-menu-trigger'
+                      data-test-schema-editor-field-contextual-button
                       as |dd|
                     >
                       <div class='warning-box'>
@@ -403,9 +405,8 @@ export default class CardSchemaEditor extends Component<Signature> {
                           (menuDivider)
                           (menuItem
                             'Remove Field'
-                            this.removeField
+                            (fn this.toggleRemoveFieldModalShown field)
                             dangerous=true
-                            disabled=true
                           )
                         }}
                       />
@@ -413,7 +414,6 @@ export default class CardSchemaEditor extends Component<Signature> {
                   {{/if}}
                 {{/let}}
               </div>
-
             </div>
           {{/if}}
         {{/each}}
@@ -437,6 +437,17 @@ export default class CardSchemaEditor extends Component<Signature> {
           />
         {{/if}}
       {{/if}}
+
+      {{#if this.removeFieldModalShown}}
+        <RemoveFieldModal
+          @file={{@file}}
+          @card={{@card}}
+          @field={{this.fieldForRemoval}}
+          @moduleSyntax={{@moduleSyntax}}
+          @onClose={{this.toggleRemoveFieldModalShown}}
+          data-test-remove-field-modal
+        />
+      {{/if}}
     </div>
   </template>
 
@@ -445,8 +456,16 @@ export default class CardSchemaEditor extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
 
   @tracked addFieldModalShown = false;
+  @tracked removeFieldModalShown = false;
+  @tracked private _fieldForRemoval?: FieldOfType = undefined;
+
   @action toggleAddFieldModal() {
     this.addFieldModalShown = !this.addFieldModalShown;
+  }
+
+  @action toggleRemoveFieldModalShown(field?: FieldOfType) {
+    this._fieldForRemoval = field;
+    this.removeFieldModalShown = !this.removeFieldModalShown;
   }
 
   @action openCardDefinition(moduleURL: string) {
@@ -456,12 +475,6 @@ export default class CardSchemaEditor extends Component<Signature> {
   @action
   isOwnField(fieldName: string): boolean {
     return isOwnField(this.args.card, fieldName);
-  }
-
-  @action
-  removeField() {
-    // TODO: implement
-    return;
   }
 
   @action
@@ -541,5 +554,13 @@ export default class CardSchemaEditor extends Component<Signature> {
       block: 'end',
       inline: 'nearest',
     });
+  }
+
+  get fieldForRemoval(): FieldOfType {
+    if (!this._fieldForRemoval) {
+      throw new Error('fieldForRemoval should be set');
+    }
+
+    return this._fieldForRemoval;
   }
 }
