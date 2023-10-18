@@ -4,9 +4,9 @@ import Component from '@glimmer/component';
 import { restartableTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
-import { BoxelButton, Modal } from '@cardstack/boxel-ui';
+import { BoxelButton, Modal } from '@cardstack/boxel-ui/components';
 
-import cssVar from '@cardstack/boxel-ui/helpers/css-var';
+import { cssVar } from '@cardstack/boxel-ui/helpers';
 
 import { identifyCard } from '@cardstack/runtime-common';
 
