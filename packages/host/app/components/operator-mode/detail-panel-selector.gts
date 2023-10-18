@@ -1,18 +1,13 @@
 import { type EmptyObject } from '@ember/component/helper';
 import compact from 'ember-composable-helpers/helpers/compact';
 import { on } from '@ember/modifier';
-import { cn } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
-import compact from 'ember-composable-helpers/helpers/compact';
-
-import cn from '@cardstack/boxel-ui/helpers/cn';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-
 import { isCardDef } from '@cardstack/runtime-common/code-ref';
+import { DiagonalArrowLeftUp } from '@cardstack/boxel-ui/icons';
 
 import {
   type ModuleDeclaration,
@@ -131,11 +126,10 @@ export default class Selector extends Component<Signature> {
                   <div class='selector-item'>
                     {{#if selectorItem.declaration.exportedAs}}
                       <span class='exported-arrow'>
-                        {{svgJar
-                          'diagonal-arrow-left-up'
+                        <DiagonalArrowLeftUp
                           width='20'
                           height='20'
-                        }}
+                        />
                       </span>
                       <span
                         class='exported'
@@ -244,8 +238,8 @@ export default class Selector extends Component<Signature> {
 
           display: flex;
           align-items: center;
-          flex-wrap: wrap;
-          text-wrap: nowrap;
+          overflow-wrap: anywhere;
+          overflow: hidden;
           gap: var(--boxel-selector-item-gap);
         }
 
