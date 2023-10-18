@@ -873,19 +873,13 @@ export default class CodeMode extends Component<Signature> {
         flex-shrink: 0;
         height: 100%;
       }
+
       .column {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp);
         height: 100%;
       }
-      /*
-      .column:nth-child(2) {
-        flex: 2;
-      }
-      .column:last-child {
-        flex: 1.2;
-      }*/
 
       .inner-container {
         height: 100%;
