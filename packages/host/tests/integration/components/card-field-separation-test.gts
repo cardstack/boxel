@@ -15,8 +15,6 @@ import {
   saveCard,
   setupCardLogs,
   setupLocalIndexing,
-  setupOnSave,
-  setupServerSentEvents,
   shimModule,
   TestRealm,
   testRealmURL,
@@ -47,12 +45,10 @@ module('Integration | card/field separation test', function (hooks) {
 
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
-  setupOnSave(hooks);
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-  setupServerSentEvents(hooks);
 
   hooks.beforeEach(async function () {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
