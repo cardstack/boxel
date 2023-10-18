@@ -7,9 +7,9 @@ import cssVars from '../../helpers/css-var.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
 
 export type PanelContext = {
-  defaultWidth: string;
-  minWidth?: string;
-  width: string;
+  defaultLength: string;
+  length: string;
+  minLength?: string;
 };
 
 // The following arguments will be supplied by the parent ResizablePanelGroup that yields this component
