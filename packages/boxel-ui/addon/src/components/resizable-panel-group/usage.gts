@@ -31,6 +31,7 @@ export default class ResizablePanelUsage extends Component {
 
   cssClassName = 'boxel-panel';
   @cssVariable declare boxelPanelResizeHandlerHeight: CSSVariableInfo;
+  @cssVariable declare boxelPanelResizeHandlerWidth: CSSVariableInfo;
   @cssVariable declare boxelPanelResizeHandlerBackgroundColor: CSSVariableInfo;
 
   <template>
@@ -138,7 +139,7 @@ export default class ResizablePanelUsage extends Component {
               @defaultLength={{this.verticalPanel1DefaultHeight}}
               @minLength={{this.verticalPanel1MinHeight}}
               style={{cssVar
-                boxel-panel-resize-handler-height=this.boxelPanelResizeHandlerHeight.value
+                boxel-panel-resize-handler-width=this.boxelPanelResizeHandlerWidth.value
                 boxel-panel-resize-handler-background-color=this.boxelPanelResizeHandlerBackgroundColor.value
               }}
             >
@@ -148,7 +149,7 @@ export default class ResizablePanelUsage extends Component {
               @defaultLength={{this.verticalPanel2DefaultHeight}}
               @minLength={{this.verticalPanel2MinHeight}}
               style={{cssVar
-                boxel-panel-resize-handler-height=this.boxelPanelResizeHandlerHeight.value
+                boxel-panel-resize-handler-width=this.boxelPanelResizeHandlerWidth.value
                 boxel-panel-resize-handler-background-color=this.boxelPanelResizeHandlerBackgroundColor.value
               }}
             >
@@ -158,7 +159,7 @@ export default class ResizablePanelUsage extends Component {
               @defaultLength={{this.verticalPanel3DefaultHeight}}
               @minLength={{this.verticalPanel3MinHeight}}
               style={{cssVar
-                boxel-panel-resize-handler-height=this.boxelPanelResizeHandlerHeight.value
+                boxel-panel-resize-handler-width=this.boxelPanelResizeHandlerWidth.value
                 boxel-panel-resize-handler-background-color=this.boxelPanelResizeHandlerBackgroundColor.value
               }}
             >
@@ -213,11 +214,11 @@ export default class ResizablePanelUsage extends Component {
       </:api>
       <:cssVars as |Css|>
         <Css.Basic
-          @name='boxel-panel-resize-handler-height'
+          @name='boxel-panel-resize-handler-width'
           @type='dimension'
-          @defaultValue={{this.boxelPanelResizeHandlerHeight.defaults}}
-          @value={{this.boxelPanelResizeHandlerHeight.value}}
-          @onInput={{this.boxelPanelResizeHandlerHeight.update}}
+          @defaultValue={{this.boxelPanelResizeHandlerWidth.defaults}}
+          @value={{this.boxelPanelResizeHandlerWidth.value}}
+          @onInput={{this.boxelPanelResizeHandlerWidth.update}}
         />
         <Css.Basic
           @name='boxel-panel-resize-handler-background-color'

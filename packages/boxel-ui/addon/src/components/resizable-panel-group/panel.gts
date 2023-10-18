@@ -61,7 +61,7 @@ export default class Panel extends Component<Signature> {
       {{yield}}
     </div>
     {{#unless this.isLastPanel}}
-      <div class='separator-{{@orientation}}'>
+      <div class='separator-{{@orientation}}' ...attributes>
         <button
           id={{this.resizeHandlerId}}
           class='resize-handler-{{@orientation}}'
