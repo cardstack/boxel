@@ -4,12 +4,18 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
+//@ts-ignore cached not available yet in definitely typed
+import { cached } from '@glimmer/tracking';
 
-import { Accordion } from '@cardstack/boxel-ui';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { use, resource } from 'ember-resources';
+import { TrackedObject } from 'tracked-built-ins';
+
+import { Accordion } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { getPlural, loadCard } from '@cardstack/runtime-common';
+
+import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import CardAdoptionChain from '@cardstack/host/components/operator-mode/card-adoption-chain';
 import { CardType, Type } from '@cardstack/host/resources/card-type';
@@ -37,14 +43,8 @@ export type CardInheritance = {
 
 export default class SchemaEditorColumn extends Component<Signature> {
   @tracked selectedItem: SelectedItem = 'schema-editor';
-  @tracked cardInheritanceChain: CardInheritance[] = [];
 
   @service declare loaderService: LoaderService;
-
-  constructor(owner: unknown, args: Signature['Args']) {
-    super(owner, args);
-    this.loadInheritanceChain.perform();
-  }
 
   @action selectItem(item: SelectedItem) {
     if (this.selectedItem === item) {
@@ -55,49 +55,75 @@ export default class SchemaEditorColumn extends Component<Signature> {
     this.selectedItem = item;
   }
 
-  loadInheritanceChain = restartableTask(async () => {
-    let fileUrl = this.args.file.url;
-    let { card, cardTypeResource } = this.args;
+  @use cardInheritanceChain = resource(() => {
+    const state: {
+      isLoading: boolean;
+      value: CardInheritance[];
+      error: Error | undefined;
+      load: () => Promise<void>;
+    } = new TrackedObject({
+      isLoading: true,
+      value: [],
+      error: undefined,
+      load: async () => {
+        state.isLoading = true;
+        let fileUrl = this.args.file.url;
+        let { card, cardTypeResource } = this.args;
 
-    await cardTypeResource!.ready;
-    let cardType = cardTypeResource!.type;
+        try {
+          await cardTypeResource!.ready;
+          let cardType = cardTypeResource!.type;
 
-    if (!cardType) {
-      throw new Error('Card type not found');
-    }
+          if (!cardType) {
+            throw new Error('Card type not found');
+          }
 
-    // Chain goes from most specific to least specific
-    let cardInheritanceChain = [
-      {
-        cardType,
-        card,
+          // Chain goes from most specific to least specific
+          let cardInheritanceChain = [
+            {
+              cardType,
+              card,
+            },
+          ];
+
+          while (cardType.super) {
+            cardType = cardType.super;
+
+            let superCard = await loadCard(cardType.codeRef, {
+              loader: this.loaderService.loader,
+              relativeTo: new URL(fileUrl), // because the module can be relative
+            });
+
+            cardInheritanceChain.push({
+              cardType,
+              card: superCard,
+            });
+          }
+          state.value = cardInheritanceChain;
+        } catch (error: any) {
+          state.error = error;
+        } finally {
+          state.isLoading = false;
+        }
       },
-    ];
+    });
 
-    while (cardType.super) {
-      cardType = cardType.super;
-
-      let superCard = await loadCard(cardType.codeRef, {
-        loader: this.loaderService.loader,
-        relativeTo: new URL(fileUrl), // because the module can be relative
-      });
-
-      cardInheritanceChain.push({
-        cardType,
-        card: superCard,
-      });
-    }
-
-    this.cardInheritanceChain = cardInheritanceChain;
+    state.load();
+    return state;
   });
 
   get totalFields() {
-    return this.cardInheritanceChain.reduce(
+    return this.cardInheritanceChain.value.reduce(
       (total: number, data: CardInheritance) => {
         return total + calculateTotalOwnFields(data.card, data.cardType);
       },
       0,
     );
+  }
+
+  @cached
+  get moduleSyntax() {
+    return new ModuleSyntax(this.args.file.content);
   }
 
   <template>
@@ -121,13 +147,19 @@ export default class SchemaEditorColumn extends Component<Signature> {
           <CardAdoptionChain
             class='accordion-content'
             @file={{@file}}
-            @cardInheritanceChain={{this.cardInheritanceChain}}
+            @moduleSyntax={{this.moduleSyntax}}
+            @cardInheritanceChain={{this.cardInheritanceChain.value}}
           />
         </:content>
       </A.Item>
     </Accordion>
 
     <style>
+      .card-adoption-chain {
+        background-color: var(--boxel-200);
+        height: 100%;
+        padding: var(--boxel-sp-sm);
+      }
       .accordion-item:last-child {
         border-bottom: var(--boxel-border);
       }

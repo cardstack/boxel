@@ -8,13 +8,15 @@ import { task } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
 
-import { Tooltip, IconButton, BoxelDropdown } from '@cardstack/boxel-ui';
+import {
+  BoxelDropdown,
+  IconButton,
+  Menu as BoxelMenu,
+  Tooltip,
+} from '@cardstack/boxel-ui/components';
 
-import BoxelMenu from '@cardstack/boxel-ui/components/menu';
-
-import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
-
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
+import { IconLink, ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
 
 import { RealmInfo, cardTypeDisplayName } from '@cardstack/runtime-common';
 
@@ -67,7 +69,7 @@ export default class CardPreviewPanel extends Component<Signature> {
             <Tooltip @placement='top'>
               <:trigger>
                 <IconButton
-                  @icon='three-dots-horizontal'
+                  @icon={{ThreeDotsHorizontal}}
                   @width='20px'
                   @height='20px'
                   class='icon-button'
@@ -86,9 +88,7 @@ export default class CardPreviewPanel extends Component<Signature> {
               @closeMenu={{dd.close}}
               @items={{array
                 (menuItem
-                  'Copy Card URL'
-                  (perform this.copyToClipboard)
-                  icon='icon-link'
+                  'Copy Card URL' (perform this.copyToClipboard) icon=IconLink
                 )
               }}
             />

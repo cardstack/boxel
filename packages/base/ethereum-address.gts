@@ -10,7 +10,7 @@ import {
   queryableValue,
   FieldDef,
 } from './card-api';
-import { BoxelInput } from '@cardstack/boxel-ui';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputFilter, DeserializedResult } from './text-input-filter';
 
 function isChecksumAddress(address: string): boolean {
@@ -41,6 +41,12 @@ function _deserialize(
     }
   }
   return { value: address };
+}
+
+class View extends Component<typeof EthereumAddressField> {
+  <template>
+    {{@model}}
+  </template>
 }
 
 class Edit extends Component<typeof EthereumAddressField> {
@@ -87,11 +93,7 @@ export default class EthereumAddressField extends FieldDef {
     }
   }
 
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      {{@model}}
-    </template>
-  };
-
+  static embedded = View;
+  static atom = View;
   static edit = Edit;
 }

@@ -15,14 +15,15 @@ import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
 
 import {
-  LoadingIndicator,
   Button,
+  LoadingIndicator,
   ResizablePanelGroup,
-  PanelContext,
-} from '@cardstack/boxel-ui';
-import cn from '@cardstack/boxel-ui/helpers/cn';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { and, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+} from '@cardstack/boxel-ui/components';
+import type { PanelContext } from '@cardstack/boxel-ui/components';
+
+import { CheckMark, File } from '@cardstack/boxel-ui/icons';
+
+import { cn, and, not } from '@cardstack/boxel-ui/helpers';
 
 import {
   type RealmInfo,
@@ -356,7 +357,7 @@ export default class CodeMode extends Component<Signature> {
   }
 
   private loadLiveCard = restartableTask(async (url: URL) => {
-    let card = await this.cardService.loadLiveModel(this, url);
+    let card = await this.cardService.loadModel(this, url);
     if (card !== this.card) {
       if (this.card) {
         this.cardService.unsubscribe(this.card, this.onCardChange);
@@ -720,7 +721,7 @@ export default class CodeMode extends Component<Signature> {
                     <span class='saved-msg'>
                       Saved
                     </span>
-                    {{svgJar 'check-mark' width='27' height='27'}}
+                    <CheckMark width='27' height='27' />
                   {{/if}}
                 </div>
               {{else if this.isLoading}}
@@ -768,7 +769,7 @@ export default class CodeMode extends Component<Signature> {
               class='inner-container inner-container--empty'
               data-test-empty-code-mode
             >
-              {{svgJar 'file' width='40' height='40' role='presentation'}}
+              <File width='40' height='40' role='presentation' />
               <h3 class='choose-file-prompt'>
                 Choose a file on the left to open it
               </h3>

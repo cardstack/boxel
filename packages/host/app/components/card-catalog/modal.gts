@@ -12,13 +12,14 @@ import debounce from 'lodash/debounce';
 
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
-import { Button, SearchInput } from '@cardstack/boxel-ui';
+import { Button, SearchInput } from '@cardstack/boxel-ui/components';
+import { IconPlus } from '@cardstack/boxel-ui/icons';
 
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { and, eq, gt, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { and, eq, gt, not } from '@cardstack/boxel-ui/helpers';
 
 import {
   createNewCard,
+  baseRealm,
   type CodeRef,
   type CreateNewCard,
   Deferred,
@@ -139,12 +140,7 @@ export default class CardCatalogModal extends Component<Signature> {
                   }}
                   data-test-card-catalog-create-new-button
                 >
-                  {{svgJar
-                    'icon-plus'
-                    width='20'
-                    height='20'
-                    role='presentation'
-                  }}
+                  <IconPlus width='20' height='20' role='presentation' />
                   Create New
                   {{this.cardRefName}}
                 </Button>
@@ -281,7 +277,24 @@ export default class CardCatalogModal extends Component<Signature> {
     },
   ): Promise<undefined | T> {
     this.zIndex++;
-    return (await this._chooseCard.perform(query, opts)) as T | undefined;
+    return (await this._chooseCard.perform(
+      {
+        // default to title sort so that we can maintain stability in
+        // the ordering of the search results (server sorts results
+        // by order indexed by default)
+        sort: [
+          {
+            on: {
+              module: `${baseRealm.url}card-api`,
+              name: 'CardDef',
+            },
+            by: 'title',
+          },
+        ],
+        ...query,
+      },
+      opts,
+    )) as T | undefined;
   }
 
   private _chooseCard = task(

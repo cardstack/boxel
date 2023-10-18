@@ -3,7 +3,7 @@ import Component from '@glimmer/component';
 
 import cssUrl from 'ember-css-url';
 
-import cn from '@cardstack/boxel-ui/helpers/cn';
+import { cn } from '@cardstack/boxel-ui/helpers';
 
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 

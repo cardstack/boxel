@@ -1,7 +1,7 @@
+/* eslint-disable @typescript-eslint/no-empty-function */
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import * as runtime from '@cardstack/runtime-common';
-import * as boxelUI from '@cardstack/boxel-ui';
 import * as flat from 'flat';
 import * as lodash from 'lodash';
 import * as dateFns from 'date-fns';
@@ -9,22 +9,15 @@ import * as ethers from 'ethers';
 
 export function shimExternals(loader: Loader) {
   loader.shimModule('@cardstack/runtime-common', runtime);
-  loader.shimModule('@cardstack/boxel-ui', boxelUI);
-  // import * as boxelSvgJar from "@cardstack/boxel-ui/helpers/svg-jar";
-  loader.shimModule('@cardstack/boxel-ui/helpers/svg-jar', {
-    svgJar() {},
+  loader.shimModule('@cardstack/boxel-ui/components', {
+    Button() {},
   });
-  // import * as boxelCssVar from '@cardstack/boxel-ui/helpers/css-var';
-  loader.shimModule('@cardstack/boxel-ui/helpers/css-var', {
+  loader.shimModule('@cardstack/boxel-ui/helpers', {
     cssVar() {},
-  });
-  // import * as boxelPickHelper from "@cardstack/boxel-ui/helpers/pick";
-  loader.shimModule('@cardstack/boxel-ui/helpers/pick', {
-    default() {},
-  });
-  // import * as boxelTruthHelpers from "@cardstack/boxel-ui/helpers/truth-helpers";
-  loader.shimModule('@cardstack/boxel-ui/helpers/truth-helpers', {
     eq() {},
+  });
+  loader.shimModule('@cardstack/boxel-ui/icons', {
+    default() {},
   });
   // import * as glimmerComponent from "@glimmer/component";
   loader.shimModule('@glimmer/component', {
