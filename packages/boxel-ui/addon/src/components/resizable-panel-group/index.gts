@@ -10,8 +10,8 @@ import ResizablePanel from './panel.gts';
 
 interface Signature {
   Args: {
-    orientation: 'horizontal' | 'vertical';
     onListPanelContextChange?: (listPanelContext: PanelContext[]) => void;
+    orientation: 'horizontal' | 'vertical';
     reverseCollapse?: boolean;
   };
   Blocks: {
@@ -106,9 +106,9 @@ export default class ResizablePanelGroup extends Component<Signature> {
 
   listPanelContext = new TrackedMap<number, PanelContext>();
   currentResizeHandler: {
+    firstEl?: HTMLElement | null;
     id: string;
     initialPosition: number;
-    firstEl?: HTMLElement | null;
     secondEl?: HTMLElement | null;
   } | null = null;
 
