@@ -1669,6 +1669,65 @@ module('Acceptance | code mode tests', function (hooks) {
       getMonacoContent().includes('favPeople = linksToMany(() => Person);'),
     );
   });
+
+  test('deleting a field from schema editor', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-card-schema]');
+
+    await click(
+      '[data-test-card-schema="Person"] [data-test-field-name="firstName"] [data-test-schema-editor-field-contextual-button]',
+    );
+
+    assert
+      .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
+      .containsText('+ 5 Fields');
+
+    assert.true(
+      getMonacoContent().includes('firstName = contains(StringCard)'),
+    );
+
+    await click('[data-test-boxel-menu-item-text="Remove Field"]');
+
+    assert.dom('[data-test-remove-field-modal]').exists();
+
+    // Test closing the modal works (cancel removing a field)
+    await click('[data-test-cancel-remove-field-button]');
+    assert.dom('[data-test-remove-field-modal]').doesNotExist();
+
+    // Open the modal again
+    await click(
+      '[data-test-card-schema="Person"] [data-test-field-name="firstName"] [data-test-schema-editor-field-contextual-button]',
+    );
+    await click('[data-test-boxel-menu-item-text="Remove Field"]');
+
+    await click('[data-test-remove-field-button]');
+    await waitFor('[data-test-card-schema]');
+
+    assert
+      .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
+      .containsText('+ 4 Fields'); // One field less
+
+    assert.false(
+      getMonacoContent().includes('firstName = contains(StringCard)'),
+    );
+
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="firstName"]`,
+      )
+      .doesNotExist();
+  });
 });
 
 async function elementIsVisible(element: Element) {
