@@ -4,6 +4,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import cssVars from '../../helpers/css-var.ts';
+import { eq } from '../../helpers/truth-helpers.ts';
 
 export type PanelContext = {
   defaultWidth: string;
