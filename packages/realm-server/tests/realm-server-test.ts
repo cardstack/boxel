@@ -516,7 +516,7 @@ module('Realm Server', function (hooks) {
     assert.strictEqual(
       response.get('X-boxel-realm-url'),
       testRealmURL.href,
-      'realm url header is correct',
+      'realm URL header is correct',
     );
     let body = response.text.trim();
     let moduleAbsolutePath = resolve(join(__dirname, '..', 'person.gts'));

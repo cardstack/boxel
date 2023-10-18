@@ -2,15 +2,20 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { BoxelInput } from '@cardstack/boxel-ui';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { and, bool, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
+
+import { and, bool, not } from '@cardstack/boxel-ui/helpers';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import URLBarResource, {
   urlBarResource,
 } from '@cardstack/host/resources/url-bar';
+import {
+  IconCircle,
+  IconGlobe,
+  Warning as IconWarning,
+} from '@cardstack/boxel-ui/icons';
 
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -51,14 +56,14 @@ export default class CardURLBar extends Component<Signature> {
           </:ready>
           <:error>
             <div class='realm-icon'>
-              {{svgJar 'icon-circle' width='22px' height='22px'}}
+              <IconCircle width='22px' height='22px' />
             </div>
             <span>in Unknown Workspace</span>
           </:error>
         </RealmInfoProvider>
       </div>
       <div class='input'>
-        {{svgJar 'icon-globe' width='22px' height='22px'}}
+        <IconGlobe width='22px' height='22px' />
         <BoxelInput
           class='url-input'
           @value={{this.urlBar.url}}
@@ -72,7 +77,7 @@ export default class CardURLBar extends Component<Signature> {
       {{#if (and (not @userHasDismissedError) (bool this.urlBar.errorMessage))}}
         <div class='error-message' data-test-card-url-bar-error>
           <span class='warning'>
-            {{svgJar 'warning' width='20px' height='20px'}}
+            <IconWarning width='20px' height='20px' />
           </span>
           <span class='message'>{{this.urlBar.errorMessage}}</span>
           <button

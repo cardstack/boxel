@@ -11,7 +11,7 @@ import {
   relativeTo,
   type BaseDef,
 } from './card-api';
-import { AddButton, Tooltip } from '@cardstack/boxel-ui';
+import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
 import {
   chooseCard,
   catalogEntryRef,
@@ -222,7 +222,7 @@ class Isolated extends Component<typeof CardsGrid> {
     let card = await chooseCard<CatalogEntry>({
       filter: {
         on: catalogEntryRef,
-        eq: { isPrimitive: false },
+        eq: { isField: false },
       },
     });
     if (!card) {

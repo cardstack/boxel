@@ -20,17 +20,14 @@ import { trackedFunction } from 'ember-resources/util/function';
 import { TrackedArray } from 'tracked-built-ins';
 
 import {
-  IconButton,
-  Header,
+  BoxelDropdown,
+  Menu as BoxelMenu,
   CardContainer,
+  Header,
+  IconButton,
   Tooltip,
-} from '@cardstack/boxel-ui';
-import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
-import BoxelMenu from '@cardstack/boxel-ui/components/menu';
-import cn from '@cardstack/boxel-ui/helpers/cn';
-import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
-import optional from '@cardstack/boxel-ui/helpers/optional';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+} from '@cardstack/boxel-ui/components';
+import { cn, eq, menuItem, optional } from '@cardstack/boxel-ui/helpers';
 
 import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 
@@ -52,6 +49,13 @@ import { type StackItem } from './container';
 import OperatorModeOverlays from './overlays';
 
 import type CardService from '../../services/card-service';
+import {
+  IconPencil,
+  IconX,
+  IconTrash,
+  IconLink,
+  ThreeDotsHorizontal,
+} from '@cardstack/boxel-ui/icons';
 
 interface Signature {
   Args: {
@@ -316,7 +320,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               <Tooltip @placement='top'>
                 <:trigger>
                   <IconButton
-                    @icon='icon-pencil'
+                    @icon={{IconPencil}}
                     @width='24px'
                     @height='24px'
                     class='icon-button'
@@ -333,7 +337,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               <Tooltip @placement='top'>
                 <:trigger>
                   <IconButton
-                    @icon='icon-pencil'
+                    @icon={{IconPencil}}
                     @width='24px'
                     @height='24px'
                     class='icon-save'
@@ -353,7 +357,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                   <Tooltip @placement='top'>
                     <:trigger>
                       <IconButton
-                        @icon='three-dots-horizontal'
+                        @icon={{ThreeDotsHorizontal}}
                         @width='20px'
                         @height='20px'
                         class='icon-button'
@@ -376,12 +380,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
                         (menuItem
                           'Copy Card URL'
                           (perform this.copyToClipboard)
-                          icon='icon-link'
+                          icon=IconLink
                         )
                         (menuItem
                           'Delete'
                           (fn @delete this.card)
-                          icon='icon-trash'
+                          icon=IconTrash
                           dangerous=true
                         )
                       )
@@ -389,12 +393,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
                         (menuItem
                           'Copy Card URL'
                           (perform this.copyToClipboard)
-                          icon='icon-link'
+                          icon=IconLink
                         )
                         (menuItem
                           'Delete'
                           (fn @delete this.card)
-                          icon='icon-trash'
+                          icon=IconTrash
                           dangerous=true
                         )
                       )
@@ -406,7 +410,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             <Tooltip @placement='top'>
               <:trigger>
                 <IconButton
-                  @icon='icon-x'
+                  @icon={{IconX}}
                   @width='20px'
                   @height='20px'
                   class='icon-button'

@@ -5,7 +5,8 @@
   "license": "MIT",
   "devDependencies": {
     "@cardstack/cardpay-sdk": "^1.0.53",
-    "@types/lodash": "^4.14.182"
+    "@types/lodash": "^4.14.182",
+    "@cardstack/boxel-ui": "workspace:*"
   },
   "scripts": {}
 }

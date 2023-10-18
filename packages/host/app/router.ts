@@ -17,7 +17,7 @@ let path = new URL(resolvedOwnRealmURL ?? ownRealmURL).pathname.replace(
 );
 
 Router.map(function () {
-  this.route('freestyle', { path: '/_freestyle' });
+  this.route('host-freestyle', { path: '/_freestyle' });
   this.route('indexer', { path: '/indexer/:id' });
   this.route('acceptance-test-setup');
   this.route('card', { path: '/*path' });

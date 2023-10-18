@@ -14,7 +14,7 @@ import { restartableTask, timeout } from 'ember-concurrency';
 
 import momentFrom from 'ember-moment/helpers/moment-from';
 
-import { AddButton, Tooltip } from '@cardstack/boxel-ui';
+import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
 
 import {
   SupportedMimeType,
@@ -415,7 +415,7 @@ export default class Go extends Component<Signature> {
     let card = await chooseCard<CatalogEntry>({
       filter: {
         on: catalogEntryRef,
-        eq: { isPrimitive: false },
+        eq: { isField: false },
       },
     });
     if (!card) {

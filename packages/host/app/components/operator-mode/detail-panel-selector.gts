@@ -1,6 +1,8 @@
 import { type EmptyObject } from '@ember/component/helper';
-import { fn } from '@ember/helper';
+import compact from 'ember-composable-helpers/helpers/compact';
 import { on } from '@ember/modifier';
+import { cn } from '@cardstack/boxel-ui/helpers';
+import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 

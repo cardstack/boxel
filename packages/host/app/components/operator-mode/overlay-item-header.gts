@@ -6,10 +6,12 @@ import Component from '@glimmer/component';
 
 import { trackedFunction } from 'ember-resources/util/function';
 
-import { BoxelDropdown, IconButton, Menu } from '@cardstack/boxel-ui';
-import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import {
+  BoxelDropdown,
+  IconButton,
+  Menu,
+} from '@cardstack/boxel-ui/components';
+import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
@@ -20,8 +22,12 @@ import type {
   Format,
   FieldType,
 } from 'https://cardstack.com/base/card-api';
-
 import { type RenderedCardForOverlayActions } from './stack-item';
+import {
+  IconPencil,
+  IconTurnDownRight,
+  ThreeDotsHorizontal,
+} from '@cardstack/boxel-ui/icons';
 
 interface Signature {
   item: RenderedCardForOverlayActions;
@@ -49,15 +55,9 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
     <header class='overlay-item-header' data-test-overlay-header>
       <div class='header-title'>
         {{#if (eq @item.fieldType 'contains')}}
-          {{svgJar 'icon-turn-down-right' width='22px' height='18px'}}
+          <IconTurnDownRight width='22px' height='18px' />
         {{else}}
-          <img
-            src={{this.iconURL}}
-            width='20'
-            height='20'
-            alt=''
-            role='presentation'
-          />
+          <img src={{this.iconURL}} width='20' height='20' alt='' />
         {{/if}}
         <span class='header-title__text'>
           {{cardTypeDisplayName @item.card}}
@@ -68,7 +68,7 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
         {{! Offer to edit embedded card only when the stack item is in edit mode  }}
         {{#if (eq @item.stackItem.format 'edit')}}
           <IconButton
-            @icon='icon-pencil'
+            @icon={{IconPencil}}
             @width='24px'
             @height='24px'
             class='header-actions__button'
@@ -90,7 +90,7 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
         <BoxelDropdown>
           <:trigger as |bindings|>
             <IconButton
-              @icon='three-dots-horizontal'
+              @icon={{ThreeDotsHorizontal}}
               @width='20px'
               @height='20px'
               class='header-actions__button'

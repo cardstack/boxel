@@ -6,7 +6,7 @@ import {
   field,
   contains,
 } from 'https://cardstack.com/base/card-api';
-import { GridContainer } from '@cardstack/boxel-ui';
+import { GridContainer } from '@cardstack/boxel-ui/components';
 
 export class Author extends CardDef {
   static displayName = 'Author Bio';

@@ -5,12 +5,8 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
-
-import { DropdownButton } from '@cardstack/boxel-ui';
-import menuDivider from '@cardstack/boxel-ui/helpers/menu-divider';
-import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { gt } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { DropdownButton } from '@cardstack/boxel-ui/components';
+import { gt, menuDivider, menuItem } from '@cardstack/boxel-ui/helpers';
 
 import { getPlural } from '@cardstack/runtime-common';
 
@@ -19,11 +15,18 @@ import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import AddFieldModal from '@cardstack/host/components/operator-mode/add-field-modal';
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import RemoveFieldModal from '@cardstack/host/components/operator-mode/remove-field-modal';
 import {
   type Type,
   type CodeRefType,
   type FieldOfType,
 } from '@cardstack/host/resources/card-type';
+import {
+  ArrowTopLeft,
+  IconLink,
+  ThreeDotsHorizontal,
+  Warning as WarningIcon,
+} from '@cardstack/boxel-ui/icons';
 
 import type { Ready } from '@cardstack/host/resources/file';
 import type CardService from '@cardstack/host/services/card-service';
@@ -332,12 +335,11 @@ export default class CardSchemaEditor extends Component<Signature> {
                       data-test-overridden-field-link
                       {{on 'click' (fn this.scrollIntoOveridingField field)}}
                     >Jump to active field definition
-                      <span>{{svgJar
-                          'arrow-top-left'
-                          width='20'
-                          height='20'
+                      <span><ArrowTopLeft
+                          width='20px'
+                          height='20px'
                           role='presentation'
-                        }}</span></button>
+                        /></span></button>
 
                   {{else}}
                     <button
@@ -347,7 +349,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                     >
                       {{#if (this.isLinkedField field)}}
                         <span class='linked-icon' data-test-linked-icon>
-                          {{svgJar 'icon-link' width='16' height='16'}}
+                          <IconLink width='16px' height='16px' />
                         </span>
                       {{/if}}
                       <div class='realm-icon'>
@@ -374,10 +376,11 @@ export default class CardSchemaEditor extends Component<Signature> {
                       </div>
                     </button>
                     <DropdownButton
-                      @icon='three-dots-horizontal'
+                      @icon={{ThreeDotsHorizontal}}
                       @label='field options'
                       @contentClass='context-menu'
                       class='context-menu-trigger'
+                      data-test-schema-editor-field-contextual-button
                       as |dd|
                     >
                       <div class='warning-box'>
@@ -386,12 +389,11 @@ export default class CardSchemaEditor extends Component<Signature> {
                           card instances.
                         </p>
                         <span class='warning-icon'>
-                          {{svgJar
-                            'warning'
-                            width='20'
-                            height='20'
+                          <WarningIcon
+                            width='20px'
+                            height='20px'
                             role='presentation'
-                          }}
+                          />
                         </span>
                       </div>
                       <dd.Menu
@@ -403,9 +405,8 @@ export default class CardSchemaEditor extends Component<Signature> {
                           (menuDivider)
                           (menuItem
                             'Remove Field'
-                            this.removeField
+                            (fn this.toggleRemoveFieldModalShown field)
                             dangerous=true
-                            disabled=true
                           )
                         }}
                       />
@@ -413,7 +414,6 @@ export default class CardSchemaEditor extends Component<Signature> {
                   {{/if}}
                 {{/let}}
               </div>
-
             </div>
           {{/if}}
         {{/each}}
@@ -437,6 +437,17 @@ export default class CardSchemaEditor extends Component<Signature> {
           />
         {{/if}}
       {{/if}}
+
+      {{#if this.removeFieldModalShown}}
+        <RemoveFieldModal
+          @file={{@file}}
+          @card={{@card}}
+          @field={{this.fieldForRemoval}}
+          @moduleSyntax={{@moduleSyntax}}
+          @onClose={{this.toggleRemoveFieldModalShown}}
+          data-test-remove-field-modal
+        />
+      {{/if}}
     </div>
   </template>
 
@@ -445,8 +456,16 @@ export default class CardSchemaEditor extends Component<Signature> {
   @service declare operatorModeStateService: OperatorModeStateService;
 
   @tracked addFieldModalShown = false;
+  @tracked removeFieldModalShown = false;
+  @tracked private _fieldForRemoval?: FieldOfType = undefined;
+
   @action toggleAddFieldModal() {
     this.addFieldModalShown = !this.addFieldModalShown;
+  }
+
+  @action toggleRemoveFieldModalShown(field?: FieldOfType) {
+    this._fieldForRemoval = field;
+    this.removeFieldModalShown = !this.removeFieldModalShown;
   }
 
   @action openCardDefinition(moduleURL: string) {
@@ -456,12 +475,6 @@ export default class CardSchemaEditor extends Component<Signature> {
   @action
   isOwnField(fieldName: string): boolean {
     return isOwnField(this.args.card, fieldName);
-  }
-
-  @action
-  removeField() {
-    // TODO: implement
-    return;
   }
 
   @action
@@ -541,5 +554,13 @@ export default class CardSchemaEditor extends Component<Signature> {
       block: 'end',
       inline: 'nearest',
     });
+  }
+
+  get fieldForRemoval(): FieldOfType {
+    if (!this._fieldForRemoval) {
+      throw new Error('fieldForRemoval should be set');
+    }
+
+    return this._fieldForRemoval;
   }
 }

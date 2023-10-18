@@ -25,11 +25,12 @@ import {
   TestRealm,
   TestRealmAdapter,
   setupLocalIndexing,
-  setupMockMessageService,
   testRealmURL,
   sourceFetchRedirectHandle,
   sourceFetchReturnUrlHandle,
+  setupServerSentEvents,
   getMonacoContent,
+  type TestContextWithSSE,
 } from '../helpers';
 
 const indexCardSource = `
@@ -191,9 +192,24 @@ module('Acceptance | code mode tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
 
+  async function saveField(
+    context: TestContextWithSSE,
+    assert: Assert,
+    expectedEvents: { type: string; data: Record<string, any> }[],
+  ) {
+    await context.expectEvents(
+      assert,
+      realm,
+      adapter,
+      expectedEvents,
+      async () => {
+        await click('[data-test-save-field-button]');
+      },
+    );
+  }
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupMockMessageService(hooks);
+  setupServerSentEvents(hooks);
   setupWindowMock(hooks);
 
   hooks.afterEach(async function () {
@@ -1464,7 +1480,21 @@ module('Acceptance | code mode tests', function (hooks) {
       .containsText('This resource does not exist');
   });
 
-  test('adding a field from schema editor - whole flow test', async function (assert) {
+  test<TestContextWithSSE>('adding a field from schema editor - whole flow test', async function (assert) {
+    assert.expect(14);
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [
+            `${testRealmURL}person.gts`,
+            `${testRealmURL}Person/1`,
+            `${testRealmURL}employee`,
+          ],
+        },
+      },
+    ];
     let operatorModeStateParam = stringify({
       stacks: [],
       submode: 'code',
@@ -1529,7 +1559,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom('[data-test-save-field-button]')
       .doesNotHaveAttribute('disabled');
 
-    await click('[data-test-save-field-button]');
+    await saveField(this, assert, expectedEvents);
     await waitFor(
       '[data-test-card-schema="Person"] [data-test-field-name="birthdate"] [data-test-card-display-name="Date"]',
     );
@@ -1543,7 +1573,21 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.ok(getMonacoContent().includes('birthdate = contains(DateCard)'));
   });
 
-  test('adding a field from schema editor - cardinality test', async function (assert) {
+  test<TestContextWithSSE>('adding a field from schema editor - cardinality test', async function (assert) {
+    assert.expect(9);
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [
+            `${testRealmURL}person.gts`,
+            `${testRealmURL}Person/1`,
+            `${testRealmURL}employee`,
+          ],
+        },
+      },
+    ];
     let operatorModeStateParam = stringify({
       stacks: [],
       submode: 'code',
@@ -1570,7 +1614,7 @@ module('Acceptance | code mode tests', function (hooks) {
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'luckyNumbers');
     await click('[data-test-boxel-radio-option-id="many"]');
-    await click('[data-test-save-field-button]');
+    await saveField(this, assert, expectedEvents);
 
     await waitFor(
       '[data-test-card-schema="Person"] [data-test-field-name="luckyNumbers"] [data-test-card-display-name="BigInteger"]',
@@ -1599,7 +1643,7 @@ module('Acceptance | code mode tests', function (hooks) {
     await fillIn('[data-test-field-name-input]', 'favPerson');
     await click('[data-test-boxel-radio-option-id="one"]');
 
-    await click('[data-test-save-field-button]');
+    await saveField(this, assert, expectedEvents);
     await waitFor(
       '[data-test-card-schema="Person"] [data-test-field-name="favPerson"] [data-test-card-display-name="Person"]',
     );
@@ -1622,7 +1666,7 @@ module('Acceptance | code mode tests', function (hooks) {
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'favPeople');
     await click('[data-test-boxel-radio-option-id="many"]');
-    await click('[data-test-save-field-button]');
+    await saveField(this, assert, expectedEvents);
     await waitFor(
       '[data-test-card-schema="Person"] [data-test-field-name="favPeople"] [data-test-card-display-name="Person"]',
     );
@@ -1631,10 +1675,68 @@ module('Acceptance | code mode tests', function (hooks) {
         `[data-test-card-schema="Person"] [data-test-field-name="favPeople"] [data-test-field-types]`,
       )
       .hasText('Link, Collection');
-
     assert.ok(
       getMonacoContent().includes('favPeople = linksToMany(() => Person);'),
     );
+  });
+
+  test('deleting a field from schema editor', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-card-schema]');
+
+    await click(
+      '[data-test-card-schema="Person"] [data-test-field-name="firstName"] [data-test-schema-editor-field-contextual-button]',
+    );
+
+    assert
+      .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
+      .containsText('+ 5 Fields');
+
+    assert.true(
+      getMonacoContent().includes('firstName = contains(StringCard)'),
+    );
+
+    await click('[data-test-boxel-menu-item-text="Remove Field"]');
+
+    assert.dom('[data-test-remove-field-modal]').exists();
+
+    // Test closing the modal works (cancel removing a field)
+    await click('[data-test-cancel-remove-field-button]');
+    assert.dom('[data-test-remove-field-modal]').doesNotExist();
+
+    // Open the modal again
+    await click(
+      '[data-test-card-schema="Person"] [data-test-field-name="firstName"] [data-test-schema-editor-field-contextual-button]',
+    );
+    await click('[data-test-boxel-menu-item-text="Remove Field"]');
+
+    await click('[data-test-remove-field-button]');
+    await waitFor('[data-test-card-schema]');
+
+    assert
+      .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
+      .containsText('+ 4 Fields'); // One field less
+
+    assert.false(
+      getMonacoContent().includes('firstName = contains(StringCard)'),
+    );
+
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="firstName"]`,
+      )
+      .doesNotExist();
   });
 });
 
