@@ -90,8 +90,9 @@ interface ClickableModuleSignature {
 export class ClickableModuleDefinitionContainer extends Component<ClickableModuleSignature> {
   <template>
     <Clickable
-      @onSelectDefinition={{@onSelectDefinition}}
-      @url={{@url}}
+      @openDefinition={{@openDefinition}}
+      @moduleHref={{@moduleHref}}
+      @codeRefName={{@codeRefName}}
       data-test-definition-container
     >
       <BaseDefinitionContainer

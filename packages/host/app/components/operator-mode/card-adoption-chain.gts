@@ -19,6 +19,7 @@ interface Signature {
     file: Ready;
     cardInheritanceChain: CardInheritance[];
     moduleSyntax: ModuleSyntax;
+    openDefinition: (moduleHref: string, codeRefName?: string) => void;
   };
 }
 
@@ -79,6 +80,7 @@ export default class CardAdoptionChain extends Component<Signature> {
             @childFields={{this.getFields index 'successors'}}
             @parentFields={{this.getFields index 'ancestors'}}
             @allowAddingFields={{eq index 0}}
+            @openDefinition={{@openDefinition}}
           />
           <div class='content-with-line'>
             <hr class='line' />

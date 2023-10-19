@@ -31,6 +31,7 @@ interface Signature {
     file: Ready;
     cardTypeResource?: CardType;
     card: typeof BaseDef;
+    openDefinition: (moduleHref: string, codeRefName?: string) => void;
   };
 }
 
@@ -149,6 +150,7 @@ export default class SchemaEditorColumn extends Component<Signature> {
             @file={{@file}}
             @moduleSyntax={{this.moduleSyntax}}
             @cardInheritanceChain={{this.cardInheritanceChain.value}}
+            @openDefinition={{@openDefinition}}
           />
         </:content>
       </A.Item>

@@ -14,7 +14,11 @@ import {
   RealmInfo,
 } from '@cardstack/runtime-common';
 import { SupportedMimeType } from '@cardstack/runtime-common';
-import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
+import {
+  isCodeRef,
+  type CodeRef,
+  isResolvedCodeRef,
+} from '@cardstack/runtime-common/code-ref';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -83,7 +87,7 @@ export class CardType extends Resource<Args> {
 
   private assembleType = restartableTask(async (card: typeof BaseDef) => {
     let maybeType = await this.toType(card);
-    if (this.isCodeRefType(maybeType)) {
+    if (isCodeRefType(maybeType)) {
       throw new Error(`bug: should never get here`);
     }
     this.type = maybeType;
@@ -125,7 +129,7 @@ export class CardType extends Resource<Args> {
     if (superCard && card !== superCard) {
       superType = await this.toType(superCard, [card, ...stack]);
     }
-    if (this.isCodeRefType(superType)) {
+    if (isCodeRefType(superType)) {
       throw new Error(
         `bug: encountered cycle in card ancestor: ${[
           superType,
@@ -185,10 +189,6 @@ export class CardType extends Resource<Args> {
     moduleInfoCache.set(url.href, moduleInfo);
     return moduleInfo;
   };
-
-  private isCodeRefType(type: any): type is CodeRefType {
-    return type && isCodeRef(type) && 'displayName' in type;
-  }
 }
 
 export function getCardType(parent: object, card: () => typeof BaseDef) {
@@ -202,4 +202,28 @@ export function getCardType(parent: object, card: () => typeof BaseDef) {
       ).loader,
     },
   })) as CardType;
+}
+
+function isCodeRefType(type: any): type is CodeRefType {
+  return type && isCodeRef(type) && 'displayName' in type;
+}
+
+export function isFieldOfType(obj: any): obj is FieldOfType {
+  return obj && 'card' in obj;
+}
+
+export function codeRefName(f: Type | FieldOfType) {
+  let codeRef: CodeRef;
+
+  if (isFieldOfType(f)) {
+    codeRef = isCodeRefType(f.card) ? f.card : f.card.codeRef;
+  } else {
+    codeRef = f.codeRef;
+  }
+
+  if (!isResolvedCodeRef(codeRef)) {
+    throw new Error('This is neither an ancestor or fieldOf code ref');
+  }
+
+  return codeRef.name;
 }

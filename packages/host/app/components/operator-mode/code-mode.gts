@@ -119,6 +119,7 @@ export default class CodeMode extends Component<Signature> {
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
   @tracked private _selectedDeclaration: ModuleDeclaration | undefined;
+  @tracked private _nextSelectedCodeRefName: string | undefined;
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
@@ -312,7 +313,7 @@ export default class CodeMode extends Component<Signature> {
     return undefined;
   });
 
-  @use private cardType = resource(() => {
+  @use private cardInstanceType = resource(() => {
     if (this.card !== undefined) {
       let cardDefinition = this.card.constructor as typeof BaseDef;
       return getCardType(this, () => cardDefinition);
@@ -395,10 +396,26 @@ export default class CodeMode extends Component<Signature> {
     return this.moduleContentsResource?.declarations || [];
   }
 
+  private get nextSelectedDeclaration() {
+    let nextSelected = this.moduleContentsResource?.declarations.find((dec) => {
+      if (isCardOrFieldDeclaration(dec)) {
+        if (dec.exportedAs === this._nextSelectedCodeRefName) {
+          return true;
+        }
+        return false;
+      }
+      return false;
+    });
+    return nextSelected;
+  }
+
   private get selectedDeclaration() {
     if (this._selectedDeclaration) {
       return this._selectedDeclaration;
     } else {
+      if (this.nextSelectedDeclaration) {
+        return this.nextSelectedDeclaration;
+      }
       return this.declarations.length > 0 ? this.declarations[0] : undefined;
     }
   }
@@ -416,6 +433,12 @@ export default class CodeMode extends Component<Signature> {
   @action
   private selectDeclaration(dec: ModuleDeclaration) {
     this._selectedDeclaration = dec;
+  }
+
+  @action
+  openDefinition(moduleHref: string, codeRefName?: string) {
+    this._nextSelectedCodeRefName = codeRefName;
+    this.operatorModeStateService.updateCodePath(new URL(moduleHref));
   }
 
   private onCardChange = () => {
@@ -659,13 +682,14 @@ export default class CodeMode extends Component<Signature> {
                   {{#if this.isReady}}
                     <DetailPanel
                       @cardInstance={{this.card}}
-                      @cardInstanceType={{this.cardType}}
+                      @cardInstanceType={{this.cardInstanceType}}
                       @readyFile={{this.readyFile}}
                       @realmInfo={{this.realmInfo}}
                       @selectedDeclaration={{this.selectedDeclaration}}
                       @declarations={{this.declarations}}
                       @selectDeclaration={{this.selectDeclaration}}
                       @delete={{this.delete}}
+                      @openDefinition={{this.openDefinition}}
                       data-test-card-inheritance-panel
                     />
                   {{/if}}
@@ -748,6 +772,7 @@ export default class CodeMode extends Component<Signature> {
                     @file={{this.readyFile}}
                     @card={{this.selectedCardOrField.cardOrField}}
                     @cardTypeResource={{this.selectedCardOrField.cardType}}
+                    @openDefinition={{this.openDefinition}}
                   />
                 {{else if this.schemaEditorIncompatible}}
                   <div

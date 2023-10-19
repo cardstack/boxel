@@ -49,7 +49,10 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 
 import { isCardDef, isFieldDef } from '@cardstack/runtime-common/code-ref';
 
-import { type CardType } from '@cardstack/host/resources/card-type';
+import {
+  type CardType,
+  codeRefName,
+} from '@cardstack/host/resources/card-type';
 
 interface Signature {
   Element: HTMLElement;
@@ -61,6 +64,7 @@ interface Signature {
     selectedDeclaration?: ModuleDeclaration;
     declarations: ModuleDeclaration[];
     selectDeclaration: (dec: ModuleDeclaration) => void;
+    openDefinition: (moduleHref: string, codeRefName?: string) => void;
     delete: () => void;
   };
 }
@@ -89,13 +93,6 @@ export default class DetailPanel extends Component<Signature> {
         }
       }) || this.cardType?.isLoading
     );
-  }
-
-  @action
-  updateCodePath(url: URL | undefined) {
-    if (url) {
-      this.operatorModeStateService.updateCodePath(url);
-    }
   }
 
   @action
@@ -242,14 +239,19 @@ export default class DetailPanel extends Component<Signature> {
                 />
                 Adopts from
               </div>
-              <ClickableModuleDefinitionContainer
-                @title={{'Card Definition'}}
-                @fileURL={{@cardInstanceType.type.module}}
-                @name={{@cardInstanceType.type.displayName}}
-                @fileExtension={{@cardInstanceType.type.moduleInfo.extension}}
-                @onSelectDefinition={{this.updateCodePath}}
-                @url={{@cardInstanceType.type.module}}
-              />
+              {{#if @cardInstanceType.type}}
+                {{#let (codeRefName @cardInstanceType.type) as |codeRefName|}}
+                  <ClickableModuleDefinitionContainer
+                    @title={{'Card Definition'}}
+                    @fileURL={{@cardInstanceType.type.module}}
+                    @name={{@cardInstanceType.type.displayName}}
+                    @fileExtension={{@cardInstanceType.type.moduleInfo.extension}}
+                    @openDefinition={{@openDefinition}}
+                    @moduleHref={{@cardInstanceType.type.module}}
+                    @codeRefName={{codeRefName}}
+                  />
+                {{/let}}
+              {{/if}}
 
             {{else if this.isField}}
               {{#let 'Field Definition' as |definitionTitle|}}
@@ -265,23 +267,29 @@ export default class DetailPanel extends Component<Signature> {
                   }}
                 />
                 {{#if this.cardType.type.super}}
-                  <div class='chain'>
-                    <IconInherit
-                      class='chain-icon'
-                      width='24px'
-                      height='24px'
-                      role='presentation'
+                  {{#let
+                    (codeRefName this.cardType.type.super)
+                    as |codeRefName|
+                  }}
+                    <div class='chain'>
+                      <IconInherit
+                        class='chain-icon'
+                        width='24px'
+                        height='24px'
+                        role='presentation'
+                      />
+                      Inherits from
+                    </div>
+                    <ClickableModuleDefinitionContainer
+                      @title={{definitionTitle}}
+                      @fileURL={{this.cardType.type.super.module}}
+                      @name={{this.cardType.type.super.displayName}}
+                      @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
+                      @openDefinition={{@openDefinition}}
+                      @moduleHref={{this.cardType.type.super.module}}
+                      @codeRefName={{codeRefName}}
                     />
-                    Inherits from
-                  </div>
-                  <ClickableModuleDefinitionContainer
-                    @title={{definitionTitle}}
-                    @fileURL={{this.cardType.type.super.module}}
-                    @name={{this.cardType.type.super.displayName}}
-                    @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
-                    @onSelectDefinition={{this.updateCodePath}}
-                    @url={{this.cardType.type.super.module}}
-                  />
+                  {{/let}}
                 {{/if}}
               {{/let}}
             {{else if this.isCard}}
@@ -298,23 +306,29 @@ export default class DetailPanel extends Component<Signature> {
                   }}
                 />
                 {{#if this.cardType.type.super}}
-                  <div class='chain'>
-                    <IconInherit
-                      class='chain-icon'
-                      width='24px'
-                      height='24px'
-                      role='presentation'
+                  {{#let
+                    (codeRefName this.cardType.type.super)
+                    as |codeRefName|
+                  }}
+                    <div class='chain'>
+                      <IconInherit
+                        class='chain-icon'
+                        width='24px'
+                        height='24px'
+                        role='presentation'
+                      />
+                      Inherits from
+                    </div>
+                    <ClickableModuleDefinitionContainer
+                      @title={{definitionTitle}}
+                      @fileURL={{this.cardType.type.super.module}}
+                      @name={{this.cardType.type.super.displayName}}
+                      @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
+                      @openDefinition={{@openDefinition}}
+                      @moduleHref={{this.cardType.type.super.module}}
+                      @codeRefName={{codeRefName}}
                     />
-                    Inherits from
-                  </div>
-                  <ClickableModuleDefinitionContainer
-                    @title={{definitionTitle}}
-                    @fileURL={{this.cardType.type.super.module}}
-                    @name={{this.cardType.type.super.displayName}}
-                    @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
-                    @onSelectDefinition={{this.updateCodePath}}
-                    @url={{this.cardType.type.super.module}}
-                  />
+                  {{/let}}
                 {{/if}}
               {{/let}}
             {{/if}}
