@@ -44,16 +44,16 @@
     "transform-modules-amd-plugin": "workspace:*"
   },
   "devDependencies": {
-    "@babel/core": "^7.17.8",
+    "@babel/core": "^7.22.11",
     "@types/dompurify": "^3.0.2",
     "@types/js-string-escape": "^1.0.1",
     "@types/qunit": "^2.11.3",
     "dompurify": "^3.0.3",
-    "ember-cli-htmlbars": "^6.2.0"
+    "ember-cli-htmlbars": "^6.3.0"
   },
   "peerDependencies": {
-    "@babel/core": "^7.17.8",
-    "ember-cli-htmlbars": "^6.2.0"
+    "@babel/core": "^7.22.11",
+    "ember-cli-htmlbars": "^6.3.0"
   },
   "dependenciesMeta": {
     "@cardstack/ember-template-imports": {
