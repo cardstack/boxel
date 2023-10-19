@@ -1565,6 +1565,7 @@ module('Acceptance | code mode tests', function (hooks) {
 
   test<TestContextWithSSE>('adding a field from schema editor - cardinality test', async function (assert) {
     assert.expect(9);
+    let waitForOpts = { timeout: 2000 }; // Helps mitigating flaky tests since Writing to a file + reflecting that in the UI can be a bit slow
     let expectedEvents = [
       {
         type: 'index',
@@ -1608,6 +1609,7 @@ module('Acceptance | code mode tests', function (hooks) {
 
     await waitFor(
       '[data-test-card-schema="Person"] [data-test-field-name="luckyNumbers"] [data-test-card-display-name="BigInteger"]',
+      waitForOpts,
     );
     assert
       .dom(
@@ -1636,6 +1638,7 @@ module('Acceptance | code mode tests', function (hooks) {
     await saveField(this, assert, expectedEvents);
     await waitFor(
       '[data-test-card-schema="Person"] [data-test-field-name="favPerson"] [data-test-card-display-name="Person"]',
+      waitForOpts,
     );
     assert
       .dom(
@@ -1651,7 +1654,10 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-add-field-button]');
     await click('[data-test-add-field-button]');
     await click('[data-test-choose-card-button]');
-    await waitFor('[data-test-select="http://test-realm/test/person-entry"]');
+    await waitFor(
+      '[data-test-select="http://test-realm/test/person-entry"]',
+      waitForOpts,
+    );
     await click('[data-test-select="http://test-realm/test/person-entry"]');
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'favPeople');
@@ -1659,6 +1665,7 @@ module('Acceptance | code mode tests', function (hooks) {
     await saveField(this, assert, expectedEvents);
     await waitFor(
       '[data-test-card-schema="Person"] [data-test-field-name="favPeople"] [data-test-card-display-name="Person"]',
+      waitForOpts,
     );
     assert
       .dom(
