@@ -1621,6 +1621,7 @@ module('Acceptance | code mode tests', function (hooks) {
       getMonacoContent().includes(
         'luckyNumbers = containsMany(BigIntegerCard)',
       ),
+      "code editor contains line 'luckyNumbers = containsMany(BigIntegerCard)'",
     );
 
     // Field is a card descending from CardDef (cardinality: one)
@@ -1648,6 +1649,7 @@ module('Acceptance | code mode tests', function (hooks) {
 
     assert.ok(
       getMonacoContent().includes('favPerson = linksTo(() => Person);'),
+      "code editor contains line 'favPerson = linksTo(() => Person);'",
     );
 
     // Field is a card descending from CardDef (cardinality: many)
