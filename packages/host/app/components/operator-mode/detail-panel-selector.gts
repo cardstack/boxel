@@ -145,7 +145,7 @@ export default class Selector extends Component<Signature> {
                       <span class='non-exported'>{{if
                           selectorItem.declaration.localName
                           selectorItem.declaration.localName
-                          '??'
+                          '[No Name Found]'
                         }}</span>
                     {{/if}}
                     <span class='type'>{{this.getType
