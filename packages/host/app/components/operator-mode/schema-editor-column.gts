@@ -31,7 +31,7 @@ interface Signature {
     file: Ready;
     cardTypeResource?: CardType;
     card: typeof BaseDef;
-    openDefinition: (moduleHref: string, codeRefName?: string) => void;
+    openDefinition: (moduleHref: string, selectorKey?: string) => void;
   };
 }
 

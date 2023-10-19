@@ -116,7 +116,7 @@ export default class CodeMode extends Component<Signature> {
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
   @tracked private _selectedDeclaration: ModuleDeclaration | undefined;
-  @tracked private _nextSelectedCodeRefName: string | undefined;
+  @tracked private _nextSelectedKey: string | undefined;
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
@@ -390,9 +390,9 @@ export default class CodeMode extends Component<Signature> {
   private get nextSelectedDeclaration() {
     let nextSelected = this.moduleContentsResource?.declarations.find((dec) => {
       if (isCardOrFieldDeclaration(dec)) {
-        if (dec.exportedAs === this._nextSelectedCodeRefName) {
+        if (dec.exportedAs === this._nextSelectedKey) {
           return true;
-        }else if(dec.localName === this._nextSelectedCodeRefName){
+        }else if(dec.localName === this._nextSelectedKey){
           return true
         }
         return false;
@@ -429,8 +429,8 @@ export default class CodeMode extends Component<Signature> {
   }
 
   @action
-  openDefinition(moduleHref: string, codeRefName?: string) {
-    this._nextSelectedCodeRefName = codeRefName;
+  openDefinition(moduleHref: string, selectorKey?: string) {
+    this._nextSelectedKey = selectorKey;
     this.operatorModeStateService.updateCodePath(new URL(moduleHref));
   }
 

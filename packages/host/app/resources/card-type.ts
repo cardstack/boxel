@@ -214,7 +214,7 @@ export function isFieldOfType(obj: any): obj is FieldOfType {
   return obj && 'card' in obj;
 }
 
-export function codeRefName(f: Type | FieldOfType) {
+export function selectorKey(f: Type | FieldOfType) {
   let codeRef: CodeRef;
   if (isFieldOfType(f)) {
     codeRef = isCodeRefType(f.card) ? f.card : f.card.codeRef;

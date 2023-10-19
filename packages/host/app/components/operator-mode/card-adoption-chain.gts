@@ -19,7 +19,7 @@ interface Signature {
     file: Ready;
     cardInheritanceChain: CardInheritance[];
     moduleSyntax: ModuleSyntax;
-    openDefinition: (moduleHref: string, codeRefName?: string) => void;
+    openDefinition: (moduleHref: string, selectorKey?: string) => void;
   };
 }
 

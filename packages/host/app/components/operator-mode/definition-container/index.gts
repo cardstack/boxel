@@ -92,7 +92,7 @@ export class ClickableModuleDefinitionContainer extends Component<ClickableModul
     <Clickable
       @openDefinition={{@openDefinition}}
       @moduleHref={{@moduleHref}}
-      @codeRefName={{@codeRefName}}
+      @selectorKey={{@selectorKey}}
       data-test-definition-container
     >
       <BaseDefinitionContainer

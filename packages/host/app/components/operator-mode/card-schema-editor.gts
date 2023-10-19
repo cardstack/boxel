@@ -20,7 +20,7 @@ import {
   type Type,
   type CodeRefType,
   type FieldOfType,
-  codeRefName,
+  selectorKey,
 } from '@cardstack/host/resources/card-type';
 import {
   ArrowTopLeft,
@@ -50,7 +50,7 @@ interface Signature {
     allowAddingFields: boolean;
     childFields: string[];
     parentFields: string[];
-    openDefinition: (moduleHref: string, codeRefName?: string) => void;
+    openDefinition: (moduleHref: string, selectorKey?: string) => void;
   };
 }
 
@@ -263,12 +263,12 @@ export default class CardSchemaEditor extends Component<Signature> {
       class='schema-editor-container'
       data-test-card-schema={{@cardType.displayName}}
     >
-      {{#let (codeRefName @cardType) as |codeRefName|}}
+      {{#let (selectorKey @cardType) as |selectorKey|}}
         <div class='header'>
           <button
             class='pill'
             data-test-card-schema-navigational-button
-            {{on 'click' (fn @openDefinition @cardType.module codeRefName)}}
+            {{on 'click' (fn @openDefinition @cardType.module selectorKey)}}
           >
             <div class='realm-icon'>
               <RealmInfoProvider @fileURL={{@cardType.module}}>
@@ -328,7 +328,7 @@ export default class CardSchemaEditor extends Component<Signature> {
               </div>
               <div class='right'>
                 {{#let (this.fieldModuleURL field) as |moduleUrl|}}
-                  {{#let (codeRefName field) as |codeRefName|}}
+                  {{#let (selectorKey field) as |selectorKey|}}
                     {{#if field.isComputed}}
                       <span class='computed-icon' data-test-computed-icon>
                         =
@@ -352,7 +352,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                         data-test-card-schema-field-navigational-button
                         {{on
                           'click'
-                          (fn @openDefinition moduleUrl codeRefName)
+                          (fn @openDefinition moduleUrl selectorKey)
                         }}
                       >
                         {{#if (this.isLinkedField field)}}

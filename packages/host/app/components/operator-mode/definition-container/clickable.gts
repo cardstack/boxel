@@ -3,9 +3,9 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
 export interface ClickableArgs {
-  openDefinition: (moduleHref: string, codeRefName?: string) => void;
+  openDefinition: (moduleHref: string, selectorKey?: string) => void;
   moduleHref: string;
-  codeRefName?: string;
+  selectorKey?: string;
 }
 
 interface ClickableSignature {
@@ -19,7 +19,7 @@ interface ClickableSignature {
 export class Clickable extends Component<ClickableSignature> {
   @action
   handleClick() {
-    this.args.openDefinition(this.args.moduleHref, this.args.codeRefName);
+    this.args.openDefinition(this.args.moduleHref, this.args.selectorKey);
   }
   <template>
     <button
