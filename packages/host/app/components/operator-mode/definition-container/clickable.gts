@@ -5,7 +5,7 @@ import Component from '@glimmer/component';
 export interface ClickableArgs {
   openDefinition: (moduleHref: string, codeRefName?: string) => void;
   moduleHref: string;
-  codeRefName: string;
+  codeRefName?: string;
 }
 
 interface ClickableSignature {
