@@ -48,7 +48,7 @@ importers:
         version: 1.2.1(typescript@5.1.6)
       '@glint/environment-ember-loose':
         specifier: ^1.2.1
-        version: 1.2.1(@glimmer/component@1.1.2)(@glint/template@1.2.1)(ember-cli-htmlbars@6.2.0)(ember-modifier@4.1.0)
+        version: 1.2.1(@glimmer/component@1.1.2)(@glint/template@1.2.1)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0)
       '@glint/environment-ember-template-imports':
         specifier: ^1.2.1
         version: 1.2.1(@glint/environment-ember-loose@1.2.1)(@glint/template@1.2.1)(ember-template-imports@3.1.2)
@@ -92,8 +92,8 @@ importers:
         specifier: github:cardstack/prettier#glimmer-style-tag-in-template-support
         version: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
       prettier-plugin-ember-template-tag:
-        specifier: ^1.0.0
-        version: 1.0.0(prettier@3.1.0-dev)
+        specifier: ^1.1.0
+        version: 1.1.0(prettier@3.1.0-dev)
       typescript:
         specifier: ^5.1.6
         version: 5.1.6
@@ -461,8 +461,8 @@ importers:
         specifier: github:cardstack/prettier#glimmer-style-tag-in-template-support
         version: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
       prettier-plugin-ember-template-tag:
-        specifier: ^1.0.0
-        version: 1.0.0(prettier@3.1.0-dev)
+        specifier: ^1.1.0
+        version: 1.1.0(prettier@3.1.0-dev)
       qunit:
         specifier: ^2.19.4
         version: 2.19.4
@@ -648,8 +648,8 @@ importers:
         specifier: github:cardstack/prettier#glimmer-style-tag-in-template-support
         version: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
       prettier-plugin-ember-template-tag:
-        specifier: ^1.0.0
-        version: 1.0.0(prettier@3.1.0-dev)
+        specifier: ^1.1.0
+        version: 1.1.0(prettier@3.1.0-dev)
       qunit:
         specifier: ^2.19.4
         version: 2.19.4
@@ -676,7 +676,7 @@ importers:
         version: 1.4.3
       '@glint/environment-ember-loose':
         specifier: ^1.0.0
-        version: 1.2.1(@glimmer/component@1.1.2)(@glint/template@1.2.1)(ember-cli-htmlbars@6.2.0)(ember-modifier@4.1.0)
+        version: 1.2.1(@glimmer/component@1.1.2)(@glint/template@1.2.1)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0)
       '@glint/template':
         specifier: ^1.2.1
         version: 1.2.1
@@ -785,7 +785,7 @@ importers:
         version: 8.0.1
       ember-template-imports:
         specifier: ^3.1.2
-        version: 3.1.2(ember-cli-htmlbars@6.2.0)
+        version: 3.1.2(ember-cli-htmlbars@6.3.0)
       ember-template-lint:
         specifier: ^5.11.2
         version: 5.11.2
@@ -820,8 +820,8 @@ importers:
         specifier: github:cardstack/prettier#glimmer-style-tag-in-template-support
         version: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
       prettier-plugin-ember-template-tag:
-        specifier: ^1.0.0
-        version: 1.0.0(prettier@3.1.0-dev)
+        specifier: ^1.1.0
+        version: 1.1.0(prettier@3.1.0-dev)
       rollup:
         specifier: ^3.28.1
         version: 3.28.1
@@ -1010,8 +1010,8 @@ importers:
         specifier: github:cardstack/prettier#glimmer-style-tag-in-template-support
         version: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
       prettier-plugin-ember-template-tag:
-        specifier: ^1.0.0
-        version: 1.0.0(prettier@3.1.0-dev)
+        specifier: ^1.1.0
+        version: 1.1.0(prettier@3.1.0-dev)
       qunit:
         specifier: ^2.19.4
         version: 2.19.4
@@ -1388,6 +1388,9 @@ importers:
       prettier:
         specifier: github:cardstack/prettier#glimmer-style-tag-in-template-support
         version: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
+      prettier-plugin-ember-template-tag:
+        specifier: ^1.1.0
+        version: 1.1.0(prettier@3.1.0-dev)
       qs:
         specifier: ^6.10.5
         version: 6.10.5
@@ -1586,8 +1589,8 @@ importers:
         specifier: github:cardstack/prettier#glimmer-style-tag-in-template-support
         version: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
       prettier-plugin-ember-template-tag:
-        specifier: ^1.0.0
-        version: 1.0.0(prettier@3.1.0-dev)
+        specifier: ^1.1.0
+        version: 1.1.0(prettier@3.1.0-dev)
       qs:
         specifier: ^6.10.5
         version: 6.10.5
@@ -4521,6 +4524,39 @@ packages:
       '@glimmer/component': 1.1.2(@babel/core@7.22.11)
       '@glint/template': 1.2.1
       ember-cli-htmlbars: 6.2.0
+      ember-modifier: 4.1.0(ember-source@4.12.0)
+
+  /@glint/environment-ember-loose@1.2.1(@glimmer/component@1.1.2)(@glint/template@1.2.1)(ember-cli-htmlbars@6.3.0)(ember-modifier@4.1.0):
+    resolution: {integrity: sha512-ZA0Ht7vwd1FosVLtMFrB2Er62P1v6yX/UuS6z9UVR6DMPfrL5qx6vef+EGJPLBrBKZMlm7zMB6Fyca201y4hDA==}
+    peerDependencies:
+      '@glimmer/component': ^1.1.2
+      '@glint/template': ^1.2.1
+      '@types/ember__array': ^4.0.2
+      '@types/ember__component': ^4.0.10
+      '@types/ember__controller': ^4.0.2
+      '@types/ember__object': ^4.0.4
+      '@types/ember__routing': ^4.0.11
+      ember-cli-htmlbars: ^6.0.1
+      ember-modifier: ^3.2.7 || ^4.0.0
+    peerDependenciesMeta:
+      '@types/ember__array':
+        optional: true
+      '@types/ember__component':
+        optional: true
+      '@types/ember__controller':
+        optional: true
+      '@types/ember__object':
+        optional: true
+      '@types/ember__routing':
+        optional: true
+      ember-cli-htmlbars:
+        optional: true
+      ember-modifier:
+        optional: true
+    dependencies:
+      '@glimmer/component': 1.1.2(@babel/core@7.22.11)
+      '@glint/template': 1.2.1
+      ember-cli-htmlbars: 6.3.0
       ember-modifier: 4.1.0(ember-source@4.12.0)
 
   /@glint/environment-ember-template-imports@1.2.1(@glint/environment-ember-loose@1.2.1)(@glint/template@1.2.1)(ember-template-imports@3.1.2):
@@ -11401,6 +11437,27 @@ packages:
     transitivePeerDependencies:
       - supports-color
 
+  /ember-cli-htmlbars@6.3.0:
+    resolution: {integrity: sha512-N9Y80oZfcfWLsqickMfRd9YByVcTGyhYRnYQ2XVPVrp6jyUyOeRWmEAPh7ERSXpp8Ws4hr/JB9QVQrn/yZa+Ag==}
+    engines: {node: 12.* || 14.* || >= 16}
+    dependencies:
+      '@ember/edition-utils': 1.2.0
+      babel-plugin-ember-template-compilation: 2.2.0
+      babel-plugin-htmlbars-inline-precompile: 5.3.1
+      broccoli-debug: 0.6.5
+      broccoli-persistent-filter: 3.1.3
+      broccoli-plugin: 4.0.7
+      ember-cli-version-checker: 5.1.2
+      fs-tree-diff: 2.0.1
+      hash-for-dep: 1.5.1
+      heimdalljs-logger: 0.1.10
+      js-string-escape: 1.0.1
+      semver: 7.5.4
+      silent-error: 1.1.1
+      walk-sync: 2.2.0
+    transitivePeerDependencies:
+      - supports-color
+
   /ember-cli-inject-live-reload@2.1.0:
     resolution: {integrity: sha512-YV5wYRD5PJHmxaxaJt18u6LE6Y+wo455BnmcpN+hGNlChy2piM9/GMvYgTAz/8Vin8RJ5KekqP/w/NEaRndc/A==}
     engines: {node: 6.* || 8.* || >= 10.*}
@@ -12019,7 +12076,7 @@ packages:
     dependencies:
       '@embroider/util': 1.12.0(@glint/environment-ember-loose@1.2.1)(@glint/template@1.2.1)(ember-source@4.12.0)
       ember-cli-babel: 7.26.11
-      ember-cli-htmlbars: 6.2.0
+      ember-cli-htmlbars: 6.3.0
       ember-source: 4.12.0(@babel/core@7.22.11)(@glimmer/component@1.1.2)(@glint/template@1.2.1)(webpack@5.88.2)
     transitivePeerDependencies:
       - '@glint/environment-ember-loose'
@@ -12194,7 +12251,7 @@ packages:
     engines: {node: 10.* || >= 12}
     dependencies:
       ember-cli-babel: 7.26.11
-      ember-cli-htmlbars: 6.2.0
+      ember-cli-htmlbars: 6.3.0
       ember-cli-version-checker: 5.1.2
     transitivePeerDependencies:
       - supports-color
@@ -12542,6 +12599,26 @@ packages:
       broccoli-stew: 3.0.0
       ember-cli-babel-plugin-helpers: 1.1.1
       ember-cli-htmlbars: 6.2.0
+      ember-cli-version-checker: 5.1.2
+      line-column: 1.0.2
+      magic-string: 0.25.9(patch_hash=sbmabuxrk2m44agmppz3qozwvq)
+      parse-static-imports: 1.1.0
+      string.prototype.matchall: 4.0.6
+      validate-peer-dependencies: 1.1.0
+    transitivePeerDependencies:
+      - supports-color
+    dev: true
+
+  /ember-template-imports@3.1.2(ember-cli-htmlbars@6.3.0):
+    resolution: {integrity: sha512-8ocUuIxXeY7S5FQQf9hcLBCyGKNvSxXz9cV/dkUUMvGcnfh8NblrglqPggXmCbBcv4eDAoEzDmOfiGccD5kEJQ==}
+    engines: {node: 12.* || >= 14}
+    peerDependencies:
+      ember-cli-htmlbars: ^6.0.0
+    dependencies:
+      babel-import-util: 0.2.0
+      broccoli-stew: 3.0.0
+      ember-cli-babel-plugin-helpers: 1.1.1
+      ember-cli-htmlbars: 6.3.0
       ember-cli-version-checker: 5.1.2
       line-column: 1.0.2
       magic-string: 0.25.9(patch_hash=sbmabuxrk2m44agmppz3qozwvq)
@@ -20010,16 +20087,15 @@ packages:
       fast-diff: 1.3.0
     dev: true
 
-  /prettier-plugin-ember-template-tag@1.0.0(prettier@3.1.0-dev):
-    resolution: {integrity: sha512-wl0GKqf8X9oB3KBi4JgMH0Cn8LMBr988p8IPkC7X0cLW5GnfdIE4Q5WMLqIiCXnCYt9Wj6Sm34zHF5w8AdgZLA==}
+  /prettier-plugin-ember-template-tag@1.1.0(prettier@3.1.0-dev):
+    resolution: {integrity: sha512-zJTC+NhEU0kHNnVh7OtcvMmkJmYTgFTist76FP9q07m9+WCvcaunR1sTFIOlGE9TH/5UGm6rlF86Umt9ouorAg==}
     engines: {node: 16.* || 18.* || >= 20}
-    requiresBuild: true
     peerDependencies:
       prettier: '>= 3.0.0'
     dependencies:
       '@babel/core': 7.22.11(supports-color@8.1.1)
       '@glimmer/syntax': 0.84.3
-      ember-cli-htmlbars: 6.2.0
+      ember-cli-htmlbars: 6.3.0
       ember-template-imports: 3.4.2
       prettier: github.com/cardstack/prettier/60eccfdc598d682a931d3c569ffb0c4f92ef5db6
     transitivePeerDependencies:
