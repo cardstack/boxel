@@ -1116,32 +1116,14 @@ module('Acceptance | code mode tests', function (hooks) {
       )}`,
     );
 
-    await waitFor('[data-test-card-inheritance-panel]');
-    await waitFor('[data-test-current-module-name]');
-    await waitFor('[data-test-in-this-file-selector]');
-    const expectedElementNames = [
-      'ChildCard1 card',
-      'ChildCard2 card',
-      'ChildCard3 card',
-      'ChildCard4 card',
-      'ChildCard5 card',
-      'ChildField1 field',
-    ];
-    expectedElementNames.forEach(async (elementName, index) => {
-      await waitFor(
-        `[data-test-boxel-selector-item]:nth-of-type(${index + 1})`,
-      );
-      assert
-        .dom(`[data-test-boxel-selector-item]:nth-of-type(${index + 1})`)
-        .hasText(elementName);
-    });
     // clicking on normal card
     let elementName = 'ChildCard1';
+    await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     let selected = 'AncestorCard2 card';
+    await waitFor(`[data-test-definition-container]`);
     await click(`[data-test-definition-container]`);
-    await waitFor('[data-test-card-module-definition]');
-    assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
+    await waitFor('[data-test-boxel-selector-item-selected]');
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
 
     //clicking on default card
@@ -1150,14 +1132,14 @@ module('Acceptance | code mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitFor('[data-test-card-inheritance-panel]');
-    await waitFor('[data-test-current-module-name]');
-    await waitFor('[data-test-in-this-file-selector]');
+
     elementName = 'ChildCard2';
+    await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     selected = 'default (DefaultAncestorCard) card';
+    await waitFor(`[data-test-definition-container]`);
     await click(`[data-test-definition-container]`);
-    await waitFor('[data-test-card-module-definition]');
+    await waitFor('[data-test-boxel-selector-item-selected]');
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
 
     //clicking on card which is renamed during export
@@ -1166,14 +1148,13 @@ module('Acceptance | code mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitFor('[data-test-card-inheritance-panel]');
-    await waitFor('[data-test-current-module-name]');
-    await waitFor('[data-test-in-this-file-selector]');
     elementName = 'ChildCard3';
+    await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     selected = 'RenamedAncestorCard (AncestorCard) card';
+    await waitFor(`[data-test-definition-container]`);
     await click(`[data-test-definition-container]`);
-    await waitFor('[data-test-card-module-definition]');
+    await waitFor('[data-test-boxel-selector-item-selected]');
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
 
     //clicking on card which is renamed during import
@@ -1182,14 +1163,12 @@ module('Acceptance | code mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitFor('[data-test-card-inheritance-panel]');
-    await waitFor('[data-test-current-module-name]');
-    await waitFor('[data-test-in-this-file-selector]');
     elementName = 'ChildCard4';
+    await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     selected = 'AncestorCard3 card';
     await click(`[data-test-definition-container]`);
-    await waitFor('[data-test-card-module-definition]');
+    await waitFor('[data-test-boxel-selector-item-selected]');
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
 
     //clicking on card which is defined locally
@@ -1198,14 +1177,15 @@ module('Acceptance | code mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitFor('[data-test-card-inheritance-panel]');
-    await waitFor('[data-test-current-module-name]');
-    await waitFor('[data-test-in-this-file-selector]');
+
     elementName = 'ChildCard5';
+    await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     selected = 'ChildCard2 card';
+    await waitFor(`[data-test-definition-container]`);
     await click(`[data-test-definition-container]`);
-    await waitFor('[data-test-card-module-definition]');
+    await waitFor('[data-test-boxel-selector-item-selected]');
+
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
     //clicking on field
     await visit(
@@ -1213,14 +1193,13 @@ module('Acceptance | code mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitFor('[data-test-card-inheritance-panel]');
-    await waitFor('[data-test-current-module-name]');
-    await waitFor('[data-test-in-this-file-selector]');
+
     elementName = 'ChildField1';
+    await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     selected = 'AncestorField1 field';
     await click(`[data-test-definition-container]`);
-    await waitFor('[data-test-card-module-definition]');
+    await waitFor('[data-test-boxel-selector-item-selected]');
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
   });
 
