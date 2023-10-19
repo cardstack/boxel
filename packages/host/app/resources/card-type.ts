@@ -14,7 +14,11 @@ import {
   RealmInfo,
 } from '@cardstack/runtime-common';
 import { SupportedMimeType } from '@cardstack/runtime-common';
-import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
+import {
+  isCodeRef,
+  type CodeRef,
+  isResolvedCodeRef,
+} from '@cardstack/runtime-common/code-ref';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -51,6 +55,7 @@ export interface Type {
   id: string;
   module: string;
   displayName: string;
+  declarationName: string;
   super: Type | undefined;
   fields: FieldOfType[];
   codeRef: CodeRef;
@@ -151,6 +156,7 @@ export class CardType extends Resource<Args> {
       module: moduleIdentifier,
       super: superType,
       displayName: card.prototype.constructor.displayName || 'Card',
+      declarationName: card.name,
       fields: fieldTypes,
       moduleInfo,
       codeRef: ref,
@@ -208,10 +214,25 @@ export function isFieldOfType(obj: any): obj is FieldOfType {
   return obj && 'card' in obj;
 }
 
-export function codeRefName(f: Type | FieldOfType): string {
-  return isFieldOfType(f)
-    ? isCodeRefType(f.card)
-      ? f.card.name
-      : f.card.codeRef.name
-    : f.codeRef.name;
+export function codeRefName(f: Type | FieldOfType) {
+  let codeRef: CodeRef;
+
+  if (isFieldOfType(f)) {
+    // if field
+    codeRef = isCodeRefType(f.card) ? f.card : f.card.codeRef;
+    if (isResolvedCodeRef(codeRef)) {
+      return codeRef.name;
+    }
+  } else {
+    // if ancestor
+    codeRef = f.codeRef;
+    if (isResolvedCodeRef(codeRef)) {
+      return codeRef.name;
+    } else {
+      if (codeRef.type === 'ancestorOf') {
+        return f.declarationName; //local card or field
+      }
+    }
+  }
+  return;
 }
