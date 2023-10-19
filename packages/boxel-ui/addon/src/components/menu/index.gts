@@ -103,11 +103,7 @@ export default class Menu extends Component<Signature> {
                 >
                   <span class='menu-item'>
                     {{#if menuItem.icon}}
-                      <menuItem.icon
-                        width='16'
-                        height='16'
-                        data-test-boxel-menu-item-icon=true
-                      />
+                      <menuItem.icon width='16' height='16' />
                     {{else if menuItem.iconURL}}
                       <span
                         class='menu-item__icon-url'

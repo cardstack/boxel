@@ -42,7 +42,7 @@ class MetamaskResource extends Resource {
     if (!window.FastBoot && !this.isMetamaskInstalled()) {
       // Only log this when inside the browser
       console.log(
-        'Metamask is not installed. Please install it to use this resource'
+        'Metamask is not installed. Please install it to use this resource',
       );
     }
   }
@@ -119,7 +119,7 @@ class MetamaskResource extends Resource {
         return;
       } else if (e.code === METAMASK_ERROR_CODES.unknown_chain) {
         throw new Error(
-          `Unknown chain id ${chainId}. Need to add chain to metamask`
+          `Unknown chain id ${chainId}. Need to add chain to metamask`,
         );
       } else {
         throw e;
