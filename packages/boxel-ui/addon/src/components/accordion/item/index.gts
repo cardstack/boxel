@@ -7,9 +7,9 @@ import DropdownArrowDown from '../../../icons/dropdown-arrow-down.gts';
 export interface AccordionItemSignature {
   Args: {
     className?: string;
+    contentClass?: string;
     isOpen: boolean;
     onClick: (event: MouseEvent) => void;
-    contentClass?: string;
   };
   Blocks: {
     content: [];
