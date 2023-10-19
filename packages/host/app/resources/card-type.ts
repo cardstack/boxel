@@ -216,21 +216,18 @@ export function isFieldOfType(obj: any): obj is FieldOfType {
 
 export function codeRefName(f: Type | FieldOfType) {
   let codeRef: CodeRef;
-
   if (isFieldOfType(f)) {
-    // if field
     codeRef = isCodeRefType(f.card) ? f.card : f.card.codeRef;
     if (isResolvedCodeRef(codeRef)) {
       return codeRef.name;
     }
   } else {
-    // if ancestor
     codeRef = f.codeRef;
     if (isResolvedCodeRef(codeRef)) {
       return codeRef.name;
     } else {
       if (codeRef.type === 'ancestorOf') {
-        return f.declarationName; //local card or field
+        return f.declarationName;
       }
     }
   }
