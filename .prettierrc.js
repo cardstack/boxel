@@ -2,14 +2,8 @@
 
 module.exports = {
   singleQuote: true,
+  plugins: ['prettier-plugin-ember-template-tag'],
   overrides: [
-    {
-      files: '*.gts',
-      plugins: ['prettier-plugin-ember-template-tag'],
-      options: {
-        parser: 'ember-template-tag',
-      },
-    },
     {
       files: ['*.yaml', '*.yml'],
       options: {
