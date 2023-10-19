@@ -107,6 +107,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private refreshSaveMsg: number | undefined;
   private subscribedCard: CardDef;
   private contentEl: HTMLElement | undefined;
+  private containerEl: HTMLElement | undefined;
 
   cardTracker = new ElementTracker<{
     card: CardDef;
@@ -297,23 +298,37 @@ export default class OperatorModeStackItem extends Component<Signature> {
   );
 
   private scrollIntoView = restartableTask(async (selector: string) => {
-    if (!this.contentEl) {
+    if (!this.contentEl || !this.containerEl) {
       return;
     }
     // this has the effect of waiting for a search to complete
     // in the scenario the stack item is a cards-grid
     await waitForProperty(this.doWithStableScroll, 'isIdle', true);
-    await timeout(300); // need to wait for DOM to update with new card(s)
+    await timeout(500); // need to wait for DOM to update with new card(s)
 
     let item = document.querySelector(selector);
     if (!item) {
       return;
     }
     item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    await timeout(1000);
+    // ember-velcro uses visibility: hidden to hide items (vs display: none). 
+    // visibility:hidden alters the geometry of the DOM elements such that 
+    // scrollIntoView thinks the container itself is scrollable (it's not) because of 
+    // the additional height that the hidden velcro-ed items are adding and 
+    // scrolls the entire container (including the header). this is a workaround 
+    // to reset the scroll position for the container. I tried adding middleware to alter
+    // the hiding behavior for ember-velcro, but for some reason the state
+    // used to indicate if the item is visible is not available to middleware...
+    this.containerEl.scrollTop = 0;
   });
 
   private setupContentEl = (el: HTMLElement) => {
     this.contentEl = el;
+  };
+
+  private setupContainerEl = (el: HTMLElement) => {
+    this.containerEl = el;
   };
 
   <template>
@@ -326,7 +341,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       data-stack-card={{this.cardIdentifier}}
       style={{this.styleForStackedCard}}
     >
-      <CardContainer class={{cn 'card' edit=(eq @item.format 'edit')}}>
+      <CardContainer class={{cn 'card' edit=(eq @item.format 'edit')}} {{ContentElement onSetup=this.setupContainerEl}}>
         <Header
           @title={{this.headerTitle}}
           class={{cn 'header' header--icon-hovered=this.isHoverOnRealmIcon}}
