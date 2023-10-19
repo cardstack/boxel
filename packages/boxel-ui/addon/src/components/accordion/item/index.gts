@@ -7,6 +7,7 @@ import DropdownArrowDown from '../../../icons/dropdown-arrow-down.gts';
 export interface AccordionItemSignature {
   Args: {
     className?: string;
+    contentClass?: string;
     isOpen: boolean;
     onClick: (event: MouseEvent) => void;
   };
@@ -25,7 +26,7 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
       </span>
       {{yield to='title'}}
     </button>
-    <div class='content'>
+    <div class={{cn 'content' @contentClass}}>
       {{yield to='content'}}
     </div>
   </div>
@@ -55,7 +56,6 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
     .accordion-item.open > .content {
       display: block;
       opacity: 1;
-      overflow-y: auto;
       border-top: var(--accordion-item-border);
       transition: all var(--boxel-transition);
     }
