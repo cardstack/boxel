@@ -9,6 +9,7 @@ export interface AccordionItemSignature {
     className?: string;
     isOpen: boolean;
     onClick: (event: MouseEvent) => void;
+    contentClass?: string;
   };
   Blocks: {
     content: [];
@@ -25,7 +26,7 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
       </span>
       {{yield to='title'}}
     </button>
-    <div class='content'>
+    <div class={{cn 'content' @contentClass}}>
       {{yield to='content'}}
     </div>
   </div>
@@ -55,7 +56,6 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
     .accordion-item.open > .content {
       display: block;
       opacity: 1;
-      overflow-y: auto;
       border-top: var(--accordion-item-border);
       transition: all var(--boxel-transition);
     }
