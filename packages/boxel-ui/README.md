@@ -1,4 +1,16 @@
+## How to build this addon
+
+### `pnpm build` in the addon/ dir
+
+This command runs the rollup build to create the consumable v2 addon format that is used by the test-app as well as the host package.
+
+### Or... `pnpm start` in the addon/ dir
+
+This command does the same thing as `pnpm build` but then watches for changes to the addon directory and re-runs the build when somethng changes.
+
 ## Notes on rebuild scripts
+
+These scripts do not run as part of the build steps above and should be run when changes you have made dictate.
 
 ### `pnpm rebuild:icons`
 
