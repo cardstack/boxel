@@ -1203,6 +1203,115 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
   });
 
+  test('After opening definition from card type and fields on RHS, "in-this-file" highlights selected definition', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}imports.gts`,
+    })!;
+
+    //click card type
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitFor(`[data-test-boxel-selector-item-text="ChildCard1"]`);
+    await click(`[data-test-boxel-selector-item-text="ChildCard1"]`);
+    let elementName = 'AncestorCard2';
+    await waitFor(
+      `[data-test-card-schema="${elementName}"] [data-test-card-schema-navigational-button]`,
+    );
+    await click(
+      `[data-test-card-schema="${elementName}"] [data-test-card-schema-navigational-button]`,
+    );
+
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} card`);
+
+    //click normal field
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitFor(`[data-test-boxel-selector-item-text="ChildCard1"]`);
+    await click(`[data-test-boxel-selector-item-text="ChildCard1"]`);
+    elementName = 'ChildCard1';
+    await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    elementName = 'AncestorField1';
+    await waitFor(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field1"] [data-test-card-display-name="${elementName}"]`,
+    );
+    await click(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field1"] [data-test-card-display-name="${elementName}"]`,
+    );
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} field`);
+
+    //click linksTo card
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitFor(`[data-test-boxel-selector-item-text="ChildCard1"]`);
+    await click(`[data-test-boxel-selector-item-text="ChildCard1"]`);
+    elementName = 'AncestorCard2';
+    await waitFor(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field2"] [data-test-card-display-name="${elementName}"]`,
+    );
+    await click(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field2"] [data-test-card-display-name="${elementName}"]`,
+    );
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} card`);
+    //click linksTo card in the same file
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    elementName = 'ChildCard2';
+    await waitFor(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field3"] [data-test-card-display-name="${elementName}"]`,
+    );
+    await click(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field3"] [data-test-card-display-name="${elementName}"]`,
+    );
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} card`);
+
+    //click linksTo many card
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitFor(`[data-test-boxel-selector-item-text="ChildCard1"]`);
+    await click(`[data-test-boxel-selector-item-text="ChildCard1"]`);
+    elementName = 'AncestorCard2';
+    await waitFor(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field4"] [data-test-card-display-name="${elementName}"]`,
+    );
+    await click(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field4"] [data-test-card-display-name="${elementName}"]`,
+    );
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} card`);
+  });
+
   test('non-card JSON is shown as just a file with empty schema editor', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [
