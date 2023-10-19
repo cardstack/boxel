@@ -14,11 +14,7 @@ import {
   RealmInfo,
 } from '@cardstack/runtime-common';
 import { SupportedMimeType } from '@cardstack/runtime-common';
-import {
-  isCodeRef,
-  type CodeRef,
-  isResolvedCodeRef,
-} from '@cardstack/runtime-common/code-ref';
+import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -212,18 +208,10 @@ export function isFieldOfType(obj: any): obj is FieldOfType {
   return obj && 'card' in obj;
 }
 
-export function codeRefName(f: Type | FieldOfType) {
-  let codeRef: CodeRef;
-
-  if (isFieldOfType(f)) {
-    codeRef = isCodeRefType(f.card) ? f.card : f.card.codeRef;
-  } else {
-    codeRef = f.codeRef;
-  }
-
-  if (!isResolvedCodeRef(codeRef)) {
-    throw new Error('This is neither an ancestor or fieldOf code ref');
-  }
-
-  return codeRef.name;
+export function codeRefName(f: Type | FieldOfType): string {
+  return isFieldOfType(f)
+    ? isCodeRefType(f.card)
+      ? f.card.name
+      : f.card.codeRef.name
+    : f.codeRef.name;
 }
