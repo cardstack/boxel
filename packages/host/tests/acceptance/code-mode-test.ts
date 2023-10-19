@@ -187,6 +187,96 @@ const friendCardSource = `
     };
   }
 `;
+const exportsSource = `
+  import {
+    contains,
+    field,
+    CardDef,
+    FieldDef
+  } from 'https://cardstack.com/base/card-api';
+  import StringCard from 'https://cardstack.com/base/string';
+
+  export class AncestorCard1 extends CardDef {
+    static displayName = 'AncestorCard1';
+    @field name = contains(StringCard);
+  }
+
+  export class AncestorCard2 extends CardDef {
+    static displayName = 'AncestorCard2';
+    @field name = contains(StringCard);
+  }
+
+  export class AncestorCard3 extends CardDef {
+    static displayName = 'AncestorCard3';
+    @field name = contains(StringCard);
+  }
+
+  export class AncestorField1 extends FieldDef {
+    static displayName = 'AncestorField1';
+    @field name = contains(StringCard);
+  }
+`;
+const specialExportsSource = `
+  import {
+    contains,
+    field,
+    CardDef
+  } from 'https://cardstack.com/base/card-api';
+  import StringCard from 'https://cardstack.com/base/string';
+
+  class AncestorCard extends CardDef {
+    static displayName = 'Ancestor';
+    @field name = contains(StringCard);
+  }
+
+  export default class DefaultAncestorCard extends CardDef {
+    static displayName = 'DefaultAncestor';
+    @field name = contains(StringCard);
+  }
+
+  export { AncestorCard as RenamedAncestorCard}
+`;
+
+const importsSource = `
+  import { AncestorCard2, AncestorField1 } from './exports';
+  import  { AncestorCard3 as FatherCard3 } from './exports';
+  import  DefaultAncestorCard from './special-exports';
+  import  { RenamedAncestorCard } from './special-exports';
+  import {
+    contains,
+    field,
+    linksTo,
+    linksToMany
+  } from 'https://cardstack.com/base/card-api';
+
+  export class ChildCard1 extends AncestorCard2 {
+    static displayName = 'ChildCard1';
+    @field field1 = contains(AncestorField1)
+    @field field2 = linksTo(AncestorCard2)
+    @field field3 = linksTo(()=>ChildCard2)
+    @field field4 = linksToMany(AncestorCard2)
+  }
+
+  export class ChildCard2 extends DefaultAncestorCard {
+    static displayName = 'ChildCard2';
+  }
+
+  export class ChildCard3 extends RenamedAncestorCard{
+    static displayName = 'ChildCard3';
+  }
+
+  export class ChildCard4 extends FatherCard3{
+    static displayName = 'ChildCard4';
+  }
+
+  export class ChildCard5 extends ChildCard2 {
+    static displayName = 'ChildCard5';
+  }
+
+  export class ChildField1 extends AncestorField1{
+    static displayName = 'ChildField1';
+  }
+`;
 
 module('Acceptance | code mode tests', function (hooks) {
   let realm: Realm;
@@ -228,6 +318,9 @@ module('Acceptance | code mode tests', function (hooks) {
       'friend.gts': friendCardSource,
       'employee.gts': employeeCardSource,
       'in-this-file.gts': inThisFileSource,
+      'exports.gts': exportsSource,
+      'special-exports.gts': specialExportsSource,
+      'imports.gts': importsSource,
       'person-entry.json': {
         data: {
           type: 'card',
@@ -1008,6 +1101,127 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     assert.dom('[data-test-card-module-definition]').doesNotExist();
     assert.dom('[data-test-schema-editor-incompatible]').exists();
+  });
+
+  test('After opening inherited definition inside inheritance panel, "in-this-file" highlights selected definition', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}imports.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    const expectedElementNames = [
+      'ChildCard1 card',
+      'ChildCard2 card',
+      'ChildCard3 card',
+      'ChildCard4 card',
+      'ChildCard5 card',
+      'ChildField1 field',
+    ];
+    expectedElementNames.forEach(async (elementName, index) => {
+      await waitFor(
+        `[data-test-boxel-selector-item]:nth-of-type(${index + 1})`,
+      );
+      assert
+        .dom(`[data-test-boxel-selector-item]:nth-of-type(${index + 1})`)
+        .hasText(elementName);
+    });
+    // clicking on normal card
+    let elementName = 'ChildCard1';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    let selected = 'AncestorCard2 card';
+    await click(`[data-test-definition-container]`);
+    await waitFor('[data-test-card-module-definition]');
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
+
+    //clicking on default card
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    elementName = 'ChildCard2';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    selected = 'default (DefaultAncestorCard) card';
+    await click(`[data-test-definition-container]`);
+    await waitFor('[data-test-card-module-definition]');
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
+
+    //clicking on card which is renamed during export
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    elementName = 'ChildCard3';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    selected = 'RenamedAncestorCard (AncestorCard) card';
+    await click(`[data-test-definition-container]`);
+    await waitFor('[data-test-card-module-definition]');
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
+
+    //clicking on card which is renamed during import
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    elementName = 'ChildCard4';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    selected = 'AncestorCard3 card';
+    await click(`[data-test-definition-container]`);
+    await waitFor('[data-test-card-module-definition]');
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
+
+    //clicking on card which is defined locally
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    elementName = 'ChildCard5';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    selected = 'ChildCard2 card';
+    await click(`[data-test-definition-container]`);
+    await waitFor('[data-test-card-module-definition]');
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
+    //clicking on field
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitFor('[data-test-card-inheritance-panel]');
+    await waitFor('[data-test-current-module-name]');
+    await waitFor('[data-test-in-this-file-selector]');
+    elementName = 'ChildField1';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    selected = 'AncestorField1 field';
+    await click(`[data-test-definition-container]`);
+    await waitFor('[data-test-card-module-definition]');
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
   });
 
   test('non-card JSON is shown as just a file with empty schema editor', async function (assert) {
