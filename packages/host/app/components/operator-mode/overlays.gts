@@ -51,9 +51,6 @@ export default class OperatorModeOverlays extends Component<Signature> {
   }
 
   <template>
-    <div>
-    currently hovered card = {{this.currentlyHoveredCard.card.id}}
-    </div>
     {{#each this.renderedCardsForOverlayActionsWithEvents as |renderedCard|}}
       {{#let
         renderedCard.card (this.isSelected renderedCard.card)
