@@ -51,6 +51,9 @@ export default class OperatorModeOverlays extends Component<Signature> {
   }
 
   <template>
+    <div>
+    currently hovered card = {{this.currentlyHoveredCard.card.id}}
+    </div>
     {{#each this.renderedCardsForOverlayActionsWithEvents as |renderedCard|}}
       {{#let
         renderedCard.card (this.isSelected renderedCard.card)
@@ -60,7 +63,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
           class={{cn
             'actions-overlay'
             selected=isSelected
-            hovered=(eq this.currentlyHoveredCard renderedCard)
+            hovered=(eq this.currentlyHoveredCard.card.id renderedCard.card.id)
           }}
           {{velcro renderedCard.element middleware=(Array this.offset)}}
           data-test-overlay-selected={{if isSelected card.id}}
