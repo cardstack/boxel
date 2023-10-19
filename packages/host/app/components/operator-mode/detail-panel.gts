@@ -26,7 +26,7 @@ import {
 import { type Ready } from '@cardstack/host/resources/file';
 import { IconInherit, IconTrash } from '@cardstack/boxel-ui/icons';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { type CardDef, type BaseDef } from 'https://cardstack.com/base/card-api';
 
 import { lastModifiedDate } from '../../resources/last-modified-date';
 
@@ -50,9 +50,13 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 import { isCardDef, isFieldDef } from '@cardstack/runtime-common/code-ref';
 
 import {
-  type CardType,
   codeRefName,
+  getCardType
 } from '@cardstack/host/resources/card-type';
+
+import { use, resource } from 'ember-resources';
+
+
 
 interface Signature {
   Element: HTMLElement;
@@ -60,7 +64,6 @@ interface Signature {
     realmInfo: RealmInfo | null;
     readyFile: Ready;
     cardInstance: CardDef | undefined;
-    cardInstanceType: CardType | undefined;
     selectedDeclaration?: ModuleDeclaration;
     declarations: ModuleDeclaration[];
     selectDeclaration: (dec: ModuleDeclaration) => void;
@@ -72,6 +75,14 @@ interface Signature {
 export default class DetailPanel extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   private lastModified = lastModifiedDate(this, () => this.args.readyFile);
+
+  @use private cardInstanceType = resource(() => {
+    if (this.args.cardInstance !== undefined) {
+      let cardDefinition = this.args.cardInstance.constructor as typeof BaseDef;
+      return getCardType(this, () => cardDefinition);
+    }
+    return undefined;
+  });
 
   get cardType() {
     if (
@@ -91,7 +102,7 @@ export default class DetailPanel extends Component<Signature> {
         } else {
           return false;
         }
-      }) || this.cardType?.isLoading
+      }) || this.cardType?.isLoading || this.cardInstanceType?.isLoading
     );
   }
 
@@ -239,15 +250,15 @@ export default class DetailPanel extends Component<Signature> {
                 />
                 Adopts from
               </div>
-              {{#if @cardInstanceType.type}}
-                {{#let (codeRefName @cardInstanceType.type) as |codeRefName|}}
+              {{#if this.cardInstanceType.type}}
+                {{#let (codeRefName this.cardInstanceType.type) as |codeRefName|}}
                   <ClickableModuleDefinitionContainer
                     @title={{'Card Definition'}}
-                    @fileURL={{@cardInstanceType.type.module}}
-                    @name={{@cardInstanceType.type.displayName}}
-                    @fileExtension={{@cardInstanceType.type.moduleInfo.extension}}
+                    @fileURL={{this.cardInstanceType.type.module}}
+                    @name={{this.cardInstanceType.type.displayName}}
+                    @fileExtension={{this.cardInstanceType.type.moduleInfo.extension}}
                     @openDefinition={{@openDefinition}}
-                    @moduleHref={{@cardInstanceType.type.module}}
+                    @moduleHref={{this.cardInstanceType.type.module}}
                     @codeRefName={{codeRefName}}
                   />
                 {{/let}}

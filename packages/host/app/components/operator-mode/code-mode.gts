@@ -41,7 +41,6 @@ import config from '@cardstack/host/config/environment';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 
-import { getCardType } from '@cardstack/host/resources/card-type';
 import {
   isReady,
   type Ready,
@@ -68,8 +67,6 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
-
-import { type BaseDef } from 'https://cardstack.com/base/card-api';
 
 import FileTree from '../editor/file-tree';
 
@@ -313,13 +310,7 @@ export default class CodeMode extends Component<Signature> {
     return undefined;
   });
 
-  @use private cardInstanceType = resource(() => {
-    if (this.card !== undefined) {
-      let cardDefinition = this.card.constructor as typeof BaseDef;
-      return getCardType(this, () => cardDefinition);
-    }
-    return undefined;
-  });
+
 
   // We are actually loading cards using a side-effect of this cached getter
   // instead of a resource because with a resource it becomes impossible
@@ -401,6 +392,8 @@ export default class CodeMode extends Component<Signature> {
       if (isCardOrFieldDeclaration(dec)) {
         if (dec.exportedAs === this._nextSelectedCodeRefName) {
           return true;
+        }else if(dec.localName === this._nextSelectedCodeRefName){
+          return true
         }
         return false;
       }
@@ -682,7 +675,6 @@ export default class CodeMode extends Component<Signature> {
                   {{#if this.isReady}}
                     <DetailPanel
                       @cardInstance={{this.card}}
-                      @cardInstanceType={{this.cardInstanceType}}
                       @readyFile={{this.readyFile}}
                       @realmInfo={{this.realmInfo}}
                       @selectedDeclaration={{this.selectedDeclaration}}
