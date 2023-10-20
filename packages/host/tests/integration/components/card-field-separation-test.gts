@@ -1,6 +1,7 @@
 import { click } from '@ember/test-helpers';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
+import percySnapshot from '@percy/ember';
 import {
   baseRealm,
   type LooseSingleCardDocument,
@@ -20,7 +21,7 @@ import {
   testRealmURL,
   type CardDocFiles,
 } from '../../helpers';
-import { renderComponent } from '../../helpers/render-component';
+import { renderComponent, renderCard } from '../../helpers/render-component';
 
 module('Integration | card/field separation test', function (hooks) {
   let loader: Loader;
@@ -74,7 +75,274 @@ module('Integration | card/field separation test', function (hooks) {
     };
   });
 
-  test('render a CardDef field (singular) linked to from FieldDef (edit mode)', async function (assert) {
+  test('render a primitive field (singular) contained within field', async function (assert) {
+    let { field, contains, FieldDef, CardDef } = cardApi;
+    let { default: StringField } = string;
+
+    class EmergencyContactField extends FieldDef {
+      @field name = contains(StringField);
+      @field email = contains(StringField);
+    }
+
+    class ContactCard extends CardDef {
+      @field firstName = contains(StringField);
+      @field emergencyContact = contains(EmergencyContactField);
+    }
+
+    let card = new ContactCard({
+      firstName: 'Marcelius',
+      emergencyContact: new EmergencyContactField({
+        name: 'Mama Leone',
+        email: 'mama@leonesons.com'
+      })
+    })
+
+    await renderCard(loader, card, 'edit');
+
+    assert.dom('[data-test-field-component-card]').exists({ count: 1 }).hasClass('edit-card', 'edit card is rendered');
+    assert.dom('[data-test-field="firstName"]').hasText('First Name', 'non-nested primitive field label is rendered');
+    assert.dom('[data-test-field="firstName"] input').hasValue('Marcelius', 'non-nested primitive field input is rendered');
+    assert.dom('[data-test-field="emergencyContact"]').containsText('Emergency Contact', 'non-nested compound field label is rendered');
+    assert.dom('[data-test-field="emergencyContact"]').hasClass('horizontal', 'compound field class is correct');
+    assert.dom('[data-test-field="emergencyContact"] [data-test-compound-field-format="edit"] [data-test-field="name"]').exists('nested primitive field editor is rendered');
+    assert.dom('[data-test-field="emergencyContact"] [data-test-field="name"]').hasClass('vertical', 'nested primitive field class is correct');
+    assert.dom('[data-test-field="emergencyContact"] [data-test-field="name"]').containsText('Name');
+    assert.dom('[data-test-field="emergencyContact"] [data-test-field="name"] input').hasValue('Mama Leone');
+    assert.dom('[data-test-field="emergencyContact"] [data-test-field="email"]').hasText('Email');
+    assert.dom('[data-test-field="emergencyContact"] [data-test-field="email"] input').hasValue('mama@leonesons.com');
+  });
+
+  test('render a compound field (singular) contained within field', async function (assert) {
+    let { field, contains, FieldDef, CardDef } = cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
+
+    class PhoneField extends FieldDef {
+      @field country = contains(NumberField);
+      @field area = contains(NumberField);
+      @field number = contains(NumberField);
+    }
+
+    class EmergencyContactField extends FieldDef {
+      @field name = contains(StringField);
+      @field phoneNumber = contains(PhoneField);
+    }
+
+    class ContactCard extends CardDef {
+      @field firstName = contains(StringField);
+      @field emergencyContact = contains(EmergencyContactField);
+    }
+
+    let card = new ContactCard({
+      firstName: 'Marcelius',
+      emergencyContact: new EmergencyContactField({
+        name: 'Mama Leone',
+        phoneNumber: new PhoneField({
+          country: 1,
+          area: 212,
+          number: 5551212,
+        }),
+      })
+    })
+
+    await renderCard(loader, card, 'edit');
+
+    assert.dom('[data-test-field-component-card]').exists({ count: 1 });
+    assert.dom('[data-test-field="firstName"]').hasText('First Name');
+    assert.dom('[data-test-field="firstName"] input').hasValue('Marcelius');
+    assert.dom('[data-test-field="emergencyContact"] [data-test-compound-field-format="edit"] [data-test-field="phoneNumber"]').containsText('Phone Number', 'nested compound field is rendered');
+    assert.dom('[data-test-field="emergencyContact"] [data-test-field="phoneNumber"] [data-test-compound-field-format="edit"] ').hasText('Country Area Number', 'fields of nested compound field are rendered');
+    assert.dom('[data-test-field="emergencyContact"] [data-test-field="phoneNumber"] [data-test-field="country"]').hasClass('vertical');
+    assert.dom('[data-test-field="emergencyContact"] [data-test-field="phoneNumber"] [data-test-field="country"] input').hasValue('1');
+    assert.dom('[data-test-field="emergencyContact"] [data-test-field="phoneNumber"] [data-test-field="area"] input').hasValue('212');
+    assert.dom('[data-test-field="emergencyContact"] [data-test-field="phoneNumber"] [data-test-field="number"] input').hasValue('5551212');
+  });
+
+  test('render a primitive field (many) contained within field (noneditable)', async function (assert) {
+    let { field, contains, containsMany, CardDef, FieldDef } = cardApi;
+    let { default: StringField } = string;
+
+    class Guest extends FieldDef {
+      @field name = contains(StringField);
+      @field additionalNames = containsMany(StringField);
+    }
+
+    class ContactCard extends CardDef {
+      static displayName = 'Contact';
+      @field name = contains(StringField);
+      @field nickname = contains(StringField);
+      @field vip = containsMany(StringField);
+      @field banned = containsMany(StringField);
+      @field guest = contains(Guest);
+      @field bannedGuest = contains(Guest);
+    }
+
+    let card = new ContactCard({
+      name: 'Marcelius Wilde',
+      vip: ['Cornelius Wilde', 'Dominique Wilde', 'Esmeralda Wilde'],
+      guest: new Guest({
+        name: 'Mama Leone',
+        additionalNames: ['Felicity Shaw', 'Grant Kingston', 'Valerie Storm'],
+      }),
+    });
+
+    await renderCard(loader, card, 'edit');
+    await percySnapshot(assert);
+
+    assert.dom('[data-test-field-component-card]').exists();
+    assert
+      .dom('[data-test-contains-many="vip"] [data-test-item]')
+      .exists({ count: 3 });
+    assert
+      .dom('[data-test-contains-many="vip"] [data-test-item="0"] input')
+      .hasValue('Cornelius Wilde');
+    assert.dom('[data-test-field="nickname"] input').hasNoValue();
+    assert
+      .dom('[data-test-contains-many="banned"] [data-test-item]')
+      .doesNotExist();
+    assert
+      .dom('[data-test-contains-many="banned"] [data-test-add-new]')
+      .exists('empty containsMany string field has an add button');
+
+    assert
+      .dom('[data-test-field="guest"] [data-test-field="name"] input')
+      .hasValue('Mama Leone');
+    assert
+      .dom(
+        '[data-test-field="guest"] [data-test-contains-many="additionalNames"]',
+      )
+      .doesNotExist('edit template is not rendered');
+    assert
+      .dom(
+        '[data-test-field="guest"] [data-test-plural-view="containsMany"] [data-test-plural-view-item]',
+      )
+      .exists({ count: 3 });
+    assert
+      .dom('[data-test-field="guest"] [data-test-plural-view="containsMany"]')
+      .containsText('Felicity Shaw Grant Kingston Valerie Storm');
+
+    assert
+      .dom('[data-test-field="bannedGuest"] [data-test-add-new]')
+      .doesNotExist('edit');
+    assert
+      .dom(
+        '[data-test-field="bannedGuest"] [data-test-plural-view="containsMany"]',
+      )
+      .hasClass('empty');
+    assert
+      .dom(
+        '[data-test-field="bannedGuest"] [data-test-plural-view="containsMany"] [data-test-plural-view-item]',
+      )
+      .doesNotExist();
+  });
+
+  test('render a compound field (many) contained within field (noneditable)', async function (assert) {
+    let { field, contains, containsMany, CardDef, FieldDef } = cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
+
+    class PersonField extends FieldDef {
+      @field fullName = contains(StringField);
+      @field guestCount = contains(NumberField);
+      @field title = contains(StringField, {
+        computeVia: function (this: PersonField) {
+          return this.guestCount
+            ? `${this.fullName} + ${this.guestCount}`
+            : this.fullName;
+        },
+      });
+    }
+
+    class Guest extends FieldDef {
+      @field name = contains(StringField);
+      @field additionalNames = containsMany(PersonField);
+    }
+
+    class ContactCard extends CardDef {
+      static displayName = 'Contact';
+      @field name = contains(StringField);
+      @field guest = contains(Guest);
+      @field guest2 = contains(Guest);
+      @field vip = containsMany(StringField);
+    }
+
+    let card = new ContactCard({
+      name: 'Marcelius Wilde',
+      guest: new Guest({
+        name: 'Mama Leone',
+        additionalNames: [
+          new PersonField({
+            fullName: 'Felicity Shaw',
+            guestCount: 1,
+          }),
+          new PersonField({
+            fullName: 'Grant Kingston',
+            guestCount: 1,
+          }),
+          new PersonField({
+            fullName: 'Valerie Storm',
+            guestCount: 2,
+          }),
+        ],
+      }),
+      guest2: new Guest({ name: 'Papa Leone' }),
+      vip: ['Cornelius Wilde', 'Dominique Wilde', 'Esmeralda Wilde'],
+    });
+
+    await renderCard(loader, card, 'edit');
+    await percySnapshot(assert);
+
+    assert
+      .dom('[data-test-field="guest"] [data-test-field="name"] input')
+      .hasValue('Mama Leone');
+    assert
+      .dom('[data-test-field="guest"] [data-test-plural-view-format="atom"]')
+      .exists('atom layout is rendered');
+    assert
+      .dom('[data-test-field="guest"] [data-test-plural-view="containsMany"]')
+      .hasClass('atom-format', 'field has correct class');
+    assert
+      .dom(
+        '[data-test-field="guest"] [data-test-plural-view="containsMany"] [data-test-plural-view-item]',
+      )
+      .exists({ count: 3 });
+    assert
+      .dom('[data-test-field="guest"] [data-test-plural-view-item="0"]')
+      .containsText('Felicity Shaw + 1');
+    assert
+      .dom(
+        '[data-test-field="guest"] [data-test-plural-view-item="0"] > [data-test-compound-field-format="atom"]',
+      )
+      .exists('atom layout is rendered for items');
+    assert
+      .dom('[data-test-field="guest"] [data-test-plural-view-item="1"]')
+      .containsText('Grant Kingston + 1');
+    assert
+      .dom('[data-test-field="guest"] [data-test-plural-view-item="2"]')
+      .containsText('Valerie Storm + 2');
+
+    assert
+      .dom('[data-test-field="guest2"] [data-test-field="name"] input')
+      .hasValue('Papa Leone');
+    assert
+      .dom('[data-test-field="guest2"] [data-test-plural-view-format="atom"]')
+      .hasClass('empty', 'empty containsMany field has correct class');
+    assert
+      .dom('[data-test-field="guest2"] [data-test-plural-view-format="atom"]')
+      .hasText('', 'field is empty');
+
+    assert
+      .dom('[data-test-field="vip"] [data-test-contains-many="vip"]')
+      .exists('top level containsMany field is rendered in edit format');
+    assert
+      .dom('[data-test-contains-many="vip"] [data-test-add-new]')
+      .exists('top level containsMany field has add button');
+    assert
+      .dom('[data-test-contains-many="vip"] [data-test-remove="0"]')
+      .exists('top level containsMany field item has remove button');
+  });
+
+  test('render a CardDef field (singular) linked to from FieldDef', async function (assert) {
     let { field, contains, linksTo, CardDef, FieldDef, Component } = cardApi;
     let { default: StringField } = string;
     let { default: NumberField } = number;
