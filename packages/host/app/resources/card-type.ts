@@ -56,7 +56,6 @@ export interface Type {
   id: string;
   module: string;
   displayName: string;
-  declarationName: string;
   super: Type | undefined;
   fields: FieldOfType[];
   codeRef: CodeRef;
@@ -157,7 +156,6 @@ export class CardType extends Resource<Args> {
       module: moduleIdentifier,
       super: superType,
       displayName: card.prototype.constructor.displayName || 'Card',
-      declarationName: card.name,
       fields: fieldTypes,
       moduleInfo,
       codeRef: ref,
