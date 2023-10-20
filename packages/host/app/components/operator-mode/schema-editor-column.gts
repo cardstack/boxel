@@ -130,6 +130,7 @@ export default class SchemaEditorColumn extends Component<Signature> {
     <Accordion class='accordion' as |A|>
       <A.Item
         class='accordion-item'
+        @contentClass='accordion-item-content'
         @onClick={{fn this.selectItem 'schema-editor'}}
         @isOpen={{eq this.selectedItem 'schema-editor'}}
       >
@@ -155,11 +156,10 @@ export default class SchemaEditorColumn extends Component<Signature> {
     </Accordion>
 
     <style>
-      .card-adoption-chain {
-        background-color: var(--boxel-200);
-        height: 100%;
-        padding: var(--boxel-sp-sm);
+      :global(.accordion-item-content) {
+        overflow-y: auto;
       }
+
       .accordion-item:last-child {
         border-bottom: var(--boxel-border);
       }

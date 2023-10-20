@@ -23,7 +23,7 @@
     "experimentalDecorators": true,
     "paths": {
       "https://cardstack.com/base/*": ["../base/*"]
-    },
+    }
   },
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"]

@@ -10,6 +10,7 @@ import CardbotLg from './icons/cardbot-lg.gts';
 import CaretDown from './icons/caret-down.gts';
 import CheckMark from './icons/check-mark.gts';
 import Copy from './icons/copy.gts';
+import DiagonalArrowLeftUp from './icons/diagonal-arrow-left-up.gts';
 import Download from './icons/download.gts';
 import DropdownArrowDown from './icons/dropdown-arrow-down.gts';
 import DropdownArrowUp from './icons/dropdown-arrow-up.gts';
@@ -46,6 +47,7 @@ export const ALL_ICON_COMPONENTS = [
   CaretDown,
   CheckMark,
   Copy,
+  DiagonalArrowLeftUp,
   Download,
   DropdownArrowDown,
   DropdownArrowUp,
@@ -83,6 +85,7 @@ export {
   CaretDown,
   CheckMark,
   Copy,
+  DiagonalArrowLeftUp,
   Download,
   DropdownArrowDown,
   DropdownArrowUp,

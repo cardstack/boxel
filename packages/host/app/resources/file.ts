@@ -181,7 +181,9 @@ class _FileResource extends Resource<Args> {
       size,
       url: response.url,
       write(content: string, flushLoader?: true) {
-        self.writing = self.writeTask.perform(this, content, flushLoader);
+        self.writing = self.writeTask
+          .unlinked() // If the component which performs this task from within another task is destroyed, for example the "add field" modal, we want this task to continue running
+          .perform(this, content, flushLoader);
         return self.writing;
       },
     });

@@ -113,7 +113,7 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
 
     <style>
       .overlay-item-header {
-        background-color: var(--boxel-light-100);
+        border-bottom: 1px solid var(--boxel-200);
         height: var(--overlay-embedded-card-header-height);
         display: flex;
         justify-content: space-between;
@@ -144,12 +144,12 @@ export default class OperatorModeOverlayItemHeader extends Component<Signature> 
         margin-left: var(--boxel-sp-xxxs);
         pointer-events: auto; /* pointer events are disabled in the overlay, we re-enable it here for header actions */
         display: flex;
-        border-radius: 4px;
+        border-radius: 5px;
         height: calc(
-          var(--overlay-embedded-card-header-height) - 2 * var(--boxel-sp-xxs)
+          var(--overlay-embedded-card-header-height) - 2 * var(--boxel-sp-xxxs)
         );
         width: calc(
-          var(--overlay-embedded-card-header-height) - 2 * var(--boxel-sp-xxs)
+          var(--overlay-embedded-card-header-height) - 2 * var(--boxel-sp-xxxs)
         );
       }
       .header-actions__button:hover {
