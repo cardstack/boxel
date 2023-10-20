@@ -157,6 +157,10 @@ export default class OperatorModeContainer extends Component<Signature> {
         };
 
       case 2: {
+        if (topMostStackItems[LEFT].card.id === topMostStackItems[RIGHT].card.id) {
+          // the source and destination cannot be the same
+          return;
+        }
         // if both the top most cards are index cards, then we need to analyze
         // the selected cards from both stacks in order to determine copy button state
         let sourceStack: number | undefined;

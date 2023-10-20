@@ -42,9 +42,7 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
 
       {{#if @icon}}
         <div class='with-icon'>
-          <@icon
-            class='boxel-field__icon' role='presentation'
-          />
+          <@icon class='boxel-field__icon' role='presentation' />
           <div class='yield-with-icon'>
             {{yield}}
           </div>

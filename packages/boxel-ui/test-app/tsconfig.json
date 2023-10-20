@@ -19,15 +19,9 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "paths": {
-      "test-app/tests/*": [
-        "tests/*"
-      ],
-      "test-app/*": [
-        "app/*"
-      ],
-      "*": [
-        "types/*"
-      ]
+      "test-app/tests/*": ["tests/*"],
+      "test-app/*": ["app/*"],
+      "*": ["types/*"]
     },
     "skipLibCheck": true,
     "strictNullChecks": true,
@@ -36,14 +30,7 @@
     "traceResolution": false
   },
   "glint": {
-    "environment": [
-      "ember-loose",
-      "ember-template-imports"
-    ]
+    "environment": ["ember-loose", "ember-template-imports"]
   },
-  "include": [
-    "app/**/*",
-    "tests/**/*",
-    "types/**/*"
-  ]
+  "include": ["app/**/*", "tests/**/*", "types/**/*"]
 }

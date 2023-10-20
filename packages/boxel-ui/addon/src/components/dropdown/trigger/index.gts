@@ -25,16 +25,14 @@ const BoxelDropdownTrigger: TemplateOnlyComponent<Signature> = <template>
     ...attributes
   >
     {{#if @icon}}
-      <@icon
-        class='boxel-dropdown-trigger__icon' role='presentation'
-      />
+      <@icon class='boxel-dropdown-trigger__icon' role='presentation' />
     {{/if}}
 
     {{@label}}
     <CaretDown
       class='boxel-dropdown-trigger__caret'
-      width=8
-      height=8
+      width='8'
+      height='8'
       role='presentation'
     />
   </BoxelButton>
