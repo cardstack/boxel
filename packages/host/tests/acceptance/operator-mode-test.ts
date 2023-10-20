@@ -17,7 +17,10 @@ import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 
-import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
+import {
+  type LooseSingleCardDocument,
+  Deferred,
+} from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 
 import { Submode } from '@cardstack/host/components/submode-switcher';
@@ -151,6 +154,9 @@ module('Acceptance | operator mode tests', function (hooks) {
           @field friends = linksToMany(Pet);
           @field firstLetterOfTheName = contains(StringCard, {
             computeVia: function (this: Chain) {
+              if (!this.firstName) {
+                return;
+              }
               return this.firstName[0];
             },
           });
@@ -176,6 +182,25 @@ module('Acceptance | operator mode tests', function (hooks) {
         }
       `,
       'README.txt': `Hello World`,
+      'person-entry.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Person Card',
+            description: 'Catalog entry for Person Card',
+            ref: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/catalog-entry',
+              name: 'CatalogEntry',
+            },
+          },
+        },
+      },
       'Pet/mango.json': {
         data: {
           attributes: {
@@ -603,6 +628,47 @@ module('Acceptance | operator mode tests', function (hooks) {
       );
 
       assert.dom('[data-test-search-sheet]').hasClass('closed');
+    });
+
+    test<TestContextWithSave>('can create a card from the index stack item', async function (assert) {
+      assert.expect(4);
+      let operatorModeStateParam = stringify({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}index`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      })!;
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam,
+        )}`,
+      );
+
+      let deferred = new Deferred<void>();
+      this.onSave((json) => {
+        if (typeof json === 'string') {
+          throw new Error('expected JSON save data');
+        }
+        assert.strictEqual(json.data.attributes?.firstName, 'Hassan');
+        assert.strictEqual(json.data.meta.realmURL, testRealmURL);
+        deferred.fulfill();
+      });
+      await click('[data-test-create-new-card-button]');
+      await waitFor(
+        `[data-test-card-catalog-item="${testRealmURL}person-entry"]`,
+      );
+      await click(`[data-test-select="${testRealmURL}person-entry"]`);
+      await click('[data-test-card-catalog-go-button]');
+
+      await waitFor('[data-test-stack-card-index="1"]');
+      await fillIn(`[data-test-field="firstName"] input`, 'Hassan');
+      await click('[data-test-stack-card-index="1"] [data-test-close-button]');
+
+      await deferred.promise;
     });
   });
 

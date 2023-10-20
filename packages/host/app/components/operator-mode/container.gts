@@ -438,23 +438,32 @@ export default class OperatorModeContainer extends Component<Signature> {
         ref: CodeRef,
         relativeTo: URL | undefined,
         opts?: {
+          realmURL?: URL;
           isLinkedCard?: boolean;
           doc?: LooseSingleCardDocument; // fill in card data with values
         },
       ): Promise<CardDef | undefined> => {
+        if ('type' in ref ) {
+          throw new Error('bug: can only create new cards from exported card definition');
+        }
+        // we make the code ref use an absolute URL for safety in
+        // case it's being created in a different realm than where the card 
+        // definition comes from
+        ref.module = new URL(ref.module, relativeTo).href;
         // prefers optional doc to be passed in
         // use case: to populate default values in a create modal
         let doc: LooseSingleCardDocument = opts?.doc ?? {
-          data: { meta: { adoptsFrom: ref } },
+          data: {
+            meta: {
+              adoptsFrom: ref,
+              ...(opts?.realmURL ? { realmURL: opts.realmURL.href} : {})
+            }
+          }
         };
-        // using RealmPaths API to correct for the trailing `/`
-        let realmPath = new RealmPaths(
-          relativeTo ?? here.cardService.defaultURL,
-        );
         let newCard = await here.cardService.createFromSerialized(
           doc.data,
           doc,
-          new URL(realmPath.url),
+          relativeTo,
         );
         let newItem: StackItem = {
           card: newCard,
@@ -468,7 +477,8 @@ export default class OperatorModeContainer extends Component<Signature> {
       },
       viewCard: async (card: CardDef, format: Format = 'isolated') => {
         here.addToStack({
-          card,
+          // assert that we are using a live card
+          card: await here.cardService.loadModel(here, new URL(card.id)),
           format,
           stackIndex,
         });

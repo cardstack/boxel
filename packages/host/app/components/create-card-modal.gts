@@ -60,7 +60,10 @@ export default class CreateCardModal extends Component {
   async create<T extends CardDef>(
     ref: CodeRef,
     relativeTo: URL | undefined,
-    opts?: { doc?: LooseSingleCardDocument },
+    opts?: { 
+      realmURL?: URL;
+      doc?: LooseSingleCardDocument
+    },
   ): Promise<undefined | T> {
     this.zIndex++;
     return (await this._create.perform(ref, relativeTo, opts)) as T | undefined;
@@ -69,17 +72,32 @@ export default class CreateCardModal extends Component {
   private _create = enqueueTask(
     async <T extends CardDef>(
       ref: CodeRef,
-      relativeTo: URL | undefined,
-      opts?: { doc?: LooseSingleCardDocument },
+      relativeTo: URL | undefined, // this relativeTo should be the catalog entry ID that the CodeRef comes from
+      opts?: {
+        doc?: LooseSingleCardDocument;
+        realmURL?: URL;
+      },
     ) => {
+      if ('type' in ref ) {
+        throw new Error('bug: can only create new cards from exported card definition');
+      }
+      // we make the code ref use an absolute URL for safety in
+      // case it's being created in a different realm than where the card 
+      // definition comes from
+      ref.module = new URL(ref.module, relativeTo).href;
       let doc: LooseSingleCardDocument = opts?.doc ?? {
-        data: { meta: { adoptsFrom: ref } },
+        data: {
+          meta: {
+            adoptsFrom: ref,
+            ...(opts?.realmURL ? { realmURL: opts.realmURL.href} : {})
+          }
+        },
       };
       this.currentRequest = {
         card: await this.cardService.createFromSerialized(
           doc.data,
           doc,
-          relativeTo ?? this.cardService.defaultURL,
+          relativeTo
         ),
         deferred: new Deferred(),
       };

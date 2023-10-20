@@ -120,7 +120,7 @@ class LinksToEditor extends GlimmerComponent<Signature> {
     let chosenCard: CardDef | undefined = await chooseCard(
       { filter: { type } },
       {
-        offerToCreate: type,
+        offerToCreate:  { ref: type, relativeTo: undefined },
         createNewCard: this.args.context?.actions?.createCard,
       },
     );

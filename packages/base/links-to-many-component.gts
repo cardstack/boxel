@@ -128,7 +128,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     let chosenCard: CardDef | undefined = await chooseCard(
       { filter },
       {
-        offerToCreate: type,
+        offerToCreate: { ref: type, relativeTo: undefined },
         multiSelect: true,
         createNewCard: this.args.context?.actions?.createCard,
       },

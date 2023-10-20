@@ -8,7 +8,6 @@ import {
   CardDef,
   realmInfo,
   realmURL,
-  relativeTo,
   type BaseDef,
 } from './card-api';
 import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
@@ -240,7 +239,8 @@ class Isolated extends Component<typeof CardsGrid> {
     // same cards into the stack.
     await this.args.context?.actions?.createCard?.(
       card.ref,
-      this.args.model[relativeTo],
+      new URL(card.id),
+      { realmURL: this.args.model[realmURL] }
     );
   });
 }
