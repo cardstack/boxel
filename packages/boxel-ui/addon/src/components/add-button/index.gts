@@ -7,10 +7,10 @@ import IconButton from '../icon-button/index.gts';
 
 interface Signature {
   Args: {
-    variant?: 'full-width' | 'pills';
-    iconWidth?: string | number;
-    iconHeight?: string | number;
     hideIcon?: boolean;
+    iconHeight?: string | number;
+    iconWidth?: string | number;
+    variant?: 'full-width' | 'pill';
   };
   Blocks: {
     default: [];
@@ -97,6 +97,10 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
       font: 500 var(--boxel-add-button-pill-font, var(--boxel-font-xs));
       letter-spacing: var(--boxel-lsp-xs);
       transition: background-color var(--boxel-transition);
+    }
+    .add-button--pill:hover:not(:disabled) {
+      box-shadow: var(--boxel-box-shadow);
+      cursor: pointer;
     }
   </style>
 </template>;

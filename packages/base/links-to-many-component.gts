@@ -9,7 +9,6 @@ import {
   type Format,
   type Field,
   CardContext,
-  isCard,
 } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
@@ -23,7 +22,8 @@ import {
   identifyCard,
   getPlural,
 } from '@cardstack/runtime-common';
-import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
+import { IconMinusCircle, IconX } from '@cardstack/boxel-ui/icons';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 interface Signature {
   Args: {
@@ -42,7 +42,7 @@ interface Signature {
 class LinksToManyEditor extends GlimmerComponent<Signature> {
   <template>
     <div data-test-links-to-many={{this.args.field.name}}>
-      {{#if (isCard @model.value)}}
+      {{#if (eq @format 'edit')}}
         {{#if @arrayField.children.length}}
           <ul class='list'>
             {{#each @arrayField.children as |boxedElement i|}}
@@ -62,7 +62,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
                 <div class='remove-button-container'>
                   <IconButton
                     @variant='primary'
-                    @icon='icon-minus-circle'
+                    @icon={{IconMinusCircle}}
                     @width='20px'
                     @height='20px'
                     class='remove'
@@ -88,38 +88,42 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       {{else}}
         <div class='boxel-pills'>
           {{#each @arrayField.children as |boxedElement i|}}
-            <div class='boxel-pills-container'>
-              <div
-                class='boxel-pill'
-                data-test-pill-item={{i}}
-                {{@context.cardComponentModifier
-                  card=boxedElement.value
-                  format=@format
-                  fieldType=@field.fieldType
-                  fieldName=@field.name
-                }}
-              >
-                {{boxedElement.value.title}}
+            {{#let
+              (getBoxComponent
+                (this.args.cardTypeFor @field boxedElement)
+                'atom'
+                boxedElement
+                @field
+                @context
+              )
+              as |Item|
+            }}
+              <div class='boxel-pills-container'>
+                <div
+                  class='boxel-pill'
+                  data-test-pill-item={{i}}
+                >
+                  <Item />
+                </div>
+                <div class='remove-item-button-container'>
+                  <IconButton
+                    @variant='primary'
+                    @icon={{IconX}}
+                    @width='14px'
+                    @height='14px'
+                    class='remove-item-button'
+                    {{on 'click' (fn this.remove i)}}
+                    aria-label='Remove'
+                    data-test-remove-card
+                    data-test-remove={{i}}
+                  />
+                </div>
               </div>
-              <div class='remove-item-button-container'>
-                <IconButton
-                  @variant='primary'
-                  @icon={{IconMinusCircle}}
-                  @width='20px'
-                  @height='20px'
-                  class='remove'
-                  {{on 'click' (fn this.remove i)}}
-                  aria-label='Remove'
-                  data-test-remove-card
-                  data-test-remove={{i}}
-                />
-              </div>
-            </div>
-
+            {{/let}}
           {{/each}}
           <AddButton
             class='add-new'
-            @variant='pills'
+            @variant='pill'
             @iconWidth='14px'
             @iconHeight='14px'
             {{on 'click' this.add}}
@@ -170,20 +174,15 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       }
       .boxel-pills-container {
         position: relative;
+        height: fit-content;
       }
-      .boxel-pill {
+      .boxel-pill .atom-card {
         display: flex;
         justify-content: center;
         align-items: center;
-        box-sizing: border-box;
         padding: var(--boxel-sp-xxxs) var(--boxel-sp-lg) var(--boxel-sp-xxxs)
           var(--boxel-sp-xs);
-        background-color: var(--boxel-light);
-        border: 1px solid var(--boxel-form-control-border-color);
-        border-radius: var(--boxel-form-control-border-radius);
         color: var(--boxel-dark);
-        font: 700 var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp-xs);
       }
       .remove-item-button-container {
         position: absolute;
@@ -193,7 +192,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
 
         display: flex;
         align-items: center;
-        padding-right: var(--boxel-sp-xs);
+        padding-right: var(--boxel-sp-xxs);
       }
       .remove-item-button {
         --icon-color: var(--boxel-dark);
@@ -202,7 +201,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       }
     </style>
   </template>
-
+  
   add = () => {
     (this.chooseCard as unknown as Descriptor<any, any[]>).perform();
   };
@@ -253,7 +252,7 @@ export function getLinksToManyComponent({
   ): typeof BaseDef;
   context?: CardContext;
 }): BoxComponent {
-  if (format === 'edit') {
+  if (format === 'edit' || format === 'atom') {
     return class LinksToManyEditorTemplate extends GlimmerComponent {
       <template>
         <LinksToManyEditor

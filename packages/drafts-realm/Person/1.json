@@ -28,6 +28,11 @@
         "links": {
           "self": "http://localhost:4201/drafts/Country/1"
         }
+      },
+      "trips.countriesVisited.1": {
+        "links": {
+          "self": "http://localhost:4201/drafts/Country/2"
+        }
       }
     },
     "meta": {

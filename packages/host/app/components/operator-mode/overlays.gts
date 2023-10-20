@@ -54,7 +54,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
   isIncludeHeader(renderedCard: RenderedCardForOverlayActions) {
     return (
       this.isEmbeddedCard(renderedCard) &&
-      !renderedCard.element.classList.contains('boxel-pill')
+      renderedCard.format !== 'atom'
     );
   }
 

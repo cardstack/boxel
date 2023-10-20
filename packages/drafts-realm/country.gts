@@ -8,7 +8,7 @@ import StringField from 'https://cardstack.com/base/string';
 
 export class Country extends CardDef {
   static displayName = 'Country';
-  @field name = contains(StringField); // required
+  @field name = contains(StringField);
   @field title = contains(StringField, {
     computeVia(this: Country) {
       return this.name;
