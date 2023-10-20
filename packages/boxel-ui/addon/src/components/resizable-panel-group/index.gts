@@ -325,9 +325,9 @@ export default class ResizablePanelGroup extends Component<Signature> {
       return;
     }
 
-    let resizeHandlerLength = (resizeHandlerEl as HTMLElement)[
-      this.offsetLengthProperty
-    ];
+    let resizeHandleContainer = (resizeHandlerEl as HTMLElement).parentElement!;
+    let resizeHandlerLength = resizeHandleContainer[this.offsetLengthProperty];
+
     let totalResizeHandlerLength =
       resizeHandlerLength * (this.listPanelContext.size - 1);
 
