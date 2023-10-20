@@ -63,7 +63,7 @@
     "@babel/plugin-transform-typescript": "^7.22.15",
     "@babel/runtime": "^7.22.11",
     "@embroider/addon-dev": "^4.1.0",
-    "@embroider/macros": "^1.13.1",
+    "@embroider/macros": "^1.13.2",
     "@rollup/plugin-babel": "^6.0.3",
     "@tsconfig/ember": "3.0.1",
     "@types/lodash": "^4.14.182",

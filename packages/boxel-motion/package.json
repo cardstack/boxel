@@ -41,7 +41,7 @@
     "@babel/core": "^7.17.10",
     "@glint/core": "^1.0.0",
     "@glint/environment-ember-template-imports": "^1.0.0",
-    "@glint/template": "^1.0.0",
+    "@glint/template": "^1.2.1",
     "@types/htmlbars-inline-precompile": "^3.0.0",
     "@types/qunit": "^2.11.3",
     "@types/rsvp": "^4.0.4",
