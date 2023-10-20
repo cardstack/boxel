@@ -86,7 +86,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
           {{getPlural @field.card.displayName}}
         </AddButton>
       {{else}}
-        <div class='boxel-pills'>
+        <div class='boxel-pills' data-test-pills>
           {{#each @arrayField.children as |boxedElement i|}}
             {{#let
               (getBoxComponent
@@ -98,10 +98,9 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
               )
               as |Item|
             }}
-              <div class='boxel-pills-container'>
+              <div class='boxel-pills-container' data-test-pill-item={{i}}>
                 <div
                   class='boxel-pill'
-                  data-test-pill-item={{i}}
                 >
                   <Item />
                 </div>
