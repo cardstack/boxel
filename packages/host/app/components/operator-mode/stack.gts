@@ -29,6 +29,7 @@ interface Signature {
       stackItem: StackItem,
       clearSelections: () => void,
       doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
+      doScrollIntoView: (selector: string) => void,
     ) => void;
   };
   Blocks: {};

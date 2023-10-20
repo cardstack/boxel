@@ -37,6 +37,9 @@ class Isolated extends Component<typeof CardsGrid> {
               fieldName=undefined
             }}
             data-test-cards-grid-item={{card.id}}
+            {{! In order to support scrolling cards into view 
+            we use a selector that is not pruned out in production builds }}
+            data-cards-grid-item={{card.id}}
           >
             <div class='grid-card'>
               <div class='grid-thumbnail'>
