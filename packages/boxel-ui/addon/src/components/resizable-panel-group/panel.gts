@@ -180,13 +180,13 @@ export default class Panel extends Component<Signature> {
 
   constructor(owner: any, args: any) {
     super(owner, args);
+    scheduleOnce('afterRender', this, this.registerPanel);
+  }
 
-    // eslint-disable-next-line ember/no-incorrect-calls-with-inline-anonymous-functions
-    scheduleOnce('afterRender', this, () => {
-      this.id = this.args.registerPanel({
-        length: this.args.length ?? this.args.defaultLength,
-        defaultLength: this.args.defaultLength,
-      });
+  private registerPanel() {
+    this.id = this.args.registerPanel({
+      length: this.args.length ?? this.args.defaultLength,
+      defaultLength: this.args.defaultLength,
     });
   }
 
