@@ -568,11 +568,12 @@ export class Loader {
   }
 
   private createModuleProxy(module: any, moduleIdentifier: string) {
+    let didSetIdentity = false;
     return new Proxy(module, {
       get: (target, property, received) => {
         let value = Reflect.get(target, property, received);
-        if (typeof value === 'function' && typeof property === 'string') {
-          if (!this.identities.has(value)) {
+        if (!didSetIdentity) {
+          if (typeof value === 'function' && typeof property === 'string') {
             this.identities.set(value, {
               module: isUrlLike(moduleIdentifier)
                 ? trimExecutableExtension(
@@ -582,6 +583,7 @@ export class Loader {
               name: property,
             });
             Loader.loaders.set(value, this);
+            didSetIdentity = true;
           }
         }
         return value;
