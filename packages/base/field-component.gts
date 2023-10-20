@@ -14,7 +14,7 @@ import {
 } from './card-api';
 import { getField } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
-import { CardContainer } from '@cardstack/boxel-ui';
+import { CardContainer } from '@cardstack/boxel-ui/components';
 import Modifier from 'ember-modifier';
 
 interface BoxComponentSignature {

@@ -7,7 +7,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
 import { Friend } from './friend';
-import { GridContainer } from '@cardstack/boxel-ui';
+import { GridContainer } from '@cardstack/boxel-ui/components';
 
 export class Friends extends CardDef {
   static displayName = 'Friends';

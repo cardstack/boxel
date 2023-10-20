@@ -12,7 +12,9 @@ const withSideWatch = require('./lib/with-side-watch');
 module.exports = function (defaults) {
   const app = new EmberApp(defaults, {
     trees: {
-      app: withSideWatch('app', { watching: ['../runtime-common'] }),
+      app: withSideWatch('app', {
+        watching: ['../runtime-common', '../boxel-ui/addon'],
+      }),
     },
     'ember-cli-babel': {
       enableTypeScriptTransform: true,

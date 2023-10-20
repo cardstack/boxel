@@ -24,25 +24,18 @@ import * as lodash from 'lodash';
 import * as marked from 'marked';
 import * as tracked from 'tracked-built-ins';
 
-import * as boxelUI from '@cardstack/boxel-ui';
-import * as boxelCssVar from '@cardstack/boxel-ui/helpers/css-var';
-import * as boxelPickHelper from '@cardstack/boxel-ui/helpers/pick';
-import * as boxelSvgJar from '@cardstack/boxel-ui/helpers/svg-jar';
-import * as boxelTruthHelpers from '@cardstack/boxel-ui/helpers/truth-helpers';
+import * as boxelUiComponents from '@cardstack/boxel-ui/components';
+import * as boxelUiHelpers from '@cardstack/boxel-ui/helpers';
+import * as boxelUiIcons from '@cardstack/boxel-ui/icons';
 
 import * as runtime from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 export function shimExternals(loader: Loader) {
   loader.shimModule('@cardstack/runtime-common', runtime);
-  loader.shimModule('@cardstack/boxel-ui', boxelUI);
-  loader.shimModule('@cardstack/boxel-ui/helpers/svg-jar', boxelSvgJar);
-  loader.shimModule('@cardstack/boxel-ui/helpers/css-var', boxelCssVar);
-  loader.shimModule('@cardstack/boxel-ui/helpers/pick', boxelPickHelper);
-  loader.shimModule(
-    '@cardstack/boxel-ui/helpers/truth-helpers',
-    boxelTruthHelpers,
-  );
+  loader.shimModule('@cardstack/boxel-ui/components', boxelUiComponents);
+  loader.shimModule('@cardstack/boxel-ui/helpers', boxelUiHelpers);
+  loader.shimModule('@cardstack/boxel-ui/icons', boxelUiIcons);
   loader.shimModule('@glimmer/component', glimmerComponent);
   loader.shimModule('@ember/component', emberComponent);
   loader.shimModule(

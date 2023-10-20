@@ -7,11 +7,13 @@ import Component from '@glimmer/component';
 // @ts-expect-error cached doesn't have type yet
 import { tracked, cached } from '@glimmer/tracking';
 
-import { CardContainer, LoadingIndicator, Header } from '@cardstack/boxel-ui';
+import {
+  CardContainer,
+  Header,
+  LoadingIndicator,
+} from '@cardstack/boxel-ui/components';
 
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-
-import { or, and } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { or, and } from '@cardstack/boxel-ui/helpers';
 
 import { type RealmInfo } from '@cardstack/runtime-common';
 
@@ -21,7 +23,16 @@ import {
   isCardDocumentString,
 } from '@cardstack/runtime-common';
 
+import { isCardDef, isFieldDef } from '@cardstack/runtime-common/code-ref';
+
+import { type CardType } from '@cardstack/host/resources/card-type';
 import { type Ready } from '@cardstack/host/resources/file';
+import { IconInherit, IconTrash } from '@cardstack/boxel-ui/icons';
+
+import {
+  type ModuleDeclaration,
+  isCardOrFieldDeclaration,
+} from '@cardstack/host/resources/module-contents';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -38,15 +49,7 @@ import Selector from './detail-panel-selector';
 
 import { SelectorItem, selectorItemFunc } from './detail-panel-selector';
 
-import {
-  type ModuleDeclaration,
-  isCardOrFieldDeclaration,
-} from '@cardstack/host/resources/module-contents';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-
-import { isCardDef, isFieldDef } from '@cardstack/runtime-common/code-ref';
-
-import { type CardType } from '@cardstack/host/resources/card-type';
 
 interface Signature {
   Element: HTMLElement;
@@ -159,7 +162,7 @@ export default class DetailPanel extends Component<Signature> {
       const isSelected = this.args.selectedDeclaration === dec;
       return selectorItemFunc(
         [
-          resolveElementName(dec),
+          dec,
           () => {
             this.args.selectDeclaration(dec);
           },
@@ -227,17 +230,16 @@ export default class DetailPanel extends Component<Signature> {
                 @fileExtension='.JSON'
                 @infoText={{this.lastModified.value}}
                 @actions={{array
-                  (hash label='Delete' handler=@delete icon='icon-trash')
+                  (hash label='Delete' handler=@delete icon=IconTrash)
                 }}
               />
               <div class='chain'>
-                {{svgJar
-                  'icon-inherit'
+                <IconInherit
                   class='chain-icon'
                   width='24px'
                   height='24px'
                   role='presentation'
-                }}
+                />
                 Adopts from
               </div>
               <ClickableModuleDefinitionContainer
@@ -259,18 +261,17 @@ export default class DetailPanel extends Component<Signature> {
                   @infoText={{this.lastModified.value}}
                   @isActive={{true}}
                   @actions={{array
-                    (hash label='Delete' handler=@delete icon='icon-trash')
+                    (hash label='Delete' handler=@delete icon=IconTrash)
                   }}
                 />
                 {{#if this.cardType.type.super}}
                   <div class='chain'>
-                    {{svgJar
-                      'icon-inherit'
+                    <IconInherit
                       class='chain-icon'
                       width='24px'
                       height='24px'
                       role='presentation'
-                    }}
+                    />
                     Inherits from
                   </div>
                   <ClickableModuleDefinitionContainer
@@ -293,18 +294,17 @@ export default class DetailPanel extends Component<Signature> {
                   @infoText={{this.lastModified.value}}
                   @isActive={{true}}
                   @actions={{array
-                    (hash label='Delete' handler=@delete icon='icon-trash')
+                    (hash label='Delete' handler=@delete icon=IconTrash)
                   }}
                 />
                 {{#if this.cardType.type.super}}
                   <div class='chain'>
-                    {{svgJar
-                      'icon-inherit'
+                    <IconInherit
                       class='chain-icon'
                       width='24px'
                       height='24px'
                       role='presentation'
-                    }}
+                    />
                     Inherits from
                   </div>
                   <ClickableModuleDefinitionContainer
@@ -330,7 +330,7 @@ export default class DetailPanel extends Component<Signature> {
                 @fileExtension={{this.fileExtension}}
                 @infoText={{this.lastModified.value}}
                 @actions={{array
-                  (hash label='Delete' handler=@delete icon='icon-trash')
+                  (hash label='Delete' handler=@delete icon=IconTrash)
                 }}
               />
             </div>
@@ -399,11 +399,3 @@ export default class DetailPanel extends Component<Signature> {
     </style>
   </template>
 }
-
-const resolveElementName = (dec: ModuleDeclaration) => {
-  let localName: string | undefined = dec.localName;
-  if (isCardOrFieldDeclaration(dec)) {
-    localName = dec.cardOrField.displayName;
-  }
-  return localName ?? '[No Name Found]';
-};

@@ -2,7 +2,14 @@ import { on } from '@ember/modifier';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
-import { Modal, CardContainer, Header, IconButton } from '@cardstack/boxel-ui';
+import {
+  CardContainer,
+  Header,
+  IconButton,
+  Modal,
+} from '@cardstack/boxel-ui/components';
+
+import { IconX } from '@cardstack/boxel-ui/icons';
 
 interface Signature {
   Element: HTMLElement;
@@ -37,7 +44,7 @@ export default class ModalContainer extends Component<Signature> {
       <CardContainer class='dialog-box' @displayBoundaries={{true}}>
         <Header @title={{@title}} class='dialog-box__header'>
           <IconButton
-            @icon='icon-x'
+            @icon={{IconX}}
             @width='20'
             @height='20'
             {{on 'click' @onClose}}

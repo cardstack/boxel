@@ -12,7 +12,12 @@ import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
 import { formatDistanceToNow } from 'date-fns';
-import { task, restartableTask, timeout } from 'ember-concurrency';
+import {
+  task,
+  restartableTask,
+  timeout,
+  waitForProperty,
+} from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 import { trackedFunction } from 'ember-resources/util/function';
@@ -20,19 +25,20 @@ import { trackedFunction } from 'ember-resources/util/function';
 import { TrackedArray } from 'tracked-built-ins';
 
 import {
-  IconButton,
-  Header,
+  BoxelDropdown,
+  Menu as BoxelMenu,
   CardContainer,
+  Header,
+  IconButton,
   Tooltip,
-} from '@cardstack/boxel-ui';
-import BoxelDropdown from '@cardstack/boxel-ui/components/dropdown';
-import BoxelMenu from '@cardstack/boxel-ui/components/menu';
-import cn from '@cardstack/boxel-ui/helpers/cn';
-import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
-import optional from '@cardstack/boxel-ui/helpers/optional';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+} from '@cardstack/boxel-ui/components';
+import { cn, eq, menuItem, optional } from '@cardstack/boxel-ui/helpers';
 
-import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
+import {
+  type Actions,
+  cardTypeDisplayName,
+  Deferred,
+} from '@cardstack/runtime-common';
 
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 
@@ -52,6 +58,13 @@ import { type StackItem } from './container';
 import OperatorModeOverlays from './overlays';
 
 import type CardService from '../../services/card-service';
+import {
+  IconPencil,
+  IconX,
+  IconTrash,
+  IconLink,
+  ThreeDotsHorizontal,
+} from '@cardstack/boxel-ui/icons';
 
 interface Signature {
   Args: {
@@ -69,6 +82,7 @@ interface Signature {
       stackItem: StackItem,
       clearSelections: () => void,
       doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
+      doScrollIntoView: (selector: string) => void,
     ) => void;
   };
 }
@@ -93,6 +107,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private refreshSaveMsg: number | undefined;
   private subscribedCard: CardDef;
   private contentEl: HTMLElement | undefined;
+  private containerEl: HTMLElement | undefined;
 
   cardTracker = new ElementTracker<{
     card: CardDef;
@@ -109,6 +124,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       this.args.item,
       this.clearSelections,
       this.doWithStableScroll.perform,
+      this.scrollIntoView.perform,
     );
   }
 
@@ -268,18 +284,51 @@ export default class OperatorModeStackItem extends Component<Signature> {
       if (!this.contentEl) {
         return;
       }
+      let deferred = new Deferred<void>();
       let el = this.contentEl;
       let currentScrollTop = this.contentEl.scrollTop;
       await changeSizeCallback();
       await this.cardService.cardsSettled();
       schedule('afterRender', () => {
         el.scrollTop = currentScrollTop;
+        deferred.fulfill();
       });
+      await deferred.promise;
     },
   );
 
+  private scrollIntoView = restartableTask(async (selector: string) => {
+    if (!this.contentEl || !this.containerEl) {
+      return;
+    }
+    // this has the effect of waiting for a search to complete
+    // in the scenario the stack item is a cards-grid
+    await waitForProperty(this.doWithStableScroll, 'isIdle', true);
+    await timeout(500); // need to wait for DOM to update with new card(s)
+
+    let item = document.querySelector(selector);
+    if (!item) {
+      return;
+    }
+    item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    await timeout(1000);
+    // ember-velcro uses visibility: hidden to hide items (vs display: none). 
+    // visibility:hidden alters the geometry of the DOM elements such that 
+    // scrollIntoView thinks the container itself is scrollable (it's not) because of 
+    // the additional height that the hidden velcro-ed items are adding and 
+    // scrolls the entire container (including the header). this is a workaround 
+    // to reset the scroll position for the container. I tried adding middleware to alter
+    // the hiding behavior for ember-velcro, but for some reason the state
+    // used to indicate if the item is visible is not available to middleware...
+    this.containerEl.scrollTop = 0;
+  });
+
   private setupContentEl = (el: HTMLElement) => {
     this.contentEl = el;
+  };
+
+  private setupContainerEl = (el: HTMLElement) => {
+    this.containerEl = el;
   };
 
   <template>
@@ -287,9 +336,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
       class='item {{if this.isBuried "buried"}}'
       data-test-stack-card-index={{@index}}
       data-test-stack-card={{this.cardIdentifier}}
+      {{! In order to support scrolling cards into view 
+      we use a selector that is not pruned out in production builds }}
+      data-stack-card={{this.cardIdentifier}}
       style={{this.styleForStackedCard}}
     >
-      <CardContainer class={{cn 'card' edit=(eq @item.format 'edit')}}>
+      <CardContainer class={{cn 'card' edit=(eq @item.format 'edit')}} {{ContentElement onSetup=this.setupContainerEl}}>
         <Header
           @title={{this.headerTitle}}
           class={{cn 'header' header--icon-hovered=this.isHoverOnRealmIcon}}
@@ -316,7 +368,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               <Tooltip @placement='top'>
                 <:trigger>
                   <IconButton
-                    @icon='icon-pencil'
+                    @icon={{IconPencil}}
                     @width='24px'
                     @height='24px'
                     class='icon-button'
@@ -333,7 +385,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               <Tooltip @placement='top'>
                 <:trigger>
                   <IconButton
-                    @icon='icon-pencil'
+                    @icon={{IconPencil}}
                     @width='24px'
                     @height='24px'
                     class='icon-save'
@@ -353,7 +405,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
                   <Tooltip @placement='top'>
                     <:trigger>
                       <IconButton
-                        @icon='three-dots-horizontal'
+                        @icon={{ThreeDotsHorizontal}}
                         @width='20px'
                         @height='20px'
                         class='icon-button'
@@ -376,12 +428,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
                         (menuItem
                           'Copy Card URL'
                           (perform this.copyToClipboard)
-                          icon='icon-link'
+                          icon=IconLink
                         )
                         (menuItem
                           'Delete'
                           (fn @delete this.card)
-                          icon='icon-trash'
+                          icon=IconTrash
                           dangerous=true
                         )
                       )
@@ -389,12 +441,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
                         (menuItem
                           'Copy Card URL'
                           (perform this.copyToClipboard)
-                          icon='icon-link'
+                          icon=IconLink
                         )
                         (menuItem
                           'Delete'
                           (fn @delete this.card)
-                          icon='icon-trash'
+                          icon=IconTrash
                           dangerous=true
                         )
                       )
@@ -406,7 +458,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             <Tooltip @placement='top'>
               <:trigger>
                 <IconButton
-                  @icon='icon-x'
+                  @icon={{IconX}}
                   @width='20px'
                   @height='20px'
                   class='icon-button'

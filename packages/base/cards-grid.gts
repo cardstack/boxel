@@ -11,7 +11,7 @@ import {
   relativeTo,
   type BaseDef,
 } from './card-api';
-import { AddButton, Tooltip } from '@cardstack/boxel-ui';
+import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
 import {
   chooseCard,
   catalogEntryRef,
@@ -37,6 +37,9 @@ class Isolated extends Component<typeof CardsGrid> {
               fieldName=undefined
             }}
             data-test-cards-grid-item={{card.id}}
+            {{! In order to support scrolling cards into view 
+            we use a selector that is not pruned out in production builds }}
+            data-cards-grid-item={{card.id}}
           >
             <div class='grid-card'>
               <div class='grid-thumbnail'>
@@ -222,7 +225,7 @@ class Isolated extends Component<typeof CardsGrid> {
     let card = await chooseCard<CatalogEntry>({
       filter: {
         on: catalogEntryRef,
-        eq: { isPrimitive: false },
+        eq: { isField: false },
       },
     });
     if (!card) {

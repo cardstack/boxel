@@ -7,17 +7,25 @@ import { tracked } from '@glimmer/tracking';
 import { velcro } from 'ember-velcro';
 import { type TrackedArray } from 'tracked-built-ins';
 
-import { IconButton, BoxelDropdown, Menu } from '@cardstack/boxel-ui';
-import cn from '@cardstack/boxel-ui/helpers/cn';
-import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
-import { and, bool, eq, not } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import {
+  BoxelDropdown,
+  IconButton,
+  Menu,
+} from '@cardstack/boxel-ui/components';
+import { and, bool, cn, eq, menuItem, not } from '@cardstack/boxel-ui/helpers';
 
 import { type Actions, cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
-
 import OperatorModeOverlayItemHeader from './overlay-item-header';
 import { RenderedCardForOverlayActions } from './stack-item';
+import {
+  Eye as EyeIcon,
+  ThreeDotsHorizontal,
+  IconCircle,
+  IconCircleSelected,
+  IconTrash,
+} from '@cardstack/boxel-ui/icons';
 
 import type { MiddlewareState } from '@floating-ui/dom';
 
@@ -60,7 +68,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
           class={{cn
             'actions-overlay'
             selected=isSelected
-            hovered=(eq this.currentlyHoveredCard renderedCard)
+            hovered=(eq this.currentlyHoveredCard.card.id renderedCard.card.id)
           }}
           {{velcro renderedCard.element middleware=(Array this.offset)}}
           data-test-overlay-selected={{if isSelected card.id}}
@@ -76,7 +84,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
               {{on 'mouseenter' (fn this.setCurrentlyHoveredCard renderedCard)}}
               {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
               class='hover-button hover-button-embedded-card preview'
-              @icon='eye'
+              @icon={{EyeIcon}}
               aria-label='preview card'
             />
           {{/if}}
@@ -90,7 +98,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
               {{on 'mouseenter' (fn this.setCurrentlyHoveredCard renderedCard)}}
               {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
               class='hover-button select'
-              @icon={{if isSelected 'icon-circle-selected' 'icon-circle'}}
+              @icon={{if isSelected IconCircleSelected IconCircle}}
               aria-label='select card'
               data-test-overlay-select={{card.id}}
             />
@@ -98,7 +106,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
               {{on 'mouseenter' (fn this.setCurrentlyHoveredCard renderedCard)}}
               {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
               class='hover-button preview'
-              @icon='eye'
+              @icon={{EyeIcon}}
               aria-label='preview card'
             />
             <BoxelDropdown>
@@ -110,7 +118,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
                   }}
                   {{on 'mouseleave' (fn this.setCurrentlyHoveredCard null)}}
                   class='hover-button more-actions'
-                  @icon='three-dots-horizontal'
+                  @icon={{ThreeDotsHorizontal}}
                   aria-label='more actions'
                   {{bindings}}
                 />
@@ -120,10 +128,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
                   @closeMenu={{dd.close}}
                   @items={{array
                     (menuItem
-                      'Delete'
-                      (fn @delete card)
-                      icon='icon-trash'
-                      dangerous=true
+                      'Delete' (fn @delete card) icon=IconTrash dangerous=true
                     )
                   }}
                   {{on

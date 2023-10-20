@@ -19,7 +19,7 @@ import {
   Loader,
 } from '@cardstack/runtime-common';
 import { isEqual } from 'lodash';
-import { FieldContainer } from '@cardstack/boxel-ui';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
 import GlimmerComponent from '@glimmer/component';
 
 export class CatalogEntry extends CardDef {
@@ -67,7 +67,6 @@ export class CatalogEntry extends CardDef {
       if (!card) {
         throw new Error(`Could not load card '${this.ref.name}'`);
       }
-
       return isFieldDef(card);
     },
   });
@@ -85,7 +84,7 @@ export class CatalogEntry extends CardDef {
   @field thumbnailURL = contains(StringField, { computeVia: () => null }); // remove this if we want card type entries to have images
 
   get showDemo() {
-    return !this.isPrimitive;
+    return !this.isField;
   }
 
   // An explicit edit template is provided since computed isPrimitive bool
@@ -164,6 +163,10 @@ export class CatalogEntry extends CardDef {
         </div>
         {{#if @model.showDemo}}
           <div data-test-demo><@fields.demo /></div>
+        {{/if}}
+        {{! field needs to be used in order to be indexed }}
+        {{#if @model.isPrimitive}}
+          <div>Field is primitive</div>
         {{/if}}
       </CatalogEntryContainer>
       <style>

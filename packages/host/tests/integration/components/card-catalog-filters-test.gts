@@ -49,6 +49,16 @@ module('Integration | card-catalog filters', function (hooks) {
         @field authorBio = linksTo(Author);
       }
     `,
+    'address.gts': `
+      import StringCard from 'https://cardstack.com/base/string';
+      import { FieldDef, field, contains } from 'https://cardstack.com/base/card-api';
+      export class Address extends FieldDef {
+        @field street = contains(StringCard);
+        @field city = contains(StringCard);
+        @field state = contains(StringCard);
+        @field zip = contains(StringCard);
+      }
+    `,
     'author.gts': `
       import StringCard from 'https://cardstack.com/base/string';
       import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
@@ -121,6 +131,25 @@ module('Integration | card-catalog filters', function (hooks) {
         },
       },
     },
+    'CatalogEntry/address.json': {
+      data: {
+        type: 'card',
+        attributes: {
+          title: 'Address',
+          description: 'Catalog entry for Address field',
+          ref: {
+            module: `${testRealmURL}address`,
+            name: 'Address',
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/catalog-entry',
+            name: 'CatalogEntry',
+          },
+        },
+      },
+    },
   });
 
   let noop = () => {};
@@ -174,6 +203,19 @@ module('Integration | card-catalog filters', function (hooks) {
       .dom('[data-test-realm="Base Workspace"] [data-test-card-catalog-item]')
       .exists({ count: 1 });
     assert.dom('[data-test-realm-filter-button]').hasText('Realm: All');
+
+    let localResults = [
+      ...document.querySelectorAll(
+        '[data-test-realm="Local Workspace"] [data-test-card-catalog-item]',
+      ),
+    ].map((n) => n.getAttribute('data-test-card-catalog-item'));
+
+    // note that Address field is not in the results
+    assert.deepEqual(localResults, [
+      'http://test-realm/test/CatalogEntry/author',
+      'http://test-realm/test/CatalogEntry/blog-post',
+      'http://test-realm/test/CatalogEntry/publishing-packet',
+    ]);
   });
 
   test('can filter cards by selecting a realm', async function (assert) {

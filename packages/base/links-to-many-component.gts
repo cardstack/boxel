@@ -12,7 +12,7 @@ import {
   isCard,
 } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
-import { AddButton, IconButton } from '@cardstack/boxel-ui';
+import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
 import {
   restartableTask,
   type EncapsulatedTaskDescriptor as Descriptor,
@@ -23,6 +23,7 @@ import {
   identifyCard,
   getPlural,
 } from '@cardstack/runtime-common';
+import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
 
 interface Signature {
   Args: {
@@ -103,10 +104,10 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
               <div class='remove-item-button-container'>
                 <IconButton
                   @variant='primary'
-                  @icon='icon-x'
-                  @width='14px'
-                  @height='14px'
-                  class='remove-item-button'
+                  @icon={{IconMinusCircle}}
+                  @width='20px'
+                  @height='20px'
+                  class='remove'
                   {{on 'click' (fn this.remove i)}}
                   aria-label='Remove'
                   data-test-remove-card

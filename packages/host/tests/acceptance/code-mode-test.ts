@@ -25,11 +25,12 @@ import {
   TestRealm,
   TestRealmAdapter,
   setupLocalIndexing,
-  setupMockMessageService,
   testRealmURL,
   sourceFetchRedirectHandle,
   sourceFetchReturnUrlHandle,
+  setupServerSentEvents,
   getMonacoContent,
+  type TestContextWithSSE,
 } from '../helpers';
 
 const indexCardSource = `
@@ -191,9 +192,24 @@ module('Acceptance | code mode tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
 
+  async function saveField(
+    context: TestContextWithSSE,
+    assert: Assert,
+    expectedEvents: { type: string; data: Record<string, any> }[],
+  ) {
+    await context.expectEvents(
+      assert,
+      realm,
+      adapter,
+      expectedEvents,
+      async () => {
+        await click('[data-test-save-field-button]');
+      },
+    );
+  }
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupMockMessageService(hooks);
+  setupServerSentEvents(hooks);
   setupWindowMock(hooks);
 
   hooks.afterEach(async function () {
@@ -908,23 +924,23 @@ module('Acceptance | code mode tests', function (hooks) {
     await waitFor('[data-test-current-module-name]');
     await waitFor('[data-test-in-this-file-selector]');
     //default is the 1st index
-    let elementName = 'LocalClass';
+    let elementName = 'AClassWithExportName (LocalClass) class';
     assert
       .dom('[data-test-boxel-selector-item]:nth-of-type(1)')
       .hasText(elementName);
     // elements must be ordered by the way they appear in the source code
     const expectedElementNames = [
-      'LocalClass',
-      'ExportedClass',
-      'ExportedClassInheritLocalClass',
-      'exportedFunction',
-      'local card', //TODO: CS-6009 will probably change this
-      'exported card',
-      'exported card extends local card',
-      'local field', //TODO: CS-6009 will probably change this
-      'exported field',
-      'exported field extends local field',
-      'DefaultClass',
+      'AClassWithExportName (LocalClass) class',
+      'ExportedClass class',
+      'ExportedClassInheritLocalClass class',
+      'exportedFunction function',
+      'LocalCard card', //TODO: CS-6009 will probably change this
+      'ExportedCard card',
+      'ExportedCardInheritLocalCard card',
+      'LocalField field', //TODO: CS-6009 will probably change this
+      'ExportedField field',
+      'ExportedFieldInheritLocalField field',
+      'default (DefaultClass) class',
     ];
     expectedElementNames.forEach(async (elementName, index) => {
       await waitFor(
@@ -939,46 +955,56 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
 
     // clicking on a card
-    elementName = 'exported card';
+    elementName = 'ExportedCard';
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
-    assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} card`);
     await waitFor('[data-test-card-module-definition]');
     assert.dom('[data-test-inheritance-panel-header]').exists();
     assert.dom('[data-test-card-module-definition]').exists();
     assert.dom('[data-test-definition-header]').includesText('Card Definition');
-    assert.dom('[data-test-card-module-definition]').includesText(elementName);
+    assert
+      .dom('[data-test-card-module-definition]')
+      .includesText('exported card');
     await waitFor('[data-test-card-schema="exported card"]');
     assert.dom('[data-test-card-schema="exported card"]').exists({ count: 1 });
     assert
       .dom(
-        `[data-test-card-schema="${elementName}"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
+        `[data-test-card-schema="exported card"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
       )
       .exists();
     assert.dom(`[data-test-total-fields]`).containsText('4 Fields');
 
     // clicking on a field
-    elementName = 'exported field';
+    elementName = 'ExportedField';
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
-    assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} field`);
     await waitFor('[data-test-card-module-definition]');
     assert.dom('[data-test-inheritance-panel-header]').exists();
     assert
       .dom('[data-test-definition-header]')
       .includesText('Field Definition');
-    assert.dom('[data-test-card-module-definition]').includesText(elementName);
+    assert
+      .dom('[data-test-card-module-definition]')
+      .includesText('exported field');
     await waitFor('[data-test-card-schema="exported field"]');
     assert.dom('[data-test-card-schema="exported field"]').exists({ count: 1 });
     assert.dom(`[data-test-total-fields]`).containsText('1 Field');
     assert
       .dom(
-        `[data-test-card-schema="${elementName}"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
+        `[data-test-card-schema="exported field"] [data-test-field-name="someString"] [data-test-card-display-name="String"]`,
       )
       .exists();
 
     // clicking on an exported function
     elementName = 'exportedFunction';
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
-    assert.dom('[data-test-boxel-selector-item-selected]').hasText(elementName);
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} function`);
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     assert.dom('[data-test-card-module-definition]').doesNotExist();
     assert.dom('[data-test-schema-editor-incompatible]').exists();
@@ -1454,7 +1480,21 @@ module('Acceptance | code mode tests', function (hooks) {
       .containsText('This resource does not exist');
   });
 
-  test('adding a field from schema editor - whole flow test', async function (assert) {
+  test<TestContextWithSSE>('adding a field from schema editor - whole flow test', async function (assert) {
+    assert.expect(14);
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [
+            `${testRealmURL}person.gts`,
+            `${testRealmURL}Person/1`,
+            `${testRealmURL}employee`,
+          ],
+        },
+      },
+    ];
     let operatorModeStateParam = stringify({
       stacks: [],
       submode: 'code',
@@ -1519,7 +1559,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom('[data-test-save-field-button]')
       .doesNotHaveAttribute('disabled');
 
-    await click('[data-test-save-field-button]');
+    await saveField(this, assert, expectedEvents);
     await waitFor(
       '[data-test-card-schema="Person"] [data-test-field-name="birthdate"] [data-test-card-display-name="Date"]',
     );
@@ -1533,7 +1573,22 @@ module('Acceptance | code mode tests', function (hooks) {
     assert.ok(getMonacoContent().includes('birthdate = contains(DateCard)'));
   });
 
-  test('adding a field from schema editor - cardinality test', async function (assert) {
+  test<TestContextWithSSE>('adding a field from schema editor - cardinality test', async function (assert) {
+    assert.expect(9);
+    let waitForOpts = { timeout: 2000 }; // Helps mitigating flaky tests since Writing to a file + reflecting that in the UI can be a bit slow
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [
+            `${testRealmURL}person.gts`,
+            `${testRealmURL}Person/1`,
+            `${testRealmURL}employee`,
+          ],
+        },
+      },
+    ];
     let operatorModeStateParam = stringify({
       stacks: [],
       submode: 'code',
@@ -1560,10 +1615,11 @@ module('Acceptance | code mode tests', function (hooks) {
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'luckyNumbers');
     await click('[data-test-boxel-radio-option-id="many"]');
-    await click('[data-test-save-field-button]');
+    await saveField(this, assert, expectedEvents);
 
     await waitFor(
       '[data-test-card-schema="Person"] [data-test-field-name="luckyNumbers"] [data-test-card-display-name="BigInteger"]',
+      waitForOpts,
     );
     assert
       .dom(
@@ -1575,6 +1631,7 @@ module('Acceptance | code mode tests', function (hooks) {
       getMonacoContent().includes(
         'luckyNumbers = containsMany(BigIntegerCard)',
       ),
+      "code editor contains line 'luckyNumbers = containsMany(BigIntegerCard)'",
     );
 
     // Field is a card descending from CardDef (cardinality: one)
@@ -1589,9 +1646,10 @@ module('Acceptance | code mode tests', function (hooks) {
     await fillIn('[data-test-field-name-input]', 'favPerson');
     await click('[data-test-boxel-radio-option-id="one"]');
 
-    await click('[data-test-save-field-button]');
+    await saveField(this, assert, expectedEvents);
     await waitFor(
       '[data-test-card-schema="Person"] [data-test-field-name="favPerson"] [data-test-card-display-name="Person"]',
+      waitForOpts,
     );
     assert
       .dom(
@@ -1601,30 +1659,93 @@ module('Acceptance | code mode tests', function (hooks) {
 
     assert.ok(
       getMonacoContent().includes('favPerson = linksTo(() => Person);'),
+      "code editor contains line 'favPerson = linksTo(() => Person);'",
     );
 
     // Field is a card descending from CardDef (cardinality: many)
     await waitFor('[data-test-add-field-button]');
     await click('[data-test-add-field-button]');
     await click('[data-test-choose-card-button]');
-    await waitFor('[data-test-select="http://test-realm/test/person-entry"]');
+    await waitFor(
+      '[data-test-select="http://test-realm/test/person-entry"]',
+      waitForOpts,
+    );
     await click('[data-test-select="http://test-realm/test/person-entry"]');
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'favPeople');
     await click('[data-test-boxel-radio-option-id="many"]');
-    await click('[data-test-save-field-button]');
+    await saveField(this, assert, expectedEvents);
     await waitFor(
       '[data-test-card-schema="Person"] [data-test-field-name="favPeople"] [data-test-card-display-name="Person"]',
+      waitForOpts,
     );
     assert
       .dom(
         `[data-test-card-schema="Person"] [data-test-field-name="favPeople"] [data-test-field-types]`,
       )
       .hasText('Link, Collection');
-
     assert.ok(
       getMonacoContent().includes('favPeople = linksToMany(() => Person);'),
     );
+  });
+
+  test('deleting a field from schema editor', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-card-schema]');
+
+    await click(
+      '[data-test-card-schema="Person"] [data-test-field-name="firstName"] [data-test-schema-editor-field-contextual-button]',
+    );
+
+    assert
+      .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
+      .containsText('+ 5 Fields');
+
+    assert.true(
+      getMonacoContent().includes('firstName = contains(StringCard)'),
+    );
+
+    await click('[data-test-boxel-menu-item-text="Remove Field"]');
+
+    assert.dom('[data-test-remove-field-modal]').exists();
+
+    // Test closing the modal works (cancel removing a field)
+    await click('[data-test-cancel-remove-field-button]');
+    assert.dom('[data-test-remove-field-modal]').doesNotExist();
+
+    // Open the modal again
+    await click(
+      '[data-test-card-schema="Person"] [data-test-field-name="firstName"] [data-test-schema-editor-field-contextual-button]',
+    );
+    await click('[data-test-boxel-menu-item-text="Remove Field"]');
+
+    await click('[data-test-remove-field-button]');
+    await waitFor('[data-test-card-schema]');
+
+    assert
+      .dom('[data-test-card-schema="Person"] [data-test-total-fields]')
+      .containsText('+ 4 Fields'); // One field less
+
+    assert.false(
+      getMonacoContent().includes('firstName = contains(StringCard)'),
+    );
+
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="firstName"]`,
+      )
+      .doesNotExist();
   });
 });
 

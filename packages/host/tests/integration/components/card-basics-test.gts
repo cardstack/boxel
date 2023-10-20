@@ -12,7 +12,7 @@ import parseISO from 'date-fns/parseISO';
 import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 
-import BoxelInput from '@cardstack/boxel-ui/components/input';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
@@ -971,17 +971,17 @@ module('Integration | card-basics', function (hooks) {
     assert.dom('[data-test-pet="Van Gogh"]').containsText('Van Gogh');
   });
 
-  test('catalog entry isPrimitive indicates if the catalog entry is a primitive field card', async function (assert) {
+  test('catalog entry isField indicates if the catalog entry is a field card', async function (assert) {
     let { CatalogEntry } = catalogEntry;
 
-    let nonPrimitiveEntry = new CatalogEntry({
+    let cardEntry = new CatalogEntry({
       title: 'CatalogEntry Card',
       ref: {
         module: 'https://cardstack.com/base/catalog-entry',
         name: 'CatalogEntry',
       },
     });
-    let primitiveEntry = new CatalogEntry({
+    let fieldEntry = new CatalogEntry({
       title: 'String Card',
       ref: {
         module: 'https://cardstack.com/base/string',
@@ -989,19 +989,11 @@ module('Integration | card-basics', function (hooks) {
       },
     });
 
-    await cardApi.recompute(nonPrimitiveEntry, { recomputeAllFields: true });
-    await cardApi.recompute(primitiveEntry, { recomputeAllFields: true });
+    await cardApi.recompute(cardEntry, { recomputeAllFields: true });
+    await cardApi.recompute(fieldEntry, { recomputeAllFields: true });
 
-    assert.strictEqual(
-      nonPrimitiveEntry.isPrimitive,
-      false,
-      'isPrimitive is correct',
-    );
-    assert.strictEqual(
-      primitiveEntry.isPrimitive,
-      true,
-      'isPrimitive is correct',
-    );
+    assert.strictEqual(cardEntry.isField, false, 'isField is correct');
+    assert.strictEqual(fieldEntry.isField, true, 'isField is correct');
   });
 
   test('catalog entry isField indicates if the catalog entry references a card descended from FieldDef', async function (assert) {

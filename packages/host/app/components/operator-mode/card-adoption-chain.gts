@@ -1,9 +1,7 @@
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
@@ -13,6 +11,7 @@ import { CardInheritance } from '@cardstack/host/components/operator-mode/schema
 import type { Ready } from '@cardstack/host/resources/file';
 
 import { isOwnField } from '@cardstack/host/utils/schema-editor';
+import { IconInherit as InheritIcon } from '@cardstack/boxel-ui/icons';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -28,6 +27,8 @@ export default class CardAdoptionChain extends Component<Signature> {
     <style>
       .card-adoption-chain {
         background-color: var(--boxel-200);
+        min-height: 100%;
+        padding: var(--boxel-sp-sm);
       }
       .content-with-line {
         position: relative;
@@ -84,11 +85,10 @@ export default class CardAdoptionChain extends Component<Signature> {
           <div class='content-with-line'>
             <hr class='line' />
             <div class='inherits-from'>
-              <span class='inherits-icon'>{{svgJar
-                  'icon-inherit'
+              <span class='inherits-icon'><InheritIcon
                   width='24px'
                   height='24px'
-                }}</span>
+                /></span>
               <span>Inherits From</span>
             </div>
           </div>

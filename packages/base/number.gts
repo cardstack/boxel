@@ -7,7 +7,7 @@ import {
   BaseInstanceType,
   FieldDef,
 } from './card-api';
-import { BoxelInput } from '@cardstack/boxel-ui';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputFilter, DeserializedResult } from './text-input-filter';
 
 function _deserialize(
