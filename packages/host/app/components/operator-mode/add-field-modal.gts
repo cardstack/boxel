@@ -26,8 +26,9 @@ import { makeResolvedURL } from '@cardstack/runtime-common/loader';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
-
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import Pill from '@cardstack/host/components/pill';
+
 import { Ready } from '@cardstack/host/resources/file';
 import LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -250,8 +251,9 @@ export default class AddFieldModal extends Component<Signature> {
         <FieldContainer @label='Field Type'>
           <div class='card-chooser-area'>
             {{#if this.chosenCatalogEntryRefCard}}
-              <div class='pill'>
-                <div class='realm-icon' data-test-selected-field-realm-icon>
+              {{! FIXME border is missing etc }}
+              <Pill data-test-selected-field-realm-icon>
+                <:icon>
                   {{#if this.fieldModuleURL.href}}
                     <RealmInfoProvider @fileURL={{this.fieldModuleURL.href}}>
                       <:ready as |realmInfo|>
@@ -263,13 +265,13 @@ export default class AddFieldModal extends Component<Signature> {
                       </:ready>
                     </RealmInfoProvider>
                   {{/if}}
-                </div>
-                <div>
+                </:icon>
+                <:default>
                   <span data-test-selected-field-display-name>
                     {{this.chosenCatalogEntryRefCard.displayName}}
                   </span>
-                </div>
-              </div>
+                </:default>
+              </Pill>
             {{/if}}
 
             <button

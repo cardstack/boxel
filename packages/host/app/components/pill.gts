@@ -6,7 +6,7 @@ import Component from '@glimmer/component';
 
 export interface PillSignature {
   Args: {
-    onClick: (event: MouseEvent) => void;
+    onClick?: () => void;
   };
   Blocks: {
     icon: [];
@@ -16,8 +16,12 @@ export interface PillSignature {
 }
 
 export default class Pill extends Component<PillSignature> {
+  onClick() {
+    this.args.onClick?.();
+  }
+
   <template>
-    <button class='pill' {{on 'click' @onClick}} ...attributes>
+    <button class='pill' {{on 'click' this.onClick}} ...attributes>
       <figure class='icon'>
         {{yield to='icon'}}
       </figure>
