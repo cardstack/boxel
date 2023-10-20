@@ -13,13 +13,17 @@ import type { Ready } from '@cardstack/host/resources/file';
 import { isOwnField } from '@cardstack/host/utils/schema-editor';
 import { IconInherit as InheritIcon } from '@cardstack/boxel-ui/icons';
 
+import {
+  type ResolvedCodeRef
+} from '@cardstack/runtime-common/code-ref';
+
 interface Signature {
   Element: HTMLDivElement;
   Args: {
     file: Ready;
     cardInheritanceChain: CardInheritance[];
     moduleSyntax: ModuleSyntax;
-    openDefinition: (moduleHref: string, selectorKey?: string) => void;
+    openDefinition: (moduleHref: string, codeRef?: ResolvedCodeRef) => void;
   };
 }
 

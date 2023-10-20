@@ -18,6 +18,7 @@ import {
   isCodeRef,
   type CodeRef,
   isResolvedCodeRef,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common/code-ref';
 import { Loader } from '@cardstack/runtime-common/loader';
 
@@ -214,22 +215,15 @@ export function isFieldOfType(obj: any): obj is FieldOfType {
   return obj && 'card' in obj;
 }
 
-export function selectorKey(f: Type | FieldOfType) {
+export function getCodeRef(t: Type | FieldOfType): ResolvedCodeRef | undefined {
   let codeRef: CodeRef;
-  if (isFieldOfType(f)) {
-    codeRef = isCodeRefType(f.card) ? f.card : f.card.codeRef;
-    if (isResolvedCodeRef(codeRef)) {
-      return codeRef.name;
-    }
+  if (isFieldOfType(t)) {
+    codeRef = isCodeRefType(t.card) ? t.card : t.card.codeRef;
   } else {
-    codeRef = f.codeRef;
-    if (isResolvedCodeRef(codeRef)) {
-      return codeRef.name;
-    } else {
-      if (codeRef.type === 'ancestorOf') {
-        return f.declarationName;
-      }
-    }
+    codeRef = t.codeRef;
   }
-  return;
+  if (!isResolvedCodeRef(codeRef)) {
+    throw new Error('codeRef is not resolved fully');
+  }
+  return codeRef;
 }

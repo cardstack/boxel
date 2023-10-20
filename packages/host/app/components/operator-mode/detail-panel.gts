@@ -52,11 +52,15 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 
 
 import {
-  selectorKey,
+  getCodeRef,
   getCardType
 } from '@cardstack/host/resources/card-type';
 
 import { use, resource } from 'ember-resources';
+
+import {
+  type ResolvedCodeRef
+} from '@cardstack/runtime-common/code-ref';
 
 
 interface Signature {
@@ -68,7 +72,7 @@ interface Signature {
     selectedDeclaration?: ModuleDeclaration;
     declarations: ModuleDeclaration[];
     selectDeclaration: (dec: ModuleDeclaration) => void;
-    openDefinition: (moduleHref: string, selectorKey?: string) => void;
+    openDefinition: (moduleHref: string, codeRef?: ResolvedCodeRef) => void;
     delete: () => void;
   };
 }
@@ -252,7 +256,7 @@ export default class DetailPanel extends Component<Signature> {
                 Adopts from
               </div>
               {{#if this.cardInstanceType.type}}
-                {{#let (selectorKey this.cardInstanceType.type) as |selectorKey|}}
+                {{#let (getCodeRef this.cardInstanceType.type) as |codeRef|}}
                   <ClickableModuleDefinitionContainer
                     @title={{'Card Definition'}}
                     @fileURL={{this.cardInstanceType.type.module}}
@@ -260,7 +264,7 @@ export default class DetailPanel extends Component<Signature> {
                     @fileExtension={{this.cardInstanceType.type.moduleInfo.extension}}
                     @openDefinition={{@openDefinition}}
                     @moduleHref={{this.cardInstanceType.type.module}}
-                    @selectorKey={{selectorKey}}
+                    @codeRef={{codeRef}}
                   />
                 {{/let}}
               {{/if}}
@@ -280,8 +284,8 @@ export default class DetailPanel extends Component<Signature> {
                 />
                 {{#if this.cardType.type.super}}
                   {{#let
-                    (selectorKey this.cardType.type.super)
-                    as |selectorKey|
+                    (getCodeRef this.cardType.type.super)
+                    as |codeRef|
                   }}
                     <div class='chain'>
                       <IconInherit
@@ -299,7 +303,7 @@ export default class DetailPanel extends Component<Signature> {
                       @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
                       @openDefinition={{@openDefinition}}
                       @moduleHref={{this.cardType.type.super.module}}
-                      @selectorKey={{selectorKey}}
+                      @codeRef={{codeRef}}
                     />
                   {{/let}}
                 {{/if}}
@@ -319,8 +323,8 @@ export default class DetailPanel extends Component<Signature> {
                 />
                 {{#if this.cardType.type.super}}
                   {{#let
-                    (selectorKey this.cardType.type.super)
-                    as |selectorKey|
+                    (getCodeRef this.cardType.type.super)
+                    as |codeRef|
                   }}
                     <div class='chain'>
                       <IconInherit
@@ -338,7 +342,7 @@ export default class DetailPanel extends Component<Signature> {
                       @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
                       @openDefinition={{@openDefinition}}
                       @moduleHref={{this.cardType.type.super.module}}
-                      @selectorKey={{selectorKey}}
+                      @codeRef={{codeRef}}
                     />
                   {{/let}}
                 {{/if}}

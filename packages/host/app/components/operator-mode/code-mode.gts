@@ -35,6 +35,10 @@ import {
   hasExecutableExtension,
 } from '@cardstack/runtime-common';
 
+import {
+  type ResolvedCodeRef
+} from '@cardstack/runtime-common/code-ref';
+
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
 import config from '@cardstack/host/config/environment';
@@ -116,7 +120,7 @@ export default class CodeMode extends Component<Signature> {
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
   @tracked private _selectedDeclaration: ModuleDeclaration | undefined;
-  @tracked private _nextSelectedKey: string | undefined;
+  @tracked private _nextSelectedCodeRef: ResolvedCodeRef | undefined;
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
@@ -389,10 +393,13 @@ export default class CodeMode extends Component<Signature> {
 
   private get nextSelectedDeclaration() {
     let nextSelected = this.moduleContentsResource?.declarations.find((dec) => {
-      if (isCardOrFieldDeclaration(dec)) {
-        if (dec.exportedAs === this._nextSelectedKey) {
+      if (isCardOrFieldDeclaration(dec) && this._nextSelectedCodeRef) {
+        if (dec.exportedAs === this._nextSelectedCodeRef.name) {
+          // this case is needed to handle
+          // - default export  
+          // - renamed export name 
           return true;
-        }else if(dec.localName === this._nextSelectedKey){
+        }else if(dec.localName === this._nextSelectedCodeRef.name){
           return true
         }
         return false;
@@ -429,8 +436,8 @@ export default class CodeMode extends Component<Signature> {
   }
 
   @action
-  openDefinition(moduleHref: string, selectorKey?: string) {
-    this._nextSelectedKey = selectorKey;
+  openDefinition(moduleHref: string, codeRef?: ResolvedCodeRef) {
+    this._nextSelectedCodeRef = codeRef;
     this.operatorModeStateService.updateCodePath(new URL(moduleHref));
   }
 

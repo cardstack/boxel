@@ -20,8 +20,11 @@ import {
   type Type,
   type CodeRefType,
   type FieldOfType,
-  selectorKey,
+  getCodeRef,
 } from '@cardstack/host/resources/card-type';
+import {
+  type ResolvedCodeRef
+} from '@cardstack/runtime-common/code-ref';
 import {
   ArrowTopLeft,
   IconLink,
@@ -50,7 +53,7 @@ interface Signature {
     allowAddingFields: boolean;
     childFields: string[];
     parentFields: string[];
-    openDefinition: (moduleHref: string, selectorKey?: string) => void;
+    openDefinition: (moduleHref: string, codeRef?: ResolvedCodeRef) => void;
   };
 }
 
@@ -263,12 +266,12 @@ export default class CardSchemaEditor extends Component<Signature> {
       class='schema-editor-container'
       data-test-card-schema={{@cardType.displayName}}
     >
-      {{#let (selectorKey @cardType) as |selectorKey|}}
+      {{#let (getCodeRef @cardType) as |codeRef|}}
         <div class='header'>
           <button
             class='pill'
             data-test-card-schema-navigational-button
-            {{on 'click' (fn @openDefinition @cardType.module selectorKey)}}
+            {{on 'click' (fn @openDefinition @cardType.module codeRef)}}
           >
             <div class='realm-icon'>
               <RealmInfoProvider @fileURL={{@cardType.module}}>
@@ -328,7 +331,7 @@ export default class CardSchemaEditor extends Component<Signature> {
               </div>
               <div class='right'>
                 {{#let (this.fieldModuleURL field) as |moduleUrl|}}
-                  {{#let (selectorKey field) as |selectorKey|}}
+                  {{#let (getCodeRef field) as |codeRef|}}
                     {{#if field.isComputed}}
                       <span class='computed-icon' data-test-computed-icon>
                         =
@@ -352,7 +355,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                         data-test-card-schema-field-navigational-button
                         {{on
                           'click'
-                          (fn @openDefinition moduleUrl selectorKey)
+                          (fn @openDefinition moduleUrl codeRef)
                         }}
                       >
                         {{#if (this.isLinkedField field)}}
