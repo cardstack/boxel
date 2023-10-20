@@ -7,7 +7,7 @@
   "scripts": {
     "build:boxel-host": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && pnpm build:production",
     "clear-caches": "find . -name 'node_modules' -type d -prune -exec rm -rf {} \\; && rm -rf $TMPDIR/embroider",
-    "deploy:boxel-host": "cd packages/boxel-ui/addon && pnpm build && ../../host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy",
+    "deploy:boxel-host": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy",
     "deploy:boxel-host:preview-staging": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy s3-preview-staging --verbose",
     "deploy:boxel-host:preview-production": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy s3-preview-production --verbose",
     "lint": "pnpm run --filter './packages/**' --if-present -r lint",
