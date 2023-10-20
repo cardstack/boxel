@@ -75,7 +75,7 @@ module('Integration | card/field separation test', function (hooks) {
     };
   });
 
-  test('render a primitive field (singular) contained within field', async function (assert) {
+  test('render a primitive `contains` field nested in an edit field', async function (assert) {
     let { field, contains, FieldDef, CardDef } = cardApi;
     let { default: StringField } = string;
 
@@ -93,26 +93,58 @@ module('Integration | card/field separation test', function (hooks) {
       firstName: 'Marcelius',
       emergencyContact: new EmergencyContactField({
         name: 'Mama Leone',
-        email: 'mama@leonesons.com'
-      })
-    })
+        email: 'mama@leonesons.com',
+      }),
+    });
 
     await renderCard(loader, card, 'edit');
 
-    assert.dom('[data-test-field-component-card]').exists({ count: 1 }).hasClass('edit-card', 'edit card is rendered');
-    assert.dom('[data-test-field="firstName"]').hasText('First Name', 'non-nested primitive field label is rendered');
-    assert.dom('[data-test-field="firstName"] input').hasValue('Marcelius', 'non-nested primitive field input is rendered');
-    assert.dom('[data-test-field="emergencyContact"]').containsText('Emergency Contact', 'non-nested compound field label is rendered');
-    assert.dom('[data-test-field="emergencyContact"]').hasClass('horizontal', 'compound field class is correct');
-    assert.dom('[data-test-field="emergencyContact"] [data-test-compound-field-format="edit"] [data-test-field="name"]').exists('nested primitive field editor is rendered');
-    assert.dom('[data-test-field="emergencyContact"] [data-test-field="name"]').hasClass('vertical', 'nested primitive field class is correct');
-    assert.dom('[data-test-field="emergencyContact"] [data-test-field="name"]').containsText('Name');
-    assert.dom('[data-test-field="emergencyContact"] [data-test-field="name"] input').hasValue('Mama Leone');
-    assert.dom('[data-test-field="emergencyContact"] [data-test-field="email"]').hasText('Email');
-    assert.dom('[data-test-field="emergencyContact"] [data-test-field="email"] input').hasValue('mama@leonesons.com');
+    assert
+      .dom('[data-test-field-component-card]')
+      .exists({ count: 1 })
+      .hasClass('edit-card', 'edit card is rendered');
+    assert
+      .dom('[data-test-field="firstName"]')
+      .hasText('First Name', 'non-nested primitive field label is rendered');
+    assert
+      .dom('[data-test-field="firstName"] input')
+      .hasValue('Marcelius', 'non-nested primitive field input is rendered');
+    assert
+      .dom('[data-test-field="emergencyContact"]')
+      .containsText(
+        'Emergency Contact',
+        'non-nested compound field label is rendered',
+      );
+    assert
+      .dom('[data-test-field="emergencyContact"]')
+      .hasClass('horizontal', 'compound field class is correct');
+    assert
+      .dom(
+        '[data-test-field="emergencyContact"] [data-test-compound-field-format="edit"] [data-test-field="name"]',
+      )
+      .exists('nested primitive field editor is rendered');
+    assert
+      .dom('[data-test-field="emergencyContact"] [data-test-field="name"]')
+      .hasClass('vertical', 'nested primitive field class is correct');
+    assert
+      .dom('[data-test-field="emergencyContact"] [data-test-field="name"]')
+      .containsText('Name');
+    assert
+      .dom(
+        '[data-test-field="emergencyContact"] [data-test-field="name"] input',
+      )
+      .hasValue('Mama Leone');
+    assert
+      .dom('[data-test-field="emergencyContact"] [data-test-field="email"]')
+      .hasText('Email');
+    assert
+      .dom(
+        '[data-test-field="emergencyContact"] [data-test-field="email"] input',
+      )
+      .hasValue('mama@leonesons.com');
   });
 
-  test('render a compound field (singular) contained within field', async function (assert) {
+  test('render a composite `contains` field nested in an edit field', async function (assert) {
     let { field, contains, FieldDef, CardDef } = cardApi;
     let { default: StringField } = string;
     let { default: NumberField } = number;
@@ -142,23 +174,50 @@ module('Integration | card/field separation test', function (hooks) {
           area: 212,
           number: 5551212,
         }),
-      })
-    })
+      }),
+    });
 
     await renderCard(loader, card, 'edit');
 
     assert.dom('[data-test-field-component-card]').exists({ count: 1 });
     assert.dom('[data-test-field="firstName"]').hasText('First Name');
     assert.dom('[data-test-field="firstName"] input').hasValue('Marcelius');
-    assert.dom('[data-test-field="emergencyContact"] [data-test-compound-field-format="edit"] [data-test-field="phoneNumber"]').containsText('Phone Number', 'nested compound field is rendered');
-    assert.dom('[data-test-field="emergencyContact"] [data-test-field="phoneNumber"] [data-test-compound-field-format="edit"] ').hasText('Country Area Number', 'fields of nested compound field are rendered');
-    assert.dom('[data-test-field="emergencyContact"] [data-test-field="phoneNumber"] [data-test-field="country"]').hasClass('vertical');
-    assert.dom('[data-test-field="emergencyContact"] [data-test-field="phoneNumber"] [data-test-field="country"] input').hasValue('1');
-    assert.dom('[data-test-field="emergencyContact"] [data-test-field="phoneNumber"] [data-test-field="area"] input').hasValue('212');
-    assert.dom('[data-test-field="emergencyContact"] [data-test-field="phoneNumber"] [data-test-field="number"] input').hasValue('5551212');
+    assert
+      .dom(
+        '[data-test-field="emergencyContact"] [data-test-compound-field-format="edit"] [data-test-field="phoneNumber"]',
+      )
+      .containsText('Phone Number', 'nested compound field is rendered');
+    assert
+      .dom(
+        '[data-test-field="emergencyContact"] [data-test-field="phoneNumber"] [data-test-compound-field-format="edit"] ',
+      )
+      .hasText(
+        'Country Area Number',
+        'fields of nested compound field are rendered',
+      );
+    assert
+      .dom(
+        '[data-test-field="emergencyContact"] [data-test-field="phoneNumber"] [data-test-field="country"]',
+      )
+      .hasClass('vertical');
+    assert
+      .dom(
+        '[data-test-field="emergencyContact"] [data-test-field="phoneNumber"] [data-test-field="country"] input',
+      )
+      .hasValue('1');
+    assert
+      .dom(
+        '[data-test-field="emergencyContact"] [data-test-field="phoneNumber"] [data-test-field="area"] input',
+      )
+      .hasValue('212');
+    assert
+      .dom(
+        '[data-test-field="emergencyContact"] [data-test-field="phoneNumber"] [data-test-field="number"] input',
+      )
+      .hasValue('5551212');
   });
 
-  test('render a primitive field (many) contained within field (noneditable)', async function (assert) {
+  test('render a primitive `containsMany` field nested in an edit field (read-only)', async function (assert) {
     let { field, contains, containsMany, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;
 
@@ -236,7 +295,7 @@ module('Integration | card/field separation test', function (hooks) {
       .doesNotExist();
   });
 
-  test('render a compound field (many) contained within field (noneditable)', async function (assert) {
+  test('composite `containsMany` field nested in an edit field renders in atom format (read-only)', async function (assert) {
     let { field, contains, containsMany, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;
     let { default: NumberField } = number;
@@ -342,7 +401,7 @@ module('Integration | card/field separation test', function (hooks) {
       .exists('top level containsMany field item has remove button');
   });
 
-  test('render a CardDef field (singular) linked to from FieldDef', async function (assert) {
+  test('render a `linksTo` card nested in an edit field', async function (assert) {
     let { field, contains, linksTo, CardDef, FieldDef, Component } = cardApi;
     let { default: StringField } = string;
     let { default: NumberField } = number;
