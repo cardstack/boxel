@@ -5,29 +5,31 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
+
 import { DropdownButton } from '@cardstack/boxel-ui/components';
 import { gt, menuDivider, menuItem } from '@cardstack/boxel-ui/helpers';
 
-import { getPlural } from '@cardstack/runtime-common';
-
-import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
-
-import Pill from '@cardstack/host/components/pill';
-import AddFieldModal from '@cardstack/host/components/operator-mode/add-field-modal';
-import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
-import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
-import RemoveFieldModal from '@cardstack/host/components/operator-mode/remove-field-modal';
-import {
-  type Type,
-  type CodeRefType,
-  type FieldOfType,
-} from '@cardstack/host/resources/card-type';
 import {
   ArrowTopLeft,
   IconLink,
   ThreeDotsHorizontal,
   Warning as WarningIcon,
 } from '@cardstack/boxel-ui/icons';
+
+import { getPlural } from '@cardstack/runtime-common';
+
+import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
+
+import AddFieldModal from '@cardstack/host/components/operator-mode/add-field-modal';
+import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
+import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import RemoveFieldModal from '@cardstack/host/components/operator-mode/remove-field-modal';
+import Pill from '@cardstack/host/components/pill';
+import {
+  type Type,
+  type CodeRefType,
+  type FieldOfType,
+} from '@cardstack/host/resources/card-type';
 
 import type { Ready } from '@cardstack/host/resources/file';
 import type CardService from '@cardstack/host/services/card-service';
@@ -322,45 +324,13 @@ export default class CardSchemaEditor extends Component<Signature> {
                       @onClick={{fn this.openCardDefinition moduleUrl}}
                       data-test-card-schema-field-navigational-button
                     >
-                              <:icon>
-                      {{#if (this.isLinkedField field)}}
-                        <span class='linked-icon' data-test-linked-icon>
-                          <IconLink width='16px' height='16px' />
-                        </span>
-                      {{/if}}
-            <RealmInfoProvider @fileURL={{@cardType.module}}>
-              <:ready as |realmInfo|>
-                <RealmIcon
-                  @realmIconURL={{realmInfo.iconURL}}
-                  @realmName={{realmInfo.name}}
-                />
-              </:ready>
-            </RealmInfoProvider>
-          </:icon>
-          <:default>
-                          {{#let
-                            (this.fieldCardDisplayName field.card)
-                            as |cardDisplayName|
-                          }}
-                            <span
-                              data-test-card-display-name={{cardDisplayName}}
-                            >{{cardDisplayName}}</span>
-                          {{/let}}
-          </:default>
-        </Pill>
-
-                    {{!-- <button
-                      class='pill'
-                      data-test-card-schema-field-navigational-button
-                      {{on 'click' (fn this.openCardDefinition moduleUrl)}}
-                    >
-                      {{#if (this.isLinkedField field)}}
-                        <span class='linked-icon' data-test-linked-icon>
-                          <IconLink width='16px' height='16px' />
-                        </span>
-                      {{/if}}
-                      <div class='realm-icon'>
-                        <RealmInfoProvider @fileURL={{moduleUrl}}>
+                      <:icon>
+                        {{#if (this.isLinkedField field)}}
+                          <span class='linked-icon' data-test-linked-icon>
+                            <IconLink width='16px' height='16px' />
+                          </span>
+                        {{/if}}
+                        <RealmInfoProvider @fileURL={{@cardType.module}}>
                           <:ready as |realmInfo|>
                             <RealmIcon
                               @realmIconURL={{realmInfo.iconURL}}
@@ -368,20 +338,18 @@ export default class CardSchemaEditor extends Component<Signature> {
                             />
                           </:ready>
                         </RealmInfoProvider>
-                      </div>
-                      <div>
-                        <span>
-                          {{#let
-                            (this.fieldCardDisplayName field.card)
-                            as |cardDisplayName|
-                          }}
-                            <span
-                              data-test-card-display-name={{cardDisplayName}}
-                            >{{cardDisplayName}}</span>
-                          {{/let}}
-                        </span>
-                      </div>
-                    </button> --}}
+                      </:icon>
+                      <:default>
+                        {{#let
+                          (this.fieldCardDisplayName field.card)
+                          as |cardDisplayName|
+                        }}
+                          <span
+                            data-test-card-display-name={{cardDisplayName}}
+                          >{{cardDisplayName}}</span>
+                        {{/let}}
+                      </:default>
+                    </Pill>
                     <DropdownButton
                       @icon={{ThreeDotsHorizontal}}
                       @label='field options'

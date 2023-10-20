@@ -17,18 +17,14 @@ export interface PillSignature {
 
 export default class Pill extends Component<PillSignature> {
   <template>
-            <button
-          class='pill'
-          {{on 'click' @onClick}}
-          ...attributes
-        >
-          <figure class='icon'>
-            {{yield to='icon'}}
-          </figure>
-          <section>
-            {{yield}}
-          </section>
-        </button>
+    <button class='pill' {{on 'click' @onClick}} ...attributes>
+      <figure class='icon'>
+        {{yield to='icon'}}
+      </figure>
+      <section>
+        {{yield}}
+      </section>
+    </button>
 
     <style>
       .pill {
