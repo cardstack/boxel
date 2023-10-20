@@ -20,14 +20,13 @@ export default class ResizablePanelUsage extends Component {
   @tracked horizontalPanel3DefaultWidth = '25%';
   @tracked horizontalPanel3MinWidth = 'none';
 
-  @tracked verticalPanel1DefaultHeight = '25%';
+  @tracked verticalReverseCollapse = true;
+
+  @tracked verticalPanel1DefaultHeight = '33%';
   @tracked verticalPanel1MinHeight = 'none';
 
-  @tracked verticalPanel2DefaultHeight = '50%';
+  @tracked verticalPanel2DefaultHeight = '67%';
   @tracked verticalPanel2MinHeight = 'none';
-
-  @tracked verticalPanel3DefaultHeight = '25%';
-  @tracked verticalPanel3MinHeight = 'none';
 
   cssClassName = 'boxel-panel';
   @cssVariable declare boxelPanelResizeHandlerHeight: CSSVariableInfo;
@@ -131,10 +130,19 @@ export default class ResizablePanelUsage extends Component {
         />
       </:cssVars>
     </FreestyleUsage>
-    <FreestyleUsage @name='Vertical ResizablePanelGroup'>
+    <FreestyleUsage
+      @name='Two-panel ResizablePanelGroup with reversed collapse'
+    >
+      <:description>
+        @reverseCollapse
+      </:description>
       <:example>
         <div class='vertical-container'>
-          <ResizablePanelGroup @orientation='vertical' as |ResizablePanel|>
+          <ResizablePanelGroup
+            @orientation='vertical'
+            @reverseCollapse={{this.verticalReverseCollapse}}
+            as |ResizablePanel|
+          >
             <ResizablePanel
               @defaultLength={{this.verticalPanel1DefaultHeight}}
               @minLength={{this.verticalPanel1MinHeight}}
@@ -155,20 +163,17 @@ export default class ResizablePanelUsage extends Component {
             >
               Panel 2
             </ResizablePanel>
-            <ResizablePanel
-              @defaultLength={{this.verticalPanel3DefaultHeight}}
-              @minLength={{this.verticalPanel3MinHeight}}
-              style={{cssVar
-                boxel-panel-resize-handler-width=this.boxelPanelResizeHandlerWidth.value
-                boxel-panel-resize-handler-background-color=this.boxelPanelResizeHandlerBackgroundColor.value
-              }}
-            >
-              Panel 3
-            </ResizablePanel>
           </ResizablePanelGroup>
         </div>
       </:example>
+
       <:api as |Args|>
+        <Args.Bool
+          @name='reverseCollapse'
+          @description='Double-clicking the handle to collapse a panel will default to collapsing outward, this reverses it, which may be preferable in a two-panel setup.'
+          @value={{this.verticalReverseCollapse}}
+          @onInput={{fn (mut this.verticalReverseCollapse)}}
+        />
         <Args.String
           @name='defaultHeight - Panel 1'
           @description="The default height of the panel is determined by this argument, which operates similarly to the 'height' property in CSS."
@@ -195,20 +200,6 @@ export default class ResizablePanelUsage extends Component {
           @description="The minimum height of the panel is determined by this argument, which operates similarly to the 'min-height' property in CSS. In double-click event, this argumen will be ingored."
           @value={{this.verticalPanel2MinHeight}}
           @onInput={{fn (mut this.verticalPanel2MinHeight)}}
-          @required={{false}}
-        />
-        <Args.String
-          @name='defaultHeight - Panel 3'
-          @description="The default height of the panel is determined by this argument, which operates similarly to the 'height' property in CSS."
-          @value={{this.verticalPanel3DefaultHeight}}
-          @onInput={{fn (mut this.verticalPanel3DefaultHeight)}}
-          @required={{true}}
-        />
-        <Args.String
-          @name='minHeight - Panel 3'
-          @description="The minimum height of the panel is determined by this argument, which operates similarly to the 'min-height' property in CSS. In double-click event, this argumen will be ingored."
-          @value={{this.verticalPanel3MinHeight}}
-          @onInput={{fn (mut this.verticalPanel3MinHeight)}}
           @required={{false}}
         />
       </:api>
