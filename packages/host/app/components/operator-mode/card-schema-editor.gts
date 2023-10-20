@@ -12,6 +12,7 @@ import { getPlural } from '@cardstack/runtime-common';
 
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
+import Pill from '@cardstack/host/components/pill';
 import AddFieldModal from '@cardstack/host/components/operator-mode/add-field-modal';
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
@@ -67,28 +68,6 @@ export default class CardSchemaEditor extends Component<Signature> {
         display: grid;
         gap: var(--boxel-sp);
         padding: var(--boxel-sp);
-      }
-
-      .pill {
-        display: inline-flex;
-        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
-        background-color: var(--boxel-light);
-        border: 1px solid var(--boxel-400);
-        border-radius: var(--boxel-border-radius-sm);
-        font: 700 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-      }
-
-      .pill:hover {
-        background-color: var(--boxel-100);
-      }
-
-      .pill > div {
-        display: flex;
-      }
-
-      .realm-icon {
-        margin-right: var(--boxel-sp-xxxs);
       }
 
       .card-field {
@@ -262,12 +241,11 @@ export default class CardSchemaEditor extends Component<Signature> {
       data-test-card-schema={{@cardType.displayName}}
     >
       <div class='header'>
-        <button
-          class='pill'
+        <Pill
+          @onClick={{(fn this.openCardDefinition @cardType.module)}}
           data-test-card-schema-navigational-button
-          {{on 'click' (fn this.openCardDefinition @cardType.module)}}
         >
-          <div class='realm-icon'>
+          <:icon>
             <RealmInfoProvider @fileURL={{@cardType.module}}>
               <:ready as |realmInfo|>
                 <RealmIcon
@@ -276,13 +254,11 @@ export default class CardSchemaEditor extends Component<Signature> {
                 />
               </:ready>
             </RealmInfoProvider>
-          </div>
-          <div>
-            <span>
-              {{@cardType.displayName}}
-            </span>
-          </div>
-        </button>
+          </:icon>
+          <:default>
+            {{@cardType.displayName}}
+          </:default>
+        </Pill>
         <div class='total-fields' data-test-total-fields>
           {{#if (gt this.totalOwnFields 0)}}
             <span class='total-fields-value'>+ {{this.totalOwnFields}}</span>
@@ -342,7 +318,38 @@ export default class CardSchemaEditor extends Component<Signature> {
                         /></span></button>
 
                   {{else}}
-                    <button
+                    <Pill
+                      @onClick={{fn this.openCardDefinition moduleUrl}}
+                      data-test-card-schema-field-navigational-button
+                    >
+                              <:icon>
+                      {{#if (this.isLinkedField field)}}
+                        <span class='linked-icon' data-test-linked-icon>
+                          <IconLink width='16px' height='16px' />
+                        </span>
+                      {{/if}}
+            <RealmInfoProvider @fileURL={{@cardType.module}}>
+              <:ready as |realmInfo|>
+                <RealmIcon
+                  @realmIconURL={{realmInfo.iconURL}}
+                  @realmName={{realmInfo.name}}
+                />
+              </:ready>
+            </RealmInfoProvider>
+          </:icon>
+          <:default>
+                          {{#let
+                            (this.fieldCardDisplayName field.card)
+                            as |cardDisplayName|
+                          }}
+                            <span
+                              data-test-card-display-name={{cardDisplayName}}
+                            >{{cardDisplayName}}</span>
+                          {{/let}}
+          </:default>
+        </Pill>
+
+                    {{!-- <button
                       class='pill'
                       data-test-card-schema-field-navigational-button
                       {{on 'click' (fn this.openCardDefinition moduleUrl)}}
@@ -374,7 +381,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                           {{/let}}
                         </span>
                       </div>
-                    </button>
+                    </button> --}}
                     <DropdownButton
                       @icon={{ThreeDotsHorizontal}}
                       @label='field options'
