@@ -28,9 +28,9 @@
   },
   "dependencies": {
     "@glimmer/component": "^1.1.2",
-    "ember-auto-import": "^2.4.3",
+    "ember-auto-import": "^2.6.3",
     "ember-cli-babel": "^7.26.11",
-    "ember-cli-htmlbars": "^6.2.0",
+    "ember-cli-htmlbars": "^6.3.0",
     "ember-cli-typescript": "^5.2.1",
     "ember-concurrency": "github:machty/ember-concurrency#c6ed562",
     "ember-modifier": "^3.2.7",
@@ -38,9 +38,9 @@
     "style-value-types": "^5.1.2"
   },
   "devDependencies": {
-    "@babel/core": "^7.17.10",
-    "@glint/core": "^1.0.0",
-    "@glint/environment-ember-template-imports": "^1.0.0",
+    "@babel/core": "^7.22.11",
+    "@glint/core": "^1.2.1",
+    "@glint/environment-ember-template-imports": "^1.2.1",
     "@glint/template": "^1.2.1",
     "@types/htmlbars-inline-precompile": "^3.0.0",
     "@types/qunit": "^2.11.3",
@@ -58,7 +58,7 @@
     "npm-run-all": "^4.1.5",
     "prettier": "^2.6.1",
     "typescript": "^5.1.6",
-    "webpack": "^5.78.0"
+    "webpack": "^5.89.0"
   },
   "peerDependencies": {
     "@glint/environment-ember-loose": "^1.0.0",
