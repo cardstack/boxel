@@ -212,7 +212,6 @@ export default class Panel extends Component<Signature> {
   get arrowResizeHandlerClass() {
     let horizontal = this.args.orientation === 'horizontal';
     let reverse = this.args.reverseHandlerArrow;
-    // FIXME is this way too confusing??
 
     if (!this.id) {
       return '';
