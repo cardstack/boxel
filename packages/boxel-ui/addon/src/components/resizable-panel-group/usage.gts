@@ -131,7 +131,7 @@ export default class ResizablePanelUsage extends Component {
       </:cssVars>
     </FreestyleUsage>
     <FreestyleUsage
-      @name='Two-panel ResizablePanelGroup with reversed collapse'
+      @name='Two-panel vertical ResizablePanelGroup with reversed collapse'
     >
       <:description>
         @reverseCollapse
