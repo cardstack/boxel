@@ -1,21 +1,21 @@
-import { IContext, Changeset } from '@cardstack/boxel-motion/models/animator';
-import { AnimationDefinition } from '@cardstack/boxel-motion/models/orchestration';
-import Sprite from '@cardstack/boxel-motion/models/sprite';
-import AnimationsService from '@cardstack/boxel-motion/services/animations';
-import { assert } from '@ember/debug';
-import { action } from '@ember/object';
-import { inject as service } from '@ember/service';
-import Component from '@glimmer/component';
-import registerContext from '../modifiers/register-context';
-import registerContextOrphansEl from '../modifiers/register-context-orphans-el';
+import { IContext, Changeset } from "@cardstack/boxel-motion/models/animator";
+import { AnimationDefinition } from "@cardstack/boxel-motion/models/orchestration";
+import Sprite from "@cardstack/boxel-motion/models/sprite";
+import AnimationsService from "@cardstack/boxel-motion/services/animations";
+import { assert } from "@ember/debug";
+import { action } from "@ember/object";
+import { inject as service } from "@ember/service";
+import Component from "@glimmer/component";
+import registerContext from "../modifiers/register-context";
+import registerContextOrphansEl from "../modifiers/register-context-orphans-el";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
-import Ember from 'ember';
+import Ember from "ember";
 
 const { VOLATILE_TAG, consumeTag } =
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
-  Ember.__loader.require('@glimmer/validator');
+  Ember.__loader.require("@glimmer/validator");
 
 interface AnimationContextArgs {
   id?: string;
@@ -36,10 +36,10 @@ export default class AnimationContextComponent
 {
   <template>
     {{this.renderDetector}}
-    <div class='animation-context' {{registerContext this}} ...attributes>
+    <div class="animation-context" {{registerContext this}} ...attributes>
       <div
         {{registerContextOrphansEl this}}
-        data-animation-context-orphan-element='true'
+        data-animation-context-orphan-element="true"
       ></div>
       {{! JS appends and removes here }}
       {{yield this}}
@@ -100,9 +100,9 @@ export default class AnimationContextComponent
     // TODO:
     // - add a map of orphans on a higher level than the animation context and use it for this assertion
     assert(
-      'Element is appended in multiple different orphan elements',
+      "Element is appended in multiple different orphan elements",
       sprite.element.parentElement === orphansElement ||
-        !sprite.element.parentElement?.dataset['animationContextOrphanElement']
+        !sprite.element.parentElement?.dataset["animationContextOrphanElement"],
     );
 
     orphansElement.appendChild(sprite.element);

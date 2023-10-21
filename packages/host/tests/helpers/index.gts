@@ -437,6 +437,7 @@ export async function saveCard(instance: CardDef, id: string, loader: Loader) {
   let doc = api.serializeCard(instance);
   doc.data.id = id;
   await api.updateFromSerialized(instance, doc);
+  return doc;
 }
 
 export async function shimModule(

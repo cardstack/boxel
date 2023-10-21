@@ -26,51 +26,51 @@ tests:
       messages:
         [
           {
-            'sender': 'ian',
-            'content':
+            "sender": "ian",
+            "content":
               {
-                'msgtype': 'org.boxel.card',
-                'body': 'Can you change their name to Dave?',
-                'instance':
+                "msgtype": "org.boxel.card",
+                "body": "Can you change their name to Dave?",
+                "instance":
                   {
-                    'data':
+                    "data":
                       {
-                        'type': 'card',
-                        'id': 'http://localhost:4201/drafts/Author/1',
-                        'attributes':
-                          { 'firstName': 'Bob', 'lastName': 'Enwunder' },
-                        'meta':
+                        "type": "card",
+                        "id": "http://localhost:4201/drafts/Author/1",
+                        "attributes":
+                          { "firstName": "Bob", "lastName": "Enwunder" },
+                        "meta":
                           {
-                            'adoptsFrom':
-                              { 'module': '../author', 'name': 'Author' },
+                            "adoptsFrom":
+                              { "module": "../author", "name": "Author" },
                           },
                       },
                   },
               },
           },
         ]
-      aibot_username: '@aibot:localhost'
+      aibot_username: "@aibot:localhost"
     assert:
       - type: contains-json
         value:
           {
-            'required': ['id', 'patch'],
-            'type': 'object',
-            'properties':
+            "required": ["id", "patch"],
+            "type": "object",
+            "properties":
               {
-                'id':
+                "id":
                   {
-                    'type': 'string',
-                    'pattern': '^http://localhost:4201/drafts/Author/1$',
+                    "type": "string",
+                    "pattern": "^http://localhost:4201/drafts/Author/1$",
                   },
-                'patch':
+                "patch":
                   {
-                    'type': 'object',
-                    'properties':
+                    "type": "object",
+                    "properties":
                       {
-                        'firstName': { 'type': 'string', 'pattern': '^Dave$' },
+                        "firstName": { "type": "string", "pattern": "^Dave$" },
                       },
-                    'required': ['firstName'],
+                    "required": ["firstName"],
                   },
               },
           }
@@ -79,54 +79,54 @@ tests:
       messages:
         [
           {
-            'sender': 'ian',
-            'content':
+            "sender": "ian",
+            "content":
               {
-                'msgtype': 'org.boxel.card',
-                'body': 'Can make this about Hemmingway instead?',
-                'instance':
+                "msgtype": "org.boxel.card",
+                "body": "Can make this about Hemmingway instead?",
+                "instance":
                   {
-                    'data':
+                    "data":
                       {
-                        'type': 'card',
-                        'id': 'http://localhost:4201/drafts/Author/1',
-                        'attributes':
-                          { 'firstName': 'Bob', 'lastName': 'Enwunder' },
-                        'meta':
+                        "type": "card",
+                        "id": "http://localhost:4201/drafts/Author/1",
+                        "attributes":
+                          { "firstName": "Bob", "lastName": "Enwunder" },
+                        "meta":
                           {
-                            'adoptsFrom':
-                              { 'module': '../author', 'name': 'Author' },
+                            "adoptsFrom":
+                              { "module": "../author", "name": "Author" },
                           },
                       },
                   },
               },
           },
         ]
-      aibot_username: '@aibot:localhost'
+      aibot_username: "@aibot:localhost"
     assert:
       - type: contains-json
         value:
           {
-            'required': ['id', 'patch'],
-            'type': 'object',
-            'properties':
+            "required": ["id", "patch"],
+            "type": "object",
+            "properties":
               {
-                'id':
+                "id":
                   {
-                    'type': 'string',
-                    'pattern': '^http://localhost:4201/drafts/Author/1$',
+                    "type": "string",
+                    "pattern": "^http://localhost:4201/drafts/Author/1$",
                   },
-                'patch':
+                "patch":
                   {
-                    'type': 'object',
-                    'properties':
+                    "type": "object",
+                    "properties":
                       {
-                        'firstName':
-                          { 'type': 'string', 'pattern': '^Ernest$' },
-                        'lastName':
-                          { 'type': 'string', 'pattern': '^Hemingway$' },
+                        "firstName":
+                          { "type": "string", "pattern": "^Ernest$" },
+                        "lastName":
+                          { "type": "string", "pattern": "^Hemingway$" },
                       },
-                    'required': ['firstName', 'lastName'],
+                    "required": ["firstName", "lastName"],
                   },
               },
           }

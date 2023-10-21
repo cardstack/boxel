@@ -27,7 +27,7 @@
       "@cardstack/host/*": ["app/*"],
       "https://cardstack.com/base/*": ["../base/*"],
       "*": ["types/*"]
-    },
+    }
   },
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"],

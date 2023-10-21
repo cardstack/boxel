@@ -160,7 +160,7 @@ export default class SchemaEditorColumn extends Component<Signature> {
 
     <style>
       :global(.accordion-item-content) {
-        overflow-y: auto
+        overflow-y: auto;
       }
 
       .accordion-item:last-child {
