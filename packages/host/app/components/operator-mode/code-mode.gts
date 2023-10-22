@@ -387,7 +387,7 @@ export default class CodeMode extends Component<Signature> {
   }
 
   private get _selectedDeclaration() {
-    let nextSelected = this.moduleContentsResource?.declarations.find((dec) => {
+    let selected = this.moduleContentsResource?.declarations.find((dec) => {
       let codeRef = this.operatorModeStateService.state.codeRef;
       if (isCardOrFieldDeclaration(dec) && codeRef) {
         if (dec.exportedAs === codeRef.name) {
@@ -402,7 +402,7 @@ export default class CodeMode extends Component<Signature> {
       }
       return false;
     });
-    return nextSelected;
+    return selected;
   }
 
   private get selectedDeclaration() {
