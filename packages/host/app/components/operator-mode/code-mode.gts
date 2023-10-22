@@ -35,9 +35,7 @@ import {
   hasExecutableExtension,
 } from '@cardstack/runtime-common';
 
-import {
-  type ResolvedCodeRef
-} from '@cardstack/runtime-common/code-ref';
+import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
@@ -119,8 +117,7 @@ export default class CodeMode extends Component<Signature> {
   @tracked private card: CardDef | undefined;
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
-  @tracked private _selectedDeclaration: ModuleDeclaration | undefined;
-  @tracked private _nextSelectedCodeRef: ResolvedCodeRef | undefined;
+  @tracked private _userSelectedDeclaration: ModuleDeclaration | undefined;
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
@@ -288,7 +285,7 @@ export default class CodeMode extends Component<Signature> {
 
   @use private moduleContentsResource = resource(({ on }) => {
     on.cleanup(() => {
-      this._selectedDeclaration = undefined;
+      this._userSelectedDeclaration = undefined;
     });
 
     if (isReady(this.currentOpenFile) && this.importedModule?.module) {
@@ -313,8 +310,6 @@ export default class CodeMode extends Component<Signature> {
     }
     return undefined;
   });
-
-
 
   // We are actually loading cards using a side-effect of this cached getter
   // instead of a resource because with a resource it becomes impossible
@@ -391,16 +386,17 @@ export default class CodeMode extends Component<Signature> {
     return this.moduleContentsResource?.declarations || [];
   }
 
-  private get nextSelectedDeclaration() {
+  private get _selectedDeclaration() {
     let nextSelected = this.moduleContentsResource?.declarations.find((dec) => {
-      if (isCardOrFieldDeclaration(dec) && this._nextSelectedCodeRef) {
-        if (dec.exportedAs === this._nextSelectedCodeRef.name) {
+      let codeRef = this.operatorModeStateService.state.codeRef;
+      if (isCardOrFieldDeclaration(dec) && codeRef) {
+        if (dec.exportedAs === codeRef.name) {
           // this case is needed to handle
-          // - default export  
-          // - renamed export name 
+          // - default export
+          // - renamed export name
           return true;
-        }else if(dec.localName === this._nextSelectedCodeRef.name){
-          return true
+        } else if (dec.localName === codeRef.name) {
+          return true;
         }
         return false;
       }
@@ -410,12 +406,16 @@ export default class CodeMode extends Component<Signature> {
   }
 
   private get selectedDeclaration() {
-    if (this._selectedDeclaration) {
-      return this._selectedDeclaration;
+    if (this._userSelectedDeclaration) {
+      // when user selects declarations by clicking/choosing on 'in-this-file' panel
+      return this._userSelectedDeclaration;
     } else {
-      if (this.nextSelectedDeclaration) {
-        return this.nextSelectedDeclaration;
+      // when navigating to a module, check if code ref exists.
+      // If so, select corresponding declaration with code ref
+      if (this._selectedDeclaration) {
+        return this._selectedDeclaration;
       }
+      // default to 1st selection
       return this.declarations.length > 0 ? this.declarations[0] : undefined;
     }
   }
@@ -432,12 +432,13 @@ export default class CodeMode extends Component<Signature> {
 
   @action
   private selectDeclaration(dec: ModuleDeclaration) {
-    this._selectedDeclaration = dec;
+    this._userSelectedDeclaration = dec;
   }
 
   @action
   openDefinition(moduleHref: string, codeRef?: ResolvedCodeRef) {
-    this._nextSelectedCodeRef = codeRef;
+    this.operatorModeStateService.updateSelectedCodeRef(codeRef);
+    debugger;
     this.operatorModeStateService.updateCodePath(new URL(moduleHref));
   }
 

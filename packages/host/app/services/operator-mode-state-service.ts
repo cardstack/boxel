@@ -10,6 +10,7 @@ import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
+import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
 import { Submode } from '@cardstack/host/components/submode-switcher';
@@ -38,6 +39,7 @@ export interface OperatorModeState {
   codePath: URL | null;
   fileView?: FileView;
   openDirs: Map<string, string[]>;
+  codeRef?: ResolvedCodeRef;
 }
 
 interface CardItem {
@@ -56,6 +58,7 @@ export type SerializedState = {
   codePath?: string;
   fileView?: FileView;
   openDirs?: Record<string, string[]>;
+  codeRef?: ResolvedCodeRef;
 };
 
 interface OpenFileSubscriber {
@@ -209,6 +212,11 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
+  updateSelectedCodeRef(codeRef: ResolvedCodeRef | undefined) {
+    this.state.codeRef = codeRef;
+    this.schedulePersist();
+  }
+
   get codePathRelativeToRealm() {
     if (this.state.codePath && this.realmURL) {
       let realmPath = new RealmPaths(this.realmURL);
@@ -316,6 +324,7 @@ export default class OperatorModeStateService extends Service {
       codePath: this.state.codePath?.toString(),
       fileView: this.state.fileView?.toString() as FileView,
       openDirs: Object.fromEntries(this.state.openDirs.entries()),
+      codeRef: this.state.codeRef,
     };
 
     for (let stack of this.state.stacks) {
@@ -358,6 +367,7 @@ export default class OperatorModeStateService extends Service {
       codePath: rawState.codePath ? new URL(rawState.codePath) : null,
       fileView: rawState.fileView ?? 'inheritance',
       openDirs,
+      codeRef: rawState.codeRef,
     });
 
     let stackIndex = 0;
