@@ -63,7 +63,7 @@ export type SerializedState = {
   codePath?: string;
   fileView?: FileView;
   openDirs?: Record<string, string[]>;
-  codeSelection: CodeSelection;
+  codeSelection?: CodeSelection;
 };
 
 interface OpenFileSubscriber {

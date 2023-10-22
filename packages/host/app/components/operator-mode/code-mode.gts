@@ -117,7 +117,6 @@ export default class CodeMode extends Component<Signature> {
   @tracked private card: CardDef | undefined;
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
-  @tracked private _userSelectedLocalName: string | undefined;
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
@@ -148,8 +147,6 @@ export default class CodeMode extends Component<Signature> {
       this.operatorModeStateService.unsubscribeFromOpenFileStateChanges(this);
     });
     this.loadMonaco.perform();
-    this._userSelectedLocalName =
-      this.operatorModeStateService.state.codeSelection.localName;
   }
 
   private get realmInfo() {

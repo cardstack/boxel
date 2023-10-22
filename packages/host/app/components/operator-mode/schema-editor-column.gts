@@ -14,7 +14,7 @@ import { Accordion } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { getPlural, loadCard } from '@cardstack/runtime-common';
-import {type ResolvedCodeRef} from '@cardstack/runtime-common/code-ref';
+import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
@@ -32,7 +32,7 @@ interface Signature {
     file: Ready;
     cardTypeResource?: CardType;
     card: typeof BaseDef;
-    openDefinition: (moduleHref: string, codeRef?: ResolvedCodeRef) => void;
+    openDefinition: (moduleHref: string, codeRef: ResolvedCodeRef) => void;
   };
 }
 
