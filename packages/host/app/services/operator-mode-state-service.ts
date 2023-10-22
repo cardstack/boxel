@@ -221,7 +221,6 @@ export default class OperatorModeStateService extends Service {
   updateCodeRefSelection(codeRef: ResolvedCodeRef) {
     this.state.codeSelection = {
       codeRef,
-      localName: this.state.codeSelection.localName,
     };
     this.schedulePersist();
   }
