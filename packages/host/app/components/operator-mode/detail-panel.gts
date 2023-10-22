@@ -33,7 +33,10 @@ import {
   isCardOrFieldDeclaration,
 } from '@cardstack/host/resources/module-contents';
 
-import { type CardDef, type BaseDef } from 'https://cardstack.com/base/card-api';
+import {
+  type CardDef,
+  type BaseDef,
+} from 'https://cardstack.com/base/card-api';
 
 import { lastModifiedDate } from '../../resources/last-modified-date';
 
@@ -50,18 +53,11 @@ import { SelectorItem, selectorItemFunc } from './detail-panel-selector';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
-
-import {
-  getCodeRef,
-  getCardType
-} from '@cardstack/host/resources/card-type';
+import { getCodeRef, getCardType } from '@cardstack/host/resources/card-type';
 
 import { use, resource } from 'ember-resources';
 
-import {
-  type ResolvedCodeRef
-} from '@cardstack/runtime-common/code-ref';
-
+import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 
 interface Signature {
   Element: HTMLElement;
@@ -72,7 +68,7 @@ interface Signature {
     selectedDeclaration?: ModuleDeclaration;
     declarations: ModuleDeclaration[];
     selectDeclaration: (dec: ModuleDeclaration) => void;
-    openDefinition: (moduleHref: string, codeRef?: ResolvedCodeRef) => void;
+    openDefinition: (moduleHref: string, codeRef: ResolvedCodeRef) => void;
     delete: () => void;
   };
 }
@@ -107,7 +103,9 @@ export default class DetailPanel extends Component<Signature> {
         } else {
           return false;
         }
-      }) || this.cardType?.isLoading || this.cardInstanceType?.isLoading
+      }) ||
+      this.cardType?.isLoading ||
+      this.cardInstanceType?.isLoading
     );
   }
 
@@ -283,10 +281,7 @@ export default class DetailPanel extends Component<Signature> {
                   }}
                 />
                 {{#if this.cardType.type.super}}
-                  {{#let
-                    (getCodeRef this.cardType.type.super)
-                    as |codeRef|
-                  }}
+                  {{#let (getCodeRef this.cardType.type.super) as |codeRef|}}
                     <div class='chain'>
                       <IconInherit
                         class='chain-icon'
@@ -322,10 +317,7 @@ export default class DetailPanel extends Component<Signature> {
                   }}
                 />
                 {{#if this.cardType.type.super}}
-                  {{#let
-                    (getCodeRef this.cardType.type.super)
-                    as |codeRef|
-                  }}
+                  {{#let (getCodeRef this.cardType.type.super) as |codeRef|}}
                     <div class='chain'>
                       <IconInherit
                         class='chain-icon'

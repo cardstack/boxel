@@ -39,7 +39,12 @@ export interface OperatorModeState {
   codePath: URL | null;
   fileView?: FileView;
   openDirs: Map<string, string[]>;
+  codeSelection: CodeSelection;
+}
+
+interface CodeSelection {
   codeRef?: ResolvedCodeRef;
+  localName?: string;
 }
 
 interface CardItem {
@@ -58,7 +63,7 @@ export type SerializedState = {
   codePath?: string;
   fileView?: FileView;
   openDirs?: Record<string, string[]>;
-  codeRef?: ResolvedCodeRef;
+  codeSelection: CodeSelection;
 };
 
 interface OpenFileSubscriber {
@@ -71,6 +76,7 @@ export default class OperatorModeStateService extends Service {
     submode: Submode.Interact,
     codePath: null,
     openDirs: new TrackedMap<string, string[]>(),
+    codeSelection: new TrackedObject({}),
   });
   @tracked recentCards = new TrackedArray<CardDef>([]);
 
@@ -212,8 +218,16 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
-  updateSelectedCodeRef(codeRef: ResolvedCodeRef | undefined) {
-    this.state.codeRef = codeRef;
+  updateCodeRefSelection(codeRef: ResolvedCodeRef) {
+    this.state.codeSelection = {
+      codeRef,
+      localName: this.state.codeSelection.localName,
+    };
+    this.schedulePersist();
+  }
+
+  updateLocalNameSelection(localName: string | undefined) {
+    this.state.codeSelection = { localName }; //we need to update localName independently because card and field don't have code ref
     this.schedulePersist();
   }
 
@@ -324,7 +338,7 @@ export default class OperatorModeStateService extends Service {
       codePath: this.state.codePath?.toString(),
       fileView: this.state.fileView?.toString() as FileView,
       openDirs: Object.fromEntries(this.state.openDirs.entries()),
-      codeRef: this.state.codeRef,
+      codeSelection: this.state.codeSelection,
     };
 
     for (let stack of this.state.stacks) {
@@ -367,7 +381,7 @@ export default class OperatorModeStateService extends Service {
       codePath: rawState.codePath ? new URL(rawState.codePath) : null,
       fileView: rawState.fileView ?? 'inheritance',
       openDirs,
-      codeRef: rawState.codeRef,
+      codeSelection: rawState.codeSelection ?? {},
     });
 
     let stackIndex = 0;

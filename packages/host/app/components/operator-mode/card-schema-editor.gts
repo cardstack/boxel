@@ -22,9 +22,7 @@ import {
   type FieldOfType,
   getCodeRef,
 } from '@cardstack/host/resources/card-type';
-import {
-  type ResolvedCodeRef
-} from '@cardstack/runtime-common/code-ref';
+import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 import {
   ArrowTopLeft,
   IconLink,
@@ -53,7 +51,7 @@ interface Signature {
     allowAddingFields: boolean;
     childFields: string[];
     parentFields: string[];
-    openDefinition: (moduleHref: string, codeRef?: ResolvedCodeRef) => void;
+    openDefinition: (moduleHref: string, codeRef: ResolvedCodeRef) => void;
   };
 }
 
@@ -353,10 +351,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                       <button
                         class='pill'
                         data-test-card-schema-field-navigational-button
-                        {{on
-                          'click'
-                          (fn @openDefinition moduleUrl codeRef)
-                        }}
+                        {{on 'click' (fn @openDefinition moduleUrl codeRef)}}
                       >
                         {{#if (this.isLinkedField field)}}
                           <span class='linked-icon' data-test-linked-icon>

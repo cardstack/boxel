@@ -117,7 +117,7 @@ export default class CodeMode extends Component<Signature> {
   @tracked private card: CardDef | undefined;
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
-  @tracked private _userSelectedDeclaration: ModuleDeclaration | undefined;
+  @tracked private _userSelectedLocalName: string | undefined;
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
@@ -148,6 +148,8 @@ export default class CodeMode extends Component<Signature> {
       this.operatorModeStateService.unsubscribeFromOpenFileStateChanges(this);
     });
     this.loadMonaco.perform();
+    this._userSelectedLocalName =
+      this.operatorModeStateService.state.codeSelection.localName;
   }
 
   private get realmInfo() {
@@ -283,11 +285,7 @@ export default class CodeMode extends Component<Signature> {
     return this.operatorModeStateService.openFile.current;
   }
 
-  @use private moduleContentsResource = resource(({ on }) => {
-    on.cleanup(() => {
-      this._userSelectedDeclaration = undefined;
-    });
-
+  @use private moduleContentsResource = resource(() => {
     if (isReady(this.currentOpenFile) && this.importedModule?.module) {
       let f: Ready = this.currentOpenFile;
       if (hasExecutableExtension(f.url)) {
@@ -387,34 +385,31 @@ export default class CodeMode extends Component<Signature> {
   }
 
   private get _selectedDeclaration() {
-    let selected = this.moduleContentsResource?.declarations.find((dec) => {
-      let codeRef = this.operatorModeStateService.state.codeRef;
+    return this.moduleContentsResource?.declarations.find((dec) => {
+      // when refreshing module,
+      // checks localName from serialized url
+      if (
+        this.operatorModeStateService.state.codeSelection.localName ===
+        dec.localName
+      )
+        return true;
+
+      // when opening new definition,
+      // checks codeRef from serialized url
+      let codeRef = this.operatorModeStateService.state.codeSelection?.codeRef;
       if (isCardOrFieldDeclaration(dec) && codeRef) {
-        if (dec.exportedAs === codeRef.name) {
-          // this case is needed to handle
-          // - default export
-          // - renamed export name
-          return true;
-        } else if (dec.localName === codeRef.name) {
-          return true;
-        }
-        return false;
+        return (
+          dec.exportedAs === codeRef.name || dec.localName === codeRef.name
+        );
       }
       return false;
     });
-    return selected;
   }
 
   private get selectedDeclaration() {
-    if (this._userSelectedDeclaration) {
-      // when user selects declarations by clicking/choosing on 'in-this-file' panel
-      return this._userSelectedDeclaration;
+    if (this._selectedDeclaration) {
+      return this._selectedDeclaration;
     } else {
-      // when navigating to a module, check if code ref exists.
-      // If so, select corresponding declaration with code ref
-      if (this._selectedDeclaration) {
-        return this._selectedDeclaration;
-      }
       // default to 1st selection
       return this.declarations.length > 0 ? this.declarations[0] : undefined;
     }
@@ -432,12 +427,12 @@ export default class CodeMode extends Component<Signature> {
 
   @action
   private selectDeclaration(dec: ModuleDeclaration) {
-    this._userSelectedDeclaration = dec;
+    this.operatorModeStateService.updateLocalNameSelection(dec.localName);
   }
 
   @action
-  openDefinition(moduleHref: string, codeRef?: ResolvedCodeRef) {
-    this.operatorModeStateService.updateSelectedCodeRef(codeRef);
+  openDefinition(moduleHref: string, codeRef: ResolvedCodeRef) {
+    this.operatorModeStateService.updateCodeRefSelection(codeRef);
     this.operatorModeStateService.updateCodePath(new URL(moduleHref));
   }
 
