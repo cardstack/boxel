@@ -438,7 +438,6 @@ export default class CodeMode extends Component<Signature> {
   @action
   openDefinition(moduleHref: string, codeRef?: ResolvedCodeRef) {
     this.operatorModeStateService.updateSelectedCodeRef(codeRef);
-    debugger;
     this.operatorModeStateService.updateCodePath(new URL(moduleHref));
   }
 
