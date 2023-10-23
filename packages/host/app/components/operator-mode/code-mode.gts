@@ -376,6 +376,9 @@ export default class CodeMode extends Component<Signature> {
 
   private loadLiveCard = restartableTask(async (url: URL) => {
     let card = await this.cardService.loadModel(this, url);
+    if (!card) {
+      throw new Error(`bug: could not load card ${url.href}`);
+    }
     if (card !== this.card) {
       if (this.card) {
         this.cardService.unsubscribe(this.card, this.onCardChange);
