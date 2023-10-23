@@ -15,13 +15,19 @@ export interface PillSignature {
   Element: HTMLButtonElement;
 }
 
+let noop = () => {};
+
 export default class Pill extends Component<PillSignature> {
   onClick() {
     this.args.onClick?.();
   }
 
   <template>
-    <button class='pill' {{on 'click' this.onClick}} ...attributes>
+    <button
+      class='pill'
+      {{on 'click' (if @onClick @onClick noop)}}
+      ...attributes
+    >
       <figure class='icon'>
         {{yield to='icon'}}
       </figure>
