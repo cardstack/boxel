@@ -154,6 +154,10 @@ const inThisFileSource = `
     static displayName = 'exported field extends local field';
   }
 
+  class LocalCardWithoutExportRelationship extends CardDef {
+    static displayName = 'local card but without export relationship';
+  }
+  
   export default class DefaultClass {}
 `;
 
