@@ -59,7 +59,6 @@ export default class CardService extends Service {
   @service private declare loaderService: LoaderService;
   @service private declare messageService: MessageService;
   private subscriber: CardSaveSubscriber | undefined;
-  private indexCards: Map<string, CardDef> = new Map();
   private liveCards: Map<
     string,
     {
@@ -206,11 +205,6 @@ export default class CardService extends Service {
       url = new URL(url);
     }
 
-    let index = this.indexCards.get(url.href);
-    if (index) {
-      return index;
-    }
-
     await this.apiModule.loaded;
     let json = await this.fetchJSON(url);
     if (!isSingleCardDocument(json)) {
@@ -220,9 +214,6 @@ export default class CardService extends Service {
       );
     }
     let card = await this.createFromSerialized(json.data, json, url);
-    if (this.isIndexCard(card)) {
-      this.indexCards.set(url.href, card);
-    }
     return card;
   }
 
