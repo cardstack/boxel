@@ -35,7 +35,7 @@ export default class Panel extends Component<Signature> {
   <template>
     <div
       id={{this.id}}
-      class='boxel-panel-{{@orientation}}'
+      class='boxel-panel {{@orientation}}'
       style={{if
         (eq @orientation 'horizontal')
         (cssVars
@@ -66,16 +66,20 @@ export default class Panel extends Component<Signature> {
       </div>
     {{/unless}}
     <style>
-      .boxel-panel-horizontal {
-        --boxel-panel-width: '300px';
+      .boxel-panel {
+        --resizable-panel-length: '300px;';
+      }
+
+      .boxel-panel.horizontal {
+        --boxel-panel-width: var(--resizable-panel-length);
         --boxel-panel-min-width: 'none';
 
         width: var(--boxel-panel-width);
         min-width: var(--boxel-panel-min-width);
       }
 
-      .boxel-panel-vertical {
-        --boxel-panel-height: '300px';
+      .boxel-panel.vertical {
+        --boxel-panel-height: var(--resizable-panel-length);
         --boxel-panel-min-height: 'none';
 
         height: var(--boxel-panel-height);
