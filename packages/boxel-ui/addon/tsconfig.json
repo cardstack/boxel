@@ -34,13 +34,7 @@
     "typeRoots": ["./src/types"]
   },
   "glint": {
-    "environment": [
-      "ember-loose",
-      "ember-template-imports"
-    ]
+    "environment": ["ember-loose", "ember-template-imports"]
   },
-  "include": [
-    "src/**/*",
-    "unpublished-development-types/**/*"
-  ]
+  "include": ["src/**/*", "unpublished-development-types/**/*"]
 }
