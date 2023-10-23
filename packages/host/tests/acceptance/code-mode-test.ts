@@ -1481,7 +1481,7 @@ module('Acceptance | code mode tests', function (hooks) {
   });
 
   test<TestContextWithSSE>('adding a field from schema editor - whole flow test', async function (assert) {
-    assert.expect(14);
+    assert.expect(15);
     let expectedEvents = [
       {
         type: 'index',
@@ -1553,6 +1553,13 @@ module('Acceptance | code mode tests', function (hooks) {
     assert
       .dom('[data-test-boxel-input-error-message]')
       .hasText('Field names must start with a lowercase letter');
+
+    await fillIn('[data-test-field-name-input]', 'birth-date');
+    assert
+      .dom('[data-test-boxel-input-error-message]')
+      .hasText(
+        'Field names can only contain letters, numbers, and underscores',
+      );
     await fillIn('[data-test-field-name-input]', 'birthdate');
 
     assert
@@ -1746,6 +1753,57 @@ module('Acceptance | code mode tests', function (hooks) {
         `[data-test-card-schema="Person"] [data-test-field-name="firstName"]`,
       )
       .doesNotExist();
+  });
+
+  test('editing a field from schema editor', async function (assert) {
+    assert.expect(2);
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-card-schema]');
+
+    // Let's edit a "linksToMany" Friend field, named friends
+    assert
+      .dom(
+        `[data-test-card-schema="Person"] [data-test-field-name="friends"] [data-test-field-types]`,
+      )
+      .hasText('Link, Collection');
+
+    await click(
+      '[data-test-card-schema="Person"] [data-test-field-name="friends"] [data-test-schema-editor-field-contextual-button]',
+    );
+    await click('[data-test-boxel-menu-item-text="Edit Field Settings"]');
+
+    // Edit the field to be a "contains" BigInteger field, named friendCount
+    await click('[data-test-choose-card-button]');
+    await waitFor(
+      '[data-test-select="https://cardstack.com/base/fields/biginteger-field"]',
+    );
+    await click(
+      '[data-test-select="https://cardstack.com/base/fields/biginteger-field"]',
+    );
+    await click('[data-test-card-catalog-go-button]');
+    await fillIn('[data-test-field-name-input]', 'friendCount');
+    await click('[data-test-boxel-radio-option-id="one"]');
+
+    await click('[data-test-save-field-button]');
+
+    await waitFor(
+      '[data-test-card-schema="Person"] [data-test-field-name="friendCount"] [data-test-card-display-name="BigInteger"]',
+    );
+
+    assert.ok(
+      getMonacoContent().includes('friendCount = contains(BigIntegerCard)'),
+    );
   });
 });
 

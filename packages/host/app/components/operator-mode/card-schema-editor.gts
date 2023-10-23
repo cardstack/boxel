@@ -12,7 +12,7 @@ import { getPlural } from '@cardstack/runtime-common';
 
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
-import AddFieldModal from '@cardstack/host/components/operator-mode/add-field-modal';
+import EditFieldModal from '@cardstack/host/components/operator-mode/edit-field-modal';
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import RemoveFieldModal from '@cardstack/host/components/operator-mode/remove-field-modal';
@@ -400,7 +400,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                         class='context-menu-list'
                         @items={{array
                           (menuItem
-                            'Edit Field Name' this.editFieldName disabled=true
+                            'Edit Field Settings' (fn this.toggleEditFieldModal field)
                           )
                           (menuDivider)
                           (menuItem
@@ -423,19 +423,20 @@ export default class CardSchemaEditor extends Component<Signature> {
         <button
           class='add-field-button'
           data-test-add-field-button
-          {{on 'click' this.toggleAddFieldModal}}
+          {{on 'click' (fn this.toggleEditFieldModal undefined)}}
         >
           + Add a field
         </button>
+      {{/if}}
 
-        {{#if this.addFieldModalShown}}
-          <AddFieldModal
-            @file={{@file}}
-            @card={{@card}}
-            @moduleSyntax={{@moduleSyntax}}
-            @onClose={{this.toggleAddFieldModal}}
-          />
-        {{/if}}
+      {{#if this.editFieldModalShown}}
+        <EditFieldModal
+          @file={{@file}}
+          @card={{@card}}
+          @moduleSyntax={{@moduleSyntax}}
+          @onClose={{this.toggleEditFieldModal}}
+          @field={{this.fieldBeingEdited}}
+        />
       {{/if}}
 
       {{#if this.removeFieldModalShown}}
@@ -455,12 +456,14 @@ export default class CardSchemaEditor extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare operatorModeStateService: OperatorModeStateService;
 
-  @tracked addFieldModalShown = false;
+  @tracked editFieldModalShown = false;
   @tracked removeFieldModalShown = false;
   @tracked private _fieldForRemoval?: FieldOfType = undefined;
+  @tracked private fieldBeingEdited?: FieldOfType = undefined;
 
-  @action toggleAddFieldModal() {
-    this.addFieldModalShown = !this.addFieldModalShown;
+  @action toggleEditFieldModal(field?: FieldOfType) {
+    this.fieldBeingEdited = field;
+    this.editFieldModalShown = !this.editFieldModalShown;
   }
 
   @action toggleRemoveFieldModalShown(field?: FieldOfType) {
@@ -475,12 +478,6 @@ export default class CardSchemaEditor extends Component<Signature> {
   @action
   isOwnField(fieldName: string): boolean {
     return isOwnField(this.args.card, fieldName);
-  }
-
-  @action
-  editFieldName() {
-    // TODO: implement
-    return;
   }
 
   get totalOwnFields() {
