@@ -104,27 +104,23 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
                 >
                   <Item />
                 </div>
-                <div class='remove-item-button-container'>
-                  <IconButton
-                    @variant='primary'
-                    @icon={{IconX}}
-                    @width='14px'
-                    @height='14px'
-                    class='remove-item-button'
-                    {{on 'click' (fn this.remove i)}}
-                    aria-label='Remove'
-                    data-test-remove-card
-                    data-test-remove={{i}}
-                  />
-                </div>
+                <IconButton
+                  @variant='primary'
+                  @icon={{IconX}}
+                  @width='14px'
+                  @height='14px'
+                  class='remove-item-button'
+                  {{on 'click' (fn this.remove i)}}
+                  aria-label='Remove'
+                  data-test-remove-card
+                  data-test-remove={{i}}
+                />
               </div>
             {{/let}}
           {{/each}}
           <AddButton
             class='add-new'
             @variant='pill'
-            @iconWidth='14px'
-            @iconHeight='14px'
             {{on 'click' this.add}}
             data-test-add-new
           >
@@ -168,7 +164,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
         border: 1px solid var(--boxel-form-control-border-color);
         border-radius: var(--boxel-form-control-border-radius);
-        --boxel-add-button-pill-font: var(--boxel-font-xs);
+        --boxel-add-button-pill-font: var(--boxel-font-sm);
         gap: var(--boxel-sp-xs);
       }
       .boxel-pills-container {
@@ -179,24 +175,20 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         display: flex;
         justify-content: center;
         align-items: center;
-        padding: var(--boxel-sp-xxxs) var(--boxel-sp-lg) var(--boxel-sp-xxxs)
-          var(--boxel-sp-xs);
+        padding-right: var(--boxel-sp-lg);
         color: var(--boxel-dark);
-      }
-      .remove-item-button-container {
-        position: absolute;
-        right: 0;
-        top: 0;
-        height: 100%;
-
-        display: flex;
-        align-items: center;
-        padding-right: var(--boxel-sp-xxs);
       }
       .remove-item-button {
         --icon-color: var(--boxel-dark);
-        width: 14px;
-        height: 14px;
+        position: absolute;
+        right: 0;
+        top: 0;
+
+        width: 22px;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        padding-right: var(--boxel-sp-xxs);
       }
     </style>
   </template>

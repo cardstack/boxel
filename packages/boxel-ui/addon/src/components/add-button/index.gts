@@ -8,8 +8,6 @@ import IconButton from '../icon-button/index.gts';
 interface Signature {
   Args: {
     hideIcon?: boolean;
-    iconHeight?: string | number;
-    iconWidth?: string | number;
     variant?: 'full-width' | 'pill';
   };
   Blocks: {
@@ -28,7 +26,7 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
       }}
       ...attributes
     >
-      {{#unless @hideIcon}}<IconPlus width='20px' height='20px' />{{/unless}}
+      {{#unless @hideIcon}}<IconPlus width='16px' height='16px' />{{/unless}}
       {{yield}}
     </button>
   {{else}}
@@ -89,12 +87,12 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
       align-items: center;
       gap: var(--boxel-sp-xxxs);
       box-sizing: border-box;
-      padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
+      padding: 4px var(--boxel-sp-sm);
       background-color: var(--boxel-highlight);
       border: none;
       border-radius: var(--boxel-form-control-border-radius);
       color: var(--boxel-light);
-      font: 500 var(--boxel-add-button-pill-font, var(--boxel-font-xs));
+      font: 700 var(--boxel-add-button-pill-font, var(--boxel-font-xs));
       letter-spacing: var(--boxel-lsp-xs);
       transition: background-color var(--boxel-transition);
     }
