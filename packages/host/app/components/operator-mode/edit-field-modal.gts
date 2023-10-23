@@ -352,7 +352,7 @@ export default class EditFieldModal extends Component<Signature> {
 
         </FieldContainer>
 
-        <FieldContainer @label='Field name'>
+        <FieldContainer @label='Field Name'>
           <BoxelInput
             @value={{this.fieldName}}
             @onInput={{this.onFieldNameInput}}
