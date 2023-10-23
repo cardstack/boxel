@@ -1,36 +1,44 @@
+import { getOwner } from '@ember/application';
+import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
+
+import Serializer from '@simple-dom/serializer';
+
+import voidMap from '@simple-dom/void-map';
+
+import { baseRealm, RealmPaths } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { isCardError, CardError } from '@cardstack/runtime-common/error';
-import { isNotReadyError, NotReady } from '@cardstack/runtime-common/not-ready';
 import {
   isNotLoadedError,
   NotLoaded,
 } from '@cardstack/runtime-common/not-loaded';
-import Serializer from '@simple-dom/serializer';
-import voidMap from '@simple-dom/void-map';
+import { isNotReadyError, NotReady } from '@cardstack/runtime-common/not-ready';
+
 import config from '@cardstack/host/config/environment';
-import { getOwner } from '@ember/application';
+
+import {
+  type IdentityContext as IdentityContextType,
+  type CardDef,
+  type Format,
+} from 'https://cardstack.com/base/card-api';
+
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
+
 import { render } from '../lib/isolated-render';
-import { baseRealm, RealmPaths } from '@cardstack/runtime-common';
+
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
 import type { SimpleDocument, SimpleElement } from '@simple-dom/interface';
-import type Owner from '@ember/owner';
-import {
-  type IdentityContext as IdentityContextType,
-  type Card,
-  type Format,
-} from 'https://cardstack.com/base/card-api';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 const ELEMENT_NODE_TYPE = 1;
 const { environment } = config;
 
 interface RenderCardParams {
-  card: Card;
+  card: CardDef;
   visit: (
     url: URL,
-    identityContext: IdentityContextType | undefined
+    identityContext: IdentityContextType | undefined,
   ) => Promise<void>;
   format?: Format;
   identityContext: IdentityContextType;
@@ -70,22 +78,22 @@ export default class RenderService extends Service {
         render(component, element, this.owner);
       } catch (err: any) {
         notReady = err.additionalErrors?.find((e: any) =>
-          isNotReadyError(e)
+          isNotReadyError(e),
         ) as NotReady | undefined;
         notLoaded = err.additionalErrors?.find((e: any) =>
-          isNotLoadedError(e)
+          isNotLoadedError(e),
         ) as NotLoaded | undefined;
         if (isCardError(err) && (notReady || notLoaded)) {
           let errorInstance = notReady?.instance ?? notLoaded?.instance;
           if (!errorInstance) {
             throw new Error(
-              `bug: could not determine NotLoaded/NotReady card instance`
+              `bug: could not determine NotLoaded/NotReady card instance`,
             );
           }
           let fieldName = notReady?.fieldName ?? notLoaded?.fieldName;
           if (!fieldName) {
             throw new Error(
-              `bug: could not determine NotLoaded/NotReady field`
+              `bug: could not determine NotLoaded/NotReady field`,
             );
           }
           await this.resolveField({
@@ -104,7 +112,7 @@ export default class RenderService extends Service {
     // This guards against bugs that may trigger render cycles
     if (tries > maxRenderThreshold) {
       let error = new CardError(
-        `detected a cycle trying to render card ${card.constructor.name} (id: ${card.id})`
+        `detected a cycle trying to render card ${card.constructor.name} (id: ${card.id})`,
       );
       error.additionalErrors = [(notLoaded ?? notReady)!];
       throw error;
@@ -116,21 +124,21 @@ export default class RenderService extends Service {
   }
 
   private async resolveField(
-    params: Omit<RenderCardParams, 'format'> & { fieldName: string }
+    params: Omit<RenderCardParams, 'format'> & { fieldName: string },
   ): Promise<void> {
     let { card, visit, identityContext, realmPath, fieldName } = params;
     let api = await this.loaderService.loader.import<typeof CardAPI>(
-      `${baseRealm.url}card-api`
+      `${baseRealm.url}card-api`,
     );
     try {
-      await api.getIfReady(card, fieldName as keyof Card, undefined, {
+      await api.getIfReady(card, fieldName as keyof CardDef, undefined, {
         loadFields: true,
       });
     } catch (error: any) {
       let errors = Array.isArray(error) ? error : [error];
       for (let err of errors) {
         let notLoaded = err.additionalErrors?.find((e: any) =>
-          isNotLoadedError(e)
+          isNotLoadedError(e),
         ) as NotLoaded | undefined;
         if (isCardError(err) && notLoaded) {
           let linkURL = new URL(`${notLoaded.reference}.json`);
@@ -151,7 +159,7 @@ export default class RenderService extends Service {
 
 function parseCardHtml(html: string): string {
   let matches = html.matchAll(
-    /<div id="isolated-render"[^>]*>[\n\s]*(?<html>[\W\w\n\s]*)[\s\n]*<\/div>/gm
+    /<div id="isolated-render"[^>]*>[\n\s]*(?<html>[\W\w\n\s]*)[\s\n]*<\/div>/gm,
   );
   for (let match of matches) {
     let { html } = match.groups as { html: string };
@@ -162,7 +170,7 @@ function parseCardHtml(html: string): string {
 
 function getChildElementById(
   id: string,
-  parent: SimpleElement
+  parent: SimpleElement,
 ): SimpleElement | undefined {
   let child = parent.firstChild;
   while (
@@ -179,7 +187,7 @@ function getChildElementById(
 
 function getElementFromIdPath(
   path: string[],
-  parent: SimpleElement
+  parent: SimpleElement,
 ): SimpleElement | undefined {
   if (path.length === 0) {
     throw new Error(`cannot get element from id path with empty path array`);
@@ -195,7 +203,7 @@ function getElementFromIdPath(
 }
 
 export function getIsolatedRenderElement(
-  document: SimpleDocument
+  document: SimpleDocument,
 ): SimpleElement {
   let element: SimpleElement | undefined;
   if (environment === 'test') {
@@ -206,12 +214,12 @@ export function getIsolatedRenderElement(
         'ember-testing',
         'isolated-render',
       ],
-      document.body
+      document.body,
     );
     if (!element) {
       let parent = getElementFromIdPath(
         ['qunit-fixture', 'ember-testing-container', 'ember-testing'],
-        document.body
+        document.body,
       );
       if (!parent) {
         throw new Error(`bug: cannot find ember testing container`);

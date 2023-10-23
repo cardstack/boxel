@@ -1,5 +1,5 @@
-import { contains, field, Card } from 'https://cardstack.com/base/card-api';
-import IntegerCard from 'https://cardstack.com/base/integer';
+import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
+import NumberCard from 'https://cardstack.com/base/number';
 import StringCard from 'https://cardstack.com/base/string';
 
 let CHAIN_IDS: Record<string, number> = {
@@ -7,9 +7,9 @@ let CHAIN_IDS: Record<string, number> = {
   'Gnosis Chain': 100,
   Polygon: 137,
 };
-export class Chain extends Card {
+export class Chain extends CardDef {
   @field name = contains(StringCard);
-  @field chainId = contains(IntegerCard, {
+  @field chainId = contains(NumberCard, {
     computeVia: function (this: Chain) {
       return CHAIN_IDS[this.name];
     },
@@ -17,6 +17,16 @@ export class Chain extends Card {
   @field title = contains(StringCard, {
     computeVia: function (this: Chain) {
       return this.name;
+    },
+  });
+  @field description = contains(StringCard, {
+    computeVia: function (this: Chain) {
+      return `Chain ${this.chainId}`;
+    },
+  });
+  @field thumbnailURL = contains(StringCard, {
+    computeVia: function (this: Chain) {
+      return `${this.name}-icon.png`;
     },
   });
 }

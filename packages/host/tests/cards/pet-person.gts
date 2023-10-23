@@ -1,16 +1,19 @@
+import { GridContainer } from '@cardstack/boxel-ui/components';
+
 import {
   contains,
   linksTo,
   linksToMany,
   field,
   Component,
-  Card,
+  CardDef,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
-import { Pet } from './pet';
-import { Person } from './person';
 
-export class PetPerson extends Card {
+import { Person } from './person';
+import { Pet } from './pet';
+
+export class PetPerson extends CardDef {
   static displayName = 'Pet Person';
   @field firstName = contains(StringCard);
   @field friend = linksTo(Person);
@@ -20,16 +23,20 @@ export class PetPerson extends Card {
       return `${this.firstName} Pet Person`;
     },
   });
+  @field description = contains(StringCard, {
+    computeVia: () => 'A person with pets',
+  });
+  @field thumbnailURL = contains(StringCard, { computeVia: () => null });
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div class='demo-card'>
+      <GridContainer>
         <h3><@fields.firstName /></h3>
         Pets:
         <@fields.pets />
         Friend:
         <@fields.friend />
-      </div>
+      </GridContainer>
     </template>
   };
 }

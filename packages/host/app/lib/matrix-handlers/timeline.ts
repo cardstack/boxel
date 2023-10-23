@@ -1,15 +1,24 @@
 import debounce from 'lodash/debounce';
 import { type MatrixEvent } from 'matrix-js-sdk';
+
+import {
+  type LooseSingleCardDocument,
+  type MatrixCardError,
+  isMatrixCardError,
+} from '@cardstack/runtime-common';
+
+import { type MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
+
+import { type RoomObjectiveField } from 'https://cardstack.com/base/room-objective';
+
+import { eventDebounceMs } from '../matrix-utils';
+
 import {
   type Context,
   type Event,
   addRoomEvent,
   recomputeRoomObjective,
 } from './index';
-import { eventDebounceMs } from '../matrix-utils';
-import { type MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
-import { type RoomObjectiveCard } from 'https://cardstack.com/base/room-objective';
-import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 export function onTimeline(context: Context) {
   return (e: MatrixEvent) => {
@@ -44,7 +53,7 @@ async function processDecryptedEvent(context: Context, event: Event) {
   let { room_id: roomId } = event;
   if (!roomId) {
     throw new Error(
-      `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`
+      `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
     );
   }
   let discreteEvent = event as DiscreteMatrixEvent;
@@ -61,14 +70,24 @@ async function processDecryptedEvent(context: Context, event: Event) {
           },
         },
       } as LooseSingleCardDocument;
-      let roomCard = await context.roomCards.get(roomId);
-      if (!roomCard) {
-        throw new Error(`could not get room card for room '${roomId}'`);
+      let room = await context.rooms.get(roomId);
+      let objective: RoomObjectiveField | MatrixCardError;
+      try {
+        if (!room) {
+          throw new Error(`could not get room card for room '${roomId}'`);
+        }
+        objective = await context.cardAPI.createFromSerialized<
+          typeof RoomObjectiveField
+        >(doc.data, doc, undefined, context.loaderService.loader);
+      } catch (error: any) {
+        objective = {
+          id: doc.data.id,
+          error,
+        } as MatrixCardError;
       }
-      objective = await context.cardAPI.createFromSerialized<
-        typeof RoomObjectiveCard
-      >(doc.data, doc, undefined);
-      objective.room = roomCard;
+      if (!isMatrixCardError(objective) && room) {
+        objective.room = room;
+      }
       context.roomObjectives.set(roomId, objective);
     }
   }
@@ -78,7 +97,7 @@ async function processDecryptedEvent(context: Context, event: Event) {
   let room = context.client.getRoom(roomId);
   if (!room) {
     throw new Error(
-      `bug: should never get here--matrix sdk returned a null room for ${roomId}`
+      `bug: should never get here--matrix sdk returned a null room for ${roomId}`,
     );
   }
   if (room.oldState.paginationToken != null) {

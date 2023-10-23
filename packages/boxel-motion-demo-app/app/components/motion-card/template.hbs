@@ -1,18 +1,18 @@
 {{! template-lint-disable no-invalid-interactive}}
 <div
-  {{on 'click' this.handleClick}}
-  local-class='card'
-  {{sprite id=@identifier role='card'}}
+  {{on "click" this.handleClick}}
+  local-class="card"
+  {{sprite id=@identifier role="card"}}
   ...attributes
 >
   {{#if (has-block)}}
     <div
-      local-class='content'
-      {{sprite role='card-content' id=(concat @identifier '-content')}}
+      local-class="content"
+      {{sprite role="card-content" id=(concat @identifier "-content")}}
     >
       {{yield}}
     </div>
   {{/if}}
 
-  <footer local-class='footer'></footer>
+  <footer local-class="footer"></footer>
 </div>

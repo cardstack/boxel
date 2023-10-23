@@ -37,7 +37,7 @@ export class Animator {
     public _state: {
       initial: Snapshot;
       final: Snapshot;
-    }
+    },
   ) {}
 
   handleSprites(sprites: Sprite[]) {
@@ -110,7 +110,7 @@ export class Changeset {
   spritesFor(criteria: SpritesForArgs): Set<Sprite> {
     assert(
       'expect spritesFor to be called with some criteria',
-      criteria.type || criteria.role || criteria.id
+      criteria.type || criteria.role || criteria.id,
     );
     let result;
     if (criteria.type) {
@@ -152,7 +152,7 @@ export class Changeset {
     let set = this.spritesFor(criteria);
     if (set.size > 1) {
       throw new Error(
-        `More than one sprite found matching criteria ${criteria}`
+        `More than one sprite found matching criteria ${criteria}`,
       );
     }
     if (set.size === 0) {

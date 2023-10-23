@@ -10,22 +10,19 @@ inputs:
     required: true
     default: web-client
 
-env:
-  VOLTA_FEATURE_PNPM: 1
-
 runs:
   using: composite
   steps:
-    - uses: volta-cli/action@v4
-    - name: Install Dependencies
-      shell: bash
-      run: pnpm install --frozen-lockfile
+    - uses: ./.github/actions/init
+
     - name: Set PR branch name
       shell: bash
       run: echo "RAW_PR_BRANCH_NAME=${{ github.head_ref }}" >> $GITHUB_ENV
+
     - name: Convert branch name to subdomain-compatible form
       shell: bash
-      run: echo "PR_BRANCH_NAME=`echo ${RAW_PR_BRANCH_NAME} | tr _ - | tr '[:upper:]' '[:lower:]' | sed -e 's/-$//' | sed -e 's/[^a-z0-9\-]//g'`" >> $GITHUB_ENV
+      run: echo "PR_BRANCH_NAME=`echo ${RAW_PR_BRANCH_NAME} | tr _ - | tr '[:upper:]' '[:lower:]' | sed -e 's/-$//' | sed -e 's/[^a-z0-9\-]//g' | cut -c1-60`" >> $GITHUB_ENV
+
     - name: Deploy preview
       shell: bash
       run: pnpm deploy:${{ inputs.package }}:preview-${{ inputs.environment }}
@@ -33,6 +30,7 @@ runs:
     - name: Store preview host
       shell: bash
       run: echo "PREVIEW_HOST=https://$PR_BRANCH_NAME.$S3_PREVIEW_BUCKET_NAME/" >> $GITHUB_ENV
+
     - name: add check with link to preview deployment
       shell: bash
       env:

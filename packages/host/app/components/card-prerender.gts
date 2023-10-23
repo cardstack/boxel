@@ -1,20 +1,26 @@
-import Component from '@glimmer/component';
-import { didCancel, enqueueTask, dropTask } from 'ember-concurrency';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
-import { CurrentRun } from '../lib/current-run';
-import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
-import { getModulesInRealm } from '../lib/utils';
+import Component from '@glimmer/component';
+
+import { didCancel, enqueueTask, dropTask } from 'ember-concurrency';
+
 import { hasExecutableExtension, baseRealm } from '@cardstack/runtime-common';
+import type { LocalPath } from '@cardstack/runtime-common/paths';
 import {
   type EntrySetter,
   type Reader,
   type RunState,
   type RunnerOpts,
 } from '@cardstack/runtime-common/search-index';
-import type RenderService from '../services/render-service';
+import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
+
+import { CurrentRun } from '../lib/current-run';
+
+import { getModulesInRealm } from '../lib/utils';
+
 import type LoaderService from '../services/loader-service';
 import type LocalIndexer from '../services/local-indexer';
-import type { LocalPath } from '@cardstack/runtime-common/paths';
+import type RenderService from '../services/render-service';
 
 // This component is used in a node/Fastboot context to perform
 // server-side rendering for indexing as well as by the TestRealm
@@ -25,7 +31,7 @@ export default class CardPrerender extends Component {
   @service declare fastboot: { isFastBoot: boolean };
   @service declare localIndexer: LocalIndexer;
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: Owner, args: {}) {
     super(owner, args);
     if (this.fastboot.isFastBoot) {
       try {
@@ -35,14 +41,14 @@ export default class CardPrerender extends Component {
           throw e;
         }
         throw new Error(
-          `card-prerender component is missing or being destroyed before runner registration was completed`
+          `card-prerender component is missing or being destroyed before runner registration was completed`,
         );
       }
     } else {
       this.warmUpModuleCache.perform();
       this.localIndexer.setup(
         this.fromScratch.bind(this),
-        this.incremental.bind(this)
+        this.incremental.bind(this),
       );
     }
   }
@@ -57,20 +63,26 @@ export default class CardPrerender extends Component {
       }
     }
     throw new Error(
-      `card-prerender component is missing or being destroyed before from scratch index of realm ${realmURL} was completed`
+      `card-prerender component is missing or being destroyed before from scratch index of realm ${realmURL} was completed`,
     );
   }
 
   private async incremental(
     prev: RunState,
     url: URL,
-    operation: 'delete' | 'update'
+    operation: 'delete' | 'update',
+    onInvalidation?: (invalidatedURLs: URL[]) => void,
   ): Promise<RunState> {
     if (hasExecutableExtension(url.href) && !this.fastboot.isFastBoot) {
       this.loaderService.reset();
     }
     try {
-      let state = await this.doIncremental.perform(prev, url, operation);
+      let state = await this.doIncremental.perform(
+        prev,
+        url,
+        operation,
+        onInvalidation,
+      );
       return state;
     } catch (e: any) {
       if (!didCancel(e)) {
@@ -78,14 +90,14 @@ export default class CardPrerender extends Component {
       }
     }
     throw new Error(
-      `card-prerender component is missing or being destroyed before incremental index of ${url} was completed`
+      `card-prerender component is missing or being destroyed before incremental index of ${url} was completed`,
     );
   }
 
   private warmUpModuleCache = dropTask(async () => {
     let baseRealmModules = await getModulesInRealm(
       this.loaderService.loader,
-      baseRealm.url
+      baseRealm.url,
     );
     // TODO the fact that we need to reverse this list is
     // indicative of a loader issue. Need to work with Ed around this as I think
@@ -113,14 +125,19 @@ export default class CardPrerender extends Component {
         reader,
         entrySetter,
         renderCard: this.renderService.renderCard.bind(this.renderService),
-      })
+      }),
     );
     this.renderService.indexRunDeferred?.fulfill();
     return current;
   });
 
   private doIncremental = enqueueTask(
-    async (prev: RunState, url: URL, operation: 'delete' | 'update') => {
+    async (
+      prev: RunState,
+      url: URL,
+      operation: 'delete' | 'update',
+      onInvalidation?: (invalidatedURLs: URL[]) => void,
+    ) => {
       let { reader, entrySetter } = this.getRunnerParams();
       let current = await CurrentRun.incremental({
         url,
@@ -130,10 +147,11 @@ export default class CardPrerender extends Component {
         loader: this.loaderService.loader,
         entrySetter,
         renderCard: this.renderService.renderCard.bind(this.renderService),
+        onInvalidation,
       });
       this.renderService.indexRunDeferred?.fulfill();
       return current;
-    }
+    },
   );
 
   private getRunnerParams(): {
@@ -153,18 +171,18 @@ export default class CardPrerender extends Component {
       let self = this;
       function readFileAsText(
         path: LocalPath,
-        opts?: { withFallbacks?: true }
+        opts?: { withFallbacks?: true },
       ): Promise<{ content: string; lastModified: number } | undefined> {
         return _readFileAsText(
           path,
           self.localIndexer.adapter.openFile.bind(self.localIndexer.adapter),
-          opts
+          opts,
         );
       }
       return {
         reader: {
           readdir: this.localIndexer.adapter.readdir.bind(
-            this.localIndexer.adapter
+            this.localIndexer.adapter,
           ),
           readFileAsText,
         },
@@ -176,7 +194,7 @@ export default class CardPrerender extends Component {
 
 function getRunnerOpts(optsId: number): RunnerOpts {
   return ((globalThis as any).getRunnerOpts as (optsId: number) => RunnerOpts)(
-    optsId
+    optsId,
   );
 }
 

@@ -3,9 +3,11 @@ import * as Babel from '@babel/core';
 import {
   schemaAnalysisPlugin,
   Options,
-  PossibleCardClass,
-  ClassReference,
-  ExternalReference,
+  type PossibleCardOrFieldClass,
+  type Declaration,
+  type BaseDeclaration,
+  isPossibleCardOrFieldClass,
+  isInternalReference,
 } from './schema-analysis-plugin';
 import {
   removeFieldPlugin,
@@ -16,7 +18,7 @@ import startCase from 'lodash/startCase';
 import camelCase from 'lodash/camelCase';
 import upperFirst from 'lodash/upperFirst';
 import { parseTemplates } from '@cardstack/ember-template-imports/lib/parse-templates';
-import { baseRealm } from './index';
+import { baseRealm, maybeRelativeURL } from './index';
 //@ts-ignore unsure where these types live
 import decoratorsPlugin from '@babel/plugin-syntax-decorators';
 //@ts-ignore unsure where these types live
@@ -28,10 +30,12 @@ import type { types as t } from '@babel/core';
 import type { NodePath } from '@babel/traverse';
 import type { FieldType } from 'https://cardstack.com/base/card-api';
 
-export type { ClassReference, ExternalReference };
+export type { PossibleCardOrFieldClass, Declaration, BaseDeclaration };
+export { isPossibleCardOrFieldClass, isInternalReference };
 
 export class ModuleSyntax {
-  declare possibleCards: PossibleCardClass[];
+  declare possibleCardsOrFields: PossibleCardOrFieldClass[];
+  declare declarations: Declaration[];
   private declare ast: t.File;
 
   constructor(src: string) {
@@ -40,11 +44,12 @@ export class ModuleSyntax {
 
   private analyze(src: string) {
     let moduleAnalysis: Options = {
-      possibleCards: [],
+      possibleCardsOrFields: [],
+      declarations: [],
     };
     let preprocessedSrc = preprocessTemplateTags(src);
 
-    this.ast = Babel.transformSync(preprocessedSrc, {
+    let r = Babel.transformSync(preprocessedSrc, {
       code: false,
       ast: true,
       plugins: [
@@ -53,25 +58,32 @@ export class ModuleSyntax {
         classPropertiesPlugin,
         [schemaAnalysisPlugin, moduleAnalysis],
       ],
-    })!.ast!;
-    this.possibleCards = moduleAnalysis.possibleCards;
+    });
+    this.ast = r!.ast!;
+    this.possibleCardsOrFields = moduleAnalysis.possibleCardsOrFields;
+    this.declarations = moduleAnalysis.declarations;
   }
 
   code(): string {
     let preprocessedSrc = generate(this.ast).code;
     return preprocessedSrc.replace(
       /\[templte\(`([^`].*?)`\)\];/gs,
-      `<template>$1</template>`
+      `<template>$1</template>`,
     );
   }
 
+  // A note about incomingRelativeTo and outgoingRelativeTo - path parameters in input (e.g. field module path) and output (e.g. field import path) are
+  // relative to some path, and we use these parameters to determine what that path is so that the emitted code has correct relative paths.
   addField(
     cardName:
       | { type: 'exportedName'; name: string }
       | { type: 'localName'; name: string },
     fieldName: string,
-    fieldRef: { name: string; module: string },
-    fieldType: FieldType
+    fieldRef: { name: string; module: string }, // module could be a relative path
+    fieldType: FieldType,
+    incomingRelativeTo: URL | undefined, // can be undefined when you know the url is not going to be relative
+    outgoingRelativeTo: URL | undefined, // can be undefined when you know url is not going to be relative
+    outgoingRealmURL: URL | undefined, // should be provided when the other 2 params are provided
   ) {
     let card = this.getCard(cardName);
     if (card.possibleFields.has(fieldName)) {
@@ -86,7 +98,10 @@ export class ModuleSyntax {
       fieldRef,
       fieldType,
       fieldName,
-      cardName.name
+      cardName.name,
+      incomingRelativeTo,
+      outgoingRelativeTo,
+      outgoingRealmURL,
     );
     let src = this.code();
     this.analyze(src); // reanalyze to update node start/end positions based on AST mutation
@@ -97,7 +112,7 @@ export class ModuleSyntax {
       lastField = [...this.getCard(cardName).possibleFields.values()].pop()!;
       if (typeof lastField.path.node.end !== 'number') {
         throw new Error(
-          `bug: could not determine the string end position to insert the new field`
+          `bug: could not determine the string end position to insert the new field`,
         );
       }
       insertPosition = lastField.path.node.end;
@@ -105,7 +120,7 @@ export class ModuleSyntax {
       let bodyStart = this.getCard(cardName).path.get('body').node.start;
       if (typeof bodyStart !== 'number') {
         throw new Error(
-          `bug: could not determine the string end position to insert the new field`
+          `bug: could not determine the string end position to insert the new field`,
         );
       }
       insertPosition = bodyStart + 1;
@@ -131,7 +146,7 @@ export class ModuleSyntax {
     cardName:
       | { type: 'exportedName'; name: string }
       | { type: 'localName'; name: string },
-    fieldName: string
+    fieldName: string,
   ) {
     let card = this.getCard(cardName);
     let field = card.possibleFields.get(fieldName);
@@ -156,20 +171,24 @@ export class ModuleSyntax {
   private getCard(
     card:
       | { type: 'exportedName'; name: string }
-      | { type: 'localName'; name: string }
-  ): PossibleCardClass {
+      | { type: 'localName'; name: string },
+  ): PossibleCardOrFieldClass {
     let cardName = card.name;
-    let cardClass: PossibleCardClass | undefined;
+    let cardClass: PossibleCardOrFieldClass | undefined;
     if (card.type === 'exportedName') {
-      cardClass = this.possibleCards.find((c) => c.exportedAs === cardName);
+      cardClass = this.possibleCardsOrFields.find(
+        (c) => c.exportedAs === cardName,
+      );
     } else {
-      cardClass = this.possibleCards.find((c) => c.localName === cardName);
+      cardClass = this.possibleCardsOrFields.find(
+        (c) => c.localName === cardName,
+      );
     }
     if (!cardClass) {
       throw new Error(
         `cannot find card with ${startCase(
-          card.type
-        ).toLowerCase()} of "${cardName}" in module`
+          card.type,
+        ).toLowerCase()} of "${cardName}" in module`,
       );
     }
     return cardClass;
@@ -188,7 +207,7 @@ function preprocessTemplateTags(src: string): string {
     output.push(
       src
         .slice(match.start.index! + match.start[0].length, match.end.index)
-        .replace(/`/g, '\\`')
+        .replace(/`/g, '\\`'),
     );
     output.push('`)]        ');
     offset = match.end.index! + match.end[0].length;
@@ -202,7 +221,10 @@ function makeNewField(
   fieldRef: { name: string; module: string },
   fieldType: FieldType,
   fieldName: string,
-  cardName: string
+  cardName: string,
+  incomingRelativeTo: URL | undefined,
+  outgoingRelativeTo: URL | undefined,
+  outgoingRealmURL: URL | undefined,
 ): string {
   let programPath = getProgramPath(target);
   //@ts-ignore ImportUtil doesn't seem to believe our Babel.types is a
@@ -213,12 +235,12 @@ function makeNewField(
     // target.parentPath to be non-nullable, but unable to express that in types
     target as NodePath<any>,
     `${baseRealm.url}card-api`,
-    'field'
+    'field',
   );
   let fieldTypeIdentifier = importUtil.import(
     target as NodePath<any>,
     `${baseRealm.url}card-api`,
-    fieldType
+    fieldType,
   );
 
   if (
@@ -229,11 +251,22 @@ function makeNewField(
     return `@${fieldDecorator.name} ${fieldName} = ${fieldTypeIdentifier.name}(() => ${cardName});`;
   }
 
+  let relativeFieldModuleRef;
+  if (incomingRelativeTo && outgoingRelativeTo) {
+    relativeFieldModuleRef = maybeRelativeURL(
+      new URL(fieldRef.module, incomingRelativeTo),
+      outgoingRelativeTo,
+      outgoingRealmURL,
+    );
+  } else {
+    relativeFieldModuleRef = fieldRef.module;
+  }
+
   let fieldCardIdentifier = importUtil.import(
     target as NodePath<any>,
-    fieldRef.module,
+    relativeFieldModuleRef,
     fieldRef.name,
-    suggestedCardName(fieldRef)
+    suggestedCardName(fieldRef),
   );
 
   if (

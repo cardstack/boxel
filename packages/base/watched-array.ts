@@ -1,5 +1,5 @@
 class WatchedArray<T> {
-  constructor(subscriber: (arr: WatchedArray<T>) => void, arr: T[] = []) {
+  constructor(subscriber: (arr: Array<T>) => void, arr: T[] = []) {
     this.#subscriber = subscriber;
     let clone = arr.slice();
     let self = this;
@@ -9,12 +9,12 @@ class WatchedArray<T> {
 
         let done: () => void;
         let notifyPromise = (self.#notifyPromise = new Promise<void>(
-          (res) => (done = res)
+          (res) => (done = res),
         ));
         (async () => {
           await Promise.resolve();
           if (self.#notifyPromise === notifyPromise) {
-            self.#subscriber(self);
+            self.#subscriber([...target]);
           }
         })().then(done!);
         return true;
@@ -27,7 +27,7 @@ class WatchedArray<T> {
 
   #notifyPromise: Promise<void> | undefined;
 
-  #subscriber: (arr: WatchedArray<T>) => void;
+  #subscriber: (arr: Array<T>) => void;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-empty-interface

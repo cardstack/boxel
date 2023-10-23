@@ -20,8 +20,8 @@ function isHTTPMethod(method: unknown): method is Method {
   return ['GET', 'POST', 'PATCH', 'DELETE'].includes(method);
 }
 
-function extractSupportedMimeType(
-  rawAcceptHeader: null | string | [string]
+export function extractSupportedMimeType(
+  rawAcceptHeader: null | string | [string],
 ): SupportedMimeType | undefined {
   if (!rawAcceptHeader) {
     return undefined;
@@ -67,7 +67,7 @@ export class Router {
     mimeType: SupportedMimeType,
     method: Method,
     path: string,
-    handler: Handler
+    handler: Handler,
   ) {
     let routeFamily = this.#routeTable.get(mimeType);
     if (!routeFamily) {
@@ -89,13 +89,13 @@ export class Router {
   async handle(request: Request): Promise<Response> {
     let handler = this.lookupHandler(request);
     if (!handler) {
-      return notFound(request);
+      return notFound(this.#paths.url, request);
     }
     try {
       return await handler(request);
     } catch (err) {
       if (err instanceof CardError) {
-        return responseWithError(err);
+        return responseWithError(this.#paths.url, err);
       }
       this.log.error(err);
       return new Response(`unexpected exception in realm ${err}`, {
@@ -106,7 +106,7 @@ export class Router {
 
   private lookupHandler(request: Request): Handler | undefined {
     let acceptMimeType = extractSupportedMimeType(
-      request.headers.get('Accept') as unknown as null | string | [string]
+      request.headers.get('Accept') as unknown as null | string | [string],
     );
     if (!acceptMimeType) {
       return;

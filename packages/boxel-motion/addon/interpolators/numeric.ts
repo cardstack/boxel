@@ -14,7 +14,7 @@ export default function interpolateNumeric(
   from: UnitValue,
   to: UnitValue,
   timing: Partial<MotionTiming>,
-  serialize?: UnitValueSerializer
+  serialize?: UnitValueSerializer,
 ) {
   let behavior = timing.behavior || new TweenBehavior();
   if (!behavior.getFrames) {

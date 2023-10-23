@@ -1,10 +1,11 @@
-import { contains, field, Card } from 'https://cardstack.com/base/card-api';
-import IntegerCard from 'https://cardstack.com/base/integer';
+import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
 import DateCard from 'https://cardstack.com/base/date';
-import { Person } from './person';
+import NumberCard from 'https://cardstack.com/base/number';
 
-export class Book extends Card {
-  @field author = contains(Person);
-  @field editions = contains(IntegerCard);
+import { PersonField } from './person';
+
+export class Book extends CardDef {
+  @field author = contains(PersonField);
+  @field editions = contains(NumberCard);
   @field pubDate = contains(DateCard);
 }

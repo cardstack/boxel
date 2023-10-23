@@ -1,8 +1,8 @@
-import { contains, containsMany, field, Component, Card } from './card-api';
-import BooleanCard from './boolean';
-import { RoomCard, RoomMemberCard } from './room';
+import { contains, containsMany, field, Component, FieldDef } from './card-api';
+import BooleanField from './boolean';
+import { RoomField, RoomMemberField } from './room';
 
-class View extends Component<typeof RoomObjectiveCard> {
+class View extends Component<typeof RoomObjectiveField> {
   <template>
     <div data-test-objective>
       <h3>Objective: Make sure that all room members greet each other by saying
@@ -50,25 +50,26 @@ class View extends Component<typeof RoomObjectiveCard> {
   }
 }
 
-export class RoomObjectiveCard extends Card {
-  @field room = contains(RoomCard);
-  @field usersThatFinishedTask = containsMany(RoomMemberCard, {
-    computeVia: function (this: RoomObjectiveCard) {
+export class RoomObjectiveField extends FieldDef {
+  static displayName = 'RoomObjective';
+  @field room = contains(RoomField);
+  @field usersThatFinishedTask = containsMany(RoomMemberField, {
+    computeVia: function (this: RoomObjectiveField) {
       let desiredMessages = this.room.messages.filter((m) =>
-        m.message.match(/^[\W_b]*[Hh][Ee][Ll][Ll][Oo][\W_\b]*$/)
+        m.message.match(/^[\W_b]*[Hh][Ee][Ll][Ll][Oo][\W_\b]*$/),
       );
-      return desiredMessages.map((m) => m.author);
+      return [...new Set(desiredMessages.map((m) => m.author))];
     },
   });
-  @field usersThatNeedToCompleteTask = containsMany(RoomMemberCard, {
-    computeVia: function (this: RoomObjectiveCard) {
+  @field usersThatNeedToCompleteTask = containsMany(RoomMemberField, {
+    computeVia: function (this: RoomObjectiveField) {
       let allUsers = this.room.joinedMembers;
       let completedUserIds = this.usersThatFinishedTask.map((u) => u.userId);
       return allUsers.filter((u) => !completedUserIds.includes(u.userId));
     },
   });
-  @field isComplete = contains(BooleanCard, {
-    computeVia: function (this: RoomObjectiveCard) {
+  @field isComplete = contains(BooleanField, {
+    computeVia: function (this: RoomObjectiveField) {
       return this.usersThatNeedToCompleteTask.length === 0;
     },
   });

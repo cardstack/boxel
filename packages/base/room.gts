@@ -3,48 +3,55 @@ import {
   containsMany,
   field,
   Component,
-  Card,
+  CardDef,
   primitive,
   useIndexBasedKey,
-  CardBase,
   createFromSerialized,
+  FieldDef,
 } from './card-api';
-import StringCard from './string';
+import StringField from './string';
 import DateTimeCard from './datetime';
-import IntegerCard from './integer';
-import MarkdownCard from './markdown';
-import { BoxelMessage } from '@cardstack/boxel-ui';
-import cssVar from '@cardstack/boxel-ui/helpers/css-var';
+import NumberField from './number';
+import MarkdownField from './markdown';
+import { BoxelMessage } from '@cardstack/boxel-ui/components';
+import { cssVar } from '@cardstack/boxel-ui/helpers';
 import { formatRFC3339 } from 'date-fns';
 import Modifier from 'ember-modifier';
+import { restartableTask } from 'ember-concurrency';
+import { tracked } from '@glimmer/tracking';
 import {
+  Loader,
+  SupportedMimeType,
+  Deferred,
+  isMatrixCardError,
   type LooseSingleCardDocument,
-  type CardRef,
+  type SingleCardDocument,
+  type CodeRef,
+  type MatrixCardError,
 } from '@cardstack/runtime-common';
 
-// this is so we can have triple equals equivalent attached cards in messages
-const attachedCards = new Map<string, Promise<Card>>();
+const attachedCards = new Map<string, Promise<CardDef | MatrixCardError>>();
 
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember({
-  roomCard,
+  room,
   userId,
   displayName,
   membership,
   membershipTs,
   membershipInitiator,
 }: {
-  roomCard: RoomCard;
+  room: RoomField;
   userId: string;
   displayName?: string;
   membership?: 'invite' | 'join' | 'leave';
   membershipTs?: number;
   membershipInitiator?: string;
-}): RoomMemberCard {
-  let roomMembers = roomMemberCache.get(roomCard);
+}): RoomMemberField {
+  let roomMembers = roomMemberCache.get(room);
   if (!roomMembers) {
     roomMembers = new Map();
-    roomMemberCache.set(roomCard, roomMembers);
+    roomMemberCache.set(room, roomMembers);
   }
   let member = roomMembers.get(userId);
   if (
@@ -56,7 +63,11 @@ function upsertRoomMember({
     return member;
   }
   if (!member) {
-    member = new RoomMemberCard({ id: userId, userId });
+    member = new RoomMemberField({
+      id: userId,
+      userId,
+      roomId: room.roomId,
+    });
     roomMembers.set(userId, member);
   }
   if (displayName) {
@@ -69,12 +80,12 @@ function upsertRoomMember({
     member.membershipDateTime = new Date(membershipTs);
   }
   if (membershipInitiator) {
-    member.membershipInitiator = membershipInitiator
+    member.membershipInitiator = membershipInitiator;
   }
   return member;
 }
 
-class JSONView extends Component<typeof MatrixEventCard> {
+class JSONView extends Component<typeof MatrixEventField> {
   <template>
     <pre>{{this.json}}</pre>
   </template>
@@ -84,7 +95,7 @@ class JSONView extends Component<typeof MatrixEventCard> {
   }
 }
 
-class MatrixEventCard extends CardBase {
+class MatrixEventField extends FieldDef {
   static [primitive]: MatrixEvent;
   static embedded = class Embedded extends JSONView {};
   static isolated = class Isolated extends JSONView {};
@@ -100,7 +111,7 @@ const messageStyle = {
     'calc( var(--boxel-message-avatar-size) + var(--boxel-message-gap) )',
 };
 
-class RoomMemberView extends Component<typeof RoomMemberCard> {
+class RoomMemberView extends Component<typeof RoomMemberField> {
   <template>
     <div>
       User ID:
@@ -117,7 +128,7 @@ class RoomMemberView extends Component<typeof RoomMemberCard> {
   </template>
 }
 
-class RoomMembershipCard extends CardBase {
+class RoomMembershipField extends FieldDef {
   static [primitive]: 'invite' | 'join' | 'leave';
   static [useIndexBasedKey]: never;
   static embedded = class Embedded extends Component<typeof this> {
@@ -133,14 +144,15 @@ class RoomMembershipCard extends CardBase {
   };
 }
 
-export class RoomMemberCard extends Card {
-  @field userId = contains(StringCard);
-  @field displayName = contains(StringCard);
-  @field membership = contains(RoomMembershipCard);
+export class RoomMemberField extends FieldDef {
+  @field userId = contains(StringField);
+  @field roomId = contains(StringField);
+  @field displayName = contains(StringField);
+  @field membership = contains(RoomMembershipField);
   @field membershipDateTime = contains(DateTimeCard);
-  @field membershipInitiator = contains(() => StringCard);
-  @field name = contains(StringCard, {
-    computeVia: function (this: RoomMemberCard) {
+  @field membershipInitiator = contains(StringField);
+  @field name = contains(StringField, {
+    computeVia: function (this: RoomMemberField) {
       return this.displayName ?? this.userId.split(':')[0].substring(1);
     },
   });
@@ -156,80 +168,196 @@ class ScrollIntoView extends Modifier {
   }
 }
 
-class MessageCard extends Card {
-  @field author = contains(RoomMemberCard);
-  @field message = contains(MarkdownCard);
-  @field formattedMessage = contains(StringCard);
-  @field created = contains(DateTimeCard);
-  @field attachedCard = contains(Card);
-  @field index = contains(IntegerCard);
+class EmbeddedMessageField extends Component<typeof MessageField> {
+  // TODO need to add the message specific CSS here
+  <template>
+    <BoxelMessage
+      {{ScrollIntoView}}
+      data-test-message-idx={{@model.index}}
+      data-test-message-card={{@model.attachedCardId}}
+      @name={{@model.author.displayName}}
+      @datetime={{formatRFC3339 this.timestamp}}
+      style={{cssVar
+        boxel-message-avatar-size=messageStyle.boxelMessageAvatarSize
+        boxel-message-meta-height=messageStyle.boxelMessageMetaHeight
+        boxel-message-gap=messageStyle.boxelMessageGap
+        boxel-message-margin-left=messageStyle.boxelMessageMarginLeft
+      }}
+    >
+      {{! template-lint-disable no-triple-curlies }}
+      {{{@model.formattedMessage}}}
 
-  static embedded = class Embedded extends Component<typeof this> {
-    // TODO need to add the message specific CSS here
-    <template>
-      <BoxelMessage
-        {{ScrollIntoView}}
-        data-test-message-idx={{@model.index}}
-        data-test-message-card={{@model.attachedCard.id}}
-        @name={{@model.author.displayName}}
-        @datetime={{formatRFC3339 this.timestamp}}
-        style={{cssVar
-          boxel-message-avatar-size=messageStyle.boxelMessageAvatarSize
-          boxel-message-meta-height=messageStyle.boxelMessageMetaHeight
-          boxel-message-gap=messageStyle.boxelMessageGap
-          boxel-message-margin-left=messageStyle.boxelMessageMarginLeft
-        }}
-      >
-        {{! template-lint-disable no-triple-curlies }}
-        {{{@model.formattedMessage}}}
-
-        {{#if @model.attachedCard}}
+      {{#if this.attachedCard}}
+        {{#if this.cardError}}
+          <div data-test-card-error class='error'>
+            Error: cannot render card
+            {{this.cardError.id}}:
+            {{this.cardError.error.message}}
+          </div>
+        {{else}}
           <this.cardComponent />
         {{/if}}
-      </BoxelMessage>
-    </template>
+      {{/if}}
+    </BoxelMessage>
 
-    get timestamp() {
-      if (!this.args.model.created) {
-        throw new Error(`message created time is undefined`);
+    <style>
+      .error {
+        color: var(--boxel-danger);
+        font-weight: 'bold';
       }
-      return this.args.model.created.getTime();
+    </style>
+  </template>
+
+  @tracked attachedCard: CardDef | MatrixCardError | undefined;
+
+  constructor(owner: unknown, args: any) {
+    super(owner, args);
+    this.loadAttachedCard.perform();
+  }
+
+  get timestamp() {
+    if (!this.args.model.created) {
+      throw new Error(`message created time is undefined`);
     }
+    return this.args.model.created.getTime();
+  }
 
-    get cardComponent() {
-      if (!this.args.model.attachedCard) {
-        return;
+  get cardComponent() {
+    if (!this.attachedCard || isMatrixCardError(this.attachedCard)) {
+      return;
+    }
+    return this.attachedCard.constructor.getComponent(
+      this.attachedCard,
+      'isolated',
+    );
+  }
+
+  get cardError() {
+    if (isMatrixCardError(this.attachedCard)) {
+      return this.attachedCard;
+    }
+    return;
+  }
+
+  loadAttachedCard = restartableTask(async () => {
+    if (!this.args.model.attachedCardId) {
+      return;
+    }
+    let cached = attachedCards.get(this.args.model.attachedCardId);
+    if (cached) {
+      this.attachedCard = await cached;
+      return;
+    }
+    let deferred = new Deferred<CardDef | MatrixCardError>();
+    attachedCards.set(this.args.model.attachedCardId, deferred.promise);
+    let cardOrError: CardDef | MatrixCardError;
+    let doc: SingleCardDocument | undefined;
+    try {
+      let response = await fetch(this.args.model.attachedCardId, {
+        headers: { Accept: SupportedMimeType.CardJson },
+      });
+      if (!response.ok) {
+        throw new Error(
+          `status: ${response.status} -
+        ${response.statusText}. ${await response.text()}`,
+        );
       }
-      return this.args.model.attachedCard.constructor.getComponent(
-        this.args.model.attachedCard,
-        'isolated'
+      doc = await response.json();
+      if (!doc) {
+        throw new Error(
+          `No document exists for ${this.args.model.attachedCardId}`,
+        );
+      }
+      let loader = Loader.getLoaderFor(createFromSerialized);
+      if (!loader) {
+        throw new Error('Could not obtain a loader');
+      }
+      cardOrError = await createFromSerialized<typeof CardDef>(
+        doc.data,
+        doc,
+        new URL(doc.data.id),
+        loader,
       );
+    } catch (error: any) {
+      cardOrError = {
+        id: this.args.model.attachedCardId,
+        error,
+      } as MatrixCardError;
     }
-  };
+    this.attachedCard = cardOrError;
+    deferred.fulfill(cardOrError);
+  });
+}
+
+type JSONValue = string | number | boolean | null | JSONObject | [JSONValue];
+
+type JSONObject = { [x: string]: JSONValue };
+
+type PatchObject = { patch: { attributes: JSONObject }; id: string };
+
+class PatchObjectField extends FieldDef {
+  static [primitive]: PatchObject;
+}
+
+class CommandType extends FieldDef {
+  static [primitive]: 'patch';
+}
+
+// Subclass, add a validator that checks the fields required?
+class PatchField extends FieldDef {
+  @field commandType = contains(CommandType);
+  @field payload = contains(PatchObjectField);
+}
+
+export class MessageField extends FieldDef {
+  @field author = contains(RoomMemberField);
+  @field message = contains(MarkdownField);
+  @field formattedMessage = contains(StringField);
+  @field created = contains(DateTimeCard);
+  @field attachedCardId = contains(StringField);
+  @field index = contains(NumberField);
+  @field transactionId = contains(StringField);
+  @field command = contains(PatchField);
+
+  static embedded = EmbeddedMessageField;
   // The edit template is meant to be read-only, this field card is not mutable
   static edit = class Edit extends JSONView {};
 }
+
 interface RoomState {
   name?: string;
-  creator?: RoomMemberCard;
+  creator?: RoomMemberField;
   created?: number;
 }
 
 // in addition to acting as a cache, this also ensures we have
-// triple equal equivalence for the interior cards of RoomCard
-const eventCache = new WeakMap<RoomCard, Map<string, MatrixEvent>>();
-const messageCache = new WeakMap<RoomCard, Map<string, MessageCard>>();
-const roomMemberCache = new WeakMap<RoomCard, Map<string, RoomMemberCard>>();
-const roomStateCache = new WeakMap<RoomCard, RoomState>();
+// triple equal equivalence for the interior cards of RoomField
+const eventCache = new WeakMap<RoomField, Map<string, MatrixEvent>>();
+const messageCache = new WeakMap<RoomField, Map<string, MessageField>>();
+const roomMemberCache = new WeakMap<RoomField, Map<string, RoomMemberField>>();
+const roomStateCache = new WeakMap<RoomField, RoomState>();
 
-export class RoomCard extends Card {
+export class RoomField extends FieldDef {
+  static displayName = 'Room';
+  // This can be used  to get the attached `cardInstance` like:
+  //   Reflect.getProtypeOf(roomFieldInstance).constructor.getAttachedCard(cardInstance);
+  static getAttachedCard(id: string) {
+    return attachedCards.get(id);
+  }
+  static setAttachedCard(
+    id: string,
+    cardPromise: Promise<CardDef | MatrixCardError>,
+  ) {
+    attachedCards.set(id, cardPromise);
+  }
+
   // the only writeable field for this card should be the "events" field.
   // All other fields should derive from the "events" field.
-  @field events = containsMany(MatrixEventCard);
+  @field events = containsMany(MatrixEventField);
 
   // This works well for synchronous computeds only
-  @field newEvents = containsMany(MatrixEventCard, {
-    computeVia: function (this: RoomCard) {
+  @field newEvents = containsMany(MatrixEventField, {
+    computeVia: function (this: RoomField) {
       let cache = eventCache.get(this);
       if (!cache) {
         cache = new Map();
@@ -247,14 +375,14 @@ export class RoomCard extends Card {
     },
   });
 
-  @field roomId = contains(StringCard, {
-    computeVia: function (this: RoomCard) {
+  @field roomId = contains(StringField, {
+    computeVia: function (this: RoomField) {
       return this.events.length > 0 ? this.events[0].room_id : undefined;
     },
   });
 
-  @field name = contains(StringCard, {
-    computeVia: function (this: RoomCard) {
+  @field name = contains(StringField, {
+    computeVia: function (this: RoomField) {
       let roomState = roomStateCache.get(this);
       if (!roomState) {
         roomState = {} as RoomState;
@@ -265,8 +393,9 @@ export class RoomCard extends Card {
       // events for a room name even if we already have one
       let events = this.newEvents
         .filter((e) => e.type === 'm.room.name')
-        .sort((a, b) => a.origin_server_ts - b.origin_server_ts) as
-        | RoomNameEvent[];
+        .sort(
+          (a, b) => a.origin_server_ts - b.origin_server_ts,
+        ) as RoomNameEvent[];
       if (events.length > 0) {
         roomState.name = name ?? events.pop()!.content.name;
       }
@@ -274,8 +403,8 @@ export class RoomCard extends Card {
     },
   });
 
-  @field creator = contains(RoomMemberCard, {
-    computeVia: function (this: RoomCard) {
+  @field creator = contains(RoomMemberField, {
+    computeVia: function (this: RoomField) {
       let roomState = roomStateCache.get(this);
       if (!roomState) {
         roomState = {} as RoomState;
@@ -290,7 +419,7 @@ export class RoomCard extends Card {
         | undefined;
       if (event) {
         roomState.creator = upsertRoomMember({
-          roomCard: this,
+          room: this,
           userId: event.sender,
         });
       }
@@ -299,7 +428,7 @@ export class RoomCard extends Card {
   });
 
   @field created = contains(DateTimeCard, {
-    computeVia: function (this: RoomCard) {
+    computeVia: function (this: RoomField) {
       let roomState = roomStateCache.get(this);
       if (!roomState) {
         roomState = {} as RoomState;
@@ -321,8 +450,8 @@ export class RoomCard extends Card {
     },
   });
 
-  @field roomMembers = containsMany(RoomMemberCard, {
-    computeVia: function (this: RoomCard) {
+  @field roomMembers = containsMany(RoomMemberField, {
+    computeVia: function (this: RoomField) {
       let roomMembers = roomMemberCache.get(this);
       if (!roomMembers) {
         roomMembers = new Map();
@@ -335,7 +464,7 @@ export class RoomCard extends Card {
         }
         let userId = event.state_key;
         upsertRoomMember({
-          roomCard: this,
+          room: this,
           userId,
           displayName: event.content.displayname,
           membership: event.content.membership,
@@ -347,24 +476,42 @@ export class RoomCard extends Card {
     },
   });
 
-  @field messages = containsMany(MessageCard, {
-    computeVia: async function (this: RoomCard) {
+  @field messages = containsMany(MessageField, {
+    // since we are rendering this card without the isolated renderer, we cannot use
+    // the rendering mechanism to test if a field is used or not, so we explicitely
+    // tell the card runtime that this field is being used
+    isUsed: true,
+    computeVia: function (this: RoomField) {
+      let loader = Loader.getLoaderFor(Object.getPrototypeOf(this).constructor);
+
+      if (!loader) {
+        throw new Error(
+          'Could not find a loader for this instance’s class’s module',
+        );
+      }
+
       let cache = messageCache.get(this);
       if (!cache) {
         cache = new Map();
         messageCache.set(this, cache);
       }
       let index = cache.size;
-      let newMessages = new Map<string, MessageCard>();
+      let newMessages = new Map<string, MessageField>();
       for (let event of this.events) {
         if (event.type !== 'm.room.message') {
           continue;
         }
-        if (cache.has(event.event_id)) {
+        let event_id = event.event_id;
+        let update = false;
+        if (event.content['m.relates_to']?.rel_type === 'm.replace') {
+          event_id = event.content['m.relates_to'].event_id;
+          update = true;
+        }
+        if (cache.has(event_id) && !update) {
           continue;
         }
 
-        let author = upsertRoomMember({ roomCard: this, userId: event.sender });
+        let author = upsertRoomMember({ room: this, userId: event.sender });
         let formattedMessage =
           event.content.msgtype === 'org.boxel.objective'
             ? `<em>${author.name} has set the room objectives</em>`
@@ -375,57 +522,62 @@ export class RoomCard extends Card {
           message: event.content.body,
           formattedMessage,
           index,
+          // These are not guaranteed to exist in the event
+          transactionId: event.unsigned?.transaction_id || null,
           attachedCard: null,
+          command: null,
         };
+        let messageField = undefined;
         if (event.content.msgtype === 'org.boxel.card') {
           let cardDoc = event.content.instance;
-          let attachedCard: Promise<Card> | undefined;
-          if (cardDoc.data.id == null) {
+          let attachedCardId = cardDoc.data.id;
+          if (attachedCardId == null) {
             throw new Error(`cannot handle cards in room without an ID`);
           }
-          attachedCard = attachedCards.get(cardDoc.data.id);
-          if (!attachedCard) {
-            attachedCard = createFromSerialized<typeof Card>(
-              cardDoc.data,
-              cardDoc,
-              new URL(cardDoc.data.id)
+          messageField = new MessageField({ ...cardArgs, attachedCardId });
+        } else if (event.content.msgtype === 'org.boxel.command') {
+          // We only handle patches for now
+          if (event.content.command.type !== 'patch') {
+            throw new Error(
+              `cannot handle commands in room with type ${event.content.command.type}`,
             );
-            attachedCards.set(cardDoc.data.id, attachedCard);
           }
-          newMessages.set(
-            event.event_id,
-            new MessageCard({ ...cardArgs, attachedCard: await attachedCard })
-          );
+          let command = new PatchField({
+            commandType: event.content.command.type,
+            payload: event.content.command,
+          });
+          messageField = new MessageField({
+            ...cardArgs,
+            command,
+          });
         } else {
-          newMessages.set(event.event_id, new MessageCard(cardArgs));
+          messageField = new MessageField(cardArgs);
         }
-
+        newMessages.set(event_id, messageField);
         index++;
       }
-      // need to get the cache again as we have crossed an async boundary,
-      // and cache may have changed
-      let updatedCache = messageCache.get(this)!; // this should always have an entry as we initialized it at the beginning of the computed
+
+      // upodate the cache with the new messages
       for (let [eventId, message] of newMessages) {
-        if (!updatedCache.has(eventId)) {
-          updatedCache.set(eventId, message);
-        }
+        cache.set(eventId, message);
       }
+
       // this sort should hopefully be very optimized since events will
       // be close to chronological order
-      return [...updatedCache.values()].sort(
-        (a, b) => a.created.getTime() - b.created.getTime()
+      return [...cache.values()].sort(
+        (a, b) => a.created.getTime() - b.created.getTime(),
       );
     },
   });
 
-  @field joinedMembers = containsMany(RoomMemberCard, {
-    computeVia: function (this: RoomCard) {
+  @field joinedMembers = containsMany(RoomMemberField, {
+    computeVia: function (this: RoomField) {
       return this.roomMembers.filter((m) => m.membership === 'join');
     },
   });
 
-  @field invitedMembers = containsMany(RoomMemberCard, {
-    computeVia: function (this: RoomCard) {
+  @field invitedMembers = containsMany(RoomMemberField, {
+    computeVia: function (this: RoomField) {
       return this.roomMembers.filter((m) => m.membership === 'invite');
     },
   });
@@ -509,7 +661,32 @@ interface LeaveEvent extends RoomStateEvent {
 interface MessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: {
+    'm.relates_to'?: {
+      rel_type: string;
+      event_id: string;
+    };
     msgtype: 'm.text';
+    format: 'org.matrix.custom.html';
+    body: string;
+    formatted_body: string;
+  };
+  unsigned: {
+    age: number;
+    transaction_id: string;
+    prev_content?: any;
+    prev_sender?: string;
+  };
+}
+
+interface CommandEvent extends BaseMatrixEvent {
+  type: 'm.room.message';
+  content: {
+    command: any;
+    'm.relates_to'?: {
+      rel_type: string;
+      event_id: string;
+    };
+    msgtype: 'org.boxel.command';
     format: 'org.matrix.custom.html';
     body: string;
     formatted_body: string;
@@ -525,6 +702,10 @@ interface MessageEvent extends BaseMatrixEvent {
 interface CardMessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: {
+    'm.relates_to'?: {
+      rel_type: string;
+      event_id: string;
+    };
     msgtype: 'org.boxel.card';
     format: 'org.matrix.custom.html';
     body: string;
@@ -542,9 +723,13 @@ interface CardMessageEvent extends BaseMatrixEvent {
 interface ObjectiveEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: {
+    'm.relates_to'?: {
+      rel_type: string;
+      event_id: string;
+    };
     msgtype: 'org.boxel.objective';
     body: string;
-    ref: CardRef;
+    ref: CodeRef;
   };
   unsigned: {
     age: number;
@@ -557,6 +742,7 @@ interface ObjectiveEvent extends BaseMatrixEvent {
 export type MatrixEvent =
   | RoomCreateEvent
   | MessageEvent
+  | CommandEvent
   | CardMessageEvent
   | ObjectiveEvent
   | RoomNameEvent

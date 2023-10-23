@@ -1,43 +1,68 @@
+import { registerDestructor } from '@ember/destroyable';
+import { isTesting } from '@embroider/macros';
+
+import { restartableTask, timeout } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import '@cardstack/requirejs-monaco-ember-polyfill';
-import * as monaco from 'monaco-editor';
-import { restartableTask, timeout } from 'ember-concurrency';
-import { registerDestructor } from '@ember/destroyable';
+
+import type * as MonacoSDK from 'monaco-editor';
 
 interface Signature {
   Args: {
     Named: {
       content: string;
-      language: string;
       contentChanged: (text: string) => void;
-      onSetup?: (editor: monaco.editor.IStandaloneCodeEditor) => void;
+      onSetup?: (editor: MonacoSDK.editor.IStandaloneCodeEditor) => void;
+      language?: string;
+      monacoSDK: typeof MonacoSDK;
     };
   };
 }
 
+const DEBOUNCE_MS = 500;
+
 export default class Monaco extends Modifier<Signature> {
-  private model: monaco.editor.ITextModel | undefined;
-  private editor: monaco.editor.IStandaloneCodeEditor | undefined;
+  private model: MonacoSDK.editor.ITextModel | undefined;
+  private editor: MonacoSDK.editor.IStandaloneCodeEditor | undefined;
   private lastLanguage: string | undefined;
   private lastContent: string | undefined;
 
   modify(
     element: HTMLElement,
     _positional: [],
-    { content, language, contentChanged, onSetup }: Signature['Args']['Named']
+    {
+      content,
+      language,
+      contentChanged,
+      onSetup,
+      monacoSDK,
+    }: Signature['Args']['Named'],
   ) {
-    if (this.model && content != null) {
-      if (language !== this.lastLanguage) {
-        monaco.editor.setModelLanguage(this.model, language);
+    if (this.model) {
+      if (language && language !== this.lastLanguage) {
+        monacoSDK.editor.setModelLanguage(this.model, language);
       }
       if (content !== this.lastContent) {
         this.model.setValue(content);
       }
-    } else if (content != null) {
-      this.editor = monaco.editor.create(element, {
-        value: content,
-        language,
-      });
+    } else {
+      let editorOptions: MonacoSDK.editor.IStandaloneEditorConstructionOptions =
+        {
+          value: content,
+          language,
+          scrollBeyondLastLine: false,
+          automaticLayout: true,
+          minimap: {
+            enabled: false,
+          },
+        };
+
+      // Code rendering is inconsistently wrapped without this, producing spurious visual diffs
+      if (isTesting()) {
+        editorOptions.wordWrap = 'on';
+      }
+
+      this.editor = monacoSDK.editor.create(element, editorOptions);
 
       onSetup?.(this.editor);
 
@@ -46,15 +71,7 @@ export default class Monaco extends Modifier<Signature> {
       this.model = this.editor.getModel()!;
 
       this.model.onDidChangeContent(() =>
-        this.onContentChanged.perform(contentChanged)
-      );
-
-      // To be consistent call this immediately since the initial content
-      // was set before we had a chance to register our listener
-      this.onContentChanged.perform(contentChanged);
-
-      monaco.languages.typescript.javascriptDefaults.setCompilerOptions(
-        monacoTypescriptOptions
+        this.onContentChanged.perform(contentChanged),
       );
     }
     this.lastLanguage = language;
@@ -62,34 +79,11 @@ export default class Monaco extends Modifier<Signature> {
 
   private onContentChanged = restartableTask(
     async (contentChanged: (text: string) => void) => {
-      await timeout(500);
+      timeout(DEBOUNCE_MS);
       if (this.model) {
         this.lastContent = this.model.getValue();
         contentChanged(this.lastContent);
       }
-    }
+    },
   );
 }
-
-const monacoTypescriptOptions: monaco.languages.typescript.CompilerOptions = {
-  target: monaco.languages.typescript.ScriptTarget.ES2020,
-  module: monaco.languages.typescript.ModuleKind.ES2015,
-  moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
-  allowJs: true,
-  allowSyntheticDefaultImports: true,
-  noImplicitAny: true,
-  noImplicitThis: true,
-  alwaysStrict: true,
-  strictNullChecks: true,
-  strictPropertyInitialization: true,
-  noFallthroughCasesInSwitch: true,
-  noUnusedLocals: true,
-  noUnusedParameters: true,
-  noImplicitReturns: true,
-  noEmitOnError: true,
-  noEmit: true,
-  inlineSourceMap: true,
-  inlineSources: true,
-  experimentalDecorators: true,
-  allowNonTsExtensions: true,
-};

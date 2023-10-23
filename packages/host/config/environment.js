@@ -17,18 +17,26 @@ module.exports = function (environment) {
     APP: {
       // Here you can pass flags/options to your application instance
       // when it is created
+      experimentalAIEnabled:
+        process.env.EXPERIMENTAL_AI_ENABLED === 'true' ? true : false,
     },
     'ember-cli-mirage': {
       enabled: false,
     },
     logLevels: process.env.LOG_LEVELS || '*=info,current-run=error',
     matrixURL: process.env.MATRIX_URL || 'http://localhost:8008',
+    autoSaveDelayMs: 500,
 
     // the fields below may be rewritten by the realm server
     ownRealmURL:
       environment === 'test'
         ? 'http://test-realm/test/'
         : process.env.OWN_REALM_URL || 'http://localhost:4200/', // this should be provided as an *unresolved* URL
+    // This is temporary until we have a better way to discover realms besides
+    // our own
+    otherRealmURLs: process.env.OTHER_REALM_URLS
+      ? process.env.OTHER_REALM_URLS.split(',').map((u) => u.trim())
+      : [],
     hostsOwnAssets: true,
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
@@ -44,6 +52,7 @@ module.exports = function (environment) {
     // ENV.APP.LOG_TRANSITIONS = true;
     // ENV.APP.LOG_TRANSITIONS_INTERNAL = true;
     // ENV.APP.LOG_VIEW_LOOKUPS = true;
+    ENV.APP.experimentalAIEnabled = true;
   }
 
   if (environment === 'test') {
@@ -56,6 +65,8 @@ module.exports = function (environment) {
 
     ENV.APP.rootElement = '#ember-testing';
     ENV.APP.autoboot = false;
+    ENV.APP.experimentalAIEnabled = true;
+    ENV.autoSaveDelayMs = 0;
   }
 
   if (environment === 'production') {

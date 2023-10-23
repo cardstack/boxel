@@ -1,8 +1,11 @@
 import debounce from 'lodash/debounce';
 import { type MatrixEvent, type RoomMember } from 'matrix-js-sdk';
+
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/room';
-import { type Context, addRoomEvent, recomputeRoomObjective } from './index';
+
 import { eventDebounceMs } from '../matrix-utils';
+
+import { type Context, addRoomEvent, recomputeRoomObjective } from './index';
 
 export function onMembership(context: Context) {
   return (event: MatrixEvent, member: RoomMember) => {
@@ -27,7 +30,7 @@ async function drainMembership(context: Context) {
   context.roomMembershipQueue = [];
 
   await Promise.all(
-    events.map(({ event: { event } }) => addRoomEvent(context, event))
+    events.map(({ event: { event } }) => addRoomEvent(context, event)),
   );
 
   // For rooms that we have been invited to we are unable to get the full
@@ -42,13 +45,13 @@ async function drainMembership(context: Context) {
     let { room_id: roomId } = rawEvent as DiscreteMatrixEvent;
     if (!roomId) {
       throw new Error(
-        `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`
+        `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
       );
     }
     let room = context.client.getRoom(roomId);
     if (!room) {
       throw new Error(
-        `bug: should never get here--matrix sdk returned a null room for ${roomId}`
+        `bug: should never get here--matrix sdk returned a null room for ${roomId}`,
       );
     }
 
@@ -76,7 +79,7 @@ async function drainMembership(context: Context) {
                 // annoyingly these events have been stripped of their id's
                 event_id: `${roomId}_${eventType}_${e.localTimestamp}`,
               }))
-              .map((event) => addRoomEvent(context, event))
+              .map((event) => addRoomEvent(context, event)),
           );
         }
       }

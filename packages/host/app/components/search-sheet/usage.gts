@@ -1,9 +1,12 @@
-import Component from '@glimmer/component';
-import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-import SearchSheet, { SearchSheetMode } from './index';
-import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
+import Component from '@glimmer/component';
+
+import { tracked } from '@glimmer/tracking';
+
+import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
+
+import SearchSheet, { SearchSheetMode } from './index';
 
 const validModes = Object.values(SearchSheetMode);
 
@@ -17,8 +20,20 @@ export default class SearchSheetUsage extends Component {
     }
   }
 
+  @action onBlur() {
+    this.mode = SearchSheetMode.Closed;
+  }
+
   @action onCancel() {
     this.mode = SearchSheetMode.Closed;
+  }
+
+  @action onSearch(_term: string) {
+    // noop
+  }
+
+  @action onCardSelect() {
+    // noop
   }
 
   <template>
@@ -32,6 +47,9 @@ export default class SearchSheetUsage extends Component {
             @mode={{this.mode}}
             @onCancel={{this.onCancel}}
             @onFocus={{this.onFocus}}
+            @onBlur={{this.onBlur}}
+            @onSearch={{this.onSearch}}
+            @onCardSelect={{this.onCardSelect}}
           />
         </div>
       </:example>
@@ -51,6 +69,14 @@ export default class SearchSheetUsage extends Component {
         <Args.Action
           @name='onFocus'
           @description='Action to call when the user focuses the search input'
+        />
+        <Args.Action
+          @name='onSearch'
+          @description='Action to call when the user issues a search'
+        />
+        <Args.Action
+          @name='onCardSelect'
+          @description='Action to call when the user clicks on a card in the search results'
         />
       </:api>
     </FreestyleUsage>

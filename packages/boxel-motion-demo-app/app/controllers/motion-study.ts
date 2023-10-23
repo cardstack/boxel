@@ -25,7 +25,7 @@ export default class MotionStudy extends Controller {
             s.boundsDelta.height !== 0 ||
             s.boundsDelta.x !== 0 ||
             s.boundsDelta.y !== 0)
-        )
+        ),
     );
 
     let removedCardSprites = changeset.spritesFor({

@@ -4,67 +4,100 @@ import { fn } from '@ember/helper';
 import {
   primitive,
   type Box,
+  type BoxComponent,
   type Format,
   type Field,
-  type CardBase,
+  type FieldDef,
+  type BaseDef,
 } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
-import type { ComponentLike } from '@glint/template';
-import { Button, IconButton } from '@cardstack/boxel-ui';
+import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
+import { getPlural } from '@cardstack/runtime-common';
+import { IconTrash } from '@cardstack/boxel-ui/icons';
 
 interface Signature {
   Args: {
-    model: Box<CardBase>;
-    arrayField: Box<CardBase[]>;
+    model: Box<FieldDef>;
+    arrayField: Box<FieldDef[]>;
     format: Format;
-    field: Field<typeof CardBase>;
+    field: Field<typeof FieldDef>;
     cardTypeFor(
-      field: Field<typeof CardBase>,
-      boxedElement: Box<CardBase>
-    ): typeof CardBase;
+      field: Field<typeof BaseDef>,
+      boxedElement: Box<BaseDef>,
+    ): typeof BaseDef;
   };
 }
 
 class ContainsManyEditor extends GlimmerComponent<Signature> {
   <template>
-    <div
-      class='contains-many-editor'
-      data-test-contains-many={{this.args.field.name}}
-    >
+    <div data-test-contains-many={{@field.name}}>
       {{#if @arrayField.children.length}}
-        <ul>
+        <ul class='list'>
           {{#each @arrayField.children as |boxedElement i|}}
-            <li class='links-to-editor' data-test-item={{i}}>
+            <li class='editor' data-test-item={{i}}>
               {{#let
                 (getBoxComponent
-                  (this.args.cardTypeFor @field boxedElement)
-                  @format
-                  boxedElement
+                  (@cardTypeFor @field boxedElement) @format boxedElement @field
                 )
                 as |Item|
               }}
-                <Item />
+                <Item @format={{@format}} />
               {{/let}}
-              <IconButton
-                @icon='icon-minus-circle'
-                @width='20px'
-                @height='20px'
-                class='remove-button'
-                {{on 'click' (fn this.remove i)}}
-                data-test-remove={{i}}
-                aria-label='Remove'
-              />
+              <div class='remove-button-container'>
+                <IconButton
+                  @icon={{IconTrash}}
+                  @width='20px'
+                  @height='20px'
+                  class='remove'
+                  {{on 'click' (fn this.remove i)}}
+                  data-test-remove={{i}}
+                  aria-label='Remove'
+                />
+              </div>
             </li>
           {{/each}}
         </ul>
       {{/if}}
-      <Button
-        @size='small'
+      <AddButton
+        class='add-new'
+        @variant='full-width'
         {{on 'click' this.add}}
-        type='button'
         data-test-add-new
-      >+ Add New</Button>
+      >
+        Add
+        {{getPlural @field.card.displayName}}
+      </AddButton>
     </div>
+    <style>
+      .list {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 var(--boxel-sp);
+      }
+      .editor {
+        position: relative;
+        cursor: pointer;
+        padding: var(--boxel-sp);
+        border-radius: var(--boxel-form-control-border-radius);
+      }
+      .editor:hover {
+        background-color: var(--boxel-light-100);
+      }
+      .remove-button-container {
+        position: absolute;
+        top: 0;
+        left: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+      }
+      .remove {
+        --icon-color: var(--boxel-red);
+      }
+      .remove:hover {
+        --icon-color: var(--boxel-error-200);
+      }
+    </style>
   </template>
 
   add = () => {
@@ -86,27 +119,25 @@ export function getContainsManyComponent({
   field,
   cardTypeFor,
 }: {
-  model: Box<CardBase>;
-  arrayField: Box<CardBase[]>;
+  model: Box<FieldDef>;
+  arrayField: Box<FieldDef[]>;
   format: Format;
-  field: Field<typeof CardBase>;
+  field: Field<typeof FieldDef>;
   cardTypeFor(
-    field: Field<typeof CardBase>,
-    boxedElement: Box<CardBase>
-  ): typeof CardBase;
-}): ComponentLike<{ Args: {}; Blocks: {} }> {
+    field: Field<typeof BaseDef>,
+    boxedElement: Box<BaseDef>,
+  ): typeof BaseDef;
+}): BoxComponent {
   if (format === 'edit') {
-    return class ContainsManyEditorTemplate extends GlimmerComponent {
-      <template>
-        <ContainsManyEditor
-          @model={{model}}
-          @arrayField={{arrayField}}
-          @field={{field}}
-          @format={{format}}
-          @cardTypeFor={{cardTypeFor}}
-        />
-      </template>
-    };
+    return <template>
+      <ContainsManyEditor
+        @model={{model}}
+        @arrayField={{arrayField}}
+        @field={{field}}
+        @format={{format}}
+        @cardTypeFor={{cardTypeFor}}
+      />
+    </template>;
   } else {
     return getPluralViewComponent(arrayField, field, format, cardTypeFor);
   }

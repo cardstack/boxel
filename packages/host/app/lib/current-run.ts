@@ -1,3 +1,10 @@
+// TODO make sure to remove this from @cardstack/runtime-common deps
+import ignore, { Ignore } from 'ignore';
+
+import flatMap from 'lodash/flatMap';
+import isEqual from 'lodash/isEqual';
+import merge from 'lodash/merge';
+
 import {
   Loader,
   baseRealm,
@@ -9,31 +16,26 @@ import {
   trimExecutableExtension,
   hasExecutableExtension,
   SupportedMimeType,
-  type CardRef,
+  type CodeRef,
   type RealmInfo,
 } from '@cardstack/runtime-common';
 import {
+  type SingleCardDocument,
+  type Relationship,
+} from '@cardstack/runtime-common/card-document';
+import {
   loadCard,
   identifyCard,
-  isCard,
+  isBaseDef,
   moduleFrom,
-} from '@cardstack/runtime-common/card-ref';
-import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
-// TODO make sure to remove this from @cardstack/runtime-common deps
-import ignore, { Ignore } from 'ignore';
-import isEqual from 'lodash/isEqual';
+} from '@cardstack/runtime-common/code-ref';
 import { Deferred } from '@cardstack/runtime-common/deferred';
-import flatMap from 'lodash/flatMap';
-import merge from 'lodash/merge';
 import {
   CardError,
   serializableError,
   type SerializedError,
 } from '@cardstack/runtime-common/error';
-import {
-  type SingleCardDocument,
-  type Relationship,
-} from '@cardstack/runtime-common/card-document';
+import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
 import {
   isIgnored,
   type Reader,
@@ -45,12 +47,14 @@ import {
   type ModuleWithErrors,
 } from '@cardstack/runtime-common/search-index';
 import { URLMap } from '@cardstack/runtime-common/url-map';
+
 import {
-  Card,
+  CardDef,
   type IdentityContext as IdentityContextType,
+  LoaderType,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type { LoaderType } from 'https://cardstack.com/base/card-api';
+
 import { type RenderCard } from '../services/render-service';
 
 const log = logger('current-run');
@@ -63,7 +67,7 @@ export class CurrentRun {
   #instances: URLMap<SearchEntryWithErrors>;
   #modules = new Map<string, ModuleWithErrors>();
   #moduleWorkingCache = new Map<string, Promise<Module>>();
-  #typesCache = new WeakMap<typeof Card, Promise<TypesWithErrors>>();
+  #typesCache = new WeakMap<typeof CardDef, Promise<TypesWithErrors>>();
   #indexingInstances = new Map<string, Promise<void>>();
   #reader: Reader;
   #realmPaths: RealmPaths;
@@ -131,6 +135,7 @@ export class CurrentRun {
     loader,
     entrySetter,
     renderCard,
+    onInvalidation,
   }: {
     url: URL;
     operation: 'update' | 'delete';
@@ -139,6 +144,7 @@ export class CurrentRun {
     loader: Loader;
     entrySetter: EntrySetter;
     renderCard: RenderCard;
+    onInvalidation?: (invalidatedURLs: URL[]) => void;
   }) {
     let start = Date.now();
     log.debug(`starting from incremental indexing for ${url.href}`);
@@ -154,7 +160,7 @@ export class CurrentRun {
       // that explicitly
       u !== url.href && u !== trimExecutableExtension(url).href
         ? [new URL(u)]
-        : []
+        : [],
     );
 
     let current = new this({
@@ -178,8 +184,15 @@ export class CurrentRun {
     log.debug(
       `completed incremental indexing for ${url.href} in ${
         Date.now() - start
-      }ms`
+      }ms`,
     );
+
+    if (onInvalidation) {
+      let urls = [url, ...invalidations].map(
+        (i) => new URL(i.href.replace(/\.json$/, '')),
+      );
+      onInvalidation(urls);
+    }
     return current;
   }
 
@@ -209,7 +222,7 @@ export class CurrentRun {
 
   private async visitDirectory(url: URL): Promise<void> {
     let ignorePatterns = await this.#reader.readFileAsText(
-      this.#realmPaths.local(new URL('.gitignore', url))
+      this.#realmPaths.local(new URL('.gitignore', url)),
     );
     if (ignorePatterns && ignorePatterns.content) {
       this.#ignoreMap.set(url, ignore().add(ignorePatterns.content));
@@ -217,7 +230,7 @@ export class CurrentRun {
     }
 
     for await (let { path: innerPath, kind } of this.#reader.readdir(
-      this.#realmPaths.local(url)
+      this.#realmPaths.local(url),
     )) {
       let innerURL = this.#realmPaths.fileURL(innerPath);
       if (isIgnored(this.#realmURL, this.#ignoreMap, innerURL)) {
@@ -234,7 +247,7 @@ export class CurrentRun {
 
   private async visitFile(
     url: URL,
-    identityContext?: IdentityContextType
+    identityContext?: IdentityContextType,
   ): Promise<void> {
     if (isIgnored(this.#realmURL, this.#ignoreMap, url)) {
       return;
@@ -257,7 +270,7 @@ export class CurrentRun {
       }
       if (!identityContext) {
         let api = await this.#loader.import<typeof CardAPI>(
-          `${baseRealm.url}card-api`
+          `${baseRealm.url}card-api`,
         );
         let { IdentityContext } = api;
         identityContext = new IdentityContext();
@@ -265,13 +278,21 @@ export class CurrentRun {
 
       let { content, lastModified } = fileRef;
       if (url.href.endsWith('.json')) {
-        let { data: resource } = JSON.parse(content);
-        if (isCardResource(resource)) {
+        let resource;
+
+        try {
+          let { data } = JSON.parse(content);
+          resource = data;
+        } catch (e) {
+          log.warn(`unable to parse ${url.href} as card JSON`);
+        }
+
+        if (resource && isCardResource(resource)) {
           await this.indexCard(
             localPath,
             lastModified,
             resource,
-            identityContext
+            identityContext,
           );
         }
       }
@@ -286,7 +307,7 @@ export class CurrentRun {
     } catch (err: any) {
       this.stats.moduleErrors++;
       log.warn(
-        `encountered error loading module "${url.href}": ${err.message}`
+        `encountered error loading module "${url.href}": ${err.message}`,
       );
       let deps = await (
         await this.loader.getConsumedModules(url.href)
@@ -305,9 +326,9 @@ export class CurrentRun {
     }
 
     let refs = Object.values(module)
-      .filter((maybeCard) => isCard(maybeCard))
+      .filter((maybeCard) => isBaseDef(maybeCard))
       .map((card) => identifyCard(card))
-      .filter(Boolean) as CardRef[];
+      .filter(Boolean) as CodeRef[];
     for (let ref of refs) {
       if (!('type' in ref)) {
         await this.buildModule(ref.module, url);
@@ -319,7 +340,7 @@ export class CurrentRun {
     path: LocalPath,
     lastModified: number,
     resource: LooseCardResource,
-    identityContext: IdentityContextType
+    identityContext: IdentityContextType,
   ): Promise<void> {
     let fileURL = this.#realmPaths.fileURL(path).href;
     let indexingInstance = this.#indexingInstances.get(fileURL);
@@ -329,27 +350,27 @@ export class CurrentRun {
     let deferred = new Deferred<void>();
     this.#indexingInstances.set(fileURL, deferred.promise);
     let instanceURL = new URL(
-      this.#realmPaths.fileURL(path).href.replace(/\.json$/, '')
+      this.#realmPaths.fileURL(path).href.replace(/\.json$/, ''),
     );
     let moduleURL = new URL(
       moduleFrom(resource.meta.adoptsFrom),
-      new URL(path, this.#realmURL)
+      new URL(path, this.#realmURL),
     ).href;
     let typesMaybeError: TypesWithErrors | undefined;
     let uncaughtError: Error | undefined;
     let doc: SingleCardDocument | undefined;
     let searchData: Record<string, any> | undefined;
-    let cardType: typeof Card | undefined;
+    let cardType: typeof CardDef | undefined;
     let html: string | undefined;
     try {
       let api = await this.#loader.import<typeof CardAPI>(
-        `${baseRealm.url}card-api`
+        `${baseRealm.url}card-api`,
       );
       //Get realm info
       if (!this.#realmInfo) {
         let realmInfoResponse = await this.#loader.fetch(
           `${this.realmURL}_info`,
-          { headers: { Accept: SupportedMimeType.RealmInfo } }
+          { headers: { Accept: SupportedMimeType.RealmInfo } },
         );
         this.#realmInfo = (await realmInfoResponse.json())?.data?.attributes;
       }
@@ -363,14 +384,14 @@ export class CurrentRun {
           realmURL: this.realmURL,
         },
       });
-      let card = await api.createFromSerialized<typeof Card>(
+      let card = await api.createFromSerialized<typeof CardDef>(
         res,
         { data: res },
         new URL(fileURL),
+        this.#loader as unknown as LoaderType,
         {
           identityContext,
-          loader: this.#loader as unknown as LoaderType,
-        }
+        },
       );
       html = await this.#renderCard({
         card,
@@ -379,11 +400,11 @@ export class CurrentRun {
         identityContext,
         realmPath: this.#realmPaths,
       });
-      cardType = Reflect.getPrototypeOf(card)?.constructor as typeof Card;
-      let data = await api.serializeCard(card, { includeComputeds: true });
+      cardType = Reflect.getPrototypeOf(card)?.constructor as typeof CardDef;
+      let data = api.serializeCard(card, { includeComputeds: true });
       // prepare the document for index serialization
       Object.values(data.data.relationships ?? {}).forEach(
-        (rel) => delete (rel as Relationship).data
+        (rel) => delete (rel as Relationship).data,
       );
       //Add again realm info and realm URL here
       //since we won't get it from serializeCard.
@@ -400,7 +421,7 @@ export class CurrentRun {
       searchData = await api.searchDoc(card);
       if (!searchData) {
         throw new Error(
-          `bug: could not derive search doc for instance ${instanceURL.href}`
+          `bug: could not derive search doc for instance ${instanceURL.href}`,
         );
       }
     } catch (err: any) {
@@ -448,7 +469,7 @@ export class CurrentRun {
         throw err;
       }
       log.warn(
-        `encountered error indexing card instance ${path}: ${error.error.detail}`
+        `encountered error indexing card instance ${path}: ${error.error.detail}`,
       );
       this.setInstance(instanceURL, error);
       deferred.fulfill();
@@ -467,13 +488,13 @@ export class CurrentRun {
 
   public async buildModule(
     moduleIdentifier: string,
-    relativeTo = this.#realmURL
+    relativeTo = this.#realmURL,
   ): Promise<void> {
     let url = new URL(moduleIdentifier, relativeTo).href;
     let existing = this.#modules.get(url);
     if (existing?.type === 'error') {
       throw new Error(
-        `bug: card definition has errors which should never happen since the card already executed successfully: ${url}`
+        `bug: card definition has errors which should never happen since the card already executed successfully: ${url}`,
       );
     }
     if (existing) {
@@ -495,7 +516,7 @@ export class CurrentRun {
       }
     }
     let consumes = (await this.loader.getConsumedModules(url)).filter(
-      (u) => u !== url
+      (u) => u !== url,
     );
     let module: Module = {
       url,
@@ -505,7 +526,7 @@ export class CurrentRun {
     deferred.fulfill(module);
   }
 
-  private async getTypes(card: typeof Card): Promise<TypesWithErrors> {
+  private async getTypes(card: typeof CardDef): Promise<TypesWithErrors> {
     let cached = this.#typesCache.get(card);
     if (cached) {
       return await cached;
@@ -517,7 +538,7 @@ export class CurrentRun {
     let deferred = new Deferred<TypesWithErrors>();
     this.#typesCache.set(card, deferred.promise);
     let types: string[] = [];
-    let fullRef: CardRef = ref;
+    let fullRef: CodeRef = ref;
     while (fullRef) {
       let loadedCard = await loadCard(fullRef, { loader: this.loader });
       let loadedCardRef = identifyCard(loadedCard);
@@ -545,7 +566,7 @@ function invalidate(
   modules: Map<string, ModuleWithErrors>,
   instances: URLMap<SearchEntryWithErrors>,
   invalidations: string[] = [],
-  visited: Set<string> = new Set()
+  visited: Set<string> = new Set(),
 ): string[] {
   if (visited.has(url.href)) {
     return [];
@@ -605,7 +626,7 @@ function invalidate(
             modules,
             instances,
             [...invalidationSet],
-            new Set([...visited, url.href])
+            new Set([...visited, url.href]),
           )) {
             invalidationSet.add(invalidation);
           }
@@ -638,7 +659,7 @@ function invalidate(
           modules,
           instances,
           [...invalidationSet],
-          new Set([...visited, url.href])
+          new Set([...visited, url.href]),
         )) {
           invalidationSet.add(invalidation);
         }

@@ -5,21 +5,21 @@
     "url": "https://github.com/cardstack/boxel"
   },
   "scripts": {
-    "build:boxel-host": "cd packages/host && pnpm build:production",
+    "build:boxel-host": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && pnpm build:production",
     "clear-caches": "find . -name 'node_modules' -type d -prune -exec rm -rf {} \\; && rm -rf $TMPDIR/embroider",
-    "deploy:boxel-host": "cd packages/host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy",
-    "deploy:boxel-host:preview-staging": "cd packages/host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy s3-preview-staging --verbose",
-    "deploy:boxel-host:preview-production": "cd packages/host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy s3-preview-production --verbose",
+    "deploy:boxel-host": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy",
+    "deploy:boxel-host:preview-staging": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy s3-preview-staging --verbose",
+    "deploy:boxel-host:preview-production": "cd packages/boxel-ui/addon && pnpm build && cd ../../host && BASE_REALM_HOSTING_DISABLED=true NODE_OPTIONS='--max_old_space_size=4096' pnpm exec ember deploy s3-preview-production --verbose",
     "lint": "pnpm run --filter './packages/**' --if-present -r lint",
     "lint:fix": "pnpm run --filter './packages/**' --if-present -r lint:fix"
   },
   "pnpm": {
     "overrides": {
       "@types/eslint": "8.4.1",
-      "@embroider/util": "1.11.1",
+      "@embroider/util": "1.12.0",
       "jsesc": "^3.0.0",
-      "ember-concurrency": "github:machty/ember-concurrency#c6ed562",
-      "ember-modifier": "^4.1.0"
+      "ember-modifier": "^4.1.0",
+      "prettier": "github:cardstack/prettier#glimmer-style-tag-in-template-support"
     },
     "peerDependencyRules": {
       "allowedVersions": {
@@ -37,26 +37,27 @@
   "devDependencies": {
     "@actions/core": "^1.2.6",
     "@actions/github": "^4.0.0",
-    "@babel/core": "^7.17.8",
+    "@babel/core": "^7.22.11",
     "@glimmer/component": "^1.1.2",
     "@glimmer/tracking": "^1.0.4",
-    "@glint/core": "^1.0.0",
-    "@glint/environment-ember-loose": "^1.0.0",
-    "@glint/environment-ember-template-imports": "^1.0.0",
+    "@glint/core": "^1.2.1",
+    "@glint/environment-ember-loose": "^1.2.1",
+    "@glint/environment-ember-template-imports": "^1.2.1",
     "@typescript-eslint/eslint-plugin": "^5.17.0",
     "@typescript-eslint/parser": "^5.17.0",
-    "ember-cli-htmlbars": "^6.2.0",
-    "ember-resources": "^4.4.0",
+    "ember-cli-htmlbars": "^6.3.0",
+    "ember-resources": "^6.3.1",
     "ember-source": "~4.12.0",
     "ember-template-imports": "^3.0.1",
     "eslint": "^7.32.0",
     "eslint-config-prettier": "^8.4.0",
     "eslint-plugin-import": "^2.26.0",
-    "eslint-plugin-prettier": "^4.0.0",
+    "eslint-plugin-prefer-let": "^3.0.1",
+    "eslint-plugin-prettier": "^5.0.0",
     "hcl2-parser": "^1.0.3",
     "prettier": "^2.7.1",
-    "prettier-plugin-ember-template-tag": "^0.3.2",
-    "typescript": "^4.6.3"
+    "prettier-plugin-ember-template-tag": "^1.1.0",
+    "typescript": "^5.1.6"
   },
   "engines": {
     "pnpm": "^8"

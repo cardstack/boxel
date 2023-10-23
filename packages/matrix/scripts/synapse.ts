@@ -8,13 +8,18 @@ let dataDir = process.env.SYNAPSE_DATA_DIR
   : undefined;
 (async () => {
   if (command === 'start') {
-    await synapseStart({ template: 'dev', dataDir });
+    await synapseStart({
+      template: 'dev',
+      dataDir,
+      containerName: 'boxel-synapse',
+      hostPort: 8008,
+    });
   } else if (command === 'stop') {
     await dockerStop({ containerId: 'boxel-synapse' });
     console.log(`stopped container 'boxel-synapse'`);
   } else {
     console.error(
-      `Unknown command "${command}", available commands are "start" and "stop"`
+      `Unknown command "${command}", available commands are "start" and "stop"`,
     );
     process.exit(1);
   }

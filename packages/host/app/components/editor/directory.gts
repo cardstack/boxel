@@ -1,19 +1,26 @@
-import Component from '@glimmer/component';
-import { service } from '@ember/service';
-import type RouterService from '@ember/routing/router-service';
-import { action } from '@ember/object';
+import { fn, concat } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { fn } from '@ember/helper';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { action } from '@ember/object';
+import type RouterService from '@ember/routing/router-service';
+import { service } from '@ember/service';
+import Component from '@glimmer/component';
+
+import Modifier, { PositionalArgs } from 'ember-modifier';
+
+import { eq } from '@cardstack/boxel-ui/helpers';
+
+import { RealmPaths, type LocalPath } from '@cardstack/runtime-common/paths';
+
 import { directory } from '@cardstack/host/resources/directory';
-import { concat } from '@ember/helper';
+
+import type CardService from '../../services/card-service';
+import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 
 interface Args {
   Args: {
-    openDirs: string[];
-    realmURL: string;
     relativePath: string;
-    openFile: string | undefined;
+    realmURL: URL;
   };
 }
 
@@ -23,28 +30,39 @@ export default class Directory extends Component<Args> {
       <div class='level' data-test-directory-level>
         {{#let (concat @relativePath entry.name) as |entryPath|}}
           {{#if (eq entry.kind 'file')}}
-            <div
+            <button
               data-test-file={{entryPath}}
-              role='button'
               {{on 'click' (fn this.openFile entryPath)}}
-              class='file {{if (eq entryPath @openFile) "selected"}}'
+              {{ScrollIntoViewModifier
+                (fileIsSelected entryPath this.operatorModeStateService)
+              }}
+              class='file
+                {{if
+                  (fileIsSelected entryPath this.operatorModeStateService)
+                  "selected"
+                }}'
             >
               {{entry.name}}
-            </div>
+            </button>
           {{else}}
-            <div
+            <button
               data-test-directory={{entryPath}}
-              role='button'
               {{on 'click' (fn this.toggleDirectory entryPath)}}
-              class='directory
-                {{if (isSelected entryPath @openFile) "selected"}}'
+              class='directory'
             >
-              {{entry.name}}
-            </div>
-            {{#if (isOpen entryPath @openDirs)}}
+              <DropdownArrowDown
+                class={{concat
+                  'icon '
+                  (if
+                    (isOpen entryPath this.operatorModeStateService)
+                    'open'
+                    'closed'
+                  )
+                }}
+              />{{entry.name}}
+            </button>
+            {{#if (isOpen entryPath this.operatorModeStateService)}}
               <Directory
-                @openFile={{@openFile}}
-                @openDirs={{@openDirs}}
                 @relativePath='{{@relativePath}}{{entry.name}}'
                 @realmURL={{@realmURL}}
               />
@@ -55,22 +73,55 @@ export default class Directory extends Component<Args> {
     {{/each}}
     <style>
       .level {
+        --icon-length: 18px;
+        --icon-margin: 4px;
+
         padding-left: 0em;
+        margin-bottom: 2px;
       }
 
       .level .level {
         padding-left: 1em;
       }
 
-      .file:hover {
-        color: var(--boxel-highlight);
-        cursor: pointer;
+      .directory,
+      .file {
+        border-radius: var(--boxel-border-radius-xs);
+        background: transparent;
+        border: 0;
+        padding: var(--boxel-sp-xxxs);
+        width: 100%;
+        text-align: start;
       }
 
-      .directory.selected,
+      .directory:hover,
+      .file:hover {
+        background-color: var(--boxel-200);
+      }
+
       .file.selected,
       .file:active {
-        color: var(--boxel-highlight);
+        color: var(--boxel-light);
+        background-color: var(--boxel-highlight);
+      }
+
+      .directory {
+        padding-left: 0;
+      }
+
+      .directory :deep(.icon) {
+        width: var(--icon-length);
+        height: var(--icon-length);
+        margin-right: var(--icon-margin);
+        margin-bottom: -4px;
+      }
+
+      .directory :deep(.icon.closed) {
+        transform: rotate(-90deg);
+      }
+
+      .file {
+        padding-left: calc(var(--icon-length) + var(--icon-margin));
       }
     </style>
   </template>
@@ -78,50 +129,67 @@ export default class Directory extends Component<Args> {
   listing = directory(
     this,
     () => this.args.relativePath,
-    () => this.args.realmURL
+    () => this.args.realmURL,
   );
+  @service declare cardService: CardService;
+  @service declare operatorModeStateService: OperatorModeStateService;
   @service declare router: RouterService;
 
   @action
-  openFile(entryPath: string) {
-    this.router.transitionTo({ queryParams: { path: entryPath } });
+  openFile(entryPath: LocalPath) {
+    let fileUrl = new RealmPaths(this.args.realmURL).fileURL(entryPath);
+    this.operatorModeStateService.updateCodePath(fileUrl);
   }
 
   @action
   toggleDirectory(entryPath: string) {
-    let openDirs = editOpenDirsQuery(entryPath, this.args.openDirs);
-    this.router.transitionTo({
-      queryParams: {
-        openDirs: openDirs.length ? openDirs.join(',') : undefined,
-      },
-    });
+    this.operatorModeStateService.toggleOpenDir(entryPath);
   }
 }
 
-function editOpenDirsQuery(entryPath: string, openDirs: string[]): string[] {
-  let dirs = openDirs.slice();
-  for (let i = 0; i < dirs.length; i++) {
-    if (dirs[i].startsWith(entryPath)) {
-      let localParts = entryPath.split('/').filter((p) => p.trim() != '');
-      localParts.pop();
-      if (localParts.length) {
-        dirs[i] = localParts.join('/') + '/';
-      } else {
-        dirs.splice(i, 1);
+function fileIsSelected(
+  localPath: string,
+  operatorModeStateService: OperatorModeStateService,
+) {
+  return operatorModeStateService.codePathRelativeToRealm === localPath;
+}
+
+function isOpen(
+  path: string,
+  operatorModeStateService: OperatorModeStateService,
+) {
+  let directoryIsPersistedOpen = (
+    operatorModeStateService.currentRealmOpenDirs ?? []
+  ).find((item) => item.startsWith(path));
+
+  return directoryIsPersistedOpen;
+}
+
+interface ScrollIntoViewModifierArgs {
+  Positional: [boolean];
+}
+
+interface ScrollIntoViewModifierSignature {
+  Element: Element;
+  Args: ScrollIntoViewModifierArgs;
+}
+
+class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModifierSignature> {
+  element!: Element;
+  #didSetup = false;
+
+  modify(
+    element: Element,
+    [shouldScrollIntoView]: PositionalArgs<ScrollIntoViewModifierSignature>,
+  ): void {
+    this.element = element;
+
+    if (!this.#didSetup) {
+      this.#didSetup = true;
+
+      if (shouldScrollIntoView) {
+        this.element.scrollIntoView({ block: 'center' });
       }
-      return dirs;
-    } else if (entryPath.startsWith(dirs[i])) {
-      dirs[i] = entryPath;
-      return dirs;
     }
   }
-  return [...dirs, entryPath];
-}
-
-function isSelected(localPath: string, openFile: string | undefined) {
-  return openFile?.startsWith(localPath);
-}
-
-function isOpen(path: string, openDirs: string[]) {
-  return openDirs.find((item) => item.startsWith(path));
 }

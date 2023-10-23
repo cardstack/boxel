@@ -2,16 +2,16 @@ import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import {
-  type Card,
-  CardBase,
+  type CardDef,
+  BaseDef,
   type Box,
+  type BoxComponent,
   type Format,
   type Field,
   CardContext,
 } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
-import type { ComponentLike } from '@glint/template';
-import { Button, IconButton } from '@cardstack/boxel-ui';
+import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
 import {
   restartableTask,
   type EncapsulatedTaskDescriptor as Descriptor,
@@ -20,73 +20,102 @@ import {
   chooseCard,
   baseCardRef,
   identifyCard,
+  getPlural,
 } from '@cardstack/runtime-common';
+import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
 
 interface Signature {
   Args: {
-    model: Box<Card>;
-    arrayField: Box<Card[]>;
+    model: Box<CardDef>;
+    arrayField: Box<CardDef[]>;
     format: Format;
-    field: Field<typeof Card>;
+    field: Field<typeof CardDef>;
     cardTypeFor(
-      field: Field<typeof CardBase>,
-      boxedElement: Box<CardBase>
-    ): typeof CardBase;
+      field: Field<typeof BaseDef>,
+      boxedElement: Box<BaseDef>,
+    ): typeof BaseDef;
     context?: CardContext;
   };
 }
 
 class LinksToManyEditor extends GlimmerComponent<Signature> {
   <template>
-    <div
-      class='contains-many-editor'
-      data-test-links-to-many={{this.args.field.name}}
-    >
+    <div data-test-links-to-many={{this.args.field.name}}>
       {{#if @arrayField.children.length}}
-        <ul>
+        <ul class='list'>
           {{#each @arrayField.children as |boxedElement i|}}
-            <li class='links-to-editor' data-test-item={{i}}>
+            <li class='editor' data-test-item={{i}}>
               {{#let
                 (getBoxComponent
                   (this.args.cardTypeFor @field boxedElement)
                   'embedded'
                   boxedElement
+                  @field
+                  @context
                 )
                 as |Item|
               }}
                 <Item />
               {{/let}}
-              <IconButton
-                @icon='icon-minus-circle'
-                @width='20px'
-                @height='20px'
-                class='icon-button'
-                {{on 'click' (fn this.remove i)}}
-                data-test-remove-card
-                data-test-remove={{i}}
-                aria-label='Remove'
-              />
+              <div class='remove-button-container'>
+                <IconButton
+                  @variant='primary'
+                  @icon={{IconMinusCircle}}
+                  @width='20px'
+                  @height='20px'
+                  class='remove'
+                  {{on 'click' (fn this.remove i)}}
+                  aria-label='Remove'
+                  data-test-remove-card
+                  data-test-remove={{i}}
+                />
+              </div>
             </li>
           {{/each}}
         </ul>
       {{/if}}
-      <Button @size='small' {{on 'click' this.add}} data-test-add-new>
-        Choose
-      </Button>
-      {{#if @context.actions.createCard}}
-        <Button @size='small' {{on 'click' this.create}} data-test-create-new>
-          Create New
-        </Button>
-      {{/if}}
+      <AddButton
+        class='add-new'
+        @variant='full-width'
+        {{on 'click' this.add}}
+        data-test-add-new
+      >
+        Add
+        {{getPlural @field.card.displayName}}
+      </AddButton>
     </div>
+    <style>
+      .list {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 var(--boxel-sp);
+      }
+      .list > li + li {
+        margin-top: var(--boxel-sp);
+      }
+      .editor {
+        position: relative;
+      }
+      .remove-button-container {
+        position: absolute;
+        top: 0;
+        left: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+      }
+      .remove {
+        --icon-color: var(--boxel-light);
+      }
+      .remove:hover {
+        --icon-bg: var(--boxel-dark);
+        --icon-border: var(--boxel-dark);
+      }
+    </style>
   </template>
 
   add = () => {
     (this.chooseCard as unknown as Descriptor<any, any[]>).perform();
-  };
-
-  create = () => {
-    (this.createCard as unknown as Descriptor<any, any[]>).perform();
   };
 
   private chooseCard = restartableTask(async () => {
@@ -96,31 +125,23 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       [];
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
     let filter = { every: [{ type }, ...selectedCardsQuery] };
-    let chosenCard: Card | undefined = this.args.context?.actions?.createCard
-      ? await chooseCard({ filter })
-      : await chooseCard({ filter }, { offerToCreate: type });
+    let chosenCard: CardDef | undefined = await chooseCard(
+      { filter },
+      {
+        offerToCreate: type,
+        multiSelect: true,
+        createNewCard: this.args.context?.actions?.createCard,
+      },
+    );
     if (chosenCard) {
       selectedCards = [...selectedCards, chosenCard];
       (this.args.model.value as any)[this.args.field.name] = selectedCards;
     }
   });
 
-  private createCard = restartableTask(async () => {
-    let cards = (this.args.model.value as any)[this.args.field.name];
-    let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let newCard: Card | undefined =
-      await this.args.context?.actions?.createCard(type, undefined, {
-        isLinkedCard: true,
-      });
-    if (newCard) {
-      cards = [...cards, newCard];
-      (this.args.model.value as any)[this.args.field.name] = cards;
-    }
-  });
-
   remove = (index: number) => {
     let cards = (this.args.model.value as any)[this.args.field.name];
-    cards = cards.filter((_c: Card, i: number) => i !== index);
+    cards = cards.filter((_c: CardDef, i: number) => i !== index);
     (this.args.model.value as any)[this.args.field.name] = cards;
   };
 }
@@ -133,16 +154,16 @@ export function getLinksToManyComponent({
   cardTypeFor,
   context,
 }: {
-  model: Box<Card>;
-  arrayField: Box<Card[]>;
+  model: Box<CardDef>;
+  arrayField: Box<CardDef[]>;
   format: Format;
-  field: Field<typeof Card>;
+  field: Field<typeof CardDef>;
   cardTypeFor(
-    field: Field<typeof CardBase>,
-    boxedElement: Box<CardBase>
-  ): typeof CardBase;
+    field: Field<typeof BaseDef>,
+    boxedElement: Box<BaseDef>,
+  ): typeof BaseDef;
   context?: CardContext;
-}): ComponentLike<{ Args: {}; Blocks: {} }> {
+}): BoxComponent {
   if (format === 'edit') {
     return class LinksToManyEditorTemplate extends GlimmerComponent {
       <template>
@@ -162,7 +183,7 @@ export function getLinksToManyComponent({
       field,
       format,
       cardTypeFor,
-      context
+      context,
     );
   }
 }

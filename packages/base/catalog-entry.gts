@@ -2,27 +2,43 @@ import {
   contains,
   field,
   Component,
-  Card,
-  CardBase,
+  CardDef,
+  FieldDef,
+  BaseDef,
   primitive,
   relativeTo,
   realmInfo,
 } from './card-api';
-import StringCard from './string';
-import BooleanCard from './boolean';
-import CardRefCard from './card-ref';
-import { baseCardRef, loadCard } from '@cardstack/runtime-common';
+import StringField from './string';
+import BooleanField from './boolean';
+import CodeRef from './code-ref';
+import {
+  baseCardRef,
+  isFieldDef,
+  loadCard,
+  Loader,
+} from '@cardstack/runtime-common';
 import { isEqual } from 'lodash';
-import { FieldContainer } from '@cardstack/boxel-ui';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
+import GlimmerComponent from '@glimmer/component';
 
-export class CatalogEntry extends Card {
+export class CatalogEntry extends CardDef {
   static displayName = 'Catalog Entry';
-  @field title = contains(StringCard);
-  @field description = contains(StringCard);
-  @field ref = contains(CardRefCard);
-  @field isPrimitive = contains(BooleanCard, {
+  @field title = contains(StringField);
+  @field description = contains(StringField);
+  @field ref = contains(CodeRef);
+  @field isPrimitive = contains(BooleanField, {
     computeVia: async function (this: CatalogEntry) {
-      let card: typeof CardBase | undefined = await loadCard(this.ref, {
+      let loader = Loader.getLoaderFor(Object.getPrototypeOf(this).constructor);
+
+      if (!loader) {
+        throw new Error(
+          'Could not find a loader for this instance’s class’s module',
+        );
+      }
+
+      let card: typeof BaseDef | undefined = await loadCard(this.ref, {
+        loader,
         relativeTo: this[relativeTo],
       });
       if (!card) {
@@ -33,20 +49,42 @@ export class CatalogEntry extends Card {
       return primitive in card || isEqual(baseCardRef, this.ref);
     },
   });
-  @field moduleHref = contains(StringCard, {
+  // If it's not a field, then it's a card
+  @field isField = contains(BooleanField, {
+    computeVia: async function (this: CatalogEntry) {
+      let loader = Loader.getLoaderFor(Object.getPrototypeOf(this).constructor);
+
+      if (!loader) {
+        throw new Error(
+          'Could not find a loader for this instance’s class’s module',
+        );
+      }
+
+      let card: typeof BaseDef | undefined = await loadCard(this.ref, {
+        loader,
+        relativeTo: this[relativeTo],
+      });
+      if (!card) {
+        throw new Error(`Could not load card '${this.ref.name}'`);
+      }
+      return isFieldDef(card);
+    },
+  });
+  @field moduleHref = contains(StringField, {
     computeVia: function (this: CatalogEntry) {
       return new URL(this.ref.module, this[relativeTo]).href;
     },
   });
-  @field demo = contains(Card);
-  @field realmName = contains(StringCard, {
+  @field demo = contains(FieldDef);
+  @field realmName = contains(StringField, {
     computeVia: function (this: CatalogEntry) {
       return this[realmInfo]?.name;
     },
   });
+  @field thumbnailURL = contains(StringField, { computeVia: () => null }); // remove this if we want card type entries to have images
 
   get showDemo() {
-    return !this.isPrimitive;
+    return !this.isField;
   }
 
   // An explicit edit template is provided since computed isPrimitive bool
@@ -54,7 +92,7 @@ export class CatalogEntry extends Card {
   // right now in the edit view.
   static edit = class Edit extends Component<typeof this> {
     <template>
-      <div class='catalog-entry catalog-entry--edit'>
+      <CatalogEntryContainer>
         <FieldContainer @tag='label' @label='Title' data-test-field='title'>
           <@fields.title />
         </FieldContainer>
@@ -74,25 +112,43 @@ export class CatalogEntry extends Card {
         <FieldContainer @vertical={{true}} @label='Demo' data-test-field='demo'>
           <@fields.demo />
         </FieldContainer>
-      </div>
+      </CatalogEntryContainer>
     </template>
   };
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>
-      <div class='catalog-entry catalog-entry--embedded'>
-        <header><@fields.title /></header>
-        <div class='catalog-entry__realm-name' data-test-realm-name>
-          in
-          <@fields.realmName />
-        </div>
-      </div>
+      <CatalogEntryContainer class='embedded'>
+        <header class='title'>
+          <@fields.title />
+        </header>
+        <p class='description' data-test-description>
+          <@fields.description />
+        </p>
+      </CatalogEntryContainer>
+      <style>
+        .embedded > * {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .title {
+          font: 700 var(--boxel-font-sm);
+        }
+
+        .description {
+          margin: 0;
+          color: var(--boxel-500);
+          font-size: var(--boxel-font-size-xs);
+        }
+      </style>
     </template>
   };
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>
-      <div class='catalog-entry'>
+      <CatalogEntryContainer>
         <h1 data-test-title><@fields.title /></h1>
         <em data-test-description><@fields.description /></em>
         <div data-test-ref>
@@ -101,14 +157,46 @@ export class CatalogEntry extends Card {
           Name:
           {{@model.ref.name}}
         </div>
-        <div class='catalog-entry__realm-name' data-test-realm-name>
+        <div class='realm-name' data-test-realm-name>
           in
           <@fields.realmName />
         </div>
         {{#if @model.showDemo}}
           <div data-test-demo><@fields.demo /></div>
         {{/if}}
-      </div>
+        {{! field needs to be used in order to be indexed }}
+        {{#if @model.isPrimitive}}
+          <div>Field is primitive</div>
+        {{/if}}
+      </CatalogEntryContainer>
+      <style>
+        .realm-name {
+          color: var(--boxel-teal);
+          font-size: var(--boxel-font-size-xs);
+        }
+      </style>
     </template>
   };
+}
+
+interface Signature {
+  Element: HTMLElement;
+  Blocks: {
+    default: [];
+  };
+}
+
+class CatalogEntryContainer extends GlimmerComponent<Signature> {
+  <template>
+    <div class='entry' ...attributes>
+      {{yield}}
+    </div>
+    <style>
+      .entry {
+        display: grid;
+        gap: 3px;
+        font: var(--boxel-font-sm);
+      }
+    </style>
+  </template>
 }

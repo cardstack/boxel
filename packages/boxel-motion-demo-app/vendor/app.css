@@ -5,8 +5,19 @@
 body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-family: system-ui, BlinkMacSystemFont, -apple-system, Segoe UI, Roboto,
-    Oxygen, Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif;
+  font-family:
+    system-ui,
+    BlinkMacSystemFont,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Oxygen,
+    Ubuntu,
+    Cantarell,
+    Fira Sans,
+    Droid Sans,
+    Helvetica Neue,
+    sans-serif;
   font-size: 1rem;
   line-height: 1.625;
   color: #3d4852;
@@ -28,9 +39,9 @@ body {
 html {
   -webkit-text-size-adjust: 100%;
   box-sizing: border-box;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji',
-    'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   line-height: 1.5;
 }
 
@@ -95,7 +106,7 @@ textarea::placeholder {
   color: #a0aec0;
 }
 
-[role='button'],
+[role="button"],
 button {
   cursor: pointer;
 }
@@ -128,7 +139,13 @@ code,
 kbd,
 pre,
 samp {
-  font-family: Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace;
+  font-family:
+    Menlo,
+    Monaco,
+    Consolas,
+    Liberation Mono,
+    Courier New,
+    monospace;
 }
 
 audio,
@@ -182,13 +199,13 @@ video {
 }
 
 .detail-person-name {
-  display: 'block';
+  display: "block";
   font-size: 2rem;
   /* border: 1px solid purple; */
 }
 
 .detail-person-title {
-  display: 'block';
+  display: "block";
   font-size: 1.2rem;
   /* border: 1px solid red; */
 }

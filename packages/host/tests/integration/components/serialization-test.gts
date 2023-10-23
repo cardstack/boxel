@@ -1,7 +1,22 @@
-import { module, test } from 'qunit';
-import { setupRenderingTest } from 'ember-qunit';
-import { renderCard } from '../../helpers/render-component';
+import { fillIn, RenderingTestContext } from '@ember/test-helpers';
+
 import parseISO from 'date-fns/parseISO';
+import { setupRenderingTest } from 'ember-qunit';
+import { isAddress } from 'ethers';
+import { module, test } from 'qunit';
+
+import {
+  baseRealm,
+  NotLoaded,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
+
+import { shimExternals } from '@cardstack/host/lib/externals';
+import type LoaderService from '@cardstack/host/services/loader-service';
+
+import { type CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
+
 import {
   p,
   cleanWhiteSpace,
@@ -9,55 +24,55 @@ import {
   setupCardLogs,
   saveCard,
 } from '../../helpers';
-import { Loader } from '@cardstack/runtime-common/loader';
-import {
-  baseRealm,
-  NotLoaded,
-  type LooseSingleCardDocument,
-} from '@cardstack/runtime-common';
-import { fillIn, RenderingTestContext } from '@ember/test-helpers';
-import { shimExternals } from '@cardstack/host/lib/externals';
+
+import { renderCard } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
-let cardRef: typeof import('https://cardstack.com/base/card-ref');
+let codeRef: typeof import('https://cardstack.com/base/code-ref');
 let date: typeof import('https://cardstack.com/base/date');
 let datetime: typeof import('https://cardstack.com/base/datetime');
-let integer: typeof import('https://cardstack.com/base/integer');
+let number: typeof import('https://cardstack.com/base/number');
 let string: typeof import('https://cardstack.com/base/string');
+let bigInteger: typeof import('https://cardstack.com/base/big-integer');
+let ethereumAddress: typeof import('https://cardstack.com/base/ethereum-address');
+
+let loader: Loader;
 
 module('Integration | serialization', function (hooks) {
   setupRenderingTest(hooks);
+
+  hooks.beforeEach(async function () {
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+    shimExternals(loader);
+  });
+
   setupCardLogs(
     hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`),
   );
   const realmURL = `https://test-realm/`;
 
   hooks.beforeEach(async function () {
-    Loader.destroy();
-    shimExternals();
-    Loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
-
-    cardApi = await Loader.import(`${baseRealm.url}card-api`);
-    string = await Loader.import(`${baseRealm.url}string`);
-    integer = await Loader.import(`${baseRealm.url}integer`);
-    date = await Loader.import(`${baseRealm.url}date`);
-    datetime = await Loader.import(`${baseRealm.url}datetime`);
-    cardRef = await Loader.import(`${baseRealm.url}card-ref`);
+    cardApi = await loader.import(`${baseRealm.url}card-api`);
+    string = await loader.import(`${baseRealm.url}string`);
+    number = await loader.import(`${baseRealm.url}number`);
+    date = await loader.import(`${baseRealm.url}date`);
+    datetime = await loader.import(`${baseRealm.url}datetime`);
+    codeRef = await loader.import(`${baseRealm.url}code-ref`);
+    bigInteger = await loader.import(`${baseRealm.url}big-integer`);
+    ethereumAddress = await loader.import(`${baseRealm.url}ethereum-address`);
   });
 
   test('can deserialize field', async function (assert) {
-    let { field, contains, Card, Component, createFromSerialized } = cardApi;
-    let { default: StringCard } = string;
-    let { default: DateCard } = date;
-    let { default: DatetimeCard } = datetime;
-    class Post extends Card {
-      @field title = contains(StringCard);
-      @field created = contains(DateCard);
-      @field published = contains(DatetimeCard);
+    let { field, contains, CardDef, Component, createFromSerialized } = cardApi;
+    let { default: StringField } = string;
+    let { default: DateField } = date;
+    let { default: DatetimeField } = datetime;
+    class Post extends CardDef {
+      @field title = contains(StringField);
+      @field created = contains(DateField);
+      @field published = contains(DatetimeField);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <@fields.title />
@@ -68,7 +83,7 @@ module('Integration | serialization', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${realmURL}test-cards`, { Post });
+    await shimModule(`${realmURL}test-cards`, { Post }, loader);
 
     // initialize card data as serialized to force us to deserialize instead of using cached data
     let resource = {
@@ -87,25 +102,26 @@ module('Integration | serialization', function (hooks) {
     let firstPost = await createFromSerialized(
       resource,
       { data: resource },
-      undefined
+      undefined,
+      loader,
     );
-    let root = await renderCard(firstPost, 'isolated');
+    let root = await renderCard(loader, firstPost, 'isolated');
 
     // the template value 'Apr 22, 2022' can only be realized when the card has
     // correctly deserialized it's static data property
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
-      'First Post created Apr 22, 2022 published Apr 27, 2022, 4:02 PM'
+      'First Post created Apr 22, 2022 published Apr 27, 2022, 4:02 PM',
     );
   });
 
   test('can deserialize a card that has an ID', async function (assert) {
-    let { field, contains, Card, createFromSerialized, isSaved } = cardApi;
-    let { default: StringCard } = string;
-    class Person extends Card {
-      @field firstName = contains(StringCard);
+    let { field, contains, CardDef, createFromSerialized, isSaved } = cardApi;
+    let { default: StringField } = string;
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
     }
-    await shimModule(`${realmURL}test-cards`, { Person });
+    await shimModule(`${realmURL}test-cards`, { Person }, loader);
 
     // deserialize a card with an ID to mark it as "saved"
     let resource = {
@@ -120,50 +136,55 @@ module('Integration | serialization', function (hooks) {
         },
       },
     };
-    let savedCard = await createFromSerialized(
+    let savedCard = (await createFromSerialized(
       resource,
       { data: resource },
-      undefined
-    );
+      undefined,
+      loader,
+    )) as CardDefType;
 
     assert.strictEqual(
       savedCard.id,
       `${realmURL}Person/mango`,
-      'instance id is set'
+      'instance id is set',
     );
     assert.strictEqual(
       isSaved(savedCard),
       true,
-      'API recognizes card as saved'
+      'API recognizes card as saved',
     );
 
     let unsavedCard = new Person();
     assert.strictEqual(
       isSaved(unsavedCard),
       false,
-      'API recognizes card as unsaved'
+      'API recognizes card as unsaved',
     );
   });
 
   test('can serialize a card that has an ID', async function (assert) {
-    let { field, contains, Card, serializeCard } = cardApi;
-    let { default: StringCard } = string;
-    class Person extends Card {
-      @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+    let { field, contains, CardDef, serializeCard } = cardApi;
+    let { default: StringField } = string;
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}test-cards`, { Person });
+    await shimModule(`${realmURL}test-cards`, { Person }, loader);
 
     let mango = new Person({
       id: `${realmURL}Person/mango`,
       firstName: 'Mango',
     });
 
-    assert.deepEqual(await serializeCard(mango, { includeUnrenderedFields: true }), {
+    assert.deepEqual(serializeCard(mango, { includeUnrenderedFields: true }), {
       data: {
         id: `${realmURL}Person/mango`,
         type: 'card',
@@ -181,12 +202,12 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can update an instance from serialized data', async function (assert) {
-    let { field, contains, Card, updateFromSerialized, isSaved } = cardApi;
-    let { default: StringCard } = string;
-    class Person extends Card {
-      @field firstName = contains(StringCard);
+    let { field, contains, CardDef, updateFromSerialized, isSaved } = cardApi;
+    let { default: StringField } = string;
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
     }
-    await shimModule(`${realmURL}test-cards`, { Person });
+    await shimModule(`${realmURL}test-cards`, { Person }, loader);
 
     let card = new Person({
       id: `${realmURL}Person/mango`,
@@ -215,19 +236,24 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(
       card.id,
       `${realmURL}Person/vanGogh`,
-      'ID can be updated for unsaved instance'
+      'ID can be updated for unsaved instance',
     );
     assert.strictEqual(card.firstName, 'Van Gogh', 'the field can be updated');
   });
 
   test('throws when updating the id of a saved instance from serialized data', async function (assert) {
-    let { field, contains, Card, updateFromSerialized, createFromSerialized } =
-      cardApi;
-    let { default: StringCard } = string;
-    class Person extends Card {
-      @field firstName = contains(StringCard);
+    let {
+      field,
+      contains,
+      CardDef,
+      updateFromSerialized,
+      createFromSerialized,
+    } = cardApi;
+    let { default: StringField } = string;
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
     }
-    await shimModule(`${realmURL}test-cards`, { Person });
+    await shimModule(`${realmURL}test-cards`, { Person }, loader);
 
     // deserialize a card with an ID to mark it as "saved"
     let resource = {
@@ -245,7 +271,8 @@ module('Integration | serialization', function (hooks) {
     let savedCard = await createFromSerialized(
       resource,
       { data: resource },
-      undefined
+      undefined,
+      loader,
     );
 
     try {
@@ -267,15 +294,15 @@ module('Integration | serialization', function (hooks) {
     } catch (err: any) {
       assert.ok(
         err.message.match(/cannot change the id for saved instance/),
-        'exception thrown when updating the ID of a saved card'
+        'exception thrown when updating the ID of a saved card',
       );
     }
   });
 
   test('deserialized card ref fields are not strict equal to serialized card ref', async function (assert) {
-    let { field, contains, Card, Component, createFromSerialized } = cardApi;
-    let { default: CardRefCard } = cardRef;
-    class DriverCard extends Card {
+    let { field, contains, CardDef, Component, createFromSerialized } = cardApi;
+    let { default: CardRefCard } = codeRef;
+    class DriverCard extends CardDef {
       @field ref = contains(CardRefCard);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -283,7 +310,7 @@ module('Integration | serialization', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${realmURL}test-cards`, { DriverCard });
+    await shimModule(`${realmURL}test-cards`, { DriverCard }, loader);
 
     let ref = { module: `http://localhost:4202/test/person`, name: 'Person' };
     let resource = {
@@ -300,23 +327,24 @@ module('Integration | serialization', function (hooks) {
     let driver = await createFromSerialized<typeof DriverCard>(
       resource,
       { data: resource },
-      undefined
+      undefined,
+      loader,
     );
     assert.ok(
       driver.ref !== ref,
-      'the card ref value is not strict equals to its serialized counter part'
+      'the card ref value is not strict equals to its serialized counter part',
     );
     assert.deepEqual(
       driver.ref,
       ref,
-      'the card ref value is deep equal to its serialized counter part'
+      'the card ref value is deep equal to its serialized counter part',
     );
   });
 
   test('serialized card ref fields are not strict equal to their deserialized card ref values', async function (assert) {
-    let { field, contains, Card, Component, serializeCard } = cardApi;
-    let { default: CardRefCard } = cardRef;
-    class DriverCard extends Card {
+    let { field, contains, CardDef, Component, serializeCard } = cardApi;
+    let { default: CardRefCard } = codeRef;
+    class DriverCard extends CardDef {
       @field ref = contains(CardRefCard);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
@@ -324,56 +352,57 @@ module('Integration | serialization', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${realmURL}test-cards`, { DriverCard });
+    await shimModule(`${realmURL}test-cards`, { DriverCard }, loader);
 
     let ref = { module: `http://localhost:4202/test/person`, name: 'Person' };
     let driver = new DriverCard({ ref });
-    let serializedRef = (await serializeCard(driver, { includeUnrenderedFields: true })).data.attributes?.ref;
+    let serializedRef = serializeCard(driver, { includeUnrenderedFields: true })
+      .data.attributes?.ref;
     assert.ok(
       serializedRef !== ref,
-      'the card ref value is not strict equals to its serialized counter part'
+      'the card ref value is not strict equals to its serialized counter part',
     );
     assert.deepEqual(
       serializedRef,
       ref,
-      'the card ref value is deep equal to its serialized counter part'
+      'the card ref value is deep equal to its serialized counter part',
     );
   });
 
   test('can serialize field', async function (assert) {
-    let { field, contains, Card, serializeCard } = cardApi;
-    let { default: DateCard } = date;
-    let { default: DatetimeCard } = datetime;
-    class Post extends Card {
-      @field created = contains(DateCard);
-      @field published = contains(DatetimeCard);
+    let { field, contains, CardDef, serializeCard } = cardApi;
+    let { default: DateField } = date;
+    let { default: DatetimeField } = datetime;
+    class Post extends CardDef {
+      @field created = contains(DateField);
+      @field published = contains(DatetimeField);
     }
-    await shimModule(`${realmURL}test-cards`, { Post });
+    await shimModule(`${realmURL}test-cards`, { Post }, loader);
 
     // initialize card data as deserialized to force us to serialize instead of using cached data
     let firstPost = new Post({
       created: p('2022-04-22'),
       published: parseISO('2022-04-27T16:30+00:00'),
     });
-    let serialized = await serializeCard(firstPost, {
+    let serialized = serializeCard(firstPost, {
       includeUnrenderedFields: true,
     });
     assert.strictEqual(serialized.data.attributes?.created, '2022-04-22');
     assert.strictEqual(
       serialized.data.attributes?.published,
-      '2022-04-27T16:30:00.000Z'
+      '2022-04-27T16:30:00.000Z',
     );
   });
 
   test('can deserialize a date field with null value', async function (assert) {
-    let { field, contains, Card, Component, createFromSerialized } = cardApi;
-    let { default: StringCard } = string;
-    let { default: DateCard } = date;
-    let { default: DatetimeCard } = datetime;
-    class Post extends Card {
-      @field title = contains(StringCard);
-      @field created = contains(DateCard);
-      @field published = contains(DatetimeCard);
+    let { field, contains, CardDef, Component, createFromSerialized } = cardApi;
+    let { default: StringField } = string;
+    let { default: DateField } = date;
+    let { default: DatetimeField } = datetime;
+    class Post extends CardDef {
+      @field title = contains(StringField);
+      @field created = contains(DateField);
+      @field published = contains(DatetimeField);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <@fields.title />
@@ -384,7 +413,7 @@ module('Integration | serialization', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${realmURL}test-cards`, { Post });
+    await shimModule(`${realmURL}test-cards`, { Post }, loader);
     let resource = {
       attributes: {
         title: 'First Post',
@@ -401,46 +430,53 @@ module('Integration | serialization', function (hooks) {
     let firstPost = await createFromSerialized(
       resource,
       { data: resource },
-      undefined
+      undefined,
+      loader,
     );
-    let root = await renderCard(firstPost, 'isolated');
+    let root = await renderCard(loader, firstPost, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
-      'First Post created [no date] published [no date-time]'
+      'First Post created [no date] published [no date-time]',
     );
   });
 
   test('can serialize a linksTo relationship', async function (assert) {
-    let { field, contains, linksTo, Card, serializeCard } = cardApi;
-    let { default: StringCard } = string;
+    let { field, contains, linksTo, CardDef, serializeCard } = cardApi;
+    let { default: StringField } = string;
 
-    class Toy extends Card {
-      @field description = contains(StringCard);
-      @field title = contains(StringCard, {
+    class Toy extends CardDef {
+      @field title = contains(StringField, {
         computeVia: function (this: Toy) {
           return this.description;
         },
       });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    class Pet extends Card {
-      @field firstName = contains(StringCard);
+    class Pet extends CardDef {
+      @field firstName = contains(StringField);
       @field favoriteToy = linksTo(Toy);
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.firstName;
         },
       });
+      @field description = contains(StringField, { computeVia: () => 'Pet' });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    class Person extends Card {
-      @field firstName = contains(StringCard);
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
+    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy }, loader);
 
     let spookyToiletPaper = new Toy({
       description: 'Toilet paper ghost: Poooo!',
@@ -453,10 +489,14 @@ module('Integration | serialization', function (hooks) {
       firstName: 'Hassan',
       pet: mango,
     });
-    await saveCard(spookyToiletPaper, `${realmURL}Toy/spookyToiletPaper`);
-    await saveCard(mango, `${realmURL}Pet/mango`);
+    await saveCard(
+      spookyToiletPaper,
+      `${realmURL}Toy/spookyToiletPaper`,
+      loader,
+    );
+    await saveCard(mango, `${realmURL}Pet/mango`, loader);
 
-    let serialized = await serializeCard(hassan, { includeUnrenderedFields: true });
+    let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
     assert.deepEqual(serialized, {
       data: {
         type: 'card',
@@ -528,25 +568,25 @@ module('Integration | serialization', function (hooks) {
       field,
       contains,
       linksTo,
-      Card,
+      CardDef,
       createFromSerialized,
       relationshipMeta,
       isSaved,
     } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
-    class Toy extends Card {
-      @field description = contains(StringCard);
+    class Toy extends CardDef {
+      @field description = contains(StringField);
     }
-    class Pet extends Card {
-      @field firstName = contains(StringCard);
+    class Pet extends CardDef {
+      @field firstName = contains(StringField);
       @field favoriteToy = linksTo(Toy);
     }
-    class Person extends Card {
-      @field firstName = contains(StringCard);
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
+    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy }, loader);
     let doc: LooseSingleCardDocument = {
       data: {
         type: 'card',
@@ -614,7 +654,8 @@ module('Integration | serialization', function (hooks) {
     let card = await createFromSerialized<typeof Person>(
       doc.data,
       doc,
-      undefined
+      undefined,
+      loader,
     );
 
     assert.ok(card instanceof Person, 'card is an instance of person');
@@ -628,7 +669,7 @@ module('Integration | serialization', function (hooks) {
         assert.strictEqual(isSaved(favoriteToy), true, 'Toy card is saved');
         assert.strictEqual(
           favoriteToy.description,
-          'Toilet paper ghost: Poooo!'
+          'Toilet paper ghost: Poooo!',
         );
       } else {
         assert.ok(false, '"favoriteToy" field value is not an instance of Toy');
@@ -641,7 +682,7 @@ module('Integration | serialization', function (hooks) {
     if (Array.isArray(relationship)) {
       assert.ok(
         false,
-        'relationshipMeta should not be an array for linksTo relationship'
+        'relationshipMeta should not be an array for linksTo relationship',
       );
     } else {
       if (relationship?.type === 'loaded') {
@@ -649,7 +690,7 @@ module('Integration | serialization', function (hooks) {
         assert.strictEqual(
           relatedCard instanceof Pet,
           true,
-          'related card is a Pet'
+          'related card is a Pet',
         );
         assert.strictEqual(relatedCard?.id, `${realmURL}Pet/mango`);
       } else {
@@ -660,7 +701,7 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(
       relationshipMeta(card, 'firstName'),
       undefined,
-      'relationshipMeta returns undefined for non-relationship field'
+      'relationshipMeta returns undefined for non-relationship field',
     );
   });
 
@@ -669,31 +710,37 @@ module('Integration | serialization', function (hooks) {
       field,
       contains,
       linksTo,
-      Card,
+      CardDef,
       createFromSerialized,
       relationshipMeta,
       serializeCard,
     } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
-    class Pet extends Card {
-      @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+    class Pet extends CardDef {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.firstName;
         },
       });
+      @field description = contains(StringField, { computeVia: () => 'Pet' });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    class Person extends Card {
-      @field firstName = contains(StringCard);
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Pet });
+    await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
     let doc: LooseSingleCardDocument = {
       data: {
         type: 'card',
@@ -718,7 +765,8 @@ module('Integration | serialization', function (hooks) {
     let hassan = await createFromSerialized<typeof Person>(
       doc.data,
       doc,
-      undefined
+      undefined,
+      loader,
     );
 
     try {
@@ -729,8 +777,8 @@ module('Integration | serialization', function (hooks) {
       assert.ok(
         err.message.match(
           /The field Person\.pet refers to the card instance https:\/\/test-realm\/Pet\/mango which is not loaded/,
-          'NotLoaded error describes field not loaded'
-        )
+          'NotLoaded error describes field not loaded',
+        ),
       );
     }
 
@@ -738,7 +786,7 @@ module('Integration | serialization', function (hooks) {
     if (Array.isArray(relationship)) {
       assert.ok(
         false,
-        'relationshipMeta should not be an array for linksTo relationship'
+        'relationshipMeta should not be an array for linksTo relationship',
       );
     } else {
       if (relationship?.type === 'not-loaded') {
@@ -748,7 +796,7 @@ module('Integration | serialization', function (hooks) {
       }
     }
 
-    let payload = await serializeCard(hassan, { includeUnrenderedFields: true });
+    let payload = serializeCard(hassan, { includeUnrenderedFields: true });
     assert.deepEqual(payload, {
       data: {
         type: 'card',
@@ -773,31 +821,35 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize an empty linksTo relationship', async function (assert) {
-    let { field, contains, linksTo, Card, serializeCard } = cardApi;
-    let { default: StringCard } = string;
+    let { field, contains, linksTo, CardDef, serializeCard } = cardApi;
+    let { default: StringField } = string;
 
-    class Pet extends Card {
-      @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+    class Pet extends CardDef {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.firstName;
         },
       });
     }
-    class Person extends Card {
-      @field firstName = contains(StringCard);
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Pet });
+    await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
 
     let hassan = new Person({ firstName: 'Hassan' });
 
-    let serialized = await serializeCard(hassan, { includeUnrenderedFields: true });
+    let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
     assert.deepEqual(serialized, {
       data: {
         type: 'card',
@@ -821,7 +873,7 @@ module('Integration | serialization', function (hooks) {
     });
 
     let mango = new Person({ firstName: 'Mango', pet: null });
-    serialized = await serializeCard(mango, { includeUnrenderedFields: true });
+    serialized = serializeCard(mango, { includeUnrenderedFields: true });
     assert.deepEqual(serialized, {
       data: {
         type: 'card',
@@ -846,17 +898,17 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize an empty linksTo relationship', async function (assert) {
-    let { field, contains, linksTo, Card, createFromSerialized } = cardApi;
-    let { default: StringCard } = string;
+    let { field, contains, linksTo, CardDef, createFromSerialized } = cardApi;
+    let { default: StringField } = string;
 
-    class Pet extends Card {
-      @field firstName = contains(StringCard);
+    class Pet extends CardDef {
+      @field firstName = contains(StringField);
     }
-    class Person extends Card {
-      @field firstName = contains(StringCard);
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Pet });
+    await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
 
     let doc: LooseSingleCardDocument = {
       data: {
@@ -882,7 +934,8 @@ module('Integration | serialization', function (hooks) {
     let card = await createFromSerialized<typeof Person>(
       doc.data,
       doc,
-      undefined
+      undefined,
+      loader,
     );
     assert.ok(card instanceof Person, 'card is a Person');
     assert.strictEqual(card.firstName, 'Hassan');
@@ -895,26 +948,27 @@ module('Integration | serialization', function (hooks) {
       contains,
       containsMany,
       linksTo,
-      Card,
+      CardDef,
       createFromSerialized,
+      FieldDef,
       relationshipMeta,
       isSaved,
     } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
-    class Person extends Card {
-      @field firstName = contains(StringCard);
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
     }
-    class Toy extends Card {
-      @field description = contains(StringCard);
+    class Toy extends FieldDef {
+      @field description = contains(StringField);
     }
-    class Pet extends Card {
-      @field firstName = contains(StringCard);
+    class Pet extends CardDef {
+      @field firstName = contains(StringField);
       @field owner = linksTo(Person);
       @field favoriteToy = contains(Toy);
       @field toys = containsMany(Toy);
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
+    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy }, loader);
     let doc: LooseSingleCardDocument = {
       data: {
         type: 'card',
@@ -957,7 +1011,12 @@ module('Integration | serialization', function (hooks) {
         },
       ],
     };
-    let card = await createFromSerialized<typeof Pet>(doc.data, doc, undefined);
+    let card = await createFromSerialized<typeof Pet>(
+      doc.data,
+      doc,
+      undefined,
+      loader,
+    );
 
     assert.ok(card instanceof Pet, 'card is an instance of pet');
     assert.strictEqual(card.firstName, 'Jackie');
@@ -970,15 +1029,12 @@ module('Integration | serialization', function (hooks) {
       assert.ok(false, '"owner" field value is not an instance of Person');
     }
     assert.strictEqual(toys.length, 2);
-    toys.map((toy, i) => {
-      if (toy instanceof Toy) {
-        assert.strictEqual(isSaved(toy), false, `Toy ${i} card is not saved`);
-      } else {
+    toys.map((toy) => {
+      if (!(toy instanceof Toy)) {
         assert.ok(false, '"toys" field value is not an instance of Toy');
       }
     });
     if (favoriteToy instanceof Toy) {
-      assert.strictEqual(isSaved(favoriteToy), false, 'Toy card is not saved');
       assert.strictEqual(favoriteToy.description, 'treat ball');
     } else {
       assert.ok(false, '"favoriteToy" field value is not an instance of Toy');
@@ -988,7 +1044,7 @@ module('Integration | serialization', function (hooks) {
     if (Array.isArray(relationship)) {
       assert.ok(
         false,
-        'relationshipMeta should not be an array for linksTo relationship'
+        'relationshipMeta should not be an array for linksTo relationship',
       );
     } else {
       if (relationship?.type === 'loaded') {
@@ -996,7 +1052,7 @@ module('Integration | serialization', function (hooks) {
         assert.strictEqual(
           relatedCard instanceof Person,
           true,
-          'related card is a Person'
+          'related card is a Person',
         );
         assert.strictEqual(relatedCard?.id, `${realmURL}Person/burcu`);
       } else {
@@ -1008,30 +1064,34 @@ module('Integration | serialization', function (hooks) {
       assert.strictEqual(
         relationshipMeta(card, fieldName),
         undefined,
-        `relationshipMeta returns undefined for non-relationship field ${fieldName}`
-      )
+        `relationshipMeta returns undefined for non-relationship field ${fieldName}`,
+      ),
     );
   });
 
   test('can serialize a linksTo relationship that points to own card class', async function (assert) {
-    let { field, contains, linksTo, Card, serializeCard } = cardApi;
-    let { default: StringCard } = string;
+    let { field, contains, linksTo, CardDef, serializeCard } = cardApi;
+    let { default: StringField } = string;
 
-    class Person extends Card {
-      @field firstName = contains(StringCard);
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
       @field friend = linksTo(() => Person);
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}test-cards`, { Person });
+    await shimModule(`${realmURL}test-cards`, { Person }, loader);
 
     let mango = new Person({ firstName: 'Mango' });
     let hassan = new Person({ firstName: 'Hassan', friend: mango });
-    await saveCard(mango, `${realmURL}Person/mango`);
-    let serialized = await serializeCard(hassan, { includeUnrenderedFields: true });
+    await saveCard(mango, `${realmURL}Person/mango`, loader);
+    let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
     assert.deepEqual(serialized, {
       data: {
         type: 'card',
@@ -1082,15 +1142,15 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a linksTo relationship that points to own card class', async function (assert) {
-    let { field, contains, linksTo, Card, createFromSerialized, isSaved } =
+    let { field, contains, linksTo, CardDef, createFromSerialized, isSaved } =
       cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
-    class Person extends Card {
-      @field firstName = contains(StringCard);
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
       @field friend = linksTo(() => Person);
     }
-    await shimModule(`${realmURL}test-cards`, { Person });
+    await shimModule(`${realmURL}test-cards`, { Person }, loader);
 
     let doc: LooseSingleCardDocument = {
       data: {
@@ -1142,7 +1202,8 @@ module('Integration | serialization', function (hooks) {
     let card = await createFromSerialized<typeof Person>(
       doc.data,
       doc,
-      undefined
+      undefined,
+      loader,
     );
     assert.ok(card instanceof Person, 'card is a Person');
     assert.strictEqual(card.firstName, 'Hassan');
@@ -1153,30 +1214,30 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('throws when serializing a linksTo relationship to an unsaved card', async function (assert) {
-    let { field, contains, linksTo, Card, serializeCard } = cardApi;
-    let { default: StringCard } = string;
+    let { field, contains, linksTo, CardDef, serializeCard } = cardApi;
+    let { default: StringField } = string;
 
-    class Pet extends Card {
-      @field firstName = contains(StringCard);
+    class Pet extends CardDef {
+      @field firstName = contains(StringField);
     }
-    class Person extends Card {
-      @field firstName = contains(StringCard);
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Pet });
+    await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
 
     let mango = new Pet({ firstName: 'Mango' });
     let hassan = new Person({ firstName: 'Hassan', pet: mango });
 
     try {
-      await serializeCard(hassan, { includeUnrenderedFields: true });
+      serializeCard(hassan, { includeUnrenderedFields: true });
       throw new Error(`expected error not thrown`);
     } catch (err: any) {
       assert.ok(
         err.message.match(
-          /field 'pet' cannot be serialized with an unsaved card/
+          /field 'pet' cannot be serialized with an unsaved card/,
         ),
-        'cannot serialize a linksTo relationship to an unsaved card'
+        'cannot serialize a linksTo relationship to an unsaved card',
       );
     }
   });
@@ -1186,39 +1247,46 @@ module('Integration | serialization', function (hooks) {
       field,
       contains,
       linksTo,
-      Card,
+      CardDef,
+      FieldDef,
       serializeCard,
       createFromSerialized,
     } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
-    class Toy extends Card {
-      @field description = contains(StringCard);
-      @field title = contains(StringCard, {
+    class Toy extends CardDef {
+      @field title = contains(StringField, {
         computeVia: function (this: Toy) {
           return this.description;
         },
       });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    class Pet extends Card {
-      @field firstName = contains(StringCard);
+    class Pet extends FieldDef {
+      @field firstName = contains(StringField);
       @field favoriteToy = linksTo(Toy);
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.firstName;
         },
       });
+      @field description = contains(StringField, { computeVia: () => 'Pet' });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    class Person extends Card {
-      @field firstName = contains(StringCard);
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
       @field pet = contains(Pet);
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
+    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy }, loader);
 
     let spookyToiletPaper = new Toy({
       description: 'Toilet paper ghost: Poooo!',
@@ -1231,8 +1299,12 @@ module('Integration | serialization', function (hooks) {
       firstName: 'Hassan',
       pet: mango,
     });
-    await saveCard(spookyToiletPaper, `${realmURL}Toy/spookyToiletPaper`);
-    let serialized = await serializeCard(hassan, { includeUnrenderedFields: true });
+    await saveCard(
+      spookyToiletPaper,
+      `${realmURL}Toy/spookyToiletPaper`,
+      loader,
+    );
+    let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
     assert.deepEqual(serialized, {
       data: {
         type: 'card',
@@ -1280,7 +1352,8 @@ module('Integration | serialization', function (hooks) {
     let card = await createFromSerialized(
       serialized.data,
       serialized,
-      undefined
+      undefined,
+      loader,
     );
     if (card instanceof Person) {
       assert.strictEqual(card.firstName, 'Hassan');
@@ -1291,7 +1364,7 @@ module('Integration | serialization', function (hooks) {
         if (favoriteToy instanceof Toy) {
           assert.strictEqual(
             favoriteToy.description,
-            'Toilet paper ghost: Poooo!'
+            'Toilet paper ghost: Poooo!',
           );
         } else {
           assert.ok(false, 'card is not instance of Toy');
@@ -1310,39 +1383,47 @@ module('Integration | serialization', function (hooks) {
       contains,
       containsMany,
       linksTo,
-      Card,
+      CardDef,
+      FieldDef,
       serializeCard,
       createFromSerialized,
     } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
-    class Toy extends Card {
-      @field description = contains(StringCard);
-      @field title = contains(StringCard, {
+    class Toy extends CardDef {
+      @field description = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Toy) {
           return this.description;
         },
       });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    class Pet extends Card {
-      @field firstName = contains(StringCard);
+    class Pet extends FieldDef {
+      @field firstName = contains(StringField);
       @field favoriteToy = linksTo(Toy);
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.firstName;
         },
       });
+      @field description = contains(StringField, { computeVia: () => 'Pet' });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    class Person extends Card {
-      @field firstName = contains(StringCard);
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
       @field pets = containsMany(Pet);
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
+    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy }, loader);
 
     let spookyToiletPaper = new Toy({
       description: 'Toilet paper ghost: Poooo!',
@@ -1355,8 +1436,12 @@ module('Integration | serialization', function (hooks) {
       firstName: 'Hassan',
       pets: [mango],
     });
-    await saveCard(spookyToiletPaper, `${realmURL}Toy/spookyToiletPaper`);
-    let serialized = await serializeCard(hassan, { includeUnrenderedFields: true });
+    await saveCard(
+      spookyToiletPaper,
+      `${realmURL}Toy/spookyToiletPaper`,
+      loader,
+    );
+    let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
     assert.deepEqual(serialized, {
       data: {
         type: 'card',
@@ -1406,7 +1491,8 @@ module('Integration | serialization', function (hooks) {
     let card = await createFromSerialized(
       serialized.data,
       serialized,
-      undefined
+      undefined,
+      loader,
     );
     if (card instanceof Person) {
       assert.strictEqual(card.firstName, 'Hassan');
@@ -1420,7 +1506,7 @@ module('Integration | serialization', function (hooks) {
           if (favoriteToy instanceof Toy) {
             assert.strictEqual(
               favoriteToy.description,
-              'Toilet paper ghost: Poooo!'
+              'Toilet paper ghost: Poooo!',
             );
           } else {
             assert.ok(false, 'card is not instance of Toy');
@@ -1437,14 +1523,14 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can maintain object identity when deserializing linksTo relationship', async function (assert) {
-    let { field, contains, linksTo, Card, createFromSerialized } = cardApi;
-    let { default: StringCard } = string;
-    class Person extends Card {
-      @field firstName = contains(StringCard);
+    let { field, contains, linksTo, CardDef, createFromSerialized } = cardApi;
+    let { default: StringField } = string;
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
       @field parent = linksTo(() => Person);
       @field favorite = linksTo(() => Person);
     }
-    await shimModule(`${realmURL}test-cards`, { Person });
+    await shimModule(`${realmURL}test-cards`, { Person }, loader);
     let doc: LooseSingleCardDocument = {
       data: {
         type: 'card',
@@ -1490,20 +1576,21 @@ module('Integration | serialization', function (hooks) {
     let mango = await createFromSerialized<typeof Person>(
       doc.data,
       doc,
-      undefined
+      undefined,
+      loader,
     );
     if (mango instanceof Person) {
       let { parent, favorite } = mango;
       assert.strictEqual(
         parent,
         favorite,
-        'relationship values share object equality'
+        'relationship values share object equality',
       );
       parent.firstName = 'Mariko';
       assert.strictEqual(
         favorite.firstName,
         'Mariko',
-        'instances that have object equality can be mutated'
+        'instances that have object equality can be mutated',
       );
     } else {
       assert.ok(false, 'mango is not a Person');
@@ -1511,17 +1598,17 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a date field with null value', async function (assert) {
-    let { field, contains, Card, serializeCard } = cardApi;
-    let { default: DateCard } = date;
-    let { default: DatetimeCard } = datetime;
-    class Post extends Card {
-      @field created = contains(DateCard);
-      @field published = contains(DatetimeCard);
+    let { field, contains, CardDef, serializeCard } = cardApi;
+    let { default: DateField } = date;
+    let { default: DatetimeField } = datetime;
+    class Post extends CardDef {
+      @field created = contains(DateField);
+      @field published = contains(DatetimeField);
     }
-    await shimModule(`${realmURL}test-cards`, { Post });
+    await shimModule(`${realmURL}test-cards`, { Post }, loader);
 
     let firstPost = new Post({ created: null, published: null });
-    let serialized = await serializeCard(firstPost, {
+    let serialized = serializeCard(firstPost, {
       includeUnrenderedFields: true,
     });
     assert.strictEqual(serialized.data.attributes?.created, null);
@@ -1529,18 +1616,25 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a nested field', async function (assert) {
-    let { field, contains, Card, Component, createFromSerialized } = cardApi;
-    let { default: StringCard } = string;
-    let { default: DateCard } = date;
-    let { default: DatetimeCard } = datetime;
-    class Person extends Card {
-      @field firstName = contains(StringCard);
-      @field birthdate = contains(DateCard);
-      @field lastLogin = contains(DatetimeCard);
+    let {
+      field,
+      contains,
+      CardDef,
+      FieldDef,
+      Component,
+      createFromSerialized,
+    } = cardApi;
+    let { default: StringField } = string;
+    let { default: DateField } = date;
+    let { default: DatetimeField } = datetime;
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field birthdate = contains(DateField);
+      @field lastLogin = contains(DatetimeField);
     }
 
-    class Post extends Card {
-      @field title = contains(StringCard);
+    class Post extends CardDef {
+      @field title = contains(StringField);
       @field author = contains(Person);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
@@ -1551,7 +1645,7 @@ module('Integration | serialization', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${realmURL}test-cards`, { Post, Person });
+    await shimModule(`${realmURL}test-cards`, { Post, Person }, loader);
 
     let doc = {
       data: {
@@ -1574,24 +1668,32 @@ module('Integration | serialization', function (hooks) {
     let firstPost = await createFromSerialized<typeof Post>(
       doc.data,
       doc,
-      undefined
+      undefined,
+      loader,
     );
-    let root = await renderCard(firstPost, 'isolated');
+    let root = await renderCard(loader, firstPost, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
-      'birthdate Oct 30, 2019 last login Apr 27, 2022, 4:58 PM'
+      'birthdate Oct 30, 2019 last login Apr 27, 2022, 4:58 PM',
     );
   });
 
   test('can deserialize a composite field', async function (assert) {
-    let { field, contains, Card, Component, createFromSerialized } = cardApi;
-    let { default: StringCard } = string;
-    let { default: DateCard } = date;
-    let { default: DatetimeCard } = datetime;
-    class Person extends Card {
-      @field firstName = contains(StringCard);
-      @field birthdate = contains(DateCard);
-      @field lastLogin = contains(DatetimeCard);
+    let {
+      field,
+      contains,
+      CardDef,
+      FieldDef,
+      Component,
+      createFromSerialized,
+    } = cardApi;
+    let { default: StringField } = string;
+    let { default: DateField } = date;
+    let { default: DatetimeField } = datetime;
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field birthdate = contains(DateField);
+      @field lastLogin = contains(DatetimeField);
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <div data-test><@fields.firstName />
@@ -1603,8 +1705,8 @@ module('Integration | serialization', function (hooks) {
       };
     }
 
-    class Post extends Card {
-      @field title = contains(StringCard);
+    class Post extends CardDef {
+      @field title = contains(StringField);
       @field author = contains(Person);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
@@ -1612,7 +1714,7 @@ module('Integration | serialization', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${realmURL}test-cards`, { Post, Person });
+    await shimModule(`${realmURL}test-cards`, { Post, Person }, loader);
 
     let doc = {
       data: {
@@ -1635,42 +1737,43 @@ module('Integration | serialization', function (hooks) {
     let firstPost = await createFromSerialized<typeof Post>(
       doc.data,
       doc,
-      undefined
+      undefined,
+      loader,
     );
-    await renderCard(firstPost, 'isolated');
+    await renderCard(loader, firstPost, 'isolated');
     assert
       .dom('[data-test]')
       .hasText(
-        'Mango born on: Oct 30, 2019 last logged in: Apr 27, 2022, 5:00 PM'
+        'Mango born on: Oct 30, 2019 last logged in: Apr 27, 2022, 5:00 PM',
       );
   });
 
   test('can serialize a composite field', async function (assert) {
-    let { field, contains, serializeCard, Card } = cardApi;
-    let { default: DateCard } = date;
-    let { default: DatetimeCard } = datetime;
-    let { default: StringCard } = string;
+    let { field, contains, serializeCard, CardDef, FieldDef } = cardApi;
+    let { default: DateField } = date;
+    let { default: DatetimeField } = datetime;
+    let { default: StringField } = string;
 
-    class Person extends Card {
-      @field firstName = contains(StringCard);
-      @field birthdate = contains(DateCard);
-      @field lastLogin = contains(DatetimeCard);
-      @field title = contains(StringCard, {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field birthdate = contains(DateField);
+      @field lastLogin = contains(DatetimeField);
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
     }
 
-    class Post extends Card {
+    class Post extends CardDef {
       @field author = contains(Person);
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Post) {
           return this.author?.title ?? 'Post';
         },
       });
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Post });
+    await shimModule(`${realmURL}test-cards`, { Person, Post }, loader);
 
     let firstPost = new Post({
       author: new Person({
@@ -1678,9 +1781,11 @@ module('Integration | serialization', function (hooks) {
         birthdate: p('2019-10-30'),
         lastLogin: parseISO('2022-04-27T16:30+00:00'),
       }),
+      description: 'Post by Mango',
+      thumbnailURL: './post.jpg',
     });
 
-    let serialized = await serializeCard(firstPost, {
+    let serialized = serializeCard(firstPost, {
       includeUnrenderedFields: true,
     });
     assert.deepEqual(serialized.data.attributes, {
@@ -1689,37 +1794,43 @@ module('Integration | serialization', function (hooks) {
         firstName: 'Mango',
         lastLogin: '2022-04-27T16:30:00.000Z',
       },
+      description: 'Post by Mango',
+      thumbnailURL: './post.jpg',
     });
     // this means the field card for the value is the same as the field's card
     assert.deepEqual(serialized.data.meta.fields, undefined);
   });
 
   test('can serialize a polymorphic composite field', async function (assert) {
-    let { field, contains, serializeCard, Card } = cardApi;
-    let { default: StringCard } = string;
-    let { default: DateCard } = date;
-    let { default: DatetimeCard } = datetime;
+    let { field, contains, serializeCard, CardDef, FieldDef } = cardApi;
+    let { default: StringField } = string;
+    let { default: DateField } = date;
+    let { default: DatetimeField } = datetime;
 
-    class Person extends Card {
-      @field firstName = contains(StringCard);
-      @field birthdate = contains(DateCard);
-      @field lastLogin = contains(DatetimeCard);
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field birthdate = contains(DateField);
+      @field lastLogin = contains(DatetimeField);
     }
 
     class Employee extends Person {
-      @field department = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field department = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Employee) {
           return `${this.firstName} - ${this.department}`;
         },
       });
     }
 
-    class Post extends Card {
+    class Post extends CardDef {
       @field author = contains(Person);
     }
 
-    await shimModule(`${realmURL}test-cards`, { Person, Employee, Post });
+    await shimModule(
+      `${realmURL}test-cards`,
+      { Person, Employee, Post },
+      loader,
+    );
 
     let firstPost = new Post({
       author: new Employee({
@@ -1730,7 +1841,7 @@ module('Integration | serialization', function (hooks) {
       }),
     });
 
-    let serialized = await serializeCard(firstPost, {
+    let serialized = serializeCard(firstPost, {
       includeUnrenderedFields: true,
     });
     assert.deepEqual(serialized.data.attributes?.author, {
@@ -1748,16 +1859,21 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a composite field that has been edited', async function (assert) {
-    let { field, contains, serializeCard, Card, Component } = cardApi;
-    let { default: StringCard } = string;
-    let { default: IntegerCard } = integer;
-    class Person extends Card {
-      @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+    let { field, contains, serializeCard, CardDef, FieldDef, Component } =
+      cardApi;
+    let { default: StringField } = string;
+    let { default: NumberField } = number;
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
       static embedded = class Embedded extends Component<typeof this> {
         <template>
           <@fields.firstName />
@@ -1765,10 +1881,12 @@ module('Integration | serialization', function (hooks) {
       };
     }
 
-    class Post extends Card {
-      @field title = contains(StringCard);
-      @field reviews = contains(IntegerCard);
+    class Post extends CardDef {
+      @field title = contains(StringField);
+      @field reviews = contains(NumberField);
       @field author = contains(Person);
+      @field description = contains(StringField, { computeVia: () => 'Post' });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
       static edit = class Edit extends Component<typeof this> {
         <template>
           <fieldset>
@@ -1785,7 +1903,7 @@ module('Integration | serialization', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${realmURL}test-cards`, { Post, Person });
+    await shimModule(`${realmURL}test-cards`, { Post, Person }, loader);
 
     let helloWorld = new Post({
       title: 'First Post',
@@ -1794,49 +1912,50 @@ module('Integration | serialization', function (hooks) {
         firstName: 'Arthur',
       }),
     });
-    await renderCard(helloWorld, 'edit');
+    await renderCard(loader, helloWorld, 'edit');
     await fillIn('[data-test-field="firstName"] input', 'Carl Stack');
 
     assert.deepEqual(
-      await serializeCard(helloWorld, { includeUnrenderedFields: true }),
+      serializeCard(helloWorld, { includeUnrenderedFields: true }),
       {
-      data: {
-        type: 'card',
-        attributes: {
-          title: 'First Post',
-          reviews: 1,
-          author: {
-            firstName: 'Carl Stack',
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'First Post',
+            reviews: 1,
+            author: {
+              firstName: 'Carl Stack',
+            },
           },
-        },
-        meta: {
-          adoptsFrom: {
-            module: `${realmURL}test-cards`,
-            name: 'Post',
+          meta: {
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Post',
+            },
           },
         },
       },
-    });
+    );
   });
 
   test('can serialize a computed field', async function (assert) {
-    let { field, contains, serializeCard, Card } = cardApi;
-    let { default: DateCard } = date;
-    class Person extends Card {
-      @field birthdate = contains(DateCard);
-      @field firstBirthday = contains(DateCard, {
+    let { field, contains, serializeCard, CardDef } = cardApi;
+    let { default: DateField } = date;
+    class Person extends CardDef {
+      @field birthdate = contains(DateField);
+      @field firstBirthday = contains(DateField, {
         computeVia: function (this: Person) {
           return new Date(
             this.birthdate.getFullYear() + 1,
             this.birthdate.getMonth(),
-            this.birthdate.getDate()
+            this.birthdate.getDate(),
           );
         },
       });
     }
-    await shimModule(`${realmURL}test-cards`, { Person });
+    await shimModule(`${realmURL}test-cards`, { Person }, loader);
     let mango = new Person({ birthdate: p('2019-10-30') });
-    let serialized = await serializeCard(mango, {
+    let serialized = serializeCard(mango, {
       includeComputeds: true,
       includeUnrenderedFields: true,
     });
@@ -1845,13 +1964,17 @@ module('Integration | serialization', function (hooks) {
 
   module('computed linksTo', function () {
     test('can serialize a computed linksTo field', async function (assert) {
-      let { field, contains, linksTo, serializeCard, Card } = cardApi;
-      let { default: StringCard } = string;
-      class Pet extends Card {
-        @field name = contains(StringCard);
+      let { field, contains, linksTo, serializeCard, CardDef } = cardApi;
+      let { default: StringField } = string;
+      class Pet extends CardDef {
+        @field name = contains(StringField);
+        @field description = contains(StringField, { computeVia: () => 'Pet' });
+        @field thumbnailURL = contains(StringField, {
+          computeVia: () => '../pet.svg',
+        });
       }
-      class Person extends Card {
-        @field firstName = contains(StringCard);
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
         @field friend = linksTo(() => Person);
         @field pet = linksTo(Pet);
         @field friendPet = linksTo(Pet, {
@@ -1859,20 +1982,31 @@ module('Integration | serialization', function (hooks) {
             return this.friend?.pet;
           },
         });
+        @field description = contains(StringField, {
+          computeVia: () => 'Person',
+        });
+        @field thumbnailURL = contains(StringField, {
+          computeVia: () => '../../person.svg',
+        });
       }
-      await shimModule(`${realmURL}test-cards`, { Pet, Person });
+      await shimModule(`${realmURL}test-cards`, { Pet, Person }, loader);
       let mango = new Pet({ name: 'Mango' });
       let hassan = new Person({ firstName: 'Hassan', pet: mango });
-      await saveCard(mango, `${realmURL}Pet/mango`);
-      await saveCard(hassan, `${realmURL}Person/hassan`);
+      await saveCard(mango, `${realmURL}Pet/mango`, loader);
+      await saveCard(hassan, `${realmURL}Person/hassan`, loader);
       let burcu = new Person({ firstName: 'Burcu', friend: hassan });
-      let serialized = await serializeCard(burcu, {
+      let serialized = serializeCard(burcu, {
         includeComputeds: true,
         includeUnrenderedFields: true,
       });
       assert.deepEqual(serialized.data, {
         type: 'card',
-        attributes: { firstName: 'Burcu', title: null },
+        attributes: {
+          firstName: 'Burcu',
+          title: null,
+          description: 'Person',
+          thumbnailURL: '../../person.svg',
+        },
         relationships: {
           pet: { links: { self: null } },
           friend: {
@@ -1893,7 +2027,12 @@ module('Integration | serialization', function (hooks) {
         {
           id: `${realmURL}Pet/mango`,
           type: 'card',
-          attributes: { name: 'Mango', title: null },
+          attributes: {
+            name: 'Mango',
+            title: null,
+            description: 'Pet',
+            thumbnailURL: '../pet.svg',
+          },
           meta: {
             adoptsFrom: { module: `${realmURL}test-cards`, name: 'Pet' },
           },
@@ -1901,7 +2040,12 @@ module('Integration | serialization', function (hooks) {
         {
           id: `${realmURL}Person/hassan`,
           type: 'card',
-          attributes: { firstName: 'Hassan', title: null },
+          attributes: {
+            firstName: 'Hassan',
+            title: null,
+            description: 'Person',
+            thumbnailURL: '../../person.svg',
+          },
           relationships: {
             pet: {
               links: { self: `${realmURL}Pet/mango` },
@@ -1922,17 +2066,17 @@ module('Integration | serialization', function (hooks) {
         field,
         contains,
         linksTo,
-        Card,
+        CardDef,
         createFromSerialized,
         relationshipMeta,
         isSaved,
       } = cardApi;
-      let { default: StringCard } = string;
-      class Pet extends Card {
-        @field name = contains(StringCard);
+      let { default: StringField } = string;
+      class Pet extends CardDef {
+        @field name = contains(StringField);
       }
-      class Person extends Card {
-        @field firstName = contains(StringCard);
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
         @field friend = linksTo(() => Person);
         @field pet = linksTo(Pet);
         @field friendPet = linksTo(Pet, {
@@ -1941,7 +2085,7 @@ module('Integration | serialization', function (hooks) {
           },
         });
       }
-      await shimModule(`${realmURL}test-cards`, { Pet, Person });
+      await shimModule(`${realmURL}test-cards`, { Pet, Person }, loader);
       let doc: LooseSingleCardDocument = {
         data: {
           type: 'card',
@@ -1991,7 +2135,8 @@ module('Integration | serialization', function (hooks) {
       let card = await createFromSerialized<typeof Person>(
         doc.data,
         doc,
-        undefined
+        undefined,
+        loader,
       );
 
       assert.ok(card instanceof Person, 'card is an instance of person');
@@ -2008,7 +2153,7 @@ module('Integration | serialization', function (hooks) {
       if (Array.isArray(relationship)) {
         assert.ok(
           false,
-          'relationshipMeta should not be an array for linksTo relationship'
+          'relationshipMeta should not be an array for linksTo relationship',
         );
       } else {
         if (relationship?.type === 'loaded') {
@@ -2016,7 +2161,7 @@ module('Integration | serialization', function (hooks) {
           assert.strictEqual(
             relatedCard instanceof Pet,
             true,
-            'related card is a Pet'
+            'related card is a Pet',
           );
           assert.strictEqual(relatedCard?.id, `${realmURL}Pet/mango`);
         } else {
@@ -2026,13 +2171,13 @@ module('Integration | serialization', function (hooks) {
     });
 
     test('can serialize an empty computed linksTo field', async function (assert) {
-      let { field, contains, linksTo, Card, serializeCard } = cardApi;
-      let { default: StringCard } = string;
-      class Pet extends Card {
-        @field name = contains(StringCard);
+      let { field, contains, linksTo, CardDef, serializeCard } = cardApi;
+      let { default: StringField } = string;
+      class Pet extends CardDef {
+        @field name = contains(StringField);
       }
-      class Person extends Card {
-        @field firstName = contains(StringCard);
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
         @field friend = linksTo(() => Person);
         @field pet = linksTo(Pet);
         @field friendPet = linksTo(Pet, {
@@ -2041,16 +2186,21 @@ module('Integration | serialization', function (hooks) {
           },
         });
       }
-      await shimModule(`${realmURL}test-cards`, { Pet, Person });
+      await shimModule(`${realmURL}test-cards`, { Pet, Person }, loader);
       let person = new Person({ firstName: 'Burcu' });
-      let serialized = await serializeCard(person, {
+      let serialized = serializeCard(person, {
         includeUnrenderedFields: true,
         includeComputeds: true,
       });
       assert.deepEqual(serialized, {
         data: {
           type: 'card',
-          attributes: { firstName: 'Burcu', title: null },
+          attributes: {
+            firstName: 'Burcu',
+            title: null,
+            description: null,
+            thumbnailURL: null,
+          },
           relationships: {
             pet: { links: { self: null } },
             friend: { links: { self: null } },
@@ -2068,16 +2218,16 @@ module('Integration | serialization', function (hooks) {
         field,
         contains,
         linksTo,
-        Card,
+        CardDef,
         createFromSerialized,
         relationshipMeta,
       } = cardApi;
-      let { default: StringCard } = string;
-      class Pet extends Card {
-        @field name = contains(StringCard);
+      let { default: StringField } = string;
+      class Pet extends CardDef {
+        @field name = contains(StringField);
       }
-      class Person extends Card {
-        @field firstName = contains(StringCard);
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
         @field friend = linksTo(() => Person);
         @field pet = linksTo(Pet);
         @field friendPet = linksTo(Pet, {
@@ -2086,7 +2236,7 @@ module('Integration | serialization', function (hooks) {
           },
         });
       }
-      await shimModule(`${realmURL}test-cards`, { Pet, Person });
+      await shimModule(`${realmURL}test-cards`, { Pet, Person }, loader);
       let doc: LooseSingleCardDocument = {
         data: {
           type: 'card',
@@ -2104,7 +2254,8 @@ module('Integration | serialization', function (hooks) {
       let card = await createFromSerialized<typeof Person>(
         doc.data,
         doc,
-        undefined
+        undefined,
+        loader,
       );
       assert.ok(card instanceof Person, 'card is a Person');
       assert.strictEqual(card.firstName, 'Burcu');
@@ -2119,16 +2270,16 @@ module('Integration | serialization', function (hooks) {
         field,
         contains,
         linksTo,
-        Card,
+        CardDef,
         createFromSerialized,
         relationshipMeta,
       } = cardApi;
-      let { default: StringCard } = string;
-      class Pet extends Card {
-        @field name = contains(StringCard);
+      let { default: StringField } = string;
+      class Pet extends CardDef {
+        @field name = contains(StringField);
       }
-      class Person extends Card {
-        @field firstName = contains(StringCard);
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
         @field friend = linksTo(() => Person);
         @field pet = linksTo(Pet);
         @field friendPet = linksTo(Pet, {
@@ -2137,7 +2288,7 @@ module('Integration | serialization', function (hooks) {
           },
         });
       }
-      await shimModule(`${realmURL}test-cards`, { Pet, Person });
+      await shimModule(`${realmURL}test-cards`, { Pet, Person }, loader);
       let doc: LooseSingleCardDocument = {
         data: {
           type: 'card',
@@ -2155,7 +2306,8 @@ module('Integration | serialization', function (hooks) {
       let card = await createFromSerialized<typeof Person>(
         doc.data,
         doc,
-        undefined
+        undefined,
+        loader,
       );
 
       try {
@@ -2166,8 +2318,8 @@ module('Integration | serialization', function (hooks) {
         assert.ok(
           err.message.match(
             /The field Person\.friendPet refers to the card instance https:\/\/test-realm\/Pet\/mango which is not loaded/,
-            'NotLoaded error describes field not loaded'
-          )
+            'NotLoaded error describes field not loaded',
+          ),
         );
       }
       let friendRel = relationshipMeta(card, 'friend');
@@ -2185,18 +2337,18 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a containsMany field', async function (assert) {
-    let { field, containsMany, Card, Component, createFromSerialized } =
+    let { field, containsMany, CardDef, Component, createFromSerialized } =
       cardApi;
-    let { default: DateCard } = date;
-    class Schedule extends Card {
-      @field dates = containsMany(DateCard);
+    let { default: DateField } = date;
+    class Schedule extends CardDef {
+      @field dates = containsMany(DateField);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <@fields.dates />
         </template>
       };
     }
-    await shimModule(`${realmURL}test-cards`, { Schedule });
+    await shimModule(`${realmURL}test-cards`, { Schedule }, loader);
 
     let doc = {
       data: {
@@ -2214,12 +2366,13 @@ module('Integration | serialization', function (hooks) {
     let classSchedule = await createFromSerialized<typeof Schedule>(
       doc.data,
       doc,
-      undefined
+      undefined,
+      loader,
     );
-    let root = await renderCard(classSchedule, 'isolated');
+    let root = await renderCard(loader, classSchedule, 'isolated');
     assert.strictEqual(
       cleanWhiteSpace(root.textContent!),
-      'Apr 1, 2022 Apr 4, 2022'
+      'Apr 1, 2022 Apr 4, 2022',
     );
   });
 
@@ -2228,16 +2381,17 @@ module('Integration | serialization', function (hooks) {
       field,
       contains,
       containsMany,
-      Card,
+      CardDef,
+      FieldDef,
       Component,
       createFromSerialized,
     } = cardApi;
-    let { default: StringCard } = string;
-    let { default: DateCard } = date;
-    class Appointment extends Card {
-      @field date = contains(DateCard);
-      @field location = contains(StringCard);
-      @field title = contains(StringCard);
+    let { default: StringField } = string;
+    let { default: DateField } = date;
+    class Appointment extends FieldDef {
+      @field date = contains(DateField);
+      @field location = contains(StringField);
+      @field title = contains(StringField);
       static embedded = class Isolated extends Component<typeof this> {
         <template>
           <div data-test='appointment'><@fields.title />
@@ -2248,7 +2402,7 @@ module('Integration | serialization', function (hooks) {
         </template>
       };
     }
-    class Schedule extends Card {
+    class Schedule extends CardDef {
       @field appointments = containsMany(Appointment);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
@@ -2256,7 +2410,11 @@ module('Integration | serialization', function (hooks) {
         </template>
       };
     }
-    await shimModule(`${realmURL}test-cards`, { Schedule, Appointment });
+    await shimModule(
+      `${realmURL}test-cards`,
+      { Schedule, Appointment },
+      loader,
+    );
 
     let doc = {
       data: {
@@ -2277,49 +2435,60 @@ module('Integration | serialization', function (hooks) {
     let classSchedule = await createFromSerialized<typeof Schedule>(
       doc.data,
       doc,
-      undefined
+      undefined,
+      loader,
     );
-    await renderCard(classSchedule, 'isolated');
+    await renderCard(loader, classSchedule, 'isolated');
     assert.deepEqual(
       [...this.element.querySelectorAll('[data-test="appointment"]')].map(
-        (element) => cleanWhiteSpace(element.textContent!)
+        (element) => cleanWhiteSpace(element.textContent!),
       ),
       [
         'Biology on Apr 1, 2022 at Room 332',
         'Civics on Apr 4, 2022 at Room 102',
-      ]
+      ],
     );
   });
 
   test('can serialize a containsMany field', async function (assert) {
-    let { field, containsMany, serializeCard, Card } = cardApi;
-    let { default: DateCard } = date;
-    class Schedule extends Card {
-      @field dates = containsMany(DateCard);
+    let { field, containsMany, serializeCard, CardDef } = cardApi;
+    let { default: DateField } = date;
+    class Schedule extends CardDef {
+      @field dates = containsMany(DateField);
     }
-    await shimModule(`${realmURL}test-cards`, { Schedule });
+    await shimModule(`${realmURL}test-cards`, { Schedule }, loader);
 
     let classSchedule = new Schedule({ dates: [p('2022-4-1'), p('2022-4-4')] });
     assert.deepEqual(
-      (await serializeCard(classSchedule, { includeUnrenderedFields: true })).data
+      serializeCard(classSchedule, { includeUnrenderedFields: true }).data
         .attributes?.dates,
-      ['2022-04-01', '2022-04-04']
+      ['2022-04-01', '2022-04-04'],
     );
   });
 
   test("can serialize a containsMany's nested field", async function (assert) {
-    let { field, contains, containsMany, serializeCard, Card } = cardApi;
-    let { default: StringCard } = string;
-    let { default: DateCard } = date;
-    class Appointment extends Card {
-      @field date = contains(DateCard);
-      @field location = contains(StringCard);
-      @field title = contains(StringCard);
+    let { field, contains, containsMany, serializeCard, CardDef, FieldDef } =
+      cardApi;
+    let { default: StringField } = string;
+    let { default: DateField } = date;
+    class Appointment extends FieldDef {
+      @field date = contains(DateField);
+      @field location = contains(StringField);
+      @field title = contains(StringField);
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    class Schedule extends Card {
+    class Schedule extends CardDef {
       @field appointments = containsMany(Appointment);
+      @field description = contains(StringField, {
+        computeVia: () => 'Schedule',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}test-cards`, { Schedule, Appointment });
+    await shimModule(
+      `${realmURL}test-cards`,
+      { Schedule, Appointment },
+      loader,
+    );
 
     let classSchedule = new Schedule({
       appointments: [
@@ -2336,7 +2505,7 @@ module('Integration | serialization', function (hooks) {
       ],
     });
 
-    let serialized = await serializeCard(classSchedule, {
+    let serialized = serializeCard(classSchedule, {
       includeUnrenderedFields: true,
     });
     assert.deepEqual(serialized.data.attributes?.appointments, [
@@ -2355,24 +2524,26 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a card with primitive fields', async function (assert) {
-    let { field, contains, serializeCard, Card, recompute } = cardApi;
-    let { default: StringCard } = string;
-    let { default: DateCard } = date;
-    let { default: DatetimeCard } = datetime;
-    class Post extends Card {
-      @field title = contains(StringCard);
-      @field created = contains(DateCard);
-      @field published = contains(DatetimeCard);
+    let { field, contains, serializeCard, CardDef, recompute } = cardApi;
+    let { default: StringField } = string;
+    let { default: DateField } = date;
+    let { default: DatetimeField } = datetime;
+    class Post extends CardDef {
+      @field title = contains(StringField);
+      @field created = contains(DateField);
+      @field published = contains(DatetimeField);
     }
-    await shimModule(`${realmURL}test-cards`, { Post });
+    await shimModule(`${realmURL}test-cards`, { Post }, loader);
 
     let firstPost = new Post({
       title: 'First Post',
       created: p('2022-04-22'),
       published: parseISO('2022-04-27T16:30+00:00'),
+      description: 'Introductory post',
+      thumbnailURL: './intro.png',
     });
     await recompute(firstPost);
-    let payload = await serializeCard(firstPost, { includeUnrenderedFields: true });
+    let payload = serializeCard(firstPost, { includeUnrenderedFields: true });
     assert.deepEqual(
       payload,
       {
@@ -2382,6 +2553,8 @@ module('Integration | serialization', function (hooks) {
             title: 'First Post',
             created: '2022-04-22',
             published: '2022-04-27T16:30:00.000Z',
+            description: 'Introductory post',
+            thumbnailURL: './intro.png',
           },
           meta: {
             adoptsFrom: {
@@ -2391,31 +2564,38 @@ module('Integration | serialization', function (hooks) {
           },
         },
       },
-      'A model can be serialized once instantiated'
+      'A model can be serialized once instantiated',
     );
   });
 
   test('can serialize a card with composite field', async function (assert) {
-    let { field, contains, serializeCard, Card } = cardApi;
-    let { default: StringCard } = string;
-    let { default: DateCard } = date;
-    class Animal extends Card {
-      @field species = contains(StringCard);
+    let { field, contains, serializeCard, CardDef, FieldDef } = cardApi;
+    let { default: StringField } = string;
+    let { default: DateField } = date;
+    class Animal extends FieldDef {
+      @field species = contains(StringField);
+      @field description = contains(StringField, {
+        computeVia: () => 'Animal',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     class Person extends Animal {
-      @field firstName = contains(StringCard);
-      @field birthdate = contains(DateCard);
-      @field title = contains(StringCard, {
+      @field firstName = contains(StringField);
+      @field birthdate = contains(DateField);
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
+      @field description = contains(StringField);
     }
-    class Post extends Card {
-      @field title = contains(StringCard);
+    class Post extends CardDef {
+      @field title = contains(StringField);
       @field author = contains(Person);
+      @field description = contains(StringField, { computeVia: () => 'Post' });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}test-cards`, { Post, Person, Animal });
+    await shimModule(`${realmURL}test-cards`, { Post, Person, Animal }, loader);
 
     let firstPost = new Post({
       title: 'First Post',
@@ -2423,9 +2603,10 @@ module('Integration | serialization', function (hooks) {
         firstName: 'Mango',
         birthdate: p('2019-10-30'),
         species: 'canis familiaris',
+        description: 'A dog',
       }),
     });
-    let payload = await serializeCard(firstPost, { includeUnrenderedFields: true });
+    let payload = serializeCard(firstPost, { includeUnrenderedFields: true });
     assert.deepEqual(payload, {
       data: {
         type: 'card',
@@ -2435,6 +2616,7 @@ module('Integration | serialization', function (hooks) {
             firstName: 'Mango',
             birthdate: '2019-10-30',
             species: 'canis familiaris',
+            description: 'A dog',
           },
         },
         meta: {
@@ -2448,31 +2630,47 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a card that has a polymorphic field value', async function (assert) {
-    let { field, contains, serializeCard, Card, createFromSerialized } =
-      cardApi;
-    let { default: StringCard } = string;
-    let { default: DateCard } = date;
+    let {
+      field,
+      contains,
+      serializeCard,
+      CardDef,
+      FieldDef,
+      createFromSerialized,
+    } = cardApi;
+    let { default: StringField } = string;
+    let { default: DateField } = date;
 
-    class Person extends Card {
-      @field firstName = contains(StringCard);
-      @field birthdate = contains(DateCard);
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field birthdate = contains(DateField);
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
     class Employee extends Person {
-      @field department = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field department = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Employee) {
           return `${this.firstName} - ${this.department}`;
         },
       });
     }
 
-    class Post extends Card {
-      @field title = contains(StringCard);
+    class Post extends CardDef {
+      @field title = contains(StringField);
       @field author = contains(Person);
+      @field description = contains(StringField, { computeVia: () => 'Post' });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
-    await shimModule(`${realmURL}test-cards`, { Person, Employee, Post });
+    await shimModule(
+      `${realmURL}test-cards`,
+      { Person, Employee, Post },
+      loader,
+    );
 
     let firstPost = new Post({
       title: 'First Post',
@@ -2482,7 +2680,7 @@ module('Integration | serialization', function (hooks) {
         department: 'wagging',
       }),
     });
-    let payload = await serializeCard(firstPost, { includeUnrenderedFields: true });
+    let payload = serializeCard(firstPost, { includeUnrenderedFields: true });
     assert.deepEqual(payload, {
       data: {
         type: 'card',
@@ -2514,7 +2712,8 @@ module('Integration | serialization', function (hooks) {
     let post2 = await createFromSerialized<typeof Post>(
       payload.data,
       payload,
-      new URL(realmURL)
+      new URL(realmURL),
+      loader,
     ); // success is not blowing up
     assert.strictEqual(post2.author.firstName, 'Mango');
     let { author } = post2;
@@ -2526,20 +2725,30 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can serialize a card that has a nested polymorphic field value', async function (assert) {
-    let { field, contains, serializeCard, Card, createFromSerialized } =
-      cardApi;
-    let { default: StringCard } = string;
-    let { default: DateCard } = date;
+    let {
+      field,
+      contains,
+      serializeCard,
+      CardDef,
+      FieldDef,
+      createFromSerialized,
+    } = cardApi;
+    let { default: StringField } = string;
+    let { default: DateField } = date;
 
-    class Person extends Card {
-      @field firstName = contains(StringCard);
-      @field birthdate = contains(DateCard);
-      @field loves = contains(Card);
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field birthdate = contains(DateField);
+      @field loves = contains(FieldDef);
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
-    class Pet extends Card {
-      @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+    class Pet extends FieldDef {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.firstName;
         },
@@ -2547,20 +2756,26 @@ module('Integration | serialization', function (hooks) {
     }
 
     class Employee extends Person {
-      @field department = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field department = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Employee) {
           return `${this.firstName} - ${this.department}`;
         },
       });
     }
 
-    class Post extends Card {
-      @field title = contains(StringCard);
+    class Post extends CardDef {
+      @field title = contains(StringField);
       @field author = contains(Person);
+      @field description = contains(StringField, { computeVia: () => 'Post' });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
-    await shimModule(`${realmURL}test-cards`, { Person, Employee, Post, Pet });
+    await shimModule(
+      `${realmURL}test-cards`,
+      { Person, Employee, Post, Pet },
+      loader,
+    );
 
     let firstPost = new Post({
       title: 'First Post',
@@ -2573,7 +2788,7 @@ module('Integration | serialization', function (hooks) {
         }),
       }),
     });
-    let payload = await serializeCard(firstPost, { includeUnrenderedFields: true });
+    let payload = serializeCard(firstPost, { includeUnrenderedFields: true });
     assert.deepEqual(payload, {
       data: {
         type: 'card',
@@ -2616,7 +2831,8 @@ module('Integration | serialization', function (hooks) {
     let post2 = await createFromSerialized<any>(
       payload.data,
       payload,
-      new URL(realmURL)
+      new URL(realmURL),
+      loader,
     ); // success is not blowing up
     assert.strictEqual(post2.author.firstName, 'Mango');
     assert.strictEqual(post2.author.loves.firstName, 'Van Gogh');
@@ -2641,24 +2857,29 @@ module('Integration | serialization', function (hooks) {
       contains,
       containsMany,
       serializeCard,
-      Card,
+      CardDef,
+      FieldDef,
       createFromSerialized,
     } = cardApi;
-    let { default: IntegerCard } = integer;
-    let { default: StringCard } = string;
+    let { default: NumberField } = number;
+    let { default: StringField } = string;
 
-    class Person extends Card {
-      @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
     class Employee extends Person {
-      @field department = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field department = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Employee) {
           return this.department;
         },
@@ -2666,24 +2887,32 @@ module('Integration | serialization', function (hooks) {
     }
 
     class Customer extends Person {
-      @field billAmount = contains(IntegerCard);
+      @field billAmount = contains(NumberField);
     }
 
-    class Group extends Card {
+    class Group extends CardDef {
       @field people = containsMany(Person);
-      @field title = contains(StringCard, {
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return 'Group';
         },
       });
+      @field description = contains(StringField, {
+        computeVia: () => 'A group of people',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
-    await shimModule(`${realmURL}test-cards`, {
-      Person,
-      Employee,
-      Customer,
-      Group,
-    });
+    await shimModule(
+      `${realmURL}test-cards`,
+      {
+        Person,
+        Employee,
+        Customer,
+        Group,
+      },
+      loader,
+    );
 
     let group = new Group({
       people: [
@@ -2698,7 +2927,7 @@ module('Integration | serialization', function (hooks) {
       ],
     });
 
-    let payload = await serializeCard(group, { includeUnrenderedFields: true });
+    let payload = serializeCard(group, { includeUnrenderedFields: true });
     assert.deepEqual(payload, {
       data: {
         type: 'card',
@@ -2742,7 +2971,8 @@ module('Integration | serialization', function (hooks) {
     let group2 = await createFromSerialized<any>(
       payload.data,
       payload,
-      new URL(realmURL)
+      new URL(realmURL),
+      loader,
     );
     let { people } = group2;
     assert.ok(Array.isArray(people), 'people is an array');
@@ -2769,54 +2999,65 @@ module('Integration | serialization', function (hooks) {
       contains,
       containsMany,
       serializeCard,
-      Card,
+      CardDef,
+      FieldDef,
       createFromSerialized,
     } = cardApi;
-    let { default: IntegerCard } = integer;
-    let { default: StringCard } = string;
+    let { default: NumberField } = number;
+    let { default: StringField } = string;
 
-    class Person extends Card {
-      @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
-    class Role extends Card {
-      @field roleName = contains(StringCard);
-      @field title = contains(StringCard, {
+    class Role extends FieldDef {
+      @field roleName = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Role) {
           return this.roleName;
         },
       });
+      @field description = contains(StringField, { computeVia: () => 'Role' });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
     class DogWalker extends Role {
-      @field poopBagCount = contains(IntegerCard);
+      @field poopBagCount = contains(NumberField);
     }
 
     class Employee extends Person {
       @field roles = containsMany(Role);
     }
 
-    class Group extends Card {
+    class Group extends CardDef {
       @field people = containsMany(Person);
-      @field title = contains(StringCard, {
-        computeVia: function (this: Group) {
-          return 'Group';
-        },
+      @field title = contains(StringField, { computeVia: () => 'Group' });
+      @field description = contains(StringField, {
+        computeVia: () => 'A group of people',
       });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
-    await shimModule(`${realmURL}test-cards`, {
-      Person,
-      Role,
-      DogWalker,
-      Employee,
-      Group,
-    });
+    await shimModule(
+      `${realmURL}test-cards`,
+      {
+        Person,
+        Role,
+        DogWalker,
+        Employee,
+        Group,
+      },
+      loader,
+    );
 
     let group = new Group({
       people: [
@@ -2830,7 +3071,7 @@ module('Integration | serialization', function (hooks) {
       ],
     });
 
-    let payload = await serializeCard(group, { includeUnrenderedFields: true });
+    let payload = serializeCard(group, { includeUnrenderedFields: true });
     assert.deepEqual(payload, {
       data: {
         type: 'card',
@@ -2883,7 +3124,8 @@ module('Integration | serialization', function (hooks) {
     let group2 = await createFromSerialized<any>(
       payload.data,
       payload,
-      new URL(realmURL)
+      new URL(realmURL),
+      loader,
     );
     let { people } = group2;
     assert.ok(Array.isArray(people), 'people is an array');
@@ -2909,22 +3151,29 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a linksTo field that contains a polymorphic field', async function (assert) {
-    let { field, contains, linksTo, Card, createFromSerialized, isSaved } =
-      cardApi;
-    let { default: StringCard } = string;
+    let {
+      field,
+      contains,
+      linksTo,
+      CardDef,
+      FieldDef,
+      createFromSerialized,
+      isSaved,
+    } = cardApi;
+    let { default: StringField } = string;
 
-    class Toy extends Card {
-      @field description = contains(StringCard);
+    class Toy extends CardDef {
+      @field description = contains(StringField);
     }
-    class Pet extends Card {
-      @field firstName = contains(StringCard);
-      @field favorite = contains(Card);
+    class Pet extends CardDef {
+      @field firstName = contains(StringField);
+      @field favorite = contains(FieldDef);
     }
-    class Person extends Card {
-      @field firstName = contains(StringCard);
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
       @field pet = linksTo(Pet);
     }
-    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
+    await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy }, loader);
 
     let doc: LooseSingleCardDocument = {
       data: {
@@ -2980,7 +3229,8 @@ module('Integration | serialization', function (hooks) {
     let card = await createFromSerialized<typeof Person>(
       doc.data,
       doc,
-      undefined
+      undefined,
+      loader,
     );
 
     assert.ok(card instanceof Person, 'card is an instance of person');
@@ -3001,19 +3251,23 @@ module('Integration | serialization', function (hooks) {
   });
 
   test('can deserialize a card from a resource object', async function (assert) {
-    let { field, contains, serializeCard, Card, createFromSerialized } =
+    let { field, contains, serializeCard, CardDef, createFromSerialized } =
       cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
-    class Person extends Card {
-      @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}person`, { Person });
+    await shimModule(`${realmURL}person`, { Person }, loader);
 
     let doc: LooseSingleCardDocument = {
       data: {
@@ -3032,11 +3286,12 @@ module('Integration | serialization', function (hooks) {
     let person = await createFromSerialized<typeof Person>(
       doc.data,
       doc,
-      new URL(realmURL)
+      new URL(realmURL),
+      loader,
     );
     assert.strictEqual(person.firstName, 'Mango');
     assert.deepEqual(
-      await serializeCard(person, { includeUnrenderedFields: true }),
+      serializeCard(person, { includeUnrenderedFields: true }),
       {
         data: {
           type: 'card',
@@ -3051,30 +3306,42 @@ module('Integration | serialization', function (hooks) {
           },
         },
       },
-      'card serialization is correct'
+      'card serialization is correct',
     );
   });
 
   test('can deserialize a card from a resource object with composite fields', async function (assert) {
-    let { field, contains, serializeCard, Card, createFromSerialized } =
-      cardApi;
-    let { default: StringCard } = string;
+    let {
+      field,
+      contains,
+      serializeCard,
+      CardDef,
+      FieldDef,
+      createFromSerialized,
+    } = cardApi;
+    let { default: StringField } = string;
 
-    class Person extends Card {
-      @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    class Post extends Card {
-      @field title = contains(StringCard);
+    class Post extends CardDef {
+      @field title = contains(StringField);
       @field author = contains(Person);
+      @field description = contains(StringField, { computeVia: () => 'Post' });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
 
-    await shimModule(`${realmURL}person`, { Person });
-    await shimModule(`${realmURL}post`, { Post });
+    await shimModule(`${realmURL}person`, { Person }, loader);
+    await shimModule(`${realmURL}post`, { Post }, loader);
 
     let doc: LooseSingleCardDocument = {
       data: {
@@ -3096,12 +3363,13 @@ module('Integration | serialization', function (hooks) {
     let post = await createFromSerialized<typeof Post>(
       doc.data,
       doc,
-      new URL(realmURL)
+      new URL(realmURL),
+      loader,
     );
     assert.strictEqual(post.title, 'Things I Want to Chew');
     assert.strictEqual(post.author.firstName, 'Mango');
     assert.deepEqual(
-      await serializeCard(post, { includeUnrenderedFields: true }),
+      serializeCard(post, { includeUnrenderedFields: true }),
       {
         data: {
           type: 'card',
@@ -3119,7 +3387,7 @@ module('Integration | serialization', function (hooks) {
           },
         },
       },
-      'card serialization is correct'
+      'card serialization is correct',
     );
   });
 
@@ -3129,34 +3397,43 @@ module('Integration | serialization', function (hooks) {
       contains,
       containsMany,
       serializeCard,
-      Card,
+      CardDef,
+      FieldDef,
       createFromSerialized,
     } = cardApi;
-    let { default: StringCard } = string;
+    let { default: StringField } = string;
 
-    class Person extends Card {
-      @field firstName = contains(StringCard);
-      @field title = contains(StringCard, {
+    class Person extends FieldDef {
+      @field firstName = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Person) {
           return this.firstName;
         },
       });
-    }
-    class Post extends Card {
-      @field title = contains(StringCard);
-      @field author = contains(Person);
-    }
-    class Blog extends Card {
-      @field posts = containsMany(Post);
-      @field _metadata = contains(StringCard, {
-        computeVia: function (this: Blog) {
-          return 'Blog';
-        },
+      @field description = contains(StringField, {
+        computeVia: () => 'A person',
       });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}person`, { Person });
-    await shimModule(`${realmURL}post`, { Post });
-    await shimModule(`${realmURL}blog`, { Blog });
+    class Post extends FieldDef {
+      @field title = contains(StringField);
+      @field author = contains(Person);
+      @field description = contains(StringField, {
+        computeVia: () => 'A post',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
+    }
+    class Blog extends CardDef {
+      @field posts = containsMany(Post);
+      @field _metadata = contains(StringField, { computeVia: () => 'Blog' });
+      @field description = contains(StringField, {
+        computeVia: () => 'A blog post',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
+    }
+    await shimModule(`${realmURL}person`, { Person }, loader);
+    await shimModule(`${realmURL}post`, { Post }, loader);
+    await shimModule(`${realmURL}blog`, { Blog }, loader);
 
     let doc: LooseSingleCardDocument = {
       data: {
@@ -3188,7 +3465,8 @@ module('Integration | serialization', function (hooks) {
     let blog = await createFromSerialized<typeof Blog>(
       doc.data,
       doc,
-      new URL(realmURL)
+      new URL(realmURL),
+      loader,
     );
     let posts = blog.posts;
     assert.strictEqual(posts.length, 2, 'number of posts is correct');
@@ -3198,7 +3476,7 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(posts[1].author.firstName, 'Van Gogh');
 
     assert.deepEqual(
-      await serializeCard(blog, { includeUnrenderedFields: true }),
+      serializeCard(blog, { includeUnrenderedFields: true }),
       {
         data: {
           type: 'card',
@@ -3227,36 +3505,36 @@ module('Integration | serialization', function (hooks) {
           },
         },
       },
-      'card serialization is correct'
+      'card serialization is correct',
     );
   });
 
   test('can serialize a card with computed field', async function (assert) {
-    let { field, contains, serializeCard, Card } = cardApi;
-    let { default: DateCard } = date;
-    let { default: StringCard } = string;
-    class Person extends Card {
-      @field birthdate = contains(DateCard);
-      @field firstBirthday = contains(DateCard, {
+    let { field, contains, serializeCard, CardDef } = cardApi;
+    let { default: DateField } = date;
+    let { default: StringField } = string;
+    class Person extends CardDef {
+      @field birthdate = contains(DateField);
+      @field firstBirthday = contains(DateField, {
         computeVia: function (this: Person) {
           return new Date(
             this.birthdate.getFullYear() + 1,
             this.birthdate.getMonth(),
-            this.birthdate.getDate()
+            this.birthdate.getDate(),
           );
         },
       });
-      @field title = contains(StringCard, {
-        computeVia: function (this: Person) {
-          return 'Person';
-        },
+      @field title = contains(StringField, { computeVia: () => 'Person' });
+      @field description = contains(StringField, {
+        computeVia: () => 'A person with birthdate',
       });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
-    await shimModule(`${realmURL}test-cards`, { Person });
+    await shimModule(`${realmURL}test-cards`, { Person }, loader);
 
     let mango = new Person({ birthdate: p('2019-10-30') });
-    await renderCard(mango, 'isolated');
-    let withoutComputeds = await serializeCard(mango, {
+    await renderCard(loader, mango, 'isolated');
+    let withoutComputeds = serializeCard(mango, {
       includeUnrenderedFields: true,
     });
     assert.deepEqual(withoutComputeds, {
@@ -3274,7 +3552,7 @@ module('Integration | serialization', function (hooks) {
       },
     });
 
-    let withComputeds = await serializeCard(mango, {
+    let withComputeds = serializeCard(mango, {
       includeComputeds: true,
       includeUnrenderedFields: true,
     });
@@ -3285,6 +3563,8 @@ module('Integration | serialization', function (hooks) {
           birthdate: '2019-10-30',
           firstBirthday: '2020-10-30',
           title: 'Person',
+          description: 'A person with birthdate',
+          thumbnailURL: null,
         },
         meta: {
           adoptsFrom: {
@@ -3298,27 +3578,27 @@ module('Integration | serialization', function (hooks) {
 
   module('linksToMany', function () {
     test('can serialize a linksToMany relationship', async function (assert) {
-      let { field, contains, linksToMany, Card, serializeCard } = cardApi;
-      let { default: StringCard } = string;
+      let { field, contains, linksToMany, CardDef, serializeCard } = cardApi;
+      let { default: StringField } = string;
 
-      class Pet extends Card {
-        @field firstName = contains(StringCard);
-        @field title = contains(StringCard, {
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
+        @field title = contains(StringField, {
           computeVia: function (this: Person) {
             return this.firstName;
           },
         });
       }
-      class Person extends Card {
-        @field firstName = contains(StringCard);
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
-        @field title = contains(StringCard, {
+        @field title = contains(StringField, {
           computeVia: function (this: Person) {
             return this.firstName;
           },
         });
       }
-      await shimModule(`${realmURL}test-cards`, { Person, Pet });
+      await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
 
       let mango = new Pet({
         firstName: 'Mango',
@@ -3331,10 +3611,10 @@ module('Integration | serialization', function (hooks) {
         pets: [mango, vanGogh],
       });
 
-      await saveCard(mango, `${realmURL}Pet/mango`);
-      await saveCard(vanGogh, `${realmURL}Pet/vanGogh`);
+      await saveCard(mango, `${realmURL}Pet/mango`, loader);
+      await saveCard(vanGogh, `${realmURL}Pet/vanGogh`, loader);
 
-      let serialized = await serializeCard(hassan);
+      let serialized = serializeCard(hassan);
       assert.deepEqual(serialized, {
         data: {
           type: 'card',
@@ -3383,21 +3663,21 @@ module('Integration | serialization', function (hooks) {
         field,
         contains,
         linksToMany,
-        Card,
+        CardDef,
         createFromSerialized,
         relationshipMeta,
         isSaved,
       } = cardApi;
-      let { default: StringCard } = string;
+      let { default: StringField } = string;
 
-      class Pet extends Card {
-        @field firstName = contains(StringCard);
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
       }
-      class Person extends Card {
-        @field firstName = contains(StringCard);
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
-      await shimModule(`${realmURL}test-cards`, { Person, Pet });
+      await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
       let doc: LooseSingleCardDocument = {
         data: {
           type: 'card',
@@ -3440,7 +3720,8 @@ module('Integration | serialization', function (hooks) {
       let card = await createFromSerialized<typeof Person>(
         doc.data,
         doc,
-        undefined
+        undefined,
+        loader,
       );
 
       assert.ok(card instanceof Person, 'card is an instance of person');
@@ -3472,7 +3753,7 @@ module('Integration | serialization', function (hooks) {
           assert.strictEqual(
             relatedCard instanceof Pet,
             true,
-            'related card is a Pet'
+            'related card is a Pet',
           );
           assert.strictEqual(relatedCard?.id, `${realmURL}Pet/mango`);
         } else {
@@ -3483,7 +3764,7 @@ module('Integration | serialization', function (hooks) {
           assert.strictEqual(
             relatedCard instanceof Pet,
             true,
-            'related card is a Pet'
+            'related card is a Pet',
           );
           assert.strictEqual(relatedCard?.id, `${realmURL}Pet/vanGogh`);
         } else {
@@ -3492,7 +3773,7 @@ module('Integration | serialization', function (hooks) {
         assert.strictEqual(
           relationshipMeta(card, 'firstName'),
           undefined,
-          'relationshipMeta returns undefined for non-relationship field'
+          'relationshipMeta returns undefined for non-relationship field',
         );
       } else {
         assert.ok(false, 'relationshipMeta returned an unexpected value');
@@ -3505,39 +3786,39 @@ module('Integration | serialization', function (hooks) {
         contains,
         linksToMany,
         linksTo,
-        Card,
+        CardDef,
         serializeCard,
         createFromSerialized,
       } = cardApi;
-      let { default: StringCard } = string;
+      let { default: StringField } = string;
 
-      class Toy extends Card {
-        @field description = contains(StringCard);
-        @field title = contains(StringCard, {
+      class Toy extends CardDef {
+        @field description = contains(StringField);
+        @field title = contains(StringField, {
           computeVia: function (this: Toy) {
             return this.description;
           },
         });
       }
-      class Pet extends Card {
-        @field firstName = contains(StringCard);
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
         @field favoriteToy = linksTo(Toy);
-        @field title = contains(StringCard, {
+        @field title = contains(StringField, {
           computeVia: function (this: Pet) {
             return this.firstName;
           },
         });
       }
-      class Person extends Card {
-        @field firstName = contains(StringCard);
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
-        @field title = contains(StringCard, {
+        @field title = contains(StringField, {
           computeVia: function (this: Pet) {
             return this.firstName;
           },
         });
       }
-      await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy });
+      await shimModule(`${realmURL}test-cards`, { Person, Pet, Toy }, loader);
 
       let spookyToiletPaper = new Toy({
         description: 'Toilet paper ghost: Poooo!',
@@ -3551,10 +3832,14 @@ module('Integration | serialization', function (hooks) {
         pets: [mango],
       });
 
-      await saveCard(spookyToiletPaper, `${realmURL}Toy/spookyToiletPaper`);
-      await saveCard(mango, `${realmURL}Pet/mango`);
+      await saveCard(
+        spookyToiletPaper,
+        `${realmURL}Toy/spookyToiletPaper`,
+        loader,
+      );
+      await saveCard(mango, `${realmURL}Pet/mango`, loader);
 
-      let serialized = await serializeCard(hassan);
+      let serialized = serializeCard(hassan);
       assert.deepEqual(serialized, {
         data: {
           type: 'card',
@@ -3605,7 +3890,8 @@ module('Integration | serialization', function (hooks) {
       let card = await createFromSerialized(
         serialized.data,
         serialized,
-        undefined
+        undefined,
+        loader,
       );
       if (card instanceof Person) {
         assert.strictEqual(card.firstName, 'Hassan');
@@ -3619,7 +3905,7 @@ module('Integration | serialization', function (hooks) {
             if (favoriteToy instanceof Toy) {
               assert.strictEqual(
                 favoriteToy.description,
-                'Toilet paper ghost: Poooo!'
+                'Toilet paper ghost: Poooo!',
               );
             } else {
               assert.ok(false, 'card is not instance of Toy');
@@ -3636,31 +3922,37 @@ module('Integration | serialization', function (hooks) {
     });
 
     test('can serialize an empty linksToMany relationship', async function (assert) {
-      let { field, contains, linksToMany, Card, serializeCard } = cardApi;
-      let { default: StringCard } = string;
+      let { field, contains, linksToMany, CardDef, serializeCard } = cardApi;
+      let { default: StringField } = string;
 
-      class Pet extends Card {
-        @field firstName = contains(StringCard);
-        @field title = contains(StringCard, {
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
+        @field title = contains(StringField, {
           computeVia: function (this: Pet) {
             return this.firstName;
           },
         });
       }
-      class Person extends Card {
-        @field firstName = contains(StringCard);
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
-        @field title = contains(StringCard, {
+        @field title = contains(StringField, {
           computeVia: function (this: Person) {
             return this.firstName;
           },
         });
+        @field description = contains(StringField, {
+          computeVia: () => 'Person',
+        });
+        @field thumbnailURL = contains(StringField, {
+          computeVia: () => 'person.svg',
+        });
       }
-      await shimModule(`${realmURL}test-cards`, { Person, Pet });
+      await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
 
       let hassan = new Person({ firstName: 'Hassan' });
 
-      let serialized = await serializeCard(hassan, { includeUnrenderedFields: true });
+      let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
       assert.deepEqual(serialized, {
         data: {
           type: 'card',
@@ -3679,7 +3971,7 @@ module('Integration | serialization', function (hooks) {
       });
 
       let mango = new Person({ firstName: 'Mango', pets: null });
-      serialized = await serializeCard(mango);
+      serialized = serializeCard(mango);
       assert.deepEqual(serialized, {
         data: {
           type: 'card',
@@ -3699,18 +3991,18 @@ module('Integration | serialization', function (hooks) {
     });
 
     test('can deserialize an empty linksToMany relationship', async function (assert) {
-      let { field, contains, linksToMany, Card, createFromSerialized } =
+      let { field, contains, linksToMany, CardDef, createFromSerialized } =
         cardApi;
-      let { default: StringCard } = string;
+      let { default: StringField } = string;
 
-      class Pet extends Card {
-        @field firstName = contains(StringCard);
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
       }
-      class Person extends Card {
-        @field firstName = contains(StringCard);
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
-      await shimModule(`${realmURL}test-cards`, { Person, Pet });
+      await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
 
       let doc: LooseSingleCardDocument = {
         data: {
@@ -3731,7 +4023,8 @@ module('Integration | serialization', function (hooks) {
       let card = await createFromSerialized<typeof Person>(
         doc.data,
         doc,
-        undefined
+        undefined,
+        loader,
       );
       assert.ok(card instanceof Person, 'card is a Person');
       assert.strictEqual(card.firstName, 'Hassan');
@@ -3743,31 +4036,41 @@ module('Integration | serialization', function (hooks) {
         field,
         contains,
         linksToMany,
-        Card,
+        CardDef,
         createFromSerialized,
         relationshipMeta,
         serializeCard,
       } = cardApi;
-      let { default: StringCard } = string;
+      let { default: StringField } = string;
 
-      class Pet extends Card {
-        @field firstName = contains(StringCard);
-        @field title = contains(StringCard, {
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
+        @field title = contains(StringField, {
           computeVia: function (this: Pet) {
             return this.firstName;
           },
         });
+        @field description = contains(StringField, { computeVia: () => 'Pet' });
+        @field thumbnailURL = contains(StringField, {
+          computeVia: () => 'pet.svg',
+        });
       }
-      class Person extends Card {
-        @field firstName = contains(StringCard);
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
-        @field title = contains(StringCard, {
+        @field title = contains(StringField, {
           computeVia: function (this: Person) {
             return this.firstName;
           },
         });
+        @field description = contains(StringField, {
+          computeVia: () => 'Person',
+        });
+        @field thumbnailURL = contains(StringField, {
+          computeVia: () => 'person.svg',
+        });
       }
-      await shimModule(`${realmURL}test-cards`, { Person, Pet });
+      await shimModule(`${realmURL}test-cards`, { Person, Pet }, loader);
       let doc: LooseSingleCardDocument = {
         data: {
           type: 'card',
@@ -3797,7 +4100,8 @@ module('Integration | serialization', function (hooks) {
       let hassan = await createFromSerialized<typeof Person>(
         doc.data,
         doc,
-        undefined
+        undefined,
+        loader,
       );
 
       try {
@@ -3807,7 +4111,7 @@ module('Integration | serialization', function (hooks) {
         assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
         assert.strictEqual(
           err.message,
-          'The field Person.pets refers to the card instance https://test-realm/Pet/vanGogh which is not loaded'
+          'The field Person.pets refers to the card instance https://test-realm/Pet/vanGogh which is not loaded',
         );
       }
 
@@ -3815,7 +4119,7 @@ module('Integration | serialization', function (hooks) {
       if (!Array.isArray(relationships)) {
         assert.ok(
           false,
-          'relationshipMeta should be an array for linksToMany relationship'
+          'relationshipMeta should be an array for linksToMany relationship',
         );
       } else {
         let [mango, vanGogh] = relationships;
@@ -3824,7 +4128,7 @@ module('Integration | serialization', function (hooks) {
         } else {
           assert.ok(
             false,
-            `relationship type for ${realmURL}Pet/mango was not "loaded"`
+            `relationship type for ${realmURL}Pet/mango was not "loaded"`,
           );
         }
         if (vanGogh?.type === 'not-loaded') {
@@ -3832,12 +4136,12 @@ module('Integration | serialization', function (hooks) {
         } else {
           assert.ok(
             false,
-            `relationship type for ${realmURL}Pet/vanGogh was not "not-loaded"`
+            `relationship type for ${realmURL}Pet/vanGogh was not "not-loaded"`,
           );
         }
       }
 
-      let serialized = await serializeCard(hassan, { includeUnrenderedFields: true });
+      let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
       assert.deepEqual(serialized, {
         data: {
           type: 'card',
@@ -3877,19 +4181,25 @@ module('Integration | serialization', function (hooks) {
     });
 
     test('can serialize a linksToMany relationship that points to own card class', async function (assert) {
-      let { field, contains, linksToMany, Card, serializeCard } = cardApi;
-      let { default: StringCard } = string;
+      let { field, contains, linksToMany, CardDef, serializeCard } = cardApi;
+      let { default: StringField } = string;
 
-      class Person extends Card {
-        @field firstName = contains(StringCard);
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
         @field friends = linksToMany(() => Person);
-        @field title = contains(StringCard, {
+        @field title = contains(StringField, {
           computeVia: function (this: Person) {
             return this.firstName;
           },
         });
+        @field description = contains(StringField, {
+          computeVia: () => 'Person',
+        });
+        @field thumbnailURL = contains(StringField, {
+          computeVia: () => 'person.svg',
+        });
       }
-      await shimModule(`${realmURL}test-cards`, { Person });
+      await shimModule(`${realmURL}test-cards`, { Person }, loader);
 
       let mango = new Person({ firstName: 'Mango' });
       let vanGogh = new Person({ firstName: 'Van Gogh' });
@@ -3897,10 +4207,10 @@ module('Integration | serialization', function (hooks) {
         firstName: 'Hassan',
         friends: [mango, vanGogh],
       });
-      await saveCard(mango, `${realmURL}Person/mango`);
-      await saveCard(vanGogh, `${realmURL}Person/vanGogh`);
-      await saveCard(hassan, `${realmURL}Person/hassan`);
-      let serialized = await serializeCard(hassan, { includeUnrenderedFields: true });
+      await saveCard(mango, `${realmURL}Person/mango`, loader);
+      await saveCard(vanGogh, `${realmURL}Person/vanGogh`, loader);
+      await saveCard(hassan, `${realmURL}Person/hassan`, loader);
+      let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
       assert.deepEqual(serialized, {
         data: {
           type: 'card',
@@ -3908,16 +4218,16 @@ module('Integration | serialization', function (hooks) {
           attributes: { firstName: 'Hassan' },
           relationships: {
             'friends.0': {
-              links: { self: `${realmURL}Person/mango` },
+              links: { self: `./mango` },
               data: { id: `${realmURL}Person/mango`, type: 'card' },
             },
             'friends.1': {
-              links: { self: `${realmURL}Person/vanGogh` },
+              links: { self: `./vanGogh` },
               data: { id: `${realmURL}Person/vanGogh`, type: 'card' },
             },
           },
           meta: {
-            adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+            adoptsFrom: { module: `/test-cards`, name: 'Person' },
           },
         },
         included: [
@@ -3929,7 +4239,7 @@ module('Integration | serialization', function (hooks) {
               friends: { links: { self: null } },
             },
             meta: {
-              adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+              adoptsFrom: { module: `/test-cards`, name: 'Person' },
             },
           },
           {
@@ -3940,7 +4250,7 @@ module('Integration | serialization', function (hooks) {
               friends: { links: { self: null } },
             },
             meta: {
-              adoptsFrom: { module: `${realmURL}test-cards`, name: 'Person' },
+              adoptsFrom: { module: `/test-cards`, name: 'Person' },
             },
           },
         ],
@@ -3952,22 +4262,22 @@ module('Integration | serialization', function (hooks) {
         field,
         contains,
         linksToMany,
-        Card,
+        CardDef,
         createFromSerialized,
         isSaved,
       } = cardApi;
-      let { default: StringCard } = string;
+      let { default: StringField } = string;
 
-      class Person extends Card {
-        @field firstName = contains(StringCard);
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
         @field friends = linksToMany(() => Person);
-        @field title = contains(StringCard, {
+        @field title = contains(StringField, {
           computeVia: function (this: Person) {
             return this.firstName;
           },
         });
       }
-      await shimModule(`${realmURL}test-cards`, { Person });
+      await shimModule(`${realmURL}test-cards`, { Person }, loader);
 
       let doc: LooseSingleCardDocument = {
         data: {
@@ -4019,7 +4329,8 @@ module('Integration | serialization', function (hooks) {
       let card = await createFromSerialized<typeof Person>(
         doc.data,
         doc,
-        new URL(`${realmURL}Person/hassan`)
+        new URL(`${realmURL}Person/hassan`),
+        loader,
       );
       assert.ok(card instanceof Person, 'card is a Person');
       assert.strictEqual(card.firstName, 'Hassan');
@@ -4042,18 +4353,18 @@ module('Integration | serialization', function (hooks) {
 
   module('computed linksToMany', function () {
     test('can serialize a computed linksToMany relationship', async function (assert) {
-      let { field, contains, linksTo, linksToMany, serializeCard, Card } =
+      let { field, contains, linksTo, linksToMany, serializeCard, CardDef } =
         cardApi;
-      let { default: StringCard } = string;
-      class Pet extends Card {
-        @field name = contains(StringCard);
+      let { default: StringField } = string;
+      class Pet extends CardDef {
+        @field name = contains(StringField);
       }
-      class Friend extends Card {
-        @field firstName = contains(StringCard);
+      class Friend extends CardDef {
+        @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
-      class Person extends Card {
-        @field firstName = contains(StringCard);
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
         @field friend = linksTo(Friend);
         @field friendPets = linksToMany(Pet, {
           computeVia: function (this: Person) {
@@ -4061,21 +4372,30 @@ module('Integration | serialization', function (hooks) {
           },
         });
       }
-      await shimModule(`${realmURL}test-cards`, { Pet, Friend, Person });
+      await shimModule(
+        `${realmURL}test-cards`,
+        { Pet, Friend, Person },
+        loader,
+      );
       let mango = new Pet({ name: 'Mango' });
       let vanGogh = new Pet({ name: 'Van Gogh' });
       let hassan = new Friend({ firstName: 'Hassan', pets: [mango, vanGogh] });
-      await saveCard(mango, `${realmURL}Pet/mango`);
-      await saveCard(vanGogh, `${realmURL}Pet/van-gogh`);
-      await saveCard(hassan, `${realmURL}Friend/hassan`);
+      await saveCard(mango, `${realmURL}Pet/mango`, loader);
+      await saveCard(vanGogh, `${realmURL}Pet/van-gogh`, loader);
+      await saveCard(hassan, `${realmURL}Friend/hassan`, loader);
       let burcu = new Person({ firstName: 'Burcu', friend: hassan });
-      let serialized = await serializeCard(burcu, {
+      let serialized = serializeCard(burcu, {
         includeComputeds: true,
         includeUnrenderedFields: true,
       });
       assert.deepEqual(serialized.data, {
         type: 'card',
-        attributes: { firstName: 'Burcu', title: null },
+        attributes: {
+          firstName: 'Burcu',
+          title: null,
+          description: null,
+          thumbnailURL: null,
+        },
         relationships: {
           friend: {
             links: { self: `${realmURL}Friend/hassan` },
@@ -4099,7 +4419,12 @@ module('Integration | serialization', function (hooks) {
         {
           id: `${realmURL}Pet/mango`,
           type: 'card',
-          attributes: { name: 'Mango', title: null },
+          attributes: {
+            name: 'Mango',
+            title: null,
+            description: null,
+            thumbnailURL: null,
+          },
           meta: {
             adoptsFrom: { module: `${realmURL}test-cards`, name: 'Pet' },
           },
@@ -4107,7 +4432,12 @@ module('Integration | serialization', function (hooks) {
         {
           id: `${realmURL}Pet/van-gogh`,
           type: 'card',
-          attributes: { name: 'Van Gogh', title: null },
+          attributes: {
+            name: 'Van Gogh',
+            title: null,
+            description: null,
+            thumbnailURL: null,
+          },
           meta: {
             adoptsFrom: { module: `${realmURL}test-cards`, name: 'Pet' },
           },
@@ -4115,7 +4445,12 @@ module('Integration | serialization', function (hooks) {
         {
           id: `${realmURL}Friend/hassan`,
           type: 'card',
-          attributes: { firstName: 'Hassan', title: null },
+          attributes: {
+            firstName: 'Hassan',
+            title: null,
+            description: null,
+            thumbnailURL: null,
+          },
           relationships: {
             'pets.0': {
               links: { self: `${realmURL}Pet/mango` },
@@ -4140,20 +4475,20 @@ module('Integration | serialization', function (hooks) {
         linksTo,
         linksToMany,
         createFromSerialized,
-        Card,
+        CardDef,
         isSaved,
         relationshipMeta,
       } = cardApi;
-      let { default: StringCard } = string;
-      class Pet extends Card {
-        @field name = contains(StringCard);
+      let { default: StringField } = string;
+      class Pet extends CardDef {
+        @field name = contains(StringField);
       }
-      class Friend extends Card {
-        @field firstName = contains(StringCard);
+      class Friend extends CardDef {
+        @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
-      class Person extends Card {
-        @field firstName = contains(StringCard);
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
         @field friend = linksTo(Friend);
         @field friendPets = linksToMany(Pet, {
           computeVia: function (this: Person) {
@@ -4161,7 +4496,11 @@ module('Integration | serialization', function (hooks) {
           },
         });
       }
-      await shimModule(`${realmURL}test-cards`, { Pet, Friend, Person });
+      await shimModule(
+        `${realmURL}test-cards`,
+        { Pet, Friend, Person },
+        loader,
+      );
       let doc: LooseSingleCardDocument = {
         data: {
           type: 'card',
@@ -4224,7 +4563,8 @@ module('Integration | serialization', function (hooks) {
       let card = await createFromSerialized<typeof Person>(
         doc.data,
         doc,
-        undefined
+        undefined,
+        loader,
       );
       assert.ok(card instanceof Person, 'card is an instance of person');
       assert.strictEqual(card.firstName, 'Burcu');
@@ -4253,18 +4593,18 @@ module('Integration | serialization', function (hooks) {
     });
 
     test('can serialize an empty computed linksToMany relationship', async function (assert) {
-      let { field, contains, linksTo, linksToMany, serializeCard, Card } =
+      let { field, contains, linksTo, linksToMany, serializeCard, CardDef } =
         cardApi;
-      let { default: StringCard } = string;
-      class Pet extends Card {
-        @field name = contains(StringCard);
+      let { default: StringField } = string;
+      class Pet extends CardDef {
+        @field name = contains(StringField);
       }
-      class Friend extends Card {
-        @field firstName = contains(StringCard);
+      class Friend extends CardDef {
+        @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
-      class Person extends Card {
-        @field firstName = contains(StringCard);
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
         @field friend = linksTo(Friend);
         @field friendPets = linksToMany(Pet, {
           computeVia: function (this: Person) {
@@ -4272,16 +4612,25 @@ module('Integration | serialization', function (hooks) {
           },
         });
       }
-      await shimModule(`${realmURL}test-cards`, { Pet, Friend, Person });
+      await shimModule(
+        `${realmURL}test-cards`,
+        { Pet, Friend, Person },
+        loader,
+      );
       let person = new Person({ firstName: 'Burcu' });
-      let serialized = await serializeCard(person, {
+      let serialized = serializeCard(person, {
         includeUnrenderedFields: true,
         includeComputeds: true,
       });
       assert.deepEqual(serialized, {
         data: {
           type: 'card',
-          attributes: { firstName: 'Burcu', title: null },
+          attributes: {
+            firstName: 'Burcu',
+            title: null,
+            description: null,
+            thumbnailURL: null,
+          },
           relationships: {
             friend: { links: { self: null } },
             friendPets: { links: { self: null } },
@@ -4300,18 +4649,18 @@ module('Integration | serialization', function (hooks) {
         linksTo,
         linksToMany,
         createFromSerialized,
-        Card,
+        CardDef,
       } = cardApi;
-      let { default: StringCard } = string;
-      class Pet extends Card {
-        @field name = contains(StringCard);
+      let { default: StringField } = string;
+      class Pet extends CardDef {
+        @field name = contains(StringField);
       }
-      class Friend extends Card {
-        @field firstName = contains(StringCard);
+      class Friend extends CardDef {
+        @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
-      class Person extends Card {
-        @field firstName = contains(StringCard);
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
         @field friend = linksTo(Friend);
         @field friendPets = linksToMany(Pet, {
           computeVia: function (this: Person) {
@@ -4319,7 +4668,11 @@ module('Integration | serialization', function (hooks) {
           },
         });
       }
-      await shimModule(`${realmURL}test-cards`, { Pet, Friend, Person });
+      await shimModule(
+        `${realmURL}test-cards`,
+        { Pet, Friend, Person },
+        loader,
+      );
       let doc: LooseSingleCardDocument = {
         data: {
           type: 'card',
@@ -4336,7 +4689,8 @@ module('Integration | serialization', function (hooks) {
       let card = await createFromSerialized<typeof Person>(
         doc.data,
         doc,
-        undefined
+        undefined,
+        loader,
       );
 
       assert.ok(card instanceof Person, 'card is a Person');
@@ -4350,21 +4704,21 @@ module('Integration | serialization', function (hooks) {
         contains,
         linksTo,
         linksToMany,
-        Card,
+        CardDef,
         createFromSerialized,
         relationshipMeta,
         serializeCard,
       } = cardApi;
-      let { default: StringCard } = string;
-      class Pet extends Card {
-        @field name = contains(StringCard);
+      let { default: StringField } = string;
+      class Pet extends CardDef {
+        @field name = contains(StringField);
       }
-      class Friend extends Card {
-        @field firstName = contains(StringCard);
+      class Friend extends CardDef {
+        @field firstName = contains(StringField);
         @field pets = linksToMany(Pet);
       }
-      class Person extends Card {
-        @field firstName = contains(StringCard);
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
         @field friend = linksTo(Friend);
         @field friendPets = linksToMany(Pet, {
           computeVia: function (this: Person) {
@@ -4372,7 +4726,11 @@ module('Integration | serialization', function (hooks) {
           },
         });
       }
-      await shimModule(`${realmURL}test-cards`, { Pet, Friend, Person });
+      await shimModule(
+        `${realmURL}test-cards`,
+        { Pet, Friend, Person },
+        loader,
+      );
       let doc: LooseSingleCardDocument = {
         data: {
           type: 'card',
@@ -4400,7 +4758,8 @@ module('Integration | serialization', function (hooks) {
       let card = await createFromSerialized<typeof Person>(
         doc.data,
         doc,
-        undefined
+        undefined,
+        loader,
       );
 
       try {
@@ -4411,8 +4770,8 @@ module('Integration | serialization', function (hooks) {
         assert.ok(
           err.message.match(
             /The field Person\.friend refers to the card instance https:\/\/test-realm\/Friend\/hassan which is not loaded/,
-            'NotLoaded error describes field not loaded'
-          )
+            'NotLoaded error describes field not loaded',
+          ),
         );
       }
 
@@ -4424,8 +4783,8 @@ module('Integration | serialization', function (hooks) {
         assert.ok(
           err.message.match(
             /The field Person\.friendPets refers to the card instance https:\/\/test-realm\/Pet\/vanGogh which is not loaded/,
-            'NotLoaded error describes field not loaded'
-          )
+            'NotLoaded error describes field not loaded',
+          ),
         );
       }
 
@@ -4439,7 +4798,7 @@ module('Integration | serialization', function (hooks) {
         } else {
           assert.ok(
             false,
-            `relationship type for ${realmURL}Pet/mango was not "loaded"`
+            `relationship type for ${realmURL}Pet/mango was not "loaded"`,
           );
         }
         if (vanGogh?.type === 'not-loaded') {
@@ -4447,12 +4806,12 @@ module('Integration | serialization', function (hooks) {
         } else {
           assert.ok(
             false,
-            `relationship type for ${realmURL}Pet/vanGogh was not "not-loaded"`
+            `relationship type for ${realmURL}Pet/vanGogh was not "not-loaded"`,
           );
         }
       }
 
-      let serialized = await serializeCard(card, {
+      let serialized = serializeCard(card, {
         includeUnrenderedFields: true,
         includeComputeds: true,
       });
@@ -4466,6 +4825,383 @@ module('Integration | serialization', function (hooks) {
           links: { self: `${realmURL}Pet/vanGogh` },
           data: { type: 'card', id: `${realmURL}Pet/vanGogh` },
         },
+      });
+    });
+  });
+
+  module('base cards', function () {
+    // this module checks the custom serialization and deserialization behaviour of base cards
+    // which have custom serialize and deserialize
+
+    module('NumberField', function () {
+      test('can deserialize field', async function (assert) {
+        let { field, contains, CardDef, createFromSerialized } = cardApi;
+        let { default: StringField } = string;
+        let { default: NumberField } = number;
+        class Sample extends CardDef {
+          @field title = contains(StringField);
+          @field someNumber = contains(NumberField);
+          @field someNegativeNumber = contains(NumberField);
+          @field someNumberString = contains(NumberField);
+          @field someBigInt = contains(NumberField);
+          @field someNegativeBigInt = contains(NumberField);
+          @field someNull = contains(NumberField);
+          @field someString = contains(NumberField);
+          @field someDecimal = contains(NumberField);
+          @field zeroNumber = contains(NumberField);
+          @field notANumber = contains(NumberField);
+          @field infinity = contains(NumberField);
+        }
+        await shimModule(`${realmURL}test-cards`, { Sample }, loader);
+
+        let resource = {
+          attributes: {
+            title: 'Number Test Cases',
+            someNumber: 42,
+            someNegativeNumber: -1,
+            someNumberString: '42',
+            someBigInt: '9007199254740992',
+            someNegativeBigInt: '-9007199254740992',
+            someNull: null,
+            someString: 'some text',
+            someDecimal: 0.0001,
+            zeroNumber: 0,
+            notANumber: NaN,
+            infinity: Infinity,
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Sample',
+            },
+          },
+        };
+        let sample = await createFromSerialized<typeof Sample>(
+          resource,
+          { data: resource },
+          undefined,
+          loader,
+        );
+
+        assert.strictEqual(sample.someNumber, 42);
+        assert.strictEqual(sample.someNegativeNumber, -1);
+        assert.strictEqual(sample.someNumberString, 42);
+        assert.strictEqual(sample.someDecimal, 0.0001);
+        assert.strictEqual(sample.zeroNumber, 0);
+
+        // failed to deserialize
+        assert.strictEqual(sample.someNull, null);
+        assert.strictEqual(sample.someBigInt, null);
+        assert.strictEqual(sample.someNegativeBigInt, null);
+        assert.strictEqual(sample.someString, null);
+        assert.strictEqual(sample.notANumber, null);
+        assert.strictEqual(sample.infinity, null);
+      });
+
+      test('can serialize field', async function (assert) {
+        let { field, contains, CardDef, serializeCard } = cardApi;
+        let { default: StringField } = string;
+        let { default: NumberField } = number;
+        class Sample extends CardDef {
+          @field title = contains(StringField);
+          @field someNumber = contains(NumberField);
+          @field someNull = contains(NumberField);
+        }
+
+        await shimModule(`${realmURL}test-cards`, { Sample }, loader);
+
+        let sample = new Sample({
+          someNumber: 42,
+          someNull: null,
+        });
+
+        let serialized = serializeCard(sample, {
+          includeUnrenderedFields: true,
+        });
+
+        assert.strictEqual(
+          typeof serialized?.data?.attributes?.someNumber === 'number',
+          true,
+        );
+        assert.strictEqual(
+          typeof serialized?.data?.attributes?.someNumber !== 'string',
+          true,
+        );
+        assert.strictEqual(serialized?.data?.attributes?.someNumber, 42);
+        assert.strictEqual(serialized?.data?.attributes?.someNull, null);
+      });
+    });
+
+    module('BigIntegerField', function () {
+      function isBigInt(input: any) {
+        return typeof input == 'bigint';
+      }
+      test('can deserialize field', async function (assert) {
+        let { field, contains, CardDef, createFromSerialized } = cardApi;
+        let { default: StringField } = string;
+        let { default: BigIntegerField } = bigInteger;
+        class Sample extends CardDef {
+          @field title = contains(StringField);
+          @field someBigInt = contains(BigIntegerField);
+          @field someNull = contains(BigIntegerField);
+          @field someString = contains(BigIntegerField);
+          @field someNumber = contains(BigIntegerField);
+          @field someNegativeNumber = contains(BigIntegerField);
+          @field someDecimal = contains(BigIntegerField);
+          @field someZeroString = contains(BigIntegerField);
+        }
+        await shimModule(`${realmURL}test-cards`, { Sample }, loader);
+
+        let resource = {
+          attributes: {
+            title: 'BigInt Test Cases',
+            someBigInt: '9223372036854775808',
+            someNull: null,
+            someString: 'some text',
+            someNumber: 42,
+            someDecimal: 0.0001,
+            someNegativeNumber: -42,
+            someZeroString: '0',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Sample',
+            },
+          },
+        };
+        let sample = await createFromSerialized<typeof Sample>(
+          resource,
+          { data: resource },
+          undefined,
+          loader,
+        );
+
+        assert.strictEqual(isBigInt(sample.someBigInt), true);
+        assert.strictEqual(isBigInt(sample.someNumber), true);
+        assert.strictEqual(isBigInt(sample.someNegativeNumber), true);
+        assert.strictEqual(isBigInt(sample.someZeroString), true);
+
+        // failed to deserialize
+        assert.strictEqual(sample.someNull, null);
+        assert.strictEqual(sample.someString, null);
+        assert.strictEqual(sample.someDecimal, null);
+      });
+
+      test('can serialize field', async function (assert) {
+        let { field, contains, CardDef, serializeCard } = cardApi;
+        let { default: StringField } = string;
+        let { default: BigIntegerField } = bigInteger;
+        class Sample extends CardDef {
+          @field title = contains(StringField);
+          @field someBigInt = contains(BigIntegerField);
+          @field someNull = contains(BigIntegerField);
+        }
+
+        await shimModule(`${realmURL}test-cards`, { Sample }, loader);
+
+        let sample = new Sample({
+          someBigInt: BigInt('9223372036854775808'),
+          someNull: null,
+        });
+
+        let serialized = serializeCard(sample, {
+          includeUnrenderedFields: true,
+        });
+
+        assert.strictEqual(
+          typeof serialized?.data?.attributes?.someBigInt === 'string',
+          true,
+        );
+        assert.strictEqual(
+          typeof serialized?.data?.attributes?.someBigInt !== 'number',
+          true,
+        );
+        assert.strictEqual(
+          serialized?.data?.attributes?.someBigInt,
+          '9223372036854775808',
+        );
+        assert.strictEqual(serialized?.data?.attributes?.someNull, null);
+      });
+
+      test('queryable value', async function (assert) {
+        let { getQueryableValue } = cardApi;
+        let { default: BigIntegerField } = bigInteger;
+        assert.strictEqual(
+          getQueryableValue(BigIntegerField, BigInt('9223372036854775808')),
+          '9223372036854775808',
+        );
+        assert.strictEqual(getQueryableValue(BigIntegerField, null), undefined);
+        assert.strictEqual(
+          getQueryableValue(BigIntegerField, undefined),
+          undefined,
+        );
+      });
+
+      test('can perform bigint operations with computed', async function (assert) {
+        let { field, contains, CardDef, serializeCard } = cardApi;
+        let { default: StringField } = string;
+        let { default: BigIntegerField } = bigInteger;
+
+        class Sample extends CardDef {
+          @field title = contains(StringField);
+          @field someBigInt = contains(BigIntegerField);
+          @field anotherBigInt = contains(BigIntegerField);
+          @field someNull = contains(BigIntegerField);
+          @field someComputed = contains(BigIntegerField, {
+            computeVia: function (this: Sample) {
+              return this.someBigInt + this.anotherBigInt;
+            },
+          });
+          //TODO: This doesn't seem to work
+          // Promise rejected during "can perform bigint operations with computed": Cannot mix BigInt and other types, use explicit conversions
+          // @field someComputedWithNull = contains(BigIntegerField, {
+          //   computeVia: function (this: Sample) {
+          //     return this.someBigInt + this.someNull;
+          //   },
+          // });
+        }
+        await shimModule(`${realmURL}test-cards`, { Sample }, loader);
+
+        let sample = new Sample({
+          someBigInt: BigInt('1'),
+          anotherBigInt: BigInt('2'),
+          someNull: null,
+        });
+
+        let serialized = serializeCard(sample, {
+          includeComputeds: true,
+          includeUnrenderedFields: true,
+        });
+
+        assert.strictEqual(
+          serialized?.data?.attributes?.someComputed,
+          (BigInt('1') + BigInt('2')).toString(),
+        );
+      });
+    });
+
+    module('EthereumAddressField', function () {
+      function isEthAddress(address: string): boolean {
+        return isAddress(address);
+      }
+      test('can deserialize field', async function (assert) {
+        let { field, contains, CardDef, createFromSerialized } = cardApi;
+        let { default: StringField } = string;
+        let { default: EthereumAddressField } = ethereumAddress;
+        class Sample extends CardDef {
+          @field title = contains(StringField);
+          @field someAddress = contains(EthereumAddressField);
+          @field nonChecksummedAddress = contains(EthereumAddressField);
+          @field checksummedAddressThatDontLookLikeOne =
+            contains(EthereumAddressField);
+          @field faultyAddress = contains(EthereumAddressField);
+          @field bitcoinAddress = contains(EthereumAddressField);
+          @field someString = contains(EthereumAddressField);
+          @field someNull = contains(EthereumAddressField);
+        }
+        await shimModule(`${realmURL}test-cards`, { Sample }, loader);
+
+        let resource = {
+          attributes: {
+            title: 'Ethereum Test Cases',
+            someAddress: '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b',
+            checksummedAddressThatDontLookLikeOne:
+              '0x27b1fdb04752bbc536007a920d24acb045561c26',
+            nonChecksummedAddress: '0x3bc8e82b5856b2f2bdc7f6693f79db9648c0aaaa',
+            faultyAddress: '0x159ADe032073d930E85f95AbBAB9995110c43C7', //missing a character
+            bitcoinAddress: '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2',
+            someString: 'hello world',
+            someNull: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${realmURL}test-cards`,
+              name: 'Sample',
+            },
+          },
+        };
+        let sample = await createFromSerialized<typeof Sample>(
+          resource,
+          { data: resource },
+          undefined,
+          loader,
+        );
+
+        assert.strictEqual(isEthAddress(sample.someAddress), true);
+        assert.strictEqual(
+          isEthAddress(sample.checksummedAddressThatDontLookLikeOne),
+          true,
+        );
+
+        // failed to deserialize
+        assert.strictEqual(sample.faultyAddress, null);
+        assert.strictEqual(sample.nonChecksummedAddress, null);
+        assert.strictEqual(sample.bitcoinAddress, null);
+        assert.strictEqual(sample.someString, null);
+        assert.strictEqual(sample.someNull, null);
+      });
+
+      test('can serialize field', async function (assert) {
+        let { field, contains, CardDef, serializeCard } = cardApi;
+        let { default: StringField } = string;
+        let { default: EthereumAddressField } = ethereumAddress;
+        class Sample extends CardDef {
+          @field title = contains(StringField);
+          @field someAddress = contains(EthereumAddressField);
+          @field nonChecksummedAddress = contains(EthereumAddressField);
+          @field someNull = contains(EthereumAddressField);
+        }
+
+        await shimModule(`${realmURL}test-cards`, { Sample }, loader);
+
+        let sample = new Sample({
+          someAddress: '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b',
+          nonChecksummedAddress: '0x3bc8e82b5856b2f2bdc7f6693f79db9648c0aaaa',
+          someNull: null,
+        });
+
+        let serialized = serializeCard(sample, {
+          includeUnrenderedFields: true,
+        });
+
+        assert.strictEqual(
+          typeof serialized?.data?.attributes?.someAddress === 'string',
+          true,
+        );
+        assert.strictEqual(
+          typeof serialized?.data?.attributes?.someAddress !== 'number',
+          true,
+        );
+        assert.strictEqual(
+          serialized?.data?.attributes?.someAddress,
+          '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b',
+        );
+        assert.strictEqual(
+          serialized?.data?.attributes?.nonChecksummedAddress,
+          '0x3bc8e82b5856b2f2bdc7f6693f79db9648c0aaaa',
+        );
+        assert.strictEqual(serialized?.data?.attributes?.someNull, null);
+      });
+
+      test('queryable value', async function (assert) {
+        let { getQueryableValue } = cardApi;
+        let { default: EthereumAddressField } = ethereumAddress;
+        assert.strictEqual(
+          getQueryableValue(
+            EthereumAddressField,
+            '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b',
+          ),
+          '0x00317f9aF5141dC211e9EbcdCE690cf0E98Ef53b',
+        );
+        assert.strictEqual(
+          getQueryableValue(EthereumAddressField, null),
+          undefined,
+        );
+        assert.strictEqual(
+          getQueryableValue(EthereumAddressField, undefined),
+          undefined,
+        );
       });
     });
   });

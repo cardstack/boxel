@@ -1,15 +1,20 @@
 import Component from '@glimmer/component';
-import Schema from './schema';
-import ImportModule from './import-module';
+
 //@ts-ignore cached not available yet in definitely typed
 import { cached } from '@glimmer/tracking';
+
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
-import type { FileResource } from '@cardstack/host/resources/file';
-import type { Card } from 'https://cardstack.com/base/card-api';
+
+import type { Ready } from '@cardstack/host/resources/file';
+
+import type { BaseDef } from 'https://cardstack.com/base/card-api';
+
+import ImportModule from './import-module';
+import Schema from './schema';
 
 interface Signature {
   Args: {
-    file: FileResource;
+    file: Ready;
   };
 }
 
@@ -34,18 +39,15 @@ export default class Module extends Component<Signature> {
 
   @cached
   get moduleSyntax() {
-    if (this.args.file.state !== 'ready') {
-      throw new Error(`the file ${this.args.file.url} is not open`);
-    }
     return new ModuleSyntax(this.args.file.content);
   }
 }
 
 function cardsFromModule(
   module: Record<string, any>,
-  _never?: never // glint insists that w/o this last param that there are actually no params
-): (typeof Card)[] {
+  _never?: never, // glint insists that w/o this last param that there are actually no params
+): (typeof BaseDef)[] {
   return Object.values(module).filter(
-    (maybeCard) => typeof maybeCard === 'function' && 'baseCard' in maybeCard
+    (maybeCard) => typeof maybeCard === 'function' && 'baseDef' in maybeCard,
   );
 }

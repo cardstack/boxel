@@ -3,19 +3,19 @@ import {
   serialize,
   queryableValue,
   Component,
-  CardBase,
   useIndexBasedKey,
+  FieldDef,
 } from './card-api';
 import { on } from '@ember/modifier';
 import Modifier from 'ember-modifier';
 import { fn } from '@ember/helper';
-import pick from '@cardstack/boxel-ui/helpers/pick';
+import { pick } from '@cardstack/boxel-ui/helpers';
 
 // this allows multiple radio groups rendered on the page
 // to stay independent of one another.
 let groupNumber = 0;
 
-class View extends Component<typeof BooleanCard> {
+class View extends Component<typeof BooleanField> {
   <template>
     {{@model}}
   </template>
@@ -28,7 +28,8 @@ class View extends Component<typeof BooleanCard> {
   }
 }
 
-export default class BooleanCard extends CardBase {
+export default class BooleanField extends FieldDef {
+  static displayName = 'Boolean';
   static [primitive]: boolean;
   static [useIndexBasedKey]: never;
   static [serialize](val: any) {
@@ -43,6 +44,7 @@ export default class BooleanCard extends CardBase {
 
   static embedded = View;
   static isolated = View;
+  static atom = View;
 
   static edit = class Edit extends Component<typeof this> {
     <template>
@@ -97,7 +99,7 @@ interface Signature {
 class RadioInitializer extends Modifier<Signature> {
   modify(
     element: HTMLInputElement,
-    [model, inputType]: Signature['Args']['Positional']
+    [model, inputType]: Signature['Args']['Positional'],
   ) {
     element.checked = model === inputType;
   }

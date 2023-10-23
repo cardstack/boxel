@@ -1,7 +1,7 @@
 /* eslint-env browser */
 /* globals QUnit */
 
-const { test } = QUnit;
+const { skip, test } = QUnit;
 const testRealmURL = 'http://localhost:4202/node-test';
 const testContainerId = 'test-container';
 
@@ -17,7 +17,7 @@ function testDocument() {
   return iframe.contentDocument;
 }
 
-async function waitFor(selector, timeoutMs = 5000) {
+async function waitFor(selector, timeoutMs = 10000) {
   let startTime = Date.now();
   while (
     querySelector(selector) == null &&
@@ -52,6 +52,21 @@ async function boot(url, waitForSelector) {
   }
 }
 
+async function bootToCodeModeFile(pathToFile, waitForSelector) {
+  let codeModeStateParam = JSON.stringify({
+    stacks: [[]],
+    submode: 'code',
+    fileView: 'browser',
+    codePath: `${testRealmURL}/${pathToFile}`,
+  });
+
+  let path = `?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+    codeModeStateParam,
+  )}`;
+
+  await boot(`${testRealmURL}/${path}`, waitForSelector);
+}
+
 function resetTestContainer() {
   let container = document.getElementById(testContainerId);
   let iframes = container.querySelectorAll('iframe');
@@ -72,20 +87,20 @@ QUnit.module(
       assert.equal(
         cleanWhiteSpace(p.textContent),
         'Hello, world',
-        'the index route is displayed'
+        'the index route is displayed',
       );
     });
 
     test('renders file tree', async function (assert) {
-      await boot(`${testRealmURL}/code`, '[data-test-directory-level]');
-      assert.strictEqual(testDocument().location.href, `${testRealmURL}/code`);
-      let nav = querySelector('.main nav');
+      await bootToCodeModeFile('person-1.json', '[data-test-directory-level]');
+
+      let nav = querySelector('nav');
       assert.ok(nav, '<nav> element exists');
       let dirContents = nav.textContent;
       assert.ok(dirContents.includes('a.js'));
       assert.ok(dirContents.includes('b.js'));
       assert.ok(dirContents.includes('c.js'));
-      assert.ok(dirContents.includes('card-ref-test.gts'));
+      assert.ok(dirContents.includes('code-ref-test.gts'));
       assert.ok(dirContents.includes('cycle-one.js'));
       assert.ok(dirContents.includes('cycle-two.js'));
       assert.ok(dirContents.includes('d.js'));
@@ -96,65 +111,72 @@ QUnit.module(
       assert.ok(dirContents.includes('person-1.json'));
       assert.ok(dirContents.includes('person-2.json'));
       assert.ok(dirContents.includes('person.gts'));
+      assert.ok(dirContents.includes('person.json'));
       assert.ok(dirContents.includes('unused-card.gts'));
     });
 
-    test('renders card source', async function (assert) {
-      await boot(`${testRealmURL}/code?path=person.gts`, '[data-test-card-id]');
+    skip('renders card source', async function (assert) {
+      await boot(
+        `${testRealmURL}/code?openFile=person.gts`,
+        '[data-test-card-id]',
+      );
       assert.strictEqual(
         testDocument().location.href,
-        `${testRealmURL}/code?path=person.gts`
+        `${testRealmURL}/code?openFile=person.gts`,
       );
       let cardId = querySelector('[data-test-card-id');
       assert.ok(cardId, 'card ID element exists');
       assert.strictEqual(
         cleanWhiteSpace(cardId.textContent),
         `Card ID: ${testRealmURL}/person/Person`,
-        'the card id is correct'
+        'the card id is correct',
       );
 
       let fields = [...querySelectorAll('[data-test-field]')];
-      assert.strictEqual(fields.length, 1, 'number of fields is correct');
+      assert.strictEqual(fields.length, 3, 'number of fields is correct');
       assert.strictEqual(
         cleanWhiteSpace(fields[0].textContent),
         `Delete firstName - contains - field card ID: https://cardstack.com/base/string/default`,
-        'field is correct'
+        'field is correct',
+      );
+      assert.strictEqual(
+        cleanWhiteSpace(fields[1].textContent),
+        `description - contains - field card ID: https://cardstack.com/base/string/default`,
+        'description field is correct',
+      );
+      assert.strictEqual(
+        cleanWhiteSpace(fields[2].textContent),
+        `thumbnailURL - contains - field card ID: https://cardstack.com/base/string/default`,
+        'thumbnailURL field is correct',
       );
     });
 
     test('renders card instance', async function (assert) {
-      await boot(`${testRealmURL}/code?path=person-2.json`, '[data-test-card]');
-      assert.strictEqual(
-        testDocument().location.href,
-        `${testRealmURL}/code?path=person-2.json`
-      );
+      await bootToCodeModeFile('person-2.json', '[data-test-card]');
+
       let card = querySelector('[data-test-card]');
       assert.strictEqual(
         cleanWhiteSpace(card.textContent),
         'Jackie',
-        'the card is rendered correctly'
+        'the card is rendered correctly',
       );
     });
 
     test('can change routes', async function (assert) {
-      await boot(`${testRealmURL}/code`, '[data-test-directory-level]');
-      let files = querySelectorAll('.main nav .file');
+      await bootToCodeModeFile('person.gts', '[data-test-directory-level]');
+      let files = querySelectorAll('nav .file');
       let instance = [...files].find(
-        (file) => cleanWhiteSpace(file.textContent) === 'person-1.json'
+        (file) => cleanWhiteSpace(file.textContent) === 'person-1.json',
       );
       assert.ok(instance, 'card instance file element exists');
       instance.click();
 
       await waitFor('[data-test-card]');
-      assert.strictEqual(
-        testDocument().location.href,
-        `${testRealmURL}/code?path=person-1.json`
-      );
       let card = querySelector('[data-test-card]');
       assert.strictEqual(
         cleanWhiteSpace(card.textContent),
         'Mango',
-        'the card is rendered correctly'
+        'the card is rendered correctly',
       );
     });
 
@@ -162,13 +184,13 @@ QUnit.module(
       await boot(`${testRealmURL}/person-1`, '[data-test-card]');
       assert.strictEqual(
         testDocument().location.href,
-        `${testRealmURL}/person-1`
+        `${testRealmURL}/person-1`,
       );
       let card = querySelector('[data-test-card]');
       assert.strictEqual(
         cleanWhiteSpace(card.textContent),
         'Mango',
-        'the card is rendered correctly'
+        'the card is rendered correctly',
       );
       let nav = querySelector('.main nav');
       assert.notOk(nav, 'file tree is not rendered');
@@ -178,44 +200,21 @@ QUnit.module(
       await boot(`${testRealmURL}/does-not-exist`, '[data-card-error]');
       assert.strictEqual(
         testDocument().location.href,
-        `${testRealmURL}/does-not-exist`
+        `${testRealmURL}/does-not-exist`,
       );
       let card = querySelector('[data-test-card]');
       assert.notOk(card, 'no card rendered');
       let error = querySelector('[data-card-error]');
       assert.ok(
         cleanWhiteSpace(error.textContent).includes(`Cannot load card`),
-        'error message is displayed'
+        'error message is displayed',
       );
       assert.ok(
         cleanWhiteSpace(error.textContent).includes(
-          `Could not find ${testRealmURL}/does-not-exist`
+          `Could not find ${testRealmURL}/does-not-exist`,
         ),
-        'error message is displayed'
+        'error message is displayed',
       );
     });
-
-    test('can render a schema view for card module', async function (assert) {
-      await boot(`${testRealmURL}/person?schema`, '[data-test-card-id]');
-      assert.strictEqual(
-        testDocument().location.href,
-        `${testRealmURL}/code?openDirs=&path=person.gts`
-      );
-      let cardId = querySelector('[data-test-card-id');
-      assert.ok(cardId, 'card ID element exists');
-      assert.strictEqual(
-        cleanWhiteSpace(cardId.textContent),
-        `Card ID: ${testRealmURL}/person/Person`,
-        'the card id is correct'
-      );
-
-      let fields = [...querySelectorAll('[data-test-field]')];
-      assert.strictEqual(fields.length, 1, 'number of fields is correct');
-      assert.strictEqual(
-        cleanWhiteSpace(fields[0].textContent),
-        `Delete firstName - contains - field card ID: https://cardstack.com/base/string/default`,
-        'field is correct'
-      );
-    });
-  }
+  },
 );

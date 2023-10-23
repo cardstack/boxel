@@ -63,7 +63,7 @@ export default class ContextAwareBounds {
       element.left - context.left,
       element.top - context.top,
       element.width,
-      element.height
+      element.height,
     );
   }
 
@@ -78,7 +78,7 @@ export default class ContextAwareBounds {
       element.left - parent.left,
       element.top - parent.top,
       element.width,
-      element.height
+      element.height,
     );
   }
 
@@ -88,7 +88,7 @@ export default class ContextAwareBounds {
       this.element.left - left,
       this.element.top - top,
       element.width,
-      element.height
+      element.height,
     );
   }
 }

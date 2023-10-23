@@ -1,8 +1,10 @@
-import Component from '@glimmer/component';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { eq } from '../helpers/truth-helpers';
+import { on } from '@ember/modifier';
+import Component from '@glimmer/component';
+
 import type { Format } from 'https://cardstack.com/base/card-api';
+
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 interface Signature {
   Args: {
@@ -14,7 +16,7 @@ interface Signature {
 
 export default class FormatPicker extends Component<Signature> {
   <template>
-    <div>
+    <div class='format-picker'>
       Format:
       {{#each @formats as |format|}}
         <button
@@ -28,5 +30,10 @@ export default class FormatPicker extends Component<Signature> {
         </button>
       {{/each}}
     </div>
+    <style>
+      .format-picker {
+        margin-bottom: var(--boxel-sp);
+      }
+    </style>
   </template>
 }

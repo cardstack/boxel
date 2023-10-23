@@ -36,6 +36,7 @@ export interface DirectoryEntryRelationship {
 import { RealmPaths } from './paths';
 import { Query } from './query';
 export {
+  aiBotUsername,
   baseRealm,
   catalogEntryRef,
   baseCardRef,
@@ -70,10 +71,10 @@ export type {
 
 import type { Saved } from './card-document';
 
-import type { CardRef } from './card-ref';
-export type { CardRef };
+import type { CodeRef } from './code-ref';
+export type { CodeRef };
 
-export * from './card-ref';
+export * from './code-ref';
 
 export type {
   CardResource,
@@ -90,29 +91,65 @@ export {
   isRelationship,
   isCardCollectionDocument,
   isSingleCardDocument,
+  isCardDocumentString,
 } from './card-document';
 export { sanitizeHtml } from './dompurify';
+export { getPlural } from './pluralize';
 
-import type { Card, CardBase } from 'https://cardstack.com/base/card-api';
+import type {
+  CardDef,
+  BaseDef,
+  Format,
+} from 'https://cardstack.com/base/card-api';
 
 export const maxLinkDepth = 5;
 export const assetsDir = '__boxel/';
+export const boxelUIAssetsDir = '@cardstack/boxel-ui/';
+
+export interface MatrixCardError {
+  id?: string;
+  error: Error;
+}
+
+export function isMatrixCardError(
+  maybeError: any,
+): maybeError is MatrixCardError {
+  return (
+    typeof maybeError === 'object' &&
+    'error' in maybeError &&
+    maybeError.error instanceof Error
+  );
+}
+
+export type CreateNewCard = (
+  ref: CodeRef,
+  relativeTo: URL | undefined,
+  opts?: { isLinkedCard?: boolean; doc?: LooseSingleCardDocument },
+) => Promise<CardDef | undefined>;
 
 export interface CardChooser {
-  chooseCard<T extends CardBase>(
+  chooseCard<T extends BaseDef>(
     query: Query,
-    opts?: { offerToCreate: CardRef }
+    opts?: {
+      offerToCreate?: CodeRef;
+      multiSelect?: boolean;
+      createNewCard?: CreateNewCard;
+    },
   ): Promise<undefined | T>;
 }
 
-export async function chooseCard<T extends Card>(
+export async function chooseCard<T extends BaseDef>(
   query: Query,
-  opts?: { offerToCreate: CardRef }
+  opts?: {
+    offerToCreate?: CodeRef;
+    multiSelect?: boolean;
+    createNewCard?: CreateNewCard;
+  },
 ): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CARD_CHOOSER) {
     throw new Error(
-      `no cardstack card chooser is available in this environment`
+      `no cardstack card chooser is available in this environment`,
     );
   }
   let chooser: CardChooser = here._CARDSTACK_CARD_CHOOSER;
@@ -121,35 +158,57 @@ export async function chooseCard<T extends Card>(
 }
 
 export interface CardSearch {
-  getCards(query: Query): {
-    instances: Card[];
+  getCards(
+    query: Query,
+    realms?: string[],
+  ): {
+    instances: CardDef[];
+    ready: Promise<void>;
+    isLoading: boolean;
+  };
+  getLiveCards(
+    query: Query,
+    realms?: string[],
+    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
+  ): {
+    instances: CardDef[];
     isLoading: boolean;
   };
 }
 
-export async function getCards(query: Query) {
+export function getCards(query: Query, realms?: string[]) {
   let here = globalThis as any;
   let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.getCards(query);
+  return finder?.getCards(query, realms);
+}
+
+export function getLiveCards(
+  query: Query,
+  realms?: string[],
+  doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
+) {
+  let here = globalThis as any;
+  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
+  return finder?.getLiveCards(query, realms, doWhileRefreshing);
 }
 
 export interface CardCreator {
-  create<T extends Card>(
-    ref: CardRef,
+  create<T extends CardDef>(
+    ref: CodeRef,
     relativeTo: URL | undefined,
-    opts?: { doc?: LooseSingleCardDocument }
+    opts?: { doc?: LooseSingleCardDocument },
   ): Promise<undefined | T>;
 }
 
-export async function createNewCard<T extends Card>(
-  ref: CardRef,
+export async function createNewCard<T extends CardDef>(
+  ref: CodeRef,
   relativeTo: URL | undefined,
-  opts?: { doc?: LooseSingleCardDocument }
+  opts?: { doc?: LooseSingleCardDocument },
 ): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CREATE_NEW_CARD) {
     throw new Error(
-      `no cardstack card creator is available in this environment`
+      `no cardstack card creator is available in this environment`,
     );
   }
   let cardCreator: CardCreator = here._CARDSTACK_CREATE_NEW_CARD;
@@ -157,23 +216,53 @@ export async function createNewCard<T extends Card>(
   return await cardCreator.create<T>(ref, relativeTo, opts);
 }
 
+export interface RealmSubscribe {
+  subscribe(realmURL: string, cb: (ev: MessageEvent) => void): () => void;
+}
+
+export function subscribeToRealm(
+  realmURL: string,
+  cb: (ev: MessageEvent) => void,
+): () => void {
+  let here = globalThis as any;
+  if (!here._CARDSTACK_REALM_SUBSCRIBE) {
+    // eventually we'll support subscribing to a realm in node since this will
+    // be how realms will coordinate with one another, but for now do nothing
+    return () => {
+      /* do nothing */
+    };
+  } else {
+    let realmSubscribe: RealmSubscribe = here._CARDSTACK_REALM_SUBSCRIBE;
+    return realmSubscribe.subscribe(realmURL, cb);
+  }
+}
+
 export interface Actions {
   createCard: (
-    ref: CardRef,
+    ref: CodeRef,
     relativeTo: URL | undefined,
-    opts?: { isLinkedCard?: boolean; doc?: LooseSingleCardDocument }
-  ) => Promise<Card | undefined>;
-  viewCard: (card: Card) => void;
+    opts?: { isLinkedCard?: boolean; doc?: LooseSingleCardDocument }, //TODO: consider renaming isLinkedCard to be more semantic
+  ) => Promise<CardDef | undefined>;
+  viewCard: (
+    card: CardDef,
+    format?: Format,
+    fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
+    fieldName?: string,
+  ) => void;
   createCardDirectly: (
     doc: LooseSingleCardDocument,
-    relativeTo: URL | undefined
+    relativeTo: URL | undefined,
+  ) => Promise<void>;
+  doWithStableScroll: (
+    card: CardDef,
+    changeSizeCallback: () => Promise<void>,
   ) => Promise<void>;
   // more CRUD ops to come...
 }
 
 export function hasExecutableExtension(path: string): boolean {
   for (let extension of executableExtensions) {
-    if (path.endsWith(extension)) {
+    if (path.endsWith(extension) && !path.endsWith('.d.ts')) {
       return true;
     }
   }
@@ -190,8 +279,8 @@ export function trimExecutableExtension(url: URL): URL {
 }
 
 export function internalKeyFor(
-  ref: CardRef,
-  relativeTo: URL | undefined
+  ref: CodeRef,
+  relativeTo: URL | undefined,
 ): string {
   if (!('type' in ref)) {
     let module = trimExecutableExtension(new URL(ref.module, relativeTo)).href;

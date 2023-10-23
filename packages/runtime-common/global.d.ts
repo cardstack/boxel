@@ -1,7 +1,7 @@
 declare module 'ember-source/dist/ember-template-compiler' {
   export function precompile(
     templateString: string,
-    options: Record<string, unknown>
+    options: Record<string, unknown>,
   ): string;
   export const _GlimmerSyntax: {
     getTemplateLocals: (template: string) => string[];

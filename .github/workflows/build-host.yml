@@ -1,0 +1,55 @@
+name: Build host with ember
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    concurrency:
+      group: build-host-${{ inputs.environment }}-${{ github.head_ref || github.run_id }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Init
+        uses: ./.github/actions/init
+
+      - name: Set up env
+        env:
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          if [ "$INPUT_ENVIRONMENT" = "production" ]; then
+            echo "OWN_REALM_URL=https://realms.cardstack.com/drafts/" >> $GITHUB_ENV
+            echo "OTHER_REALM_URLS=https://realms.cardstack.com/published/" >> $GITHUB_ENV
+            echo "RESOLVED_BASE_REALM_URL=https://realms.cardstack.com/base/" >> $GITHUB_ENV
+            echo "MATRIX_URL=https://matrix.cardstack.com" >> $GITHUB_ENV
+            echo "EXPERIMENTAL_AI_ENABLED=true" >> $GITHUB_ENV
+          elif [ "$INPUT_ENVIRONMENT" = "staging" ]; then
+            echo "OWN_REALM_URL=https://realms-staging.stack.cards/drafts/" >> $GITHUB_ENV
+            echo "OTHER_REALM_URLS=https://realms-staging.stack.cards/published/" >> $GITHUB_ENV
+            echo "RESOLVED_BASE_REALM_URL=https://realms-staging.stack.cards/base/" >> $GITHUB_ENV
+            echo "MATRIX_URL=https://matrix-staging.stack.cards" >> $GITHUB_ENV
+            echo "EXPERIMENTAL_AI_ENABLED=true" >> $GITHUB_ENV
+          else
+            echo "unrecognized environment"
+            exit 1;
+          fi
+
+      - name: Build boxel-ui
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
+
+      - name: Build host
+        run: pnpm deploy:boxel-host build-only --verbose
+
+      - name: Save dist
+        uses: actions/upload-artifact@v3
+        with:
+          name: host-dist
+          path: packages/host/tmp/deploy-dist

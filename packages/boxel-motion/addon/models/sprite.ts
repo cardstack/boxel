@@ -85,7 +85,7 @@ export default class Sprite {
     type: SpriteType,
     public callbacks: {
       onAnimationStart(animation: Animation): void;
-    }
+    },
   ) {
     this.element = element;
     this.identifier = new SpriteIdentifier(metadata.id, metadata.role);
@@ -102,7 +102,7 @@ export default class Sprite {
     // Otherwise it should not be eligible to animate (check definition of context.isStable)
     assert(
       'Animator always has initial and final Snapshots',
-      animator._state.initial && animator._state.final
+      animator._state.initial && animator._state.final,
     );
 
     this._contextElementState = animator._state;

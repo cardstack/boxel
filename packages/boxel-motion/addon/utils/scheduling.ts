@@ -10,7 +10,7 @@ const cancellation: WeakMap<
 
 export function registerCancellation(
   promise: Promise<any>,
-  handler: (p: Promise<any>) => void
+  handler: (p: Promise<any>) => void,
 ) {
   cancellation.set(promise, handler);
 }

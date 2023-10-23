@@ -21,34 +21,39 @@
     "@types/diff": "^5.0.2",
     "@types/flat": "^5.0.2",
     "@types/lodash": "^4.14.182",
+    "@types/pluralize": "^0.0.30",
     "@types/qs": "^6.9.7",
     "babel-import-util": "^1.2.2",
-    "babel-plugin-ember-template-compilation": "^2.0.3",
+    "babel-plugin-ember-template-compilation": "^2.2.0",
     "date-fns": "^2.28.0",
     "diff": "^5.1.0",
     "ember-concurrency-async-plugin": "workspace:*",
     "ember-source": "~4.12.0",
     "flat": "^5.0.2",
+    "glimmer-scoped-css": "^0.4.0",
     "http-status-codes": "^2.2.0",
     "ignore": "^5.2.0",
+    "js-string-escape": "^1.0.1",
     "json-typescript": "^1.1.2",
     "lodash": "^4.17.21",
     "loglevel": "^1.8.1",
+    "pluralize": "^8.0.0",
     "qs": "^6.10.5",
     "qunit": "^2.18.0",
     "super-fast-md5": "^1.0.1",
     "transform-modules-amd-plugin": "workspace:*"
   },
   "devDependencies": {
-    "@babel/core": "^7.17.8",
+    "@babel/core": "^7.22.11",
     "@types/dompurify": "^3.0.2",
+    "@types/js-string-escape": "^1.0.1",
     "@types/qunit": "^2.11.3",
     "dompurify": "^3.0.3",
-    "ember-cli-htmlbars": "^6.2.0"
+    "ember-cli-htmlbars": "^6.3.0"
   },
   "peerDependencies": {
-    "@babel/core": "^7.17.8",
-    "ember-cli-htmlbars": "^6.2.0"
+    "@babel/core": "^7.22.11",
+    "ember-cli-htmlbars": "^6.3.0"
   },
   "dependenciesMeta": {
     "@cardstack/ember-template-imports": {

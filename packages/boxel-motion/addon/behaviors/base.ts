@@ -46,7 +46,7 @@ export default interface Behavior {
       | EasingToFramesArgument
       | SpringToFramesArgument
       | StaticToFramesArgument
-      | WaitToFramesArgument
+      | WaitToFramesArgument,
   ): FrameGenerator;
 }
 
@@ -61,6 +61,6 @@ export interface EasingBehavior extends Behavior {
   instantaneousVelocity(
     time: number,
     duration: number,
-    frames: number[]
+    frames: number[],
   ): number;
 }

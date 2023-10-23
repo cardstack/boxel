@@ -1,7 +1,15 @@
+import { RenderingTestContext } from '@ember/test-helpers';
+
+import { setupRenderingTest } from 'ember-qunit';
 import { module, test } from 'qunit';
+
+import { baseRealm } from '@cardstack/runtime-common';
+import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
-import { baseRealm } from '@cardstack/runtime-common';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
+
 import {
   testRealmURL,
   setupCardLogs,
@@ -11,31 +19,33 @@ import {
   trimCardContainer,
   setupLocalIndexing,
 } from '../helpers';
-import { setupRenderingTest } from 'ember-qunit';
-import { shimExternals } from '@cardstack/host/lib/externals';
+
+let loader: Loader;
 
 module('Integration | card-prerender', function (hooks) {
   let adapter: TestRealmAdapter;
   let realm: Realm;
+
   setupRenderingTest(hooks);
+
+  hooks.beforeEach(function () {
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+  });
+
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
-  hooks.beforeEach(async function () {
-    Loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
-    shimExternals();
+  hooks.beforeEach(async function (this: RenderingTestContext) {
     adapter = new TestRealmAdapter({
       'pet.gts': `
-        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
-        export class Pet extends Card {
+        export class Pet extends CardDef {
           @field firstName = contains(StringCard);
           static isolated = class Isolated extends Component<typeof this> {
             <template>
@@ -75,29 +85,30 @@ module('Integration | card-prerender', function (hooks) {
         },
       },
     });
-    realm = await TestRealm.createWithAdapter(adapter, this.owner);
+
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
   });
 
   test("can generate the card's pre-rendered HTML", async function (assert) {
     {
       let entry = await realm.searchIndex.searchEntry(
-        new URL(`${testRealmURL}Pet/mango`)
+        new URL(`${testRealmURL}Pet/mango`),
       );
       assert.strictEqual(
-        trimCardContainer(entry!.html!),
+        trimCardContainer(stripScopedCSSAttributes(entry!.html!)),
         cleanWhiteSpace(`<h3> Mango </h3>`),
-        'the pre-rendered HTML is correct'
+        'the pre-rendered HTML is correct',
       );
     }
     {
       let entry = await realm.searchIndex.searchEntry(
-        new URL(`${testRealmURL}Pet/vangogh`)
+        new URL(`${testRealmURL}Pet/vangogh`),
       );
       assert.strictEqual(
-        trimCardContainer(entry!.html!),
+        trimCardContainer(stripScopedCSSAttributes(entry!.html!)),
         cleanWhiteSpace(`<h3> Van Gogh </h3>`),
-        'the pre-rendered HTML is correct'
+        'the pre-rendered HTML is correct',
       );
     }
   });

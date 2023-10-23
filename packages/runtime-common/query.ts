@@ -2,7 +2,7 @@ import * as JSON from 'json-typescript';
 import isEqual from 'lodash/isEqual';
 import { assertJSONValue, assertJSONPrimitive } from './json-validation';
 import qs from 'qs';
-import { type CardRef, isCardRef } from './index';
+import { type CodeRef, isCodeRef } from './index';
 
 export interface Query {
   filter?: Filter;
@@ -16,16 +16,17 @@ export type Filter =
   | EveryFilter
   | NotFilter
   | EqFilter
+  | ContainsFilter
   | RangeFilter
   | CardTypeFilter;
 
 export interface TypedFilter {
-  on?: CardRef;
+  on?: CodeRef;
 }
 
 interface SortExpression {
   by: string;
-  on: CardRef;
+  on: CodeRef;
   direction?: 'asc' | 'desc';
 }
 
@@ -35,7 +36,7 @@ export type Sort = SortExpression[];
 // adopt from some particular card type--no other predicates are included in
 // this filter.
 export interface CardTypeFilter {
-  type: CardRef;
+  type: CodeRef;
 }
 
 export interface AnyFilter extends TypedFilter {
@@ -67,6 +68,29 @@ export interface RangeFilter extends TypedFilter {
   };
 }
 
+export interface ContainsFilter extends TypedFilter {
+  contains: { [fieldName: string]: JSON.Value };
+}
+
+export function isCardTypeFilter(filter: Filter): filter is CardTypeFilter {
+  return (filter as CardTypeFilter).type !== undefined;
+}
+
+export function isNotFilter(filter: Filter): filter is NotFilter {
+  return (filter as NotFilter).not !== undefined;
+}
+
+export function isRangeFilter(filter: Filter): filter is RangeFilter {
+  return (filter as RangeFilter).range !== undefined;
+}
+
+export function isEveryFilter(filter: Filter): filter is EveryFilter {
+  return (filter as EveryFilter).every !== undefined;
+}
+export function isAnyFilter(filter: Filter): filter is AnyFilter {
+  return (filter as AnyFilter).any !== undefined;
+}
+
 export function parseQueryString(querystring: string): Query {
   let query = qs.parse(querystring);
   assertQuery(query);
@@ -79,7 +103,7 @@ export function buildQueryString(query: Query): string {
 
 export function assertQuery(
   query: any,
-  pointer: string[] = ['']
+  pointer: string[] = [''],
 ): asserts query is Query {
   if (typeof query !== 'object' || query == null) {
     throw new Error(`${pointer.join('/') || '/'}: missing query object`);
@@ -93,7 +117,7 @@ export function assertQuery(
       case 'sort':
         if (!Array.isArray(value)) {
           throw new Error(
-            `${pointer.concat('sort').join('/') || '/'}: sort must be an array`
+            `${pointer.concat('sort').join('/') || '/'}: sort must be an array`,
           );
         }
         value.forEach((sort, i) => {
@@ -105,7 +129,7 @@ export function assertQuery(
           throw new Error(
             `${
               pointer.concat('queryString').join('/') || '/'
-            }: queryString must be a string`
+            }: queryString must be a string`,
           );
         }
         break;
@@ -120,24 +144,24 @@ export function assertQuery(
 
 function assertSortExpression(
   sort: any,
-  pointer: string[]
+  pointer: string[],
 ): asserts sort is Query['sort'] {
   if (typeof sort !== 'object' || sort == null) {
     throw new Error(`${pointer.join('/') || '/'}: missing sort object`);
   }
   if (!('by' in sort)) {
     throw new Error(
-      `${pointer.concat('by').join('/') || '/'}: missing by object`
+      `${pointer.concat('by').join('/') || '/'}: missing by object`,
     );
   }
   if (typeof sort.by !== 'string') {
     throw new Error(
-      `${pointer.concat('by').join('/') || '/'}: by must be a string`
+      `${pointer.concat('by').join('/') || '/'}: by must be a string`,
     );
   }
   if (!('on' in sort)) {
     throw new Error(
-      `${pointer.concat('on').join('/') || '/'}: missing on object`
+      `${pointer.concat('on').join('/') || '/'}: missing on object`,
     );
   }
   assertCardType(sort.on, pointer.concat('on'));
@@ -147,7 +171,7 @@ function assertSortExpression(
       throw new Error(
         `${
           pointer.concat('direction').join('/') || '/'
-        }: direction must be either 'asc' or 'desc'`
+        }: direction must be either 'asc' or 'desc'`,
       );
     }
   }
@@ -155,7 +179,7 @@ function assertSortExpression(
 
 function assertPage(
   page: any,
-  pointer: string[]
+  pointer: string[],
 ): asserts page is Query['page'] {
   if (typeof page !== 'object' || page == null) {
     throw new Error(`${pointer.join('/') || '/'}: missing page object`);
@@ -167,21 +191,21 @@ function assertPage(
       (typeof page.size === 'string' && isNaN(page.size))
     ) {
       throw new Error(
-        `${pointer.concat('size').join('/') || '/'}: size must be a number`
+        `${pointer.concat('size').join('/') || '/'}: size must be a number`,
       );
     }
   }
 
   if ('cursor' in page && typeof page.cursor !== 'string') {
     throw new Error(
-      `${pointer.concat('cursor').join('/') || '/'}: cursor must be a string`
+      `${pointer.concat('cursor').join('/') || '/'}: cursor must be a string`,
     );
   }
 }
 
 function assertFilter(
   filter: any,
-  pointer: string[]
+  pointer: string[],
 ): asserts filter is Filter {
   if (typeof filter !== 'object' || filter == null) {
     throw new Error(`${pointer.join('/') || '/'}: missing filter object`);
@@ -206,24 +230,26 @@ function assertFilter(
     assertNotFilter(filter, pointer);
   } else if ('eq' in filter) {
     assertEqFilter(filter, pointer);
+  } else if ('contains' in filter) {
+    assertContainsFilter(filter, pointer);
   } else if ('range' in filter) {
     assertRangeFilter(filter, pointer);
   } else {
     throw new Error(
-      `${pointer.join('/') || '/'}: cannot determine the type of filter`
+      `${pointer.join('/') || '/'}: cannot determine the type of filter`,
     );
   }
 }
 
 function assertCardType(type: any, pointer: string[]) {
-  if (!isCardRef(type)) {
+  if (!isCodeRef(type)) {
     throw new Error(`${pointer.join('/') || '/'}: type is not valid`);
   }
 }
 
 function assertAnyFilter(
   filter: any,
-  pointer: string[]
+  pointer: string[],
 ): asserts filter is AnyFilter {
   if (typeof filter !== 'object' || filter == null) {
     throw new Error(`${pointer.join('/') || '/'}: filter must be an object`);
@@ -231,24 +257,24 @@ function assertAnyFilter(
   pointer.concat('any');
   if (!('any' in filter)) {
     throw new Error(
-      `${pointer.join('/') || '/'}: AnyFilter must have any property`
+      `${pointer.join('/') || '/'}: AnyFilter must have any property`,
     );
   }
 
   if (!Array.isArray(filter.any)) {
     throw new Error(
-      `${pointer.join('/') || '/'}: any must be an array of Filters`
+      `${pointer.join('/') || '/'}: any must be an array of Filters`,
     );
   } else {
     filter.any.every((value: any, index: number) =>
-      assertFilter(value, pointer.concat(`[${index}]`))
+      assertFilter(value, pointer.concat(`[${index}]`)),
     );
   }
 }
 
 function assertEveryFilter(
   filter: any,
-  pointer: string[]
+  pointer: string[],
 ): asserts filter is EveryFilter {
   if (typeof filter !== 'object' || filter == null) {
     throw new Error(`${pointer.join('/') || '/'}: filter must be an object`);
@@ -256,24 +282,24 @@ function assertEveryFilter(
   pointer.concat('every');
   if (!('every' in filter)) {
     throw new Error(
-      `${pointer.join('/') || '/'}: EveryFilter must have every property`
+      `${pointer.join('/') || '/'}: EveryFilter must have every property`,
     );
   }
 
   if (!Array.isArray(filter.every)) {
     throw new Error(
-      `${pointer.join('/') || '/'}: every must be an array of Filters`
+      `${pointer.join('/') || '/'}: every must be an array of Filters`,
     );
   } else {
     filter.every.every((value: any, index: number) =>
-      assertFilter(value, pointer.concat(`[${index}]`))
+      assertFilter(value, pointer.concat(`[${index}]`)),
     );
   }
 }
 
 function assertNotFilter(
   filter: any,
-  pointer: string[]
+  pointer: string[],
 ): asserts filter is NotFilter {
   if (typeof filter !== 'object' || filter == null) {
     throw new Error(`${pointer.join('/') || '/'}: filter must be an object`);
@@ -281,7 +307,7 @@ function assertNotFilter(
   pointer.concat('not');
   if (!('not' in filter)) {
     throw new Error(
-      `${pointer.join('/') || '/'}: NotFilter must have not property`
+      `${pointer.join('/') || '/'}: NotFilter must have not property`,
     );
   }
 
@@ -290,7 +316,7 @@ function assertNotFilter(
 
 function assertEqFilter(
   filter: any,
-  pointer: string[]
+  pointer: string[],
 ): asserts filter is EqFilter {
   if (typeof filter !== 'object' || filter == null) {
     throw new Error(`${pointer.join('/') || '/'}: filter must be an object`);
@@ -298,20 +324,45 @@ function assertEqFilter(
   pointer.concat('eq');
   if (!('eq' in filter)) {
     throw new Error(
-      `${pointer.concat('eq').join('/') || '/'}: EqFilter must have eq property`
+      `${
+        pointer.concat('eq').join('/') || '/'
+      }: EqFilter must have eq property`,
     );
   }
   if (typeof filter.eq !== 'object' || filter.eq == null) {
     throw new Error(`${pointer.join('/') || '/'}: eq must be an object`);
   }
   Object.entries(filter.eq).every(([key, value]) =>
-    assertJSONValue(value, pointer.concat(key))
+    assertJSONValue(value, pointer.concat(key)),
+  );
+}
+
+function assertContainsFilter(
+  filter: any,
+  pointer: string[],
+): asserts filter is ContainsFilter {
+  if (typeof filter !== 'object' || filter == null) {
+    throw new Error(`${pointer.join('/') || '/'}: filter must be an object`);
+  }
+  pointer.concat('contains');
+  if (!('contains' in filter)) {
+    throw new Error(
+      `${
+        pointer.concat('contains').join('/') || '/'
+      }: ContainsFilter must have contains property`,
+    );
+  }
+  if (typeof filter.contains !== 'object' || filter.contains == null) {
+    throw new Error(`${pointer.join('/') || '/'}: contains must be an object`);
+  }
+  Object.entries(filter.contains).every(([key, value]) =>
+    assertJSONValue(value, pointer.concat(key)),
   );
 }
 
 function assertRangeFilter(
   filter: any,
-  pointer: string[]
+  pointer: string[],
 ): asserts filter is RangeFilter {
   if (typeof filter !== 'object' || filter == null) {
     throw new Error(`${pointer.join('/') || '/'}: filter must be an object`);
@@ -321,7 +372,7 @@ function assertRangeFilter(
     throw new Error(
       `${
         pointer.concat('range').join('/') || '/'
-      }: RangeFilter must have range property`
+      }: RangeFilter must have range property`,
     );
   }
   if (typeof filter.range !== 'object' || filter.range == null) {
@@ -331,7 +382,7 @@ function assertRangeFilter(
     let innerPointer = [...pointer, fieldPath];
     if (typeof constraints !== 'object' || constraints == null) {
       throw new Error(
-        `${innerPointer.join('/') || '/'}: range constraint must be an object`
+        `${innerPointer.join('/') || '/'}: range constraint must be an object`,
       );
     }
     Object.entries(constraints).every(([key, value]) => {
@@ -346,7 +397,7 @@ function assertRangeFilter(
           throw new Error(
             `${
               innerPointer.join('/') || '/'
-            }: range item must be gt, gte, lt, or lte`
+            }: range item must be gt, gte, lt, or lte`,
           );
       }
     });

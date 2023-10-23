@@ -1,4 +1,5 @@
 import flatMap from 'lodash/flatMap';
+
 import {
   hasExecutableExtension,
   type Relationship,
@@ -8,7 +9,7 @@ import {
 export async function getModulesInRealm(
   loader: Loader,
   realmURL: string,
-  url: string = realmURL
+  url: string = realmURL,
 ): Promise<string[]> {
   let response: Response | undefined;
   response = await loader.fetch(url, {
@@ -19,7 +20,7 @@ export async function getModulesInRealm(
     console.log(
       `Could not get directory listing ${url}, status ${response.status}: ${
         response.statusText
-      } - ${await response.text()}`
+      } - ${await response.text()}`,
     );
     return [];
   }
@@ -32,10 +33,10 @@ export async function getModulesInRealm(
     ([name, info]) =>
       info.meta!.kind === 'file' && hasExecutableExtension(name)
         ? [`${url}${name}`]
-        : []
+        : [],
   );
   let nestedDirs = flatMap(Object.values(relationships), (rel) =>
-    rel.meta!.kind === 'directory' ? [rel.links.related] : []
+    rel.meta!.kind === 'directory' ? [rel.links.related] : [],
   ).filter(Boolean) as string[];
   let nestedResults: string[] = [];
   for (let dir of nestedDirs) {

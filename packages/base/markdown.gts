@@ -1,5 +1,5 @@
-import { primitive, Component, CardBase, useIndexBasedKey } from './card-api';
-import { BoxelInput } from '@cardstack/boxel-ui';
+import { primitive, Component, useIndexBasedKey, FieldDef } from './card-api';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { marked } from 'marked';
 import { sanitizeHtml } from '@cardstack/runtime-common';
 
@@ -12,7 +12,16 @@ function toHtml(markdown: string | null) {
   return markdown ? sanitizeHtml(marked(markdown, markdownOpts)) : '';
 }
 
-export default class MarkdownCard extends CardBase {
+class View extends Component<typeof MarkdownField> {
+  <template>
+    <div>
+      {{{toHtml @model}}}
+    </div>
+  </template>
+}
+
+export default class MarkdownField extends FieldDef {
+  static displayName = 'Markdown';
   static [primitive]: string;
   static [useIndexBasedKey]: never;
 
@@ -24,13 +33,8 @@ export default class MarkdownCard extends CardBase {
     </template>
   };
 
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      <div>
-        {{{toHtml @model}}}
-      </div>
-    </template>
-  };
+  static embedded = View;
+  static atom = View;
 
   static edit = class Edit extends Component<typeof this> {
     <template>

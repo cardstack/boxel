@@ -4,13 +4,22 @@ import {
   type MatrixClient,
   type IEvent,
 } from 'matrix-js-sdk';
+
+import {
+  type LooseCardResource,
+  type MatrixCardError,
+  baseRealm,
+  isMatrixCardError,
+} from '@cardstack/runtime-common';
+
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type {
-  RoomCard,
+  RoomField,
   MatrixEvent as DiscreteMatrixEvent,
 } from 'https://cardstack.com/base/room';
-import type { RoomObjectiveCard } from 'https://cardstack.com/base/room-objective';
-import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import { type LooseCardResource, baseRealm } from '@cardstack/runtime-common';
+import type { RoomObjectiveField } from 'https://cardstack.com/base/room-objective';
+
+import type LoaderService from '../../services/loader-service';
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 export * as Membership from './membership';
@@ -32,62 +41,64 @@ export interface RoomMeta {
 
 export type Event = Partial<IEvent>;
 
-export interface Context {
-  roomCards: Map<string, Promise<RoomCard>>;
-  roomObjectives: Map<string, RoomObjectiveCard>;
+export interface EventSendingContext {
+  rooms: Map<string, Promise<RoomField>>;
+  cardAPI: typeof CardAPI;
+  loaderService: LoaderService;
+}
+
+export interface Context extends EventSendingContext {
+  roomObjectives: Map<string, RoomObjectiveField | MatrixCardError>;
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   roomMembershipQueue: { event: MatrixEvent; member: RoomMember }[];
   timelineQueue: MatrixEvent[];
-  cardAPI: typeof CardAPI;
   client: MatrixClient;
   matrixSDK: typeof MatrixSDK;
   handleMessage?: (
     context: Context,
     event: Event,
-    roomId: string
+    roomId: string,
   ) => Promise<void>;
 }
 
-export async function addRoomEvent(context: Context, event: Event) {
+export async function addRoomEvent(context: EventSendingContext, event: Event) {
   let { event_id: eventId, room_id: roomId, state_key: stateKey } = event;
   eventId = eventId ?? stateKey; // room state may not necessary have an event ID
   if (!eventId) {
     throw new Error(
-      `bug: event ID is undefined for event ${JSON.stringify(event, null, 2)}`
+      `bug: event ID is undefined for event ${JSON.stringify(event, null, 2)}`,
     );
   }
   if (!roomId) {
     throw new Error(
-      `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`
+      `bug: roomId is undefined for event ${JSON.stringify(event, null, 2)}`,
     );
   }
-  let roomCard = context.roomCards.get(roomId);
-  if (!roomCard) {
+  let room = context.rooms.get(roomId);
+  if (!room) {
     let data: LooseCardResource = {
-      attributes: {
-        id: roomId,
-      },
       meta: {
         adoptsFrom: {
-          name: 'RoomCard',
+          name: 'RoomField',
           module: `${baseRealm.url}room`,
         },
       },
     };
-    roomCard = context.cardAPI.createFromSerialized<typeof RoomCard>(
+    room = context.cardAPI.createFromSerialized<typeof RoomField>(
       data,
       { data },
-      undefined
+      undefined,
+      context.loaderService.loader,
     );
-    context.roomCards.set(roomId, roomCard);
+    context.rooms.set(roomId, room);
   }
-  let resolvedRoomCard = await roomCard;
+  let resolvedRoom = await room;
 
   // duplicate events may be emitted from matrix, as well as the resolved room card might already contain this event
-  if (!resolvedRoomCard.events.find((e) => e.event_id === eventId)) {
-    resolvedRoomCard.events = [
-      ...(resolvedRoomCard.events ?? []),
+  if (!resolvedRoom.events.find((e) => e.event_id === eventId)) {
+    resolvedRoom.events = [
+      ...(resolvedRoom.events ?? []),
       event as unknown as DiscreteMatrixEvent,
     ];
   }
@@ -98,12 +109,12 @@ export async function addRoomEvent(context: Context, event: Event) {
 // changes, the consuming card's computeds will not automatically recompute. To
 // work around that, we are performing the assignment of the interior card to
 // the consuming card again which will trigger the consuming card's computeds to
-// pick up the interior card's updated fields. In this case the consuming card is
-// the RoomObjectiveCard and the interior card is the RoomCard.
+// pick up the interior card's updated fields. In this case the consuming
+// card/field is the RoomObjectiveField and the interior field is the RoomField.
 export async function recomputeRoomObjective(context: Context, roomId: string) {
-  let roomCard = await context.roomCards.get(roomId);
+  let room = await context.rooms.get(roomId);
   let objective = context.roomObjectives.get(roomId);
-  if (objective && roomCard) {
-    objective.room = roomCard;
+  if (objective && room && !isMatrixCardError(objective)) {
+    objective.room = room;
   }
 }

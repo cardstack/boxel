@@ -7,12 +7,13 @@ export function dockerRun(args: {
   containerName: string;
   dockerParams?: string[];
   applicationParams?: string[];
+  runAsUser?: true;
 }): Promise<string> {
   const userInfo = os.userInfo();
   const params = args.dockerParams ?? [];
   const appParams = args.applicationParams ?? [];
 
-  if (userInfo.uid >= 0) {
+  if (args.runAsUser && userInfo.uid >= 0) {
     // On *nix we run the docker container as our uid:gid otherwise cleaning it up its media_store can be difficult
     params.push('-u', `${userInfo.uid}:${userInfo.gid}`);
   }
@@ -34,7 +35,7 @@ export function dockerRun(args: {
           reject(err);
         }
         resolve(stdout.trim());
-      }
+      },
     );
   });
 }
@@ -56,7 +57,35 @@ export function dockerExec(args: {
           return;
         }
         resolve();
-      }
+      },
+    );
+  });
+}
+
+/**
+ * Get the host port a container port is mapped to
+ */
+export function getHostPort(
+  containerId: string,
+  internalPort: number,
+): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
+    childProcess.execFile(
+      'docker',
+      [
+        'inspect',
+        `--format='{{(index (index .NetworkSettings.Ports "${internalPort}/tcp") 0).HostPort}}'`,
+        containerId,
+      ],
+      { encoding: 'utf8' },
+      (err, stdout, _stderr) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        // It's returned in the fomat 'port' (e.g. '8008')
+        resolve(parseInt(stdout.trim().replace(/'/g, '')));
+      },
     );
   });
 }
@@ -76,7 +105,7 @@ export function dockerCreateNetwork(args: {
         if (err) {
           if (
             stderr.includes(
-              `network with name ${args.networkName} already exists`
+              `network with name ${args.networkName} already exists`,
             )
           ) {
             // Don't consider this as error
@@ -86,7 +115,7 @@ export function dockerCreateNetwork(args: {
           return;
         }
         resolve();
-      }
+      },
     );
   });
 }

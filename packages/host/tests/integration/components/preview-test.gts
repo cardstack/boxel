@@ -1,15 +1,20 @@
-import { module, test } from 'qunit';
+import Service from '@ember/service';
+import { waitFor } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
+
 import { setupRenderingTest } from 'ember-qunit';
+import { module, test } from 'qunit';
+
 import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
+
 import Preview from '@cardstack/host/components/preview';
-import Service from '@ember/service';
-import { renderComponent } from '../../helpers/render-component';
-import { testRealmURL, shimModule } from '../../helpers';
-import { waitFor } from '@ember/test-helpers';
-import type LoaderService from '@cardstack/host/services/loader-service';
+
 import { shimExternals } from '@cardstack/host/lib/externals';
+import type LoaderService from '@cardstack/host/services/loader-service';
+
+import { testRealmURL, shimModule } from '../../helpers';
+import { renderComponent } from '../../helpers/render-component';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
 let string: typeof import('https://cardstack.com/base/string');
@@ -23,18 +28,18 @@ module('Integration | preview', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(async function () {
-    shimExternals();
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
+    shimExternals(loader);
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     this.owner.register('service:local-indexer', MockLocalIndexer);
   });
 
   test('renders card', async function (assert) {
-    let { field, contains, Card, Component } = cardApi;
+    let { field, contains, CardDef, Component } = cardApi;
     let { default: StringCard } = string;
-    class TestCard extends Card {
+    class TestCard extends CardDef {
       @field firstName = contains(StringCard);
       static isolated = class Isolated extends Component<typeof this> {
         <template>
@@ -49,7 +54,7 @@ module('Integration | preview', function (hooks) {
         <template>
           <Preview @card={{card}} />
         </template>
-      }
+      },
     );
     await waitFor('[data-test-firstName]'); // we need to wait for the card instance to load
     assert.dom('[data-test-firstName]').hasText('Mango');

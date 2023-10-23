@@ -1,8 +1,11 @@
 import Service, { service } from '@ember/service';
 import { tracked } from '@glimmer/tracking';
-import { Loader } from '@cardstack/runtime-common/loader';
+
 import { baseRealm } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
+
 import config from '@cardstack/host/config/environment';
+import { shimExternals } from '@cardstack/host/lib/externals';
 
 export default class LoaderService extends Service {
   @service declare fastboot: { isFastBoot: boolean };
@@ -10,18 +13,23 @@ export default class LoaderService extends Service {
 
   reset() {
     this.loader = Loader.cloneLoader(this.loader);
+    shimExternals(this.loader);
   }
 
   private makeInstance() {
     if (this.fastboot.isFastBoot) {
-      return Loader.createLoaderFromGlobal();
+      let loader = new Loader();
+      shimExternals(loader);
+      return loader;
     }
 
-    let loader = Loader.createLoaderFromGlobal();
+    let loader = new Loader();
     loader.addURLMapping(
       new URL(baseRealm.url),
-      new URL(config.resolvedBaseRealmURL)
+      new URL(config.resolvedBaseRealmURL),
     );
+    shimExternals(loader);
+
     return loader;
   }
 }

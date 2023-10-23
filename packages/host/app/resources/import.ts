@@ -1,9 +1,12 @@
-import { Resource } from 'ember-resources/core';
-import { tracked } from '@glimmer/tracking';
-import { task } from 'ember-concurrency';
-import { Loader } from '@cardstack/runtime-common/loader';
 import { getOwner } from '@ember/application';
-import { logger } from '@cardstack/runtime-common';
+import { tracked } from '@glimmer/tracking';
+
+import { task } from 'ember-concurrency';
+import { Resource } from 'ember-resources';
+
+import { isBaseDef, logger } from '@cardstack/runtime-common';
+import { Loader } from '@cardstack/runtime-common/loader';
+
 import type LoaderService from '../services/loader-service';
 
 interface Args {
@@ -24,6 +27,10 @@ export class ImportResource extends Resource<Args> {
 
   get loaded() {
     return this.#loaded;
+  }
+
+  get cardsOrFieldsFromModule() {
+    return Object.values(this.module || {}).filter(isBaseDef);
   }
 
   private load = task(async (url: string, loader: Loader) => {
@@ -58,7 +65,7 @@ export function importResource(parent: object, url: () => string) {
       url: url(),
       loader: (
         (getOwner(parent) as any).lookup(
-          'service:loader-service'
+          'service:loader-service',
         ) as LoaderService
       ).loader,
     },

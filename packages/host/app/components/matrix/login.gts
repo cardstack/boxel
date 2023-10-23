@@ -1,33 +1,35 @@
-import Component from '@glimmer/component';
-import { service } from '@ember/service';
-import { action } from '@ember/object';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import { service } from '@ember/service';
+import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+
 import { restartableTask } from 'ember-concurrency';
-import {
-  BoxelHeader,
-  BoxelInput,
-  Button,
-  FieldContainer,
-  LoadingIndicator,
-} from '@cardstack/boxel-ui';
-import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
-import type MatrixService from '@cardstack/host/services/matrix-service';
+
 import { type IAuthData } from 'matrix-js-sdk';
 
-const TRUE = true;
+import {
+  Button,
+  FieldContainer,
+  BoxelHeader,
+  BoxelInput,
+  LoadingIndicator,
+} from '@cardstack/boxel-ui/components';
+
+import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 
 export default class Login extends Component {
   <template>
-    <BoxelHeader @title='Login' @hasBackground={{TRUE}} />
+    <BoxelHeader @title='Login' @hasBackground={{true}} />
     {{#if this.error}}
       <div class='error' data-test-login-error>{{this.error}}</div>
     {{/if}}
     {{#if this.doLogin.isRunning}}
       <LoadingIndicator />
     {{else}}
-      <fieldset>
-        <FieldContainer @label='Username:' @tag='label'>
+      <div class='login'>
+        <FieldContainer @label='Username:' @tag='label' class='login__field'>
           <BoxelInput
             data-test-username-field
             type='text'
@@ -35,7 +37,7 @@ export default class Login extends Component {
             @onInput={{this.setUsername}}
           />
         </FieldContainer>
-        <FieldContainer @label='Password:' @tag='label'>
+        <FieldContainer @label='Password:' @tag='label' class='login__field'>
           <BoxelInput
             data-test-password-field
             type='password'
@@ -44,13 +46,29 @@ export default class Login extends Component {
           />
         </FieldContainer>
         <Button
+          class='login__button'
           data-test-login-btn
           @kind='primary'
           @disabled={{this.isLoginButtonDisabled}}
           {{on 'click' this.login}}
         >Login</Button>
-      </fieldset>
+      </div>
     {{/if}}
+
+    <style>
+      .login {
+        padding: var(--boxel-sp);
+      }
+      .login__field {
+        margin-top: var(--boxel-sp-sm);
+      }
+      .login__button {
+        margin-top: var(--boxel-sp-sm);
+        margin-right: var(--boxel-sp);
+        position: absolute;
+        right: var(--boxel-sp);
+      }
+    </style>
   </template>
 
   @tracked private error: string | undefined;
@@ -82,18 +100,18 @@ export default class Login extends Component {
   private doLogin = restartableTask(async () => {
     if (!this.username) {
       throw new Error(
-        `bug: should never get here: login button disabled when no username`
+        `bug: should never get here: login button disabled when no username`,
       );
     } else if (!this.password) {
       throw new Error(
-        `bug: should never get here: login button disabled when no password`
+        `bug: should never get here: login button disabled when no password`,
       );
     }
     let auth: IAuthData | undefined;
     try {
       auth = await this.matrixService.client.loginWithPassword(
         this.username,
-        this.password
+        this.password,
       );
     } catch (e: any) {
       if (isMatrixError(e)) {
@@ -106,7 +124,7 @@ export default class Login extends Component {
       await this.matrixService.start(auth);
     } else {
       throw new Error(
-        `bug: should be impossible to get here - successful matrix login with no auth response`
+        `bug: should be impossible to get here - successful matrix login with no auth response`,
       );
     }
   });

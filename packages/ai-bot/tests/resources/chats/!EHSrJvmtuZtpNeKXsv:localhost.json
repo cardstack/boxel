@@ -1,0 +1,281 @@
+[
+  {
+    "type": "m.room.message",
+    "room_id": "!EHSrJvmtuZtpNeKXsv:localhost",
+    "sender": "@ian:localhost",
+    "content": {
+      "msgtype": "org.boxel.card",
+      "body": "Please fill in the body and description as requested (Card: Terry Pratchett, http://localhost:4201/drafts/Author/1)",
+      "formatted_body": "<p>Please fill in the body and description as requested</p>\n",
+      "instance": {
+        "data": {
+          "type": "card",
+          "id": "http://localhost:4201/drafts/Author/1",
+          "attributes": {
+            "firstName": "Terry",
+            "lastName": "Pratchett",
+            "photo": null,
+            "body": "Short bio goes here",
+            "description": "Bio summary in English, followed by it translated into french.",
+            "thumbnailURL": null
+          },
+          "meta": {
+            "adoptsFrom": {
+              "module": "../author",
+              "name": "Author"
+            }
+          }
+        }
+      }
+    },
+    "origin_server_ts": 1695639577737,
+    "unsigned": {
+      "age": 143557
+    },
+    "event_id": "$OwbCww1FjuMD3IhIraef4v5HrtFcFDnpUkCeHrbEcbw",
+    "user_id": "@ian:localhost",
+    "age": 143557
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EHSrJvmtuZtpNeKXsv:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "Sure. As I understand, you would like to fill in the 'body' and 'description' fields for the card of Terry Pratchett. I want to clarify: \n\nDo you have specific content for these fields or should I create contents based on the available information about Terry Pratchett on the internet? \n\nAnd if you want it in English and French, could you please provide the translation or should I handle that as well? \n\nOnce I have this information, I can better assist you.",
+      "msgtype": "m.text",
+      "formatted_body": "Sure. As I understand, you would like to fill in the 'body' and 'description' fields for the card of Terry Pratchett. I want to clarify: \n\nDo you have specific content for these fields or should I create contents based on the available information about Terry Pratchett on the internet? \n\nAnd if you want it in English and French, could you please provide the translation or should I handle that as well? \n\nOnce I have this information, I can better assist you.",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "Sure. As I understand, you would like to fill in the 'body' and 'description' fields for the card of Terry Pratchett. I want to clarify: \n\nDo you have specific content for these fields or should I create contents based on the available information about Terry Pratchett on the internet? \n\nAnd if you want it in English and French, could you please provide the translation or should I handle that as well? \n\nOnce I have this information, I can better assist you.",
+        "msgtype": "m.text",
+        "formatted_body": "Sure. As I understand, you would like to fill in the 'body' and 'description' fields for the card of Terry Pratchett. I want to clarify: \n\nDo you have specific content for these fields or should I create contents based on the available information about Terry Pratchett on the internet? \n\nAnd if you want it in English and French, could you please provide the translation or should I handle that as well? \n\nOnce I have this information, I can better assist you.",
+        "format": "org.matrix.custom.html"
+      },
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$EobqHvdZNbgidhG5Q5PA2GzDo4sw__1WPkSa0d9GLZE"
+      }
+    },
+    "origin_server_ts": 1695639590155,
+    "unsigned": {
+      "age": 131139
+    },
+    "event_id": "$EobqHvdZNbgidhG5Q5PA2GzDo4sw__1WPkSa0d9GLZE",
+    "user_id": "@aibot:localhost",
+    "age": 131139
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EHSrJvmtuZtpNeKXsv:localhost",
+    "sender": "@ian:localhost",
+    "content": {
+      "msgtype": "m.text",
+      "format": "org.matrix.custom.html",
+      "body": "You can create the content, just note that this is aimed at a younger audience. Please perform the translations yourself",
+      "formatted_body": "<p>You can create the content, just note that this is aimed at a younger audience. Please perform the translations yourself</p>\n"
+    },
+    "origin_server_ts": 1695639628632,
+    "unsigned": {
+      "age": 92662
+    },
+    "event_id": "$URXES201o9nyBcimtSIN3wlGlOElsn_5nKZxiUg_Ms8",
+    "user_id": "@ian:localhost",
+    "age": 92662
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EHSrJvmtuZtpNeKXsv:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "To add details to Terry Pratchett's card while keeping a younger audience in mind, I've come up with three options:\n\nOption 1: We keep the information simple and entertaining, engaging the audience with a playful language.\nOption 1: \n",
+      "msgtype": "m.text",
+      "formatted_body": "To add details to Terry Pratchett's card while keeping a younger audience in mind, I've come up with three options:\n\nOption 1: We keep the information simple and entertaining, engaging the audience with a playful language.\nOption 1: \n",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "To add details to Terry Pratchett's card while keeping a younger audience in mind, I've come up with three options:\n\nOption 1: We keep the information simple and entertaining, engaging the audience with a playful language.\nOption 1: \n",
+        "msgtype": "m.text",
+        "formatted_body": "To add details to Terry Pratchett's card while keeping a younger audience in mind, I've come up with three options:\n\nOption 1: We keep the information simple and entertaining, engaging the audience with a playful language.\nOption 1: \n",
+        "format": "org.matrix.custom.html"
+      },
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$PqPogMbsaJLjerSM35i_d1lMgvoIlfYH--NuD6xF_UE"
+      }
+    },
+    "origin_server_ts": 1695639645646,
+    "unsigned": {
+      "age": 75648
+    },
+    "event_id": "$PqPogMbsaJLjerSM35i_d1lMgvoIlfYH--NuD6xF_UE",
+    "user_id": "@aibot:localhost",
+    "age": 75648
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EHSrJvmtuZtpNeKXsv:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "patch",
+      "msgtype": "org.boxel.command",
+      "formatted_body": "A patch",
+      "format": "org.matrix.custom.html",
+      "command": {
+        "type": "patch",
+        "id": "http://localhost:4201/drafts/Author/1",
+        "patch": {
+          "attributes": {
+            "body": "Terry Pratchett was a funny man who wrote books full of wit, humour, and talking hats! Ever heard of Discworld? He dreamed it all up!",
+            "description": "Meet Terry Pratchett, the chap who brought laughter to books. Voici Terry Pratchett, le gars qui a apporté le rire dans les livres."
+          }
+        }
+      }
+    },
+    "origin_server_ts": 1695639645684,
+    "unsigned": {
+      "age": 75610
+    },
+    "event_id": "$rAetkmJ_QSeVIkCxWE8CjvPfr4p-bydFjBWua2Wn8hw",
+    "user_id": "@aibot:localhost",
+    "age": 75610
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EHSrJvmtuZtpNeKXsv:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "Option 2: This version introduces some interesting facts about the author, sparking curiosity.\nOption 2:",
+      "msgtype": "m.text",
+      "formatted_body": "Option 2: This version introduces some interesting facts about the author, sparking curiosity.\nOption 2:",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "Option 2: This version introduces some interesting facts about the author, sparking curiosity.\nOption 2:",
+        "msgtype": "m.text",
+        "formatted_body": "Option 2: This version introduces some interesting facts about the author, sparking curiosity.\nOption 2:",
+        "format": "org.matrix.custom.html"
+      },
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$kNN2Jk1sm-yu77Em7UHR4viDv42xAtm4mvT6cd2e2dA"
+      }
+    },
+    "origin_server_ts": 1695639663156,
+    "unsigned": {
+      "age": 58138
+    },
+    "event_id": "$kNN2Jk1sm-yu77Em7UHR4viDv42xAtm4mvT6cd2e2dA",
+    "user_id": "@aibot:localhost",
+    "age": 58138
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EHSrJvmtuZtpNeKXsv:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "patch",
+      "msgtype": "org.boxel.command",
+      "formatted_body": "A patch",
+      "format": "org.matrix.custom.html",
+      "command": {
+        "type": "patch",
+        "id": "http://localhost:4201/drafts/Author/1",
+        "patch": {
+          "attributes": {
+            "body": "Terry Pratchett was the guy who wrote more than 70 books! His most famous series, Discworld, has 41 books in itself!",
+            "description": "Get to know Terry Pratchett, the author who wrote a LOT of books. Apprenez à connaître Terry Pratchett, l'auteur qui a écrit BEAUCOUP de livres."
+          }
+        }
+      }
+    },
+    "origin_server_ts": 1695639663206,
+    "unsigned": {
+      "age": 58088
+    },
+    "event_id": "$xe1k5UBDaN5vPUJPmiOQ4_10Qr6aMsQcpiA6rZkzqIc",
+    "user_id": "@aibot:localhost",
+    "age": 58088
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EHSrJvmtuZtpNeKXsv:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "\n\nOption 3: A more standard approach, presenting Terry's writing ability and imagination.\nOption 3: \n",
+      "msgtype": "m.text",
+      "formatted_body": "\n\nOption 3: A more standard approach, presenting Terry's writing ability and imagination.\nOption 3: \n",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "\n\nOption 3: A more standard approach, presenting Terry's writing ability and imagination.\nOption 3: \n",
+        "msgtype": "m.text",
+        "formatted_body": "\n\nOption 3: A more standard approach, presenting Terry's writing ability and imagination.\nOption 3: \n",
+        "format": "org.matrix.custom.html"
+      },
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$eYnpPxFvMzTy2OHJwm0zabxpZ7UC_U6ZryYGqdsg9qQ"
+      }
+    },
+    "origin_server_ts": 1695639669551,
+    "unsigned": {
+      "age": 51743
+    },
+    "event_id": "$eYnpPxFvMzTy2OHJwm0zabxpZ7UC_U6ZryYGqdsg9qQ",
+    "user_id": "@aibot:localhost",
+    "age": 51743
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EHSrJvmtuZtpNeKXsv:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "patch",
+      "msgtype": "org.boxel.command",
+      "formatted_body": "A patch",
+      "format": "org.matrix.custom.html",
+      "command": {
+        "type": "patch",
+        "id": "http://localhost:4201/drafts/Author/1",
+        "patch": {
+          "attributes": {
+            "body": "Terry Pratchett had an immense talent for writing stories that both children and adults could enjoy. He's best known for his Discworld series.",
+            "description": "Say hello to Terry Pratchett, a brilliant storyteller. Dites bonjour à Terry Pratchett, un conteur brillant."
+          }
+        }
+      }
+    },
+    "origin_server_ts": 1695639669599,
+    "unsigned": {
+      "age": 51695
+    },
+    "event_id": "$jS9xyXEnForabSTtRNqSqgwz_h_8JzisquS7SuXL1Ng",
+    "user_id": "@aibot:localhost",
+    "age": 51695
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EHSrJvmtuZtpNeKXsv:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "Please choose the best option that aligns with your expectation or suggest adjustments based on these examples.",
+      "msgtype": "m.text",
+      "formatted_body": "Please choose the best option that aligns with your expectation or suggest adjustments based on these examples.",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "Please choose the best option that aligns with your expectation or suggest adjustments based on these examples.",
+        "msgtype": "m.text",
+        "formatted_body": "Please choose the best option that aligns with your expectation or suggest adjustments based on these examples.",
+        "format": "org.matrix.custom.html"
+      },
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$YsDbrL_VZk2ariidlDme9CFa8NRnmAIEY_Qqpx2s9_s"
+      }
+    },
+    "origin_server_ts": 1695639670972,
+    "unsigned": {
+      "age": 50322
+    },
+    "event_id": "$YsDbrL_VZk2ariidlDme9CFa8NRnmAIEY_Qqpx2s9_s",
+    "user_id": "@aibot:localhost",
+    "age": 50322
+  }
+]

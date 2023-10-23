@@ -1,4 +1,25 @@
+import { fn } from '@ember/helper';
+
+//@ts-ignore glint does not think this is consumed-but it is consumed in the template
+import { hash } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
+//@ts-ignore cached not available yet in definitely typed
+import { cached, tracked } from '@glimmer/tracking';
+
+import { restartableTask } from 'ember-concurrency';
+import Modifier from 'ember-modifier';
+
+import {
+  Button,
+  BoxelInput,
+  CardContainer,
+  FieldContainer,
+  Label,
+} from '@cardstack/boxel-ui/components';
+
 import {
   chooseCard,
   catalogEntryRef,
@@ -6,41 +27,28 @@ import {
   internalKeyFor,
   moduleFrom,
 } from '@cardstack/runtime-common';
-import { isCardRef, type CardRef } from '@cardstack/runtime-common/card-ref';
-import { getCardType, type Type } from '@cardstack/host/resources/card-type';
-import { action } from '@ember/object';
-import { service } from '@ember/service';
-import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
-import { eq } from '@cardstack/host/helpers/truth-helpers';
-import { RealmPaths } from '@cardstack/runtime-common/paths';
-//@ts-ignore cached not available yet in definitely typed
-import { cached, tracked } from '@glimmer/tracking';
-import { LinkTo } from '@ember/routing';
-//@ts-ignore glint does not think this is consumed-but it is consumed in the template
-import { hash } from '@ember/helper';
-import CatalogEntryEditor from './catalog-entry-editor';
-import { restartableTask } from 'ember-concurrency';
-import Modifier from 'ember-modifier';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import type CardService from '@cardstack/host/services/card-service';
+import { isCodeRef, type CodeRef } from '@cardstack/runtime-common/code-ref';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
-import type { FileResource } from '@cardstack/host/resources/file';
-import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
-import type { Card, FieldType } from 'https://cardstack.com/base/card-api';
-import {
-  BoxelInput,
-  Button,
-  CardContainer,
-  FieldContainer,
-  Label,
-} from '@cardstack/boxel-ui';
+import { RealmPaths } from '@cardstack/runtime-common/paths';
 import type { Filter } from '@cardstack/runtime-common/query';
+
+import { eq } from '@cardstack/boxel-ui/helpers';
+
+import { getCardType, type Type } from '@cardstack/host/resources/card-type';
+import type { Ready } from '@cardstack/host/resources/file';
+import type CardService from '@cardstack/host/services/card-service';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
+
+import type { BaseDef, FieldType } from 'https://cardstack.com/base/card-api';
+import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+
+import CatalogEntryEditor from './catalog-entry-editor';
 
 interface Signature {
   Args: {
-    card: typeof Card;
-    file: FileResource;
+    card: typeof BaseDef;
+    file: Ready;
     moduleSyntax: ModuleSyntax;
   };
 }
@@ -78,18 +86,9 @@ export default class Schema extends Component<Signature> {
                   {{cardId field.card}}
                   (this card)
                 {{else if (this.inRealm (cardModule field.card))}}
-                  <LinkTo
-                    @route='code'
-                    @query={{hash
-                      path=(this.modulePath (cardModule field.card))
-                    }}
-                  >
-                    {{cardId field.card}}
-                  </LinkTo>
+                  <div>{{cardId field.card}}</div>
                 {{else}}
-                  <a
-                    href={{this.moduleSchemaURL (cardModule field.card)}}
-                  >{{cardId field.card}}</a>
+                  <div>{{cardId field.card}}</div>
                 {{/if}}
               </li>
             {{/each}}
@@ -225,8 +224,8 @@ export default class Schema extends Component<Signature> {
   get realmPath() {
     return new RealmPaths(
       this.loaderService.loader.reverseResolution(
-        this.cardService.defaultURL.href
-      )
+        this.cardService.defaultURL.href,
+      ),
     );
   }
 
@@ -246,7 +245,7 @@ export default class Schema extends Component<Signature> {
     }
     if (
       this.cardType.type?.fields.find(
-        (field) => field.name === this.newFieldName
+        (field) => field.name === this.newFieldName,
       )
     ) {
       return `The field name "${this.newFieldName}" already exists, please choose a different name.`;
@@ -257,14 +256,14 @@ export default class Schema extends Component<Signature> {
   @action
   isOwnField(fieldName: string): boolean {
     return Object.keys(
-      Object.getOwnPropertyDescriptors(this.args.card.prototype)
+      Object.getOwnPropertyDescriptors(this.args.card.prototype),
     ).includes(fieldName);
   }
   @action
-  isThisCard(card: Type | CardRef): boolean {
+  isThisCard(card: Type | CodeRef): boolean {
     return (
       internalKeyFor(this.ref, undefined) ===
-      (isCardRef(card) ? internalKeyFor(card, undefined) : card.id)
+      (isCodeRef(card) ? internalKeyFor(card, undefined) : card.id)
     );
   }
 
@@ -292,7 +291,7 @@ export default class Schema extends Component<Signature> {
   deleteField(fieldName: string) {
     this.args.moduleSyntax.removeField(
       { type: 'exportedName', name: this.ref.name },
-      fieldName
+      fieldName,
     );
     this.write.perform(this.args.moduleSyntax.code());
   }
@@ -312,7 +311,7 @@ export default class Schema extends Component<Signature> {
       this.newFieldType === 'linksTo' || this.newFieldType === 'linksToMany'
         ? {
             on: catalogEntryRef,
-            eq: { isPrimitive: false },
+            eq: { isField: false },
           }
         : {
             on: catalogEntryRef,
@@ -320,9 +319,7 @@ export default class Schema extends Component<Signature> {
               eq: { ref: this.ref },
             },
           };
-    let fieldEntry: CatalogEntry | undefined = await chooseCard({
-      filter,
-    });
+    let fieldEntry: CatalogEntry | undefined = await chooseCard({ filter });
     if (!fieldEntry) {
       return;
     }
@@ -334,7 +331,10 @@ export default class Schema extends Component<Signature> {
       { type: 'exportedName', name: this.ref.name },
       this.newFieldName,
       fieldEntry.ref,
-      this.newFieldType
+      this.newFieldType,
+      undefined,
+      undefined,
+      undefined,
     );
     await this.write.perform(this.args.moduleSyntax.code());
   });
@@ -346,20 +346,20 @@ export default class Schema extends Component<Signature> {
     // note that this write will cause the component to rerender, so
     // any code after this write will not be executed since the component will
     // get torn down before subsequent code can execute
-    this.args.file.writeTask.perform(src, true);
+    this.args.file.write(src, true);
   });
 }
 
-function cardId(card: Type | CardRef): string {
-  if (isCardRef(card)) {
+function cardId(card: Type | CodeRef): string {
+  if (isCodeRef(card)) {
     return internalKeyFor(card, undefined);
   } else {
     return card.id;
   }
 }
 
-function cardModule(card: Type | CardRef): string {
-  if (isCardRef(card)) {
+function cardModule(card: Type | CodeRef): string {
+  if (isCodeRef(card)) {
     return moduleFrom(card);
   } else {
     return card.module;
@@ -376,7 +376,7 @@ interface RadioInitializerSignature {
 class RadioInitializer extends Modifier<RadioInitializerSignature> {
   modify(
     element: HTMLInputElement,
-    [model, inputType]: RadioInitializerSignature['Args']['Positional']
+    [model, inputType]: RadioInitializerSignature['Args']['Positional'],
   ) {
     element.checked = model === inputType;
   }

@@ -1,16 +1,21 @@
 import Route from '@ember/routing/route';
-import { service } from '@ember/service';
-import ENV from '@cardstack/host/config/environment';
-import { parse } from 'qs';
-import type CardService from '../services/card-service';
 import type RouterService from '@ember/routing/router-service';
-import { Card } from 'https://cardstack.com/base/card-api';
+import { service } from '@ember/service';
+
+import { parse } from 'qs';
+
+import ENV from '@cardstack/host/config/environment';
+
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
+import { CardDef } from 'https://cardstack.com/base/card-api';
+
+import type CardService from '../services/card-service';
 
 const { ownRealmURL } = ENV;
 const rootPath = new URL(ownRealmURL).pathname.replace(/^\//, '');
 
-export type Model = Card | null;
+export type Model = CardDef | null;
 
 export default class RenderCard extends Route<Model | null> {
   queryParams = {
@@ -29,7 +34,7 @@ export default class RenderCard extends Route<Model | null> {
   beforeModel(transition: any) {
     let queryParams = parse(
       new URL(transition.intent.url, 'http://anywhere').search,
-      { ignoreQueryPrefix: true }
+      { ignoreQueryPrefix: true },
     );
     if ('schema' in queryParams) {
       let {
@@ -57,11 +62,21 @@ export default class RenderCard extends Route<Model | null> {
       : new URL('./', ownRealmURL);
 
     try {
-      let model = await this.cardService.loadModel(url);
+      let model = await this.cardService.loadModel(this, url);
 
       if (operatorModeEnabled) {
         let operatorModeStateObject = JSON.parse(operatorModeState);
 
+        if (this.operatorModeStateService.serialize() === operatorModeState) {
+          // If the operator mode state in the query param is the same as the one we have in memory,
+          // we don't want to restore it again, because it will lead to rerendering of the stack items, which can
+          // bring various annoyances, e.g reloading of the items in the index card.
+          // We will reach this point when the user manipulates the stack and the operator state service will set the
+          // query param, which will trigger a refresh of the model, which will call the model hook again.
+          // The model refresh happens automatically because we have operatorModeState: { refreshModel: true } in the queryParams.
+          // We have that because we want to support back-forward navigation in operator mode.
+          return model;
+        }
         await this.operatorModeStateService.restore(operatorModeStateObject);
       }
 

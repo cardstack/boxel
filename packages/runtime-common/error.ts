@@ -59,7 +59,7 @@ export class CardError extends Error implements SerializedError {
     result.stack = err.stack;
     if (err.additionalErrors) {
       result.additionalErrors = err.additionalErrors.map((inner) =>
-        CardError.fromSerializableError(inner)
+        CardError.fromSerializableError(inner),
       );
     }
     return result;
@@ -67,7 +67,7 @@ export class CardError extends Error implements SerializedError {
 
   static async fromFetchResponse(
     url: string,
-    response: Response
+    response: Response,
   ): Promise<CardError> {
     if (!response.ok) {
       let text = await response.text();
@@ -91,13 +91,13 @@ export class CardError extends Error implements SerializedError {
         {
           title: response.statusText,
           status: response.status,
-        }
+        },
       );
     }
     throw new CardError(
       `tried to create a card error from a successful fetch response from ${url}, status ${
         response.status
-      }, with body: ${await response.text()}`
+      }, with body: ${await response.text()}`,
     );
   }
 }
@@ -131,47 +131,72 @@ export function serializableError(err: any): any {
   return result;
 }
 
-export function responseWithError(error: CardError): Response {
+export function responseWithError(
+  unresolvedRealmURL: string,
+  error: CardError,
+): Response {
   return createResponse(
+    unresolvedRealmURL,
     JSON.stringify({ errors: [serializableError(error)] }),
     {
       status: error.status,
       statusText: error.title,
       headers: { 'content-type': 'application/json' },
-    }
+    },
   );
 }
 
-export function methodNotAllowed(request: Request): Response {
+export function methodNotAllowed(
+  unresolvedRealmURL: string,
+  request: Request,
+): Response {
   return responseWithError(
+    unresolvedRealmURL,
     new CardError(`${request.method} not allowed for ${request.url}`, {
       status: 405,
-    })
+    }),
   );
 }
 
 export function notFound(
+  unresolvedRealmURL: string,
   request: Request,
-  message = `Could not find ${request.url}`
+  message = `Could not find ${request.url}`,
 ): Response {
-  return responseWithError(new CardError(message, { status: 404 }));
+  return responseWithError(
+    unresolvedRealmURL,
+    new CardError(message, { status: 404 }),
+  );
 }
 
-export function badRequest(message: string): Response {
-  return responseWithError(new CardError(message, { status: 400 }));
+export function badRequest(
+  unresolvedRealmURL: string,
+  message: string,
+): Response {
+  return responseWithError(
+    unresolvedRealmURL,
+    new CardError(message, { status: 400 }),
+  );
 }
 
-export function systemUnavailable(message: string): Response {
-  return responseWithError(new CardError(message, { status: 503 }));
+export function systemUnavailable(
+  unresolvedRealmURL: string,
+  message: string,
+): Response {
+  return responseWithError(
+    unresolvedRealmURL,
+    new CardError(message, { status: 503 }),
+  );
 }
 
 export function systemError(
+  unresolvedRealmURL: string,
   message: string,
-  additionalError?: CardError | Error
+  additionalError?: CardError | Error,
 ): Response {
   let err = new CardError(message, { status: 500 });
   if (additionalError) {
     err.additionalErrors = [additionalError];
   }
-  return responseWithError(err);
+  return responseWithError(unresolvedRealmURL, err);
 }

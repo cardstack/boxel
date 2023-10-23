@@ -1,0 +1,12 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/cards-grid",
+        "name": "CardsGrid"
+      }
+    }
+  }
+}

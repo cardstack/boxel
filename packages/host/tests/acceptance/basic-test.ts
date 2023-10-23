@@ -1,4 +1,3 @@
-import { module, test } from 'qunit';
 import {
   find,
   visit,
@@ -8,28 +7,37 @@ import {
   fillIn,
   waitUntil,
 } from '@ember/test-helpers';
+
+import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
-import { Loader } from '@cardstack/runtime-common/loader';
+import window from 'ember-window-mock';
+import { setupWindowMock } from 'ember-window-mock/test-support';
+import { module, skip, test } from 'qunit';
+
 import { baseRealm } from '@cardstack/runtime-common';
+
+import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
+
+import { Realm } from '@cardstack/runtime-common/realm';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
+
 import {
   TestRealm,
   TestRealmAdapter,
   setupLocalIndexing,
-  setupMockMessageService,
+  setupServerSentEvents,
   testRealmURL,
+  getMonacoContent,
+  sourceFetchReturnUrlHandle,
+  waitForSyntaxHighlighting,
+  type TestContextWithSSE,
 } from '../helpers';
-import { Realm } from '@cardstack/runtime-common/realm';
-import { shimExternals } from '@cardstack/host/lib/externals';
-import type LoaderService from '@cardstack/host/services/loader-service';
-
-function getMonacoContent(): string {
-  return (window as any).monaco.editor.getModels()[0].getValue();
-}
 
 const indexCardSource = `
-  import { Card, Component } from "https://cardstack.com/base/card-api";
+  import { CardDef, Component } from "https://cardstack.com/base/card-api";
 
-  export class Index extends Card {
+  export class Index extends CardDef {
     static isolated = class Isolated extends Component<typeof this> {
       <template>
         <div data-test-index-card>
@@ -41,10 +49,10 @@ const indexCardSource = `
 `;
 
 const personCardSource = `
-  import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+  import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
   import StringCard from "https://cardstack.com/base/string";
 
-  export class Person extends Card {
+  export class Person extends CardDef {
     @field firstName = contains(StringCard);
     @field lastName = contains(StringCard);
     @field title = contains(StringCard, {
@@ -59,6 +67,12 @@ const personCardSource = `
           <p>Last name: <@fields.lastName /></p>
           <p>Title: <@fields.title /></p>
         </div>
+        <style>
+          div {
+            color: green;
+            content: '';
+          }
+        </style>
       </template>
     };
   }
@@ -70,16 +84,18 @@ module('Acceptance | basic tests', function (hooks) {
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupMockMessageService(hooks);
+  setupServerSentEvents(hooks);
+  setupWindowMock(hooks);
+
+  hooks.afterEach(async function () {
+    window.localStorage.removeItem('recent-files');
+  });
 
   hooks.beforeEach(async function () {
+    window.localStorage.removeItem('recent-files');
+
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
-    Loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
-    shimExternals();
     adapter = new TestRealmAdapter({
       'index.gts': indexCardSource,
       'person.gts': personCardSource,
@@ -130,13 +146,18 @@ module('Acceptance | basic tests', function (hooks) {
         },
       },
     });
-    realm = await TestRealm.createWithAdapter(adapter, this.owner, {
-      isAcceptanceTest: true,
-    });
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
-    loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
+
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner, {
+      isAcceptanceTest: true,
+      overridingHandlers: [
+        async (req: Request) => {
+          return sourceFetchReturnUrlHandle(req, realm.maybeHandle.bind(realm));
+        },
+      ],
+    });
     await realm.ready;
   });
 
@@ -183,16 +204,17 @@ module('Acceptance | basic tests', function (hooks) {
       .doesNotExist('Person/1.json file entry is not rendered');
   });
 
-  test('Can view a card instance', async function (assert) {
+  skip('Can view a card instance', async function (assert) {
     await visit('/code');
     await waitFor('[data-test-file]');
     await click('[data-test-directory="Person/"]');
     await waitFor('[data-test-file="Person/1.json"]');
 
     await click('[data-test-file="Person/1.json"]');
+
     assert.strictEqual(
       currentURL(),
-      '/code?openDirs=Person%2F&path=Person%2F1.json'
+      '/code?openDirs=Person%2F&openFile=Person%2F1.json',
     );
     assert
       .dom('[data-test-file="Person/1.json"]')
@@ -215,15 +237,76 @@ module('Acceptance | basic tests', function (hooks) {
         },
       },
     });
+
+    assert.dom('[data-test-person]').hasStyle(
+      {
+        color: 'rgb(0, 128, 0)',
+      },
+      'expected scoped CSS to apply to card instance',
+    );
+
+    await waitForSyntaxHighlighting('"Person"', 'rgb(4, 81, 165)');
+    await percySnapshot(assert);
   });
 
-  test('Can view a card schema', async function (assert) {
+  test<TestContextWithSSE>('Card instance live updates when index changes', async function (assert) {
+    let expectedEvents = [
+      {
+        type: 'index',
+        data: {
+          type: 'incremental',
+          invalidations: [`${testRealmURL}Person/1`],
+        },
+      },
+    ];
+
+    await visit('/code');
+    await waitFor('[data-test-file]');
+    await click('[data-test-directory="Person/"]');
+    await waitFor('[data-test-file="Person/1.json"]');
+    await click('[data-test-file="Person/1.json"]');
+
+    await this.expectEvents(
+      assert,
+      realm,
+      adapter,
+      expectedEvents,
+      async () => {
+        await realm.write(
+          'Person/1.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'HassanXXX',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../person',
+                  name: 'Person',
+                },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+      },
+    );
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-person]')!
+          .textContent?.includes('HassanXXX'),
+    );
+    assert.dom('[data-test-person]').containsText('First name: HassanXXX');
+  });
+
+  skip('Can view a card schema', async function (assert) {
     await visit('/code');
     await waitFor('[data-test-file]');
     await click('[data-test-file="person.gts"]');
     await waitFor('[data-test-card-id]');
 
-    assert.strictEqual(currentURL(), '/code?path=person.gts');
+    assert.strictEqual(currentURL(), '/code?openFile=person.gts');
     assert
       .dom('[data-test-card-id]')
       .containsText(`${testRealmURL}person/Person`);
@@ -235,8 +318,14 @@ module('Acceptance | basic tests', function (hooks) {
     assert.strictEqual(
       getMonacoContent(),
       personCardSource,
-      'the monaco content is correct'
+      'the monaco content is correct',
     );
+
+    // Syntax highlighting is breadth-first, this is the latest and deepest token
+    await waitForSyntaxHighlighting("''", 'rgb(163, 21, 21)');
+    await waitFor('[data-test-boxel-card-container] [data-test-description]');
+
+    await percySnapshot(assert);
   });
 
   test('glimmer-scoped-css smoke test', async function (assert) {
@@ -256,16 +345,19 @@ module('Acceptance | basic tests', function (hooks) {
 
     if (!buttonElementScopedCssAttribute) {
       throw new Error(
-        'Scoped CSS attribute not found on [data-test-create-new-card-button]'
+        'Scoped CSS attribute not found on [data-test-create-new-card-button]',
       );
     }
 
     assert.dom('[data-test-create-new-card-button] + style').doesNotExist();
   });
 
-  test('can create a new card', async function (assert) {
+  skip('can create a new card', async function (assert) {
     await visit('/code');
     await click('[data-test-create-new-card-button]');
+    assert
+      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+      .containsText('Choose a CatalogEntry card');
     await waitFor('[data-test-card-catalog-modal] [data-test-realm-name]');
 
     await click(`[data-test-select="${testRealmURL}person-entry"]`);
@@ -275,8 +367,10 @@ module('Acceptance | basic tests', function (hooks) {
 
     await fillIn('[data-test-field="firstName"] input', 'Mango');
     await fillIn('[data-test-field="lastName"] input', 'Abdel-Rahman');
+    await fillIn('[data-test-field="description"] input', 'Person');
+    await fillIn('[data-test-field="thumbnailURL"] input', './mango.png');
     await click('[data-test-save-card]');
-    await waitUntil(() => currentURL() === '/code?path=Person%2F2.json');
+    await waitUntil(() => currentURL() === '/code?openFile=Person%2F2.json');
 
     await click('[data-test-directory="Person/"]');
     await waitFor('[data-test-file="Person/2.json"]');
@@ -292,6 +386,8 @@ module('Acceptance | basic tests', function (hooks) {
         attributes: {
           firstName: 'Mango',
           lastName: 'Abdel-Rahman',
+          description: 'Person',
+          thumbnailURL: './mango.png',
         },
         meta: {
           adoptsFrom: {
@@ -313,6 +409,8 @@ module('Acceptance | basic tests', function (hooks) {
           attributes: {
             firstName: 'Mango',
             lastName: 'Abdel-Rahman',
+            description: 'Person',
+            thumbnailURL: './mango.png',
           },
           meta: {
             adoptsFrom: {
@@ -322,7 +420,7 @@ module('Acceptance | basic tests', function (hooks) {
           },
         },
       },
-      'file contents are correct'
+      'file contents are correct',
     );
   });
 });

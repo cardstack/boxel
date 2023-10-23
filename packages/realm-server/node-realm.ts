@@ -22,13 +22,14 @@ import {
 } from 'fs-extra';
 import { join } from 'path';
 import { Duplex } from 'node:stream';
+import type { UpdateEventData } from '@cardstack/runtime-common/realm';
 
 export class NodeAdapter implements RealmAdapter {
   constructor(private realmDir: string) {}
 
   async *readdir(
     path: string,
-    opts?: { create?: true }
+    opts?: { create?: true },
   ): AsyncGenerator<{ name: string; path: string; kind: Kind }, void> {
     if (opts?.create) {
       ensureDirSync(path);
@@ -52,13 +53,21 @@ export class NodeAdapter implements RealmAdapter {
 
   private watcher: Watcher | undefined = undefined;
 
-  async subscribe(cb: (message: Record<string, any>) => void): Promise<void> {
+  async subscribe(cb: (message: UpdateEventData) => void): Promise<void> {
     if (this.watcher) {
       throw new Error(`tried to subscribe to watcher twice`);
     }
     this.watcher = sane(join(this.realmDir, '/'));
-    this.watcher.on('change', (path) => cb({ changed: path }));
-    this.watcher.on('add', (path) => cb({ added: path }));
+    this.watcher.on('change', (path, _root, stat) => {
+      if (stat.isFile()) {
+        cb({ updated: path });
+      }
+    });
+    this.watcher.on('add', (path, _root, stat) => {
+      if (stat.isFile()) {
+        cb({ added: path });
+      }
+    });
     this.watcher.on('delete', (path) => cb({ removed: path }));
     this.watcher.on('error', (err) => {
       throw new Error(`watcher error: ${err}`);
@@ -106,7 +115,7 @@ export class NodeAdapter implements RealmAdapter {
 
   async write(
     path: string,
-    contents: string
+    contents: string,
   ): Promise<{ lastModified: number }> {
     let absolutePath = join(this.realmDir, path);
     ensureFileSync(absolutePath);
@@ -121,12 +130,17 @@ export class NodeAdapter implements RealmAdapter {
   }
 
   createStreamingResponse(
+    unresolvedRealmURL: string,
     request: Request,
     responseInit: ResponseInit,
-    cleanup: () => void
+    cleanup: () => void,
   ) {
     let s = new MessageStream();
-    let response = createResponse(null, responseInit) as ResponseWithNodeStream;
+    let response = createResponse(
+      unresolvedRealmURL,
+      null,
+      responseInit,
+    ) as ResponseWithNodeStream;
     response.nodeStream = s;
     onClose(request, cleanup);
     return { response, writable: s as unknown as WritableStream };
@@ -152,7 +166,7 @@ class MessageStream extends Duplex {
   _read() {
     if (this.pendingRead) {
       throw new Error(
-        'bug: did not expect node to call read until after we push data from the prior read'
+        'bug: did not expect node to call read until after we push data from the prior read',
       );
     }
     if (this.pendingWrite) {
@@ -168,11 +182,11 @@ class MessageStream extends Duplex {
   _write(
     chunk: string,
     _encoding: string,
-    callback: (err: null | Error) => void
+    callback: (err: null | Error) => void,
   ) {
     if (this.pendingWrite) {
       throw new Error(
-        'bug: did not expect node to call write until after we call the callback'
+        'bug: did not expect node to call write until after we call the callback',
       );
     }
     if (this.pendingRead) {

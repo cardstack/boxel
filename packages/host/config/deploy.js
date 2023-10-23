@@ -38,6 +38,11 @@ module.exports = function (deployTarget) {
     ENV.build.environment = 'production';
   }
 
+  if (deployTarget === 'build-only') {
+    ENV.build.environment = 'production';
+    ENV.plugins = ['build'];
+  }
+
   if (
     deployTarget === 's3-preview-staging' ||
     deployTarget === 's3-preview-production'

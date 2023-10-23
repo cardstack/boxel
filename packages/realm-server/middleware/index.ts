@@ -1,11 +1,12 @@
 import proxy from 'koa-proxies';
 import {
-  Loader,
   assetsDir,
+  boxelUIAssetsDir,
   logger as getLogger,
   type Realm,
 } from '@cardstack/runtime-common';
 import type Koa from 'koa';
+import basicAuth from 'basic-auth';
 
 interface ProxyOptions {
   responseHeaders?: Record<string, string>;
@@ -14,7 +15,7 @@ interface ProxyOptions {
 export function proxyAsset(
   from: string,
   assetsURL: URL,
-  opts?: ProxyOptions
+  opts?: ProxyOptions,
 ): Koa.Middleware<Koa.DefaultState, Koa.DefaultContext> {
   let filename = from.split('/').pop()!;
   return proxy(from, {
@@ -53,10 +54,33 @@ export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
     logger.info(
       `${ctxt.method} ${ctxt.req.headers.accept} ${
         fullRequestURL(ctxt).href
-      }: ${ctxt.status}`
+      }: ${ctxt.status}`,
     );
     logger.debug(JSON.stringify(ctxt.req.headers));
   });
+  return next();
+}
+
+const BASIC_AUTH_USERNAME = 'cardstack';
+
+export function httpBasicAuth(ctxt: Koa.Context, next: Koa.Next) {
+  if (
+    process.env['BOXEL_HTTP_BASIC_PW'] &&
+    ctxt.header.accept?.includes('text/html')
+  ) {
+    let credentials = basicAuth(ctxt.request as any);
+    if (
+      !credentials ||
+      credentials.name !== BASIC_AUTH_USERNAME ||
+      credentials.pass !== process.env['BOXEL_HTTP_BASIC_PW']
+    ) {
+      ctxt.type = 'html';
+      ctxt.status = 401;
+      ctxt.body = 'Authorization Required';
+      ctxt.set('WWW-Authenticate', 'Basic realm="Boxel realm server"');
+      return;
+    }
+  }
   return next();
 }
 
@@ -64,26 +88,31 @@ export function ecsMetadata(ctxt: Koa.Context, next: Koa.Next) {
   if (process.env['ECS_CONTAINER_METADATA_URI_V4']) {
     ctxt.set(
       'X-ECS-Container-Metadata-URI-v4',
-      process.env['ECS_CONTAINER_METADATA_URI_V4']
+      process.env['ECS_CONTAINER_METADATA_URI_V4'],
     );
   }
   return next();
 }
 
 export function assetRedirect(
-  assetsURL: URL
+  assetsURL: URL,
 ): (ctxt: Koa.Context, next: Koa.Next) => void {
   return (ctxt: Koa.Context, next: Koa.Next) => {
     if (ctxt.path.startsWith(`/${assetsDir}`)) {
       let redirectURL = new URL(
         `./${ctxt.path.slice(assetsDir.length + 1)}`,
-        assetsURL
+        assetsURL,
       ).href;
 
       if (redirectURL !== ctxt.href) {
         ctxt.redirect(redirectURL);
         return;
       }
+    }
+    if (ctxt.path.startsWith(`/${boxelUIAssetsDir}`)) {
+      let redirectURL = new URL(`.${ctxt.path}`, assetsURL).href;
+      ctxt.redirect(redirectURL);
+      return;
     }
     return next();
   };
@@ -93,7 +122,7 @@ export function assetRedirect(
 // technically inside the realm (as the realm includes the trailing '/').
 // So issue a redirect in those scenarios.
 export function rootRealmRedirect(
-  realms: Realm[]
+  realms: Realm[],
 ): (ctxt: Koa.Context, next: Koa.Next) => void {
   return (ctxt: Koa.Context, next: Koa.Next) => {
     let url = fullRequestURL(ctxt);
@@ -103,8 +132,8 @@ export function rootRealmRedirect(
       !realmUrlWithoutQueryParams.endsWith('/') &&
       realms.find(
         (r) =>
-          Loader.reverseResolution(`${realmUrlWithoutQueryParams}/`).href ===
-          r.url
+          r.loader.reverseResolution(`${realmUrlWithoutQueryParams}/`).href ===
+          r.url,
       )
     ) {
       url.pathname = `${url.pathname}/`;

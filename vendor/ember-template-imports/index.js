@@ -13,7 +13,7 @@ module.exports = {
 
     if (!emberChecker.gte('3.27.0')) {
       throw new Error(
-        'ember-template-imports requires ember-source 3.27.0 or higher'
+        'ember-template-imports requires ember-source 3.27.0 or higher',
       );
     }
 
@@ -33,7 +33,7 @@ module.exports = {
       let TemplateImportPreprocessor = require('./src/preprocessor-plugin');
       registry.add(
         'js',
-        new TemplateImportPreprocessor(() => this.templateCompilerPath)
+        new TemplateImportPreprocessor(() => this.templateCompilerPath),
       );
     }
   },

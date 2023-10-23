@@ -1,4 +1,5 @@
 import Service from '@ember/service';
+
 import { type RealmAdapter } from '@cardstack/runtime-common';
 import {
   SearchEntryWithErrors,
@@ -13,8 +14,8 @@ export default class LocalIndexer extends Service {
     _incremental: (
       prev: RunState,
       url: URL,
-      operation: 'update' | 'delete'
-    ) => Promise<RunState>
+      operation: 'update' | 'delete',
+    ) => Promise<RunState>,
   ) {}
   get adapter(): RealmAdapter {
     return {} as RealmAdapter;

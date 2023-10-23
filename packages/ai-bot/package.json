@@ -1,0 +1,26 @@
+{
+  "name": "@cardstack/ai-bot",
+  "devDependencies": {
+    "@cardstack/runtime-common": "workspace:^",
+    "@types/node": "^18.18.5",
+    "@types/stream-chain": "^2.0.1",
+    "@types/stream-json": "^1.7.3",
+    "matrix-js-sdk": "^25.0.0",
+    "openai": "4.0.0-beta.4",
+    "promptfoo": "^0.24.2",
+    "qunit": "^2.18.0",
+    "stream-chain": "^2.2.5",
+    "stream-json": "^1.8.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.1.6"
+  },
+  "scripts": {
+    "lint": "eslint . --cache --ext ts",
+    "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
+    "test": "NODE_NO_WARNINGS=1 qunit --require ts-node/register/transpile-only tests/index.ts",
+    "get-chat": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/get_chat.ts"
+  },
+  "volta": {
+    "extends": "../../package.json"
+  }
+}

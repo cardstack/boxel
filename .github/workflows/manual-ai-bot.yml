@@ -1,0 +1,34 @@
+name: Manual Deploy [ai-bot]
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: false
+        default: staging
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build:
+    name: Build
+    uses: cardstack/gh-actions/.github/workflows/waypoint-build.yml@main
+    secrets: inherit
+    with:
+      app: "boxel-ai-bot"
+      environment: ${{ inputs.environment }}
+      working-directory: "packages/ai-bot"
+
+  deploy:
+    name: Deploy
+    needs: [build]
+    uses: cardstack/gh-actions/.github/workflows/waypoint-deploy.yml@main
+    secrets: inherit
+    with:
+      app: "boxel-ai-bot"
+      environment: ${{ inputs.environment }}
+      working-directory: "packages/ai-bot"
+      retain: "0"

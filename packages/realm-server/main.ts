@@ -8,6 +8,7 @@ import { resolve, join } from 'path';
 import { makeFastBootIndexRunner } from './fastboot';
 import { RunnerOptionsManager } from '@cardstack/runtime-common/search-index';
 import { readFileSync } from 'fs-extra';
+import { shimExternals } from './lib/externals';
 
 let {
   port,
@@ -60,25 +61,28 @@ let {
 
 if (!(fromUrls.length === toUrls.length)) {
   console.error(
-    `Mismatched number of URLs, the --fromUrl params must be matched to the --toUrl params`
+    `Mismatched number of URLs, the --fromUrl params must be matched to the --toUrl params`,
   );
   process.exit(-1);
 }
 if (fromUrls.length < paths.length) {
   console.error(
-    `not enough url pairs were provided to satisfy the paths provided. There must be at least one --fromUrl/--toUrl pair for each --path parameter`
+    `not enough url pairs were provided to satisfy the paths provided. There must be at least one --fromUrl/--toUrl pair for each --path parameter`,
   );
   process.exit(-1);
 }
 
 let log = logger('main');
 
+let loader = new Loader();
+shimExternals(loader);
+
 let urlMappings = fromUrls.map((fromUrl, i) => [
   new URL(String(fromUrl), `http://localhost:${port}`),
   new URL(String(toUrls[i]), `http://localhost:${port}`),
 ]);
 for (let [from, to] of urlMappings) {
-  Loader.addURLMapping(from, to);
+  loader.addURLMapping(from, to);
 }
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
 let dist: string | URL;
@@ -94,12 +98,13 @@ if (distURL) {
     let manager = new RunnerOptionsManager();
     let { getRunner, distPath } = await makeFastBootIndexRunner(
       dist,
-      manager.getOptions.bind(manager)
+      manager.getOptions.bind(manager),
     );
     realms.push(
       new Realm(
         hrefs[i][0],
         new NodeAdapter(resolve(String(path))),
+        loader,
         getRunner,
         manager,
         async () => readFileSync(join(distPath, 'index.html')).toString(),
@@ -110,8 +115,8 @@ if (distURL) {
                 useTestingDomain,
               }
             : {}),
-        }
-      )
+        },
+      ),
     );
   }
 
@@ -139,14 +144,14 @@ if (distURL) {
       `Realm ${realm.url} has started (${JSON.stringify(
         realm.searchIndex.stats,
         null,
-        2
-      )})`
+        2,
+      )})`,
     );
   }
 })().catch((e: any) => {
   console.error(
     `Unexpected error encountered starting realm, stopping server`,
-    e
+    e,
   );
   process.exit(1);
 });

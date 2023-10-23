@@ -57,7 +57,7 @@ export default function generateFrames(
   sprite: Sprite,
   property: MotionProperty,
   options: MotionOptions | Value,
-  timingArg: Partial<MotionTiming>
+  timingArg: Partial<MotionTiming>,
 ): SimpleFrame[] {
   let normalizedProperty = normalizeProperty(property);
 
@@ -79,7 +79,7 @@ export default function generateFrames(
   if (typeof options !== 'object') {
     if (!(timing.behavior instanceof StaticBehavior)) {
       throw new Error(
-        'Behavior must be StaticBehavior when passing a Value instead of MotionOptions'
+        'Behavior must be StaticBehavior when passing a Value instead of MotionOptions',
       );
     }
 
@@ -120,7 +120,7 @@ export default function generateFrames(
         normalizedProperty,
         cssToUnitValue(from),
         cssToUnitValue(to),
-        timing
+        timing,
       );
     }
 
@@ -143,7 +143,7 @@ export default function generateFrames(
 
       if (timing.behavior instanceof SpringBehavior) {
         throw new Error(
-          'Spring behavior is not currently supported for complex values'
+          'Spring behavior is not currently supported for complex values',
         );
       }
 
@@ -154,7 +154,7 @@ export default function generateFrames(
             normalizedProperty,
             fromParts[index] as RGBA | HSLA,
             toParts[index] as RGBA | HSLA,
-            timing
+            timing,
           ).map((frame) => frame.value);
         } else {
           let _timing = {
@@ -186,17 +186,20 @@ export default function generateFrames(
             normalizedProperty,
             cssToUnitValue(fromParts[index] as number),
             cssToUnitValue(toParts[index] as number),
-            _timing
+            _timing,
           ).map((frame) => frame.value);
         }
       });
 
       let result: SimpleFrame[] = [];
       frameSet[0]!.forEach((_, index) => {
-        let values = frameSet.reduce((result, frames) => {
-          result.push(frames[index]!);
-          return result;
-        }, [] as (Value | RGBA | HSLA)[]);
+        let values = frameSet.reduce(
+          (result, frames) => {
+            result.push(frames[index]!);
+            return result;
+          },
+          [] as (Value | RGBA | HSLA)[],
+        );
         result.push(new SimpleFrame(normalizedProperty, serialize(values)));
       });
 
@@ -204,7 +207,7 @@ export default function generateFrames(
     }
 
     console.error(
-      `Couldn't match value ${from} of property ${property} to a known type.`
+      `Couldn't match value ${from} of property ${property} to a known type.`,
     );
   }
 

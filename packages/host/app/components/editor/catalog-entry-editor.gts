@@ -1,26 +1,34 @@
+import { hash } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { action } from '@ember/object';
+import { LinkTo } from '@ember/routing';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
+
+import { tracked } from '@glimmer/tracking';
+
+import { CardContainer } from '@cardstack/boxel-ui/components';
+import { Button } from '@cardstack/boxel-ui/components';
+
 import {
   catalogEntryRef,
-  type CardRef,
+  type CodeRef,
   humanReadable,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
-import { on } from '@ember/modifier';
-import { action } from '@ember/object';
-import { tracked } from '@glimmer/tracking';
-import { LinkTo } from '@ember/routing';
-import { service } from '@ember/service';
 //@ts-ignore glint does not think this is consumed-but it is consumed in the template
-import { hash } from '@ember/helper';
+
+import CardEditor from '@cardstack/host/components/card-editor';
 import { getSearchResults } from '@cardstack/host/resources/search';
 import type CardService from '@cardstack/host/services/card-service';
-import CardEditor from '@cardstack/host/components/card-editor';
-import { type Card } from 'https://cardstack.com/base/card-api';
-import { Button, CardContainer } from '@cardstack/boxel-ui';
+import type LoaderService from '@cardstack/host/services/loader-service';
+
+import { CardDef } from 'https://cardstack.com/base/card-api';
+import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
 
 interface Signature {
   Args: {
-    ref: CardRef;
+    ref: CodeRef;
   };
 }
 
@@ -80,6 +88,7 @@ export default class CatalogEntryEditor extends Component<Signature> {
   </template>
 
   @service declare cardService: CardService;
+  @service declare loaderService: LoaderService;
   catalogEntryRef = catalogEntryRef;
   catalogEntry = getSearchResults(this, () => ({
     filter: {
@@ -87,8 +96,8 @@ export default class CatalogEntryEditor extends Component<Signature> {
       eq: { ref: this.args.ref },
     },
   }));
-  @tracked entry: Card | undefined;
-  @tracked newEntry: Card | undefined;
+  @tracked entry: CatalogEntry | undefined;
+  @tracked newEntry: CatalogEntry | undefined;
 
   get card() {
     return this.entry ?? this.catalogEntry.instances[0];
@@ -96,10 +105,10 @@ export default class CatalogEntryEditor extends Component<Signature> {
 
   @action
   async createEntry(): Promise<void> {
-    let loader = this.cardService.loaderService.loader;
+    let loader = this.loaderService.loader;
     let realmInfoResponse = await loader.fetch(
       `${this.cardService.defaultURL}_info`,
-      { headers: { Accept: SupportedMimeType.RealmInfo } }
+      { headers: { Accept: SupportedMimeType.RealmInfo } },
     );
 
     let resource = {
@@ -120,11 +129,11 @@ export default class CatalogEntryEditor extends Component<Signature> {
         },
       },
     };
-    this.newEntry = await this.cardService.createFromSerialized(
+    this.newEntry = (await this.cardService.createFromSerialized(
       resource,
       { data: resource },
-      this.cardService.defaultURL
-    );
+      this.cardService.defaultURL,
+    )) as CatalogEntry;
   }
 
   @action
@@ -133,8 +142,8 @@ export default class CatalogEntryEditor extends Component<Signature> {
   }
 
   @action
-  onSave(card: Card) {
-    this.entry = card;
+  onSave(card: CardDef) {
+    this.entry = card as CatalogEntry;
   }
 }
 

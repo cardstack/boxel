@@ -1,17 +1,21 @@
 import { getComponentTemplate } from '@ember/component';
-import { CardError } from '@cardstack/runtime-common/error';
-import { type ComponentLike } from '@glint/template';
-// @ts-expect-error
-import { renderMain, inTransaction } from '@glimmer/runtime';
+
+import type Owner from '@ember/owner';
 // @ts-expect-error
 import { createConstRef } from '@glimmer/reference';
+// @ts-expect-error
+import { renderMain, inTransaction } from '@glimmer/runtime';
+
+import { type ComponentLike } from '@glint/template';
+
+import { CardError } from '@cardstack/runtime-common/error';
+
 import type { SimpleElement } from '@simple-dom/interface';
-import type Owner from '@ember/owner';
 
 export function render(
   C: ComponentLike,
   element: SimpleElement,
-  owner: Owner
+  owner: Owner,
 ): void {
   // this needs to be a template-only component because the way we're invoking it
   // just grabs the template and would drop any associated class.
@@ -21,7 +25,7 @@ export function render(
   removeChildren(element);
 
   let { _runtime, _context, _owner, _builder } = owner.lookup(
-    'renderer:-dom'
+    'renderer:-dom',
   ) as any;
   let self = createConstRef({}, 'this');
   let layout = (getComponentTemplate as any)(root)(_owner).asLayout();
@@ -31,7 +35,7 @@ export function render(
     _owner,
     self,
     _builder(_runtime.env, { element }),
-    layout
+    layout,
   );
   let vm = (iterator as any).vm;
 
@@ -46,7 +50,7 @@ export function render(
     // that we need to step in and do this by hand. Within the vm[STACKS] is a the stack
     // for the cache group. We need to call a commit for each item in this stack.
     let vmSymbols = Object.fromEntries(
-      Object.getOwnPropertySymbols(vm).map((s) => [s.toString(), s])
+      Object.getOwnPropertySymbols(vm).map((s) => [s.toString(), s]),
     );
     let stacks = vm[vmSymbols['Symbol(STACKS)']];
     let stackSize = stacks.cache.stack.length;
@@ -55,7 +59,7 @@ export function render(
     }
 
     let error = new CardError(
-      `Encountered error rendering HTML for card: ${err.message}`
+      `Encountered error rendering HTML for card: ${err.message}`,
     );
     error.additionalErrors = [err];
     throw error;

@@ -1,29 +1,29 @@
-<div class='my-20 w-full max-w-md lg:max-w-2xl mx-auto px-4'>
-  <div class='text-center max-w-lg mx-auto'>
-    <h2 class='text-4xl font-semibold leading-tight'>
+<div class="my-20 w-full max-w-md lg:max-w-2xl mx-auto px-4">
+  <div class="text-center max-w-lg mx-auto">
+    <h2 class="text-4xl font-semibold leading-tight">
       Cross-route transitions
     </h2>
 
-    <p class='mt-4 text-lg'>
+    <p class="mt-4 text-lg">
       Place an &lt;AnimationContext&gt; around your outlet and
       \{{sprite}} modifiers on the elements in the child templates that you want
       to animate.
     </p>
 
-    <h3 class='text-3xl font-semibold leading-tight mt-16'>
+    <h3 class="text-3xl font-semibold leading-tight mt-16">
       Demo
     </h3>
 
-    <p class='mt-4 text-lg'>
+    <p class="mt-4 text-lg">
       Notice that the URL changes when you click the links &mdash; these are
       real route transitions.
     </p>
 
     <AnimationContext
-      @id='routes-context'
+      @id="routes-context"
       {{! @glint-expect-error: TODO: migrate this.transition to return AnimationDefinition }}
       @use={{this.transition}}
-      class='w-1/4 m-auto mt-5 overflow-hidden'
+      class="w-1/4 m-auto mt-5 overflow-hidden"
     >
       {{outlet}}
     </AnimationContext>

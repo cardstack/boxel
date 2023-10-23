@@ -1,0 +1,11 @@
+{
+  "name": "@cardstack/published-realm",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/lodash": "^4.14.182",
+    "@cardstack/boxel-ui": "workspace:*"
+  },
+  "scripts": {}
+}

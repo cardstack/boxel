@@ -16,7 +16,7 @@ module('Unit | Behaviors | Tween', function () {
           value: 1,
           velocity: 0,
         },
-      ]
+      ],
     );
     assert.deepEqual(
       Array.from(behavior.getFrames({ from: 1, to: 0, duration: 0 })),
@@ -29,7 +29,7 @@ module('Unit | Behaviors | Tween', function () {
           value: 0,
           velocity: 0,
         },
-      ]
+      ],
     );
   });
 
@@ -38,11 +38,11 @@ module('Unit | Behaviors | Tween', function () {
 
     assert.deepEqual(
       Array.from(behavior.getFrames({ from: 1, to: 1, duration: 0 })),
-      []
+      [],
     );
     assert.deepEqual(
       Array.from(behavior.getFrames({ from: 0, to: 0, duration: 0 })),
-      []
+      [],
     );
   });
 
@@ -50,7 +50,7 @@ module('Unit | Behaviors | Tween', function () {
     let behavior = new TweenBehavior();
 
     let frames = Array.from(
-      behavior.getFrames({ from: 0, to: 1, duration: 100 })
+      behavior.getFrames({ from: 0, to: 1, duration: 100 }),
     );
 
     assert.equal(frames.length, 7);
@@ -95,7 +95,7 @@ module('Unit | Behaviors | Tween', function () {
         to: 1,
         duration: 100,
         delay: 50,
-      })
+      }),
     );
 
     assert.equal(frames.length, 10);

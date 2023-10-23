@@ -13,28 +13,19 @@ export default class Router extends EmberRouter {
 // that means that means the resolvedOwnRealmURL should be used instead of ownRealmURL.
 let path = new URL(resolvedOwnRealmURL ?? ownRealmURL).pathname.replace(
   /\/$/,
-  ''
+  '',
 );
 
 Router.map(function () {
-  this.route('freestyle', { path: '/_freestyle' });
+  this.route('host-freestyle', { path: '/_freestyle' });
   this.route('indexer', { path: '/indexer/:id' });
   this.route('acceptance-test-setup');
   this.route('card', { path: '/*path' });
 
   if (!path || hostsOwnAssets) {
-    this.route('chat', function () {
-      this.route('register');
-      this.route('room', { path: `/room/:id` });
-    });
     this.route('index-card', { path: '/' });
     this.route('code');
   } else {
-    this.route('chat', { path: `${path}/chat` }, function () {
-      this.route('register');
-      this.route('room', { path: `/room/:id` });
-    });
-
     this.route('code', { path: `${path}/code` });
   }
 });

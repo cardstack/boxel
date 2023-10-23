@@ -8,7 +8,7 @@ export class RealmPaths {
     this.url =
       (typeof realmURL === 'string' ? realmURL : realmURL.href).replace(
         /\/$/,
-        ''
+        '',
       ) + '/';
   }
 
@@ -18,7 +18,9 @@ export class RealmPaths {
     }
 
     if (!url.href.startsWith(this.url)) {
-      throw new Error(`bug: realm ${this.url} does not contain ${url.href}`);
+      let error = new Error(`realm ${this.url} does not contain ${url.href}`);
+      (error as any).status = 404;
+      throw error;
     }
 
     if (opts.preserveQuerystring !== true) {

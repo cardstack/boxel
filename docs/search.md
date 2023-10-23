@@ -2,7 +2,7 @@
 
 The Realm object has a `searchIndex` property, which in turn as a `search(...)` method. This is the method used to issue queries and get search results (card instance JSON-API representations) from the realm index.
 
-Note that search results are only as good as the most recent index, so if indexing is not working, or some cards are failing to be indexed, you may not get the results you expect. 
+Note that search results are only as good as the most recent index, so if indexing is not working, or some cards are failing to be indexed, you may not get the results you expect.
 
 ## Search Queries
 
@@ -12,14 +12,15 @@ The `SearchIndex#search(...)` method has one required argument, a search query. 
 
 The Query object may have a `filter` property, which controls which cards are included in the result set.
 
-* `type`: allow specification of a particular card type. Also includes descendant cards in this card's adoption chain.
-* `eq`: allows specifying a card with a specific field value
-* `range`: allows specifying a card with a field value that is gt, gte, lt, or lte a specific value
-* `any`: allows an "OR" union of other filters
-* `every`: allows an "AND" union of other filters
-* `not`: allow negating another filter
+- `type`: allow specification of a particular card type. Also includes descendant cards in this card's adoption chain.
+- `eq`: allows specifying a card with a specific field value
+- `range`: allows specifying a card with a field value that is gt, gte, lt, or lte a specific value
+- `any`: allows an "OR" union of other filters
+- `every`: allows an "AND" union of other filters
+- `not`: allow negating another filter
+- `contains`: allows you to specify a card that has a field value containing a specific value.
 
-* `on`: may be used with `eq` or `range` to limit results to a particular card type. `on` provides the card type context for a field. This is how we can disambiguate, for example, between a `Company.name` field and a `Country.name` field. Simply providing a predicate to filter by the `name` field isnt enough. You need to say which card's name field you want to filter by -- this is the function of `on`.
+- `on`: may be used with `eq`,`range` and `every` to limit results to a particular card type. `on` provides the card type context for a field. This is how we can disambiguate, for example, between a `Company.name` field and a `Country.name` field. Simply providing a predicate to filter by the `name` field isnt enough. You need to say which card's name field you want to filter by -- this is the function of `on`.
 
 Nested fields may be specified using a dot (`.`) notation.
 
@@ -30,70 +31,79 @@ A note about the efficiency around linked fields in search results: Currently, t
 #### Examples
 
 ```js
-  let { data: matching } = await indexer.search({
-    filter: {
-      type: { module: `https://my.realm/article`, name: 'Article' },
-    },
-  });
+let { data: matching } = await indexer.search({
+  filter: {
+    type: { module: `https://my.realm/article`, name: 'Article' },
+  },
+});
 ```
 
 ```js
-  let { data: matching } = await indexer.search({
-    filter: {
-      on: { module: `https://my.realm/post`, name: 'Post' },
-      range: { views: { lte: 10, gt: 5 }, 'author.posts': { gte: 1 } },
-    },
-  });
+let { data: matching } = await indexer.search({
+  filter: {
+    on: { module: `https://my.realm/post`, name: 'Post' },
+    range: { views: { lte: 10, gt: 5 }, 'author.posts': { gte: 1 } },
+  },
+});
 ```
 
 ```js
-  let { data: matching } = await indexer.search({
-    filter: {
-      on: { module: `https://my.realm/booking`, name: 'Booking' },
-      eq: { 'hosts.firstName': 'Arthur' },
-    },
-  });
+let { data: matching } = await indexer.search({
+  filter: {
+    on: { module: `https://my.realm/booking`, name: 'Booking' },
+    eq: { 'hosts.firstName': 'Arthur' },
+  },
+});
 ```
 
 ```js
-  let { data: matching } = await indexer.search({
-    filter: {
-      on: { module: `https://my.realm/article`, name: 'Article' },
-      not: { eq: { 'author.firstName': 'Carl' } },
-    },
-  });
+let { data: matching } = await indexer.search({
+  filter: {
+    on: { module: `https://my.realm/article`, name: 'Article' },
+    not: { eq: { 'author.firstName': 'Carl' } },
+  },
+});
 ```
 
 ```js
-  let { data: matching } = await indexer.search({
-    filter: {
-      any: [
-        {
-          on: { module: `https://my.realm/article`, name: 'Article' },
-          eq: { 'author.firstName': 'Kafka' },
-        },
-        {
-          on: { module: `https://my.realm/book`, name: 'Book' },
-          eq: { 'author.firstName': 'Kafka' },
-        },
-      ],
-    },
-  });
-```
-
-```js
-  let { data: matching } = await indexer.search({
-    filter: {
-      on: {
-        module: `https://my.realm/post`,
-        name: 'Post',
+let { data: matching } = await indexer.search({
+  filter: {
+    any: [
+      {
+        on: { module: `https://my.realm/article`, name: 'Article' },
+        eq: { 'author.firstName': 'Kafka' },
       },
-      every: [
-        { eq: { title: 'Card 1' } },
-        { not: { eq: { 'author.firstName': 'Cardy' } } },
-      ],
+      {
+        on: { module: `https://my.realm/book`, name: 'Book' },
+        eq: { 'author.firstName': 'Kafka' },
+      },
+    ],
+  },
+});
+```
+
+```js
+let { data: matching } = await indexer.search({
+  filter: {
+    on: {
+      module: `https://my.realm/post`,
+      name: 'Post',
     },
-  });
+    every: [
+      { eq: { title: 'Card 1' } },
+      { not: { eq: { 'author.firstName': 'Cardy' } } },
+    ],
+  },
+});
+```
+
+```js
+let { data: matching } = await indexer.search({
+  filter: {
+    on: { module: `https://my.realm/person`, name: 'Person' },
+    contains: { firstName: 'Carl' },
+  },
+});
 ```
 
 ### Sort Order
@@ -102,40 +112,40 @@ The Query object may have a `sort` property, which controls the order in which r
 
 A `sort` is an array property value where each item is an object that consists of `on`, `by`, and optionally `direction`. The array is the order in which the sort is applied.
 
-* `on`: The card type being sorted
-* `by`: The field name to be sorted on. Nested fields may be supported using a dot (`.`) notation.
-* `direction`: `asc` or `desc`, default is `asc`
+- `on`: The card type being sorted
+- `by`: The field name to be sorted on. Nested fields may be supported using a dot (`.`) notation.
+- `direction`: `asc` or `desc`, default is `asc`
 
 #### Examples
 
 ```js
-  let { data: matching } = await indexer.search({
-    sort: [
-      {
-        by: 'author.firstName',
-        on: { module: `https://my.realm/article`, name: 'Article' },
-        direction: 'desc',
-      },
-    ],
-    filter: { type: { module: `https://my.realm/post`, name: 'Post' } },
-  });
+let { data: matching } = await indexer.search({
+  sort: [
+    {
+      by: 'author.firstName',
+      on: { module: `https://my.realm/article`, name: 'Article' },
+      direction: 'desc',
+    },
+  ],
+  filter: { type: { module: `https://my.realm/post`, name: 'Post' } },
+});
 ```
 
 ```js
-  let { data: matching } = await indexer.search({
-    sort: [
-      {
-        by: 'editions',
-        on: { module: `https://my.realm/book`, name: 'Book' },
-        direction: 'desc',
-      },
-      {
-        by: 'author.lastName',
-        on: { module: `https://my.realm/book`, name: 'Book' },
-      },
-    ],
-    filter: { type: { module: `https://my.realm/book`, name: 'Book' } },
-  });
+let { data: matching } = await indexer.search({
+  sort: [
+    {
+      by: 'editions',
+      on: { module: `https://my.realm/book`, name: 'Book' },
+      direction: 'desc',
+    },
+    {
+      by: 'author.lastName',
+      on: { module: `https://my.realm/book`, name: 'Book' },
+    },
+  ],
+  filter: { type: { module: `https://my.realm/book`, name: 'Book' } },
+});
 ```
 
 ### Pagination -- Future feature

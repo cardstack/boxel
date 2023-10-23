@@ -13,6 +13,8 @@ import {
   setupBaseRealmServer,
 } from './helpers';
 import isEqual from 'lodash/isEqual';
+import { shimExternals } from '../lib/externals';
+import stripScopedCSSAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-attributes';
 
 function cleanWhiteSpace(text: string) {
   return text.replace(/\s+/g, ' ').trim();
@@ -20,8 +22,8 @@ function cleanWhiteSpace(text: string) {
 
 function trimCardContainer(text: string) {
   return cleanWhiteSpace(text).replace(
-    /<div .*? data-test-field-component-card> (.*?) <\/div> <\/div>/,
-    '$1'
+    /<div .*? data-test-field-component-card>\s?[<!---->]*? (.*?) <\/div>/g,
+    '$1',
   );
 }
 
@@ -31,24 +33,38 @@ setGracefulCleanup();
 // underlying filesystem in a manner that doesn't leak into other tests (as well
 // as to test through loader caching)
 module('indexing', function (hooks) {
+  let loader = new Loader();
+  loader.addURLMapping(
+    new URL(baseRealm.url),
+    new URL('http://localhost:4201/base/'),
+  );
+  shimExternals(loader);
+
   setupCardLogs(
     hooks,
-    async () => await Loader.import(`${baseRealm.url}card-api`)
+    async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
   let dir: string;
   let realm: Realm;
 
-  setupBaseRealmServer(hooks);
+  setupBaseRealmServer(hooks, loader);
 
   hooks.beforeEach(async function () {
+    let testRealmLoader = new Loader();
+    testRealmLoader.addURLMapping(
+      new URL(baseRealm.url),
+      new URL('http://localhost:4201/base/'),
+    );
+    shimExternals(testRealmLoader);
+
     dir = dirSync().name;
-    realm = await createRealm(dir, {
+    realm = await createRealm(testRealmLoader, dir, {
       'person.gts': `
-        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
-        export class Person extends Card {
+        export class Person extends CardDef {
           @field firstName = contains(StringCard);
           static isolated = class Isolated extends Component<typeof this> {
             <template>
@@ -58,15 +74,15 @@ module('indexing', function (hooks) {
         }
       `,
       'pet.gts': `
-        import { contains, field, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
-        export class Pet extends Card {
+        export class Pet extends CardDef {
           @field firstName = contains(StringCard);
         }
       `,
       'fancy-person.gts': `
-        import { contains, field, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { Person } from "./person";
 
@@ -75,12 +91,12 @@ module('indexing', function (hooks) {
         }
       `,
       'post.gts': `
-        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import { contains, field, linksTo, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { Person } from "./person";
 
-        export class Post extends Card {
-          @field author = contains(Person);
+        export class Post extends CardDef {
+          @field author = linksTo(Person);
           @field message = contains(StringCard);
           static isolated = class Isolated extends Component<typeof this> {
             <template>
@@ -91,10 +107,10 @@ module('indexing', function (hooks) {
         }
       `,
       'boom.gts': `
-        import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
 
-        export class Boom extends Card {
+        export class Boom extends CardDef {
           @field firstName = contains(StringCard);
           static isolated = class Isolated extends Component<typeof this> {
             <template>
@@ -148,10 +164,14 @@ module('indexing', function (hooks) {
       'post-1.json': {
         data: {
           attributes: {
-            author: {
-              firstName: 'Van Gogh',
-            },
             message: 'Who wants to fetch?!',
+          },
+          relationships: {
+            author: {
+              links: {
+                self: './vangogh',
+              },
+            },
           },
           meta: {
             adoptsFrom: {
@@ -180,7 +200,7 @@ module('indexing', function (hooks) {
           meta: {
             adoptsFrom: {
               module: 'https://cardstack.com/base/card-api',
-              name: 'Card',
+              name: 'CardDef',
             },
           },
         },
@@ -191,12 +211,12 @@ module('indexing', function (hooks) {
 
   test('can store card pre-rendered html in the index', async function (assert) {
     let entry = await realm.searchIndex.searchEntry(
-      new URL(`${testRealm}mango`)
+      new URL(`${testRealm}mango`),
     );
     assert.strictEqual(
-      trimCardContainer(entry!.html!),
+      trimCardContainer(stripScopedCSSAttributes(entry!.html!)),
       cleanWhiteSpace(`<h1> Mango </h1>`),
-      'pre-rendered html is correct'
+      'pre-rendered html is correct',
     );
   });
 
@@ -206,7 +226,7 @@ module('indexing', function (hooks) {
       if (entry?.type === 'error') {
         assert.strictEqual(
           entry.error.detail,
-          'Encountered error rendering HTML for card: intentional error'
+          'Encountered error rendering HTML for card: intentional error',
         );
         assert.deepEqual(entry.error.deps, [`${testRealm}boom`]);
       } else {
@@ -219,16 +239,16 @@ module('indexing', function (hooks) {
         assert.deepEqual(entry.doc.data.attributes?.firstName, 'Van Gogh');
         let { html } =
           (await realm.searchIndex.searchEntry(
-            new URL(`${testRealm}vangogh`)
+            new URL(`${testRealm}vangogh`),
           )) ?? {};
         assert.strictEqual(
-          trimCardContainer(html!),
-          cleanWhiteSpace(`<h1> Van Gogh </h1>`)
+          trimCardContainer(stripScopedCSSAttributes(html!)),
+          cleanWhiteSpace(`<h1> Van Gogh </h1>`),
         );
       } else {
         assert.ok(
           false,
-          `expected search entry to be a document but was: ${entry?.error.detail}`
+          `expected search entry to be a document but was: ${entry?.error.detail}`,
         );
       }
     }
@@ -249,7 +269,7 @@ module('indexing', function (hooks) {
             },
           },
         },
-      } as LooseSingleCardDocument)
+      } as LooseSingleCardDocument),
     );
 
     let { data: result } = await realm.searchIndex.search({
@@ -266,7 +286,7 @@ module('indexing', function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
       }),
-      'indexed correct number of files'
+      'indexed correct number of files',
     );
   });
 
@@ -276,13 +296,13 @@ module('indexing', function (hooks) {
     await realm.write(
       'pet.gts',
       `
-          import { contains, field, Card } from "https://cardstack.com/base/card-api";
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
           import StringCard from "https://cardstack.com/base/string";
-          export class Pet extends Card {
+          export class Pet extends CardDef {
             @field firstName = contains(StringCard);
           }
           throw new Error('boom!');
-        `
+        `,
     );
     assert.ok(
       // assert.deepEqual returns false because despite having the same shape, the constructors are different
@@ -291,14 +311,14 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 1,
       }),
-      'indexed correct number of files'
+      'indexed correct number of files',
     );
     await realm.write(
       'person.gts',
       `
           // syntax error
           export class IntentionallyThrownError {
-        `
+        `,
     );
     assert.ok(
       // assert.deepEqual returns false because despite having the same shape, the constructors are different
@@ -307,7 +327,7 @@ module('indexing', function (hooks) {
         instanceErrors: 3, // 1 post, 2 persons
         moduleErrors: 3, // post, fancy person, person
       }),
-      'indexed correct number of files'
+      'indexed correct number of files',
     );
     let { data: result } = await realm.searchIndex.search({
       filter: {
@@ -317,18 +337,18 @@ module('indexing', function (hooks) {
     assert.deepEqual(
       result,
       [],
-      'the broken type results in no instance results'
+      'the broken type results in no instance results',
     );
     await realm.write(
       'person.gts',
       `
-          import { contains, field, Card } from "https://cardstack.com/base/card-api";
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
           import StringCard from "https://cardstack.com/base/string";
 
-          export class Person extends Card {
+          export class Person extends CardDef {
             @field firstName = contains(StringCard);
           }
-        `
+        `,
     );
     assert.ok(
       // assert.deepEqual returns false because despite having the same shape, the constructors are different
@@ -337,7 +357,7 @@ module('indexing', function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
       }),
-      'indexed correct number of files'
+      'indexed correct number of files',
     );
     result = (
       await realm.searchIndex.search({
@@ -349,7 +369,7 @@ module('indexing', function (hooks) {
     assert.strictEqual(
       result.length,
       2,
-      'correct number of instances returned'
+      'correct number of instances returned',
     );
   });
 
@@ -370,7 +390,7 @@ module('indexing', function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
       }),
-      'index did not touch any files'
+      'index did not touch any files',
     );
   });
 
@@ -378,12 +398,12 @@ module('indexing', function (hooks) {
     await realm.write(
       'post.gts',
       `
-        import { contains, field, Card } from "https://cardstack.com/base/card-api";
+        import { contains, linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { Person } from "./person";
 
-        export class Post extends Card {
-          @field author = contains(Person);
+        export class Post extends CardDef {
+          @field author = linksTo(Person);
           @field message = contains(StringCard);
           @field nickName = contains(StringCard, {
             computeVia: function() {
@@ -391,7 +411,7 @@ module('indexing', function (hooks) {
             }
           })
         }
-      `
+      `,
     );
 
     let { data: result } = await realm.searchIndex.search({
@@ -408,7 +428,7 @@ module('indexing', function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
       }),
-      'indexed correct number of files'
+      'indexed correct number of files',
     );
   });
 
@@ -416,10 +436,10 @@ module('indexing', function (hooks) {
     await realm.write(
       'person.gts',
       `
-          import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+          import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
           import StringCard from "https://cardstack.com/base/string";
 
-          export class Person extends Card {
+          export class Person extends CardDef {
             @field firstName = contains(StringCard);
             @field nickName = contains(StringCard, {
               computeVia: function() {
@@ -430,7 +450,7 @@ module('indexing', function (hooks) {
               <template><@fields.firstName/> (<@fields.nickName/>)</template>
             }
           }
-        `
+        `,
     );
 
     let { data: result } = await realm.searchIndex.search({
@@ -447,7 +467,7 @@ module('indexing', function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
       }),
-      'indexed correct number of files'
+      'indexed correct number of files',
     );
   });
 
@@ -462,7 +482,7 @@ module('indexing', function (hooks) {
       assert.deepEqual(
         result,
         [],
-        'the deleted type results in no card instance results'
+        'the deleted type results in no card instance results',
       );
     }
     let actual = await realm.searchIndex.card(new URL(`${testRealm}post-1`));
@@ -483,7 +503,7 @@ module('indexing', function (hooks) {
             deps: ['http://test-realm/post'],
           },
         }),
-        'card instance is an error document'
+        'card instance is an error document',
       );
     } else {
       assert.ok(false, 'search index entry is not an error document');
@@ -495,19 +515,19 @@ module('indexing', function (hooks) {
         instanceErrors: 1,
         moduleErrors: 0,
       }),
-      'indexed correct number of files'
+      'indexed correct number of files',
     );
 
     // when the definitions is created again, the instance should mend its broken link
     await realm.write(
       'post.gts',
       `
-        import { contains, field, Card } from "https://cardstack.com/base/card-api";
+        import { contains, linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { Person } from "./person";
 
-        export class Post extends Card {
-          @field author = contains(Person);
+        export class Post extends CardDef {
+          @field author = linksTo(Person);
           @field message = contains(StringCard);
           @field nickName = contains(StringCard, {
             computeVia: function() {
@@ -515,7 +535,7 @@ module('indexing', function (hooks) {
             }
           })
         }
-      `
+      `,
     );
     {
       let { data: result } = await realm.searchIndex.search({
@@ -533,7 +553,7 @@ module('indexing', function (hooks) {
         instanceErrors: 0,
         moduleErrors: 0,
       }),
-      'indexed correct number of files'
+      'indexed correct number of files',
     );
   });
 });

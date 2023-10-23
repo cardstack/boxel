@@ -1,10 +1,10 @@
-import { languages } from 'monaco-editor';
+import type { languages } from 'monaco-editor';
 
 type LanguageInfo = languages.ILanguageExtensionPoint;
 type LanguageConfig = languages.LanguageConfiguration;
 type LanguageDefinition = languages.IMonarchLanguage;
 
-type MonacoLanguageConfig = {
+export type MonacoLanguageConfig = {
   baseId: string;
   langInfo: LanguageInfo;
   rules: LanguageDefinition;
@@ -62,41 +62,9 @@ export const languageConfigs = [
   },
 ];
 
-export async function extendMonacoLanguage({
-  baseId,
-  langInfo,
-  rules,
-}: MonacoLanguageConfig) {
-  const baseLanguage = languages
-    .getLanguages()
-    .find((lang) => lang.id === baseId);
-
-  // @ts-ignore-next-line
-  let { conf, language } = await baseLanguage.loader();
-
-  let extendedConfig = extendConfig(conf);
-  let extendedDef = extendDefinition(language, rules);
-  let { id } = langInfo;
-
-  languages.register(langInfo);
-  languages.setMonarchTokensProvider(id, extendedDef);
-  languages.setLanguageConfiguration(id, extendedConfig);
-}
-
-function extendConfig(config: LanguageConfig): LanguageConfig {
-  return {
-    ...config,
-    autoClosingPairs: [
-      { open: '<!--', close: '-->', notIn: ['comment', 'string'] },
-      { open: '<template>', close: '</template>' },
-      ...(config.autoClosingPairs as languages.IAutoClosingPairConditional[]),
-    ],
-  };
-}
-
-function extendDefinition(
+export function extendDefinition(
   baseLanguage: LanguageDefinition,
-  newLanguage: LanguageDefinition
+  newLanguage: LanguageDefinition,
 ): LanguageDefinition {
   return {
     ...baseLanguage,
@@ -108,11 +76,13 @@ function extendDefinition(
   };
 }
 
-export function getLangFromFileExtension(fileName: string): string {
-  const editorLanguages = languages.getLanguages();
-  let extension = '.' + fileName.split('.').pop();
-  let language = editorLanguages.find((lang) =>
-    lang.extensions?.find((ext) => ext === extension)
-  );
-  return language?.id ?? 'plaintext';
+export function extendConfig(config: LanguageConfig): LanguageConfig {
+  return {
+    ...config,
+    autoClosingPairs: [
+      { open: '<!--', close: '-->', notIn: ['comment', 'string'] },
+      { open: '<template>', close: '</template>' },
+      ...(config.autoClosingPairs as languages.IAutoClosingPairConditional[]),
+    ],
+  };
 }

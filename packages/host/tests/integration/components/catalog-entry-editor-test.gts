@@ -1,23 +1,29 @@
-import { module, test } from 'qunit';
+import { waitUntil, waitFor, fillIn, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
-import { baseRealm, CardRef } from '@cardstack/runtime-common';
+
+import { setupRenderingTest } from 'ember-qunit';
+import { module, test } from 'qunit';
+
+import { baseRealm, CodeRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
-import { setupRenderingTest } from 'ember-qunit';
-import { renderComponent } from '../../helpers/render-component';
+
+import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
+import CardPrerender from '@cardstack/host/components/card-prerender';
+import CreateCardModal from '@cardstack/host/components/create-card-modal';
 import CatalogEntryEditor from '@cardstack/host/components/editor/catalog-entry-editor';
+
+import type LoaderService from '@cardstack/host/services/loader-service';
+
 import {
   TestRealm,
   TestRealmAdapter,
   testRealmURL,
   setupLocalIndexing,
 } from '../../helpers';
-import { waitUntil, waitFor, fillIn, click } from '@ember/test-helpers';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import CreateCardModal from '@cardstack/host/components/create-card-modal';
-import CardCatalogModal from '@cardstack/host/components/card-catalog-modal';
-import CardPrerender from '@cardstack/host/components/card-prerender';
-import { shimExternals } from '@cardstack/host/lib/externals';
+import { renderComponent } from '../../helpers/render-component';
+
+let loader: Loader;
 
 module('Integration | catalog-entry-editor', function (hooks) {
   let adapter: TestRealmAdapter;
@@ -26,36 +32,34 @@ module('Integration | catalog-entry-editor', function (hooks) {
   setupLocalIndexing(hooks);
 
   hooks.beforeEach(async function () {
-    // this seeds the loader used during index which obtains url mappings
-    // from the global loader
-    Loader.addURLMapping(
-      new URL(baseRealm.url),
-      new URL('http://localhost:4201/base/')
-    );
-    shimExternals();
+    loader = (this.owner.lookup('service:loader-service') as LoaderService)
+      .loader;
+
     adapter = new TestRealmAdapter({
       'person.gts': `
-        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
-        export class Person extends Card {
+        export class Person extends FieldDef {
           @field firstName = contains(StringCard);
           @field title =  contains(StringCard, {
             computeVia: function (this: Person) {
               return this.firstName;
             },
           });
+          @field description = contains(StringCard, { computeVia: () => 'Person' });
+          @field thumbnailURL = contains(StringCard, { computeVia: () => './person.svg' });
           static embedded = class Embedded extends Component<typeof this> {
             <template><@fields.firstName/></template>
           }
         }
       `,
       'pet.gts': `
-        import { contains, field, Component, Card } from "https://cardstack.com/base/card-api";
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import BooleanCard from "https://cardstack.com/base/boolean";
         import DateCard from "https://cardstack.com/base/date";
         import { Person } from "./person";
-        export class Pet extends Card {
+        export class Pet extends CardDef {
           @field name = contains(StringCard);
           @field lovesWalks = contains(BooleanCard);
           @field birthday = contains(DateCard);
@@ -65,7 +69,6 @@ module('Integration | catalog-entry-editor', function (hooks) {
               return this.name;
             },
           });
-
           static embedded = class Embedded extends Component<typeof this> {
             <template>
               <h2 data-test-pet-name><@fields.name/></h2>
@@ -76,26 +79,19 @@ module('Integration | catalog-entry-editor', function (hooks) {
         }
       `,
     });
-    realm = await TestRealm.createWithAdapter(adapter, this.owner);
-    let loader = (this.owner.lookup('service:loader-service') as LoaderService)
-      .loader;
-    loader.registerURLHandler(new URL(realm.url), realm.handle.bind(realm));
+    realm = await TestRealm.createWithAdapter(adapter, loader, this.owner);
     await realm.ready;
   });
 
-  hooks.afterEach(function () {
-    Loader.destroy();
-  });
-
   test('can publish new catalog entry', async function (assert) {
-    const args: CardRef = { module: `${testRealmURL}pet`, name: 'Pet' };
+    const args: CodeRef = { module: `${testRealmURL}pet`, name: 'Pet' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
           <CatalogEntryEditor @ref={{args}} />
           <CardPrerender />
         </template>
-      }
+      },
     );
 
     await waitFor('button[data-test-catalog-entry-publish]', { timeout: 5000 });
@@ -112,13 +108,13 @@ module('Integration | catalog-entry-editor', function (hooks) {
       .dom('[data-test-field="title"] input')
       .hasValue(
         `Pet from ${testRealmURL}pet`,
-        'title input field value is correct'
+        'title input field value is correct',
       );
     assert
       .dom('[data-test-field="description"] input')
       .hasValue(
         `Catalog entry for Pet from ${testRealmURL}pet`,
-        'description input field value is correct'
+        'description input field value is correct',
       );
     assert
       .dom('[data-test-ref]')
@@ -131,12 +127,20 @@ module('Integration | catalog-entry-editor', function (hooks) {
       .hasValue('', 'demo card name input field is correct');
     assert
       .dom(
-        '[data-test-field="demo"] [data-test-field="lovesWalks"] label:nth-of-type(2) input'
+        '[data-test-field="demo"] [data-test-field="lovesWalks"] label:nth-of-type(2) input',
       )
       .isChecked('demo card lovesWalks input field is correct');
 
     await fillIn('[data-test-field="title"] input', 'Pet test');
     await fillIn('[data-test-field="description"] input', 'Test description');
+    await fillIn(
+      '[data-test-field="demo"] [data-test-field="description"] input',
+      'Beagle',
+    );
+    await fillIn(
+      '[data-test-field="demo"] [data-test-field="thumbnailURL"] input',
+      './jackie.png',
+    );
     await fillIn('[data-test-field="name"] input', 'Jackie');
     await click('[data-test-field="lovesWalks"] label:nth-of-type(1) input');
     await fillIn('[data-test-field="firstName"] input', 'BN');
@@ -145,7 +149,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
     await waitUntil(() => !document.querySelector('[data-test-saving]'));
 
     let entry = await realm.searchIndex.card(
-      new URL(`${testRealmURL}CatalogEntry/1`)
+      new URL(`${testRealmURL}CatalogEntry/1`),
     );
     assert.ok(entry, 'the new catalog entry was created');
 
@@ -172,6 +176,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
               owner: {
                 firstName: 'BN',
               },
+              description: 'Beagle',
+              thumbnailURL: './jackie.png',
             },
           },
           meta: {
@@ -190,7 +196,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
           },
         },
       },
-      'file contents are correct'
+      'file contents are correct',
     );
   });
 
@@ -231,17 +237,17 @@ module('Integration | catalog-entry-editor', function (hooks) {
             },
           },
         },
-      })
+      }),
     );
 
-    const args: CardRef = { module: `${testRealmURL}pet`, name: 'Pet' };
+    const args: CodeRef = { module: `${testRealmURL}pet`, name: 'Pet' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
           <CatalogEntryEditor @ref={{args}} />
           <CardPrerender />
         </template>
-      }
+      },
     );
 
     await waitFor('[data-test-format-button="edit"]');
@@ -272,7 +278,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
       .dom('[data-test-field="owner"] [data-test-field="firstName"] input')
       .hasValue(
         'BN',
-        'demo card owner first name input field value is correct'
+        'demo card owner first name input field value is correct',
       );
 
     await fillIn('[data-test-field="title"] input', 'test title');
@@ -293,33 +299,33 @@ module('Integration | catalog-entry-editor', function (hooks) {
     assert.dom('[data-test-demo] [data-test-pet-owner]').hasText('EA');
 
     let maybeError = await realm.searchIndex.card(
-      new URL(`${testRealmURL}pet-catalog-entry`)
+      new URL(`${testRealmURL}pet-catalog-entry`),
     );
     if (maybeError?.type === 'error') {
       throw new Error(
-        `unexpected error when getting card from index: ${maybeError.error.detail}`
+        `unexpected error when getting card from index: ${maybeError.error.detail}`,
       );
     }
     let { doc } = maybeError!;
     assert.strictEqual(
       doc?.data.attributes?.title,
       'test title',
-      'catalog entry title was updated'
+      'catalog entry title was updated',
     );
     assert.strictEqual(
       doc?.data.attributes?.description,
       'test description',
-      'catalog entry description was updated'
+      'catalog entry description was updated',
     );
     assert.strictEqual(
       doc?.data.attributes?.demo?.name,
       'Jackie Wackie',
-      'demo name field was updated'
+      'demo name field was updated',
     );
     assert.strictEqual(
       doc?.data.attributes?.demo?.owner?.firstName,
       'EA',
-      'demo owner firstName field was updated'
+      'demo owner firstName field was updated',
     );
   });
 
@@ -360,17 +366,17 @@ module('Integration | catalog-entry-editor', function (hooks) {
             },
           },
         },
-      })
+      }),
     );
 
-    const args: CardRef = { module: `${testRealmURL}pet`, name: 'Pet' };
+    const args: CodeRef = { module: `${testRealmURL}pet`, name: 'Pet' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
           <CatalogEntryEditor @ref={{args}} />
           <CardPrerender />
         </template>
-      }
+      },
     );
 
     await waitFor('[data-test-format-button="edit"]');
@@ -396,7 +402,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
       .dom('[data-test-field="owner"] [data-test-field="firstName"] input')
       .hasValue(
         'BN',
-        'demo card owner first name input field value is correct'
+        'demo card owner first name input field value is correct',
       );
 
     await fillIn('[data-test-field="title"] input', 'test title');
@@ -416,45 +422,45 @@ module('Integration | catalog-entry-editor', function (hooks) {
     assert.dom('[data-test-demo] [data-test-pet-owner]').hasText('EA');
 
     let maybeError = await realm.searchIndex.card(
-      new URL(`${testRealmURL}dir/pet-catalog-entry`)
+      new URL(`${testRealmURL}dir/pet-catalog-entry`),
     );
     if (maybeError?.type === 'error') {
       throw new Error(
-        `unexpected error when getting card from index: ${maybeError.error.detail}`
+        `unexpected error when getting card from index: ${maybeError.error.detail}`,
       );
     }
     let { doc } = maybeError!;
     assert.strictEqual(
       doc?.data.attributes?.title,
       'test title',
-      'catalog entry title was updated'
+      'catalog entry title was updated',
     );
     assert.strictEqual(
       doc?.data.attributes?.description,
       'test description',
-      'catalog entry description was updated'
+      'catalog entry description was updated',
     );
     assert.strictEqual(
       doc?.data.attributes?.demo?.name,
       'Jackie Wackie',
-      'demo name field was updated'
+      'demo name field was updated',
     );
     assert.strictEqual(
       doc?.data.attributes?.demo?.owner?.firstName,
       'EA',
-      'demo owner firstName field was updated'
+      'demo owner firstName field was updated',
     );
   });
 
   test('can create new card with missing composite field value', async function (assert) {
-    const args: CardRef = { module: `${testRealmURL}pet`, name: 'Pet' };
+    const args: CodeRef = { module: `${testRealmURL}pet`, name: 'Pet' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
           <CatalogEntryEditor @ref={{args}} />
           <CardPrerender />
         </template>
-      }
+      },
     );
 
     await waitFor('button[data-test-catalog-entry-publish]');
@@ -466,7 +472,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
     await waitUntil(() => !document.querySelector('[data-test-saving]'));
 
     let entry = await realm.searchIndex.card(
-      new URL(`${testRealmURL}CatalogEntry/1`)
+      new URL(`${testRealmURL}CatalogEntry/1`),
     );
     assert.ok(entry, 'catalog entry was created');
 
@@ -476,7 +482,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
           <CatalogEntryEditor @ref={{args}} />
           <CardPrerender />
         </template>
-      }
+      },
     );
 
     await waitFor('[data-test-format-button="edit"]');
@@ -506,6 +512,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
               owner: {
                 firstName: null,
               },
+              description: null,
+              thumbnailURL: null,
             },
           },
           meta: {
@@ -524,19 +532,19 @@ module('Integration | catalog-entry-editor', function (hooks) {
           },
         },
       },
-      'file contents are correct'
+      'file contents are correct',
     );
   });
 
   test('can create new catalog entry with all demo card field values missing', async function (assert) {
-    const args: CardRef = { module: `${testRealmURL}person`, name: 'Person' };
+    const args: CodeRef = { module: `${testRealmURL}person`, name: 'Person' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
           <CatalogEntryEditor @ref={{args}} />
           <CardPrerender />
         </template>
-      }
+      },
     );
 
     await waitFor('button[data-test-catalog-entry-publish]');
@@ -552,7 +560,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
           <CatalogEntryEditor @ref={{args}} />
           <CardPrerender />
         </template>
-      }
+      },
     );
 
     await waitFor('[data-test-format-button="edit"]');
@@ -560,7 +568,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
     assert.dom('[data-test-field="firstName"] input').exists();
 
     let entry = await realm.searchIndex.card(
-      new URL(`${testRealmURL}CatalogEntry/1`)
+      new URL(`${testRealmURL}CatalogEntry/1`),
     );
     assert.ok(entry, 'catalog entry was created');
 
@@ -600,7 +608,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
           },
         },
       },
-      'file contents are correct'
+      'file contents are correct',
     );
   });
 
@@ -608,24 +616,24 @@ module('Integration | catalog-entry-editor', function (hooks) {
     await realm.write(
       'pet.gts',
       `
-      import { contains, field, Card, Component } from "https://cardstack.com/base/card-api";
+      import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
-      export class Pet extends Card {
+      export class Pet extends CardDef {
         @field name = contains(StringCard);
         static embedded = class Embedded extends Component<typeof this> {
           <template><h4 data-test-pet-name><@fields.name/></h4></template>
         };
       }
-    `
+    `,
     );
     // note that person.gts already exists in beforeEach, so using a different module so we don't collide
     await realm.write(
       'nice-person.gts',
       `
-      import { contains, field, linksTo, Card, Component } from "https://cardstack.com/base/card-api";
+      import { contains, field, linksTo, CardDef, Component } from "https://cardstack.com/base/card-api";
       import StringCard from "https://cardstack.com/base/string";
       import { Pet } from "./pet";
-      export class NicePerson extends Card {
+      export class NicePerson extends CardDef {
         @field firstName = contains(StringCard);
         @field lastName = contains(StringCard);
         @field pet = linksTo(Pet);
@@ -636,7 +644,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
           </template>
         };
       }
-    `
+    `,
     );
     await realm.write(
       'jackie-pet.json',
@@ -653,7 +661,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
             },
           },
         },
-      })
+      }),
     );
     await realm.write(
       'person-entry.json',
@@ -694,10 +702,10 @@ module('Integration | catalog-entry-editor', function (hooks) {
             },
           },
         },
-      })
+      }),
     );
 
-    const args: CardRef = {
+    const args: CodeRef = {
       module: `${testRealmURL}nice-person`,
       name: 'NicePerson',
     };
@@ -707,7 +715,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
           <CatalogEntryEditor @ref={{args}} />
           <CardPrerender />
         </template>
-      }
+      },
     );
 
     await waitFor('[data-test-ref]');
@@ -727,39 +735,43 @@ module('Integration | catalog-entry-editor', function (hooks) {
     await realm.write(
       'invoice.gts',
       `
-      import { contains, containsMany, field, linksTo, Card, Component } from "https://cardstack.com/base/card-api";
-      import IntegerCard from "https://cardstack.com/base/integer";
+      import { contains, containsMany, field, linksTo, CardDef, FieldDef, Component } from "https://cardstack.com/base/card-api";
+      import NumberCard from "https://cardstack.com/base/number";
       import StringCard from "https://cardstack.com/base/string";
-      class Vendor extends Card {
+      class Vendor extends CardDef {
         @field company = contains(StringCard);
-        @field title =  contains(StringCard, {
+        @field title = contains(StringCard, {
           computeVia: function (this: Vendor) {
             return this.company;
           },
         });
+        @field description = contains(StringCard, { computeVia: () => 'Vendor' });
+        @field thumbnailURL = contains(StringCard, { computeVia: () => null });
         static embedded = class Embedded extends Component<typeof this> {
           <template><div data-test-company><@fields.company/></div></template>
         };
       }
-      class Item extends Card {
+      class Item extends FieldDef {
         @field name = contains(StringCard);
-        @field price = contains(IntegerCard);
+        @field price = contains(NumberCard);
         @field title =  contains(StringCard, {
           computeVia: function (this: Item) {
             return this.name + ' ' + this.price;
           },
         });
+        @field description = contains(StringCard, { computeVia: () => null });
+        @field thumbnailURL = contains(StringCard, { computeVia: () => null });
       }
       class LineItem extends Item {
-        @field quantity = contains(IntegerCard);
+        @field quantity = contains(NumberCard);
         static embedded = class Embedded extends Component<typeof this> {
           <template><div data-test-line-item="{{@model.name}}"><@fields.name/> - <@fields.quantity/> @ $<@fields.price/> USD</div></template>
         };
       }
-      export class Invoice extends Card {
+      export class Invoice extends CardDef {
         @field vendor = linksTo(Vendor);
         @field lineItems = containsMany(LineItem);
-        @field balanceDue = contains(IntegerCard, { computeVia: function(this: Invoice) {
+        @field balanceDue = contains(NumberCard, { computeVia: function(this: Invoice) {
           return this.lineItems.length === 0 ? 0 : this.lineItems.map(i => i.price * i.quantity).reduce((a, b) => (a + b));
         }});
         @field title =  contains(StringCard, {
@@ -767,6 +779,8 @@ module('Integration | catalog-entry-editor', function (hooks) {
             return this.vendor ? 'Invoice from ' + this.vendor.title : 'Invoice'
           },
         });
+        @field description = contains(StringCard, { computeVia: () => 'Invoice' });
+        @field thumbnailURL = contains(StringCard, { computeVia: () => null });
         static embedded = class Embedded extends Component<typeof Invoice> {
           <template>
             <h3>Invoice</h3>
@@ -776,10 +790,10 @@ module('Integration | catalog-entry-editor', function (hooks) {
           </template>
         };
       }
-    `
+    `,
     );
 
-    const args: CardRef = { module: `${testRealmURL}invoice`, name: 'Invoice' };
+    const args: CodeRef = { module: `${testRealmURL}invoice`, name: 'Invoice' };
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -788,23 +802,23 @@ module('Integration | catalog-entry-editor', function (hooks) {
           <CreateCardModal />
           <CardPrerender />
         </template>
-      }
+      },
     );
 
     await waitFor('button[data-test-catalog-entry-publish]');
     await click('[data-test-catalog-entry-publish]');
     await waitFor('[data-test-ref]');
 
-    await click('[data-test-add-new]');
+    await click('[data-test-field="lineItems"] [data-test-add-new]');
     await fillIn('[data-test-field="name"] input', 'Keyboard');
     await fillIn('[data-test-field="quantity"] input', '2');
     await fillIn('[data-test-field="price"] input', '150');
 
-    await click('[data-test-choose-card]');
+    await click('[data-test-field="vendor"] [data-test-add-new]');
     await waitFor('[data-test-card-catalog-modal]');
-    await waitFor('[data-test-card-catalog-modal] [data-test-create-new]');
+    await waitFor('[data-test-card-catalog-create-new-button]');
 
-    await click('[data-test-card-catalog-modal] [data-test-create-new]');
+    await click('[data-test-card-catalog-create-new-button]');
     await waitFor('[data-test-create-new-card="Vendor"]');
     await fillIn('[data-test-field="company"] input', 'Big Tech');
 
@@ -821,7 +835,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
     assert.dom('[data-test-balance-due]').hasText('300');
 
     let entry = await realm.searchIndex.card(
-      new URL(`${testRealmURL}CatalogEntry/1`)
+      new URL(`${testRealmURL}CatalogEntry/1`),
     );
     assert.ok(entry, 'the new catalog entry was created');
 
@@ -874,11 +888,11 @@ module('Integration | catalog-entry-editor', function (hooks) {
           },
         },
       },
-      'file contents are correct'
+      'file contents are correct',
     );
 
     let vendorfileRef = await realm.searchIndex.card(
-      new URL(`${testRealmURL}cards/1`)
+      new URL(`${testRealmURL}cards/1`),
     );
     if (!vendorfileRef || !('doc' in vendorfileRef)) {
       throw new Error('file not found');
@@ -893,7 +907,7 @@ module('Integration | catalog-entry-editor', function (hooks) {
           name: 'Invoice',
         },
       },
-      'newly created vendor file has correct meta.adoptsFrom'
+      'newly created vendor file has correct meta.adoptsFrom',
     );
   });
 });

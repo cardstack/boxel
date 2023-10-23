@@ -1,0 +1,22 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Things That I Like to Chew On",
+      "body": "I like to chew on my toys, my bones, and my daddy's nose."
+    },
+    "relationships": {
+      "author": {
+        "links": {
+          "self": "./Person/1"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./post",
+        "name": "Post"
+      }
+    }
+  }
+}

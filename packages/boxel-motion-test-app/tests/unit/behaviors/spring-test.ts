@@ -307,7 +307,7 @@ module('Unit | Behaviors | Spring', function () {
           value: 0,
           velocity: 0,
         },
-      ]
+      ],
     );
   });
 
@@ -352,7 +352,7 @@ module('Unit | Behaviors | Spring', function () {
           value: 1,
           velocity: 0,
         },
-      ]
+      ],
     );
 
     let clampedSpring = new SpringBehavior({
@@ -622,7 +622,7 @@ module('Unit | Behaviors | Spring', function () {
           value: 1,
           velocity: 0,
         },
-      ]
+      ],
     );
   });
 
@@ -863,7 +863,7 @@ module('Unit | Behaviors | Spring', function () {
           value: 1,
           velocity: 0,
         },
-      ]
+      ],
     );
   });
 
@@ -1229,7 +1229,7 @@ module('Unit | Behaviors | Spring', function () {
           value: 1,
           velocity: 0,
         },
-      ]
+      ],
     );
 
     let overdampedSpringWithoutOverdamping = new SpringBehavior({
@@ -1240,7 +1240,7 @@ module('Unit | Behaviors | Spring', function () {
     });
     assert.deepEqual(
       Array.from(
-        overdampedSpringWithoutOverdamping.getFrames({ from: 0, to: 1 })
+        overdampedSpringWithoutOverdamping.getFrames({ from: 0, to: 1 }),
       ),
       [
         {
@@ -1471,7 +1471,7 @@ module('Unit | Behaviors | Spring', function () {
           value: 1,
           velocity: 0,
         },
-      ]
+      ],
     );
 
     let criticallydampedSpring = new SpringBehavior({
@@ -1481,9 +1481,9 @@ module('Unit | Behaviors | Spring', function () {
     });
     assert.deepEqual(
       Array.from(
-        overdampedSpringWithoutOverdamping.getFrames({ from: 0, to: 1 })
+        overdampedSpringWithoutOverdamping.getFrames({ from: 0, to: 1 }),
       ),
-      Array.from(criticallydampedSpring.getFrames({ from: 0, to: 1 }))
+      Array.from(criticallydampedSpring.getFrames({ from: 0, to: 1 })),
     );
   });
 
@@ -1492,7 +1492,7 @@ module('Unit | Behaviors | Spring', function () {
       overshootClamping: true,
     });
     let frames = Array.from(
-      clampedSpring.getFrames({ from: 0, to: 1, delay: 50 })
+      clampedSpring.getFrames({ from: 0, to: 1, delay: 50 }),
     );
 
     assert.equal(frames.length, 19);
@@ -1582,7 +1582,7 @@ module('Unit | Behaviors | Spring', function () {
     });
 
     let frames = Array.from(
-      clampedSpring.getFrames({ from: 0, to: 1, velocity: 0.01 })
+      clampedSpring.getFrames({ from: 0, to: 1, velocity: 0.01 }),
     );
     assert.equal(frames.length, 20);
     assert.deepEqual(frames, [
@@ -1669,7 +1669,7 @@ module('Unit | Behaviors | Spring', function () {
     ]);
 
     frames = Array.from(
-      clampedSpring.getFrames({ from: 0, to: 1, velocity: -0.01 })
+      clampedSpring.getFrames({ from: 0, to: 1, velocity: -0.01 }),
     );
     assert.equal(frames.length, 9);
     assert.deepEqual(frames, [
@@ -1712,7 +1712,7 @@ module('Unit | Behaviors | Spring', function () {
     ]);
 
     frames = Array.from(
-      clampedSpring.getFrames({ from: 0, to: 1, velocity: -1 })
+      clampedSpring.getFrames({ from: 0, to: 1, velocity: -1 }),
     );
     assert.equal(frames.length, 2);
     assert.deepEqual(frames, [
@@ -1738,7 +1738,7 @@ module('Unit | Behaviors | Spring', function () {
         to: 1,
         velocity: -0.01,
         delay: 50,
-      })
+      }),
     );
 
     assert.equal(frames.length, 10);

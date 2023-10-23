@@ -1,14 +1,10 @@
 {{#unless this.model.isFastBoot}}
   {{page-title 'Boxel'}}
 
-  <CardCatalogModal />
+  <CardCatalog::Modal />
   <CreateCardModal />
 
-  <Editor::Go
-    @path={{this.model.path}}
-    @openFile={{this.model.openFile}}
-    @openDirs={{this.model.openDirs}}
-  />
+  <Editor::Go @monaco={{this.model.monaco}} />
 
   {{outlet}}
 {{/unless}}
