@@ -480,7 +480,7 @@ export default class CodeMode extends Component<Signature> {
       throw new Error('File is not ready to be written to');
     }
 
-    return file.write(content);
+    return file.write(content, true);
   }
 
   private safeJSONParse(content: string) {
