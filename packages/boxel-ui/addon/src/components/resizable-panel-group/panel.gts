@@ -68,6 +68,8 @@ export default class Panel extends Component<Signature> {
     <style>
       .boxel-panel {
         --resizable-panel-length: '300px;';
+
+        container-type: inline-size;
       }
 
       .boxel-panel.horizontal {
@@ -125,6 +127,18 @@ export default class Panel extends Component<Signature> {
 
       .resize-handler.vertical {
         cursor: row-resize;
+      }
+
+      @container (width <= 30px) {
+        .resize-handler.vertical {
+          visibility: hidden;
+        }
+      }
+
+      @container (height <= 30px) {
+        .resize-handler.horizontal {
+          visibility: hidden;
+        }
       }
 
       .arrow {
