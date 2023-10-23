@@ -312,11 +312,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
     }
     item.scrollIntoView({ behavior: 'smooth', block: 'center' });
     await timeout(1000);
-    // ember-velcro uses visibility: hidden to hide items (vs display: none). 
-    // visibility:hidden alters the geometry of the DOM elements such that 
-    // scrollIntoView thinks the container itself is scrollable (it's not) because of 
-    // the additional height that the hidden velcro-ed items are adding and 
-    // scrolls the entire container (including the header). this is a workaround 
+    // ember-velcro uses visibility: hidden to hide items (vs display: none).
+    // visibility:hidden alters the geometry of the DOM elements such that
+    // scrollIntoView thinks the container itself is scrollable (it's not) because of
+    // the additional height that the hidden velcro-ed items are adding and
+    // scrolls the entire container (including the header). this is a workaround
     // to reset the scroll position for the container. I tried adding middleware to alter
     // the hiding behavior for ember-velcro, but for some reason the state
     // used to indicate if the item is visible is not available to middleware...
@@ -341,7 +341,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
       data-stack-card={{this.cardIdentifier}}
       style={{this.styleForStackedCard}}
     >
-      <CardContainer class={{cn 'card' edit=(eq @item.format 'edit')}} {{ContentElement onSetup=this.setupContainerEl}}>
+      <CardContainer
+        class={{cn 'card' edit=(eq @item.format 'edit')}}
+        {{ContentElement onSetup=this.setupContainerEl}}
+      >
         <Header
           @title={{this.headerTitle}}
           class={{cn 'header' header--icon-hovered=this.isHoverOnRealmIcon}}

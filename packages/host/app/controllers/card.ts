@@ -22,6 +22,8 @@ import OperatorModeStateService, {
   SerializedState as OperatorModeSerializedState,
 } from '@cardstack/host/services/operator-mode-state-service';
 
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+
 import { withPreventDefault } from '../helpers/with-prevent-default';
 import {
   getLiveSearchResults,
@@ -70,6 +72,13 @@ export default class CardController extends Controller {
       () => query,
       realms ? () => realms : undefined,
     );
+  }
+
+  getLiveCard<T extends object>(
+    owner: T,
+    url: URL,
+  ): Promise<CardDef | undefined> {
+    return this.cardService.loadModel(owner, url);
   }
 
   getLiveCards(

@@ -170,6 +170,10 @@ export interface CardSearch {
     ready: Promise<void>;
     isLoading: boolean;
   };
+  getLiveCard: <T extends object>(
+    owner: T,
+    url: URL,
+  ) => Promise<CardDef | undefined>;
   getLiveCards(
     query: Query,
     realms?: string[],
@@ -184,6 +188,19 @@ export function getCards(query: Query, realms?: string[]) {
   let here = globalThis as any;
   let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
   return finder?.getCards(query, realms);
+}
+
+export function getLiveCard<T extends object>(
+  owner: T,
+  url: URL,
+): Promise<CardDef | undefined> {
+  let here = globalThis as any;
+  if (!here._CARDSTACK_CARD_SEARCH) {
+    // on the server we don't need this
+    return Promise.resolve(undefined);
+  }
+  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
+  return finder?.getLiveCard(owner, url);
 }
 
 export function getLiveCards(

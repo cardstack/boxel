@@ -31,6 +31,10 @@ import {
   type CodeRef,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
+import {
+  moduleFrom,
+  codeRefWithAbsoluteURL
+} from '@cardstack/runtime-common/code-ref';
 
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
@@ -48,7 +52,7 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
-import { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import CardCatalogModal from '../card-catalog/modal';
 
@@ -139,6 +143,12 @@ export default class OperatorModeContainer extends Component<Signature> {
       () => query,
       realms ? () => realms : undefined,
     );
+  }
+
+  // public API
+  @action
+  getLiveCard<T extends object>(owner: T, url: URL): Promise<CardDef | undefined> {
+    return this.cardService.loadModel(owner, url);
   }
 
   // public API
@@ -290,12 +300,6 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   });
 
-  private saveCard = task(async (card: CardDef) => {
-    await this.withTestWaiters(async () => {
-      await this.cardService.saveModel(card);
-    });
-  });
-
   private saveSource = task(async (url: URL, content: string) => {
     await this.withTestWaiters(async () => {
       await this.cardService.saveSource(url, content);
@@ -443,15 +447,13 @@ export default class OperatorModeContainer extends Component<Signature> {
           doc?: LooseSingleCardDocument; // fill in card data with values
         },
       ): Promise<CardDef | undefined> => {
-        if ('type' in ref ) {
-          throw new Error('bug: can only create new cards from exported card definition');
-        }
+        let cardModule = new URL(moduleFrom(ref), relativeTo);
         // we make the code ref use an absolute URL for safety in
-        // case it's being created in a different realm than where the card 
+        // the case it's being created in a different realm than where the card 
         // definition comes from
-        ref.module = new URL(ref.module, relativeTo).href;
-        // prefers optional doc to be passed in
-        // use case: to populate default values in a create modal
+        if (opts?.realmURL && !(new RealmPaths(opts.realmURL).inRealm(cardModule))) {
+          ref = codeRefWithAbsoluteURL(ref, relativeTo)
+        }
         let doc: LooseSingleCardDocument = opts?.doc ?? {
           data: {
             meta: {
@@ -476,9 +478,13 @@ export default class OperatorModeContainer extends Component<Signature> {
         return await newItem.request?.promise;
       },
       viewCard: async (card: CardDef, format: Format = 'isolated') => {
+        let liveCard = await here.cardService.loadModel(here, new URL(card.id));
+        if (!liveCard) {
+          throw new Error(`bug: could not load card ${card.id}`);
+        }
         here.addToStack({
           // assert that we are using a live card
-          card: await here.cardService.loadModel(here, new URL(card.id)),
+          card: liveCard,
           format,
           stackIndex,
         });
@@ -733,7 +739,7 @@ export default class OperatorModeContainer extends Component<Signature> {
           <CodeMode
             @delete={{perform this.delete}}
             @saveSourceOnClose={{perform this.saveSource}}
-            @saveCardOnClose={{perform this.saveCard}}
+            @saveCardOnClose={{perform this.write}}
           />
         {{else}}
           <div class='operator-mode__main' style={{this.backgroundImageStyle}}>

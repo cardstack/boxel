@@ -9,11 +9,16 @@ import { tracked } from '@glimmer/tracking';
 
 import { enqueueTask } from 'ember-concurrency';
 
-import type {
-  CodeRef,
-  LooseSingleCardDocument,
+import {
+  Deferred,
+  RealmPaths,
+  type CodeRef,
+  type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-import { Deferred } from '@cardstack/runtime-common/deferred';
+import {
+  moduleFrom,
+  codeRefWithAbsoluteURL
+} from '@cardstack/runtime-common/code-ref';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -78,13 +83,13 @@ export default class CreateCardModal extends Component {
         realmURL?: URL;
       },
     ) => {
-      if ('type' in ref ) {
-        throw new Error('bug: can only create new cards from exported card definition');
-      }
+      let cardModule = new URL(moduleFrom(ref), relativeTo);
       // we make the code ref use an absolute URL for safety in
-      // case it's being created in a different realm than where the card 
+      // the case it's being created in a different realm than where the card 
       // definition comes from
-      ref.module = new URL(ref.module, relativeTo).href;
+      if (opts?.realmURL && !(new RealmPaths(opts.realmURL).inRealm(cardModule))) {
+        ref = codeRefWithAbsoluteURL(ref, relativeTo)
+      }
       let doc: LooseSingleCardDocument = opts?.doc ?? {
         data: {
           meta: {

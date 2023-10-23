@@ -154,17 +154,45 @@ export default class CardService extends Service {
     return card as CardDef;
   }
 
+  private initializeModel<T extends Object>(owner: T, card: CardDef) {
+    if (!card.id) {
+      throw new Error(`cannot set live card model on an unsaved card`);
+    }
+    if (this.liveCards.has(card.id)) {
+      throw new Error(
+        `cannot set live card model for ${card.id}--a live model already exists for this card`,
+      );
+    }
+    let realmURL = card[this.api.realmURL];
+    if (!realmURL) {
+      throw new Error(`bug: cannot determine realm for card ${card.id}`);
+    }
+    this.liveCards.set(card.id, {
+      card,
+      realmURL,
+      subscribers: new Set([owner]),
+    });
+  }
+
   // TODO consider exposing this as API in @cardstack/runtime-common/index
-  async loadModel<T extends object>(parent: T, url: URL): Promise<CardDef> {
+  async loadModel<T extends object>(
+    owner: T,
+    url: URL,
+  ): Promise<CardDef | undefined> {
     let entry = this.liveCards.get(url.href);
     if (entry) {
-      if (!entry.subscribers.has(parent)) {
-        registerDestructor(parent, () => this.unsubscribeFromCards(parent));
+      if (!entry.subscribers.has(owner)) {
+        registerDestructor(owner, () => this.unsubscribeFromCards(owner));
       }
-      entry.subscribers.add(parent);
+      entry.subscribers.add(owner);
       return entry.card;
     }
-    let card = await this.loadStaticModel(url);
+    let card: CardDef | undefined;
+    try {
+      card = await this.loadStaticModel(url);
+    } catch (e: any) {
+      return undefined;
+    }
     let realmURL = await this.getRealmURL(card);
     if (!realmURL) {
       throw new Error(`bug: cannot determine realm URL for card ${card.id}`);
@@ -195,7 +223,7 @@ export default class CardService extends Service {
     this.liveCards.set(card.id, {
       card,
       realmURL,
-      subscribers: new Set([parent]),
+      subscribers: new Set([owner]),
     });
     return card;
   }
@@ -318,6 +346,7 @@ export default class CardService extends Service {
       // to relative URL's as it serializes the cards
       let realmUrl = await this.getRealmURL(card);
       let json = await this.saveCardDocument(doc, realmUrl);
+      let isNew = !card.id;
       cardSaveTimes.set(card, Date.now());
 
       let result: CardDef | undefined;
@@ -330,6 +359,11 @@ export default class CardService extends Service {
         // instance that does not yet have an id is still the same instance after an
         // ID has been assigned by the server.
         result = (await this.api.updateFromSerialized(card, json)) as CardDef;
+      }
+      if (isNew && result) {
+        // TODO need to think about `this`--it means we hold on to this model
+        // for the life of the service...
+        this.initializeModel(this, result);
       }
       if (this.subscriber) {
         this.subscriber(json);

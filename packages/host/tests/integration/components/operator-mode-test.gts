@@ -2272,6 +2272,7 @@ module('Integration | operator-mode', function (hooks) {
       .hasAttribute('src', 'https://example-icon.test');
 
     await click('[data-test-author');
+    await waitFor('[data-test-stack-card-index="1"]');
     assert.dom('[data-test-stack-card-index]').exists({ count: 2 });
     assert
       .dom('[data-test-stack-card-index="1"] [data-test-boxel-header-title]')

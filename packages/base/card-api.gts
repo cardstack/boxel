@@ -31,6 +31,7 @@ import {
   humanReadable,
   maybeURL,
   maybeRelativeURL,
+  getLiveCard,
   type Meta,
   type CardFields,
   type Relationship,
@@ -878,8 +879,11 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     if (value?.links?.self == null) {
       return null;
     }
-    let cachedInstance = identityContext.identities.get(value.links.self);
+    let cachedInstance =
+      (await getLiveCard(doc, new URL(value.links.self, relativeTo))) ??
+      identityContext.identities.get(value.links.self);
     if (cachedInstance) {
+      cachedInstance[isSavedInstance] = true;
       return cachedInstance as BaseInstanceType<CardT>;
     }
     let resourceId = new URL(value.links.self, relativeTo).href;
@@ -1185,8 +1189,11 @@ class LinksToMany<FieldT extends CardDefConstructor>
         if (value.links.self == null) {
           return null;
         }
-        let cachedInstance = identityContext.identities.get(value.links.self);
+        let cachedInstance =
+          (await getLiveCard(doc, new URL(value.links.self, relativeTo))) ??
+          identityContext.identities.get(value.links.self);
         if (cachedInstance) {
+          cachedInstance[isSavedInstance] = true;
           return cachedInstance;
         }
         let resourceId = new URL(value.links.self, relativeTo).href;
