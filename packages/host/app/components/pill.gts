@@ -9,18 +9,22 @@ export interface PillSignature {
     icon: [];
     default: [];
   };
-  Element: HTMLButtonElement;
+  Element: HTMLButtonElement | HTMLDivElement;
 }
 
 let noop = () => {};
 
 export default class Pill extends Component<PillSignature> {
-  onClick() {
-    this.args.onClick?.();
+  get wrapperComponent() {
+    if (this.args.onClick) {
+      return ButtonPill;
+    } else {
+      return DivPill;
+    }
   }
 
   <template>
-    <button
+    <this.wrapperComponent
       class='pill'
       {{on 'click' (if @onClick @onClick noop)}}
       ...attributes
@@ -31,7 +35,7 @@ export default class Pill extends Component<PillSignature> {
       <section>
         {{yield}}
       </section>
-    </button>
+    </this.wrapperComponent>
 
     <style>
       .pill {
@@ -64,5 +68,39 @@ export default class Pill extends Component<PillSignature> {
         height: 20px;
       }
     </style>
+  </template>
+}
+
+interface ButtonSignature {
+  Args: {
+    onClick: () => void;
+  };
+  Blocks: {
+    default: [];
+  };
+  Element: HTMLButtonElement;
+}
+
+class ButtonPill extends Component<ButtonSignature> {
+  <template>
+    <button {{on 'click' (if @onClick @onClick noop)}} ...attributes>
+      {{yield}}
+    </button>
+  </template>
+}
+
+interface DivSignature {
+  Args: {};
+  Blocks: {
+    default: [];
+  };
+  Element: HTMLDivElement;
+}
+
+class DivPill extends Component<DivSignature> {
+  <template>
+    <div ...attributes>
+      {{yield}}
+    </div>
   </template>
 }
