@@ -244,7 +244,7 @@ export default class CardSchemaEditor extends Component<Signature> {
     >
       <div class='header'>
         <Pill
-          @onClick={{(fn this.openCardDefinition @cardType.module)}}
+          @onClick={{fn this.openCardDefinition @cardType.module}}
           data-test-card-schema-navigational-button
         >
           <:icon>
