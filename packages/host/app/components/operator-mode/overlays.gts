@@ -50,6 +50,14 @@ export default class OperatorModeOverlays extends Component<Signature> {
     );
   }
 
+  @action
+  isIncludeHeader(renderedCard: RenderedCardForOverlayActions) {
+    return (
+      this.isEmbeddedCard(renderedCard) &&
+      renderedCard.format !== 'atom'
+    );
+  }
+
   <template>
     {{#each this.renderedCardsForOverlayActionsWithEvents as |renderedCard|}}
       {{#let
@@ -67,7 +75,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
           data-test-overlay-card={{card.id}}
           data-test-overlay-card-display-name={{cardTypeDisplayName card}}
         >
-          {{#if (this.isEmbeddedCard renderedCard)}}
+          {{#if (this.isIncludeHeader renderedCard)}}
             <OperatorModeOverlayItemHeader
               @item={{renderedCard}}
               @openOrSelectCard={{this.openOrSelectCard}}
