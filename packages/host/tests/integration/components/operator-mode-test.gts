@@ -209,11 +209,36 @@ module('Integration | operator-mode', function (hooks) {
           };
         }
       `,
+      'country.gts': `
+        import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        import { FieldContainer } from '@cardstack/boxel-ui/components';
+
+        export class Country extends CardDef {
+          static displayName = 'Country';
+          @field name = contains(StringCard);
+          @field title = contains(StringCard, {
+            computeVia(this: Country) {
+              return this.name;
+            },
+          });
+        }
+      `,
+      'trips.gts': `
+        import { field, Component, FieldDef, linksToMany } from "https://cardstack.com/base/card-api";
+        import { Country } from "./country";
+
+        export class Trips extends FieldDef {
+          static displayName = 'Trips';
+          @field countries = linksToMany(Country);
+        }
+      `,
       'person.gts': `
         import { contains, linksTo, field, Component, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
         import { Pet } from "./pet";
         import { Address } from "./address";
+        import { Trips } from "./trips";
 
         export class Person extends CardDef {
           static displayName = 'Person';
@@ -231,6 +256,7 @@ module('Integration | operator-mode', function (hooks) {
             },
           });
           @field address = contains(Address);
+          @field trips = contains(Trips);
           static isolated = class Isolated extends Component<typeof this> {
             <template>
               <h2 data-test-person={{@model.firstName}}>
@@ -242,10 +268,41 @@ module('Integration | operator-mode', function (hooks) {
               Pet: <@fields.pet/>
               Friends: <@fields.friends/>
               <div data-test-addresses>Address: <@fields.address/></div>
+              <div data-test-trips>Trips: <@fields.trips/></div>
             </template>
           }
         }
       `,
+      'Country/united-states.json': {
+        data: {
+          type: 'card',
+          id: `${testRealmURL}Country/united-states`,
+          attributes: {
+            name: 'United States',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}country`,
+              name: 'Country',
+            },
+          },
+        },
+      },
+      'Country/japan.json': {
+        data: {
+          type: 'card',
+          id: `${testRealmURL}Country/japan`,
+          attributes: {
+            name: 'Japan',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}country`,
+              name: 'Country',
+            },
+          },
+        },
+      },
       'Pet/mango.json': {
         data: {
           type: 'card',
@@ -2599,5 +2656,48 @@ module('Integration | operator-mode', function (hooks) {
 
     await click(`[data-test-operator-mode-stack]`);
     assert.dom(`[data-test-search-sheet="closed"]`).exists();
+  });
+
+  test('shows cards using atom format for linksToMany field within FieldDef', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
+    await click('[data-test-edit-button]');
+
+    assert.dom('[data-test-field="trips"] [data-test-add-new]').exists();
+    await click('[data-test-links-to-many="countries"] [data-test-add-new]');
+    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Country/japan"]`);
+    await click(`[data-test-select="${testRealmURL}Country/japan"]`);
+    await click('[data-test-card-catalog-go-button]');
+
+    await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
+    assert.dom('[data-test-pill-item]').exists({ count: 1});
+    assert
+      .dom('[data-test-field="trips"]')
+      .containsText('Japan');
+
+    await click('[data-test-links-to-many="countries"] [data-test-add-new]');
+    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Country/united-states"]`);
+    await click(`[data-test-select="${testRealmURL}Country/united-states"]`);
+    await click('[data-test-card-catalog-go-button]');
+
+    await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
+    assert.dom('[data-test-pill-item]').exists({ count: 2});
+    assert
+      .dom('[data-test-field="trips"]')
+      .containsText('Japan United States');
+  
+    await click('[data-test-pill-item] [data-test-remove-card]');
+    assert.dom('[data-test-pill-item]').exists({ count: 1});
+    await click('[data-test-pill-item] [data-test-remove-card]');
+    assert.dom('[data-test-pill-item]').exists({ count: 0});
   });
 });

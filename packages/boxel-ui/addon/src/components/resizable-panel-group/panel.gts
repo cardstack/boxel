@@ -35,7 +35,7 @@ export default class Panel extends Component<Signature> {
   <template>
     <div
       id={{this.id}}
-      class='boxel-panel-{{@orientation}}'
+      class='boxel-panel {{@orientation}}'
       style={{if
         (eq @orientation 'horizontal')
         (cssVars
@@ -66,16 +66,22 @@ export default class Panel extends Component<Signature> {
       </div>
     {{/unless}}
     <style>
-      .boxel-panel-horizontal {
-        --boxel-panel-width: '300px';
+      .boxel-panel {
+        --resizable-panel-length: '300px;';
+
+        container-type: inline-size;
+      }
+
+      .boxel-panel.horizontal {
+        --boxel-panel-width: var(--resizable-panel-length);
         --boxel-panel-min-width: 'none';
 
         width: var(--boxel-panel-width);
         min-width: var(--boxel-panel-min-width);
       }
 
-      .boxel-panel-vertical {
-        --boxel-panel-height: '300px';
+      .boxel-panel.vertical {
+        --boxel-panel-height: var(--resizable-panel-length);
         --boxel-panel-min-height: 'none';
 
         height: var(--boxel-panel-height);
@@ -87,7 +93,8 @@ export default class Panel extends Component<Signature> {
         align-items: center;
         --boxel-panel-resize-handler-height: 100px;
         --boxel-panel-resize-handler-width: 5px;
-        --boxel-panel-resize-handler-background-color: var(--boxel-highlight);
+        --boxel-panel-resize-handler-background-color: var(--boxel-450);
+        --boxel-panel-resize-handler-hover-background-color: var(--boxel-highlight);
 
         padding: var(--boxel-sp-xxxs);
       }
@@ -97,12 +104,16 @@ export default class Panel extends Component<Signature> {
         justify-content: center;
         --boxel-panel-resize-handler-width: 100px;
         --boxel-panel-resize-handler-height: 5px;
-        --boxel-panel-resize-handler-background-color: var(--boxel-highlight);
+        --boxel-panel-resize-handler-background-color: var(--boxel-450);
+        --boxel-panel-resize-handler-hover-background-color: var(--boxel-highlight);
 
         padding: var(--boxel-sp-xxxs);
       }
 
       .resize-handler {
+        width: var(--boxel-panel-resize-handler-width);
+        height: var(--boxel-panel-resize-handler-height);
+
         border: none;
         border-radius: var(--boxel-border-radius-xl);
         padding: 0;
@@ -112,18 +123,28 @@ export default class Panel extends Component<Signature> {
         z-index: 2;
       }
 
+      .resize-handler:hover {
+        background-color: var(--boxel-panel-resize-handler-hover-background-color);
+      }
+
       .resize-handler.horizontal {
         cursor: col-resize;
-
-        height: var(--boxel-panel-resize-handler-height);
-        width: var(--boxel-panel-resize-handler-width);
       }
 
       .resize-handler.vertical {
         cursor: row-resize;
+      }
 
-        width: var(--boxel-panel-resize-handler-width);
-        height: var(--boxel-panel-resize-handler-height);
+      @container (width <= 30px) {
+        .resize-handler.vertical {
+          visibility: hidden;
+        }
+      }
+
+      @container (height <= 30px) {
+        .resize-handler.horizontal {
+          visibility: hidden;
+        }
       }
 
       .arrow {
@@ -144,6 +165,10 @@ export default class Panel extends Component<Signature> {
           var(--boxel-panel-resize-handler-background-color);
       }
 
+      .resize-handler:hover .arrow.right {
+        border-left-color: var(--boxel-panel-resize-handler-hover-background-color);
+      }
+
       .arrow.left {
         top: 50%;
         left: calc(var(--boxel-panel-resize-handler-width) * -1);
@@ -152,6 +177,10 @@ export default class Panel extends Component<Signature> {
         border-bottom: 6px solid transparent;
         border-right: 10px solid
           var(--boxel-panel-resize-handler-background-color);
+      }
+
+      .resize-handler:hover .arrow.left {
+        border-right-color: var(--boxel-panel-resize-handler-hover-background-color);
       }
 
       .arrow.top {
@@ -164,6 +193,10 @@ export default class Panel extends Component<Signature> {
           var(--boxel-panel-resize-handler-background-color);
       }
 
+      .resize-handler:hover .arrow.top {
+        border-bottom-color: var(--boxel-panel-resize-handler-hover-background-color);
+      }
+
       .arrow.bottom {
         left: 50%;
         bottom: calc(var(--boxel-panel-resize-handler-height) * -1);
@@ -172,6 +205,10 @@ export default class Panel extends Component<Signature> {
         border-right: 6px solid transparent;
         border-top: 10px solid
           var(--boxel-panel-resize-handler-background-color);
+      }
+
+      .resize-handler:hover .arrow.bottom {
+        border-top-color: var(--boxel-panel-resize-handler-hover-background-color);
       }
     </style>
   </template>

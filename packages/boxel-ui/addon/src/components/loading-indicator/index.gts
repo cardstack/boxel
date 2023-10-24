@@ -11,7 +11,11 @@ interface Signature {
 }
 
 const LoadingIndicator: TemplateOnlyComponent<Signature> = <template>
-  <div class='boxel-loading-indicator' ...attributes>
+  <div
+    class='boxel-loading-indicator'
+    data-test-loading-indicator
+    ...attributes
+  >
     <LoadingIndicatorIcon
       style={{cssVar icon-color=(if @color @color '#000')}}
       role='presentation'

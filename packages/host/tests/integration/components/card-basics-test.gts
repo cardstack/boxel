@@ -2313,44 +2313,39 @@ module('Integration | card-basics', function (hooks) {
         '[data-test-field="traveler"] [data-test-field="travelerName"] input',
       )
       .hasValue('Mama Leone');
+
     assert
       .dom(
-        '[data-test-field="countriesVisited"] [data-test-plural-view-format="atom"]',
+        '[data-test-links-to-many="countriesVisited"] [data-test-pills] [data-test-pill-item] [data-test-card-format="atom"]',
       )
       .exists('atom layout is rendered');
     assert
       .dom(
-        '[data-test-field="countriesVisited"] [data-test-plural-view="linksToMany"]',
+        '[data-test-links-to-many="countriesVisited"] [data-test-pills] [data-test-pill-item] [data-test-card-format="atom"]',
       )
-      .hasClass('atom-format', 'field has correct class');
+      .hasClass('atom-card', 'field has correct class');
+
     assert
       .dom(
-        '[data-test-field="countriesVisited"] [data-test-plural-view-format="atom"] [data-test-plural-view-item]',
+        '[data-test-field="countriesVisited"] [data-test-pill-item]',
       )
       .exists({ count: 3 });
     assert
       .dom(
-        '[data-test-plural-view-format="atom"] [data-test-plural-view-item="0"]',
+        '[data-test-pill-item="0"]',
       )
       .hasText('🇺🇸 United States');
     assert
       .dom(
-        '[data-test-plural-view-format="atom"] [data-test-plural-view-item="0"] > [data-test-field-component-card]',
-      )
-      .hasClass('atom-card', 'atom view field item has correct class');
-    assert
-      .dom(
-        '[data-test-plural-view-format="atom"] [data-test-plural-view-item="1"]',
+        '[data-test-pill-item="1"]',
       )
       .hasText('🇨🇦 Canada');
-    // TODO: Add assertions for add/remove buttons when design is implemented
 
     assert
       .dom(
         '[data-test-field="traveler2"] [data-test-field="travelerName"] input',
       )
       .hasValue('Papa Leone');
-    // TODO: Add assertions for empty nested linksToMany field
 
     assert
       .dom(

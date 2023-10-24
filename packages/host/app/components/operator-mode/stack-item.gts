@@ -94,6 +94,7 @@ export interface RenderedCardForOverlayActions {
   card: CardDef;
   fieldType: FieldType | undefined;
   fieldName: string | undefined;
+  format: Format | 'data';
   stackItem: StackItem;
 }
 
@@ -144,6 +145,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
           card: entry.meta.card,
           fieldType: entry.meta.fieldType,
           fieldName: entry.meta.fieldName,
+          format: entry.meta.format,
           stackItem: this.args.item,
         }))
     );

@@ -207,11 +207,24 @@ export default class CodeMode extends Component<Signature> {
     return this.maybeMonacoSDK && isReady(this.currentOpenFile);
   }
 
-  private get schemaEditorIncompatible() {
-    return this.readyFile.isBinary || this.isNonCardJson;
+  private get schemaEditorIncompatibleFile() {
+    return (
+      this.readyFile.isBinary || this.isNonCardJson || !this.isValidSchemaFile
+    );
   }
 
-  private isNonCardJson() {
+  private get isValidSchemaFile() {
+    return this.declarations.some((d) => isCardOrFieldDeclaration(d));
+  }
+
+  private get schemaEditorIncompatibleItem() {
+    if (!this.selectedDeclaration) {
+      return;
+    }
+    return !isCardOrFieldDeclaration(this.selectedDeclaration);
+  }
+
+  private get isNonCardJson() {
     return (
       this.readyFile.name.endsWith('.json') &&
       !isCardDocumentString(this.readyFile.content)
@@ -808,14 +821,30 @@ export default class CodeMode extends Component<Signature> {
                     @card={{this.selectedCardOrField.cardOrField}}
                     @cardTypeResource={{this.selectedCardOrField.cardType}}
                   />
-                {{else if this.schemaEditorIncompatible}}
+                {{else if this.schemaEditorIncompatibleFile}}
                   <div
                     class='incompatible-schema-editor'
-                    data-test-schema-editor-incompatible
-                  >Schema Editor cannot be used with this file type</div>
+                    data-test-schema-editor-incompatible-file
+                  >
+                    Schema Editor cannot be used with this file type.
+                  </div>
+                {{else if
+                  (and this.isValidSchemaFile this.schemaEditorIncompatibleItem)
+                }}
+                  <div
+                    class='incompatible-schema-editor'
+                    data-test-schema-editor-incompatible-item
+                  >
+                    Schema Editor cannot be used for selected
+                    {{this.selectedDeclaration.type}}
+                    "{{this.selectedDeclaration.localName}}".</div>
                 {{else if this.cardError}}
                   {{this.cardError.message}}
                 {{/if}}
+              {{else if this.isLoading}}
+                <div class='loading'>
+                  <LoadingIndicator />
+                </div>
               {{/if}}
             </div>
           </ResizablePanel>
