@@ -23,7 +23,7 @@ import {
 } from '../../helpers';
 import { renderComponent, renderCard } from '../../helpers/render-component';
 
-module('Integration | card/field separation test', function (hooks) {
+module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   let loader: Loader;
   let cardApi: typeof import('https://cardstack.com/base/card-api');
   let string: typeof import('https://cardstack.com/base/string');
