@@ -158,7 +158,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   // public API
   @action
   trackLiveCard<T extends object>(owner: T, card: CardDef) {
-    this.cardService.trackLiveCard(owner, card);
+    return this.cardService.trackLiveCard(owner, card);
   }
 
   // public API

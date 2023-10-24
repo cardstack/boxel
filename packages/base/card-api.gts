@@ -909,7 +909,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       identityContext,
     );
     deserialized[isSavedInstance] = true;
-    trackLiveCard(loader, deserialized);
+    deserialized = trackLiveCard(loader, deserialized);
     return deserialized;
   }
 
@@ -1237,7 +1237,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
           identityContext,
         );
         deserialized[isSavedInstance] = true;
-        trackLiveCard(loader, deserialized);
+        deserialized = trackLiveCard(loader, deserialized);
         return deserialized;
       });
 

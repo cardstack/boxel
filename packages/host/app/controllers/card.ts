@@ -83,7 +83,7 @@ export default class CardController extends Controller {
   }
 
   trackLiveCard<T extends object>(owner: T, card: CardDef) {
-    this.cardService.trackLiveCard(owner, card);
+    return this.cardService.trackLiveCard(owner, card);
   }
 
   getLiveCards(

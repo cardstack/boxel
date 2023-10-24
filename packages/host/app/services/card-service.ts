@@ -154,13 +154,13 @@ export default class CardService extends Service {
     return card as CardDef;
   }
 
-  trackLiveCard<T extends Object>(owner: T, card: CardDef) {
+  trackLiveCard<T extends Object>(owner: T, card: CardDef): CardDef {
     if (!card.id) {
       throw new Error(`cannot set live card model on an unsaved card`);
     }
-    if (this.liveCards.has(card.id)) {
-      // we're already tracking this card
-      return;
+    let alreadyTracked = this.liveCards.get(card.id);
+    if (alreadyTracked) {
+      return alreadyTracked.card;
     }
     let realmURL = card[this.api.realmURL];
     if (!realmURL) {
@@ -171,6 +171,7 @@ export default class CardService extends Service {
       realmURL,
       subscribers: new Set([owner]),
     });
+    return card;
   }
 
   async loadModel<T extends object>(
@@ -371,7 +372,7 @@ export default class CardService extends Service {
         card.id = json.data.id;
       }
       if (isNew && result) {
-        this.trackLiveCard(owner, result);
+        result = this.trackLiveCard(owner, result);
       }
       if (this.subscriber) {
         this.subscriber(json);
