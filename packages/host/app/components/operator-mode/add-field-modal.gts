@@ -219,7 +219,7 @@ export default class AddFieldModal extends Component<Signature> {
         min-height: 3em;
       }
 
-      .card-chooser-area button {
+      .card-chooser-area button.change {
         background-color: transparent;
         border: none;
         color: var(--boxel-highlight);
@@ -251,7 +251,7 @@ export default class AddFieldModal extends Component<Signature> {
         <FieldContainer @label='Field Type'>
           <div class='card-chooser-area'>
             {{#if this.chosenCatalogEntryRefCard}}
-              {{! FIXME border is missing etc }}
+              <Pill @inert={{true}} data-test-selected-field-realm-icon>
                 <:icon>
                   {{#if this.fieldModuleURL.href}}
                     <RealmInfoProvider @fileURL={{this.fieldModuleURL.href}}>
@@ -275,7 +275,7 @@ export default class AddFieldModal extends Component<Signature> {
 
             <button
               {{on 'click' this.chooseCard}}
-              class='{{if this.chosenCatalogEntryRefCard "pull-right"}}'
+              class='change {{if this.chosenCatalogEntryRefCard "pull-right"}}'
               data-test-choose-card-button
             >
               {{#if this.chosenCatalogEntryRefCard}}
