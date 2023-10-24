@@ -73,6 +73,8 @@ import {
   Download,
 } from '@cardstack/boxel-ui/icons';
 
+import config from '@cardstack/host/config/environment';
+
 const waiter = buildWaiter('operator-mode-container:write-waiter');
 
 const { APP } = ENV;
@@ -123,6 +125,12 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
+    if (config.environment === 'test') {
+      (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
+      registerDestructor(this, () => {
+        delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
+      });
+    }
     this.constructRecentCards.perform();
     registerDestructor(this, () => {
       this.operatorModeStateService.clearStacks();
