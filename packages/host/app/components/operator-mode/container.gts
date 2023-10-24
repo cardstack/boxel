@@ -123,10 +123,8 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
-    (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
     this.constructRecentCards.perform();
     registerDestructor(this, () => {
-      delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
       this.operatorModeStateService.clearStacks();
     });
   }
