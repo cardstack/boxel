@@ -8,8 +8,8 @@ import IconButton from '../icon-button/index.gts';
 interface Signature {
   Args: {
     hideIcon?: boolean;
-    iconWidth?: string;
     iconHeight?: string;
+    iconWidth?: string;
     variant?: 'full-width' | 'pill';
   };
   Blocks: {
