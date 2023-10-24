@@ -140,6 +140,9 @@ module('Acceptance | operator mode tests', function (hooks) {
           @field friends = linksToMany(Pet);
           @field firstLetterOfTheName = contains(StringCard, {
             computeVia: function (this: Chain) {
+              if (!this.firstName) {
+                return;
+              }
               return this.firstName[0];
             },
           });
@@ -165,6 +168,25 @@ module('Acceptance | operator mode tests', function (hooks) {
         }
       `,
       'README.txt': `Hello World`,
+      'person-entry.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            title: 'Person Card',
+            description: 'Catalog entry for Person Card',
+            ref: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/catalog-entry',
+              name: 'CatalogEntry',
+            },
+          },
+        },
+      },
       'Pet/mango.json': {
         data: {
           attributes: {
