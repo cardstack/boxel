@@ -164,6 +164,9 @@ export default class CardService extends Service {
       return entry.card;
     }
     let card = await this.loadStaticModel(url);
+    if (!this.loaderService.usingCurrentLoader(card)) {
+      throw new Error('Using wrong loader');
+    }
     let realmURL = await this.getRealmURL(card);
     if (!realmURL) {
       throw new Error(`bug: cannot determine realm URL for card ${card.id}`);
@@ -190,6 +193,9 @@ export default class CardService extends Service {
           },
         ),
       });
+    }
+    if (!this.loaderService.usingCurrentLoader(card)) {
+      throw new Error('Using wrong loader');
     }
     this.liveCards.set(card.id, {
       card,
@@ -309,6 +315,9 @@ export default class CardService extends Service {
       // to relative URL's as it serializes the cards
       let realmUrl = await this.getRealmURL(card);
       let json = await this.saveCardDocument(doc, realmUrl);
+      if (!this.loaderService.usingCurrentLoader(card)) {
+        throw new Error('Using wrong loader');
+      }
       cardSaveTimes.set(card, Date.now());
 
       let result: CardDef | undefined;
@@ -468,6 +477,9 @@ export default class CardService extends Service {
     if (!(maybeIndexCard instanceof this.api.CardDef)) {
       return false;
     }
+    if (!this.loaderService.usingCurrentLoader(maybeIndexCard)) {
+      throw new Error('Using wrong loader');
+    }
     let realmURL = maybeIndexCard[this.api.realmURL]?.href;
     if (!realmURL) {
       throw new Error(
@@ -479,11 +491,17 @@ export default class CardService extends Service {
 
   async getRealmInfo(card: CardDef): Promise<RealmInfo | undefined> {
     await this.apiModule.loaded;
+    if (!this.loaderService.usingCurrentLoader(card)) {
+      throw new Error('Using wrong loader');
+    }
     return card[this.api.realmInfo];
   }
 
   async getRealmURL(card: CardDef): Promise<URL | undefined> {
     await this.apiModule.loaded;
+    if (!this.loaderService.usingCurrentLoader(card)) {
+      throw new Error('Using wrong loader');
+    }
     return card[this.api.realmURL];
   }
 
