@@ -126,10 +126,7 @@ export default class Selector extends Component<Signature> {
                   <div class='selector-item'>
                     {{#if selectorItem.declaration.exportedAs}}
                       <span class='exported-arrow'>
-                        <DiagonalArrowLeftUp
-                          width='20'
-                          height='20'
-                        />
+                        <DiagonalArrowLeftUp width='20' height='20' />
                       </span>
                       <span
                         class='exported'

@@ -69,13 +69,13 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
       gap: var(--boxel-sp-xxxs);
       box-sizing: border-box;
       width: 100%;
-      min-height: 5rem;
+      min-height: 3.75rem;
       padding: var(--boxel-sp-xs);
-      background-color: var(--boxel-light-100);
+      background-color: var(--boxel-100);
       border: none;
       border-radius: var(--boxel-form-control-border-radius);
       color: var(--boxel-highlight);
-      font: 500 var(--boxel-font-sm);
+      font: 700 var(--boxel-font-sm);
       letter-spacing: var(--boxel-lsp-xs);
       transition: background-color var(--boxel-transition);
     }
