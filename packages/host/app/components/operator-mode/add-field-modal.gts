@@ -216,7 +216,6 @@ export default class AddFieldModal extends Component<Signature> {
 
       .card-chooser-area {
         display: flex;
-        min-height: 3em;
       }
 
       .card-chooser-area button.change {

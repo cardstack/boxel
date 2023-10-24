@@ -132,7 +132,7 @@ export default class CardSchemaEditor extends Component<Signature> {
         display: inline-flex;
         font: 700 var(--boxel-font);
         letter-spacing: var(--boxel-lsp-xs);
-        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xxxxxs) var(--boxel-sp-xxs);
         background-color: var(--boxel-200);
         border-radius: var(--boxel-border-radius-sm);
         margin-right: var(--boxel-sp-xxs);
