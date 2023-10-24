@@ -252,7 +252,6 @@ export default class AddFieldModal extends Component<Signature> {
           <div class='card-chooser-area'>
             {{#if this.chosenCatalogEntryRefCard}}
               {{! FIXME border is missing etc }}
-              <Pill data-test-selected-field-realm-icon>
                 <:icon>
                   {{#if this.fieldModuleURL.href}}
                     <RealmInfoProvider @fileURL={{this.fieldModuleURL.href}}>

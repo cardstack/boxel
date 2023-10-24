@@ -1,9 +1,8 @@
-import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 
 export interface PillSignature {
   Args: {
-    onClick?: () => void;
+    inert?: boolean;
   };
   Blocks: {
     icon: [];
@@ -12,21 +11,11 @@ export interface PillSignature {
   Element: HTMLButtonElement | HTMLDivElement;
 }
 
-let noop = () => {};
-
 export default class Pill extends Component<PillSignature> {
-  get wrapperComponent() {
-    if (this.args.onClick) {
-      return ButtonPill;
-    } else {
-      return DivPill;
-    }
-  }
-
   <template>
-    <this.wrapperComponent
-      class='pill'
-      {{on 'click' (if @onClick @onClick noop)}}
+    <button
+      class='pill {{if @inert "inert"}}'
+      disabled={{@inert}}
       ...attributes
     >
       <figure class='icon'>
@@ -35,7 +24,7 @@ export default class Pill extends Component<PillSignature> {
       <section>
         {{yield}}
       </section>
-    </this.wrapperComponent>
+    </button>
 
     <style>
       .pill {
@@ -46,6 +35,11 @@ export default class Pill extends Component<PillSignature> {
         border-radius: var(--boxel-border-radius-sm);
         font: 700 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
+      }
+
+      .pill.inert {
+        border: 0;
+        background-color: var(--boxel-100);
       }
 
       .pill:hover {
@@ -68,39 +62,5 @@ export default class Pill extends Component<PillSignature> {
         height: 20px;
       }
     </style>
-  </template>
-}
-
-interface ButtonSignature {
-  Args: {
-    onClick: () => void;
-  };
-  Blocks: {
-    default: [];
-  };
-  Element: HTMLButtonElement;
-}
-
-class ButtonPill extends Component<ButtonSignature> {
-  <template>
-    <button {{on 'click' (if @onClick @onClick noop)}} ...attributes>
-      {{yield}}
-    </button>
-  </template>
-}
-
-interface DivSignature {
-  Args: {};
-  Blocks: {
-    default: [];
-  };
-  Element: HTMLDivElement;
-}
-
-class DivPill extends Component<DivSignature> {
-  <template>
-    <div ...attributes>
-      {{yield}}
-    </div>
   </template>
 }
