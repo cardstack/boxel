@@ -382,7 +382,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   test<
     TestContextWithSave & TestContextWithSSE
   >('card instance change made in card editor is auto-saved', async function (assert) {
-    assert.expect(3);
+    assert.expect(2);
 
     let expectedEvents = [
       {
@@ -395,9 +395,11 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     ];
     let expected: LooseSingleCardDocument = {
       data: {
+        id: `${testRealmURL}Pet/mango`,
         type: 'card',
         attributes: {
           name: 'MangoXXX',
+          title: 'MangoXXX',
           description: null,
           thumbnailURL: null,
         },
@@ -432,7 +434,15 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       if (typeof json === 'string') {
         throw new Error('expected JSON save data');
       }
-      assert.strictEqual(json.data.attributes?.name, 'MangoXXX');
+      delete json.data.links;
+      delete json.data.meta.realmInfo;
+      delete json.data.meta.realmURL;
+      delete json.data.meta.lastModified;
+      assert.strictEqual(
+        stringify(json),
+        stringify(expected),
+        'saved card is correct',
+      );
     });
 
     await click('[data-test-preview-card-footer-button-edit]');
@@ -446,11 +456,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       },
     );
     await waitFor('[data-test-save-idle]');
-    assert.strictEqual(
-      getMonacoContent(),
-      JSON.stringify(expected, null, 2),
-      'monaco content has updated',
-    );
   });
 
   test<TestContextWithSave>('non-card instance change made in monaco editor is auto-saved', async function (assert) {

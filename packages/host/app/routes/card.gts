@@ -63,6 +63,9 @@ export default class RenderCard extends Route<Model | null> {
 
     try {
       let model = await this.cardService.loadModel(this, url);
+      if (!model) {
+        throw new Error(`Could not find ${url}`);
+      }
 
       if (operatorModeEnabled) {
         let operatorModeStateObject = JSON.parse(operatorModeState);

@@ -154,17 +154,48 @@ export default class CardService extends Service {
     return card as CardDef;
   }
 
-  // TODO consider exposing this as API in @cardstack/runtime-common/index
-  async loadModel<T extends object>(parent: T, url: URL): Promise<CardDef> {
+  trackLiveCard<T extends Object>(owner: T, card: CardDef): CardDef {
+    if (!card.id) {
+      throw new Error(`cannot set live card model on an unsaved card`);
+    }
+    let alreadyTracked = this.liveCards.get(card.id);
+    if (alreadyTracked) {
+      return alreadyTracked.card;
+    }
+    let realmURL = card[this.api.realmURL];
+    if (!realmURL) {
+      throw new Error(`bug: cannot determine realm for card ${card.id}`);
+    }
+    this.liveCards.set(card.id, {
+      card,
+      realmURL,
+      subscribers: new Set([owner]),
+    });
+    return card;
+  }
+
+  async loadModel<T extends object>(
+    owner: T,
+    url: URL,
+    opts?: { cachedOnly?: true },
+  ): Promise<CardDef | undefined> {
     let entry = this.liveCards.get(url.href);
     if (entry) {
-      if (!entry.subscribers.has(parent)) {
-        registerDestructor(parent, () => this.unsubscribeFromCards(parent));
+      if (!entry.subscribers.has(owner)) {
+        registerDestructor(owner, () => this.unsubscribeFromCards(owner));
       }
-      entry.subscribers.add(parent);
+      entry.subscribers.add(owner);
       return entry.card;
     }
-    let card = await this.loadStaticModel(url);
+    if (opts?.cachedOnly) {
+      return undefined;
+    }
+    let card: CardDef | undefined;
+    try {
+      card = await this.loadStaticModel(url);
+    } catch (e: any) {
+      return undefined;
+    }
     let realmURL = await this.getRealmURL(card);
     if (!realmURL) {
       throw new Error(`bug: cannot determine realm URL for card ${card.id}`);
@@ -195,7 +226,7 @@ export default class CardService extends Service {
     this.liveCards.set(card.id, {
       card,
       realmURL,
-      subscribers: new Set([parent]),
+      subscribers: new Set([owner]),
     });
     return card;
   }
@@ -300,7 +331,10 @@ export default class CardService extends Service {
   }
 
   // we return undefined if the card changed locally while the save was in-flight
-  async saveModel(card: CardDef): Promise<CardDef | undefined> {
+  async saveModel<T extends object>(
+    owner: T,
+    card: CardDef,
+  ): Promise<CardDef | undefined> {
     let cardChanged = false;
     function onCardChange() {
       cardChanged = true;
@@ -318,6 +352,7 @@ export default class CardService extends Service {
       // to relative URL's as it serializes the cards
       let realmUrl = await this.getRealmURL(card);
       let json = await this.saveCardDocument(doc, realmUrl);
+      let isNew = !card.id;
       cardSaveTimes.set(card, Date.now());
 
       let result: CardDef | undefined;
@@ -330,6 +365,14 @@ export default class CardService extends Service {
         // instance that does not yet have an id is still the same instance after an
         // ID has been assigned by the server.
         result = (await this.api.updateFromSerialized(card, json)) as CardDef;
+      } else if (isNew) {
+        // in this case a new card was created, but there is an immediate change
+        // that was made--so we save off the new ID for the card so in the next
+        // save we'll correlate to the correct card ID
+        card.id = json.data.id;
+      }
+      if (isNew && result) {
+        result = this.trackLiveCard(owner, result);
       }
       if (this.subscriber) {
         this.subscriber(json);
@@ -370,7 +413,9 @@ export default class CardService extends Service {
       card,
       doc,
     );
-    return await this.saveModel(updatedCard);
+    // TODO setting `this` as an owner until we can have a better solution here...
+    // (currently only used by the AI bot to patch cards from chat)
+    return await this.saveModel(this, updatedCard);
   }
 
   private async saveCardDocument(

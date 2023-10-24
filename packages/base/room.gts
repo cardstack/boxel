@@ -30,7 +30,10 @@ import {
   type MatrixCardError,
 } from '@cardstack/runtime-common';
 
-const attachedCards = new Map<string, Promise<CardDef | MatrixCardError>>();
+const attachedCards = new Map<
+  string,
+  Promise<CardDef | MatrixCardError | undefined>
+>();
 
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember({
@@ -346,7 +349,7 @@ export class RoomField extends FieldDef {
   }
   static setAttachedCard(
     id: string,
-    cardPromise: Promise<CardDef | MatrixCardError>,
+    cardPromise: Promise<CardDef | MatrixCardError | undefined>,
   ) {
     attachedCards.set(id, cardPromise);
   }
