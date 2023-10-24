@@ -823,7 +823,7 @@ export default class CodeMode extends Component<Signature> {
                     class='incompatible-schema-editor'
                     data-test-schema-editor-incompatible-file
                   >
-                    Schema Editor cannot be used with this type of file.
+                    Schema Editor cannot be used with this file type.
                   </div>
                 {{else if
                   (and this.isValidSchemaFile this.schemaEditorIncompatibleItem)
