@@ -121,6 +121,8 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
           <AddButton
             class='add-new'
             @variant='pill'
+            @iconWidth='16px'
+            @iconHeight='16px'
             {{on 'click' this.add}}
             data-test-add-new
           >

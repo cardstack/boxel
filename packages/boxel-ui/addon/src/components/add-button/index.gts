@@ -8,6 +8,8 @@ import IconButton from '../icon-button/index.gts';
 interface Signature {
   Args: {
     hideIcon?: boolean;
+    iconWidth?: string;
+    iconHeight?: string;
     variant?: 'full-width' | 'pill';
   };
   Blocks: {
@@ -26,7 +28,10 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
       }}
       ...attributes
     >
-      {{#unless @hideIcon}}<IconPlus width='16px' height='16px' />{{/unless}}
+      {{#unless @hideIcon}}<IconPlus
+          width={{if @iconWidth @iconWidth '20px'}}
+          height={{if @iconHeight @iconHeight '20px'}}
+        />{{/unless}}
       {{yield}}
     </button>
   {{else}}
