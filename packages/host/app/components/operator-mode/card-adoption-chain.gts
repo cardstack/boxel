@@ -12,6 +12,7 @@ import type { Ready } from '@cardstack/host/resources/file';
 
 import { isOwnField } from '@cardstack/host/utils/schema-editor';
 import { IconInherit as InheritIcon } from '@cardstack/boxel-ui/icons';
+import { Type } from '@cardstack/host/resources/card-type';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -80,7 +81,7 @@ export default class CardAdoptionChain extends Component<Signature> {
             @moduleSyntax={{@moduleSyntax}}
             @childFields={{this.getFields index 'successors'}}
             @parentFields={{this.getFields index 'ancestors'}}
-            @allowAddingFields={{eq index 0}}
+            @allowFieldManipulation={{this.allowFieldManipulation @file data.cardType}}
           />
           <div class='content-with-line'>
             <hr class='line' />
@@ -112,5 +113,12 @@ export default class CardAdoptionChain extends Component<Signature> {
     }, []);
 
     return fields;
+  }
+
+  @action allowFieldManipulation(file: Ready, cardType: Type): boolean {
+    // Only allow add/edit/remove for fields from the currently opened module
+
+    // TODO: is there a better way to do this comparison?
+    return file.url.replace(/\.gts$/, '') === cardType.module;
   }
 }

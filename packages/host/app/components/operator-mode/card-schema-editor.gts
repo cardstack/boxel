@@ -46,7 +46,7 @@ interface Signature {
     file: Ready;
     cardType: Type;
     moduleSyntax: ModuleSyntax;
-    allowAddingFields: boolean;
+    allowFieldManipulation: boolean;
     childFields: string[];
     parentFields: string[];
   };
@@ -98,9 +98,13 @@ export default class CardSchemaEditor extends Component<Signature> {
         flex-wrap: wrap;
         gap: var(--boxel-sp-xxs);
         margin-bottom: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs);
         border-radius: var(--boxel-border-radius);
         background-color: var(--boxel-light);
+      }
+
+      .card-field--with-context-menu-button {
+        padding-right: 0
       }
 
       .card-fields {
@@ -232,7 +236,7 @@ export default class CardSchemaEditor extends Component<Signature> {
         font-weight: 600;
       }
 
-      .overriding-field {
+      .card-field--overriding {
         transition: border 1s;
       }
 
@@ -300,11 +304,8 @@ export default class CardSchemaEditor extends Component<Signature> {
         {{#each @cardType.fields as |field|}}
           {{#if (this.isOwnField field.name)}}
             <div
-              class={{if
-                (this.isOverriding field)
-                'card-field overidding-field'
-                'card-field'
-              }}
+              class="card-field {{if (this.isOverriding field) 'card-field--overriding'}} {{if @allowFieldManipulation 'card-field--with-context-menu-button'}}"
+
               data-field-name={{field.name}}
               data-test-field-name={{field.name}}
             >
@@ -375,42 +376,45 @@ export default class CardSchemaEditor extends Component<Signature> {
                         </span>
                       </div>
                     </button>
-                    <DropdownButton
-                      @icon={{ThreeDotsHorizontal}}
-                      @label='field options'
-                      @contentClass='context-menu'
-                      class='context-menu-trigger'
-                      data-test-schema-editor-field-contextual-button
-                      as |dd|
-                    >
-                      <div class='warning-box'>
-                        <p class='warning'>
-                          These actions will break compatibility with existing
-                          card instances.
-                        </p>
-                        <span class='warning-icon'>
-                          <WarningIcon
-                            width='20px'
-                            height='20px'
-                            role='presentation'
-                          />
-                        </span>
-                      </div>
-                      <dd.Menu
-                        class='context-menu-list'
-                        @items={{array
-                          (menuItem
-                            'Edit Field Settings' (fn this.toggleEditFieldModal field)
-                          )
-                          (menuDivider)
-                          (menuItem
-                            'Remove Field'
-                            (fn this.toggleRemoveFieldModalShown field)
-                            dangerous=true
-                          )
-                        }}
-                      />
-                    </DropdownButton>
+
+                    {{#if @allowFieldManipulation}}
+                      <DropdownButton
+                        @icon={{ThreeDotsHorizontal}}
+                        @label='field options'
+                        @contentClass='context-menu'
+                        class='context-menu-trigger'
+                        data-test-schema-editor-field-contextual-button
+                        as |dd|
+                      >
+                        <div class='warning-box'>
+                          <p class='warning'>
+                            These actions will break compatibility with existing
+                            card instances.
+                          </p>
+                          <span class='warning-icon'>
+                            <WarningIcon
+                              width='20px'
+                              height='20px'
+                              role='presentation'
+                            />
+                          </span>
+                        </div>
+                        <dd.Menu
+                          class='context-menu-list'
+                          @items={{array
+                            (menuItem
+                              'Edit Field Settings' (fn this.toggleEditFieldModal field)
+                            )
+                            (menuDivider)
+                            (menuItem
+                              'Remove Field'
+                              (fn this.toggleRemoveFieldModalShown field)
+                              dangerous=true
+                            )
+                          }}
+                        />
+                      </DropdownButton>
+                    {{/if}}
                   {{/if}}
                 {{/let}}
               </div>
@@ -419,7 +423,7 @@ export default class CardSchemaEditor extends Component<Signature> {
         {{/each}}
       </div>
 
-      {{#if @allowAddingFields}}
+      {{#if @allowFieldManipulation}}
         <button
           class='add-field-button'
           data-test-add-field-button
@@ -427,27 +431,27 @@ export default class CardSchemaEditor extends Component<Signature> {
         >
           + Add a field
         </button>
-      {{/if}}
 
-      {{#if this.editFieldModalShown}}
-        <EditFieldModal
-          @file={{@file}}
-          @card={{@card}}
-          @moduleSyntax={{@moduleSyntax}}
-          @onClose={{this.toggleEditFieldModal}}
-          @field={{this.fieldBeingEdited}}
-        />
-      {{/if}}
+        {{#if this.editFieldModalShown}}
+          <EditFieldModal
+            @file={{@file}}
+            @card={{@card}}
+            @moduleSyntax={{@moduleSyntax}}
+            @onClose={{this.toggleEditFieldModal}}
+            @field={{this.fieldBeingEdited}}
+          />
+        {{/if}}
 
-      {{#if this.removeFieldModalShown}}
-        <RemoveFieldModal
-          @file={{@file}}
-          @card={{@card}}
-          @field={{this.fieldForRemoval}}
-          @moduleSyntax={{@moduleSyntax}}
-          @onClose={{this.toggleRemoveFieldModalShown}}
-          data-test-remove-field-modal
-        />
+        {{#if this.removeFieldModalShown}}
+          <RemoveFieldModal
+            @file={{@file}}
+            @card={{@card}}
+            @field={{this.fieldForRemoval}}
+            @moduleSyntax={{@moduleSyntax}}
+            @onClose={{this.toggleRemoveFieldModalShown}}
+            data-test-remove-field-modal
+          />
+        {{/if}}
       {{/if}}
     </div>
   </template>
