@@ -2080,7 +2080,9 @@ function serializeCardResource(
     serializedGet(model, fieldName, doc, visited, opts),
   );
   return merge(
-    {},
+    {
+      attributes: {},
+    },
     ...fieldResources,
     {
       type: 'card',

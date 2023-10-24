@@ -88,21 +88,31 @@ const employeeCardSource = `
     contains,
     field,
     Component,
+    CardDef
   } from 'https://cardstack.com/base/card-api';
   import StringCard from 'https://cardstack.com/base/string';
+  import DateField from 'https://cardstack.com/base/date';
+  import BooleanField from 'https://cardstack.com/base/boolean';
   import { Person } from './person';
+
+  export function isHourly (this: Employee) {
+    return !this.isSalaried;
+  }
+
+  class Isolated extends Component<typeof Employee> {
+    <template>
+      <@fields.firstName /> <@fields.lastName />
+
+      Department: <@fields.department />
+    </template>
+  };
 
   export class Employee extends Person {
     static displayName = 'Employee';
     @field department = contains(StringCard);
+    @field isSalaried = contains(BooleanField);
 
-    static isolated = class Isolated extends Component<typeof this> {
-      <template>
-        <@fields.firstName /> <@fields.lastName />
-
-        Department: <@fields.department />
-      </template>
-    };
+    static isolated = Isolated;
   }
 `;
 
@@ -302,6 +312,7 @@ module('Acceptance | code mode tests', function (hooks) {
           'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
         iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
       },
+      'noop.gts': `export function noop() {};\nclass NoopClass {}`,
     });
 
     let loader = (this.owner.lookup('service:loader-service') as LoaderService)
@@ -1007,7 +1018,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .hasText(`${elementName} function`);
     assert.dom('[data-test-inheritance-panel-header]').doesNotExist();
     assert.dom('[data-test-card-module-definition]').doesNotExist();
-    assert.dom('[data-test-schema-editor-incompatible]').exists();
+    assert.dom('[data-test-schema-editor-incompatible-item]').exists();
   });
 
   test('non-card JSON is shown as just a file with empty schema editor', async function (assert) {
@@ -1038,7 +1049,7 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom('[data-test-definition-realm-name]')
       .hasText('in Test Workspace B');
 
-    assert.dom('[data-test-schema-editor-incompatible]').exists();
+    assert.dom('[data-test-schema-editor-incompatible-file]').exists();
   });
 
   test('invalid JSON is shown as just a file with empty schema editor', async function (assert) {
@@ -1069,7 +1080,61 @@ module('Acceptance | code mode tests', function (hooks) {
       .dom('[data-test-definition-realm-name]')
       .hasText('in Test Workspace B');
 
-    assert.dom('[data-test-schema-editor-incompatible]').exists();
+    assert.dom('[data-test-schema-editor-incompatible-file]').exists();
+  });
+
+  test('displays clear message when a schema-editor incompatible item is selected within a valid file type', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}employee.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-loading-indicator]', { count: 0 });
+
+    assert
+      .dom(
+        '[data-test-in-this-file-selector] [data-test-boxel-selector-item-selected]',
+      )
+      .hasText('isHourly function');
+    assert
+      .dom('[data-test-schema-editor-incompatible-item]')
+      .hasText(
+        'Schema Editor cannot be used for selected function "isHourly".',
+      );
+
+    await click('[data-test-boxel-selector-item-text="Isolated"]');
+    await waitFor('[data-test-loading-indicator]', { count: 0 });
+
+    assert
+      .dom(
+        '[data-test-in-this-file-selector] [data-test-boxel-selector-item-selected]',
+      )
+      .hasText('Isolated class');
+    assert
+      .dom('[data-test-schema-editor-incompatible-item]')
+      .hasText('Schema Editor cannot be used for selected class "Isolated".');
+
+    operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}noop.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-loading-indicator]', { count: 0 });
+    assert.dom('[data-test-schema-editor-incompatible-file]').exists();
   });
 
   test('empty state displays default realm info', async function (assert) {
@@ -1376,7 +1441,8 @@ module('Acceptance | code mode tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-
+    await waitFor('[data-test-boxel-selector-item-text="Employee"]');
+    await click('[data-test-boxel-selector-item-text="Employee"]');
     await waitFor(
       '[data-test-card-schema="Employee"] [data-test-card-schema-navigational-button]',
     );
@@ -1397,6 +1463,8 @@ module('Acceptance | code mode tests', function (hooks) {
       )}`,
     );
 
+    await waitFor('[data-test-boxel-selector-item-text="Employee"]');
+    await click('[data-test-boxel-selector-item-text="Employee"]');
     await waitFor(
       '[data-test-card-schema="Employee"] [data-test-field-name="department"] [data-test-card-display-name="String"]',
     );
@@ -1438,7 +1506,7 @@ module('Acceptance | code mode tests', function (hooks) {
     assert
       .dom('[data-test-binary-info] [data-test-last-modified]')
       .containsText('Last modified');
-    assert.dom('[data-test-schema-editor-incompatible]').exists();
+    assert.dom('[data-test-schema-editor-incompatible-file]').exists();
 
     await percySnapshot(assert);
   });

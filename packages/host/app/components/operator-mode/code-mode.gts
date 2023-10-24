@@ -95,12 +95,23 @@ type PanelWidths = {
   emptyCodeModePanel: string;
 };
 
+type PanelHeights = {
+  filePanel: string;
+  recentPanel: string;
+};
+
 const CodeModePanelWidths = 'code-mode-panel-widths';
 const defaultPanelWidths: PanelWidths = {
   leftPanel: 'var(--operator-mode-left-column)',
   codeEditorPanel: '48%',
   rightPanel: '32%',
   emptyCodeModePanel: '80%',
+};
+
+const CodeModePanelHeights = 'code-mode-panel-heights';
+const defaultPanelHeights: PanelHeights = {
+  filePanel: '60%',
+  recentPanel: '40%',
 };
 
 const cardEditorSaveTimes = new Map<string, number>();
@@ -122,6 +133,7 @@ export default class CodeMode extends Component<Signature> {
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
+  private panelHeights: PanelHeights;
   // This is to cache realm info during reload after code path change so
   // that realm assets don't produce a flicker when code patch changes and
   // the realm is the same
@@ -134,6 +146,12 @@ export default class CodeMode extends Component<Signature> {
       ? // @ts-ignore Type 'null' is not assignable to type 'string'
         JSON.parse(localStorage.getItem(CodeModePanelWidths))
       : defaultPanelWidths;
+
+    this.panelHeights = localStorage.getItem(CodeModePanelHeights)
+      ? // @ts-ignore Type 'null' is not assignable to type 'string'
+        JSON.parse(localStorage.getItem(CodeModePanelHeights))
+      : defaultPanelHeights;
+
     registerDestructor(this, () => {
       // destructor functons are called synchronously. in order to save,
       // which is async, we leverage an EC task that is running in a
@@ -189,11 +207,24 @@ export default class CodeMode extends Component<Signature> {
     return this.maybeMonacoSDK && isReady(this.currentOpenFile);
   }
 
-  private get schemaEditorIncompatible() {
-    return this.readyFile.isBinary || this.isNonCardJson;
+  private get schemaEditorIncompatibleFile() {
+    return (
+      this.readyFile.isBinary || this.isNonCardJson || !this.isValidSchemaFile
+    );
   }
 
-  private isNonCardJson() {
+  private get isValidSchemaFile() {
+    return this.declarations.some((d) => isCardOrFieldDeclaration(d));
+  }
+
+  private get schemaEditorIncompatibleItem() {
+    if (!this.selectedDeclaration) {
+      return;
+    }
+    return !isCardOrFieldDeclaration(this.selectedDeclaration);
+  }
+
+  private get isNonCardJson() {
     return (
       this.readyFile.name.endsWith('.json') &&
       !isCardDocumentString(this.readyFile.content)
@@ -553,11 +584,22 @@ export default class CodeMode extends Component<Signature> {
 
   @action
   private onListPanelContextChange(listPanelContext: PanelContext[]) {
-    this.panelWidths.leftPanel = listPanelContext[0]?.width;
-    this.panelWidths.codeEditorPanel = listPanelContext[1]?.width;
-    this.panelWidths.rightPanel = listPanelContext[2]?.width;
+    this.panelWidths.leftPanel = listPanelContext[0]?.length;
+    this.panelWidths.codeEditorPanel = listPanelContext[1]?.length;
+    this.panelWidths.rightPanel = listPanelContext[2]?.length;
 
     localStorage.setItem(CodeModePanelWidths, JSON.stringify(this.panelWidths));
+  }
+
+  @action
+  private onFilePanelContextChange(filePanelContext: PanelContext[]) {
+    this.panelHeights.filePanel = filePanelContext[0]?.length;
+    this.panelHeights.recentPanel = filePanelContext[1]?.length;
+
+    localStorage.setItem(
+      CodeModePanelHeights,
+      JSON.stringify(this.panelHeights),
+    );
   }
 
   @action
@@ -612,84 +654,111 @@ export default class CodeMode extends Component<Signature> {
       }}
     >
       <ResizablePanelGroup
+        @orientation='horizontal'
         @onListPanelContextChange={{this.onListPanelContextChange}}
         class='columns'
         as |ResizablePanel|
       >
         <ResizablePanel
-          @defaultWidth={{defaultPanelWidths.leftPanel}}
-          @width='var(--operator-mode-left-column)'
+          @defaultLength={{defaultPanelWidths.leftPanel}}
+          @length='var(--operator-mode-left-column)'
         >
           <div class='column'>
-            {{! Move each container and styles to separate component }}
-            <div
-              class='inner-container file-view
-                {{if this.showBrowser "file-browser"}}'
+            <ResizablePanelGroup
+              @orientation='vertical'
+              @onListPanelContextChange={{this.onFilePanelContextChange}}
+              @reverseCollapse={{true}}
+              as |VerticallyResizablePanel|
             >
-              <header
-                class='file-view__header'
-                aria-label={{this.fileViewTitle}}
-                data-test-file-view-header
+              <VerticallyResizablePanel
+                @defaultLength={{defaultPanelHeights.filePanel}}
+                @length={{this.panelHeights.filePanel}}
               >
-                <Button
-                  @disabled={{this.emptyOrNotFound}}
-                  @kind={{if (not this.showBrowser) 'primary-dark' 'secondary'}}
-                  @size='extra-small'
-                  class={{cn
-                    'file-view__header-btn'
-                    active=(not this.showBrowser)
-                  }}
-                  {{on 'click' (fn this.setFileView 'inheritance')}}
-                  data-test-inheritance-toggle
+
+                {{! Move each container and styles to separate component }}
+                <div
+                  class='inner-container file-view
+                    {{if this.showBrowser "file-browser"}}'
                 >
-                  Inspector</Button>
-                <Button
-                  @kind={{if this.showBrowser 'primary-dark' 'secondary'}}
-                  @size='extra-small'
-                  class={{cn 'file-view__header-btn' active=this.showBrowser}}
-                  {{on 'click' (fn this.setFileView 'browser')}}
-                  data-test-file-browser-toggle
-                >
-                  File Tree</Button>
-              </header>
-              <section class='inner-container__content'>
-                {{#if this.showBrowser}}
-                  <FileTree @realmURL={{this.realmURL}} />
-                {{else}}
-                  {{#if this.isReady}}
-                    <DetailPanel
-                      @cardInstance={{this.card}}
-                      @cardInstanceType={{this.cardType}}
-                      @readyFile={{this.readyFile}}
-                      @realmInfo={{this.realmInfo}}
-                      @selectedDeclaration={{this.selectedDeclaration}}
-                      @declarations={{this.declarations}}
-                      @selectDeclaration={{this.selectDeclaration}}
-                      @delete={{this.delete}}
-                      data-test-card-inheritance-panel
-                    />
-                  {{/if}}
-                {{/if}}
-              </section>
-            </div>
-            <aside class='inner-container'>
-              <header
-                class='inner-container__header'
-                aria-label='Recent Files Header'
+                  <header
+                    class='file-view__header'
+                    aria-label={{this.fileViewTitle}}
+                    data-test-file-view-header
+                  >
+                    <Button
+                      @disabled={{this.emptyOrNotFound}}
+                      @kind={{if
+                        (not this.showBrowser)
+                        'primary-dark'
+                        'secondary'
+                      }}
+                      @size='extra-small'
+                      class={{cn
+                        'file-view__header-btn'
+                        active=(not this.showBrowser)
+                      }}
+                      {{on 'click' (fn this.setFileView 'inheritance')}}
+                      data-test-inheritance-toggle
+                    >
+                      Inspector</Button>
+                    <Button
+                      @kind={{if this.showBrowser 'primary-dark' 'secondary'}}
+                      @size='extra-small'
+                      class={{cn
+                        'file-view__header-btn'
+                        active=this.showBrowser
+                      }}
+                      {{on 'click' (fn this.setFileView 'browser')}}
+                      data-test-file-browser-toggle
+                    >
+                      File Tree</Button>
+                  </header>
+                  <section class='inner-container__content'>
+                    {{#if this.showBrowser}}
+                      <FileTree @realmURL={{this.realmURL}} />
+                    {{else}}
+                      {{#if this.isReady}}
+                        <DetailPanel
+                          @cardInstance={{this.card}}
+                          @cardInstanceType={{this.cardType}}
+                          @readyFile={{this.readyFile}}
+                          @realmInfo={{this.realmInfo}}
+                          @selectedDeclaration={{this.selectedDeclaration}}
+                          @declarations={{this.declarations}}
+                          @selectDeclaration={{this.selectDeclaration}}
+                          @delete={{this.delete}}
+                          data-test-card-inheritance-panel
+                        />
+                      {{/if}}
+                    {{/if}}
+                  </section>
+                </div>
+              </VerticallyResizablePanel>
+              <VerticallyResizablePanel
+                @defaultLength={{defaultPanelHeights.recentPanel}}
+                @length={{this.panelHeights.recentPanel}}
+                @minLength='100px'
               >
-                Recent Files
-              </header>
-              <section class='inner-container__content'>
-                <RecentFiles />
-              </section>
-            </aside>
+                <aside class='inner-container recent-files'>
+                  <header
+                    class='inner-container__header'
+                    aria-label='Recent Files Header'
+                  >
+                    Recent Files
+                  </header>
+                  <section class='inner-container__content'>
+                    <RecentFiles />
+                  </section>
+                </aside>
+              </VerticallyResizablePanel>
+            </ResizablePanelGroup>
           </div>
         </ResizablePanel>
         {{#if this.codePath}}
           <ResizablePanel
-            @defaultWidth={{defaultPanelWidths.codeEditorPanel}}
-            @width={{this.panelWidths.codeEditorPanel}}
-            @minWidth='300px'
+            @defaultLength={{defaultPanelWidths.codeEditorPanel}}
+            @length={{this.panelWidths.codeEditorPanel}}
+            @minLength='300px'
           >
             <div class='inner-container'>
               {{#if this.isReady}}
@@ -732,8 +801,8 @@ export default class CodeMode extends Component<Signature> {
             </div>
           </ResizablePanel>
           <ResizablePanel
-            @defaultWidth={{defaultPanelWidths.rightPanel}}
-            @width={{this.panelWidths.rightPanel}}
+            @defaultLength={{defaultPanelWidths.rightPanel}}
+            @length={{this.panelWidths.rightPanel}}
           >
             <div class='inner-container'>
               {{#if this.isReady}}
@@ -749,21 +818,37 @@ export default class CodeMode extends Component<Signature> {
                     @card={{this.selectedCardOrField.cardOrField}}
                     @cardTypeResource={{this.selectedCardOrField.cardType}}
                   />
-                {{else if this.schemaEditorIncompatible}}
+                {{else if this.schemaEditorIncompatibleFile}}
                   <div
                     class='incompatible-schema-editor'
-                    data-test-schema-editor-incompatible
-                  >Schema Editor cannot be used with this file type</div>
+                    data-test-schema-editor-incompatible-file
+                  >
+                    Schema Editor cannot be used with this file type.
+                  </div>
+                {{else if
+                  (and this.isValidSchemaFile this.schemaEditorIncompatibleItem)
+                }}
+                  <div
+                    class='incompatible-schema-editor'
+                    data-test-schema-editor-incompatible-item
+                  >
+                    Schema Editor cannot be used for selected
+                    {{this.selectedDeclaration.type}}
+                    "{{this.selectedDeclaration.localName}}".</div>
                 {{else if this.cardError}}
                   {{this.cardError.message}}
                 {{/if}}
+              {{else if this.isLoading}}
+                <div class='loading'>
+                  <LoadingIndicator />
+                </div>
               {{/if}}
             </div>
           </ResizablePanel>
         {{else}}
           <ResizablePanel
-            @defaultWidth={{defaultPanelWidths.emptyCodeModePanel}}
-            @width={{this.panelWidths.emptyCodeModePanel}}
+            @defaultLength={{defaultPanelWidths.emptyCodeModePanel}}
+            @length={{this.panelWidths.emptyCodeModePanel}}
           >
             <div
               class='inner-container inner-container--empty'
@@ -817,24 +902,12 @@ export default class CodeMode extends Component<Signature> {
         flex-shrink: 0;
         height: 100%;
       }
+
       .column {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp);
         height: 100%;
-      }
-      .column:nth-child(2) {
-        flex: 2;
-      }
-      .column:last-child {
-        flex: 1.2;
-      }
-      .column:first-child > *:first-child {
-        max-height: 50%;
-      }
-      .column:first-child > *:last-child {
-        max-height: calc(50% - var(--boxel-sp));
-        background-color: var(--boxel-200);
       }
 
       .inner-container {
@@ -847,6 +920,11 @@ export default class CodeMode extends Component<Signature> {
         box-shadow: var(--boxel-deep-box-shadow);
         overflow: hidden;
       }
+
+      .inner-container.recent-files {
+        background-color: var(--boxel-200);
+      }
+
       .inner-container__header {
         padding: var(--boxel-sp-sm) var(--boxel-sp-xs);
         font: 700 var(--boxel-font);
