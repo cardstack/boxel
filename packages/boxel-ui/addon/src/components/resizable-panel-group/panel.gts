@@ -93,7 +93,8 @@ export default class Panel extends Component<Signature> {
         align-items: center;
         --boxel-panel-resize-handler-height: 100px;
         --boxel-panel-resize-handler-width: 5px;
-        --boxel-panel-resize-handler-background-color: var(--boxel-highlight);
+        --boxel-panel-resize-handler-background-color: var(--boxel-450);
+        --boxel-panel-resize-handler-hover-background-color: var(--boxel-highlight);
 
         padding: var(--boxel-sp-xxxs);
       }
@@ -103,7 +104,8 @@ export default class Panel extends Component<Signature> {
         justify-content: center;
         --boxel-panel-resize-handler-width: 100px;
         --boxel-panel-resize-handler-height: 5px;
-        --boxel-panel-resize-handler-background-color: var(--boxel-highlight);
+        --boxel-panel-resize-handler-background-color: var(--boxel-450);
+        --boxel-panel-resize-handler-hover-background-color: var(--boxel-highlight);
 
         padding: var(--boxel-sp-xxxs);
       }
@@ -119,6 +121,10 @@ export default class Panel extends Component<Signature> {
 
         position: relative;
         z-index: 2;
+      }
+
+      .resize-handler:hover {
+        background-color: var(--boxel-panel-resize-handler-hover-background-color);
       }
 
       .resize-handler.horizontal {
@@ -159,6 +165,10 @@ export default class Panel extends Component<Signature> {
           var(--boxel-panel-resize-handler-background-color);
       }
 
+      .resize-handler:hover .arrow.right {
+        border-left-color: var(--boxel-panel-resize-handler-hover-background-color);
+      }
+
       .arrow.left {
         top: 50%;
         left: calc(var(--boxel-panel-resize-handler-width) * -1);
@@ -167,6 +177,10 @@ export default class Panel extends Component<Signature> {
         border-bottom: 6px solid transparent;
         border-right: 10px solid
           var(--boxel-panel-resize-handler-background-color);
+      }
+
+      .resize-handler:hover .arrow.left {
+        border-right-color: var(--boxel-panel-resize-handler-hover-background-color);
       }
 
       .arrow.top {
@@ -179,6 +193,10 @@ export default class Panel extends Component<Signature> {
           var(--boxel-panel-resize-handler-background-color);
       }
 
+      .resize-handler:hover .arrow.top {
+        border-bottom-color: var(--boxel-panel-resize-handler-hover-background-color);
+      }
+
       .arrow.bottom {
         left: 50%;
         bottom: calc(var(--boxel-panel-resize-handler-height) * -1);
@@ -187,6 +205,10 @@ export default class Panel extends Component<Signature> {
         border-right: 6px solid transparent;
         border-top: 10px solid
           var(--boxel-panel-resize-handler-background-color);
+      }
+
+      .resize-handler:hover .arrow.bottom {
+        border-top-color: var(--boxel-panel-resize-handler-hover-background-color);
       }
     </style>
   </template>
