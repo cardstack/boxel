@@ -244,7 +244,7 @@ export default class CardSchemaEditor extends Component<Signature> {
     >
       <div class='header'>
         <Pill
-          @onClick={{fn this.openCardDefinition @cardType.module}}
+          {{on 'click' (fn this.openCardDefinition @cardType.module)}}
           data-test-card-schema-navigational-button
         >
           <:icon>
@@ -321,7 +321,7 @@ export default class CardSchemaEditor extends Component<Signature> {
 
                   {{else}}
                     <Pill
-                      @onClick={{fn this.openCardDefinition moduleUrl}}
+                      {{on 'click' (fn this.openCardDefinition moduleUrl)}}
                       data-test-card-schema-field-navigational-button
                     >
                       <:icon>
