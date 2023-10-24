@@ -33,7 +33,7 @@ import {
 } from '@cardstack/runtime-common';
 import {
   moduleFrom,
-  codeRefWithAbsoluteURL
+  codeRefWithAbsoluteURL,
 } from '@cardstack/runtime-common/code-ref';
 
 import { RealmPaths } from '@cardstack/runtime-common/paths';
@@ -147,8 +147,18 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   // public API
   @action
-  getLiveCard<T extends object>(owner: T, url: URL): Promise<CardDef | undefined> {
-    return this.cardService.loadModel(owner, url);
+  getLiveCard<T extends object>(
+    owner: T,
+    url: URL,
+    opts?: { cachedOnly?: true },
+  ): Promise<CardDef | undefined> {
+    return this.cardService.loadModel(owner, url, opts);
+  }
+
+  // public API
+  @action
+  trackLiveCard<T extends object>(owner: T, card: CardDef) {
+    this.cardService.trackLiveCard(owner, card);
   }
 
   // public API
@@ -372,7 +382,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   // at the same time
   private write = task(async (card: CardDef) => {
     return await this.withTestWaiters(async () => {
-      return await this.cardService.saveModel(card);
+      return await this.cardService.saveModel(this, card);
     });
   });
 
@@ -449,18 +459,21 @@ export default class OperatorModeContainer extends Component<Signature> {
       ): Promise<CardDef | undefined> => {
         let cardModule = new URL(moduleFrom(ref), relativeTo);
         // we make the code ref use an absolute URL for safety in
-        // the case it's being created in a different realm than where the card 
+        // the case it's being created in a different realm than where the card
         // definition comes from
-        if (opts?.realmURL && !(new RealmPaths(opts.realmURL).inRealm(cardModule))) {
-          ref = codeRefWithAbsoluteURL(ref, relativeTo)
+        if (
+          opts?.realmURL &&
+          !new RealmPaths(opts.realmURL).inRealm(cardModule)
+        ) {
+          ref = codeRefWithAbsoluteURL(ref, relativeTo);
         }
         let doc: LooseSingleCardDocument = opts?.doc ?? {
           data: {
             meta: {
               adoptsFrom: ref,
-              ...(opts?.realmURL ? { realmURL: opts.realmURL.href} : {})
-            }
-          }
+              ...(opts?.realmURL ? { realmURL: opts.realmURL.href } : {}),
+            },
+          },
         };
         let newCard = await here.cardService.createFromSerialized(
           doc.data,
@@ -478,13 +491,8 @@ export default class OperatorModeContainer extends Component<Signature> {
         return await newItem.request?.promise;
       },
       viewCard: async (card: CardDef, format: Format = 'isolated') => {
-        let liveCard = await here.cardService.loadModel(here, new URL(card.id));
-        if (!liveCard) {
-          throw new Error(`bug: could not load card ${card.id}`);
-        }
         here.addToStack({
-          // assert that we are using a live card
-          card: liveCard,
+          card,
           format,
           stackIndex,
         });
@@ -498,7 +506,7 @@ export default class OperatorModeContainer extends Component<Signature> {
           doc,
           relativeTo ?? here.cardService.defaultURL,
         );
-        await here.cardService.saveModel(newCard);
+        await here.cardService.saveModel(here, newCard);
         let newItem: StackItem = {
           card: newCard,
           format: 'isolated',

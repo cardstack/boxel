@@ -173,7 +173,9 @@ export interface CardSearch {
   getLiveCard: <T extends object>(
     owner: T,
     url: URL,
+    opts?: { cachedOnly?: true },
   ) => Promise<CardDef | undefined>;
+  trackLiveCard<T extends object>(owner: T, card: CardDef): void;
   getLiveCards(
     query: Query,
     realms?: string[],
@@ -193,6 +195,7 @@ export function getCards(query: Query, realms?: string[]) {
 export function getLiveCard<T extends object>(
   owner: T,
   url: URL,
+  opts?: { cachedOnly?: true },
 ): Promise<CardDef | undefined> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CARD_SEARCH) {
@@ -200,7 +203,17 @@ export function getLiveCard<T extends object>(
     return Promise.resolve(undefined);
   }
   let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.getLiveCard(owner, url);
+  return finder?.getLiveCard(owner, url, opts);
+}
+
+export function trackLiveCard<T extends object>(owner: T, card: CardDef) {
+  let here = globalThis as any;
+  if (!here._CARDSTACK_CARD_SEARCH) {
+    // on the server we don't need this
+    return Promise.resolve(undefined);
+  }
+  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
+  return finder?.trackLiveCard(owner, card);
 }
 
 export function getLiveCards(

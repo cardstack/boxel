@@ -77,8 +77,13 @@ export default class CardController extends Controller {
   getLiveCard<T extends object>(
     owner: T,
     url: URL,
+    opts?: { cachedOnly?: true },
   ): Promise<CardDef | undefined> {
-    return this.cardService.loadModel(owner, url);
+    return this.cardService.loadModel(owner, url, opts);
+  }
+
+  trackLiveCard<T extends object>(owner: T, card: CardDef) {
+    this.cardService.trackLiveCard(owner, card);
   }
 
   getLiveCards(

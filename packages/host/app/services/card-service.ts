@@ -154,14 +154,13 @@ export default class CardService extends Service {
     return card as CardDef;
   }
 
-  private initializeModel<T extends Object>(owner: T, card: CardDef) {
+  trackLiveCard<T extends Object>(owner: T, card: CardDef) {
     if (!card.id) {
       throw new Error(`cannot set live card model on an unsaved card`);
     }
     if (this.liveCards.has(card.id)) {
-      throw new Error(
-        `cannot set live card model for ${card.id}--a live model already exists for this card`,
-      );
+      // we're already tracking this card
+      return;
     }
     let realmURL = card[this.api.realmURL];
     if (!realmURL) {
@@ -174,10 +173,10 @@ export default class CardService extends Service {
     });
   }
 
-  // TODO consider exposing this as API in @cardstack/runtime-common/index
   async loadModel<T extends object>(
     owner: T,
     url: URL,
+    opts?: { cachedOnly?: true },
   ): Promise<CardDef | undefined> {
     let entry = this.liveCards.get(url.href);
     if (entry) {
@@ -186,6 +185,9 @@ export default class CardService extends Service {
       }
       entry.subscribers.add(owner);
       return entry.card;
+    }
+    if (opts?.cachedOnly) {
+      return undefined;
     }
     let card: CardDef | undefined;
     try {
@@ -328,7 +330,10 @@ export default class CardService extends Service {
   }
 
   // we return undefined if the card changed locally while the save was in-flight
-  async saveModel(card: CardDef): Promise<CardDef | undefined> {
+  async saveModel<T extends object>(
+    owner: T,
+    card: CardDef,
+  ): Promise<CardDef | undefined> {
     let cardChanged = false;
     function onCardChange() {
       cardChanged = true;
@@ -359,11 +364,14 @@ export default class CardService extends Service {
         // instance that does not yet have an id is still the same instance after an
         // ID has been assigned by the server.
         result = (await this.api.updateFromSerialized(card, json)) as CardDef;
+      } else if (isNew) {
+        // in this case a new card was created, but there is an immediate change
+        // that was made--so we save off the new ID for the card so in the next
+        // save we'll correlate to the correct card ID
+        card.id = json.data.id;
       }
       if (isNew && result) {
-        // TODO need to think about `this`--it means we hold on to this model
-        // for the life of the service...
-        this.initializeModel(this, result);
+        this.trackLiveCard(owner, result);
       }
       if (this.subscriber) {
         this.subscriber(json);
@@ -404,7 +412,9 @@ export default class CardService extends Service {
       card,
       doc,
     );
-    return await this.saveModel(updatedCard);
+    // TODO setting `this` as an owner until we can have a better solution here...
+    // (currently only used by the AI bot to patch cards from chat)
+    return await this.saveModel(this, updatedCard);
   }
 
   private async saveCardDocument(

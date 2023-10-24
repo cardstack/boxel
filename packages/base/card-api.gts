@@ -32,6 +32,7 @@ import {
   maybeURL,
   maybeRelativeURL,
   getLiveCard,
+  trackLiveCard,
   type Meta,
   type CardFields,
   type Relationship,
@@ -880,8 +881,9 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       return null;
     }
     let cachedInstance =
-      (await getLiveCard(doc, new URL(value.links.self, relativeTo))) ??
-      identityContext.identities.get(value.links.self);
+      (await getLiveCard(doc, new URL(value.links.self, relativeTo), {
+        cachedOnly: true,
+      })) ?? identityContext.identities.get(value.links.self);
     if (cachedInstance) {
       cachedInstance[isSavedInstance] = true;
       return cachedInstance as BaseInstanceType<CardT>;
@@ -897,9 +899,18 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         reference: value.links.self,
       };
     }
-    return (await cardClassFromResource(resource, this.card, relativeTo))[
-      deserialize
-    ](resource, relativeTo, doc, identityContext);
+
+    let clazz = await cardClassFromResource(resource, this.card, relativeTo);
+    let loader = Loader.getLoaderFor(clazz)!;
+    let deserialized = await clazz[deserialize](
+      resource,
+      relativeTo,
+      doc,
+      identityContext,
+    );
+    deserialized[isSavedInstance] = true;
+    trackLiveCard(loader, deserialized);
+    return deserialized;
   }
 
   emptyValue(_instance: CardDef) {
@@ -1190,8 +1201,9 @@ class LinksToMany<FieldT extends CardDefConstructor>
           return null;
         }
         let cachedInstance =
-          (await getLiveCard(doc, new URL(value.links.self, relativeTo))) ??
-          identityContext.identities.get(value.links.self);
+          (await getLiveCard(doc, new URL(value.links.self, relativeTo), {
+            cachedOnly: true,
+          })) ?? identityContext.identities.get(value.links.self);
         if (cachedInstance) {
           cachedInstance[isSavedInstance] = true;
           return cachedInstance;
@@ -1212,9 +1224,21 @@ class LinksToMany<FieldT extends CardDefConstructor>
             reference: value.links.self,
           };
         }
-        return (await cardClassFromResource(resource, this.card, relativeTo))[
-          deserialize
-        ](resource, relativeTo, doc, identityContext);
+        let clazz = await cardClassFromResource(
+          resource,
+          this.card,
+          relativeTo,
+        );
+        let loader = Loader.getLoaderFor(clazz)!;
+        let deserialized = await clazz[deserialize](
+          resource,
+          relativeTo,
+          doc,
+          identityContext,
+        );
+        deserialized[isSavedInstance] = true;
+        trackLiveCard(loader, deserialized);
+        return deserialized;
       });
 
     return new WatchedArray(
