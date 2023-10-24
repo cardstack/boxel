@@ -1,8 +1,6 @@
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
-import { eq } from '@cardstack/boxel-ui/helpers';
-
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import CardSchemaEditor from '@cardstack/host/components/operator-mode/card-schema-editor';
