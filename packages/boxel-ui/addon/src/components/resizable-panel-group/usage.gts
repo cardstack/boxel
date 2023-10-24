@@ -32,6 +32,8 @@ export default class ResizablePanelUsage extends Component {
   @cssVariable declare boxelPanelResizeHandlerHeight: CSSVariableInfo;
   @cssVariable declare boxelPanelResizeHandlerWidth: CSSVariableInfo;
   @cssVariable declare boxelPanelResizeHandlerBackgroundColor: CSSVariableInfo;
+  @cssVariable
+  declare boxelPanelResizeHandlerHoverBackgroundColor: CSSVariableInfo;
 
   <template>
     <FreestyleUsage @name='Horizontal ResizablePanelGroup'>
@@ -43,6 +45,7 @@ export default class ResizablePanelUsage extends Component {
             style={{cssVar
               boxel-panel-resize-handler-height=this.boxelPanelResizeHandlerHeight.value
               boxel-panel-resize-handler-background-color=this.boxelPanelResizeHandlerBackgroundColor.value
+              boxel-panel-resize-handler-hover-background-color=this.boxelPanelResizeHandlerHoverBackgroundColor.value
             }}
           >
             Panel 1
@@ -53,6 +56,7 @@ export default class ResizablePanelUsage extends Component {
             style={{cssVar
               boxel-panel-resize-handler-height=this.boxelPanelResizeHandlerHeight.value
               boxel-panel-resize-handler-background-color=this.boxelPanelResizeHandlerBackgroundColor.value
+              boxel-panel-resize-handler-hover-background-color=this.boxelPanelResizeHandlerHoverBackgroundColor.value
             }}
           >
             Panel 2
@@ -63,6 +67,7 @@ export default class ResizablePanelUsage extends Component {
             style={{cssVar
               boxel-panel-resize-handler-height=this.boxelPanelResizeHandlerHeight.value
               boxel-panel-resize-handler-background-color=this.boxelPanelResizeHandlerBackgroundColor.value
+              boxel-panel-resize-handler-hover-background-color=this.boxelPanelResizeHandlerHoverBackgroundColor.value
             }}
           >
             Panel 3
@@ -128,6 +133,13 @@ export default class ResizablePanelUsage extends Component {
           @value={{this.boxelPanelResizeHandlerBackgroundColor.value}}
           @onInput={{this.boxelPanelResizeHandlerBackgroundColor.update}}
         />
+        <Css.Basic
+          @name='boxel-panel-resize-handler-hover-background-color'
+          @type='color'
+          @defaultValue={{this.boxelPanelResizeHandlerHoverBackgroundColor.defaults}}
+          @value={{this.boxelPanelResizeHandlerHoverBackgroundColor.value}}
+          @onInput={{this.boxelPanelResizeHandlerHoverBackgroundColor.update}}
+        />
       </:cssVars>
     </FreestyleUsage>
     <FreestyleUsage
@@ -149,6 +161,7 @@ export default class ResizablePanelUsage extends Component {
               style={{cssVar
                 boxel-panel-resize-handler-width=this.boxelPanelResizeHandlerWidth.value
                 boxel-panel-resize-handler-background-color=this.boxelPanelResizeHandlerBackgroundColor.value
+                boxel-panel-resize-handler-hover-background-color=this.boxelPanelResizeHandlerHoverBackgroundColor.value
               }}
             >
               Panel 1
@@ -159,6 +172,7 @@ export default class ResizablePanelUsage extends Component {
               style={{cssVar
                 boxel-panel-resize-handler-width=this.boxelPanelResizeHandlerWidth.value
                 boxel-panel-resize-handler-background-color=this.boxelPanelResizeHandlerBackgroundColor.value
+                boxel-panel-resize-handler-hover-background-color=this.boxelPanelResizeHandlerHoverBackgroundColor.value
               }}
             >
               Panel 2
@@ -217,6 +231,13 @@ export default class ResizablePanelUsage extends Component {
           @defaultValue={{this.boxelPanelResizeHandlerBackgroundColor.defaults}}
           @value={{this.boxelPanelResizeHandlerBackgroundColor.value}}
           @onInput={{this.boxelPanelResizeHandlerBackgroundColor.update}}
+        />
+        <Css.Basic
+          @name='boxel-panel-resize-handler-hover-background-color'
+          @type='color'
+          @defaultValue={{this.boxelPanelResizeHandlerHoverBackgroundColor.defaults}}
+          @value={{this.boxelPanelResizeHandlerHoverBackgroundColor.value}}
+          @onInput={{this.boxelPanelResizeHandlerHoverBackgroundColor.update}}
         />
       </:cssVars>
     </FreestyleUsage>
