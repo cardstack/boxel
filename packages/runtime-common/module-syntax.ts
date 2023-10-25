@@ -84,6 +84,7 @@ export class ModuleSyntax {
     incomingRelativeTo: URL | undefined, // can be undefined when you know the url is not going to be relative
     outgoingRelativeTo: URL | undefined, // can be undefined when you know url is not going to be relative
     outgoingRealmURL: URL | undefined, // should be provided when the other 2 params are provided
+    addAfterFieldWithIndex?: number, // if provided, the field will be added at the specified index in the card's possibleFields map
   ) {
     let card = this.getCard(cardName);
     if (card.possibleFields.has(fieldName)) {
@@ -103,27 +104,44 @@ export class ModuleSyntax {
       outgoingRelativeTo,
       outgoingRealmURL,
     );
+
     let src = this.code();
     this.analyze(src); // reanalyze to update node start/end positions based on AST mutation
+    card = this.getCard(cardName); // re-get the card to get the updated node positions
 
     let insertPosition: number;
-    let lastField = [...card.possibleFields.values()].pop();
-    if (lastField) {
-      lastField = [...this.getCard(cardName).possibleFields.values()].pop()!;
-      if (typeof lastField.path.node.end !== 'number') {
+
+    if (addAfterFieldWithIndex !== undefined && card.possibleFields.size > 0) {
+      let field = Array.from(card.possibleFields.entries())[
+        addAfterFieldWithIndex
+      ][1];
+
+      if (typeof field.path.node.end !== 'number') {
         throw new Error(
-          `bug: could not determine the string end position to insert the new field`,
+          `bug: could not determine the string start position to insert the new field`,
         );
       }
-      insertPosition = lastField.path.node.end;
+
+      insertPosition = field.path.node.end;
     } else {
-      let bodyStart = this.getCard(cardName).path.get('body').node.start;
-      if (typeof bodyStart !== 'number') {
-        throw new Error(
-          `bug: could not determine the string end position to insert the new field`,
-        );
+      let lastField = [...card.possibleFields.values()].pop();
+      if (lastField) {
+        lastField = [...card.possibleFields.values()].pop()!;
+        if (typeof lastField.path.node.end !== 'number') {
+          throw new Error(
+            `bug: could not determine the string end position to insert the new field`,
+          );
+        }
+        insertPosition = lastField.path.node.end;
+      } else {
+        let bodyStart = card.path.get('body').node.start;
+        if (typeof bodyStart !== 'number') {
+          throw new Error(
+            `bug: could not determine the string end position to insert the new field`,
+          );
+        }
+        insertPosition = bodyStart + 1;
       }
-      insertPosition = bodyStart + 1;
     }
 
     // we use string manipulation to add the field into the src so that we
@@ -154,6 +172,10 @@ export class ModuleSyntax {
       throw new Error(`field "${fieldName}" does not exist`);
     }
 
+    let fieldIndex = Array.from(card.possibleFields.entries())
+      .map((f) => f[0])
+      .indexOf(fieldName);
+
     this.ast = Babel.transformFromAstSync(this.ast, undefined, {
       code: false,
       ast: true,
@@ -166,6 +188,8 @@ export class ModuleSyntax {
     })!.ast!;
 
     this.analyze(this.code());
+
+    return fieldIndex; // Useful for re-adding the field in the same position (i.e editing a field)
   }
 
   private getCard(
