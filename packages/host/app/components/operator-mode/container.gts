@@ -40,7 +40,7 @@ import { RealmPaths } from '@cardstack/runtime-common/paths';
 
 import type { Query } from '@cardstack/runtime-common/query';
 
-import CodeMode from '@cardstack/host/components/operator-mode/code-mode';
+import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import ENV from '@cardstack/host/config/environment';
 
 import {
@@ -753,7 +753,7 @@ export default class OperatorModeContainer extends Component<Signature> {
         />
 
         {{#if this.isCodeMode}}
-          <CodeMode
+          <CodeSubmode
             @delete={{perform this.delete}}
             @saveSourceOnClose={{perform this.saveSource}}
             @saveCardOnClose={{perform this.write}}

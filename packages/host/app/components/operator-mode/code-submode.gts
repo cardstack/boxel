@@ -83,7 +83,7 @@ interface Signature {
     saveCardOnClose: (card: CardDef) => void;
   };
 }
-const log = logger('component:code-mode');
+const log = logger('component:code-submode');
 const { autoSaveDelayMs } = config;
 
 type PanelWidths = {
@@ -114,7 +114,7 @@ const defaultPanelHeights: PanelHeights = {
 
 const cardEditorSaveTimes = new Map<string, number>();
 
-export default class CodeMode extends Component<Signature> {
+export default class CodeSubmode extends Component<Signature> {
   @service declare monacoService: MonacoService;
   @service declare cardService: CardService;
   @service declare messageService: MessageService;
