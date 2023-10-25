@@ -54,20 +54,20 @@ export default class RemoveFieldModal extends Component<Signature> {
       style={{cssVar boxel-modal-offset-top='40vh'}}
       data-test-remove-field-modal
     >
-      <div class='delete'>
-        <div class='content'>Remove a field</div>
+      <section class='delete'>
+        <header class='header'>Remove a Field</header>
 
-        <div class='content'>
+        <p class='content'>
           Are you sure you want to remove the
-          <b>{{@field.name}}</b>
+          <strong>{{@field.name}}</strong>
           field from the
-          <b>{{@card.displayName}}</b>
+          <strong>{{@card.displayName}}</strong>
           card?
-        </div>
+        </p>
 
-        <div class='content disclaimer'>This action is not reversible.</div>
+        <p class='content disclaimer'>This action is not reversible.</p>
 
-        <div class='buttons'>
+        <footer class='buttons'>
           <BoxelButton
             @size='tall'
             @kind='secondary-light'
@@ -92,26 +92,36 @@ export default class RemoveFieldModal extends Component<Signature> {
               Remove
             {{/if}}
           </BoxelButton>
-        </div>
-      </div>
+        </footer>
+      </section>
     </Modal>
 
     <style>
-      .content {
-        width: 100%;
-        font-size: var(--boxel-font-size);
+      .header {
+        font: 700 var(--boxel-font);
+        letter-spacing: var(--boxel-lsp-xs);
         text-align: center;
-        margin-top: var(--boxel-sp);
       }
-      .content:first-child {
-        margin-top: 0;
+      .content {
+        margin: 0;
+        width: 100%;
+        font: 500 var(--boxel-font);
+        letter-spacing: var(--boxel-lsp-xs);
+        text-align: center;
+      }
+      .content + .content {
+        margin-top: var(--boxel-sp-xs);
+      }
+      .header + .content {
+        margin-top: var(--boxel-sp);
       }
       .disclaimer {
         color: var(--boxel-danger);
-        font-size: var(--boxel-font-size-xs);
+        font: 500 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-xs);
       }
       .delete {
-        padding: var(--boxel-sp-lg) var(--boxel-sp-xl) var(--boxel-sp);
+        padding: var(--boxel-sp-lg) var(--boxel-sp-lg) var(--boxel-sp);
         background-color: white;
         border-radius: var(--boxel-border-radius-xl);
         box-shadow: var(--boxel-deep-box-shadow);

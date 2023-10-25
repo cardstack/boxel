@@ -30,13 +30,12 @@ export default class DeleteModal extends Component<Signature> {
       @onClose={{fn this.choose false}}
       style={{cssVar boxel-modal-offset-top='40vh'}}
     >
-      <div class='delete'>
-        <div class='content'>Delete the card</div>
-        <div class='content'>
+      <section class='delete'>
+        <p class='content'>Delete the card<br />
           <strong>{{this.currentConfirmation.card.title}}</strong>?
-        </div>
-        <div class='content disclaimer'>This action is not reversible.</div>
-        <div class='buttons'>
+        </p>
+        <p class='content disclaimer'>This action is not reversible.</p>
+        <footer class='buttons'>
           {{#if this.waitForDelete.isRunning}}
             <BoxelButton @size='tall' @kind='danger' @loading={{true}}>
               Deleting
@@ -59,26 +58,31 @@ export default class DeleteModal extends Component<Signature> {
               Delete
             </BoxelButton>
           {{/if}}
-        </div>
-      </div>
+        </footer>
+      </section>
     </Modal>
 
     <style>
       .content {
         width: 100%;
-        font-size: var(--boxel-font-size);
+        margin: 0;
+        font: 500 var(--boxel-font);
+        letter-spacing: var(--boxel-lsp-xs);
         text-align: center;
         overflow: hidden;
         text-overflow: ellipsis;
       }
-      .disclaimer {
+      .content + .content {
         margin-top: var(--boxel-sp-xs);
+      }
+      .disclaimer {
         color: var(--boxel-danger);
-        font-size: var(--boxel-font-size-xs);
+        font: 500 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-xs);
       }
       .delete {
-        padding: var(--boxel-sp-lg) var(--boxel-sp-xl) var(--boxel-sp);
-        background-color: white;
+        padding: var(--boxel-sp-lg) var(--boxel-sp-lg) var(--boxel-sp);
+        background-color: var(--boxel-light);
         border-radius: var(--boxel-border-radius-xl);
         box-shadow: var(--boxel-deep-box-shadow);
       }
