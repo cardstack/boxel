@@ -38,10 +38,11 @@ import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RecentFilesService from '../../services/recent-files-service';
 
-import { SearchSheetMode } from '../search-sheet';
+import SearchSheet, { SearchSheetMode } from '../search-sheet';
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
 import OperatorModeStack from './stack';
+import SubmodeLayout from './submode-layout';
 
 const waiter = buildWaiter('operator-mode:interact-submode-waiter');
 
@@ -75,6 +76,11 @@ interface Signature {
       | 'drop-card-to-right-neighbor-stack-button'
       | null;
     onFocusSearchInput: () => void;
+
+    onCancelSearchSheet: any;
+    onBlurSearchInput: any;
+    onSearch: any;
+    onCardSelectFromSearch: any;
   };
 }
 
@@ -92,10 +98,6 @@ export default class InteractSubmode extends Component<Signature> {
   private get allStackItems() {
     return this.operatorModeStateService.state?.stacks.flat() ?? [];
   }
-
-  private setupDeleteModal = (deleteModal: DeleteModal) => {
-    this.deleteModal = deleteModal;
-  };
 
   // The public API is wrapped in a closure so that whatever calls its methods
   // in the context of operator-mode, the methods can be aware of which stack to deal with (via stackIndex), i.e.
@@ -361,6 +363,10 @@ export default class InteractSubmode extends Component<Signature> {
     }
   }
 
+  private setupDeleteModal = (deleteModal: DeleteModal) => {
+    this.deleteModal = deleteModal;
+  };
+
   // dropTask will ignore any subsequent copy requests until the one in progress is done
   private copy = dropTask(
     async (
@@ -445,83 +451,105 @@ export default class InteractSubmode extends Component<Signature> {
   }
 
   <template>
-    <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
-      {{#if (eq this.allStackItems.length 0)}}
-        <div class='no-cards'>
-          <p class='add-card-title'>
-            Add a card to get started
-          </p>
+    <SubmodeLayout>
+      <:main>
+        <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
+          {{#if (eq this.allStackItems.length 0)}}
+            <div class='no-cards'>
+              <p class='add-card-title'>
+                Add a card to get started
+              </p>
 
-          <button
-            class='add-card-button'
-            {{on 'click' (fn (perform this.addCard))}}
-            data-test-add-card-button
-          >
-            <IconPlus width='50px' height='50px' />
-          </button>
+              <button
+                class='add-card-button'
+                {{on 'click' (fn (perform this.addCard))}}
+                data-test-add-card-button
+              >
+                <IconPlus width='50px' height='50px' />
+              </button>
+            </div>
+          {{else}}
+            {{#each this.stacks as |stack stackIndex|}}
+              <OperatorModeStack
+                data-test-operator-mode-stack={{stackIndex}}
+                class='operator-mode-stack'
+                @stackItems={{stack}}
+                @backgroundImageURL={{get
+                  this.differingBackgroundImageURLs
+                  stackIndex
+                }}
+                @stackIndex={{stackIndex}}
+                @publicAPI={{this.publicAPI this stackIndex}}
+                @close={{perform this.close}}
+                @edit={{this.edit}}
+                @onSelectedCards={{this.onSelectedCards}}
+                @save={{perform this.save}}
+                @delete={{perform this.delete}}
+                @setupStackItem={{this.setupStackItem}}
+              />
+            {{/each}}
+
+            <CopyButton
+              @selectedCards={{this.selectedCards}}
+              @copy={{fn (perform this.copy)}}
+              @isCopying={{this.copy.isRunning}}
+            />
+          {{/if}}
+
+          {{#if this.canCreateNeighborStack}}
+            <button
+              data-test-add-card-left-stack
+              class='add-card-to-neighbor-stack add-card-to-neighbor-stack--left
+                {{if
+                  (eq
+                    @searchSheetTrigger
+                    "drop-card-to-left-neighbor-stack-button"
+                  )
+                  "add-card-to-neighbor-stack--active"
+                }}'
+              {{on
+                'click'
+                (fn
+                  @onFocusSearchInput 'drop-card-to-left-neighbor-stack-button'
+                )
+              }}
+            >
+              <Download width='25' height='25' />
+            </button>
+            <button
+              data-test-add-card-right-stack
+              class='add-card-to-neighbor-stack add-card-to-neighbor-stack--right
+                {{if
+                  (eq
+                    @searchSheetTrigger
+                    "drop-card-to-right-neighbor-stack-button"
+                  )
+                  "add-card-to-neighbor-stack--active"
+                }}'
+              {{on
+                'click'
+                (fn
+                  @onFocusSearchInput 'drop-card-to-right-neighbor-stack-button'
+                )
+              }}
+            >
+              <Download width='25' height='25' />
+            </button>
+          {{/if}}
+          <DeleteModal @onCreate={{this.setupDeleteModal}} />
         </div>
-      {{else}}
-        {{#each this.stacks as |stack stackIndex|}}
-          <OperatorModeStack
-            data-test-operator-mode-stack={{stackIndex}}
-            class='operator-mode-stack'
-            @stackItems={{stack}}
-            @backgroundImageURL={{get
-              this.differingBackgroundImageURLs
-              stackIndex
-            }}
-            @stackIndex={{stackIndex}}
-            @publicAPI={{this.publicAPI this stackIndex}}
-            @close={{perform this.close}}
-            @edit={{this.edit}}
-            @onSelectedCards={{this.onSelectedCards}}
-            @save={{perform this.save}}
-            @delete={{perform this.delete}}
-            @setupStackItem={{this.setupStackItem}}
-          />
-        {{/each}}
-
-        <CopyButton
-          @selectedCards={{this.selectedCards}}
-          @copy={{fn (perform this.copy)}}
-          @isCopying={{this.copy.isRunning}}
+      </:main>
+      <:search>
+        <SearchSheet
+          @mode={{@searchSheetMode}}
+          @onCancel={{@onCancelSearchSheet}}
+          @onFocus={{@onFocusSearchInput}}
+          @onBlur={{@onBlurSearchInput}}
+          @onSearch={{@onSearch}}
+          @onCardSelect={{@onCardSelectFromSearch}}
         />
-      {{/if}}
-
-      {{#if this.canCreateNeighborStack}}
-        <button
-          data-test-add-card-left-stack
-          class='add-card-to-neighbor-stack add-card-to-neighbor-stack--left
-            {{if
-              (eq @searchSheetTrigger "drop-card-to-left-neighbor-stack-button")
-              "add-card-to-neighbor-stack--active"
-            }}'
-          {{on
-            'click'
-            (fn @onFocusSearchInput 'drop-card-to-left-neighbor-stack-button')
-          }}
-        >
-          <Download width='25' height='25' />
-        </button>
-        <button
-          data-test-add-card-right-stack
-          class='add-card-to-neighbor-stack add-card-to-neighbor-stack--right
-            {{if
-              (eq
-                @searchSheetTrigger "drop-card-to-right-neighbor-stack-button"
-              )
-              "add-card-to-neighbor-stack--active"
-            }}'
-          {{on
-            'click'
-            (fn @onFocusSearchInput 'drop-card-to-right-neighbor-stack-button')
-          }}
-        >
-          <Download width='25' height='25' />
-        </button>
-      {{/if}}
-      <DeleteModal @onCreate={{this.setupDeleteModal}} />
-    </div>
+      </:search>
+    </SubmodeLayout>
 
     <style>
       .operator-mode__main {

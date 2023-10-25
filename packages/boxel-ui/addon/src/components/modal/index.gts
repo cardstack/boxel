@@ -25,7 +25,9 @@ interface Signature {
 
 export default class Modal extends Component<Signature> {
   get backgroundImageURL() {
-    return `url(${this.args.backgroundImageURL})`;
+    return this.args.backgroundImageURL
+      ? `url(${this.args.backgroundImageURL})`
+      : '';
   }
 
   <template>
