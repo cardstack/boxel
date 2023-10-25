@@ -21,7 +21,7 @@ function isResolvedURL(url: URL | ResolvedURL): url is ResolvedURL {
   return '_isResolved' in url;
 }
 
-function makeResolvedURL(unresolvedURL: URL | string): ResolvedURL {
+export function makeResolvedURL(unresolvedURL: URL | string): ResolvedURL {
   let resolvedURL = new URL(unresolvedURL) as ResolvedURL;
   resolvedURL._isResolved = undefined;
   return resolvedURL;
@@ -497,13 +497,23 @@ export class Loader {
     urlOrRequest: string | URL | Request,
     init?: RequestInit,
   ): Promise<Response> {
-    for (let handler of this.urlHandlers) {
-      let result = await handler(this.asUnresolvedRequest(urlOrRequest, init));
-      if (result) {
-        return result;
+    try {
+      for (let handler of this.urlHandlers) {
+        let result = await handler(
+          this.asUnresolvedRequest(urlOrRequest, init),
+        );
+        if (result) {
+          return result;
+        }
       }
+      return await getNativeFetch()(this.asResolvedRequest(urlOrRequest, init));
+    } catch (err: any) {
+      this.log.error(`fetch failed for ${urlOrRequest}`, err);
+      return new Response(new Blob(), {
+        status: 500,
+        statusText: err.message,
+      });
     }
-    return await getNativeFetch()(this.asResolvedRequest(urlOrRequest, init));
   }
 
   resolve(moduleIdentifier: string | URL, relativeTo?: URL): ResolvedURL {

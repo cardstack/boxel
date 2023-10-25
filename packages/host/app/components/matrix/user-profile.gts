@@ -6,16 +6,16 @@ import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
-import { dropTask, restartableTask } from 'ember-concurrency';
+import { dropTask, restartableTask, all } from 'ember-concurrency';
 
 import {
+  BoxelInput,
   Button,
   FieldContainer,
-  BoxelInput,
   LoadingIndicator,
-} from '@cardstack/boxel-ui';
+} from '@cardstack/boxel-ui/components';
 
-import { not } from '@cardstack/host/helpers/truth-helpers';
+import { not } from '@cardstack/boxel-ui/helpers';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 export default class UserProfile extends Component {
@@ -26,7 +26,15 @@ export default class UserProfile extends Component {
           {{this.userId}}
         </div>
       </FieldContainer>
-
+      <FieldContainer @label='Email' @tag='label'>
+        <div class='value' data-test-field-value='email'>
+          {{#if this.email}}
+            {{this.email}}
+          {{else}}
+            - email not set -
+          {{/if}}
+        </div>
+      </FieldContainer>
       <FieldContainer @label='Display Name' @tag='label'>
         {{#if this.isEditMode}}
           <BoxelInput
@@ -50,7 +58,14 @@ export default class UserProfile extends Component {
       {{#if this.isEditMode}}
         <Button
           class='user-button'
+          data-test-profile-cancel-btn
+          @disabled={{not this.displayName}}
+          {{on 'click' this.cancel}}
+        >Cancel</Button>
+        <Button
+          class='user-button'
           data-test-profile-save-btn
+          @kind='primary'
           @disabled={{not this.displayName}}
           {{on 'click' this.save}}
         >Save</Button>
@@ -91,6 +106,7 @@ export default class UserProfile extends Component {
   @service private declare matrixService: MatrixService;
   @tracked private isEditMode = false;
   @tracked private displayName: string | undefined;
+  @tracked private email: string | undefined;
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
@@ -121,6 +137,11 @@ export default class UserProfile extends Component {
   }
 
   @action
+  private cancel() {
+    this.isEditMode = false;
+  }
+
+  @action
   private save() {
     this.doSave.perform();
   }
@@ -135,8 +156,13 @@ export default class UserProfile extends Component {
   });
 
   private loadProfile = restartableTask(async () => {
-    let { displayname: displayName } =
-      await this.matrixService.client.getProfileInfo(this.userId);
+    let [profile, threePid] = await all([
+      this.matrixService.client.getProfileInfo(this.userId),
+      this.matrixService.client.getThreePids(),
+    ]);
+    let { displayname: displayName } = profile;
+    let { threepids } = threePid;
+    this.email = threepids.find((t) => t.medium === 'email')?.address;
     this.displayName = displayName;
   });
 

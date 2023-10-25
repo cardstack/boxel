@@ -7,7 +7,7 @@ import {
   BaseInstanceType,
   FieldDef,
 } from './card-api';
-import { BoxelInput } from '@cardstack/boxel-ui';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputFilter, DeserializedResult } from './text-input-filter';
 
 function _deserialize(
@@ -48,6 +48,12 @@ function _serialize(val: number): string {
   return val.toString();
 }
 
+class View extends Component<typeof NumberField> {
+  <template>
+    {{@model}}
+  </template>
+}
+
 export default class NumberField extends FieldDef {
   static displayName = 'Number';
   static [primitive]: number;
@@ -58,12 +64,8 @@ export default class NumberField extends FieldDef {
   ): Promise<BaseInstanceType<T>> {
     return _deserialize(number).value as BaseInstanceType<T>;
   }
-
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      {{@model}}
-    </template>
-  };
+  static embedded = View;
+  static atom = View;
 
   static edit = class Edit extends Component<typeof this> {
     <template>

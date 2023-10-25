@@ -7,7 +7,8 @@ import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
-import { Button, CardContainer } from '@cardstack/boxel-ui';
+import { CardContainer } from '@cardstack/boxel-ui/components';
+import { Button } from '@cardstack/boxel-ui/components';
 
 import {
   catalogEntryRef,
@@ -20,6 +21,7 @@ import {
 import CardEditor from '@cardstack/host/components/card-editor';
 import { getSearchResults } from '@cardstack/host/resources/search';
 import type CardService from '@cardstack/host/services/card-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { type CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
@@ -86,6 +88,7 @@ export default class CatalogEntryEditor extends Component<Signature> {
   </template>
 
   @service declare cardService: CardService;
+  @service declare loaderService: LoaderService;
   catalogEntryRef = catalogEntryRef;
   catalogEntry = getSearchResults(this, () => ({
     filter: {
@@ -102,7 +105,7 @@ export default class CatalogEntryEditor extends Component<Signature> {
 
   @action
   async createEntry(): Promise<void> {
-    let loader = this.cardService.loaderService.loader;
+    let loader = this.loaderService.loader;
     let realmInfoResponse = await loader.fetch(
       `${this.cardService.defaultURL}_info`,
       { headers: { Accept: SupportedMimeType.RealmInfo } },

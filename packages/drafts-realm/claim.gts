@@ -10,7 +10,9 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { getMetamaskResource } from './utils/resources/metamask';
 import { tracked } from '@glimmer/tracking';
-import { Button, FieldContainer, GridContainer } from '@cardstack/boxel-ui';
+import { Button } from '@cardstack/boxel-ui/components';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
+import { GridContainer } from '@cardstack/boxel-ui/components';
 import EthereumAddressCard from 'https://cardstack.com/base/ethereum-address';
 
 // @ts-ignore

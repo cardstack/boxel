@@ -8,19 +8,16 @@ import {
   CardDef,
   realmInfo,
   realmURL,
-  relativeTo,
   type BaseDef,
 } from './card-api';
-import { AddButton, Tooltip } from '@cardstack/boxel-ui';
+import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
 import {
   chooseCard,
   catalogEntryRef,
-  getCards,
+  getLiveCards,
   baseRealm,
   cardTypeDisplayName,
-  subscribeToRealm,
 } from '@cardstack/runtime-common';
-import { registerDestructor } from '@ember/destroyable';
 import { tracked } from '@glimmer/tracking';
 import { type CatalogEntry } from './catalog-entry';
 import StringField from './string';
@@ -39,6 +36,9 @@ class Isolated extends Component<typeof CardsGrid> {
               fieldName=undefined
             }}
             data-test-cards-grid-item={{card.id}}
+            {{! In order to support scrolling cards into view 
+            we use a selector that is not pruned out in production builds }}
+            data-cards-grid-item={{card.id}}
           >
             <div class='grid-card'>
               <div class='grid-thumbnail'>
@@ -58,7 +58,7 @@ class Isolated extends Component<typeof CardsGrid> {
             </div>
           </li>
         {{else}}
-          {{#if this.request.isLoading}}
+          {{#if this.liveQuery.isLoading}}
             Loading...
           {{else}}
             <p>No cards available</p>
@@ -159,62 +159,14 @@ class Isolated extends Component<typeof CardsGrid> {
   </template>
 
   @tracked
-  private declare request: {
+  private declare liveQuery: {
     instances: CardDef[];
     isLoading: boolean;
-    ready: Promise<void>;
   };
-  @tracked staleInstances: CardDef[] = [];
-  private subscription: { url: string; unsubscribe: () => void } | undefined;
 
   constructor(owner: unknown, args: any) {
     super(owner, args);
-    this.refresh();
-
-    let url = `${this.args.model[realmURL]}_message`;
-    this.subscription = {
-      url,
-      unsubscribe: subscribeToRealm(url, ({ type }) => {
-        // we are only interested in index events
-        if (type !== 'index') {
-          return;
-        }
-        // we show stale instances during a live refresh while we are
-        // waiting for the new instances to arrive--this eliminates the flash
-        // while we wait
-        this.staleInstances = [...(this.instances ?? [])];
-
-        if (this.args.context?.actions) {
-          this.args.context?.actions?.doWithStableScroll(
-            this.args.model as CardDef,
-            async () => {
-              this.refresh();
-              await this.request.ready;
-            },
-          );
-        } else {
-          this.refresh();
-        }
-      }),
-    };
-    registerDestructor(this, () => {
-      if (this.subscription) {
-        this.subscription.unsubscribe();
-      }
-    });
-  }
-
-  get instances() {
-    if (!this.request) {
-      return;
-    }
-    return this.request.isLoading
-      ? this.staleInstances
-      : this.request.instances;
-  }
-
-  private refresh() {
-    this.request = getCards(
+    this.liveQuery = getLiveCards(
       {
         filter: {
           not: {
@@ -243,7 +195,24 @@ class Isolated extends Component<typeof CardsGrid> {
         ],
       },
       this.args.model[realmURL] ? [this.args.model[realmURL].href] : undefined,
+      async (ready: Promise<void> | undefined) => {
+        if (this.args.context?.actions) {
+          this.args.context.actions.doWithStableScroll(
+            this.args.model as CardDef,
+            async () => {
+              await ready;
+            },
+          );
+        }
+      },
     );
+  }
+
+  get instances() {
+    if (!this.liveQuery) {
+      return;
+    }
+    return this.liveQuery.instances;
   }
 
   @action
@@ -255,7 +224,7 @@ class Isolated extends Component<typeof CardsGrid> {
     let card = await chooseCard<CatalogEntry>({
       filter: {
         on: catalogEntryRef,
-        eq: { isPrimitive: false },
+        eq: { isField: false },
       },
     });
     if (!card) {
@@ -270,7 +239,8 @@ class Isolated extends Component<typeof CardsGrid> {
     // same cards into the stack.
     await this.args.context?.actions?.createCard?.(
       card.ref,
-      this.args.model[relativeTo],
+      new URL(card.id),
+      { realmURL: this.args.model[realmURL] }
     );
   });
 }

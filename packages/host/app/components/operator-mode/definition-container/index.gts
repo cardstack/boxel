@@ -28,7 +28,7 @@ export class FileDefinitionContainer extends Component<FileSignature> {
     </BaseDefinitionContainer>
   </template>
 }
-interface ModuleArgs extends Omit<BaseArgs, 'title'>, ActiveArgs {}
+interface ModuleArgs extends BaseArgs, ActiveArgs {}
 
 interface ModuleSignature {
   Element: HTMLElement;
@@ -38,7 +38,7 @@ interface ModuleSignature {
 export class ModuleDefinitionContainer extends Component<ModuleSignature> {
   <template>
     <BaseDefinitionContainer
-      @title='Card Definition'
+      @title={{@title}}
       @name={{@name}}
       @fileExtension={{@fileExtension}}
       @isActive={{@isActive}}
@@ -79,7 +79,7 @@ export class InstanceDefinitionContainer extends Component<InstanceSignature> {
 }
 
 interface ClickableModuleArgs
-  extends Omit<BaseArgs, 'title' | 'infoText' | 'isActive'>,
+  extends Omit<BaseArgs, 'infoText' | 'isActive'>,
     ClickableArgs {}
 
 interface ClickableModuleSignature {
@@ -95,7 +95,7 @@ export class ClickableModuleDefinitionContainer extends Component<ClickableModul
       data-test-definition-container
     >
       <BaseDefinitionContainer
-        @title='Card Definition'
+        @title={{@title}}
         @name={{@name}}
         @fileExtension={{@fileExtension}}
         @isActive={{false}}

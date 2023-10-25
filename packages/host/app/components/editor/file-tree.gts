@@ -6,7 +6,7 @@ import Directory from './directory';
 
 interface Args {
   Args: {
-    realmURL: string;
+    realmURL: URL;
   };
 }
 

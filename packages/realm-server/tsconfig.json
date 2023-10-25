@@ -28,8 +28,7 @@
       "@cardstack/boxel-ui": ["../boxel-ui/addon"],
       "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"],
       "*": ["types/*"]
-    },
-    "typeRoots": ["../boxel-ui/types"]
+    }
   },
   "glint": {
     "environment": ["ember-loose", "ember-template-imports"],

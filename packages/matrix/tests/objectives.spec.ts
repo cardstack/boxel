@@ -23,7 +23,10 @@ test.describe('Room objectives', () => {
     await login(page, 'user1', 'pass');
     await createRoom(page, { name: 'Room 1', invites: ['user2'] });
     await openRoom(page, 'Room 1');
-    await setObjective(page, 'https://cardstack.com/base/types/room-objective');
+    await setObjective(
+      page,
+      'https://cardstack.com/base/fields/room-objective-field',
+    );
 
     await logout(page);
     await login(page, 'user2', 'pass');
@@ -53,7 +56,10 @@ test.describe('Room objectives', () => {
     await createRoom(page, { name: 'Room 1' });
     await openRoom(page, 'Room 1');
 
-    await setObjective(page, 'https://cardstack.com/base/types/room-objective');
+    await setObjective(
+      page,
+      'https://cardstack.com/base/fields/room-objective-field',
+    );
     await expect(page.locator(`[data-test-objective]`)).toContainText(
       'Objective: Make sure that all room members greet each other by saying "Hello"',
     );
@@ -87,7 +93,10 @@ test.describe('Room objectives', () => {
     await createRoom(page, { name: 'Room 1', invites: ['user2'] });
     await openRoom(page, 'Room 1');
 
-    await setObjective(page, 'https://cardstack.com/base/types/room-objective');
+    await setObjective(
+      page,
+      'https://cardstack.com/base/fields/room-objective-field',
+    );
     await expect(page.locator(`[data-test-objective-progress]`)).toContainText(
       `Completed 0 of 1 (0%)`,
     );
@@ -113,7 +122,10 @@ test.describe('Room objectives', () => {
     await createRoom(page, { name: 'Room 1' });
     await openRoom(page, 'Room 1');
 
-    await setObjective(page, 'https://cardstack.com/base/types/room-objective');
+    await setObjective(
+      page,
+      'https://cardstack.com/base/fields/room-objective-field',
+    );
     await sendMessage(page, 'Room 1', `hello!`);
 
     await expect(page.locator(`[data-test-objective-progress]`)).toContainText(
@@ -131,7 +143,10 @@ test.describe('Room objectives', () => {
     await createRoom(page, { name: 'Room 1', invites: ['user2'] });
     await openRoom(page, 'Room 1');
 
-    await setObjective(page, 'https://cardstack.com/base/types/room-objective');
+    await setObjective(
+      page,
+      'https://cardstack.com/base/fields/room-objective-field',
+    );
     await sendMessage(page, 'Room 1', `hello`);
     await expect(
       page.locator(`[data-test-objective-is-complete]`),

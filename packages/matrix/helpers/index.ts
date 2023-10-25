@@ -5,10 +5,12 @@ import {
   type SynapseInstance,
 } from '../docker/synapse';
 export const testHost = 'http://localhost:4202/test';
+export const mailHost = 'http://localhost:5001';
 
 interface ProfileAssertions {
   userId?: string;
   displayName?: string;
+  email?: string;
 }
 interface LoginOptions {
   expectFailure?: true;
@@ -33,20 +35,22 @@ export async function setupMatrixOverride(
   page: Page,
   synapse: SynapseInstance,
 ) {
-  // Save the original goto function
-  const originalGoto = page.goto.bind(page);
+  // Save the original goto function keeping mind this override function may be
+  // called more than once
+  const originalGoto = (page as any).originalGoto ?? page.goto.bind(page);
+  (page as any).originalGoto = originalGoto;
 
   // Patch the goto function
   page.goto = async (url, options) => {
     const newUrl = new URL(url);
     const params = new URLSearchParams(newUrl.search);
 
-    // Override the matrix URL
+    // Override the matrixURL
     params.set('matrixURL', `http://localhost:${synapse.mappedPort}`);
     newUrl.search = params.toString();
 
     // Call the original goto function with the new URL
-    return await originalGoto(newUrl.toString(), options);
+    return await originalGoto(newUrl.href, options);
   };
 
   // Patch the reload function
@@ -73,6 +77,75 @@ export async function openChat(page: Page) {
 
 export async function openRoot(page: Page) {
   await page.goto(testHost);
+}
+
+export async function clearLocalStorage(page: Page) {
+  await openRoot(page);
+  await page.evaluate(() => window.localStorage.clear());
+}
+
+export async function validateEmail(
+  page: Page,
+  email: string,
+  opts?: {
+    onEmailPage?: (page: Page) => Promise<void>;
+    onValidationPage?: (page: Page) => Promise<void>;
+    sendAttempts?: number;
+    isLoggedInWhenValidated?: true;
+  },
+) {
+  let sendAttempts = opts?.sendAttempts ?? 1;
+  await expect(page.locator('[data-test-validate-btn]')).toBeDisabled();
+  await page.locator('[data-test-email-field] input').fill(email);
+  await expect(page.locator('[data-test-validate-btn]')).toBeEnabled();
+  await page.locator('[data-test-validate-btn]').click();
+  await expect(page.locator('[data-test-email-validation]')).toContainText(
+    'The email address user1@example.com has not been validated',
+  );
+
+  for (let i = 0; i < sendAttempts - 1; i++) {
+    await page.waitForTimeout(500);
+    await page.locator('[data-test-resend-validation]').click();
+  }
+
+  await page.goto(mailHost);
+  await expect(
+    page.locator('.messagelist .unread').filter({ hasText: email }),
+  ).toHaveCount(sendAttempts);
+  await page
+    .locator('.messagelist .unread')
+    .filter({ hasText: email })
+    .first()
+    .click();
+  await expect(
+    page.frameLocator('.messageview iframe').locator('body'),
+  ).toContainText('Verify Your Email Address');
+  await expect(page.locator('.messageview .messageviewheader')).toContainText(
+    `To:${email}`,
+  );
+
+  if (opts?.onEmailPage) {
+    await opts.onEmailPage(page);
+  }
+
+  let context = page.context();
+  const [validationPage] = await Promise.all([
+    context.waitForEvent('page'),
+    await page
+      .frameLocator('.messageview iframe')
+      .getByText('Verify Your Email Address')
+      .click(),
+  ]);
+  await validationPage.waitForLoadState();
+  if (opts?.onValidationPage) {
+    await opts.onValidationPage(validationPage);
+  }
+  await gotoRegistration(page);
+  if (!opts?.isLoggedInWhenValidated) {
+    await expect(page.locator('[data-test-email-validation]')).toContainText(
+      'The email address user1@example.com has been validated',
+    );
+  }
 }
 
 export async function gotoRegistration(page: Page) {
@@ -303,6 +376,11 @@ export async function assertLoggedIn(page: Page, opts?: ProfileAssertions) {
   await expect(
     page.locator('[data-test-field-value="displayName"]'),
   ).toContainText(opts?.displayName ?? 'user1');
+  if (opts?.email) {
+    await expect(page.locator('[data-test-field-value="email"]')).toHaveText(
+      opts.email,
+    );
+  }
 }
 
 export async function assertLoggedOut(page: Page) {

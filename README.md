@@ -15,6 +15,10 @@
 
 `packages/realm-server` is a node app that serves the realm as an HTTP server, as well as, it can also host the runtime application for its own realm.
 
+`packages/boxel-ui/addon` is the UI components Ember addon
+
+`packages/boxel-ui/test-app` is the test suite and component explorer for boxel-ui
+
 `packages/boxel-motion` is the animation primitives ember addon.
 
 `packages/boxel-motion-test-app` is the test suite for boxel-motion
@@ -33,8 +37,9 @@ There exists a "dev" mode in which we can use ember-cli to host the card runtime
 
 In order to run the ember-cli hosted app:
 
-1. `pnpm start` in the host/ workspace to serve the ember app. Note that this script includes the environment variable `OWN_REALM_URL=http://localhost:4201/draft/` which configures the host to point to the draft realm's cards realm by default.
-2. `pnpm start:all` in the realm-server/ to serve the base realm, draft realm and published realm -- this will also allow you to switch between the app and the tests without having to restart servers)
+1. `pnpm build` in the boxel-ui/addon workspace to build the boxel-ui addon.
+2. `pnpm start` in the host/ workspace to serve the ember app. Note that this script includes the environment variable `OWN_REALM_URL=http://localhost:4201/draft/` which configures the host to point to the draft realm's cards realm by default.
+3. `pnpm start:all` in the realm-server/ to serve the base realm, draft realm and published realm -- this will also allow you to switch between the app and the tests without having to restart servers)
 
 The app is available at http://localhost:4200. It will serve the draft realm (configurable with OWN_REALM_URL, as mentioned above). You can open the base and draft cards workspace directly by entering http://localhost:4201/base or http://localhost:4201/draft in the browser (and additionally the published realm by entering http://localhost:4201/published).
 
@@ -68,6 +73,7 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 | :4203 | `root (/)` base realm                                 | ✅                  | 🚫                   |
 | :4204 | `root (/)` drafts realm                               | ✅                  | 🚫                   |
 | :4205 | qunit server mounting realms in iframes for testing   | ✅                  | 🚫                   |
+| :5001 | Mail user interface for viewing emails sent to local SMTP | ✅              | 🚫                   | 
 | :8008 | Matrix synapse server                                 | ✅                  | 🚫                   |
 
 #### Using `start:development`
@@ -143,11 +149,15 @@ To stop the admin console run the following in the packages/matrix workspace:
 pnpm stop:admin
 ```
 
+#### SMTP Server
+
+Matrix requires an SMTP server in order to send emails. In order to facilitate this we leverage [smtp4dev](https://github.com/rnwood/smtp4dev) in dev and test (CI) environments . This is a docker container that includes both a local SMTP server and hosts a web app for viewing all emails send from the SMTP server (the emails never leave the docker container). smtp4dev runs in the same docker network as synapse, so the SMTP port is never projected to the docker host. smtp4dev also runs the web app used to view emails sent from the SMTP server at `http://localhost:5001`. You can open a browser tab with this URL to view any emails sent from the matrix server. As well as, our matrix tests leverage the mail web app in order to perform email assertions. smtp4dev is automatically started as part of running `pnpm start:all` in the `packages/realm-server` workspace.
+
 ## Boxel UI Component Explorer
 
 There is a ember-freestyle component explorer available to assist with development. In order to run the freestyle app:
 
-1. `cd packages/boxel-ui`
+1. `cd packages/boxel-ui/test-app`
 2. `pnpm start`
 3. Visit http://localhost:4210/ in your browser
 
@@ -188,6 +198,11 @@ This test suite contains acceptance tests for asserting that the Realm server is
 1. `pnpm start:all`
 
 Visit `http://localhost:4205` after the realms have finished starting up
+
+### Boxel UI
+
+1. `cd packages/boxel-ui/test-app`
+2. `pnpm test` (or `pnpm start` and visit http://localhost:4210/tests to run tests in the browser)
 
 ### Boxel Motion
 

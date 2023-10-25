@@ -8,16 +8,19 @@ import { task } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
 
-import { Tooltip, IconButton, BoxelDropdown } from '@cardstack/boxel-ui';
+import {
+  BoxelDropdown,
+  IconButton,
+  Menu as BoxelMenu,
+  Tooltip,
+} from '@cardstack/boxel-ui/components';
 
-import BoxelMenu from '@cardstack/boxel-ui/components/menu';
+import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
+import { IconLink, ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
 
-import menuItem from '@cardstack/boxel-ui/helpers/menu-item';
+import { RealmInfo, cardTypeDisplayName } from '@cardstack/runtime-common';
 
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
-
-import { cardTypeDisplayName } from '@cardstack/runtime-common';
-
+import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import Preview from '@cardstack/host/components/preview';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
@@ -26,7 +29,7 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     card: CardDef;
-    realmIconURL: string | null | undefined;
+    realmInfo: RealmInfo | null;
   };
   Blocks: {};
 }
@@ -49,7 +52,13 @@ export default class CardPreviewPanel extends Component<Signature> {
       ...attributes
     >
       <div class='header-icon'>
-        <img src={{@realmIconURL}} alt='Realm icon' />
+        {{#if @realmInfo}}
+          <RealmIcon
+            @realmIconURL={{@realmInfo.iconURL}}
+            @realmName={{@realmInfo.name}}
+            class='icon'
+          />
+        {{/if}}
       </div>
       <div class='header-title'>
         {{cardTypeDisplayName @card}}
@@ -60,7 +69,7 @@ export default class CardPreviewPanel extends Component<Signature> {
             <Tooltip @placement='top'>
               <:trigger>
                 <IconButton
-                  @icon='three-dots-horizontal'
+                  @icon={{ThreeDotsHorizontal}}
                   @width='20px'
                   @height='20px'
                   class='icon-button'
@@ -79,9 +88,7 @@ export default class CardPreviewPanel extends Component<Signature> {
               @closeMenu={{dd.close}}
               @items={{array
                 (menuItem
-                  'Copy Card URL'
-                  (perform this.copyToClipboard)
-                  icon='icon-link'
+                  'Copy Card URL' (perform this.copyToClipboard) icon=IconLink
                 )
               }}
             />
