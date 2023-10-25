@@ -35,7 +35,7 @@ export default class DeleteModal extends Component<Signature> {
         <div class='content'>
           <strong>{{this.currentConfirmation.card.title}}</strong>?
         </div>
-        <div class='content disclaimer'>This action is not reversable</div>
+        <div class='content disclaimer'>This action is not reversible.</div>
         <div class='buttons'>
           {{#if this.waitForDelete.isRunning}}
             <BoxelButton @size='tall' @kind='danger' @loading={{true}}>
