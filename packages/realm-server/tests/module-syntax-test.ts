@@ -588,7 +588,7 @@ module('module-syntax', function () {
     `;
 
     let mod = new ModuleSyntax(src);
-    let indexOfRemovedField = mod.removeField(
+    let fieldIndex = mod.removeField(
       { type: 'exportedName', name: 'Person' },
       'artistName',
     );
@@ -604,7 +604,7 @@ module('module-syntax', function () {
       undefined,
       undefined,
       undefined,
-      indexOfRemovedField - 1,
+      fieldIndex,
     );
 
     assert.codeEqual(
@@ -618,6 +618,104 @@ module('module-syntax', function () {
           @field lastName = contains(StringCard);
           @field artistNames = containsMany(StringCard);
           @field streetName = contains(StringCard);
+        }
+      `,
+    );
+  });
+
+  test('can use remove & add a field to achieve edit in place - when field is at the beginning', async function (assert) {
+    let src = `
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends CardDef {
+        @field firstName = contains(StringCard);
+        @field lastName = contains(StringCard);
+        @field artistName = contains(StringCard);
+        @field streetName = contains(StringCard);
+      }
+    `;
+
+    let mod = new ModuleSyntax(src);
+    let fieldIndex = mod.removeField(
+      { type: 'exportedName', name: 'Person' },
+      'firstName',
+    );
+
+    mod.addField(
+      { type: 'exportedName', name: 'Person' },
+      'firstNameAdjusted',
+      {
+        module: 'https://cardstack.com/base/string',
+        name: 'default',
+      },
+      'contains',
+      undefined,
+      undefined,
+      undefined,
+      fieldIndex,
+    );
+
+    assert.codeEqual(
+      mod.code(),
+      `
+        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        export class Person extends CardDef {
+          @field firstNameAdjusted = contains(StringCard);
+          @field lastName = contains(StringCard);
+          @field artistName = contains(StringCard);
+          @field streetName = contains(StringCard);
+        }
+      `,
+    );
+  });
+
+  test('can use remove & add a field to achieve edit in place - when field is at the end', async function (assert) {
+    let src = `
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+
+      export class Person extends CardDef {
+        @field firstName = contains(StringCard);
+        @field lastName = contains(StringCard);
+        @field artistName = contains(StringCard);
+        @field streetName = contains(StringCard);
+      }
+    `;
+
+    let mod = new ModuleSyntax(src);
+    let fieldIndex = mod.removeField(
+      { type: 'exportedName', name: 'Person' },
+      'streetName',
+    );
+
+    mod.addField(
+      { type: 'exportedName', name: 'Person' },
+      'streetNameAdjusted',
+      {
+        module: 'https://cardstack.com/base/string',
+        name: 'default',
+      },
+      'contains',
+      undefined,
+      undefined,
+      undefined,
+      fieldIndex,
+    );
+
+    assert.codeEqual(
+      mod.code(),
+      `
+        import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        export class Person extends CardDef {
+          @field firstName = contains(StringCard);
+          @field lastName = contains(StringCard);
+          @field artistName = contains(StringCard);
+          @field streetNameAdjusted = contains(StringCard);
         }
       `,
     );

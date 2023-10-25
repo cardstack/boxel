@@ -195,15 +195,14 @@ export default class EditFieldModal extends Component<Signature> {
       name: string;
     };
 
-    let addAfterFieldWithIndex = undefined;
+    let addFieldAtIndex = undefined;
 
     if (!this.isNewField) {
       // We are editing a field, so we need to first remove the old one, and then add the new one
-      addAfterFieldWithIndex =
-        this.args.moduleSyntax.removeField(
-          { type: 'exportedName', name: identifiedCard.name },
-          this.args.field!.name,
-        ) - 1; // -1 because we want to add the new field before the old one (that just got removed)
+      addFieldAtIndex = this.args.moduleSyntax.removeField(
+        { type: 'exportedName', name: identifiedCard.name },
+        this.args.field!.name,
+      );
     }
 
     this.args.moduleSyntax.addField(
@@ -219,7 +218,7 @@ export default class EditFieldModal extends Component<Signature> {
         makeResolvedURL(this.operatorModeStateService.state.codePath!).href,
       ),
       new URL(this.args.file.realmURL),
-      addAfterFieldWithIndex,
+      addFieldAtIndex,
     );
 
     this.writeTask.perform(this.args.moduleSyntax.code());

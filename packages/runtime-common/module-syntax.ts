@@ -84,7 +84,7 @@ export class ModuleSyntax {
     incomingRelativeTo: URL | undefined, // can be undefined when you know the url is not going to be relative
     outgoingRelativeTo: URL | undefined, // can be undefined when you know url is not going to be relative
     outgoingRealmURL: URL | undefined, // should be provided when the other 2 params are provided
-    addAfterFieldWithIndex?: number, // if provided, the field will be added at the specified index in the card's possibleFields map
+    addFieldAtIndex?: number, // if provided, the field will be added at the specified index in the card's possibleFields map
   ) {
     let card = this.getCard(cardName);
     if (card.possibleFields.has(fieldName)) {
@@ -111,18 +111,19 @@ export class ModuleSyntax {
 
     let insertPosition: number;
 
-    if (addAfterFieldWithIndex !== undefined && card.possibleFields.size > 0) {
-      let field = Array.from(card.possibleFields.entries())[
-        addAfterFieldWithIndex
-      ][1];
+    if (
+      addFieldAtIndex !== undefined &&
+      addFieldAtIndex < card.possibleFields.size
+    ) {
+      let field = Array.from(card.possibleFields.entries())[addFieldAtIndex][1];
 
-      if (typeof field.path.node.end !== 'number') {
+      if (typeof field.path.node.start !== 'number') {
         throw new Error(
           `bug: could not determine the string start position to insert the new field`,
         );
       }
 
-      insertPosition = field.path.node.end;
+      insertPosition = field.path.node.start; // squeeze the new field in before the existing field
     } else {
       let lastField = [...card.possibleFields.values()].pop();
       if (lastField) {
@@ -189,7 +190,7 @@ export class ModuleSyntax {
 
     this.analyze(this.code());
 
-    return fieldIndex; // Useful for re-adding the field in the same position (i.e editing a field)
+    return fieldIndex; // Useful for re-adding a new field in the same position (i.e editing a field, which is composed of removeField and addField)
   }
 
   private getCard(
