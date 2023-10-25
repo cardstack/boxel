@@ -29,6 +29,7 @@ import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 import ModalContainer from '@cardstack/host/components/modal-container';
 
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import { FieldOfType, Type } from '@cardstack/host/resources/card-type';
 import { Ready } from '@cardstack/host/resources/file';
 import LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -36,7 +37,6 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 import { BaseDef, FieldType } from 'https://cardstack.com/base/card-api';
 
 import { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
-import { FieldOfType, Type } from '@cardstack/host/resources/card-type';
 
 interface Signature {
   Args: {
@@ -110,21 +110,37 @@ export default class EditFieldModal extends Component<Signature> {
     }
 
     this.fieldName = this.args.field.name;
-    this.cardinality = ['containsMany', 'linksToMany'].includes(this.args.field.type) ? 'many' : 'one';
+    this.cardinality = ['containsMany', 'linksToMany'].includes(
+      this.args.field.type,
+    )
+      ? 'many'
+      : 'one';
 
-    let fieldCardType = this.args.field.card as Type
+    let ref: { module: string; name: string };
 
-    this.fieldCard = await loadCard(fieldCardType.codeRef, {
-      loader: this.loaderService.loader
+    let fieldCardType = this.args.field.card;
+    let isCardType = 'codeRef' in fieldCardType; // To see whether we are dealing with Type or CodeRefType
+
+    if (isCardType) {
+      ref = (fieldCardType as Type).codeRef as typeof ref;
+    } else {
+      ref = fieldCardType as typeof ref;
+    }
+
+    this.fieldCard = await loadCard(ref, {
+      loader: this.loaderService.loader,
     });
 
-    this.fieldModuleURL = new URL(fieldCardType.module);
+    this.fieldModuleURL = new URL(ref.module);
+    this.cardURL = new URL(ref.module);
+    this.fieldRef = ref;
 
     // Field's card can descend from a FieldDef or a CardDef, so we need to determine which one it is. We do this by checking the field's type -
-    // contains/containsMany is a FieldDef, and linksTo/linksToMany is a CardDef
-    this.isFieldDef = this.determineFieldOrCardFromFieldType(this.args.field.type) === "field";
-    this.cardURL = new URL(fieldCardType.id);
-    this.fieldRef = fieldCardType.codeRef;
+    // contains/containsMany is a FieldDef, and linksTo/linksToMany is a CardDef. When spawning the card chooser, the catalog entry will have the isField property set,
+    // which dictates the field type. But at this point where we are editing an existing field, we don't have the catalog entry available, so we need to determine isFieldDef
+    // from the field's type
+    this.isFieldDef =
+      this.determineFieldOrCardFromFieldType(this.args.field.type) === 'field';
   });
 
   private chooseCardTask = restartableTask(async () => {
@@ -157,7 +173,9 @@ export default class EditFieldModal extends Component<Signature> {
     }
   });
 
-  private determineFieldOrCardFromFieldType(fieldType: FieldType): 'field' | 'card' {
+  private determineFieldOrCardFromFieldType(
+    fieldType: FieldType,
+  ): 'field' | 'card' {
     if (fieldType === 'contains' || fieldType === 'containsMany') {
       return 'field';
     } else {
@@ -177,12 +195,15 @@ export default class EditFieldModal extends Component<Signature> {
       name: string;
     };
 
+    let addAfterFieldWithIndex = undefined;
+
     if (!this.isNewField) {
       // We are editing a field, so we need to first remove the old one, and then add the new one
-      this.args.moduleSyntax.removeField(
-        { type: 'exportedName', name: identifiedCard.name },
-        this.args.field!.name,
-      );
+      addAfterFieldWithIndex =
+        this.args.moduleSyntax.removeField(
+          { type: 'exportedName', name: identifiedCard.name },
+          this.args.field!.name,
+        ) - 1; // -1 because we want to add the new field before the old one (that just got removed)
     }
 
     this.args.moduleSyntax.addField(
@@ -191,13 +212,14 @@ export default class EditFieldModal extends Component<Signature> {
         name: identifiedCard.name,
       },
       this.fieldName,
-      this.fieldRef as { module: string, name: string },
+      this.fieldRef as { module: string; name: string },
       this.fieldType,
       this.cardURL,
       this.loaderService.loader.reverseResolution(
         makeResolvedURL(this.operatorModeStateService.state.codePath!).href,
       ),
       new URL(this.args.file.realmURL),
+      addAfterFieldWithIndex,
     );
 
     this.writeTask.perform(this.args.moduleSyntax.code());
@@ -303,7 +325,7 @@ export default class EditFieldModal extends Component<Signature> {
     </style>
 
     <ModalContainer
-      @title={{if this.isNewField "Add field" "Edit field settings"}}
+      @title={{if this.isNewField 'Add field' 'Edit field settings'}}
       @onClose={{@onClose}}
       @size='medium'
       @centered={{true}}
