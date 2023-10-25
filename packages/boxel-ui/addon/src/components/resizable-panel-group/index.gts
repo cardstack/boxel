@@ -301,7 +301,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
     let panelLengths = [];
     for (let index = 1; index <= this.listPanelContext.size; index++) {
       let panelEl = panelGroupEl.querySelector(
-        `[id='${index}'].boxel-panel.${this.args.orientation}`,
+        `[id='${index}'].boxel-panel-${this.args.orientation}`,
       ) as HTMLElement;
       if (!panelEl) {
         console.error(
