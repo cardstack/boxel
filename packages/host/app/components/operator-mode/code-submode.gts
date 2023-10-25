@@ -78,7 +78,7 @@ import DetailPanel from './detail-panel';
 
 interface Signature {
   Args: {
-    delete: (card: CardDef, afterDelete?: () => void) => void;
+    delete: (card: CardDef, afterDelete?: () => void) => Promise<void>;
     saveSourceOnClose: (url: URL, content: string) => void;
     saveCardOnClose: (card: CardDef) => void;
   };
