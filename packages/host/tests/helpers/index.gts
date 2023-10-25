@@ -1,7 +1,7 @@
 import Owner from '@ember/owner';
 import Service from '@ember/service';
 import { type TestContext, visit } from '@ember/test-helpers';
-import { findAll, waitUntil } from '@ember/test-helpers';
+import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
 import { buildWaiter } from '@ember/test-waiters';
 import GlimmerComponent from '@glimmer/component';
 
@@ -103,6 +103,19 @@ export async function waitForSyntaxHighlighting(
       color,
     { timeoutMessage: 'timed out waiting for syntax highlighting' },
   );
+}
+export async function showSearchResult(realmName: string, id: string) {
+  await waitFor(`[data-test-realm="${realmName}"] [data-test-select]`);
+  while (
+    document.querySelector(
+      `[data-test-realm="${realmName}"] [data-test-show-more-cards]`,
+    ) &&
+    !document.querySelector(
+      `[data-test-realm="${realmName}"] [data-test-select="${id}"]`,
+    )
+  ) {
+    await click(`[data-test-realm="${realmName}"] [data-test-show-more-cards]`);
+  }
 }
 export interface Dir {
   [name: string]: string | Dir;
@@ -424,6 +437,7 @@ export async function saveCard(instance: CardDef, id: string, loader: Loader) {
   let doc = api.serializeCard(instance);
   doc.data.id = id;
   await api.updateFromSerialized(instance, doc);
+  return doc;
 }
 
 export async function shimModule(

@@ -14,7 +14,7 @@ import { restartableTask, timeout } from 'ember-concurrency';
 
 import momentFrom from 'ember-moment/helpers/moment-from';
 
-import { AddButton, Tooltip } from '@cardstack/boxel-ui';
+import { AddButton, Tooltip } from '@cardstack/boxel-ui/components';
 
 import {
   SupportedMimeType,
@@ -52,7 +52,8 @@ import Module from './module';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
-const { ownRealmURL } = ENV;
+const { ownRealmURL: ownRealmURLString } = ENV;
+const ownRealmURL = new URL(ownRealmURLString);
 const log = logger('component:go');
 const waiter = buildWaiter('code-route:load-card-waiter');
 
@@ -310,7 +311,7 @@ export default class Go extends Component<Signature> {
     }
 
     try {
-      await this.cardService.saveModel(card);
+      await this.cardService.saveModel(this, card);
       await this.loadCard.perform(url);
     } catch (e) {
       console.error('Failed to save single card document', e);
@@ -345,7 +346,7 @@ export default class Go extends Component<Signature> {
 
   private loadCard = restartableTask(async (url: URL) => {
     await this.withTestWaiters(async () => {
-      this.card = await this.cardService.loadModel(url);
+      this.card = await this.cardService.loadModel(this, url);
     });
   });
 
@@ -414,7 +415,7 @@ export default class Go extends Component<Signature> {
     let card = await chooseCard<CatalogEntry>({
       filter: {
         on: catalogEntryRef,
-        eq: { isPrimitive: false },
+        eq: { isField: false },
       },
     });
     if (!card) {
@@ -428,7 +429,7 @@ export default class Go extends Component<Signature> {
         )}`,
       );
     }
-    let path = `${newCard.id.slice(ownRealmURL.length)}.json`;
+    let path = `${newCard.id.slice(ownRealmURLString.length)}.json`;
     this.operatorModeStateService.state.codePath = new URL(path);
   });
 }

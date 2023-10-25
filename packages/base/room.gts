@@ -13,8 +13,8 @@ import StringField from './string';
 import DateTimeCard from './datetime';
 import NumberField from './number';
 import MarkdownField from './markdown';
-import { BoxelMessage } from '@cardstack/boxel-ui';
-import cssVar from '@cardstack/boxel-ui/helpers/css-var';
+import { BoxelMessage } from '@cardstack/boxel-ui/components';
+import { cssVar } from '@cardstack/boxel-ui/helpers';
 import { formatRFC3339 } from 'date-fns';
 import Modifier from 'ember-modifier';
 import { restartableTask } from 'ember-concurrency';
@@ -30,7 +30,10 @@ import {
   type MatrixCardError,
 } from '@cardstack/runtime-common';
 
-const attachedCards = new Map<string, Promise<CardDef | MatrixCardError>>();
+const attachedCards = new Map<
+  string,
+  Promise<CardDef | MatrixCardError | undefined>
+>();
 
 // this is so we can have triple equals equivalent room member cards
 function upsertRoomMember({
@@ -346,7 +349,7 @@ export class RoomField extends FieldDef {
   }
   static setAttachedCard(
     id: string,
-    cardPromise: Promise<CardDef | MatrixCardError>,
+    cardPromise: Promise<CardDef | MatrixCardError | undefined>,
   ) {
     attachedCards.set(id, cardPromise);
   }

@@ -7,8 +7,7 @@ import Component from '@glimmer/component';
 
 import Modifier, { PositionalArgs } from 'ember-modifier';
 
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import { RealmPaths, type LocalPath } from '@cardstack/runtime-common/paths';
 
@@ -16,11 +15,12 @@ import { directory } from '@cardstack/host/resources/directory';
 
 import type CardService from '../../services/card-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 
 interface Args {
   Args: {
     relativePath: string;
-    realmURL: string;
+    realmURL: URL;
   };
 }
 
@@ -50,17 +50,16 @@ export default class Directory extends Component<Args> {
               {{on 'click' (fn this.toggleDirectory entryPath)}}
               class='directory'
             >
-              {{svgJar
-                'dropdown-arrow-down'
-                class=(concat
+              <DropdownArrowDown
+                class={{concat
                   'icon '
                   (if
                     (isOpen entryPath this.operatorModeStateService)
                     'open'
                     'closed'
                   )
-                )
-              }}{{entry.name}}
+                }}
+              />{{entry.name}}
             </button>
             {{#if (isOpen entryPath this.operatorModeStateService)}}
               <Directory
@@ -160,7 +159,7 @@ function isOpen(
   operatorModeStateService: OperatorModeStateService,
 ) {
   let directoryIsPersistedOpen = (
-    operatorModeStateService.state.openDirs ?? []
+    operatorModeStateService.currentRealmOpenDirs ?? []
   ).find((item) => item.startsWith(path));
 
   return directoryIsPersistedOpen;

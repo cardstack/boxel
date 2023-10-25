@@ -3,12 +3,11 @@ import GlimmerComponent from '@glimmer/component';
 import { flatMap, merge, isEqual } from 'lodash';
 import { TrackedWeakMap } from 'tracked-built-ins';
 import { WatchedArray } from './watched-array';
-import { BoxelInput } from '@cardstack/boxel-ui';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { eq, pick } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
-import pick from '@cardstack/boxel-ui/helpers/pick';
 import { startCase } from 'lodash';
-import { getBoxComponent } from './field-component';
+import { getBoxComponent, type BoxComponent } from './field-component';
 import { getContainsManyComponent } from './contains-many-component';
 import { getLinksToEditor } from './links-to-editor';
 import { getLinksToManyComponent } from './links-to-many-component';
@@ -32,6 +31,8 @@ import {
   humanReadable,
   maybeURL,
   maybeRelativeURL,
+  getLiveCard,
+  trackLiveCard,
   type Meta,
   type CardFields,
   type Relationship,
@@ -43,9 +44,9 @@ import {
   type RealmInfo,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
-import { FieldContainer } from '@cardstack/boxel-ui';
+import { FieldContainer } from '@cardstack/boxel-ui/components';
 
-export { primitive, isField };
+export { primitive, isField, type BoxComponent };
 export const serialize = Symbol('cardstack-serialize');
 export const deserialize = Symbol('cardstack-deserialize');
 export const useIndexBasedKey = Symbol('cardstack-use-index-based-key');
@@ -70,14 +71,15 @@ export type PartialBaseInstanceType<T extends BaseDefConstructor> = T extends {
   ? P | null
   : Partial<InstanceType<T>>;
 export type FieldsTypeFor<T extends BaseDef> = {
-  [Field in keyof T]: ComponentLike<{ Args: {}; Blocks: {} }> &
+  [Field in keyof T]: BoxComponent &
     (T[Field] extends ArrayLike<unknown>
-      ? ComponentLike<{ Args: {}; Blocks: {} }>[]
+      ? BoxComponent[]
       : T[Field] extends BaseDef
       ? FieldsTypeFor<T[Field]>
       : unknown);
 };
-export type Format = 'isolated' | 'embedded' | 'edit';
+export const formats: Format[] = ['isolated', 'embedded', 'edit', 'atom'];
+export type Format = 'isolated' | 'embedded' | 'edit' | 'atom';
 export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
 
 type Setter = (value: any) => void;
@@ -260,9 +262,9 @@ export interface Field<
   validate(instance: BaseDef, value: any): void;
   component(
     model: Box<BaseDef>,
-    format: Format,
+    defaultFormat: Format,
     context?: CardContext,
-  ): ComponentLike<{ Args: {}; Blocks: {} }>;
+  ): BoxComponent;
   getter(instance: BaseDef): BaseInstanceType<CardT>;
   queryableValue(value: any, stack: BaseDef[]): SearchT;
   queryMatcher(
@@ -556,10 +558,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     );
   }
 
-  component(
-    model: Box<BaseDef>,
-    format: Format,
-  ): ComponentLike<{ Args: {}; Blocks: {} }> {
+  component(model: Box<BaseDef>, format: Format): BoxComponent {
     let fieldName = this.name as keyof BaseDef;
     let arrayField = model.field(
       fieldName,
@@ -572,7 +571,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       'isFieldDef' in model.value.constructor &&
       model.value.constructor.isFieldDef
     ) {
-      renderFormat = 'embedded';
+      renderFormat = 'atom';
     }
 
     return getContainsManyComponent({
@@ -735,7 +734,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     model: Box<BaseDef>,
     format: Format,
     context?: CardContext,
-  ): ComponentLike<{ Args: {}; Blocks: {} }> {
+  ): BoxComponent {
     return fieldComponent(this, model, format, context);
   }
 }
@@ -881,8 +880,12 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     if (value?.links?.self == null) {
       return null;
     }
-    let cachedInstance = identityContext.identities.get(value.links.self);
+    let cachedInstance =
+      (await getLiveCard(doc, new URL(value.links.self, relativeTo), {
+        cachedOnly: true,
+      })) ?? identityContext.identities.get(value.links.self);
     if (cachedInstance) {
+      cachedInstance[isSavedInstance] = true;
       return cachedInstance as BaseInstanceType<CardT>;
     }
     let resourceId = new URL(value.links.self, relativeTo).href;
@@ -896,9 +899,21 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         reference: value.links.self,
       };
     }
-    return (await cardClassFromResource(resource, this.card, relativeTo))[
-      deserialize
-    ](resource, relativeTo, doc, identityContext);
+
+    let clazz = await cardClassFromResource(resource, this.card, relativeTo);
+    let loader = Loader.getLoaderFor(clazz)!;
+    let deserialized = await clazz[deserialize](
+      resource,
+      relativeTo,
+      doc,
+      identityContext,
+    );
+    deserialized[isSavedInstance] = true;
+    deserialized = trackLiveCard(
+      loader,
+      deserialized,
+    ) as BaseInstanceType<CardT>;
+    return deserialized;
   }
 
   emptyValue(_instance: CardDef) {
@@ -1011,7 +1026,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     model: Box<CardDef>,
     format: Format,
     context?: CardContext,
-  ): ComponentLike<{ Args: {}; Blocks: {} }> {
+  ): BoxComponent {
     if (format === 'edit') {
       let innerModel = model.field(
         this.name as keyof BaseDef,
@@ -1188,8 +1203,12 @@ class LinksToMany<FieldT extends CardDefConstructor>
         if (value.links.self == null) {
           return null;
         }
-        let cachedInstance = identityContext.identities.get(value.links.self);
+        let cachedInstance =
+          (await getLiveCard(doc, new URL(value.links.self, relativeTo), {
+            cachedOnly: true,
+          })) ?? identityContext.identities.get(value.links.self);
         if (cachedInstance) {
+          cachedInstance[isSavedInstance] = true;
           return cachedInstance;
         }
         let resourceId = new URL(value.links.self, relativeTo).href;
@@ -1208,9 +1227,24 @@ class LinksToMany<FieldT extends CardDefConstructor>
             reference: value.links.self,
           };
         }
-        return (await cardClassFromResource(resource, this.card, relativeTo))[
-          deserialize
-        ](resource, relativeTo, doc, identityContext);
+        let clazz = await cardClassFromResource(
+          resource,
+          this.card,
+          relativeTo,
+        );
+        let loader = Loader.getLoaderFor(clazz)!;
+        let deserialized = await clazz[deserialize](
+          resource,
+          relativeTo,
+          doc,
+          identityContext,
+        );
+        deserialized[isSavedInstance] = true;
+        deserialized = trackLiveCard(
+          loader,
+          deserialized,
+        ) as BaseInstanceType<FieldT>;
+        return deserialized;
       });
 
     return new WatchedArray(
@@ -1374,17 +1408,25 @@ class LinksToMany<FieldT extends CardDefConstructor>
     model: Box<CardDef>,
     format: Format,
     context?: CardContext,
-  ): ComponentLike<{ Args: {}; Blocks: {} }> {
+  ): BoxComponent {
     let fieldName = this.name as keyof BaseDef;
     let arrayField = model.field(
       fieldName,
       useIndexBasedKey in this.card,
     ) as unknown as Box<CardDef[]>;
+    let renderFormat: Format | undefined = undefined;
+    if (
+      format === 'edit' &&
+      'isFieldDef' in model.value.constructor &&
+      model.value.constructor.isFieldDef
+    ) {
+      renderFormat = 'atom';
+    }
     return getLinksToManyComponent({
       model,
       arrayField,
       field: this,
-      format,
+      format: renderFormat ?? format,
       cardTypeFor,
       context,
     });
@@ -1394,9 +1436,9 @@ class LinksToMany<FieldT extends CardDefConstructor>
 function fieldComponent(
   field: Field<typeof BaseDef>,
   model: Box<BaseDef>,
-  format: Format,
+  defaultFormat: Format,
   context?: CardContext,
-): ComponentLike<{ Args: {}; Blocks: {} }> {
+): BoxComponent {
   let fieldName = field.name as keyof BaseDef;
   let card: typeof BaseDef;
   if (primitive in field.card) {
@@ -1406,7 +1448,7 @@ function fieldComponent(
       (model.value[fieldName]?.constructor as typeof BaseDef) ?? field.card;
   }
   let innerModel = model.field(fieldName) as unknown as Box<BaseDef>;
-  return getBoxComponent(card, format, innerModel, field, context);
+  return getBoxComponent(card, defaultFormat, innerModel, field, context);
 }
 
 // our decorators are implemented by Babel, not TypeScript, so they have a
@@ -1611,6 +1653,10 @@ export function isCard(card: any): card is CardDef {
   return isCardOrField(card) && !('isFieldDef' in card.constructor);
 }
 
+export function isFieldDef(field: any): field is FieldDef {
+  return isCardOrField(field) && 'isFieldDef' in field.constructor;
+}
+
 export function isCompoundField(card: any) {
   return (
     isCardOrField(card) &&
@@ -1645,6 +1691,21 @@ class DefaultCardDefTemplate extends GlimmerComponent<{
         gap: var(--boxel-sp-lg);
       }
     </style>
+  </template>
+}
+
+class DefaultAtomViewTemplate extends GlimmerComponent<{
+  Args: {
+    model: CardDef;
+    fields: Record<string, new () => GlimmerComponent>;
+  };
+}> {
+  <template>
+    {{#each-in @fields as |key Field|}}
+      {{#if (eq key 'title')}}
+        <Field />
+      {{/if}}
+    {{/each-in}}
   </template>
 }
 
@@ -1718,6 +1779,7 @@ export class FieldDef extends BaseDef {
     </template>
   };
   static edit: BaseDefComponent = FieldDefEditTemplate;
+  static atom: BaseDefComponent = DefaultAtomViewTemplate;
 }
 
 class IDField extends FieldDef {
@@ -1752,6 +1814,11 @@ export class StringField extends FieldDef {
   static edit = class Edit extends Component<typeof this> {
     <template>
       <BoxelInput @value={{@model}} @onInput={{@set}} />
+    </template>
+  };
+  static atom = class Atom extends Component<typeof this> {
+    <template>
+      {{@model}}
     </template>
   };
 }
@@ -1795,6 +1862,7 @@ export class CardDef extends BaseDef {
   };
   static isolated: BaseDefComponent = DefaultCardDefTemplate;
   static edit: BaseDefComponent = DefaultCardDefTemplate;
+  static atom: BaseDefComponent = DefaultAtomViewTemplate;
 }
 
 export type BaseDefConstructor = typeof BaseDef;
@@ -2049,7 +2117,9 @@ function serializeCardResource(
     serializedGet(model, fieldName, doc, visited, opts),
   );
   return merge(
-    {},
+    {
+      attributes: {},
+    },
     ...fieldResources,
     {
       type: 'card',
@@ -2461,16 +2531,16 @@ export function getComponent(
   format: Format,
   field?: Field,
   context?: CardContext,
-): ComponentLike<{ Args: {}; Blocks: {} }> {
+): BoxComponent {
   let box = Box.create(model);
-  let component = getBoxComponent(
+  let boxComponent = getBoxComponent(
     model.constructor as BaseDefConstructor,
     format,
     box,
     field,
     context,
   );
-  return component;
+  return boxComponent;
 }
 
 interface RecomputeOptions {

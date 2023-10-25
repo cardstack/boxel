@@ -53,6 +53,9 @@ module('module-syntax', function () {
         name: 'default',
       },
       'contains',
+      undefined,
+      undefined,
+      undefined,
     );
 
     assert.codeEqual(
@@ -72,7 +75,7 @@ module('module-syntax', function () {
       `,
     );
 
-    let card = mod.possibleCards.find((c) => c.exportedAs === 'Person');
+    let card = mod.possibleCardsOrFields.find((c) => c.exportedAs === 'Person');
     let field = card!.possibleFields.get('age');
     assert.ok(field, 'new field was added to syntax');
     assert.deepEqual(
@@ -113,6 +116,9 @@ module('module-syntax', function () {
         name: 'default',
       },
       'contains',
+      undefined,
+      undefined,
+      undefined,
     );
     assert.codeEqual(
       mod.code(),
@@ -128,6 +134,82 @@ module('module-syntax', function () {
           static embedded = class Embedded extends Component<typeof this> {
             <template><h1><@fields.firstName/></h1></template>
           }
+        }
+      `,
+    );
+  });
+
+  test('can add a field to a card when the module url is relative', async function (assert) {
+    let src = `
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      export class Pet extends CardDef {
+        @field petName = contains(StringCard);
+      }
+    `;
+
+    let mod = new ModuleSyntax(src);
+
+    mod.addField(
+      { type: 'exportedName', name: 'Pet' }, // Card we want to add to
+      'bestFriend',
+      {
+        module: '../person',
+        name: 'Person',
+      },
+      'linksTo',
+      new URL(`http://localhost:4202/node-test/catalog-entry/1`), // hypothethical catalog entry that lives at this id
+      new URL('http://localhost:4202/node-test/pet'), // outgoing card
+      new URL('http://localhost:4202/node-test/'), // the realm that the catalog entry lives in
+    );
+
+    assert.codeEqual(
+      mod.code(),
+      `
+        import { Person as PersonCard } from "./person";
+        import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        export class Pet extends CardDef {
+          @field petName = contains(StringCard);
+          @field bestFriend = linksTo(() => PersonCard);
+        }
+      `,
+    );
+  });
+
+  test('can add a field to a card when the module url is from another realm', async function (assert) {
+    let src = `
+      import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+      import StringCard from "https://cardstack.com/base/string";
+      export class Pet extends CardDef {
+        @field petName = contains(StringCard);
+      }
+    `;
+
+    let mod = new ModuleSyntax(src);
+
+    mod.addField(
+      { type: 'exportedName', name: 'Pet' }, // card we want to add to
+      'bestFriend',
+      {
+        module: '../person', // the other realm (will be from the /test realm not the /node-test)
+        name: 'Person',
+      },
+      'linksTo',
+      new URL(`http://localhost:4202/test/catalog-entry/1`), // hypothethical catalog entry that lives at this id
+      new URL('http://localhost:4202/node-test/pet'), // outgoing card
+      new URL('http://localhost:4202/node-test/'), // the realm that the catalog entry lives in
+    );
+
+    assert.codeEqual(
+      mod.code(),
+      `
+        import { Person as PersonCard } from "http://localhost:4202/test/person";
+        import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        export class Pet extends CardDef {
+          @field petName = contains(StringCard);
+          @field bestFriend = linksTo(() => PersonCard);
         }
       `,
     );
@@ -149,6 +231,9 @@ module('module-syntax', function () {
         name: 'default',
       },
       'contains',
+      undefined,
+      undefined,
+      undefined,
     );
 
     assert.codeEqual(
@@ -190,6 +275,9 @@ module('module-syntax', function () {
         name: 'default',
       },
       'contains',
+      undefined,
+      undefined,
+      undefined,
     );
 
     assert.codeEqual(
@@ -236,6 +324,9 @@ module('module-syntax', function () {
         name: 'default',
       },
       'containsMany',
+      undefined,
+      undefined,
+      undefined,
     );
 
     assert.codeEqual(
@@ -253,7 +344,7 @@ module('module-syntax', function () {
         }
       `,
     );
-    let card = mod.possibleCards.find((c) => c.exportedAs === 'Person');
+    let card = mod.possibleCardsOrFields.find((c) => c.exportedAs === 'Person');
     let field = card!.possibleFields.get('aliases');
     assert.ok(field, 'new field was added to syntax');
     assert.deepEqual(
@@ -295,6 +386,9 @@ module('module-syntax', function () {
         name: 'Pet',
       },
       'linksTo',
+      undefined,
+      undefined,
+      undefined,
     );
 
     assert.codeEqual(
@@ -309,7 +403,7 @@ module('module-syntax', function () {
         }
       `,
     );
-    let card = mod.possibleCards.find((c) => c.exportedAs === 'Person');
+    let card = mod.possibleCardsOrFields.find((c) => c.exportedAs === 'Person');
     let field = card!.possibleFields.get('pet');
     assert.ok(field, 'new field was added to syntax');
     assert.deepEqual(
@@ -341,6 +435,9 @@ module('module-syntax', function () {
         name: 'Person',
       },
       'linksTo',
+      undefined,
+      undefined,
+      undefined,
     );
 
     assert.codeEqual(
@@ -355,7 +452,7 @@ module('module-syntax', function () {
         }
       `,
     );
-    let card = mod.possibleCards.find((c) => c.exportedAs === 'Person');
+    let card = mod.possibleCardsOrFields.find((c) => c.exportedAs === 'Person');
     let field = card!.possibleFields.get('friend');
     assert.ok(field, 'new field was added to syntax');
     assert.deepEqual(
@@ -390,6 +487,9 @@ module('module-syntax', function () {
         name: 'default',
       },
       'contains',
+      undefined,
+      undefined,
+      undefined,
     );
 
     assert.codeEqual(
@@ -431,6 +531,9 @@ module('module-syntax', function () {
           name: 'default',
         },
         'contains',
+        undefined,
+        undefined,
+        undefined,
       );
       throw new Error('expected error was not thrown');
     } catch (err: any) {
@@ -466,7 +569,7 @@ module('module-syntax', function () {
       `,
     );
 
-    let card = mod.possibleCards.find((c) => c.exportedAs === 'Person');
+    let card = mod.possibleCardsOrFields.find((c) => c.exportedAs === 'Person');
     let field = card!.possibleFields.get('firstName');
     assert.strictEqual(field, undefined, 'field does not exist in syntax');
   });
@@ -518,7 +621,7 @@ module('module-syntax', function () {
       `,
     );
 
-    let card = mod.possibleCards.find((c) => c.exportedAs === 'Friend');
+    let card = mod.possibleCardsOrFields.find((c) => c.exportedAs === 'Friend');
     let field = card!.possibleFields.get('friend');
     assert.strictEqual(field, undefined, 'field does not exist in syntax');
   });

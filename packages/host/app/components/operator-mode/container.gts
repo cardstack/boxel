@@ -19,9 +19,9 @@ import get from 'lodash/get';
 
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
-import { Modal, IconButton } from '@cardstack/boxel-ui';
-import { svgJar } from '@cardstack/boxel-ui/helpers/svg-jar';
-import { eq } from '@cardstack/boxel-ui/helpers/truth-helpers';
+import { IconButton, Modal } from '@cardstack/boxel-ui/components';
+
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   Deferred,
@@ -31,6 +31,10 @@ import {
   type CodeRef,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
+import {
+  moduleFrom,
+  codeRefWithAbsoluteURL,
+} from '@cardstack/runtime-common/code-ref';
 
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
@@ -40,15 +44,15 @@ import CodeMode from '@cardstack/host/components/operator-mode/code-mode';
 import ENV from '@cardstack/host/config/environment';
 
 import {
+  getLiveSearchResults,
   getSearchResults,
   type Search,
 } from '@cardstack/host/resources/search';
-
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
-import { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import CardCatalogModal from '../card-catalog/modal';
 
@@ -66,8 +70,12 @@ import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
 
 import type MatrixService from '../../services/matrix-service';
-import type MessageService from '../../services/message-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import {
+  Sparkle as SparkleIcon,
+  IconPlus,
+  Download,
+} from '@cardstack/boxel-ui/icons';
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
 
@@ -96,29 +104,29 @@ enum SearchSheetTrigger {
 
 const cardSelections = new TrackedWeakMap<StackItem, TrackedSet<CardDef>>();
 const clearSelections = new WeakMap<StackItem, () => void>();
-const stackItemStableScrolls = new WeakMap<
+const stackItemScrollers = new WeakMap<
   StackItem,
-  (changeSizeCallback: () => Promise<void>) => void
+  {
+    stableScroll: (changeSizeCallback: () => Promise<void>) => void;
+    scrollIntoView: (selector: string) => void;
+  }
 >();
 
 export default class OperatorModeContainer extends Component<Signature> {
-  @service declare loaderService: LoaderService;
-  @service declare cardService: CardService;
-  @service declare messageService: MessageService;
-  @service declare operatorModeStateService: OperatorModeStateService;
-  @service declare matrixService: MatrixService;
-  @service declare recentFilesService: RecentFilesService;
+  @service private declare loaderService: LoaderService;
+  @service private declare cardService: CardService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare matrixService: MatrixService;
+  @service private declare recentFilesService: RecentFilesService;
 
-  @tracked searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
-  @tracked searchSheetTrigger: SearchSheetTrigger | null = null;
-  @tracked isChatVisible = false;
+  @tracked private searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
+  @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
+  @tracked private isChatVisible = false;
 
   private deleteModal: DeleteModal | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
-
-    this.messageService.register();
     (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
     this.constructRecentCards.perform();
     registerDestructor(this, () => {
@@ -127,10 +135,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     });
   }
 
-  get stacks() {
-    return this.operatorModeStateService.state?.stacks ?? [];
-  }
-
+  // public API
   @action
   getCards(query: Query, realms?: string[]): Search {
     return getSearchResults(
@@ -140,12 +145,47 @@ export default class OperatorModeContainer extends Component<Signature> {
     );
   }
 
+  // public API
   @action
-  toggleChat() {
+  getLiveCard<T extends object>(
+    owner: T,
+    url: URL,
+    opts?: { cachedOnly?: true },
+  ): Promise<CardDef | undefined> {
+    return this.cardService.loadModel(owner, url, opts);
+  }
+
+  // public API
+  @action
+  trackLiveCard<T extends object>(owner: T, card: CardDef) {
+    return this.cardService.trackLiveCard(owner, card);
+  }
+
+  // public API
+  @action
+  getLiveCards(
+    query: Query,
+    realms?: string[],
+    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
+  ): Search {
+    return getLiveSearchResults(
+      this,
+      () => query,
+      realms ? () => realms : undefined,
+      doWhileRefreshing ? () => doWhileRefreshing : undefined,
+    );
+  }
+
+  private get stacks() {
+    return this.operatorModeStateService.state?.stacks ?? [];
+  }
+
+  @action
+  private toggleChat() {
     this.isChatVisible = !this.isChatVisible;
   }
 
-  @action onFocusSearchInput(searchSheetTrigger?: SearchSheetTrigger) {
+  @action private onFocusSearchInput(searchSheetTrigger?: SearchSheetTrigger) {
     if (
       searchSheetTrigger ==
         SearchSheetTrigger.DropCardToLeftNeighborStackButton ||
@@ -164,21 +204,21 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   }
 
-  @action onBlurSearchInput() {
+  @action private onBlurSearchInput() {
     this.searchSheetTrigger = null;
     this.searchSheetMode = SearchSheetMode.Closed;
   }
 
-  @action onSearch(_term: string) {
+  @action private onSearch(_term: string) {
     this.searchSheetMode = SearchSheetMode.SearchResults;
   }
 
-  constructRecentCards = restartableTask(async () => {
+  private constructRecentCards = restartableTask(async () => {
     return await this.operatorModeStateService.constructRecentCards();
   });
 
   @action
-  onSelectedCards(selectedCards: CardDef[], stackItem: StackItem) {
+  private onSelectedCards(selectedCards: CardDef[], stackItem: StackItem) {
     let selected = cardSelections.get(stackItem);
     if (!selected) {
       selected = new TrackedSet([]);
@@ -190,26 +230,26 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   }
 
-  get selectedCards() {
+  private get selectedCards() {
     return this.operatorModeStateService
       .topMostStackItems()
       .map((i) => [...(cardSelections.get(i) ?? [])]);
   }
 
-  @action onCancelSearchSheet() {
+  @action private onCancelSearchSheet() {
     this.searchSheetMode = SearchSheetMode.Closed;
     this.searchSheetTrigger = null;
   }
 
-  @action addToStack(item: StackItem) {
+  @action private addToStack(item: StackItem) {
     this.operatorModeStateService.addItemToStack(item);
   }
 
-  @action edit(item: StackItem) {
+  @action private edit(item: StackItem) {
     this.updateItem(item, 'edit', new Deferred());
   }
 
-  @action updateItem(
+  @action private updateItem(
     item: StackItem,
     format: Format,
     request?: Deferred<CardDef | undefined>,
@@ -221,7 +261,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     });
   }
 
-  close = task(async (item: StackItem) => {
+  private close = task(async (item: StackItem) => {
     let { card, request } = item;
     // close the item first so user doesn't have to wait for the save to complete
     this.operatorModeStateService.trimItemsFromStack(item);
@@ -235,7 +275,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   });
 
-  save = task(async (item: StackItem, dismissStackItem: boolean) => {
+  private save = task(async (item: StackItem, dismissStackItem: boolean) => {
     let { request } = item;
     let updatedCard = await this.write.perform(item.card);
 
@@ -270,20 +310,14 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   });
 
-  saveCard = task(async (card: CardDef) => {
-    await this.withTestWaiters(async () => {
-      await this.cardService.saveModel(card);
-    });
-  });
-
-  saveSource = task(async (url: URL, content: string) => {
+  private saveSource = task(async (url: URL, content: string) => {
     await this.withTestWaiters(async () => {
       await this.cardService.saveSource(url, content);
     });
   });
 
   // dropTask will ignore any subsequent delete requests until the one in progress is done
-  delete = dropTask(async (card: CardDef, afterDelete?: () => void) => {
+  private delete = dropTask(async (card: CardDef, afterDelete?: () => void) => {
     if (!card.id) {
       // the card isn't actually saved yet, so do nothing
       return;
@@ -348,7 +382,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   // at the same time
   private write = task(async (card: CardDef) => {
     return await this.withTestWaiters(async () => {
-      return await this.cardService.saveModel(card);
+      return await this.cardService.saveModel(this, card);
     });
   });
 
@@ -369,14 +403,27 @@ export default class OperatorModeContainer extends Component<Signature> {
           );
         }
         let realmURL = destinationRealmURL;
-        for (let card of sources) {
-          await this.cardService.copyCard(card, realmURL);
+        sources.sort((a, b) => a.title.localeCompare(b.title));
+        let scrollToCard: CardDef | undefined;
+        for (let [index, card] of sources.entries()) {
+          let newCard = await this.cardService.copyCard(card, realmURL);
+          if (index === 0) {
+            scrollToCard = newCard; // we scroll to the first card lexically by title
+          }
         }
         let clearSelection = clearSelections.get(sourceItem);
         if (typeof clearSelection === 'function') {
           clearSelection();
         }
         cardSelections.delete(sourceItem);
+        let scroller = stackItemScrollers.get(destinationItem);
+        if (scrollToCard) {
+          // Currently the destination item is always a cards-grid, so we use that
+          // fact to be able to scroll to the newly copied item
+          scroller?.scrollIntoView(
+            `[data-stack-card="${destinationItem.card.id}"] [data-cards-grid-item="${scrollToCard.id}"]`,
+          );
+        }
       });
     },
   );
@@ -405,23 +452,33 @@ export default class OperatorModeContainer extends Component<Signature> {
         ref: CodeRef,
         relativeTo: URL | undefined,
         opts?: {
+          realmURL?: URL;
           isLinkedCard?: boolean;
           doc?: LooseSingleCardDocument; // fill in card data with values
         },
       ): Promise<CardDef | undefined> => {
-        // prefers optional doc to be passed in
-        // use case: to populate default values in a create modal
+        let cardModule = new URL(moduleFrom(ref), relativeTo);
+        // we make the code ref use an absolute URL for safety in
+        // the case it's being created in a different realm than where the card
+        // definition comes from
+        if (
+          opts?.realmURL &&
+          !new RealmPaths(opts.realmURL).inRealm(cardModule)
+        ) {
+          ref = codeRefWithAbsoluteURL(ref, relativeTo);
+        }
         let doc: LooseSingleCardDocument = opts?.doc ?? {
-          data: { meta: { adoptsFrom: ref } },
+          data: {
+            meta: {
+              adoptsFrom: ref,
+              ...(opts?.realmURL ? { realmURL: opts.realmURL.href } : {}),
+            },
+          },
         };
-        // using RealmPaths API to correct for the trailing `/`
-        let realmPath = new RealmPaths(
-          relativeTo ?? here.cardService.defaultURL,
-        );
         let newCard = await here.cardService.createFromSerialized(
           doc.data,
           doc,
-          new URL(realmPath.url),
+          relativeTo,
         );
         let newItem: StackItem = {
           card: newCard,
@@ -449,7 +506,7 @@ export default class OperatorModeContainer extends Component<Signature> {
           doc,
           relativeTo ?? here.cardService.defaultURL,
         );
-        await here.cardService.saveModel(newCard);
+        await here.cardService.saveModel(here, newCard);
         let newItem: StackItem = {
           card: newCard,
           format: 'isolated',
@@ -466,7 +523,8 @@ export default class OperatorModeContainer extends Component<Signature> {
         for (let stack of here.stacks) {
           stackItem = stack.find((item) => item.card === card);
           if (stackItem) {
-            let doWithStableScroll = stackItemStableScrolls.get(stackItem);
+            let doWithStableScroll =
+              stackItemScrollers.get(stackItem)?.stableScroll;
             if (doWithStableScroll) {
               doWithStableScroll(changeSizeCallback); // this is perform()ed in the component
               return;
@@ -478,7 +536,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     };
   }
 
-  addCard = restartableTask(async () => {
+  private addCard = restartableTask(async () => {
     let type = baseCardRef;
     let chosenCard: CardDef | undefined = await chooseCard({
       filter: { type },
@@ -494,7 +552,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   });
 
-  fetchBackgroundImageURLs = trackedFunction(this, async () => {
+  private fetchBackgroundImageURLs = trackedFunction(this, async () => {
     let result = await Promise.all(
       this.stacks.map(async (stack) => {
         if (stack.length === 0) {
@@ -508,13 +566,13 @@ export default class OperatorModeContainer extends Component<Signature> {
     return result;
   });
 
-  get backgroundImageURLs() {
+  private get backgroundImageURLs() {
     return (
       this.fetchBackgroundImageURLs.value?.map((u) => (u ? u : undefined)) ?? []
     );
   }
 
-  get backgroundImageStyle() {
+  private get backgroundImageStyle() {
     // only return a background image when both stacks originate from the same realm
     // otherwise we delegate to each stack to handle this
     if (
@@ -528,7 +586,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     return false;
   }
 
-  get differingBackgroundImageURLs() {
+  private get differingBackgroundImageURLs() {
     // if the this.backgroundImageStyle is undefined when there are images its because
     // they are different images--in that case we want to return these.
     if (this.backgroundImageURLs.length > 0 && !this.backgroundImageStyle) {
@@ -537,11 +595,11 @@ export default class OperatorModeContainer extends Component<Signature> {
     return [];
   }
 
-  get allStackItems() {
+  private get allStackItems() {
     return this.operatorModeStateService.state?.stacks.flat() ?? [];
   }
 
-  get lastCardInRightMostStack(): CardDef | null {
+  private get lastCardInRightMostStack(): CardDef | null {
     if (this.allStackItems.length <= 0) {
       return null;
     }
@@ -549,11 +607,11 @@ export default class OperatorModeContainer extends Component<Signature> {
     return this.allStackItems[this.allStackItems.length - 1].card;
   }
 
-  get isCodeMode() {
+  private get isCodeMode() {
     return this.operatorModeStateService.state?.submode === Submode.Code;
   }
 
-  @action onCardSelectFromSearch(card: CardDef) {
+  @action private onCardSelectFromSearch(card: CardDef) {
     let searchSheetTrigger = this.searchSheetTrigger; // Will be set by onFocusSearchInput
 
     // In case the left button was clicked, whatever is currently in stack with index 0 will be moved to stack with index 1,
@@ -624,28 +682,32 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   // This determines whether we show the left and right button that trigger the search sheet whose card selection will go to the left or right stack
   // (there is a single stack with at least one card in it)
-  get canCreateNeighborStack() {
+  private get canCreateNeighborStack() {
     return this.allStackItems.length > 0 && this.stacks.length === 1;
   }
 
-  get chatVisibilityClass() {
+  private get chatVisibilityClass() {
     return this.isChatVisible ? 'chat-open' : 'chat-closed';
   }
 
-  setupStackItem = (
+  private setupStackItem = (
     item: StackItem,
     doClearSelections: () => void,
     doWithStableScroll: (changeSizeCallback: () => Promise<void>) => void,
+    doScrollIntoView: (selector: string) => void,
   ) => {
     clearSelections.set(item, doClearSelections);
-    stackItemStableScrolls.set(item, doWithStableScroll);
+    stackItemScrollers.set(item, {
+      stableScroll: doWithStableScroll,
+      scrollIntoView: doScrollIntoView,
+    });
   };
 
-  setupDeleteModal = (deleteModal: DeleteModal) => {
+  private setupDeleteModal = (deleteModal: DeleteModal) => {
     this.deleteModal = deleteModal;
   };
 
-  @action updateSubmode(submode: Submode) {
+  @action private updateSubmode(submode: Submode) {
     switch (submode) {
       case Submode.Interact:
         this.operatorModeStateService.updateCodePath(null);
@@ -685,7 +747,7 @@ export default class OperatorModeContainer extends Component<Signature> {
           <CodeMode
             @delete={{perform this.delete}}
             @saveSourceOnClose={{perform this.saveSource}}
-            @saveCardOnClose={{perform this.saveCard}}
+            @saveCardOnClose={{perform this.write}}
           />
         {{else}}
           <div class='operator-mode__main' style={{this.backgroundImageStyle}}>
@@ -700,7 +762,7 @@ export default class OperatorModeContainer extends Component<Signature> {
                   {{on 'click' (fn (perform this.addCard))}}
                   data-test-add-card-button
                 >
-                  {{svgJar 'icon-plus' width='50px' height='50px'}}
+                  <IconPlus width='50px' height='50px' />
                 </button>
               </div>
             {{else}}
@@ -750,7 +812,7 @@ export default class OperatorModeContainer extends Component<Signature> {
                   )
                 }}
               >
-                {{svgJar 'download' width='25' height='25'}}
+                <Download width='25' height='25' />
               </button>
               <button
                 data-test-add-card-right-stack
@@ -770,7 +832,7 @@ export default class OperatorModeContainer extends Component<Signature> {
                   )
                 }}
               >
-                {{svgJar 'download' width='25' height='25'}}
+                <Download width='25' height='25' />
               </button>
             {{/if}}
           </div>
@@ -787,7 +849,7 @@ export default class OperatorModeContainer extends Component<Signature> {
             <IconButton
               data-test-open-chat
               class='chat-btn'
-              @icon='sparkle'
+              @icon={{SparkleIcon}}
               @width='25'
               @height='25'
               {{on 'click' this.toggleChat}}

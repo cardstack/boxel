@@ -1,4 +1,12 @@
+import { registerDestructor } from '@ember/destroyable';
+
 import Service, { service } from '@ember/service';
+import { buildWaiter } from '@ember/test-waiters';
+import { isTesting } from '@embroider/macros';
+
+import { task } from 'ember-concurrency';
+
+import intersection from 'lodash/intersection';
 
 import { stringify } from 'qs';
 
@@ -17,6 +25,8 @@ import type { Query } from '@cardstack/runtime-common/query';
 
 import ENV from '@cardstack/host/config/environment';
 
+import type MessageService from '@cardstack/host/services/message-service';
+
 import type {
   BaseDef,
   CardDef,
@@ -32,12 +42,34 @@ import { importResource } from '../resources/import';
 import type LoaderService from './loader-service';
 
 export type CardSaveSubscriber = (content: SingleCardDocument | string) => void;
+
+// One of our challenges is that it is difficult to tell if the server sent
+// events that we receive are from out of band changes or just echos of the
+// changes we are making from the UI. We are using a simple heuristic to
+// identify if an event is our own--specifically a time window. If an SSE event
+// occurs more than `loadIfNewerThanSec` seconds after the last card model
+// save, then we will consider it as an event not tied to our own card model's
+// auto save.
+const loadIfNewerThanSec = 5;
 const { ownRealmURL, otherRealmURLs } = ENV;
+const waiter = buildWaiter('card-service:load-card-waiter');
+const cardSaveTimes = new WeakMap<CardDef, number>();
 
 export default class CardService extends Service {
-  @service declare loaderService: LoaderService;
+  @service private declare loaderService: LoaderService;
+  @service private declare messageService: MessageService;
   private subscriber: CardSaveSubscriber | undefined;
   private indexCards: Map<string, CardDef> = new Map();
+  private liveCards: Map<
+    string,
+    {
+      card: CardDef;
+      realmURL: URL;
+      subscribers: Set<any>;
+    }
+  > = new Map();
+  private realmSubscriptions: Map<string, { unsubscribe: () => void }> =
+    new Map();
 
   private apiModule = importResource(
     this,
@@ -122,19 +154,85 @@ export default class CardService extends Service {
     return card as CardDef;
   }
 
-  async reloadModel(card: CardDef): Promise<CardDef> {
-    await this.apiModule.loaded;
-    let json = await this.fetchJSON(card.id);
-    if (!isSingleCardDocument(json)) {
-      throw new Error(
-        `bug: server returned a non card document for ${card.id}:
-        ${JSON.stringify(json, null, 2)}`,
-      );
+  trackLiveCard<T extends Object>(owner: T, card: CardDef): CardDef {
+    if (!card.id) {
+      throw new Error(`cannot set live card model on an unsaved card`);
     }
-    return await this.api.updateFromSerialized<typeof CardDef>(card, json);
+    let alreadyTracked = this.liveCards.get(card.id);
+    if (alreadyTracked) {
+      return alreadyTracked.card;
+    }
+    let realmURL = card[this.api.realmURL];
+    if (!realmURL) {
+      throw new Error(`bug: cannot determine realm for card ${card.id}`);
+    }
+    this.liveCards.set(card.id, {
+      card,
+      realmURL,
+      subscribers: new Set([owner]),
+    });
+    return card;
   }
 
-  async loadModel(url: URL | string): Promise<CardDef> {
+  async loadModel<T extends object>(
+    owner: T,
+    url: URL,
+    opts?: { cachedOnly?: true },
+  ): Promise<CardDef | undefined> {
+    let entry = this.liveCards.get(url.href);
+    if (entry) {
+      if (!entry.subscribers.has(owner)) {
+        registerDestructor(owner, () => this.unsubscribeFromCards(owner));
+      }
+      entry.subscribers.add(owner);
+      return entry.card;
+    }
+    if (opts?.cachedOnly) {
+      return undefined;
+    }
+    let card: CardDef | undefined;
+    try {
+      card = await this.loadStaticModel(url);
+    } catch (e: any) {
+      return undefined;
+    }
+    let realmURL = await this.getRealmURL(card);
+    if (!realmURL) {
+      throw new Error(`bug: cannot determine realm URL for card ${card.id}`);
+    }
+    if (!this.realmSubscriptions.has(realmURL.href)) {
+      this.realmSubscriptions.set(realmURL.href, {
+        unsubscribe: this.messageService.subscribe(
+          `${realmURL.href}_message`,
+          ({ type, data: dataStr }) => {
+            if (type !== 'index') {
+              return;
+            }
+            let data = JSON.parse(dataStr);
+            if (data.type !== 'incremental') {
+              return;
+            }
+            let invalidations = data.invalidations as string[];
+            let updatedIds = intersection(invalidations, [
+              ...this.liveCards.keys(),
+            ]);
+            for (let id of updatedIds) {
+              this.reloadIfNewer.perform(this.liveCards.get(id)!.card);
+            }
+          },
+        ),
+      });
+    }
+    this.liveCards.set(card.id, {
+      card,
+      realmURL,
+      subscribers: new Set([owner]),
+    });
+    return card;
+  }
+
+  // unsure if this is public API--let's leave it private for now...
+  private async loadStaticModel(url: URL): Promise<CardDef> {
     if (typeof url === 'string') {
       url = new URL(url);
     }
@@ -159,6 +257,69 @@ export default class CardService extends Service {
     return card;
   }
 
+  private unsubscribeFromCards = <T extends object>(parent: T) => {
+    let unsubscribeFromURLs: Set<string> = new Set();
+    // gather up all the realmURLs for the cards this parent subscribed to
+    for (let [id, { subscribers, realmURL }] of this.liveCards) {
+      if (subscribers.has(parent)) {
+        subscribers.delete(parent);
+        unsubscribeFromURLs.add(realmURL.href);
+        if (subscribers.size === 0) {
+          this.liveCards.delete(id);
+        }
+      }
+    }
+    // figure out which realms have no more subscribers
+    for (let { realmURL } of this.liveCards.values()) {
+      if (unsubscribeFromURLs.has(realmURL.href)) {
+        unsubscribeFromURLs.delete(realmURL.href);
+      }
+    }
+    // for realms with no more subscribers, unsubscribe from realm events
+    for (let realmURL of unsubscribeFromURLs) {
+      this.realmSubscriptions.get(realmURL)?.unsubscribe();
+      this.realmSubscriptions.delete(realmURL);
+    }
+  };
+
+  private reloadIfNewer = task(async (card: CardDef) => {
+    // we don't await this in the realm subscription callback, so this test
+    // waiter should catch otherwise leaky async in the tests
+    await this.withTestWaiters(async () => {
+      await this.apiModule.loaded;
+      let incomingDoc: SingleCardDocument;
+      try {
+        incomingDoc = (await this.fetchJSON(card.id)) as SingleCardDocument;
+      } catch (err: any) {
+        if (err.status !== 404) {
+          throw err;
+        }
+        // in this case the document was invalidated in the index because the
+        // file was deleted
+        return;
+      }
+      if (!isSingleCardDocument(incomingDoc)) {
+        throw new Error(
+          `bug: server returned a non card document for ${card.id}:
+        ${JSON.stringify(incomingDoc, null, 2)}`,
+        );
+      }
+      let saveTime = cardSaveTimes.get(card);
+      if (
+        saveTime != null &&
+        Date.now() - saveTime < loadIfNewerThanSec * 1000
+      ) {
+        return card;
+      }
+
+      let updated = await this.api.updateFromSerialized<typeof CardDef>(
+        card,
+        incomingDoc,
+      );
+      return updated;
+    });
+  });
+
   async serializeCard(
     card: CardDef,
     opts?: SerializeOpts,
@@ -170,7 +331,10 @@ export default class CardService extends Service {
   }
 
   // we return undefined if the card changed locally while the save was in-flight
-  async saveModel(card: CardDef): Promise<CardDef | undefined> {
+  async saveModel<T extends object>(
+    owner: T,
+    card: CardDef,
+  ): Promise<CardDef | undefined> {
     let cardChanged = false;
     function onCardChange() {
       cardChanged = true;
@@ -188,6 +352,8 @@ export default class CardService extends Service {
       // to relative URL's as it serializes the cards
       let realmUrl = await this.getRealmURL(card);
       let json = await this.saveCardDocument(doc, realmUrl);
+      let isNew = !card.id;
+      cardSaveTimes.set(card, Date.now());
 
       let result: CardDef | undefined;
       // if the card changed while the save was in flight then don't load the
@@ -199,6 +365,14 @@ export default class CardService extends Service {
         // instance that does not yet have an id is still the same instance after an
         // ID has been assigned by the server.
         result = (await this.api.updateFromSerialized(card, json)) as CardDef;
+      } else if (isNew) {
+        // in this case a new card was created, but there is an immediate change
+        // that was made--so we save off the new ID for the card so in the next
+        // save we'll correlate to the correct card ID
+        card.id = json.data.id;
+      }
+      if (isNew && result) {
+        result = this.trackLiveCard(owner, result);
       }
       if (this.subscriber) {
         this.subscriber(json);
@@ -239,7 +413,9 @@ export default class CardService extends Service {
       card,
       doc,
     );
-    return await this.saveModel(updatedCard);
+    // TODO setting `this` as an owner until we can have a better solution here...
+    // (currently only used by the AI bot to patch cards from chat)
+    return await this.saveModel(this, updatedCard);
   }
 
   private async saveCardDocument(
@@ -342,10 +518,6 @@ export default class CardService extends Service {
     return this.api.primitive in card;
   }
 
-  isCard(maybeCard: any): maybeCard is CardDef {
-    return this.api.isCard(maybeCard);
-  }
-
   isIndexCard(maybeIndexCard: any): maybeIndexCard is CardDef {
     if (!(maybeIndexCard instanceof this.api.CardDef)) {
       return false;
@@ -416,5 +588,20 @@ export default class CardService extends Service {
       );
     }
     return (await response.json()).data.attributes;
+  }
+
+  private async withTestWaiters<T>(cb: () => Promise<T>) {
+    let token = waiter.beginAsync();
+    try {
+      let result = await cb();
+      // only do this in test env--this makes sure that we also wait for any
+      // interior card instance async as part of our ember-test-waiters
+      if (isTesting()) {
+        await this.cardsSettled();
+      }
+      return result;
+    } finally {
+      waiter.endAsync(token);
+    }
   }
 }
