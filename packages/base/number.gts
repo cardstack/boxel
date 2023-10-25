@@ -6,6 +6,8 @@ import {
   BaseDefConstructor,
   BaseInstanceType,
   FieldDef,
+  field,
+  contains,
 } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { TextInputFilter, DeserializedResult } from './text-input-filter';
@@ -57,7 +59,12 @@ class View extends Component<typeof NumberField> {
 export default class NumberField extends FieldDef {
   static displayName = 'Number';
   static [primitive]: number;
+  static schematype: string = typeof this[primitive];
   static [useIndexBasedKey]: never;
+
+  static schema() {
+    return { type: 'number' };
+  }
   static async [deserialize]<T extends BaseDefConstructor>(
     this: T,
     number: any,

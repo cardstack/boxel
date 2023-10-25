@@ -27,8 +27,13 @@ import { addRoomEvent } from '@cardstack/host/lib/matrix-handlers';
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import CardService from '@cardstack/host/services/card-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
+
+function generateJSONSchema(x: any) {
+  return x;
+}
 
 import {
   testRealmURL,
@@ -51,6 +56,7 @@ const realmName = 'Operator Mode Workspace';
 let setCardInOperatorModeState: (card: string) => Promise<void>;
 
 let loader: Loader;
+let cardService: CardService;
 
 module('Integration | operator-mode', function (hooks) {
   let adapter: TestRealmAdapter;
@@ -60,6 +66,7 @@ module('Integration | operator-mode', function (hooks) {
   hooks.beforeEach(function () {
     loader = (this.owner.lookup('service:loader-service') as LoaderService)
       .loader;
+    cardService = this.owner.lookup('service:card-service') as CardService;
   });
 
   setupLocalIndexing(hooks);
@@ -525,6 +532,43 @@ module('Integration | operator-mode', function (hooks) {
             adoptsFrom: {
               module: 'https://cardstack.com/base/catalog-entry',
               name: 'CatalogEntry',
+            },
+          },
+        },
+      },
+      'example.gts': `
+        import { contains, containsMany, field, CardDef } from 'https://cardstack.com/base/card-api';
+        import {
+          CappedNumberField,
+          ContainedNumberField,
+        } from 'https://cardstack.com/base/capped-number';
+
+        export class Example extends CardDef {
+          static displayName = 'Example';
+          @field amount = contains(ContainedNumberField);
+          @field listOfNumbers = containsMany(ContainedNumberField);
+          @field amountCapped = contains(CappedNumberField);
+        }
+      `,
+      'Example/1.json': {
+        data: {
+          type: 'card',
+          attributes: {
+            amount: {
+              internalValue: 12,
+            },
+            amountCapped: {
+              internalValue: 34,
+              maxValue: 100,
+            },
+            title: 'I have an internal value woo',
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: '../example',
+              name: 'Example',
             },
           },
         },
@@ -1629,6 +1673,34 @@ module('Integration | operator-mode', function (hooks) {
 
     assert.dom(`[data-test-cards-grid-cards]`).isNotVisible();
     assert.dom(`[data-test-create-new-card-button]`).isNotVisible();
+  });
+
+  test(`OH MY`, async function (assert) {
+    let exampleCard = await loadCard(`${testRealmURL}Example/1`);
+    console.log(exampleCard);
+    let schema = cardApi.generateJSONSchema(exampleCard.constructor);
+    console.log(
+      'ref',
+      Reflect.getOwnPropertyDescriptor(exampleCard.constructor, 'primitive'),
+    );
+    assert.equal(schema, {});
+    console.log(schema);
+    console.log(JSON.stringify(schema));
+    exampleCard.amount = exampleCard.amountCapped;
+    let serialised = await cardService.serializeCard(exampleCard);
+    console.log(serialised);
+    assert.equal(serialised, 'womp');
+  });
+
+  test(`OH MY 2`, async function (assert) {
+    let exampleCard = await loadCard(`${testRealmURL}Person/fadhlan`);
+    console.log(exampleCard);
+    assert.equal(exampleCard.constructor.schema(), {});
+    console.log(exampleCard.constructor.schema());
+    console.log(JSON.stringify(exampleCard.constructor.schema()));
+    let serialised = await cardService.serializeCard(exampleCard);
+    console.log(serialised);
+    assert.equal(serialised, 'womp');
   });
 
   test(`displays recently accessed card`, async function (assert) {

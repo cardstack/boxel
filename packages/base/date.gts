@@ -35,11 +35,18 @@ class View extends Component<typeof DateField> {
 }
 
 export default class DateField extends FieldDef {
-  static [primitive]: Date;
+  static [primitive] = {
+    tsType: Date,
+    serializedType: { type: 'string', format: 'date' },
+  };
   static [serialize](date: Date) {
     return format(date, dateFormat);
   }
   static displayName = 'Date';
+
+  static schema() {
+    return { type: 'string', format: 'date' };
+  }
 
   static async [deserialize]<T extends BaseDefConstructor>(
     this: T,
