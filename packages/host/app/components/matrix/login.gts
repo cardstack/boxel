@@ -9,12 +9,12 @@ import { restartableTask } from 'ember-concurrency';
 import { type IAuthData } from 'matrix-js-sdk';
 
 import {
-  BoxelHeader,
-  BoxelInput,
   Button,
   FieldContainer,
+  BoxelHeader,
+  BoxelInput,
   LoadingIndicator,
-} from '@cardstack/boxel-ui';
+} from '@cardstack/boxel-ui/components';
 
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';

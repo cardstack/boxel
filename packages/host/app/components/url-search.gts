@@ -6,8 +6,8 @@ import { tracked } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import debounce from 'lodash/debounce';
 
-import { BoxelInputValidationState } from '@cardstack/boxel-ui';
-import { type InputValidationState } from '@cardstack/boxel-ui/components/input/validation-state';
+import { BoxelInputValidationState } from '@cardstack/boxel-ui/components';
+import type { InputValidationState } from '@cardstack/boxel-ui/components';
 
 import {
   isSingleCardDocument,

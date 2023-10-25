@@ -5,13 +5,13 @@ import {
   type CardDef,
   BaseDef,
   type Box,
+  type BoxComponent,
   type Format,
   type Field,
   CardContext,
 } from './card-api';
 import { getBoxComponent, getPluralViewComponent } from './field-component';
-import type { ComponentLike } from '@glint/template';
-import { AddButton, IconButton } from '@cardstack/boxel-ui';
+import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
 import {
   restartableTask,
   type EncapsulatedTaskDescriptor as Descriptor,
@@ -22,6 +22,8 @@ import {
   identifyCard,
   getPlural,
 } from '@cardstack/runtime-common';
+import { IconMinusCircle, IconX } from '@cardstack/boxel-ui/icons';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 interface Signature {
   Args: {
@@ -40,48 +42,95 @@ interface Signature {
 class LinksToManyEditor extends GlimmerComponent<Signature> {
   <template>
     <div data-test-links-to-many={{this.args.field.name}}>
-      {{#if @arrayField.children.length}}
-        <ul class='list'>
+      {{#if (eq @format 'edit')}}
+        {{#if @arrayField.children.length}}
+          <ul class='list'>
+            {{#each @arrayField.children as |boxedElement i|}}
+              <li class='editor' data-test-item={{i}}>
+                {{#let
+                  (getBoxComponent
+                    (this.args.cardTypeFor @field boxedElement)
+                    'embedded'
+                    boxedElement
+                    @field
+                    @context
+                  )
+                  as |Item|
+                }}
+                  <Item />
+                {{/let}}
+                <div class='remove-button-container'>
+                  <IconButton
+                    @variant='primary'
+                    @icon={{IconMinusCircle}}
+                    @width='20px'
+                    @height='20px'
+                    class='remove'
+                    {{on 'click' (fn this.remove i)}}
+                    aria-label='Remove'
+                    data-test-remove-card
+                    data-test-remove={{i}}
+                  />
+                </div>
+              </li>
+            {{/each}}
+          </ul>
+        {{/if}}
+        <AddButton
+          class='add-new'
+          @variant='full-width'
+          {{on 'click' this.add}}
+          data-test-add-new
+        >
+          Add
+          {{getPlural @field.card.displayName}}
+        </AddButton>
+      {{else}}
+        <div class='boxel-pills' data-test-pills>
           {{#each @arrayField.children as |boxedElement i|}}
-            <li class='editor' data-test-item={{i}}>
-              {{#let
-                (getBoxComponent
-                  (this.args.cardTypeFor @field boxedElement)
-                  'embedded'
-                  boxedElement
-                  @field
-                  @context
-                )
-                as |Item|
-              }}
-                <Item />
-              {{/let}}
-              <div class='remove-button-container'>
+            {{#let
+              (getBoxComponent
+                (this.args.cardTypeFor @field boxedElement)
+                'atom'
+                boxedElement
+                @field
+                @context
+              )
+              as |Item|
+            }}
+              <div class='boxel-pills-container' data-test-pill-item={{i}}>
+                <div
+                  class='boxel-pill'
+                >
+                  <Item />
+                </div>
                 <IconButton
                   @variant='primary'
-                  @icon='icon-minus-circle'
-                  @width='20px'
-                  @height='20px'
-                  class='remove'
+                  @icon={{IconX}}
+                  @width='14px'
+                  @height='14px'
+                  class='remove-item-button'
                   {{on 'click' (fn this.remove i)}}
                   aria-label='Remove'
                   data-test-remove-card
                   data-test-remove={{i}}
                 />
               </div>
-            </li>
+            {{/let}}
           {{/each}}
-        </ul>
+          <AddButton
+            class='add-new'
+            @variant='pill'
+            @iconWidth='16px'
+            @iconHeight='16px'
+            {{on 'click' this.add}}
+            data-test-add-new
+          >
+            Add
+            {{@field.card.displayName}}
+          </AddButton>
+        </div>
       {{/if}}
-      <AddButton
-        class='add-new'
-        @variant='full-width'
-        {{on 'click' this.add}}
-        data-test-add-new
-      >
-        Add
-        {{getPlural @field.card.displayName}}
-      </AddButton>
     </div>
     <style>
       .list {
@@ -110,9 +159,42 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         --icon-bg: var(--boxel-dark);
         --icon-border: var(--boxel-dark);
       }
+      .boxel-pills {
+        display: flex;
+        flex-wrap: wrap;
+
+        padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
+        border: 1px solid var(--boxel-form-control-border-color);
+        border-radius: var(--boxel-form-control-border-radius);
+        --boxel-add-button-pill-font: var(--boxel-font-sm);
+        gap: var(--boxel-sp-xs);
+      }
+      .boxel-pills-container {
+        position: relative;
+        height: fit-content;
+      }
+      .boxel-pill .atom-card {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding-right: var(--boxel-sp-lg);
+        color: var(--boxel-dark);
+      }
+      .remove-item-button {
+        --icon-color: var(--boxel-dark);
+        position: absolute;
+        right: 0;
+        top: 0;
+
+        width: 22px;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        padding-right: var(--boxel-sp-xxs);
+      }
     </style>
   </template>
-
+  
   add = () => {
     (this.chooseCard as unknown as Descriptor<any, any[]>).perform();
   };
@@ -127,7 +209,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     let chosenCard: CardDef | undefined = await chooseCard(
       { filter },
       {
-        offerToCreate: type,
+        offerToCreate: { ref: type, relativeTo: undefined },
         multiSelect: true,
         createNewCard: this.args.context?.actions?.createCard,
       },
@@ -162,8 +244,8 @@ export function getLinksToManyComponent({
     boxedElement: Box<BaseDef>,
   ): typeof BaseDef;
   context?: CardContext;
-}): ComponentLike<{ Args: {}; Blocks: {} }> {
-  if (format === 'edit') {
+}): BoxComponent {
+  if (format === 'edit' || format === 'atom') {
     return class LinksToManyEditorTemplate extends GlimmerComponent {
       <template>
         <LinksToManyEditor

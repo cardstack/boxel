@@ -395,6 +395,33 @@ module('Integration | card-copy', function (hooks) {
       .doesNotExist('copy button does not exist');
   });
 
+  test('copy button does not appear when right and left stacks are both the same index card', async function (assert) {
+    await setCardInOperatorModeState(
+      [`${testRealmURL}index`],
+      [`${testRealmURL}index`],
+    );
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor(
+      '[data-test-operator-mode-stack="0"] [data-test-cards-grid-item]',
+    );
+    await waitFor(
+      '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
+    );
+    await click(
+      `[data-test-operator-mode-stack="0"] [data-test-overlay-card="${testRealmURL}Person/hassan"] button.select`,
+    );
+    assert
+      .dom('[data-test-copy-button]')
+      .doesNotExist('copy button does not exist');
+  });
+
   test('copy button does not appear when right and left stacks are both single cards items', async function (assert) {
     await setCardInOperatorModeState(
       [`${testRealmURL}index`, `${testRealmURL}Person/hassan`],

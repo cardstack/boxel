@@ -8,8 +8,9 @@ import {
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import StringCard from 'https://cardstack.com/base/string';
 import { Pet } from './pet';
-import { GridContainer } from '@cardstack/boxel-ui';
+import { GridContainer } from '@cardstack/boxel-ui/components';
 import { Address } from './address';
+import { Trips } from './trips';
 
 export class Person extends CardDef {
   static displayName = 'Person';
@@ -19,6 +20,7 @@ export class Person extends CardDef {
   @field isHuman = contains(BooleanCard);
   @field address = contains(Address);
   @field pet = linksTo(Pet);
+  @field trips = contains(Trips);
   @field title = contains(StringCard, {
     computeVia: function (this: Person) {
       return [this.firstName, this.lastName].filter(Boolean).join(' ');
@@ -43,6 +45,7 @@ export class Person extends CardDef {
           <div>Is Human: <@fields.isHuman /></div>
         </div>
         {{#if @model.pet}}<@fields.pet />{{/if}}
+        <@fields.trips />
       </GridContainer>
     </template>
   };

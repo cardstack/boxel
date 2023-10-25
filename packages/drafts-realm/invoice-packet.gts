@@ -14,11 +14,13 @@ import StringCard from 'https://cardstack.com/base/string';
 import TextAreaCard from 'https://cardstack.com/base/text-area';
 import { Vendor } from './vendor';
 import { formatUSD, balanceInCurrency } from './currency-format';
-import { FieldContainer, Label, Message } from '@cardstack/boxel-ui';
+import { FieldContainer, Label, Message } from '@cardstack/boxel-ui/components';
+
 import { TokenField, CurrencyField } from './asset';
 import GlimmerComponent from '@glimmer/component';
 
 class Details extends FieldDef {
+  static displayName = 'Details';
   @field invoiceNo = contains(StringCard);
   @field invoiceDate = contains(DateCard);
   @field dueDate = contains(DateCard);
@@ -120,6 +122,7 @@ class DetailsFieldsContainer extends GlimmerComponent<GenericContainerSignature>
 }
 
 class LineItem extends FieldDef {
+  static displayName = 'LineItem';
   @field name = contains(StringCard);
   @field quantity = contains(NumberCard);
   @field amount = contains(NumberCard);
@@ -198,6 +201,7 @@ class LineItem extends FieldDef {
 }
 
 class Note extends FieldDef {
+  static displayName = 'Note';
   @field text = contains(TextAreaCard);
   @field authorName = contains(StringCard); /* computed */
   @field authorImage = contains(StringCard); /* computed */

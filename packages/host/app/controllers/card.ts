@@ -16,12 +16,20 @@ import { Model } from '@cardstack/host/routes/card';
 
 import type CardService from '@cardstack/host/services/card-service';
 
+import MessageService from '@cardstack/host/services/message-service';
+
 import OperatorModeStateService, {
   SerializedState as OperatorModeSerializedState,
 } from '@cardstack/host/services/operator-mode-state-service';
 
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+
 import { withPreventDefault } from '../helpers/with-prevent-default';
-import { getSearchResults, type Search } from '../resources/search';
+import {
+  getLiveSearchResults,
+  getSearchResults,
+  type Search,
+} from '../resources/search';
 
 export default class CardController extends Controller {
   queryParams = ['operatorModeState', 'operatorModeEnabled'];
@@ -32,6 +40,7 @@ export default class CardController extends Controller {
   @service declare cardService: CardService;
   @service declare router: RouterService;
   @service declare operatorModeStateService: OperatorModeStateService;
+  @service declare messageService: MessageService;
 
   @tracked operatorModeEnabled = false;
   @tracked model: Model | undefined;
@@ -40,6 +49,11 @@ export default class CardController extends Controller {
   constructor(args: any) {
     super(args);
     (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
+
+    // this allows the guest mode cards-grid to use a live query. I'm not sure
+    // if that is a requirement or not. we can remove this if it is not.
+    this.messageService.register();
+
     registerDestructor(this, () => {
       delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
     });
@@ -57,6 +71,31 @@ export default class CardController extends Controller {
       this,
       () => query,
       realms ? () => realms : undefined,
+    );
+  }
+
+  getLiveCard<T extends object>(
+    owner: T,
+    url: URL,
+    opts?: { cachedOnly?: true },
+  ): Promise<CardDef | undefined> {
+    return this.cardService.loadModel(owner, url, opts);
+  }
+
+  trackLiveCard<T extends object>(owner: T, card: CardDef) {
+    return this.cardService.trackLiveCard(owner, card);
+  }
+
+  getLiveCards(
+    query: Query,
+    realms?: string[],
+    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
+  ): Search {
+    return getLiveSearchResults(
+      this,
+      () => query,
+      realms ? () => realms : undefined,
+      doWhileRefreshing ? () => doWhileRefreshing : undefined,
     );
   }
 

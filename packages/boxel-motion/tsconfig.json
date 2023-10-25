@@ -62,7 +62,7 @@
     "inlineSources": true,
 
     "skipLibCheck": false,
-
+    "allowImportingTsExtensions": true,
     // The combination of `baseUrl` with `paths` allows Ember's classic package
     // layout, which is not resolveable with the Node resolution algorithm, to
     // work with TypeScript.

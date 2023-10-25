@@ -6,6 +6,15 @@
       "lastName": "Abdel-Rahman",
       "isCool": false,
       "isHuman": true,
+      "address": {
+        "streetAddress": null,
+        "city": null,
+        "region": null,
+        "postalCode": null,
+        "poBoxNumber": null,
+        "country": null
+      },
+      "trips": {},
       "description": null,
       "thumbnailURL": null
     },
@@ -13,6 +22,16 @@
       "pet": {
         "links": {
           "self": "../Pet/2"
+        }
+      },
+      "trips.countriesVisited.0": {
+        "links": {
+          "self": "http://localhost:4201/drafts/Country/1"
+        }
+      },
+      "trips.countriesVisited.1": {
+        "links": {
+          "self": "http://localhost:4201/drafts/Country/2"
         }
       }
     },

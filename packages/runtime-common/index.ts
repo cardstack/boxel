@@ -124,14 +124,18 @@ export function isMatrixCardError(
 export type CreateNewCard = (
   ref: CodeRef,
   relativeTo: URL | undefined,
-  opts?: { isLinkedCard?: boolean; doc?: LooseSingleCardDocument },
+  opts?: {
+    isLinkedCard?: boolean;
+    doc?: LooseSingleCardDocument;
+    realmURL?: URL;
+  },
 ) => Promise<CardDef | undefined>;
 
 export interface CardChooser {
   chooseCard<T extends BaseDef>(
     query: Query,
     opts?: {
-      offerToCreate?: CodeRef;
+      offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
       multiSelect?: boolean;
       createNewCard?: CreateNewCard;
     },
@@ -141,7 +145,7 @@ export interface CardChooser {
 export async function chooseCard<T extends BaseDef>(
   query: Query,
   opts?: {
-    offerToCreate?: CodeRef;
+    offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
     multiSelect?: boolean;
     createNewCard?: CreateNewCard;
   },
@@ -166,6 +170,20 @@ export interface CardSearch {
     ready: Promise<void>;
     isLoading: boolean;
   };
+  getLiveCard: <T extends object>(
+    owner: T,
+    url: URL,
+    opts?: { cachedOnly?: true },
+  ) => Promise<CardDef | undefined>;
+  trackLiveCard<T extends object>(owner: T, card: CardDef): CardDef;
+  getLiveCards(
+    query: Query,
+    realms?: string[],
+    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
+  ): {
+    instances: CardDef[];
+    isLoading: boolean;
+  };
 }
 
 export function getCards(query: Query, realms?: string[]) {
@@ -174,18 +192,58 @@ export function getCards(query: Query, realms?: string[]) {
   return finder?.getCards(query, realms);
 }
 
+export function getLiveCard<T extends object>(
+  owner: T,
+  url: URL,
+  opts?: { cachedOnly?: true },
+): Promise<CardDef | undefined> {
+  let here = globalThis as any;
+  if (!here._CARDSTACK_CARD_SEARCH) {
+    // on the server we don't need this
+    return Promise.resolve(undefined);
+  }
+  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
+  return finder?.getLiveCard(owner, url, opts);
+}
+
+export function trackLiveCard<T extends object>(owner: T, card: CardDef) {
+  let here = globalThis as any;
+  if (!here._CARDSTACK_CARD_SEARCH) {
+    // on the server we don't need this
+    return card;
+  }
+  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
+  return finder?.trackLiveCard(owner, card);
+}
+
+export function getLiveCards(
+  query: Query,
+  realms?: string[],
+  doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>,
+) {
+  let here = globalThis as any;
+  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
+  return finder?.getLiveCards(query, realms, doWhileRefreshing);
+}
+
 export interface CardCreator {
   create<T extends CardDef>(
     ref: CodeRef,
     relativeTo: URL | undefined,
-    opts?: { doc?: LooseSingleCardDocument },
+    opts?: {
+      realmURL?: URL;
+      doc?: LooseSingleCardDocument;
+    },
   ): Promise<undefined | T>;
 }
 
 export async function createNewCard<T extends CardDef>(
   ref: CodeRef,
   relativeTo: URL | undefined,
-  opts?: { doc?: LooseSingleCardDocument },
+  opts?: {
+    realmURL?: URL;
+    doc?: LooseSingleCardDocument;
+  },
 ): Promise<undefined | T> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CREATE_NEW_CARD) {
@@ -223,7 +281,12 @@ export interface Actions {
   createCard: (
     ref: CodeRef,
     relativeTo: URL | undefined,
-    opts?: { isLinkedCard?: boolean; doc?: LooseSingleCardDocument }, //TODO: consider renaming isLinkedCard to be more semantic
+    opts?: {
+      // TODO: consider renaming isLinkedCard to be more semantic
+      isLinkedCard?: boolean;
+      realmURL?: URL;
+      doc?: LooseSingleCardDocument;
+    },
   ) => Promise<CardDef | undefined>;
   viewCard: (
     card: CardDef,
@@ -244,7 +307,7 @@ export interface Actions {
 
 export function hasExecutableExtension(path: string): boolean {
   for (let extension of executableExtensions) {
-    if (path.endsWith(extension)) {
+    if (path.endsWith(extension) && !path.endsWith('.d.ts')) {
       return true;
     }
   }

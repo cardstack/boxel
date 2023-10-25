@@ -128,6 +128,7 @@ export async function synapseStart(
       '--network=boxel',
     ],
     applicationParams: ['run'],
+    runAsUser: true,
   });
 
   const port = await getHostPort(synapseId, synCfg.port);
