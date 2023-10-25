@@ -32,16 +32,21 @@ export class AttachedCards extends Resource<Args> {
       }
       let RoomFieldClazz = Reflect.getPrototypeOf(room)!
         .constructor as typeof RoomField;
-      let pendingCards: Promise<CardDef | MatrixCardError>[] = [];
+      let pendingCards: Promise<CardDef | MatrixCardError | undefined>[] = [];
       for (let id of ids) {
-        let pendingCard = RoomFieldClazz.getAttachedCard(id);
+        let pendingCard:
+          | Promise<CardDef | MatrixCardError | undefined>
+          | undefined = RoomFieldClazz.getAttachedCard(id);
         if (!pendingCard) {
           pendingCard = this.cardService.loadModel(this, new URL(id));
           RoomFieldClazz.setAttachedCard(id, pendingCard);
         }
         pendingCards.push(pendingCard);
       }
-      this.instances = await all(pendingCards);
+      this.instances = (await all(pendingCards)).filter(Boolean) as (
+        | CardDef
+        | MatrixCardError
+      )[];
     },
   );
 }
