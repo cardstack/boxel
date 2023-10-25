@@ -116,7 +116,7 @@ export default class CardAdoptionChain extends Component<Signature> {
   @action allowFieldManipulation(file: Ready, cardType: Type): boolean {
     // Only allow add/edit/remove for fields from the currently opened module
 
-    // TODO: is there a better way to do this comparison?
-    return file.url.replace(/\.gts$/, '') === cardType.module;
+    // Strip the file extension from the file url
+    return file.url.replace(/\.[^/.]+$/, '') === cardType.module;
   }
 }
