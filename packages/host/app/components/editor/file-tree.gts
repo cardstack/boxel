@@ -15,7 +15,7 @@ interface Args {
 
 export default class FileTree extends Component<Args> {
   <template>
-    <div class='file-realm-info'>
+    <div class='realm-info'>
       <RealmInfoProvider @realmURL={{@realmURL}}>
         <:ready as |realmInfo|>
           <RealmIcon
@@ -23,7 +23,8 @@ export default class FileTree extends Component<Args> {
             @realmName={{realmInfo.name}}
             class='icon'
           />
-          <span>{{realmInfo.name}}</span>
+          <span data-test-realm-name={{realmInfo.name}}>In
+            {{realmInfo.name}}</span>
         </:ready>
       </RealmInfoProvider>
     </div>
@@ -32,24 +33,24 @@ export default class FileTree extends Component<Args> {
     </nav>
 
     <style>
-      .file-realm-info {
+      .realm-info {
         position: sticky;
         top: calc(var(--boxel-sp-xxs) * -1);
         left: calc(var(--boxel-sp-xs) * -1);
         margin: calc(var(--boxel-sp-xxs) * -1) calc(var(--boxel-sp-xs) * -1) 0
           calc(var(--boxel-sp-xs) * -1);
-        padding: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
         background-color: var(--boxel-light);
         box-shadow: var(--boxel-box-shadow);
         z-index: 1;
 
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-xs);
+        gap: var(--boxel-sp-xxxs);
       }
 
-      .file-realm-info img {
-        width: 16px;
+      .realm-info img {
+        width: 18px;
       }
     </style>
   </template>
