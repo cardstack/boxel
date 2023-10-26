@@ -168,6 +168,10 @@ const inThisFileSource = `
     static displayName = 'exported field extends local field';
   }
 
+  class LocalCardWithoutExportRelationship extends CardDef {
+    static displayName = 'local card but without export relationship';
+  }
+
   export default class DefaultClass {}
 `;
 
@@ -202,6 +206,97 @@ const friendCardSource = `
   }
 `;
 
+const exportsSource = `
+  import {
+    contains,
+    field,
+    CardDef,
+    FieldDef
+  } from 'https://cardstack.com/base/card-api';
+  import StringCard from 'https://cardstack.com/base/string';
+
+  export class AncestorCard1 extends CardDef {
+    static displayName = 'AncestorCard1';
+    @field name = contains(StringCard);
+  }
+
+  export class AncestorCard2 extends CardDef {
+    static displayName = 'AncestorCard2';
+    @field name = contains(StringCard);
+  }
+
+  export class AncestorCard3 extends CardDef {
+    static displayName = 'AncestorCard3';
+    @field name = contains(StringCard);
+  }
+
+  export class AncestorField1 extends FieldDef {
+    static displayName = 'AncestorField1';
+    @field name = contains(StringCard);
+  }
+`;
+const specialExportsSource = `
+  import {
+    contains,
+    field,
+    CardDef
+  } from 'https://cardstack.com/base/card-api';
+  import StringCard from 'https://cardstack.com/base/string';
+
+  class AncestorCard extends CardDef {
+    static displayName = 'Ancestor';
+    @field name = contains(StringCard);
+  }
+
+  export default class DefaultAncestorCard extends CardDef {
+    static displayName = 'DefaultAncestor';
+    @field name = contains(StringCard);
+  }
+
+  export { AncestorCard as RenamedAncestorCard}
+`;
+
+const importsSource = `
+  import { AncestorCard2, AncestorField1 } from './exports';
+  import  { AncestorCard3 as FatherCard3 } from './exports';
+  import  DefaultAncestorCard from './special-exports';
+  import  { RenamedAncestorCard } from './special-exports';
+  import {
+    contains,
+    field,
+    linksTo,
+    linksToMany
+  } from 'https://cardstack.com/base/card-api';
+
+  export class ChildCard1 extends AncestorCard2 {
+    static displayName = 'ChildCard1';
+    @field field1 = contains(AncestorField1)
+    @field field2 = linksTo(AncestorCard2)
+    @field field3 = linksTo(()=>ChildCard2)
+    @field field4 = linksToMany(AncestorCard2)
+  }
+
+  export class ChildCard2 extends DefaultAncestorCard {
+    static displayName = 'ChildCard2';
+  }
+
+  export class ChildCard3 extends RenamedAncestorCard{
+    static displayName = 'ChildCard3';
+  }
+
+  export class ChildCard4 extends FatherCard3{
+    static displayName = 'ChildCard4';
+  }
+
+  export class ChildCard5 extends ChildCard2 {
+    static displayName = 'ChildCard5';
+  }
+
+  export class ChildField1 extends AncestorField1{
+    static displayName = 'ChildField1';
+  }
+`;
+
 module('Acceptance | code submode | inspector tests', function (hooks) {
   let realm: Realm;
   let adapter: TestRealmAdapter;
@@ -228,6 +323,9 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       'friend.gts': friendCardSource,
       'employee.gts': employeeCardSource,
       'in-this-file.gts': inThisFileSource,
+      'exports.gts': exportsSource,
+      'special-exports.gts': specialExportsSource,
+      'imports.gts': importsSource,
       'person-entry.json': {
         data: {
           type: 'card',
@@ -737,5 +835,214 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       JSON.stringify([[testRealmURL, 'Pet/mango.json']]),
       'the deleted card has been removed from recent files',
     );
+  });
+
+  test('After opening inherited definition inside inheritance panel, "in-this-file" highlights selected definition', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}imports.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    // clicking on normal card
+    let elementName = 'ChildCard1';
+    await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    let selected = 'AncestorCard2 card';
+    await waitFor(`[data-test-definition-container]`);
+    await click(`[data-test-definition-container]`);
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
+
+    //clicking on default card
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    elementName = 'ChildCard2';
+    await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    selected = 'default (DefaultAncestorCard) card';
+    await waitFor(`[data-test-definition-container]`);
+    await click(`[data-test-definition-container]`);
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
+
+    //clicking on card which is renamed during export
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    elementName = 'ChildCard3';
+    await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    selected = 'RenamedAncestorCard (AncestorCard) card';
+    await waitFor(`[data-test-definition-container]`);
+    await click(`[data-test-definition-container]`);
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
+
+    //clicking on card which is renamed during import
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    elementName = 'ChildCard4';
+    await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    selected = 'AncestorCard3 card';
+    await click(`[data-test-definition-container]`);
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
+
+    //clicking on card which is defined locally
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    elementName = 'ChildCard5';
+    await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    selected = 'ChildCard2 card';
+    await waitFor(`[data-test-definition-container]`);
+    await click(`[data-test-definition-container]`);
+    await waitFor('[data-test-boxel-selector-item-selected]');
+
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
+    //clicking on field
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    elementName = 'ChildField1';
+    await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    selected = 'AncestorField1 field';
+    await click(`[data-test-definition-container]`);
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
+  });
+
+  test('After opening definition from card type and fields on RHS, "in-this-file" highlights selected definition', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}imports.gts`,
+    })!;
+
+    //click card type
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitFor(`[data-test-boxel-selector-item-text="ChildCard1"]`);
+    await click(`[data-test-boxel-selector-item-text="ChildCard1"]`);
+    let elementName = 'AncestorCard2';
+    await waitFor(
+      `[data-test-card-schema="${elementName}"] [data-test-card-schema-navigational-button]`,
+    );
+    await click(
+      `[data-test-card-schema="${elementName}"] [data-test-card-schema-navigational-button]`,
+    );
+
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} card`);
+
+    //click normal field
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitFor(`[data-test-boxel-selector-item-text="ChildCard1"]`);
+    await click(`[data-test-boxel-selector-item-text="ChildCard1"]`);
+    elementName = 'ChildCard1';
+    await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    elementName = 'AncestorField1';
+    await waitFor(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field1"] [data-test-card-display-name="${elementName}"]`,
+    );
+    await click(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field1"] [data-test-card-display-name="${elementName}"]`,
+    );
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} field`);
+
+    //click linksTo card
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitFor(`[data-test-boxel-selector-item-text="ChildCard1"]`);
+    await click(`[data-test-boxel-selector-item-text="ChildCard1"]`);
+    elementName = 'AncestorCard2';
+    await waitFor(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field2"] [data-test-card-display-name="${elementName}"]`,
+    );
+    await click(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field2"] [data-test-card-display-name="${elementName}"]`,
+    );
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} card`);
+    //click linksTo card in the same file
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    elementName = 'ChildCard2';
+    await waitFor(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field3"] [data-test-card-display-name="${elementName}"]`,
+    );
+    await click(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field3"] [data-test-card-display-name="${elementName}"]`,
+    );
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} card`);
+
+    //click linksTo many card
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    await waitFor(`[data-test-boxel-selector-item-text="ChildCard1"]`);
+    await click(`[data-test-boxel-selector-item-text="ChildCard1"]`);
+    elementName = 'AncestorCard2';
+    await waitFor(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field4"] [data-test-card-display-name="${elementName}"]`,
+    );
+    await click(
+      `[data-test-card-schema="ChildCard1"] [data-test-field-name="field4"] [data-test-card-display-name="${elementName}"]`,
+    );
+    await waitFor('[data-test-boxel-selector-item-selected]');
+    assert
+      .dom('[data-test-boxel-selector-item-selected]')
+      .hasText(`${elementName} card`);
   });
 });
