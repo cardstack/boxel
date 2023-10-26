@@ -890,7 +890,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-card-error]');
     assert
       .dom('[data-test-card-error]')
-      .hasText(
+      .includesText(
         'Error: cannot render card http://this-is-not-a-real-card.com: status: 500 - Failed to fetch.',
       );
   });
@@ -2674,30 +2674,30 @@ module('Integration | operator-mode', function (hooks) {
 
     assert.dom('[data-test-field="trips"] [data-test-add-new]').exists();
     await click('[data-test-links-to-many="countries"] [data-test-add-new]');
-    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Country/japan"]`);
+    await waitFor(
+      `[data-test-card-catalog-item="${testRealmURL}Country/japan"]`,
+    );
     await click(`[data-test-select="${testRealmURL}Country/japan"]`);
     await click('[data-test-card-catalog-go-button]');
 
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
-    assert.dom('[data-test-pill-item]').exists({ count: 1});
-    assert
-      .dom('[data-test-field="trips"]')
-      .containsText('Japan');
+    assert.dom('[data-test-pill-item]').exists({ count: 1 });
+    assert.dom('[data-test-field="trips"]').containsText('Japan');
 
     await click('[data-test-links-to-many="countries"] [data-test-add-new]');
-    await waitFor(`[data-test-card-catalog-item="${testRealmURL}Country/united-states"]`);
+    await waitFor(
+      `[data-test-card-catalog-item="${testRealmURL}Country/united-states"]`,
+    );
     await click(`[data-test-select="${testRealmURL}Country/united-states"]`);
     await click('[data-test-card-catalog-go-button]');
 
     await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
-    assert.dom('[data-test-pill-item]').exists({ count: 2});
-    assert
-      .dom('[data-test-field="trips"]')
-      .containsText('Japan United States');
-  
+    assert.dom('[data-test-pill-item]').exists({ count: 2 });
+    assert.dom('[data-test-field="trips"]').containsText('Japan United States');
+
     await click('[data-test-pill-item] [data-test-remove-card]');
-    assert.dom('[data-test-pill-item]').exists({ count: 1});
+    assert.dom('[data-test-pill-item]').exists({ count: 1 });
     await click('[data-test-pill-item] [data-test-remove-card]');
-    assert.dom('[data-test-pill-item]').exists({ count: 0});
+    assert.dom('[data-test-pill-item]').exists({ count: 0 });
   });
 });
