@@ -330,7 +330,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                             <IconLink width='16px' height='16px' />
                           </span>
                         {{/if}}
-                        <RealmInfoProvider @fileURL={{@cardType.module}}>
+                        <RealmInfoProvider @fileURL={{moduleUrl}}>
                           <:ready as |realmInfo|>
                             <RealmIcon
                               @realmIconURL={{realmInfo.iconURL}}
