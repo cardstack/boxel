@@ -2727,15 +2727,22 @@ export function getFields(
       if (!maybeField) {
         return [];
       }
+
       if (
-        opts?.usedFieldsOnly &&
-        !usedFields.includes(maybeFieldName) &&
-        !maybeField.isUsed
+        !(primitive in maybeField.card) ||
+        maybeField.computeVia ||
+        !['contains', 'containsMany'].includes(maybeField.fieldType)
       ) {
-        return [];
-      }
-      if (maybeField.computeVia && !opts?.includeComputeds) {
-        return [];
+        if (
+          opts?.usedFieldsOnly &&
+          !usedFields.includes(maybeFieldName) &&
+          !maybeField.isUsed
+        ) {
+          return [];
+        }
+        if (maybeField.computeVia && !opts?.includeComputeds) {
+          return [];
+        }
       }
 
       return [[maybeFieldName, maybeField]];
