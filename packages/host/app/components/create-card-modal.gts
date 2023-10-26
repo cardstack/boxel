@@ -9,11 +9,16 @@ import { tracked } from '@glimmer/tracking';
 
 import { enqueueTask } from 'ember-concurrency';
 
-import type {
-  CodeRef,
-  LooseSingleCardDocument,
+import {
+  Deferred,
+  RealmPaths,
+  type CodeRef,
+  type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
-import { Deferred } from '@cardstack/runtime-common/deferred';
+import {
+  moduleFrom,
+  codeRefWithAbsoluteURL
+} from '@cardstack/runtime-common/code-ref';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -60,7 +65,10 @@ export default class CreateCardModal extends Component {
   async create<T extends CardDef>(
     ref: CodeRef,
     relativeTo: URL | undefined,
-    opts?: { doc?: LooseSingleCardDocument },
+    opts?: { 
+      realmURL?: URL;
+      doc?: LooseSingleCardDocument
+    },
   ): Promise<undefined | T> {
     this.zIndex++;
     return (await this._create.perform(ref, relativeTo, opts)) as T | undefined;
@@ -69,17 +77,32 @@ export default class CreateCardModal extends Component {
   private _create = enqueueTask(
     async <T extends CardDef>(
       ref: CodeRef,
-      relativeTo: URL | undefined,
-      opts?: { doc?: LooseSingleCardDocument },
+      relativeTo: URL | undefined, // this relativeTo should be the catalog entry ID that the CodeRef comes from
+      opts?: {
+        doc?: LooseSingleCardDocument;
+        realmURL?: URL;
+      },
     ) => {
+      let cardModule = new URL(moduleFrom(ref), relativeTo);
+      // we make the code ref use an absolute URL for safety in
+      // the case it's being created in a different realm than where the card 
+      // definition comes from
+      if (opts?.realmURL && !(new RealmPaths(opts.realmURL).inRealm(cardModule))) {
+        ref = codeRefWithAbsoluteURL(ref, relativeTo)
+      }
       let doc: LooseSingleCardDocument = opts?.doc ?? {
-        data: { meta: { adoptsFrom: ref } },
+        data: {
+          meta: {
+            adoptsFrom: ref,
+            ...(opts?.realmURL ? { realmURL: opts.realmURL.href} : {})
+          }
+        },
       };
       this.currentRequest = {
         card: await this.cardService.createFromSerialized(
           doc.data,
           doc,
-          relativeTo ?? this.cardService.defaultURL,
+          relativeTo
         ),
         deferred: new Deferred(),
       };

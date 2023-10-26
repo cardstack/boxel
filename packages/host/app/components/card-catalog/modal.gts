@@ -64,7 +64,7 @@ type Request = {
   search: Search;
   deferred: Deferred<CardDef | undefined>;
   opts?: {
-    offerToCreate?: CodeRef;
+    offerToCreate?: { ref: CodeRef, relativeTo: URL | undefined };
     createNewCard?: CreateNewCard;
   };
 };
@@ -136,7 +136,11 @@ export default class CardCatalogModal extends Component<Signature> {
                   class='create-new-button'
                   {{on
                     'click'
-                    (fn this.createNew this.state.request.opts.offerToCreate)
+                    (fn 
+                      this.createNew
+                      this.state.request.opts.offerToCreate.ref
+                      this.state.request.opts.offerToCreate.relativeTo
+                    )
                   }}
                   data-test-card-catalog-create-new-button
                 >
@@ -217,7 +221,7 @@ export default class CardCatalogModal extends Component<Signature> {
   get cardRefName() {
     return (
       (
-        this.state.request.opts?.offerToCreate as {
+        this.state.request.opts?.offerToCreate?.ref as {
           module: string;
           name: string;
         }
@@ -271,7 +275,7 @@ export default class CardCatalogModal extends Component<Signature> {
   async chooseCard<T extends CardDef>(
     query: Query,
     opts?: {
-      offerToCreate?: CodeRef;
+      offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined };
       multiSelect?: boolean;
       createNewCard?: CreateNewCard;
     },
@@ -300,7 +304,7 @@ export default class CardCatalogModal extends Component<Signature> {
   private _chooseCard = task(
     async <T extends CardDef>(
       query: Query,
-      opts: { offerToCreate?: CodeRef; multiSelect?: boolean } = {},
+      opts: { offerToCreate?: { ref: CodeRef; relativeTo: URL | undefined }; multiSelect?: boolean } = {},
     ) => {
       this.stateId++;
       let title = chooseCardTitle(query.filter, opts?.multiSelect);
@@ -408,11 +412,11 @@ export default class CardCatalogModal extends Component<Signature> {
     }
   }
 
-  @action createNew(ref: CodeRef) {
-    this.createNewTask.perform(ref);
+  @action createNew(ref: CodeRef, relativeTo: URL | undefined) {
+    this.createNewTask.perform(ref, relativeTo);
   }
 
-  createNewTask = task(async (ref: CodeRef) => {
+  createNewTask = task(async (ref: CodeRef, relativeTo: URL | undefined /* this should be the catalog entry ID */) => {
     let newCard;
     this.state.dismissModal = true;
 
@@ -421,11 +425,11 @@ export default class CardCatalogModal extends Component<Signature> {
     // users will open the card catalog modal and insert a new state into the stack.
     let currentState = this.state;
     if (this.state.request.opts?.createNewCard) {
-      newCard = await this.state.request.opts?.createNewCard(ref, undefined, {
+      newCard = await this.state.request.opts?.createNewCard(ref, relativeTo, {
         isLinkedCard: true,
       });
     } else {
-      newCard = await createNewCard(ref, undefined);
+      newCard = await createNewCard(ref, relativeTo);
     }
     this.pick(newCard, currentState);
   });
