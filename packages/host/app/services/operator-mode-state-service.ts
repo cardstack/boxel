@@ -389,6 +389,9 @@ export default class OperatorModeStateService extends Service {
       for (let item of stack) {
         let { format } = item;
         let card = await this.cardService.loadModel(this, new URL(item.id));
+        if (!card) {
+          throw new Error(`cannot load card ${item.id}`);
+        }
         newStack.push({
           card,
           format,
@@ -414,6 +417,10 @@ export default class OperatorModeStateService extends Service {
         this,
         new URL(recentCardId),
       );
+      if (!card) {
+        console.warn(`cannot load card ${recentCardId}`);
+        continue;
+      }
       this.recentCards.push(card);
     }
   }

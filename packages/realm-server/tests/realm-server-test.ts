@@ -3,7 +3,14 @@ import supertest, { Test, SuperTest } from 'supertest';
 import { join, resolve } from 'path';
 import { Server } from 'http';
 import { dirSync, setGracefulCleanup, DirResult } from 'tmp';
-import { copySync, existsSync, readFileSync, readJSONSync } from 'fs-extra';
+import {
+  copySync,
+  existsSync,
+  readFileSync,
+  readJSONSync,
+  removeSync,
+  writeJSONSync,
+} from 'fs-extra';
 import {
   cardSrc,
   compiledCard,
@@ -14,6 +21,7 @@ import {
   baseRealm,
   loadCard,
   Deferred,
+  type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
 import { Query } from '@cardstack/runtime-common/query';
@@ -176,6 +184,7 @@ module('Realm Server', function (hooks) {
         .send({
           data: {
             type: 'card',
+            attributes: {},
             meta: {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/card-api',
@@ -209,6 +218,7 @@ module('Realm Server', function (hooks) {
         {
           data: {
             type: 'card',
+            attributes: {},
             meta: {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/card-api',
@@ -719,6 +729,150 @@ module('Realm Server', function (hooks) {
       loader,
     );
     assert.deepEqual(testCard.ref, ref, 'card data is correct');
+  });
+
+  test('can index a newly added file to the filesystem', async function (assert) {
+    {
+      let response = await request
+        .get('/new-card')
+        .set('Accept', 'application/vnd.card+json');
+      assert.strictEqual(response.status, 404, 'HTTP 404 status');
+    }
+    let expected = [
+      {
+        type: 'incremental',
+        invalidations: [`${testRealmURL}new-card`],
+      },
+    ];
+    await expectEvent(assert, expected, async () => {
+      writeJSONSync(join(dir.name, 'new-card.json'), {
+        data: {
+          attributes: {
+            firstName: 'Mango',
+          },
+          meta: {
+            adoptsFrom: {
+              module: './person',
+              name: 'Person',
+            },
+          },
+        },
+      } as LooseSingleCardDocument);
+    });
+
+    {
+      let response = await request
+        .get('/new-card')
+        .set('Accept', 'application/vnd.card+json');
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let json = response.body;
+      assert.ok(json.data.meta.lastModified, 'lastModified exists');
+      delete json.data.meta.lastModified;
+      assert.strictEqual(
+        response.get('X-boxel-realm-url'),
+        testRealmURL.href,
+        'realm url header is correct',
+      );
+      assert.deepEqual(json, {
+        data: {
+          id: `${testRealmHref}new-card`,
+          type: 'card',
+          attributes: {
+            firstName: 'Mango',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `./person`,
+              name: 'Person',
+            },
+            realmInfo: {
+              name: 'Test Realm',
+              backgroundURL: null,
+              iconURL: null,
+            },
+            realmURL: testRealmURL.href,
+          },
+          links: {
+            self: `${testRealmHref}new-card`,
+          },
+        },
+      });
+    }
+  });
+
+  test('can index a changed file in the filesystem', async function (assert) {
+    {
+      let response = await request
+        .get('/person-1')
+        .set('Accept', 'application/vnd.card+json');
+      let json = response.body as LooseSingleCardDocument;
+      assert.strictEqual(
+        json.data.attributes?.firstName,
+        'Mango',
+        'initial firstName value is correct',
+      );
+    }
+
+    let expected = [
+      {
+        type: 'incremental',
+        invalidations: [`${testRealmURL}person-1`],
+      },
+    ];
+    await expectEvent(assert, expected, async () => {
+      writeJSONSync(join(dir.name, 'person-1.json'), {
+        data: {
+          type: 'card',
+          attributes: {
+            firstName: 'Van Gogh',
+          },
+          meta: {
+            adoptsFrom: {
+              module: './person.gts',
+              name: 'Person',
+            },
+          },
+        },
+      } as LooseSingleCardDocument);
+    });
+
+    {
+      let response = await request
+        .get('/person-1')
+        .set('Accept', 'application/vnd.card+json');
+      let json = response.body as LooseSingleCardDocument;
+      assert.strictEqual(
+        json.data.attributes?.firstName,
+        'Van Gogh',
+        'updated firstName value is correct',
+      );
+    }
+  });
+
+  test('can index a file deleted from the filesystem', async function (assert) {
+    {
+      let response = await request
+        .get('/person-1')
+        .set('Accept', 'application/vnd.card+json');
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+    }
+
+    let expected = [
+      {
+        type: 'incremental',
+        invalidations: [`${testRealmURL}person-1`],
+      },
+    ];
+    await expectEvent(assert, expected, async () => {
+      removeSync(join(dir.name, 'person-1.json'));
+    });
+
+    {
+      let response = await request
+        .get('/person-1')
+        .set('Accept', 'application/vnd.card+json');
+      assert.strictEqual(response.status, 404, 'HTTP 404 status');
+    }
   });
 
   module('BOXEL_HTTP_BASIC_PW env var', function (hooks) {

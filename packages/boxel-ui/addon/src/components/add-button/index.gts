@@ -1,6 +1,6 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
-import { eq } from '../../helpers/truth-helpers.ts';
+import { bool, eq } from '../../helpers/truth-helpers.ts';
 import IconPlus from '../../icons/icon-plus.gts';
 import PlusCircleIcon from '../../icons/icon-plus-circle.gts';
 import IconButton from '../icon-button/index.gts';
@@ -8,7 +8,9 @@ import IconButton from '../icon-button/index.gts';
 interface Signature {
   Args: {
     hideIcon?: boolean;
-    variant?: 'full-width';
+    iconHeight?: string;
+    iconWidth?: string;
+    variant?: 'full-width' | 'pill';
   };
   Blocks: {
     default: [];
@@ -17,9 +19,19 @@ interface Signature {
 }
 
 const AddButton: TemplateOnlyComponent<Signature> = <template>
-  {{#if (eq @variant 'full-width')}}
-    <button class='add-button--full-width' ...attributes>
-      {{#unless @hideIcon}}<IconPlus width='20px' height='20px' />{{/unless}}
+  {{#if (bool @variant)}}
+    <button
+      class={{if
+        (eq @variant 'full-width')
+        'add-button--full-width'
+        'add-button--pill'
+      }}
+      ...attributes
+    >
+      {{#unless @hideIcon}}<IconPlus
+          width={{if @iconWidth @iconWidth '20px'}}
+          height={{if @iconHeight @iconHeight '20px'}}
+        />{{/unless}}
       {{yield}}
     </button>
   {{else}}
@@ -70,6 +82,27 @@ const AddButton: TemplateOnlyComponent<Signature> = <template>
 
     .add-button--full-width:hover:not(:disabled) {
       background-color: var(--boxel-light-200);
+      cursor: pointer;
+    }
+
+    .add-button--pill {
+      --icon-color: var(--boxel-light);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: var(--boxel-sp-xxxs);
+      box-sizing: border-box;
+      padding: 4px var(--boxel-sp-sm);
+      background-color: var(--boxel-highlight);
+      border: none;
+      border-radius: var(--boxel-form-control-border-radius);
+      color: var(--boxel-light);
+      font: 700 var(--boxel-add-button-pill-font, var(--boxel-font-xs));
+      letter-spacing: var(--boxel-lsp-xs);
+      transition: background-color var(--boxel-transition);
+    }
+    .add-button--pill:hover:not(:disabled) {
+      box-shadow: var(--boxel-box-shadow);
       cursor: pointer;
     }
   </style>

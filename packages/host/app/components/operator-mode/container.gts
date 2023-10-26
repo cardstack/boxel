@@ -31,6 +31,10 @@ import {
   type CodeRef,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
+import {
+  moduleFrom,
+  codeRefWithAbsoluteURL,
+} from '@cardstack/runtime-common/code-ref';
 
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
@@ -48,7 +52,7 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
-import { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 import CardCatalogModal from '../card-catalog/modal';
 
@@ -139,6 +143,22 @@ export default class OperatorModeContainer extends Component<Signature> {
       () => query,
       realms ? () => realms : undefined,
     );
+  }
+
+  // public API
+  @action
+  getLiveCard<T extends object>(
+    owner: T,
+    url: URL,
+    opts?: { cachedOnly?: true },
+  ): Promise<CardDef | undefined> {
+    return this.cardService.loadModel(owner, url, opts);
+  }
+
+  // public API
+  @action
+  trackLiveCard<T extends object>(owner: T, card: CardDef) {
+    return this.cardService.trackLiveCard(owner, card);
   }
 
   // public API
@@ -290,12 +310,6 @@ export default class OperatorModeContainer extends Component<Signature> {
     }
   });
 
-  private saveCard = task(async (card: CardDef) => {
-    await this.withTestWaiters(async () => {
-      await this.cardService.saveModel(card);
-    });
-  });
-
   private saveSource = task(async (url: URL, content: string) => {
     await this.withTestWaiters(async () => {
       await this.cardService.saveSource(url, content);
@@ -368,7 +382,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   // at the same time
   private write = task(async (card: CardDef) => {
     return await this.withTestWaiters(async () => {
-      return await this.cardService.saveModel(card);
+      return await this.cardService.saveModel(this, card);
     });
   });
 
@@ -438,23 +452,33 @@ export default class OperatorModeContainer extends Component<Signature> {
         ref: CodeRef,
         relativeTo: URL | undefined,
         opts?: {
+          realmURL?: URL;
           isLinkedCard?: boolean;
           doc?: LooseSingleCardDocument; // fill in card data with values
         },
       ): Promise<CardDef | undefined> => {
-        // prefers optional doc to be passed in
-        // use case: to populate default values in a create modal
+        let cardModule = new URL(moduleFrom(ref), relativeTo);
+        // we make the code ref use an absolute URL for safety in
+        // the case it's being created in a different realm than where the card
+        // definition comes from
+        if (
+          opts?.realmURL &&
+          !new RealmPaths(opts.realmURL).inRealm(cardModule)
+        ) {
+          ref = codeRefWithAbsoluteURL(ref, relativeTo);
+        }
         let doc: LooseSingleCardDocument = opts?.doc ?? {
-          data: { meta: { adoptsFrom: ref } },
+          data: {
+            meta: {
+              adoptsFrom: ref,
+              ...(opts?.realmURL ? { realmURL: opts.realmURL.href } : {}),
+            },
+          },
         };
-        // using RealmPaths API to correct for the trailing `/`
-        let realmPath = new RealmPaths(
-          relativeTo ?? here.cardService.defaultURL,
-        );
         let newCard = await here.cardService.createFromSerialized(
           doc.data,
           doc,
-          new URL(realmPath.url),
+          relativeTo,
         );
         let newItem: StackItem = {
           card: newCard,
@@ -482,7 +506,7 @@ export default class OperatorModeContainer extends Component<Signature> {
           doc,
           relativeTo ?? here.cardService.defaultURL,
         );
-        await here.cardService.saveModel(newCard);
+        await here.cardService.saveModel(here, newCard);
         let newItem: StackItem = {
           card: newCard,
           format: 'isolated',
@@ -588,6 +612,12 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   @action private onCardSelectFromSearch(card: CardDef) {
+    if (this.isCodeMode) {
+      let codePath = new URL(card.id + '.json');
+      this.operatorModeStateService.updateCodePath(codePath);
+      this.onCancelSearchSheet();
+      return;
+    }
     let searchSheetTrigger = this.searchSheetTrigger; // Will be set by onFocusSearchInput
 
     // In case the left button was clicked, whatever is currently in stack with index 0 will be moved to stack with index 1,
@@ -723,7 +753,7 @@ export default class OperatorModeContainer extends Component<Signature> {
           <CodeMode
             @delete={{perform this.delete}}
             @saveSourceOnClose={{perform this.saveSource}}
-            @saveCardOnClose={{perform this.saveCard}}
+            @saveCardOnClose={{perform this.write}}
           />
         {{else}}
           <div class='operator-mode__main' style={{this.backgroundImageStyle}}>

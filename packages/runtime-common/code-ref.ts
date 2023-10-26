@@ -79,6 +79,16 @@ export function isFieldDef(field: any): field is typeof FieldDef {
   return 'isFieldDef' in field && isBaseDef(field);
 }
 
+export function codeRefWithAbsoluteURL(
+  ref: CodeRef,
+  relativeTo?: URL | undefined,
+): CodeRef {
+  if (!('type' in ref)) {
+    return { ...ref, module: new URL(ref.module, relativeTo).href };
+  }
+  return { ...ref, card: codeRefWithAbsoluteURL(ref.card, relativeTo) };
+}
+
 export async function loadCard(
   ref: CodeRef,
   opts: { loader: Loader; relativeTo?: URL },

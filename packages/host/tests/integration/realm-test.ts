@@ -441,6 +441,7 @@ module('Integration | realm', function (hooks) {
             JSON.parse(fileRef.content as string),
             {
               data: {
+                attributes: {},
                 type: 'card',
                 meta: {
                   adoptsFrom: {
