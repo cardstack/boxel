@@ -12,6 +12,8 @@ import { baseRealm } from '@cardstack/runtime-common';
 
 import { Realm } from '@cardstack/runtime-common/realm';
 
+import { Submode } from '@cardstack/host/components/submode-switcher';
+
 import type LoaderService from '@cardstack/host/services/loader-service';
 
 import {
@@ -25,8 +27,6 @@ import {
   setupServerSentEvents,
   type TestContextWithSSE,
 } from '../../helpers';
-
-import { Submode } from '@cardstack/host/components/submode-switcher';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
