@@ -129,7 +129,7 @@ interface IndexHTMLOptions {
 }
 
 interface UpdateItem {
-  operation: 'add' | 'update' | 'remove';
+  operation: 'add' | 'update' | 'removed';
   url: URL;
 }
 
@@ -1118,7 +1118,7 @@ export class Realm {
             },
           });
         },
-        ...(operation === 'remove' ? { delete: true } : {}),
+        ...(operation === 'removed' ? { delete: true } : {}),
       });
     }
     itemsDrained!();
