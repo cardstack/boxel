@@ -51,4 +51,10 @@ export class ExportedFieldInheritLocalField extends LocalField {
   static displayName = 'exported field extends local field';
 }
 
+// @ts-ignore
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+class LocalCardWithoutExportRelationship extends CardDef {
+  static displayName = 'local card but without export relationship';
+}
+
 export default class DefaultClass {}

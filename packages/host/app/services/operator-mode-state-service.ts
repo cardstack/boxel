@@ -10,6 +10,7 @@ import window from 'ember-window-mock';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
+import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 import { RealmPaths } from '@cardstack/runtime-common/paths';
 
 import { Submode } from '@cardstack/host/components/submode-switcher';
@@ -38,6 +39,12 @@ export interface OperatorModeState {
   codePath: URL | null;
   fileView?: FileView;
   openDirs: Map<string, string[]>;
+  codeSelection: CodeSelection;
+}
+
+interface CodeSelection {
+  codeRef?: ResolvedCodeRef;
+  localName?: string;
 }
 
 interface CardItem {
@@ -56,6 +63,7 @@ export type SerializedState = {
   codePath?: string;
   fileView?: FileView;
   openDirs?: Record<string, string[]>;
+  codeSelection?: CodeSelection;
 };
 
 interface OpenFileSubscriber {
@@ -68,6 +76,7 @@ export default class OperatorModeStateService extends Service {
     submode: Submode.Interact,
     codePath: null,
     openDirs: new TrackedMap<string, string[]>(),
+    codeSelection: new TrackedObject({}),
   });
   @tracked recentCards = new TrackedArray<CardDef>([]);
 
@@ -209,6 +218,18 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
+  updateCodeRefSelection(codeRef: ResolvedCodeRef) {
+    this.state.codeSelection = {
+      codeRef,
+    };
+    this.schedulePersist();
+  }
+
+  updateLocalNameSelection(localName: string | undefined) {
+    this.state.codeSelection = { localName }; //we need to update localName independently because card and field don't have code ref
+    this.schedulePersist();
+  }
+
   get codePathRelativeToRealm() {
     if (this.state.codePath && this.realmURL) {
       let realmPath = new RealmPaths(this.realmURL);
@@ -316,6 +337,7 @@ export default class OperatorModeStateService extends Service {
       codePath: this.state.codePath?.toString(),
       fileView: this.state.fileView?.toString() as FileView,
       openDirs: Object.fromEntries(this.state.openDirs.entries()),
+      codeSelection: this.state.codeSelection,
     };
 
     for (let stack of this.state.stacks) {
@@ -358,6 +380,7 @@ export default class OperatorModeStateService extends Service {
       codePath: rawState.codePath ? new URL(rawState.codePath) : null,
       fileView: rawState.fileView ?? 'inheritance',
       openDirs,
+      codeSelection: rawState.codeSelection ?? {},
     });
 
     let stackIndex = 0;

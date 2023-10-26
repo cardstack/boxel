@@ -612,6 +612,12 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   @action private onCardSelectFromSearch(card: CardDef) {
+    if (this.isCodeMode) {
+      let codePath = new URL(card.id + '.json');
+      this.operatorModeStateService.updateCodePath(codePath);
+      this.onCancelSearchSheet();
+      return;
+    }
     let searchSheetTrigger = this.searchSheetTrigger; // Will be set by onFocusSearchInput
 
     // In case the left button was clicked, whatever is currently in stack with index 0 will be moved to stack with index 1,

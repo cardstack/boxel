@@ -18,6 +18,7 @@ import {
 
 import { getPlural } from '@cardstack/runtime-common';
 
+import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import AddFieldModal from '@cardstack/host/components/operator-mode/add-field-modal';
@@ -29,6 +30,7 @@ import {
   type Type,
   type CodeRefType,
   type FieldOfType,
+  getCodeRef,
 } from '@cardstack/host/resources/card-type';
 
 import type { Ready } from '@cardstack/host/resources/file';
@@ -52,6 +54,7 @@ interface Signature {
     allowAddingFields: boolean;
     childFields: string[];
     parentFields: string[];
+    openDefinition: (moduleHref: string, codeRef: ResolvedCodeRef) => void;
   };
 }
 
@@ -242,37 +245,39 @@ export default class CardSchemaEditor extends Component<Signature> {
       class='schema-editor-container'
       data-test-card-schema={{@cardType.displayName}}
     >
-      <div class='header'>
-        <Pill
-          {{on 'click' (fn this.openCardDefinition @cardType.module)}}
-          data-test-card-schema-navigational-button
-        >
-          <:icon>
-            <RealmInfoProvider @fileURL={{@cardType.module}}>
-              <:ready as |realmInfo|>
-                <RealmIcon
-                  @realmIconURL={{realmInfo.iconURL}}
-                  @realmName={{realmInfo.name}}
-                />
-              </:ready>
-            </RealmInfoProvider>
-          </:icon>
-          <:default>
-            {{@cardType.displayName}}
-          </:default>
-        </Pill>
-        <div class='total-fields' data-test-total-fields>
-          {{#if (gt this.totalOwnFields 0)}}
-            <span class='total-fields-value'>+ {{this.totalOwnFields}}</span>
-            <span class='total-fields-label'>{{getPlural
-                'Field'
-                this.totalOwnFields
-              }}</span>
-          {{else}}
-            <span class='total-fields-label'>No Fields</span>
-          {{/if}}
+      {{#let (getCodeRef @cardType) as |codeRef|}}
+        <div class='header'>
+          <Pill
+            {{on 'click' (fn @openDefinition @cardType.module codeRef)}}
+            data-test-card-schema-navigational-button
+          >
+            <:icon>
+              <RealmInfoProvider @fileURL={{@cardType.module}}>
+                <:ready as |realmInfo|>
+                  <RealmIcon
+                    @realmIconURL={{realmInfo.iconURL}}
+                    @realmName={{realmInfo.name}}
+                  />
+                </:ready>
+              </RealmInfoProvider>
+            </:icon>
+            <:default>
+              {{@cardType.displayName}}
+            </:default>
+          </Pill>
+          <div class='total-fields' data-test-total-fields>
+            {{#if (gt this.totalOwnFields 0)}}
+              <span class='total-fields-value'>+ {{this.totalOwnFields}}</span>
+              <span class='total-fields-label'>{{getPlural
+                  'Field'
+                  this.totalOwnFields
+                }}</span>
+            {{else}}
+              <span class='total-fields-label'>No Fields</span>
+            {{/if}}
+          </div>
         </div>
-      </div>
+      {{/let}}
 
       <div class='card-fields'>
         {{#each @cardType.fields as |field|}}
@@ -302,91 +307,93 @@ export default class CardSchemaEditor extends Component<Signature> {
               </div>
               <div class='right'>
                 {{#let (this.fieldModuleURL field) as |moduleUrl|}}
-                  {{#if field.isComputed}}
-                    <span class='computed-icon' data-test-computed-icon>
-                      =
-                    </span>
-                  {{/if}}
-                  {{#if (this.isOverridden field)}}
-                    <button
-                      class='overridden-field-link'
-                      data-test-overridden-field-link
-                      {{on 'click' (fn this.scrollIntoOveridingField field)}}
-                    >Jump to active field definition
-                      <span><ArrowTopLeft
-                          width='20px'
-                          height='20px'
-                          role='presentation'
-                        /></span></button>
-
-                  {{else}}
-                    <Pill
-                      {{on 'click' (fn this.openCardDefinition moduleUrl)}}
-                      data-test-card-schema-field-navigational-button
-                    >
-                      <:icon>
-                        {{#if (this.isLinkedField field)}}
-                          <span class='linked-icon' data-test-linked-icon>
-                            <IconLink width='16px' height='16px' />
-                          </span>
-                        {{/if}}
-                        <RealmInfoProvider @fileURL={{moduleUrl}}>
-                          <:ready as |realmInfo|>
-                            <RealmIcon
-                              @realmIconURL={{realmInfo.iconURL}}
-                              @realmName={{realmInfo.name}}
-                            />
-                          </:ready>
-                        </RealmInfoProvider>
-                      </:icon>
-                      <:default>
-                        {{#let
-                          (this.fieldCardDisplayName field.card)
-                          as |cardDisplayName|
-                        }}
-                          <span
-                            data-test-card-display-name={{cardDisplayName}}
-                          >{{cardDisplayName}}</span>
-                        {{/let}}
-                      </:default>
-                    </Pill>
-                    <DropdownButton
-                      @icon={{ThreeDotsHorizontal}}
-                      @label='field options'
-                      @contentClass='context-menu'
-                      class='context-menu-trigger'
-                      data-test-schema-editor-field-contextual-button
-                      as |dd|
-                    >
-                      <div class='warning-box'>
-                        <p class='warning'>
-                          These actions will break compatibility with existing
-                          card instances.
-                        </p>
-                        <span class='warning-icon'>
-                          <WarningIcon
+                  {{#let (getCodeRef field) as |codeRef|}}
+                    {{#if field.isComputed}}
+                      <span class='computed-icon' data-test-computed-icon>
+                        =
+                      </span>
+                    {{/if}}
+                    {{#if (this.isOverridden field)}}
+                      <button
+                        class='overridden-field-link'
+                        data-test-overridden-field-link
+                        {{on 'click' (fn this.scrollIntoOveridingField field)}}
+                      >Jump to active field definition
+                        <span><ArrowTopLeft
                             width='20px'
                             height='20px'
                             role='presentation'
-                          />
-                        </span>
-                      </div>
-                      <dd.Menu
-                        class='context-menu-list'
-                        @items={{array
-                          (menuItem
-                            'Edit Field Name' this.editFieldName disabled=true
-                          )
-                          (menuDivider)
-                          (menuItem
-                            'Remove Field'
-                            (fn this.toggleRemoveFieldModalShown field)
-                            dangerous=true
-                          )
-                        }}
-                      />
-                    </DropdownButton>
-                  {{/if}}
+                          /></span></button>
+
+                    {{else}}
+                      <Pill
+                        {{on 'click' (fn @openDefinition moduleUrl codeRef)}}
+                        data-test-card-schema-field-navigational-button
+                      >
+                        <:icon>
+                          {{#if (this.isLinkedField field)}}
+                            <span class='linked-icon' data-test-linked-icon>
+                              <IconLink width='16px' height='16px' />
+                            </span>
+                          {{/if}}
+                          <RealmInfoProvider @fileURL={{moduleUrl}}>
+                            <:ready as |realmInfo|>
+                              <RealmIcon
+                                @realmIconURL={{realmInfo.iconURL}}
+                                @realmName={{realmInfo.name}}
+                              />
+                            </:ready>
+                          </RealmInfoProvider>
+                        </:icon>
+                        <:default>
+                          {{#let
+                            (this.fieldCardDisplayName field.card)
+                            as |cardDisplayName|
+                          }}
+                            <span
+                              data-test-card-display-name={{cardDisplayName}}
+                            >{{cardDisplayName}}</span>
+                          {{/let}}
+                        </:default>
+                      </Pill>
+                      <DropdownButton
+                        @icon={{ThreeDotsHorizontal}}
+                        @label='field options'
+                        @contentClass='context-menu'
+                        class='context-menu-trigger'
+                        data-test-schema-editor-field-contextual-button
+                        as |dd|
+                      >
+                        <div class='warning-box'>
+                          <p class='warning'>
+                            These actions will break compatibility with existing
+                            card instances.
+                          </p>
+                          <span class='warning-icon'>
+                            <WarningIcon
+                              width='20px'
+                              height='20px'
+                              role='presentation'
+                            />
+                          </span>
+                        </div>
+                        <dd.Menu
+                          class='context-menu-list'
+                          @items={{array
+                            (menuItem
+                              'Edit Field Name' this.editFieldName disabled=true
+                            )
+                            (menuDivider)
+                            (menuItem
+                              'Remove Field'
+                              (fn this.toggleRemoveFieldModalShown field)
+                              dangerous=true
+                            )
+                          }}
+                        />
+                      </DropdownButton>
+                    {{/if}}
+                  {{/let}}
                 {{/let}}
               </div>
             </div>

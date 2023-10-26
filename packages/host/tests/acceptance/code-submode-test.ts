@@ -23,6 +23,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import {
   TestRealm,
   TestRealmAdapter,
+  getMonacoContent,
   setupLocalIndexing,
   testRealmURL,
   sourceFetchRedirectHandle,
@@ -120,7 +121,7 @@ const employeeCardSource = `
     return !this.isSalaried;
   }
 
-  class Isolated extends Component<typeof Employee> {
+  export class Isolated extends Component<typeof Employee> {
     <template>
       <@fields.firstName /> <@fields.lastName />
 
@@ -694,6 +695,9 @@ module('Acceptance | code submode tests', function (hooks) {
 
     await waitFor('[data-test-loading-indicator]', { count: 0 });
 
+    await waitFor(
+      '[data-test-in-this-file-selector] [data-test-boxel-selector-item-selected]',
+    );
     assert
       .dom(
         '[data-test-in-this-file-selector] [data-test-boxel-selector-item-selected]',
@@ -731,5 +735,55 @@ module('Acceptance | code submode tests', function (hooks) {
 
     await waitFor('[data-test-loading-indicator]', { count: 0 });
     assert.dom('[data-test-schema-editor-incompatible-file]').exists();
+  });
+
+  test('Clicking card in search panel opens card JSON in editor', async function (assert) {
+    let operatorModeStateParam = stringify({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}employee.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+
+    assert.dom('[data-test-search-sheet]').doesNotHaveClass('prompt'); // Search closed
+
+    // Click on search-input
+    await click('[data-test-search-input] input');
+
+    assert.dom('[data-test-search-sheet]').hasClass('prompt'); // Search opened
+
+    await fillIn('[data-test-search-input] input', 'Mango');
+
+    assert.dom('[data-test-search-sheet]').hasClass('results'); // Search open
+
+    await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`, {
+      timeout: 2000,
+    });
+
+    // Click on search result
+    await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+
+    assert.dom('[data-test-search-sheet]').doesNotHaveClass('results'); // Search closed
+
+    // The card appears in the editor
+    await waitFor('[data-test-editor]');
+    assert.deepEqual(JSON.parse(getMonacoContent()), {
+      data: {
+        attributes: {
+          name: 'Mango',
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}pet`,
+            name: 'Pet',
+          },
+        },
+      },
+    });
   });
 });
