@@ -422,8 +422,9 @@ export default class CodeMode extends Component<Signature> {
       if (
         this.operatorModeStateService.state.codeSelection.localName ===
         dec.localName
-      )
+      ) {
         return true;
+      }
 
       // when opening new definition,
       // checks codeRef from serialized url
