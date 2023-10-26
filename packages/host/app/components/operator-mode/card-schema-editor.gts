@@ -8,6 +8,14 @@ import { tracked } from '@glimmer/tracking';
 import { DropdownButton } from '@cardstack/boxel-ui/components';
 import { gt, menuDivider, menuItem } from '@cardstack/boxel-ui/helpers';
 
+import {
+  ArrowTopLeft,
+  IconLink,
+  ThreeDotsHorizontal,
+  Warning as WarningIcon,
+  IconPlus,
+} from '@cardstack/boxel-ui/icons';
+
 import { getPlural } from '@cardstack/runtime-common';
 
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
@@ -16,17 +24,12 @@ import AddFieldModal from '@cardstack/host/components/operator-mode/add-field-mo
 import RealmIcon from '@cardstack/host/components/operator-mode/realm-icon';
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
 import RemoveFieldModal from '@cardstack/host/components/operator-mode/remove-field-modal';
+
 import {
   type Type,
   type CodeRefType,
   type FieldOfType,
 } from '@cardstack/host/resources/card-type';
-import {
-  ArrowTopLeft,
-  IconLink,
-  ThreeDotsHorizontal,
-  Warning as WarningIcon,
-} from '@cardstack/boxel-ui/icons';
 
 import type { Ready } from '@cardstack/host/resources/file';
 import type CardService from '@cardstack/host/services/card-service';
@@ -225,11 +228,35 @@ export default class CardSchemaEditor extends Component<Signature> {
       }
 
       .add-field-button {
+        --icon-color: var(--boxel-highlight);
         background-color: transparent;
-        border: none;
         color: var(--boxel-highlight);
         font-size: var(--boxel-font-sm);
         font-weight: 600;
+        width: 100%;
+        height: 56px;
+        padding: var(--boxel-sp-xs);
+        border-radius: var(--boxel-border-radius);
+        border: 1px solid var(--boxel-500);
+        display: flex;
+      }
+
+      .add-field-button > span {
+        display: flex;
+        margin: auto;
+      }
+
+      .add-field-button > span > span {
+        margin-top: 1px;
+      }
+
+      .add-field-button > span > svg {
+        margin-right: var(--boxel-sp-xxxs);
+      }
+
+      .add-field-button:hover {
+        border: 1px solid var(--boxel-highlight);
+        background-color: var(--boxel-100);
       }
 
       .overriding-field {
@@ -425,7 +452,10 @@ export default class CardSchemaEditor extends Component<Signature> {
           data-test-add-field-button
           {{on 'click' this.toggleAddFieldModal}}
         >
-          + Add a field
+          <span>
+            <IconPlus width='20px' height='20px' role='presentation' />
+            <span>Add a field</span>
+          </span>
         </button>
 
         {{#if this.addFieldModalShown}}
