@@ -1,4 +1,4 @@
-import { visit, click, waitFor } from '@ember/test-helpers';
+import { visit, click, waitFor, currentURL } from '@ember/test-helpers';
 
 import percySnapshot from '@percy/ember';
 import { setupApplicationTest } from 'ember-qunit';
@@ -25,6 +25,8 @@ import {
   setupServerSentEvents,
   type TestContextWithSSE,
 } from '../../helpers';
+
+import { Submode } from '@cardstack/host/components/submode-switcher';
 
 const indexCardSource = `
   import { CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -854,6 +856,16 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     let elementName = 'ChildCard1';
     await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}imports.gts`,
+      codeSelection: {
+        localName: elementName,
+      },
+      fileView: 'inheritance',
+      openDirs: {},
+      stacks: [[]],
+      submode: Submode.Code,
+    });
     let selected = 'AncestorCard2 card';
     await waitFor(`[data-test-definition-container]`);
     await click(`[data-test-definition-container]`);
@@ -870,6 +882,16 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     elementName = 'ChildCard2';
     await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}imports.gts`,
+      codeSelection: {
+        localName: elementName,
+      },
+      fileView: 'inheritance',
+      openDirs: {},
+      stacks: [[]],
+      submode: Submode.Code,
+    });
     selected = 'default (DefaultAncestorCard) card';
     await waitFor(`[data-test-definition-container]`);
     await click(`[data-test-definition-container]`);
@@ -885,6 +907,16 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     elementName = 'ChildCard3';
     await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}imports.gts`,
+      codeSelection: {
+        localName: elementName,
+      },
+      fileView: 'inheritance',
+      openDirs: {},
+      stacks: [[]],
+      submode: Submode.Code,
+    });
     selected = 'RenamedAncestorCard (AncestorCard) card';
     await waitFor(`[data-test-definition-container]`);
     await click(`[data-test-definition-container]`);
@@ -900,6 +932,16 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     elementName = 'ChildCard4';
     await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}imports.gts`,
+      codeSelection: {
+        localName: elementName,
+      },
+      fileView: 'inheritance',
+      openDirs: {},
+      stacks: [[]],
+      submode: Submode.Code,
+    });
     selected = 'AncestorCard3 card';
     await click(`[data-test-definition-container]`);
     await waitFor('[data-test-boxel-selector-item-selected]');
@@ -915,6 +957,16 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     elementName = 'ChildCard5';
     await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}imports.gts`,
+      codeSelection: {
+        localName: elementName,
+      },
+      fileView: 'inheritance',
+      openDirs: {},
+      stacks: [[]],
+      submode: Submode.Code,
+    });
     selected = 'ChildCard2 card';
     await waitFor(`[data-test-definition-container]`);
     await click(`[data-test-definition-container]`);
@@ -931,6 +983,16 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     elementName = 'ChildField1';
     await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}imports.gts`,
+      codeSelection: {
+        localName: elementName,
+      },
+      fileView: 'inheritance',
+      openDirs: {},
+      stacks: [[]],
+      submode: Submode.Code,
+    });
     selected = 'AncestorField1 field';
     await click(`[data-test-definition-container]`);
     await waitFor('[data-test-boxel-selector-item-selected]');
@@ -940,9 +1002,15 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   test('After opening definition from card type and fields on RHS, "in-this-file" highlights selected definition', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [],
-      submode: 'code',
+      submode: Submode.Code,
       codePath: `${testRealmURL}imports.gts`,
     })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
 
     //click card type
     await visit(
@@ -950,8 +1018,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitFor(`[data-test-boxel-selector-item-text="ChildCard1"]`);
-    await click(`[data-test-boxel-selector-item-text="ChildCard1"]`);
     let elementName = 'AncestorCard2';
     await waitFor(
       `[data-test-card-schema="${elementName}"] [data-test-card-schema-navigational-button]`,
@@ -959,6 +1025,19 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click(
       `[data-test-card-schema="${elementName}"] [data-test-card-schema-navigational-button]`,
     );
+    assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}exports.gts`,
+      codeSelection: {
+        codeRef: {
+          module: `${testRealmURL}exports`,
+          name: elementName,
+        },
+      },
+      fileView: 'inheritance',
+      openDirs: {},
+      stacks: [],
+      submode: Submode.Code,
+    });
 
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert
@@ -971,11 +1050,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitFor(`[data-test-boxel-selector-item-text="ChildCard1"]`);
-    await click(`[data-test-boxel-selector-item-text="ChildCard1"]`);
-    elementName = 'ChildCard1';
-    await waitFor(`[data-test-boxel-selector-item-text="${elementName}"]`);
-    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     elementName = 'AncestorField1';
     await waitFor(
       `[data-test-card-schema="ChildCard1"] [data-test-field-name="field1"] [data-test-card-display-name="${elementName}"]`,
@@ -983,6 +1057,19 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click(
       `[data-test-card-schema="ChildCard1"] [data-test-field-name="field1"] [data-test-card-display-name="${elementName}"]`,
     );
+    assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}exports.gts`,
+      codeSelection: {
+        codeRef: {
+          module: `${testRealmURL}exports`,
+          name: elementName,
+        },
+      },
+      fileView: 'inheritance',
+      openDirs: {},
+      stacks: [],
+      submode: Submode.Code,
+    });
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert
       .dom('[data-test-boxel-selector-item-selected]')
@@ -994,8 +1081,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitFor(`[data-test-boxel-selector-item-text="ChildCard1"]`);
-    await click(`[data-test-boxel-selector-item-text="ChildCard1"]`);
+
     elementName = 'AncestorCard2';
     await waitFor(
       `[data-test-card-schema="ChildCard1"] [data-test-field-name="field2"] [data-test-card-display-name="${elementName}"]`,
@@ -1003,6 +1089,20 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click(
       `[data-test-card-schema="ChildCard1"] [data-test-field-name="field2"] [data-test-card-display-name="${elementName}"]`,
     );
+
+    assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}exports.gts`,
+      codeSelection: {
+        codeRef: {
+          module: `${testRealmURL}exports`,
+          name: elementName,
+        },
+      },
+      fileView: 'inheritance',
+      openDirs: {},
+      stacks: [],
+      submode: Submode.Code,
+    });
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert
       .dom('[data-test-boxel-selector-item-selected]')
@@ -1013,6 +1113,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
+
     elementName = 'ChildCard2';
     await waitFor(
       `[data-test-card-schema="ChildCard1"] [data-test-field-name="field3"] [data-test-card-display-name="${elementName}"]`,
@@ -1020,6 +1121,19 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click(
       `[data-test-card-schema="ChildCard1"] [data-test-field-name="field3"] [data-test-card-display-name="${elementName}"]`,
     );
+    assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}imports.gts`,
+      codeSelection: {
+        codeRef: {
+          module: `${testRealmURL}imports`,
+          name: elementName,
+        },
+      },
+      fileView: 'inheritance',
+      openDirs: {},
+      stacks: [],
+      submode: Submode.Code,
+    });
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert
       .dom('[data-test-boxel-selector-item-selected]')
@@ -1031,8 +1145,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
         operatorModeStateParam,
       )}`,
     );
-    await waitFor(`[data-test-boxel-selector-item-text="ChildCard1"]`);
-    await click(`[data-test-boxel-selector-item-text="ChildCard1"]`);
+
     elementName = 'AncestorCard2';
     await waitFor(
       `[data-test-card-schema="ChildCard1"] [data-test-field-name="field4"] [data-test-card-display-name="${elementName}"]`,
@@ -1040,6 +1153,20 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click(
       `[data-test-card-schema="ChildCard1"] [data-test-field-name="field4"] [data-test-card-display-name="${elementName}"]`,
     );
+
+    assert.operatorModeParametersMatch(currentURL(), {
+      codePath: `${testRealmURL}exports.gts`,
+      codeSelection: {
+        codeRef: {
+          module: `${testRealmURL}exports`,
+          name: elementName,
+        },
+      },
+      fileView: 'inheritance',
+      openDirs: {},
+      stacks: [],
+      submode: Submode.Code,
+    });
     await waitFor('[data-test-boxel-selector-item-selected]');
     assert
       .dom('[data-test-boxel-selector-item-selected]')
