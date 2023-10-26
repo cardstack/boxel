@@ -576,8 +576,8 @@ export class Loader {
       get: (target, property, received) => {
         let value = Reflect.get(target, property, received);
         if (typeof value === 'function' && typeof property === 'string') {
-          const propertiesSet = this.moduleProperties.get(moduleIdentifier);
-          if (!propertiesSet?.has(value)) {
+          const properties = this.moduleProperties.get(moduleIdentifier);
+          if (!properties?.has(value)) {
             this.identities.set(value, {
               module: isUrlLike(moduleIdentifier)
                 ? trimExecutableExtension(
@@ -586,7 +586,7 @@ export class Loader {
                 : moduleIdentifier,
               name: property,
             });
-            propertiesSet?.add(value);
+            properties?.add(value);
             Loader.loaders.set(value, this);
           }
         }
