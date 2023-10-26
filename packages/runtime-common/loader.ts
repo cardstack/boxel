@@ -1,7 +1,7 @@
 import TransformModulesAmdPlugin from 'transform-modules-amd-plugin';
 import { transformSync } from '@babel/core';
 import { Deferred } from './deferred';
-import { trimExecutableExtension, logger } from './index';
+import { trimExecutableExtension, logger, executableExtensions } from './index';
 import { RealmPaths } from './paths';
 import { CardError } from './error';
 import flatMap from 'lodash/flatMap';
@@ -568,23 +568,53 @@ export class Loader {
   }
 
   private createModuleProxy(module: any, moduleIdentifier: string) {
-    let didSetIdentity = false;
     return new Proxy(module, {
       get: (target, property, received) => {
         let value = Reflect.get(target, property, received);
-        if (!didSetIdentity) {
-          if (typeof value === 'function' && typeof property === 'string') {
-            this.identities.set(value, {
-              module: isUrlLike(moduleIdentifier)
-                ? trimExecutableExtension(
-                    this.reverseResolution(moduleIdentifier),
-                  ).href
-                : moduleIdentifier,
-              name: property,
-            });
-            Loader.loaders.set(value, this);
-            didSetIdentity = true;
+        if (typeof value === 'function' && typeof property === 'string') {
+          if (this.identities.has(value)) {
+            let existingModuleIdentity = this.identities.get(value);
+            if (
+              existingModuleIdentity &&
+              existingModuleIdentity.module !== moduleIdentifier
+            ) {
+              let moduleUrl = existingModuleIdentity.module;
+              let extension = '.gts';
+              console.log('======');
+              console.log(
+                `Function ${property} in ${moduleIdentifier} is may be related to ${existingModuleIdentity?.module}`,
+              );
+              if (
+                existingModuleIdentity &&
+                moduleIdentifier.endsWith(extension) &&
+                `${moduleUrl}${extension}` === moduleIdentifier
+              ) {
+                this.identities.set(value, {
+                  module: isUrlLike(moduleIdentifier)
+                    ? trimExecutableExtension(
+                        this.reverseResolution(moduleIdentifier),
+                      ).href
+                    : moduleIdentifier,
+                  name: property,
+                });
+                return value;
+              } else {
+                console.log(
+                  `Function ${property} in ${moduleIdentifier} is a re-export of ${existingModuleIdentity?.module}`,
+                );
+                return value;
+              }
+            }
           }
+          this.identities.set(value, {
+            module: isUrlLike(moduleIdentifier)
+              ? trimExecutableExtension(
+                  this.reverseResolution(moduleIdentifier),
+                ).href
+              : moduleIdentifier,
+            name: property,
+          });
+          Loader.loaders.set(value, this);
         }
         return value;
       },
