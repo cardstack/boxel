@@ -568,53 +568,42 @@ export class Loader {
   }
 
   private createModuleProxy(module: any, moduleIdentifier: string) {
+    let didSetIdentity = false;
     return new Proxy(module, {
       get: (target, property, received) => {
         let value = Reflect.get(target, property, received);
-        if (typeof value === 'function' && typeof property === 'string') {
-          if (this.identities.has(value)) {
-            let existingModuleIdentity = this.identities.get(value);
-            if (
-              existingModuleIdentity &&
-              existingModuleIdentity.module !== moduleIdentifier
-            ) {
-              let moduleUrl = existingModuleIdentity.module;
-              let extension = '.gts';
-              console.log('======');
-              console.log(
-                `Function ${property} in ${moduleIdentifier} is may be related to ${existingModuleIdentity?.module}`,
-              );
-              if (
-                existingModuleIdentity &&
-                moduleIdentifier.endsWith(extension) &&
-                `${moduleUrl}${extension}` === moduleIdentifier
-              ) {
-                this.identities.set(value, {
-                  module: isUrlLike(moduleIdentifier)
-                    ? trimExecutableExtension(
-                        this.reverseResolution(moduleIdentifier),
-                      ).href
-                    : moduleIdentifier,
-                  name: property,
-                });
-                return value;
-              } else {
-                console.log(
-                  `Function ${property} in ${moduleIdentifier} is a re-export of ${existingModuleIdentity?.module}`,
-                );
-                return value;
-              }
+        if (!didSetIdentity) {
+          if (typeof value === 'function' && typeof property === 'string') {
+            // if (this.identities.has(value)) {
+            //   let existingModuleIdentity = this.identities.get(value);
+            //   let normalisedModuleIdentifier = isUrlLike(moduleIdentifier)
+            //     ? trimExecutableExtension(
+            //         this.reverseResolution(moduleIdentifier),
+            //       ).href
+            //     : moduleIdentifier;
+            //   if (
+            //     existingModuleIdentity &&
+            //     existingModuleIdentity.module !== normalisedModuleIdentifier
+            //   ) {
+            //     console.log(
+            //       `Function ${property} in ${moduleIdentifier} may export of ${existingModuleIdentity?.module}`,
+            //     );
+            //     return value;
+            //   }
+            // }
+            if (this.identities.has(value)) {
+              console.log('u r here');
             }
+            this.identities.set(value, {
+              module: isUrlLike(moduleIdentifier)
+                ? trimExecutableExtension(
+                    this.reverseResolution(moduleIdentifier),
+                  ).href
+                : moduleIdentifier,
+              name: property,
+            });
+            Loader.loaders.set(value, this);
           }
-          this.identities.set(value, {
-            module: isUrlLike(moduleIdentifier)
-              ? trimExecutableExtension(
-                  this.reverseResolution(moduleIdentifier),
-                ).href
-              : moduleIdentifier,
-            name: property,
-          });
-          Loader.loaders.set(value, this);
         }
         return value;
       },
