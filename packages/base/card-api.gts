@@ -91,6 +91,7 @@ interface Options {
   // use the rendering mechanism to tell if a card is used or not,
   // in which case we need to tell the runtime that a card is
   // explictly being used.
+  isUsed?: true;
 }
 
 interface NotLoadedValue {
@@ -235,6 +236,12 @@ export interface Field<
   name: string;
   fieldType: FieldType;
   computeVia: undefined | string | (() => unknown);
+  // there exists cards that we only ever run in the host without
+  // the isolated renderer (RoomField), which means that we cannot
+  // use the rendering mechanism to tell if a card is used or not,
+  // in which case we need to tell the runtime that a card is
+  // explictly being used.
+  isUsed?: undefined | true;
   serialize(
     value: any,
     doc: JSONAPISingleResourceDocument,
@@ -364,6 +371,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     private cardThunk: () => FieldT,
     readonly computeVia: undefined | string | (() => unknown),
     readonly name: string,
+    readonly isUsed: undefined | true,
   ) {}
 
   get card(): FieldT {
@@ -582,6 +590,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     private cardThunk: () => CardT,
     readonly computeVia: undefined | string | (() => unknown),
     readonly name: string,
+    readonly isUsed: undefined | true,
   ) {}
 
   get card(): CardT {
@@ -736,6 +745,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     private cardThunk: () => CardT,
     readonly computeVia: undefined | string | (() => unknown),
     readonly name: string,
+    readonly isUsed: undefined | true,
   ) {}
 
   get card(): CardT {
@@ -1035,6 +1045,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
     private cardThunk: () => FieldT,
     readonly computeVia: undefined | string | (() => unknown),
     readonly name: string,
+    readonly isUsed: undefined | true,
   ) {}
 
   get card(): FieldT {
@@ -1462,7 +1473,8 @@ export function containsMany<FieldT extends FieldDefConstructor>(
           cardThunk(field),
           options?.computeVia,
           fieldName,
-        )
+          options?.isUsed,
+        ),
       );
     },
   } as any;
@@ -1480,7 +1492,8 @@ export function contains<FieldT extends FieldDefConstructor>(
           cardThunk(field),
           options?.computeVia,
           fieldName,
-        )
+          options?.isUsed,
+        ),
       );
     },
   } as any;
@@ -1498,7 +1511,8 @@ export function linksTo<CardT extends CardDefConstructor>(
           cardThunk(cardOrThunk),
           options?.computeVia,
           fieldName,
-        )
+          options?.isUsed,
+        ),
       );
     },
   } as any;
@@ -1516,7 +1530,8 @@ export function linksToMany<CardT extends CardDefConstructor>(
           cardThunk(cardOrThunk),
           options?.computeVia,
           fieldName,
-        )
+          options?.isUsed,
+        ),
       );
     },
   } as any;
@@ -1569,7 +1584,7 @@ export class BaseDef {
       }
       return Object.fromEntries(
         Object.entries(
-          getFields(value, { includeComputeds: true, excludeUnusedLinkedFields: true })
+          getFields(value, { includeComputeds: true, usedFieldsOnly: true }),
         ).map(([fieldName, field]) => {
           let rawValue = peekAtField(value, fieldName);
           if (field?.fieldType === 'linksToMany') {
@@ -2093,10 +2108,10 @@ function serializeCardResource(
   if (!adoptsFrom) {
     throw new Error(`bug: could not identify card: ${model.constructor.name}`);
   }
-  let { ...fieldOpts } = opts ?? {};
+  let { includeUnrenderedFields: remove, ...fieldOpts } = opts ?? {};
   let { id: removedIdField, ...fields } = getFields(model, {
     ...fieldOpts,
-    excludeUnusedLinkedFields: !opts?.includeUnrenderedFields,
+    usedFieldsOnly: !opts?.includeUnrenderedFields,
   });
   let fieldResources = Object.keys(fields).map((fieldName) =>
     serializedGet(model, fieldName, doc, visited, opts),
@@ -2533,7 +2548,7 @@ interface RecomputeOptions {
   // for host initiated renders (vs indexer initiated renders), glimmer will expect
   // all the fields to be available synchronously, in which case we need to buffer the
   // async in the recompute using this option
-  recomputeAllFields?: boolean;
+  recomputeAllFields?: true;
 }
 export async function recompute(
   card: BaseDef,
@@ -2675,17 +2690,17 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
 }
 
 export function getFields(
-  card: typeof CardBase,
-  opts?: { excludeUnusedLinkedFields?: boolean; includeComputeds?: boolean }
-): { [fieldName: string]: Field<CardBaseConstructor> };
-export function getFields<T extends CardBase>(
+  card: typeof BaseDef,
+  opts?: { usedFieldsOnly?: boolean; includeComputeds?: boolean },
+): { [fieldName: string]: Field<BaseDefConstructor> };
+export function getFields<T extends BaseDef>(
   card: T,
-  opts?: { excludeUnusedLinkedFields?: boolean; includeComputeds?: boolean }
-): { [P in keyof T]?: Field<CardBaseConstructor> };
+  opts?: { usedFieldsOnly?: boolean; includeComputeds?: boolean },
+): { [P in keyof T]?: Field<BaseDefConstructor> };
 export function getFields(
-  cardInstanceOrClass: CardBase | typeof CardBase,
-  opts?: { excludeUnusedLinkedFields?: boolean; includeComputeds?: boolean }
-): { [fieldName: string]: Field<CardBaseConstructor> } {
+  cardInstanceOrClass: BaseDef | typeof BaseDef,
+  opts?: { usedFieldsOnly?: boolean; includeComputeds?: boolean },
+): { [fieldName: string]: Field<BaseDefConstructor> } {
   let obj: object | null;
   let usedFields: string[] = [];
   if (isCardOrField(cardInstanceOrClass)) {
@@ -2703,20 +2718,26 @@ export function getFields(
       if (maybeFieldName === 'constructor') {
         return [];
       }
-      let maybeField: Field | undefined = getField(
-        (isCard(cardInstanceOrClass)
+      let maybeField = getField(
+        (isCardOrField(cardInstanceOrClass)
           ? cardInstanceOrClass.constructor
-          : cardInstanceOrClass) as typeof CardBase,
-        maybeFieldName
+          : cardInstanceOrClass) as typeof BaseDef,
+        maybeFieldName,
       );
-
-      if (!maybeField ||
-          (maybeField.computeVia && !opts?.includeComputeds) ||
-          (!usedFields.includes(maybeFieldName) && opts?.excludeUnusedLinkedFields &&
-            (maybeField.fieldType === 'linksTo' || maybeField.fieldType === 'linksToMany'))) {
+      if (!maybeField) {
         return [];
       }
-      
+      if (
+        opts?.usedFieldsOnly &&
+        !usedFields.includes(maybeFieldName) &&
+        !maybeField.isUsed
+      ) {
+        return [];
+      }
+      if (maybeField.computeVia && !opts?.includeComputeds) {
+        return [];
+      }
+
       return [[maybeFieldName, maybeField]];
     });
     fields = { ...fields, ...Object.fromEntries(currentFields) };

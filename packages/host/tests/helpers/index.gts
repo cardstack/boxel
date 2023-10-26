@@ -434,7 +434,7 @@ function makeRealm(
 
 export async function saveCard(instance: CardDef, id: string, loader: Loader) {
   let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
-  let doc = await api.serializeCard(instance);
+  let doc = api.serializeCard(instance);
   doc.data.id = id;
   await api.updateFromSerialized(instance, doc);
   return doc;
