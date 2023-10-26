@@ -48,18 +48,11 @@ export default class Pill extends Component<PillSignature> {
         background-color: var(--boxel-100);
       }
 
-      .pill > div {
-        display: flex;
-      }
-
       .icon {
         display: flex;
         margin-block: 0;
         margin-inline: 0;
         margin-right: var(--boxel-sp-xxxxxs);
-      }
-
-      .icon :deep(img) {
         width: 20px;
         height: 20px;
       }
