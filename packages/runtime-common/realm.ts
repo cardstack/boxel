@@ -408,6 +408,18 @@ export class Realm {
     return { isTracked: false, url };
   }
 
+  // this is used by tests to manipulate the realm directly
+  async delete(path: LocalPath): Promise<void> {
+    let deferred = new Deferred<void>();
+    this.#operationQueue.push({
+      type: 'delete',
+      path,
+      deferred,
+    });
+    this.drainOperations();
+    return deferred.promise;
+  }
+
   async #delete(path: LocalPath): Promise<void> {
     await this.trackOwnWrite(path, { isDelete: true });
     await this.#adapter.remove(path);
