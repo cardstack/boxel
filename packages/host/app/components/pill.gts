@@ -42,6 +42,7 @@ export default class Pill extends Component<PillSignature> {
       .pill.inert {
         border: 0;
         background-color: var(--boxel-100);
+        color: inherit;
       }
 
       .pill:hover {
