@@ -1,7 +1,7 @@
 import TransformModulesAmdPlugin from 'transform-modules-amd-plugin';
 import { transformSync } from '@babel/core';
 import { Deferred } from './deferred';
-import { trimExecutableExtension, logger, executableExtensions } from './index';
+import { trimExecutableExtension, logger } from './index';
 import { RealmPaths } from './paths';
 import { CardError } from './error';
 import flatMap from 'lodash/flatMap';
@@ -133,6 +133,7 @@ export class Loader {
   >();
   private consumptionCache = new WeakMap<object, string[]>();
   private static loaders = new WeakMap<Function, Loader>();
+  private moduleProperties = new Map<string, Set<Function>>();
 
   static cloneLoader(loader: Loader): Loader {
     let clone = new Loader();
@@ -568,32 +569,15 @@ export class Loader {
   }
 
   private createModuleProxy(module: any, moduleIdentifier: string) {
-    let didSetIdentity = false;
+    if (!this.moduleProperties.has(moduleIdentifier)) {
+      this.moduleProperties.set(moduleIdentifier, new Set());
+    }
     return new Proxy(module, {
       get: (target, property, received) => {
         let value = Reflect.get(target, property, received);
-        if (!didSetIdentity) {
-          if (typeof value === 'function' && typeof property === 'string') {
-            // if (this.identities.has(value)) {
-            //   let existingModuleIdentity = this.identities.get(value);
-            //   let normalisedModuleIdentifier = isUrlLike(moduleIdentifier)
-            //     ? trimExecutableExtension(
-            //         this.reverseResolution(moduleIdentifier),
-            //       ).href
-            //     : moduleIdentifier;
-            //   if (
-            //     existingModuleIdentity &&
-            //     existingModuleIdentity.module !== normalisedModuleIdentifier
-            //   ) {
-            //     console.log(
-            //       `Function ${property} in ${moduleIdentifier} may export of ${existingModuleIdentity?.module}`,
-            //     );
-            //     return value;
-            //   }
-            // }
-            if (this.identities.has(value)) {
-              console.log('u r here');
-            }
+        if (typeof value === 'function' && typeof property === 'string') {
+          const propertiesSet = this.moduleProperties.get(moduleIdentifier);
+          if (!propertiesSet?.has(value)) {
             this.identities.set(value, {
               module: isUrlLike(moduleIdentifier)
                 ? trimExecutableExtension(
@@ -602,6 +586,7 @@ export class Loader {
                 : moduleIdentifier,
               name: property,
             });
+            propertiesSet?.add(value);
             Loader.loaders.set(value, this);
           }
         }
