@@ -133,7 +133,6 @@ export class Loader {
   >();
   private consumptionCache = new WeakMap<object, string[]>();
   private static loaders = new WeakMap<Function, Loader>();
-  private moduleProperties = new Map<string, Set<Function>>();
 
   static cloneLoader(loader: Loader): Loader {
     let clone = new Loader();
@@ -569,24 +568,18 @@ export class Loader {
   }
 
   private createModuleProxy(module: any, moduleIdentifier: string) {
-    if (!this.moduleProperties.has(moduleIdentifier)) {
-      this.moduleProperties.set(moduleIdentifier, new Set());
-    }
+    let moduleId = isUrlLike(moduleIdentifier)
+      ? trimExecutableExtension(this.reverseResolution(moduleIdentifier)).href
+      : moduleIdentifier;
     return new Proxy(module, {
       get: (target, property, received) => {
         let value = Reflect.get(target, property, received);
         if (typeof value === 'function' && typeof property === 'string') {
-          const properties = this.moduleProperties.get(moduleIdentifier);
-          if (!properties?.has(value)) {
+          if (!this.identities.has(value)) {
             this.identities.set(value, {
-              module: isUrlLike(moduleIdentifier)
-                ? trimExecutableExtension(
-                    this.reverseResolution(moduleIdentifier),
-                  ).href
-                : moduleIdentifier,
+              module: moduleId,
               name: property,
             });
-            properties?.add(value);
             Loader.loaders.set(value, this);
           }
         }
