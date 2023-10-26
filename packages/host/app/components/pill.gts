@@ -30,8 +30,8 @@ export default class Pill extends Component<PillSignature> {
       .pill {
         display: inline-flex;
         align-items: center;
-        padding: var(--boxel-sp-xxxxxs);
-        padding-right: var(--boxel-sp-xxxxs);
+        padding: var(--boxel-sp-xxxxxs) var(--boxel-sp-xxxs)
+          var(--boxel-sp-xxxxxs) var(--boxel-sp-xxxxxs);
         background-color: var(--boxel-light);
         border: 1px solid var(--boxel-400);
         border-radius: var(--boxel-border-radius-sm);
