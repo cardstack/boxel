@@ -321,10 +321,10 @@ export class Realm {
     this.#operationQueue = [];
     for (let operation of operations) {
       if (operation.type === 'write') {
-        let result = await this.write(operation.path, operation.contents);
+        let result = await this.#write(operation.path, operation.contents);
         operation.deferred.fulfill(result);
       } else {
-        await this.delete(operation.path);
+        await this.#delete(operation.path);
         operation.deferred.fulfill();
       }
     }
@@ -332,7 +332,20 @@ export class Realm {
     operationsDrained!();
   }
 
-  private async write(path: LocalPath, contents: string): Promise<WriteResult> {
+  // this is used by tests to manipulate the realm directly
+  async write(path: LocalPath, contents: string): Promise<WriteResult> {
+    let deferred = new Deferred<WriteResult>();
+    this.#operationQueue.push({
+      type: 'write',
+      path,
+      contents,
+      deferred,
+    });
+    this.drainOperations();
+    return deferred.promise;
+  }
+
+  async #write(path: LocalPath, contents: string): Promise<WriteResult> {
     await this.trackOwnWrite(path);
     let results = await this.#adapter.write(path, contents);
     await this.#searchIndex.update(this.paths.fileURL(path), {
@@ -395,7 +408,7 @@ export class Realm {
     return { isTracked: false, url };
   }
 
-  private async delete(path: LocalPath): Promise<void> {
+  async #delete(path: LocalPath): Promise<void> {
     await this.trackOwnWrite(path, { isDelete: true });
     await this.#adapter.remove(path);
     await this.#searchIndex.update(this.paths.fileURL(path), {
