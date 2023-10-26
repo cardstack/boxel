@@ -374,6 +374,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         codePath: `${testRealmURL}Pet/mango.json`,
         fileView: 'inheritance',
         openDirs: { [testRealmURL]: ['Pet/'] },
+        codeSelection: {},
       });
 
       // Toggle back to interactive mode
@@ -402,6 +403,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         submode: Submode.Interact,
         fileView: 'inheritance',
         openDirs: { [testRealmURL]: ['Pet/'] },
+        codeSelection: {},
       });
     });
   });

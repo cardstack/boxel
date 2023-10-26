@@ -398,6 +398,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         submode: Submode.Interact,
         fileView: 'inheritance',
         openDirs: {},
+        codeSelection: {},
       });
 
       await waitFor('[data-test-pet="Mango"]');
@@ -423,6 +424,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             submode: 'interact',
             fileView: 'inheritance',
             openDirs: {},
+            codeSelection: {},
           })!,
         )}`,
       );
@@ -450,6 +452,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             submode: 'interact',
             fileView: 'inheritance',
             openDirs: {},
+            codeSelection: {},
           })!,
         )}`,
       );
@@ -740,6 +743,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         submode: Submode.Interact,
         fileView: 'inheritance',
         openDirs: {},
+        codeSelection: {},
       });
 
       // Close the last card in the last stack that is left - should get the empty state
