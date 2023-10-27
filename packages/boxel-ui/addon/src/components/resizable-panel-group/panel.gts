@@ -249,13 +249,12 @@ export default class Panel extends Component<Signature> {
 
     if (
       (this.id === 1 && this.panelContext?.length !== '0px') ||
-      (this.id &&
-        this.args.isLastPanel(this.id + 1) &&
+      (this.args.isLastPanel(this.id + 1) &&
         this.args.panelContext(this.id + 1)?.length === '0px')
     ) {
       toward = reverse ? 'end' : 'beginning';
     } else if (
-      (this.id && this.args.isLastPanel(this.id + 1)) ||
+      this.args.isLastPanel(this.id + 1) ||
       (this.id === 1 && this.panelContext?.length === '0px')
     ) {
       toward = reverse ? 'beginning' : 'end';
