@@ -175,6 +175,25 @@ interface MessageEvent {
   id?: string;
 }
 
+type Operation = WriteOperation | DeleteOperation;
+
+interface WriteResult {
+  lastModified: number;
+}
+
+interface WriteOperation {
+  type: 'write';
+  path: LocalPath;
+  contents: string;
+  deferred: Deferred<WriteResult>;
+}
+
+interface DeleteOperation {
+  type: 'delete';
+  path: LocalPath;
+  deferred: Deferred<void>;
+}
+
 export class Realm {
   #startedUp = new Deferred<void>();
   #searchIndex: SearchIndex;
@@ -189,6 +208,8 @@ export class Realm {
   #updateItems: UpdateItem[] = [];
   #flushUpdateEvents: Promise<void> | undefined;
   #recentWrites: Map<string, number> = new Map();
+  #flushOperations: Promise<void> | undefined;
+  #operationQueue: Operation[] = [];
   readonly paths: RealmPaths;
 
   get url(): string {
@@ -282,10 +303,49 @@ export class Realm {
     return this.#flushUpdateEvents;
   }
 
-  async write(
-    path: LocalPath,
-    contents: string,
-  ): Promise<{ lastModified: number }> {
+  async flushOperations() {
+    return this.#flushOperations;
+  }
+
+  // in order to prevent issues with concurrent index manipulation clobbering
+  // each other we use a queue of operations to mutate realm state. We should
+  // remove this queue when we move to a pg backed index
+  private async drainOperations() {
+    await this.#flushOperations;
+
+    let operationsDrained: () => void;
+    this.#flushOperations = new Promise<void>(
+      (res) => (operationsDrained = res),
+    );
+    let operations = [...this.#operationQueue];
+    this.#operationQueue = [];
+    for (let operation of operations) {
+      if (operation.type === 'write') {
+        let result = await this.#write(operation.path, operation.contents);
+        operation.deferred.fulfill(result);
+      } else {
+        await this.#delete(operation.path);
+        operation.deferred.fulfill();
+      }
+    }
+
+    operationsDrained!();
+  }
+
+  // this is used by tests to manipulate the realm directly
+  async write(path: LocalPath, contents: string): Promise<WriteResult> {
+    let deferred = new Deferred<WriteResult>();
+    this.#operationQueue.push({
+      type: 'write',
+      path,
+      contents,
+      deferred,
+    });
+    this.drainOperations();
+    return deferred.promise;
+  }
+
+  async #write(path: LocalPath, contents: string): Promise<WriteResult> {
     await this.trackOwnWrite(path);
     let results = await this.#adapter.write(path, contents);
     await this.#searchIndex.update(this.paths.fileURL(path), {
@@ -348,7 +408,19 @@ export class Realm {
     return { isTracked: false, url };
   }
 
+  // this is used by tests to manipulate the realm directly
   async delete(path: LocalPath): Promise<void> {
+    let deferred = new Deferred<void>();
+    this.#operationQueue.push({
+      type: 'delete',
+      path,
+      deferred,
+    });
+    this.drainOperations();
+    return deferred.promise;
+  }
+
+  async #delete(path: LocalPath): Promise<void> {
     await this.trackOwnWrite(path, { isDelete: true });
     await this.#adapter.remove(path);
     await this.#searchIndex.update(this.paths.fileURL(path), {
@@ -533,10 +605,15 @@ export class Realm {
   }
 
   private async upsertCardSource(request: Request): Promise<Response> {
-    let { lastModified } = await this.write(
-      this.paths.local(request.url),
-      await request.text(),
-    );
+    let deferred = new Deferred<WriteResult>();
+    this.#operationQueue.push({
+      type: 'write',
+      path: this.paths.local(request.url),
+      contents: await request.text(),
+      deferred,
+    });
+    this.drainOperations();
+    let { lastModified } = await deferred.promise;
     return createResponse(this.url, null, {
       status: 204,
       headers: { 'last-modified': formatRFC7231(lastModified) },
@@ -573,7 +650,14 @@ export class Realm {
     if (!handle) {
       return notFound(this.url, request, `${localName} not found`);
     }
-    await this.delete(handle.path);
+    let deferred = new Deferred<void>();
+    this.#operationQueue.push({
+      type: 'delete',
+      path: handle.path,
+      deferred,
+    });
+    this.drainOperations();
+    await deferred.promise;
     return createResponse(this.url, null, { status: 204 });
   }
 
@@ -694,9 +778,11 @@ export class Realm {
     let pathname = `${dirName}${++index}.json`;
     let fileURL = this.paths.fileURL(pathname);
     let localPath: LocalPath = this.paths.local(fileURL);
-    let { lastModified } = await this.write(
-      localPath,
-      JSON.stringify(
+    let deferred = new Deferred<WriteResult>();
+    this.#operationQueue.push({
+      type: 'write',
+      path: localPath,
+      contents: JSON.stringify(
         await this.fileSerialization(
           merge(json, { data: { meta: { realmURL: this.url } } }),
           fileURL,
@@ -704,7 +790,11 @@ export class Realm {
         null,
         2,
       ),
-    );
+
+      deferred,
+    });
+    this.drainOperations();
+    let { lastModified } = await deferred.promise;
     let newURL = fileURL.href.replace(/\.json$/, '');
     let entry = await this.#searchIndex.card(new URL(newURL), {
       loadLinks: true,
@@ -786,9 +876,11 @@ export class Realm {
 
     delete (card as any).data.id; // don't write the ID to the file
     let path: LocalPath = `${localPath}.json`;
-    let { lastModified } = await this.write(
+    let deferred = new Deferred<WriteResult>();
+    this.#operationQueue.push({
+      type: 'write',
       path,
-      JSON.stringify(
+      contents: JSON.stringify(
         await this.fileSerialization(
           merge(card, { data: { meta: { realmURL: this.url } } }),
           url,
@@ -796,7 +888,10 @@ export class Realm {
         null,
         2,
       ),
-    );
+      deferred,
+    });
+    this.drainOperations();
+    let { lastModified } = await deferred.promise;
     let instanceURL = url.href.replace(/\.json$/, '');
     let entry = await this.#searchIndex.card(new URL(instanceURL), {
       loadLinks: true,
@@ -866,8 +961,15 @@ export class Realm {
     if (!result) {
       return notFound(this.url, request);
     }
-    let localPath = this.paths.local(url) + '.json';
-    await this.delete(localPath);
+    let path = this.paths.local(url) + '.json';
+    let deferred = new Deferred<void>();
+    this.#operationQueue.push({
+      type: 'delete',
+      path,
+      deferred,
+    });
+    this.drainOperations();
+    await deferred.promise;
     return createResponse(this.url, null, { status: 204 });
   }
 
