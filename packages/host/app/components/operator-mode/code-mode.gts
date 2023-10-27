@@ -792,6 +792,7 @@ export default class CodeMode extends Component<Signature> {
                       contentChanged=(perform this.contentChangedTask)
                       monacoSDK=this.monacoSDK
                       language=this.language
+                      selectedDeclaration=this.selectedDeclaration
                     }}
                   ></div>
                 {{/if}}

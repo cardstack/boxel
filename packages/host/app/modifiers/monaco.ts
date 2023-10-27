@@ -1,9 +1,14 @@
 import { registerDestructor } from '@ember/destroyable';
+
 import { isTesting } from '@embroider/macros';
 
 import { restartableTask, timeout } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import '@cardstack/requirejs-monaco-ember-polyfill';
+
+import { Range } from 'monaco-editor';
+
+import { ModuleDeclaration } from '@cardstack/host/resources/module-contents';
 
 import type * as MonacoSDK from 'monaco-editor';
 
@@ -15,6 +20,7 @@ interface Signature {
       onSetup?: (editor: MonacoSDK.editor.IStandaloneCodeEditor) => void;
       language?: string;
       monacoSDK: typeof MonacoSDK;
+      selectedDeclaration?: ModuleDeclaration | undefined;
     };
   };
 }
@@ -36,6 +42,7 @@ export default class Monaco extends Modifier<Signature> {
       contentChanged,
       onSetup,
       monacoSDK,
+      selectedDeclaration,
     }: Signature['Args']['Named'],
   ) {
     if (this.model) {
@@ -44,6 +51,14 @@ export default class Monaco extends Modifier<Signature> {
       }
       if (content !== this.lastContent) {
         this.model.setValue(content);
+      }
+
+      //highlight text inside editor
+      let loc = selectedDeclaration?.path?.node.loc;
+      if (loc) {
+        let { start, end } = loc;
+        let range = new Range(start.line, start.column, end.line, end.column);
+        this.editor!.setSelection(range);
       }
     } else {
       let editorOptions: MonacoSDK.editor.IStandaloneEditorConstructionOptions =
