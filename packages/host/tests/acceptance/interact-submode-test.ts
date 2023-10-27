@@ -347,6 +347,49 @@ module('Acceptance | interact submode tests', function (hooks) {
         .doesNotExist();
       assert.dom('[data-test-search-input] input').hasValue('');
     });
+
+    test('Can open a recent card in empty stack', async function (assert) {
+      let operatorModeStateParam = stringify({ stacks: [] })!;
+
+      await visit(
+        `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+          operatorModeStateParam,
+        )}`,
+      );
+
+      await waitFor('[data-test-add-card-button]');
+      await click('[data-test-add-card-button]');
+
+      await waitFor('[data-test-url-field]');
+      await fillIn('[data-test-url-field] input', `${testRealmURL}index`);
+
+      await waitFor('[data-test-card-catalog-go-button][disabled]', {
+        count: 0,
+      });
+      await click('[data-test-card-catalog-go-button]');
+      await waitFor(`[data-test-stack-card="${testRealmURL}index"]`);
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}index"]`)
+        .containsText('Test Workspace B');
+
+      await click(
+        `[data-test-stack-card="${testRealmURL}index"] [data-test-close-button]`,
+      );
+      await waitFor(`[data-test-stack-card="${testRealmURL}index"]`, {
+        count: 0,
+      });
+      assert.dom('[data-test-add-card-button]').exists('stack is empty');
+
+      await click('[data-test-search-input] input');
+      assert.dom('[data-test-search-sheet]').hasClass('prompt');
+
+      await waitFor(`[data-test-search-result="${testRealmURL}index"]`);
+      await click(`[data-test-search-result="${testRealmURL}index"]`);
+
+      await waitFor(`[data-test-stack-card="${testRealmURL}index"]`);
+      assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).exists();
+    });
   });
 
   module('1 stack', function () {

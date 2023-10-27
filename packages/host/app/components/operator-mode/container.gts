@@ -661,7 +661,10 @@ export default class OperatorModeContainer extends Component<Signature> {
       let stackIndex = numberOfStacks - 1;
       let stack: Stack | undefined;
 
-      if (numberOfStacks === 0) {
+      if (
+        numberOfStacks === 0 ||
+        this.operatorModeStateService.stackIsEmpty(stackIndex)
+      ) {
         this.operatorModeStateService.addItemToStack({
           format: 'isolated',
           stackIndex: 0,
