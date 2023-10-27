@@ -21,9 +21,8 @@ import {
 } from '@cardstack/boxel-ui/components';
 import type { PanelContext } from '@cardstack/boxel-ui/components';
 
-import { CheckMark, File } from '@cardstack/boxel-ui/icons';
-
 import { cn, and, not } from '@cardstack/boxel-ui/helpers';
+import { CheckMark, File } from '@cardstack/boxel-ui/icons';
 
 import {
   type RealmInfo,
@@ -951,6 +950,7 @@ export default class CodeMode extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-xs);
       }
       .inner-container__content {
+        position: relative;
         padding: var(--boxel-sp-xxs) var(--boxel-sp-xs) var(--boxel-sp-sm);
         overflow-y: auto;
         height: 100%;
