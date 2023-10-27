@@ -254,13 +254,18 @@ export default class Panel extends Component<Signature> {
     let nextPanelIsCollapsed =
       this.args.panelContext(this.id + 1)?.length === '0px';
 
-    if (
-      (isFirstPanel && !isCollapsed) ||
-      (nextPanelIsLast && nextPanelIsCollapsed)
-    ) {
-      toward = reverse ? 'end' : 'beginning';
+    if (isFirstPanel && !isCollapsed) {
+      if (nextPanelIsLast && nextPanelIsCollapsed) {
+        toward = reverse ? 'beginning' : 'end';
+      } else {
+        toward = reverse ? 'end' : 'beginning';
+      }
     } else if (nextPanelIsLast || (isFirstPanel && isCollapsed)) {
-      toward = reverse ? 'beginning' : 'end';
+      if (nextPanelIsCollapsed) {
+        toward = 'beginning';
+      } else {
+        toward = reverse ? 'beginning' : 'end';
+      }
     }
 
     if (toward) {
