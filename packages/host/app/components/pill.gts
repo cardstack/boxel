@@ -5,8 +5,8 @@ export interface PillSignature {
     inert?: boolean;
   };
   Blocks: {
-    icon: [];
     default: [];
+    icon: [];
   };
   Element: HTMLButtonElement | HTMLDivElement;
 }
@@ -54,7 +54,6 @@ export default class Pill extends Component<PillSignature> {
         margin-block: 0;
         margin-inline: 0;
         margin-right: var(--boxel-sp-xxxxxs);
-        width: 20px;
         height: 20px;
       }
     </style>
