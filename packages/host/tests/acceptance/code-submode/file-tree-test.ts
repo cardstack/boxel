@@ -2,6 +2,7 @@ import {
   visit,
   click,
   waitFor,
+  waitUntil,
   find,
   fillIn,
   triggerKeyEvent,
@@ -591,6 +592,39 @@ module('Acceptance | code submode tests', function (hooks) {
       await elementIsVisible(fileToOpenElement),
       'expected near-bottom file to be visible after opening it',
     );
+  });
+
+  test('can open files in base realm', async function (assert) {
+    let codeModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/1`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      submode: 'code',
+      fileView: 'browser',
+      codePath: `http://localhost:4201/base/cards-grid.gts`,
+    })!;
+
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        codeModeStateParam,
+      )}`,
+    );
+
+    await waitFor('[data-test-file="cards-grid.gts"]');
+
+    await click('[data-test-file="cards-grid.gts"]');
+    await waitUntil(
+      () =>
+        document
+          .querySelector(`[data-test-file="cards-grid.gts"]`)
+          ?.className.includes('selected'),
+    );
+    assert.dom('[data-test-file="cards-grid.gts"]').hasClass('selected');
   });
 });
 
