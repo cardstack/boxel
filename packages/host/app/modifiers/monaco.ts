@@ -32,6 +32,7 @@ export default class Monaco extends Modifier<Signature> {
   private editor: MonacoSDK.editor.IStandaloneCodeEditor | undefined;
   private lastLanguage: string | undefined;
   private lastContent: string | undefined;
+  private decorationIds: string[] = [];
 
   modify(
     element: HTMLElement,
@@ -58,7 +59,21 @@ export default class Monaco extends Modifier<Signature> {
       if (loc) {
         let { start, end } = loc;
         let range = new Range(start.line, start.column, end.line, end.column);
-        this.editor!.setSelection(range);
+        if (this.decorationIds.length > 0) {
+          this.editor!.deltaDecorations(this.decorationIds, []);
+        }
+        this.decorationIds = this.editor!.deltaDecorations(
+          [],
+          [
+            {
+              range,
+              options: {
+                className: 'custom-monaco-highlight',
+              },
+            },
+          ],
+        );
+        console.log(this.decorationIds);
       }
     } else {
       let editorOptions: MonacoSDK.editor.IStandaloneEditorConstructionOptions =

@@ -895,6 +895,10 @@ export default class CodeMode extends Component<Signature> {
         );
       }
 
+      :global(.custom-monaco-highlight) {
+        background-color: var(--boxel-200);
+      }
+
       .code-mode {
         height: 100%;
         max-height: 100vh;
