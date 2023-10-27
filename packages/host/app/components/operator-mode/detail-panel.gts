@@ -25,7 +25,6 @@ import {
 
 import { isCardDef, isFieldDef } from '@cardstack/runtime-common/code-ref';
 
-import { type CardType } from '@cardstack/host/resources/card-type';
 import { type Ready } from '@cardstack/host/resources/file';
 import { IconInherit, IconTrash } from '@cardstack/boxel-ui/icons';
 
@@ -34,7 +33,10 @@ import {
   isCardOrFieldDeclaration,
 } from '@cardstack/host/resources/module-contents';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import {
+  type CardDef,
+  type BaseDef,
+} from 'https://cardstack.com/base/card-api';
 
 import { lastModifiedDate } from '../../resources/last-modified-date';
 
@@ -51,16 +53,22 @@ import { SelectorItem, selectorItemFunc } from './detail-panel-selector';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
+import { getCodeRef, getCardType } from '@cardstack/host/resources/card-type';
+
+import { use, resource } from 'ember-resources';
+
+import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
+
 interface Signature {
   Element: HTMLElement;
   Args: {
     realmInfo: RealmInfo | null;
     readyFile: Ready;
     cardInstance: CardDef | undefined;
-    cardInstanceType: CardType | undefined;
     selectedDeclaration?: ModuleDeclaration;
     declarations: ModuleDeclaration[];
     selectDeclaration: (dec: ModuleDeclaration) => void;
+    openDefinition: (moduleHref: string, codeRef: ResolvedCodeRef) => void;
     delete: () => void;
   };
 }
@@ -68,6 +76,14 @@ interface Signature {
 export default class DetailPanel extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   private lastModified = lastModifiedDate(this, () => this.args.readyFile);
+
+  @use private cardInstanceType = resource(() => {
+    if (this.args.cardInstance !== undefined) {
+      let cardDefinition = this.args.cardInstance.constructor as typeof BaseDef;
+      return getCardType(this, () => cardDefinition);
+    }
+    return undefined;
+  });
 
   get cardType() {
     if (
@@ -87,15 +103,10 @@ export default class DetailPanel extends Component<Signature> {
         } else {
           return false;
         }
-      }) || this.cardType?.isLoading
+      }) ||
+      this.cardType?.isLoading ||
+      this.cardInstanceType?.isLoading
     );
-  }
-
-  @action
-  updateCodePath(url: URL | undefined) {
-    if (url) {
-      this.operatorModeStateService.updateCodePath(url);
-    }
   }
 
   @action
@@ -242,14 +253,19 @@ export default class DetailPanel extends Component<Signature> {
                 />
                 Adopts from
               </div>
-              <ClickableModuleDefinitionContainer
-                @title={{'Card Definition'}}
-                @fileURL={{@cardInstanceType.type.module}}
-                @name={{@cardInstanceType.type.displayName}}
-                @fileExtension={{@cardInstanceType.type.moduleInfo.extension}}
-                @onSelectDefinition={{this.updateCodePath}}
-                @url={{@cardInstanceType.type.module}}
-              />
+              {{#if this.cardInstanceType.type}}
+                {{#let (getCodeRef this.cardInstanceType.type) as |codeRef|}}
+                  <ClickableModuleDefinitionContainer
+                    @title={{'Card Definition'}}
+                    @fileURL={{this.cardInstanceType.type.module}}
+                    @name={{this.cardInstanceType.type.displayName}}
+                    @fileExtension={{this.cardInstanceType.type.moduleInfo.extension}}
+                    @openDefinition={{@openDefinition}}
+                    @moduleHref={{this.cardInstanceType.type.module}}
+                    @codeRef={{codeRef}}
+                  />
+                {{/let}}
+              {{/if}}
 
             {{else if this.isField}}
               {{#let 'Field Definition' as |definitionTitle|}}
@@ -265,23 +281,26 @@ export default class DetailPanel extends Component<Signature> {
                   }}
                 />
                 {{#if this.cardType.type.super}}
-                  <div class='chain'>
-                    <IconInherit
-                      class='chain-icon'
-                      width='24px'
-                      height='24px'
-                      role='presentation'
+                  {{#let (getCodeRef this.cardType.type.super) as |codeRef|}}
+                    <div class='chain'>
+                      <IconInherit
+                        class='chain-icon'
+                        width='24px'
+                        height='24px'
+                        role='presentation'
+                      />
+                      Inherits from
+                    </div>
+                    <ClickableModuleDefinitionContainer
+                      @title={{definitionTitle}}
+                      @fileURL={{this.cardType.type.super.module}}
+                      @name={{this.cardType.type.super.displayName}}
+                      @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
+                      @openDefinition={{@openDefinition}}
+                      @moduleHref={{this.cardType.type.super.module}}
+                      @codeRef={{codeRef}}
                     />
-                    Inherits from
-                  </div>
-                  <ClickableModuleDefinitionContainer
-                    @title={{definitionTitle}}
-                    @fileURL={{this.cardType.type.super.module}}
-                    @name={{this.cardType.type.super.displayName}}
-                    @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
-                    @onSelectDefinition={{this.updateCodePath}}
-                    @url={{this.cardType.type.super.module}}
-                  />
+                  {{/let}}
                 {{/if}}
               {{/let}}
             {{else if this.isCard}}
@@ -298,23 +317,26 @@ export default class DetailPanel extends Component<Signature> {
                   }}
                 />
                 {{#if this.cardType.type.super}}
-                  <div class='chain'>
-                    <IconInherit
-                      class='chain-icon'
-                      width='24px'
-                      height='24px'
-                      role='presentation'
+                  {{#let (getCodeRef this.cardType.type.super) as |codeRef|}}
+                    <div class='chain'>
+                      <IconInherit
+                        class='chain-icon'
+                        width='24px'
+                        height='24px'
+                        role='presentation'
+                      />
+                      Inherits from
+                    </div>
+                    <ClickableModuleDefinitionContainer
+                      @title={{definitionTitle}}
+                      @fileURL={{this.cardType.type.super.module}}
+                      @name={{this.cardType.type.super.displayName}}
+                      @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
+                      @openDefinition={{@openDefinition}}
+                      @moduleHref={{this.cardType.type.super.module}}
+                      @codeRef={{codeRef}}
                     />
-                    Inherits from
-                  </div>
-                  <ClickableModuleDefinitionContainer
-                    @title={{definitionTitle}}
-                    @fileURL={{this.cardType.type.super.module}}
-                    @name={{this.cardType.type.super.displayName}}
-                    @fileExtension={{this.cardType.type.super.moduleInfo.extension}}
-                    @onSelectDefinition={{this.updateCodePath}}
-                    @url={{this.cardType.type.super.module}}
-                  />
+                  {{/let}}
                 {{/if}}
               {{/let}}
             {{/if}}

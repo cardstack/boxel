@@ -568,19 +568,20 @@ export class Loader {
   }
 
   private createModuleProxy(module: any, moduleIdentifier: string) {
+    let moduleId = isUrlLike(moduleIdentifier)
+      ? trimExecutableExtension(this.reverseResolution(moduleIdentifier)).href
+      : moduleIdentifier;
     return new Proxy(module, {
       get: (target, property, received) => {
         let value = Reflect.get(target, property, received);
         if (typeof value === 'function' && typeof property === 'string') {
-          this.identities.set(value, {
-            module: isUrlLike(moduleIdentifier)
-              ? trimExecutableExtension(
-                  this.reverseResolution(moduleIdentifier),
-                ).href
-              : moduleIdentifier,
-            name: property,
-          });
-          Loader.loaders.set(value, this);
+          if (!this.identities.has(value)) {
+            this.identities.set(value, {
+              module: moduleId,
+              name: property,
+            });
+            Loader.loaders.set(value, this);
+          }
         }
         return value;
       },

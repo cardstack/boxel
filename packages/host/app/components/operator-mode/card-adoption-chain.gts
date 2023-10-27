@@ -13,12 +13,15 @@ import type { Ready } from '@cardstack/host/resources/file';
 import { isOwnField } from '@cardstack/host/utils/schema-editor';
 import { IconInherit as InheritIcon } from '@cardstack/boxel-ui/icons';
 
+import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
+
 interface Signature {
   Element: HTMLDivElement;
   Args: {
     file: Ready;
     cardInheritanceChain: CardInheritance[];
     moduleSyntax: ModuleSyntax;
+    openDefinition: (moduleHref: string, codeRef: ResolvedCodeRef) => void;
   };
 }
 
@@ -81,6 +84,7 @@ export default class CardAdoptionChain extends Component<Signature> {
             @childFields={{this.getFields index 'successors'}}
             @parentFields={{this.getFields index 'ancestors'}}
             @allowAddingFields={{eq index 0}}
+            @openDefinition={{@openDefinition}}
           />
           <div class='content-with-line'>
             <hr class='line' />

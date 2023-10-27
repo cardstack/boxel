@@ -425,7 +425,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await waitFor(
       // using non test selectors to disambiguate what we are waiting for, as
       // without these the selectors are matching DOM that is not being tested
-      '[data-test-card-schema="Person"] .pill .realm-icon [data-test-realm-icon-url]',
+      '[data-test-card-schema="Person"] .pill .icon [data-test-realm-icon-url]',
     );
     assert
       .dom(`[data-test-card-schema="Person"] [data-test-realm-icon-url]`)
@@ -444,7 +444,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await waitFor(
       // using non test selectors to disambiguate what we are waiting for, as
       // without these the selectors are matching DOM that is not being tested
-      '[data-test-card-schema="Card"] .pill .realm-icon [data-test-realm-icon-url]',
+      '[data-test-card-schema="Card"] .pill .icon [data-test-realm-icon-url]',
     );
     assert
       .dom(`[data-test-card-schema="Card"] [data-test-realm-icon-url]`)
