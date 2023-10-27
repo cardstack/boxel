@@ -238,19 +238,17 @@ export default class CardSchemaEditor extends Component<Signature> {
         padding: var(--boxel-sp-xs);
         border-radius: var(--boxel-border-radius);
         border: 1px solid var(--boxel-500);
+        margin: auto;
+        align-items: center;
+        justify-content: center;
         display: flex;
       }
 
       .add-field-button > span {
-        display: flex;
-        margin: auto;
-      }
-
-      .add-field-button > span > span {
         margin-top: 1px;
       }
 
-      .add-field-button > span > svg {
+      .add-field-button > svg {
         margin-right: var(--boxel-sp-xxxs);
       }
 
@@ -452,9 +450,9 @@ export default class CardSchemaEditor extends Component<Signature> {
           data-test-add-field-button
           {{on 'click' this.toggleAddFieldModal}}
         >
+          <IconPlus width='20px' height='20px' role='presentation' />
           <span>
-            <IconPlus width='20px' height='20px' role='presentation' />
-            <span>Add a field</span>
+            Add a field
           </span>
         </button>
 
