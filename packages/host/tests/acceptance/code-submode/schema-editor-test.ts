@@ -523,7 +523,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   });
 
   test<TestContextWithSSE>('adding a field from schema editor - whole flow test', async function (assert) {
-    assert.expect(14);
+    assert.expect(16);
     let expectedEvents = [
       {
         type: 'index',
@@ -595,6 +595,15 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert
       .dom('[data-test-boxel-input-error-message]')
       .hasText('Field names must start with a lowercase letter');
+
+    await fillIn('[data-test-field-name-input]', 'firstName');
+    await click('[data-test-save-field-button]');
+    await waitFor('[data-test-boxel-input-error-message]');
+    assert
+      .dom('[data-test-boxel-input-error-message]')
+      .hasText('the field "firstName" already exists');
+    assert.dom('[data-test-save-field-button]').hasAttribute('disabled');
+
     await fillIn('[data-test-field-name-input]', 'birthdate');
 
     assert

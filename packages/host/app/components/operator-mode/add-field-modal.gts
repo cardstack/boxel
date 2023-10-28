@@ -52,6 +52,7 @@ export default class AddFieldModal extends Component<Signature> {
   @tracked fieldModuleURL: URL | undefined = undefined;
   @tracked fieldName: string | undefined = undefined;
   @tracked cardinality: 'one' | 'many' = 'one';
+  @tracked fieldNameErrorMessage: string | undefined;
   @service declare loaderService: LoaderService;
   @service declare operatorModeStateService: OperatorModeStateService;
 
@@ -72,6 +73,7 @@ export default class AddFieldModal extends Component<Signature> {
 
   @action onFieldNameInput(value: string) {
     this.fieldName = value;
+    this.validateFieldName();
   }
 
   @action onCardinalityChange(id: 'one' | 'many'): void {
@@ -124,38 +126,53 @@ export default class AddFieldModal extends Component<Signature> {
       relationshipType = this.cardinality === 'one' ? 'linksTo' : 'linksToMany';
     }
 
-    this.args.moduleSyntax.addField(
-      {
-        type: 'exportedName',
-        name: (
-          identifyCard(this.args.card)! as { module: string; name: string }
-        ).name,
-      },
-      this.fieldName,
-      this.chosenCatalogEntry.ref,
-      relationshipType,
-      new URL(this.chosenCatalogEntry.id),
-      this.loaderService.loader.reverseResolution(
-        makeResolvedURL(this.operatorModeStateService.state.codePath!).href,
-      ),
-      new URL(this.args.file.realmURL),
-    );
+    try {
+      this.args.moduleSyntax.addField(
+        {
+          type: 'exportedName',
+          name: (
+            identifyCard(this.args.card)! as { module: string; name: string }
+          ).name,
+        },
+        this.fieldName,
+        this.chosenCatalogEntry.ref,
+        relationshipType,
+        new URL(this.chosenCatalogEntry.id),
+        this.loaderService.loader.reverseResolution(
+          makeResolvedURL(this.operatorModeStateService.state.codePath!).href,
+        ),
+        new URL(this.args.file.realmURL),
+      );
+    } catch (error) {
+      let errorMessage = (error as Error).message;
+      if (errorMessage.includes('already exists')) {
+        // message example: "the field "firstName" already exists"
+        this.fieldNameErrorMessage = errorMessage;
+      }
+      console.log(error);
+      return;
+    }
 
     this.writeTask.perform(this.args.moduleSyntax.code());
   }
 
-  get nameErrorMessage() {
-    if (this.fieldName) {
-      if (/\s/g.test(this.fieldName)) {
-        return 'Field names cannot contain spaces';
-      }
+  validateFieldName() {
+    this.fieldNameErrorMessage = undefined;
 
-      if (this.fieldName[0] === this.fieldName[0].toUpperCase()) {
-        return 'Field names must start with a lowercase letter';
-      }
+    if (!this.fieldName) {
+      return;
     }
 
-    return undefined;
+    if (/\s/g.test(this.fieldName)) {
+      this.fieldNameErrorMessage = 'Field names cannot contain spaces';
+      return;
+    }
+
+    if (this.fieldName[0] === this.fieldName[0].toUpperCase()) {
+      this.fieldNameErrorMessage =
+        'Field names must start with a lowercase letter';
+      return;
+    }
   }
 
   get submitDisabled(): boolean {
@@ -163,7 +180,7 @@ export default class AddFieldModal extends Component<Signature> {
       !this.fieldName ||
         !this.chosenCatalogEntry ||
         !this.chosenCatalogEntryRefCard ||
-        this.nameErrorMessage ||
+        this.fieldNameErrorMessage ||
         this.writeTask.isRunning,
     );
   }
@@ -291,8 +308,8 @@ export default class AddFieldModal extends Component<Signature> {
           <BoxelInput
             @value={{this.fieldName}}
             @onInput={{this.onFieldNameInput}}
-            @errorMessage={{this.nameErrorMessage}}
-            @invalid={{bool this.nameErrorMessage}}
+            @errorMessage={{this.fieldNameErrorMessage}}
+            @invalid={{bool this.fieldNameErrorMessage}}
             data-test-field-name-input
           />
         </FieldContainer>
