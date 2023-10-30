@@ -72,7 +72,7 @@ export function isBaseDef(cardOrField: any): cardOrField is typeof BaseDef {
 }
 
 export function isCardDef(card: any): card is typeof CardDef {
-  return !('isFieldDef' in card) && isBaseDef(card);
+  return !('isFieldDef' in card) && 'isCardDef' in card && isBaseDef(card);
 }
 
 export function isFieldDef(field: any): field is typeof FieldDef {
