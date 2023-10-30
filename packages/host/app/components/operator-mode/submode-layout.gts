@@ -3,6 +3,7 @@ import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { inject as service } from '@ember/service';
+import { restartableTask } from 'ember-concurrency';
 
 import { IconButton } from '@cardstack/boxel-ui/components';
 import { Sparkle as SparkleIcon } from '@cardstack/boxel-ui/icons';
@@ -13,10 +14,10 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
-// import DeleteModal from './delete-modal';
 import SubmodeSwitcher, { Submode } from '../submode-switcher';
 import ChatSidebar from '../matrix/chat-sidebar';
 import CardCatalogModal from '../card-catalog/modal';
+import SearchSheet, { SearchSheetMode } from '../search-sheet';
 
 import ENV from '@cardstack/host/config/environment';
 
@@ -24,18 +25,25 @@ const { APP } = ENV;
 
 interface Signature {
   Element: HTMLDivElement;
-  Args: {};
+  Args: {
+    onSearchSheetOpened?: () => void;
+    onSearchSheetClosed?: () => void;
+    onCardSelectFromSearch: (card: CardDef) => void;
+  };
   Blocks: {
-    main: [];
-    search: [];
+    default: [openSearch: () => void];
   };
 }
 
 export default class SubmodeLayout extends Component<Signature> {
   @tracked private isChatVisible = false;
-  // private deleteModal: DeleteModal | undefined;
+  @tracked private searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
 
   @service private declare operatorModeStateService: OperatorModeStateService;
+
+  private constructRecentCards = restartableTask(async () => {
+    return await this.operatorModeStateService.constructRecentCards();
+  });
 
   private get chatVisibilityClass() {
     return this.isChatVisible ? 'chat-open' : 'chat-closed';
@@ -52,10 +60,6 @@ export default class SubmodeLayout extends Component<Signature> {
 
     return this.allStackItems[this.allStackItems.length - 1].card;
   }
-
-  // private setupDeleteModal = (deleteModal: DeleteModal) => {
-  //   this.deleteModal = deleteModal;
-  // };
 
   @action private updateSubmode(submode: Submode) {
     switch (submode) {
@@ -80,6 +84,32 @@ export default class SubmodeLayout extends Component<Signature> {
     this.isChatVisible = !this.isChatVisible;
   }
 
+  @action private closeSearchSheet() {
+    this.searchSheetMode = SearchSheetMode.Closed;
+    this.args.onSearchSheetClosed?.();
+  }
+
+  @action private expandSearchToShowResults(_term: string) {
+    this.searchSheetMode = SearchSheetMode.SearchResults;
+  }
+
+  @action private openSearchSheetToPrompt() {
+    if (this.searchSheetMode == SearchSheetMode.Closed) {
+      this.searchSheetMode = SearchSheetMode.SearchPrompt;
+    }
+
+    if (this.operatorModeStateService.recentCards.length === 0) {
+      this.constructRecentCards.perform();
+    }
+
+    this.args.onSearchSheetOpened?.();
+  }
+
+  @action private handleCardSelectFromSearch(card: CardDef) {
+    this.args.onCardSelectFromSearch(card);
+    this.closeSearchSheet();
+  }
+
   <template>
     <CardCatalogModal />
 
@@ -89,7 +119,7 @@ export default class SubmodeLayout extends Component<Signature> {
         @onSubmodeSelect={{this.updateSubmode}}
         class='submode-switcher'
       />
-      {{yield to='main'}}
+      {{yield this.openSearchSheetToPrompt}}
 
       {{#if APP.experimentalAIEnabled}}
         {{#if this.isChatVisible}}
@@ -108,7 +138,14 @@ export default class SubmodeLayout extends Component<Signature> {
         {{/if}}
       {{/if}}
     </div>
-    {{yield to='search'}}
+    <SearchSheet
+      @mode={{this.searchSheetMode}}
+      @onBlur={{this.closeSearchSheet}}
+      @onCancel={{this.closeSearchSheet}}
+      @onFocus={{this.openSearchSheetToPrompt}}
+      @onSearch={{this.expandSearchToShowResults}}
+      @onCardSelect={{this.handleCardSelectFromSearch}}
+    />
     <style>
       .operator-mode__with-chat {
         display: grid;

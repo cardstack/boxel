@@ -25,7 +25,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import {
   type Stack,
   type StackItem,
-} from '../components/operator-mode/container';
+} from '../components/operator-mode/interact-submode';
 
 import type CardService from '../services/card-service';
 

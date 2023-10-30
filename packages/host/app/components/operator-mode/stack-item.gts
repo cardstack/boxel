@@ -53,7 +53,7 @@ import type {
 import ElementTracker from '../../resources/element-tracker';
 import Preview from '../preview';
 
-import { type StackItem } from './container';
+import { type StackItem } from './interact-submode';
 
 import OperatorModeOverlays from './overlays';
 
@@ -338,7 +338,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       class='item {{if this.isBuried "buried"}}'
       data-test-stack-card-index={{@index}}
       data-test-stack-card={{this.cardIdentifier}}
-      {{! In order to support scrolling cards into view 
+      {{! In order to support scrolling cards into view
       we use a selector that is not pruned out in production builds }}
       data-stack-card={{this.cardIdentifier}}
       style={{this.styleForStackedCard}}

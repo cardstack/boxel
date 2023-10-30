@@ -87,9 +87,6 @@ import CardURLBar from './card-url-bar';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import SubmodeLayout from './submode-layout';
-import SearchSheet, {
-  SearchSheetMode,
-} from '@cardstack/host/components/search-sheet';
 
 interface Signature {
   Args: {
@@ -143,7 +140,6 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private card: CardDef | undefined;
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
-  @tracked private searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
 
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
@@ -354,10 +350,6 @@ export default class CodeSubmode extends Component<Signature> {
       }
     }
     return undefined;
-  });
-
-  private constructRecentCards = restartableTask(async () => {
-    return await this.operatorModeStateService.constructRecentCards();
   });
 
   // We are actually loading cards using a side-effect of this cached getter
@@ -715,32 +707,9 @@ export default class CodeSubmode extends Component<Signature> {
     this.deleteModal = deleteModal;
   };
 
-  @action private onCardSelectFromSearch(card: CardDef) {
+  @action private openSearchResultInEditor(card: CardDef) {
     let codePath = new URL(card.id + '.json');
     this.operatorModeStateService.updateCodePath(codePath);
-    this.onCancelSearchSheet();
-  }
-
-  @action private onCancelSearchSheet() {
-    this.searchSheetMode = SearchSheetMode.Closed;
-  }
-
-  @action private onBlurSearchInput() {
-    this.searchSheetMode = SearchSheetMode.Closed;
-  }
-
-  @action private onSearch(_term: string) {
-    this.searchSheetMode = SearchSheetMode.SearchResults;
-  }
-
-  @action private onFocusSearchInput() {
-    if (this.searchSheetMode == SearchSheetMode.Closed) {
-      this.searchSheetMode = SearchSheetMode.SearchPrompt;
-    }
-
-    if (this.operatorModeStateService.recentCards.length === 0) {
-      this.constructRecentCards.perform();
-    }
   }
 
   <template>
@@ -753,245 +722,229 @@ export default class CodeSubmode extends Component<Signature> {
       @realmURL={{this.realmURL}}
       class='card-url-bar'
     />
-    <SubmodeLayout>
-      <:main>
-        <div
-          class='code-mode'
-          data-test-code-mode
-          data-test-save-idle={{and
-            this.contentChangedTask.isIdle
-            this.doWhenCardChanges.isIdle
-          }}
+    <SubmodeLayout @onCardSelectFromSearch={{this.openSearchResultInEditor}}>
+      <div
+        class='code-mode'
+        data-test-code-mode
+        data-test-save-idle={{and
+          this.contentChangedTask.isIdle
+          this.doWhenCardChanges.isIdle
+        }}
+      >
+        <ResizablePanelGroup
+          @orientation='horizontal'
+          @onListPanelContextChange={{this.onListPanelContextChange}}
+          class='columns'
+          as |ResizablePanel|
         >
-          <ResizablePanelGroup
-            @orientation='horizontal'
-            @onListPanelContextChange={{this.onListPanelContextChange}}
-            class='columns'
-            as |ResizablePanel|
+          <ResizablePanel
+            @defaultLength={{defaultPanelWidths.leftPanel}}
+            @length='var(--operator-mode-left-column)'
           >
-            <ResizablePanel
-              @defaultLength={{defaultPanelWidths.leftPanel}}
-              @length='var(--operator-mode-left-column)'
-            >
-              <div class='column'>
-                <ResizablePanelGroup
-                  @orientation='vertical'
-                  @onListPanelContextChange={{this.onFilePanelContextChange}}
-                  @reverseCollapse={{true}}
-                  as |VerticallyResizablePanel|
+            <div class='column'>
+              <ResizablePanelGroup
+                @orientation='vertical'
+                @onListPanelContextChange={{this.onFilePanelContextChange}}
+                @reverseCollapse={{true}}
+                as |VerticallyResizablePanel|
+              >
+                <VerticallyResizablePanel
+                  @defaultLength={{defaultPanelHeights.filePanel}}
+                  @length={{this.panelHeights.filePanel}}
                 >
-                  <VerticallyResizablePanel
-                    @defaultLength={{defaultPanelHeights.filePanel}}
-                    @length={{this.panelHeights.filePanel}}
-                  >
 
-                    {{! Move each container and styles to separate component }}
-                    <div
-                      class='inner-container file-view
-                        {{if this.showBrowser "file-browser"}}'
-                    >
-                      <header
-                        class='file-view__header'
-                        aria-label={{this.fileViewTitle}}
-                        data-test-file-view-header
-                      >
-                        <Button
-                          @disabled={{this.emptyOrNotFound}}
-                          @kind={{if
-                            (not this.showBrowser)
-                            'primary-dark'
-                            'secondary'
-                          }}
-                          @size='extra-small'
-                          class={{cn
-                            'file-view__header-btn'
-                            active=(not this.showBrowser)
-                          }}
-                          {{on 'click' (fn this.setFileView 'inheritance')}}
-                          data-test-inheritance-toggle
-                        >
-                          Inspector</Button>
-                        <Button
-                          @kind={{if
-                            this.showBrowser
-                            'primary-dark'
-                            'secondary'
-                          }}
-                          @size='extra-small'
-                          class={{cn
-                            'file-view__header-btn'
-                            active=this.showBrowser
-                          }}
-                          {{on 'click' (fn this.setFileView 'browser')}}
-                          data-test-file-browser-toggle
-                        >
-                          File Tree</Button>
-                      </header>
-                      <section class='inner-container__content'>
-                        {{#if this.showBrowser}}
-                          <FileTree @realmURL={{this.realmURL}} />
-                        {{else}}
-                          {{#if this.isReady}}
-                            <DetailPanel
-                              @cardInstance={{this.card}}
-                              @readyFile={{this.readyFile}}
-                              @realmInfo={{this.realmInfo}}
-                              @selectedDeclaration={{this.selectedDeclaration}}
-                              @declarations={{this.declarations}}
-                              @selectDeclaration={{this.selectDeclaration}}
-                              @delete={{perform this.delete}}
-                              @openDefinition={{this.openDefinition}}
-                              data-test-card-inheritance-panel
-                            />
-                          {{/if}}
-                        {{/if}}
-                      </section>
-                    </div>
-                  </VerticallyResizablePanel>
-                  <VerticallyResizablePanel
-                    @defaultLength={{defaultPanelHeights.recentPanel}}
-                    @length={{this.panelHeights.recentPanel}}
-                    @minLength='100px'
+                  {{! Move each container and styles to separate component }}
+                  <div
+                    class='inner-container file-view
+                      {{if this.showBrowser "file-browser"}}'
                   >
-                    <aside class='inner-container recent-files'>
-                      <header
-                        class='inner-container__header'
-                        aria-label='Recent Files Header'
+                    <header
+                      class='file-view__header'
+                      aria-label={{this.fileViewTitle}}
+                      data-test-file-view-header
+                    >
+                      <Button
+                        @disabled={{this.emptyOrNotFound}}
+                        @kind={{if
+                          (not this.showBrowser)
+                          'primary-dark'
+                          'secondary'
+                        }}
+                        @size='extra-small'
+                        class={{cn
+                          'file-view__header-btn'
+                          active=(not this.showBrowser)
+                        }}
+                        {{on 'click' (fn this.setFileView 'inheritance')}}
+                        data-test-inheritance-toggle
                       >
-                        Recent Files
-                      </header>
-                      <section class='inner-container__content'>
-                        <RecentFiles />
-                      </section>
-                    </aside>
-                  </VerticallyResizablePanel>
-                </ResizablePanelGroup>
+                        Inspector</Button>
+                      <Button
+                        @kind={{if this.showBrowser 'primary-dark' 'secondary'}}
+                        @size='extra-small'
+                        class={{cn
+                          'file-view__header-btn'
+                          active=this.showBrowser
+                        }}
+                        {{on 'click' (fn this.setFileView 'browser')}}
+                        data-test-file-browser-toggle
+                      >
+                        File Tree</Button>
+                    </header>
+                    <section class='inner-container__content'>
+                      {{#if this.showBrowser}}
+                        <FileTree @realmURL={{this.realmURL}} />
+                      {{else}}
+                        {{#if this.isReady}}
+                          <DetailPanel
+                            @cardInstance={{this.card}}
+                            @readyFile={{this.readyFile}}
+                            @realmInfo={{this.realmInfo}}
+                            @selectedDeclaration={{this.selectedDeclaration}}
+                            @declarations={{this.declarations}}
+                            @selectDeclaration={{this.selectDeclaration}}
+                            @delete={{perform this.delete}}
+                            @openDefinition={{this.openDefinition}}
+                            data-test-card-inheritance-panel
+                          />
+                        {{/if}}
+                      {{/if}}
+                    </section>
+                  </div>
+                </VerticallyResizablePanel>
+                <VerticallyResizablePanel
+                  @defaultLength={{defaultPanelHeights.recentPanel}}
+                  @length={{this.panelHeights.recentPanel}}
+                  @minLength='100px'
+                >
+                  <aside class='inner-container recent-files'>
+                    <header
+                      class='inner-container__header'
+                      aria-label='Recent Files Header'
+                    >
+                      Recent Files
+                    </header>
+                    <section class='inner-container__content'>
+                      <RecentFiles />
+                    </section>
+                  </aside>
+                </VerticallyResizablePanel>
+              </ResizablePanelGroup>
+            </div>
+          </ResizablePanel>
+          {{#if this.codePath}}
+            <ResizablePanel
+              @defaultLength={{defaultPanelWidths.codeEditorPanel}}
+              @length={{this.panelWidths.codeEditorPanel}}
+              @minLength='300px'
+            >
+              <div class='inner-container'>
+                {{#if this.isReady}}
+                  {{#if this.readyFile.isBinary}}
+                    <BinaryFileInfo @readyFile={{this.readyFile}} />
+                  {{else}}
+                    <div
+                      class='monaco-container'
+                      data-test-editor
+                      {{monacoModifier
+                        content=this.readyFile.content
+                        contentChanged=(perform this.contentChangedTask)
+                        monacoSDK=this.monacoSDK
+                        language=this.language
+                      }}
+                    ></div>
+                  {{/if}}
+                  <div class='save-indicator {{if this.isSaving "visible"}}'>
+                    {{#if this.isSaving}}
+                      <span class='saving-msg'>
+                        Now Saving
+                      </span>
+                      <span class='save-spinner'>
+                        <span class='save-spinner-inner'>
+                          <LoadingIndicator />
+                        </span>
+                      </span>
+                    {{else}}
+                      <span class='saved-msg'>
+                        Saved
+                      </span>
+                      <CheckMark width='27' height='27' />
+                    {{/if}}
+                  </div>
+                {{else if this.isLoading}}
+                  <div class='loading'>
+                    <LoadingIndicator />
+                  </div>
+                {{/if}}
               </div>
             </ResizablePanel>
-            {{#if this.codePath}}
-              <ResizablePanel
-                @defaultLength={{defaultPanelWidths.codeEditorPanel}}
-                @length={{this.panelWidths.codeEditorPanel}}
-                @minLength='300px'
-              >
-                <div class='inner-container'>
-                  {{#if this.isReady}}
-                    {{#if this.readyFile.isBinary}}
-                      <BinaryFileInfo @readyFile={{this.readyFile}} />
-                    {{else}}
-                      <div
-                        class='monaco-container'
-                        data-test-editor
-                        {{monacoModifier
-                          content=this.readyFile.content
-                          contentChanged=(perform this.contentChangedTask)
-                          monacoSDK=this.monacoSDK
-                          language=this.language
-                        }}
-                      ></div>
-                    {{/if}}
-                    <div class='save-indicator {{if this.isSaving "visible"}}'>
-                      {{#if this.isSaving}}
-                        <span class='saving-msg'>
-                          Now Saving
-                        </span>
-                        <span class='save-spinner'>
-                          <span class='save-spinner-inner'>
-                            <LoadingIndicator />
-                          </span>
-                        </span>
-                      {{else}}
-                        <span class='saved-msg'>
-                          Saved
-                        </span>
-                        <CheckMark width='27' height='27' />
-                      {{/if}}
+            <ResizablePanel
+              @defaultLength={{defaultPanelWidths.rightPanel}}
+              @length={{this.panelWidths.rightPanel}}
+            >
+              <div class='inner-container'>
+                {{#if this.isReady}}
+                  {{#if this.cardIsLoaded}}
+                    <CardPreviewPanel
+                      @card={{this.loadedCard}}
+                      @realmInfo={{this.realmInfo}}
+                      data-test-card-resource-loaded
+                    />
+                  {{else if this.selectedCardOrField}}
+                    <SchemaEditorColumn
+                      @file={{this.readyFile}}
+                      @card={{this.selectedCardOrField.cardOrField}}
+                      @cardTypeResource={{this.selectedCardOrField.cardType}}
+                      @openDefinition={{this.openDefinition}}
+                    />
+                  {{else if this.schemaEditorIncompatibleFile}}
+                    <div
+                      class='incompatible-schema-editor'
+                      data-test-schema-editor-incompatible-file
+                    >
+                      Schema Editor cannot be used with this file type.
                     </div>
-                  {{else if this.isLoading}}
-                    <div class='loading'>
-                      <LoadingIndicator />
-                    </div>
+                  {{else if
+                    (and
+                      this.isValidSchemaFile this.schemaEditorIncompatibleItem
+                    )
+                  }}
+                    <div
+                      class='incompatible-schema-editor'
+                      data-test-schema-editor-incompatible-item
+                    >
+                      Schema Editor cannot be used for selected
+                      {{this.selectedDeclaration.type}}
+                      "{{this.selectedDeclaration.localName}}".</div>
+                  {{else if this.cardError}}
+                    {{this.cardError.message}}
                   {{/if}}
-                </div>
-              </ResizablePanel>
-              <ResizablePanel
-                @defaultLength={{defaultPanelWidths.rightPanel}}
-                @length={{this.panelWidths.rightPanel}}
+                {{else if this.isLoading}}
+                  <div class='loading'>
+                    <LoadingIndicator />
+                  </div>
+                {{/if}}
+              </div>
+            </ResizablePanel>
+          {{else}}
+            <ResizablePanel
+              @defaultLength={{defaultPanelWidths.emptyCodeModePanel}}
+              @length={{this.panelWidths.emptyCodeModePanel}}
+            >
+              <div
+                class='inner-container inner-container--empty'
+                data-test-empty-code-mode
               >
-                <div class='inner-container'>
-                  {{#if this.isReady}}
-                    {{#if this.cardIsLoaded}}
-                      <CardPreviewPanel
-                        @card={{this.loadedCard}}
-                        @realmInfo={{this.realmInfo}}
-                        data-test-card-resource-loaded
-                      />
-                    {{else if this.selectedCardOrField}}
-                      <SchemaEditorColumn
-                        @file={{this.readyFile}}
-                        @card={{this.selectedCardOrField.cardOrField}}
-                        @cardTypeResource={{this.selectedCardOrField.cardType}}
-                        @openDefinition={{this.openDefinition}}
-                      />
-                    {{else if this.schemaEditorIncompatibleFile}}
-                      <div
-                        class='incompatible-schema-editor'
-                        data-test-schema-editor-incompatible-file
-                      >
-                        Schema Editor cannot be used with this file type.
-                      </div>
-                    {{else if
-                      (and
-                        this.isValidSchemaFile this.schemaEditorIncompatibleItem
-                      )
-                    }}
-                      <div
-                        class='incompatible-schema-editor'
-                        data-test-schema-editor-incompatible-item
-                      >
-                        Schema Editor cannot be used for selected
-                        {{this.selectedDeclaration.type}}
-                        "{{this.selectedDeclaration.localName}}".</div>
-                    {{else if this.cardError}}
-                      {{this.cardError.message}}
-                    {{/if}}
-                  {{else if this.isLoading}}
-                    <div class='loading'>
-                      <LoadingIndicator />
-                    </div>
-                  {{/if}}
-                </div>
-              </ResizablePanel>
-            {{else}}
-              <ResizablePanel
-                @defaultLength={{defaultPanelWidths.emptyCodeModePanel}}
-                @length={{this.panelWidths.emptyCodeModePanel}}
-              >
-                <div
-                  class='inner-container inner-container--empty'
-                  data-test-empty-code-mode
-                >
-                  <File width='40' height='40' role='presentation' />
-                  <h3 class='choose-file-prompt'>
-                    Choose a file on the left to open it
-                  </h3>
-                </div>
-              </ResizablePanel>
-            {{/if}}
-          </ResizablePanelGroup>
-        </div>
-        <DeleteModal @onCreate={{this.setupDeleteModal}} />
-      </:main>
-      <:search>
-        <SearchSheet
-          @mode={{this.searchSheetMode}}
-          @onCancel={{this.onCancelSearchSheet}}
-          @onFocus={{this.onFocusSearchInput}}
-          @onBlur={{this.onBlurSearchInput}}
-          @onSearch={{this.onSearch}}
-          @onCardSelect={{this.onCardSelectFromSearch}}
-        />
-      </:search>
+                <File width='40' height='40' role='presentation' />
+                <h3 class='choose-file-prompt'>
+                  Choose a file on the left to open it
+                </h3>
+              </div>
+            </ResizablePanel>
+          {{/if}}
+        </ResizablePanelGroup>
+      </div>
+      <DeleteModal @onCreate={{this.setupDeleteModal}} />
     </SubmodeLayout>
 
     <style>
