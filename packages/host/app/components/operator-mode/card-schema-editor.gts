@@ -147,7 +147,7 @@ export default class CardSchemaEditor extends Component<Signature> {
         align-items: center;
         height: 20px;
 
-        margin-right: var(--boxel-sp-xxxs);
+        margin-right: var(--boxel-sp-xxxxxs);
       }
 
       .field-name {

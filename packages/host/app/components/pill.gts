@@ -54,6 +54,9 @@ export default class Pill extends Component<PillSignature> {
         margin-block: 0;
         margin-inline: 0;
         margin-right: var(--boxel-sp-xxxxxs);
+      }
+
+      .icon > :deep(*) {
         height: 20px;
       }
     </style>
