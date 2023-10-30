@@ -21,17 +21,12 @@ import {
   getSearchResults,
   type Search,
 } from '@cardstack/host/resources/search';
-import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import { Submode } from '../submode-switcher';
 
 import type CardService from '../../services/card-service';
-
-import type LoaderService from '../../services/loader-service';
-
-import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
 const waiter = buildWaiter('operator-mode-container:write-waiter');
@@ -43,11 +38,8 @@ interface Signature {
 }
 
 export default class OperatorModeContainer extends Component<Signature> {
-  @service private declare loaderService: LoaderService;
   @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare matrixService: MatrixService;
-  @service private declare recentFilesService: RecentFilesService;
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
