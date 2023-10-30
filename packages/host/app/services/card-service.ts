@@ -194,6 +194,7 @@ export default class CardService extends Service {
     try {
       card = await this.loadStaticModel(url);
     } catch (e: any) {
+      console.warn(`cannot load card ${url.href}`, e);
       return undefined;
     }
     let realmURL = await this.getRealmURL(card);
@@ -473,37 +474,32 @@ export default class CardService extends Service {
         ${JSON.stringify(json, null, 2)}`,
       );
     }
-    let results: CardDef[] = [];
-
-    // TODO let's deserialize the search results concurrently for better performance
-    for (let doc of json.data) {
-      // TODO temporarily ignoring errors during deserialization until we have a
-      // better solution here so that index cards aren't broken when a search
-      // result item encounters an error while being deserialized. Specifically
-      // we may encounter broken links which throw a NotFound error (as
-      // designed). The indexer does not yet track card instances that are
-      // consumed by each index instance so during deletion of instances we
-      // don't have anything to invalidate which means that broken links may
-      // live in our index. although there is nothing stopping a realm server
-      // from going down which may also cause a broken link...
-      try {
-        results.push(
-          await this.createFromSerialized(doc, json, new URL(doc.id)),
-        );
-      } catch (e) {
-        console.error(
-          `Encountered error deserializing '${
-            doc.id
-          }' from search result for query ${JSON.stringify(
-            query,
-            null,
-            2,
-          )} against realm ${realmURL}`,
-          e,
-        );
-      }
-    }
-    return results;
+    let collectionDoc = json;
+    return (
+      await Promise.all(
+        collectionDoc.data.map(async (doc) => {
+          try {
+            return await this.createFromSerialized(
+              doc,
+              collectionDoc,
+              new URL(doc.id),
+            );
+          } catch (e) {
+            console.warn(
+              `Skipping ${
+                doc.id
+              }. Encountered error deserializing from search result for query ${JSON.stringify(
+                query,
+                null,
+                2,
+              )} against realm ${realmURL}`,
+              e,
+            );
+            return undefined;
+          }
+        }),
+      )
+    ).filter(Boolean) as CardDef[];
   }
 
   async getFields(
