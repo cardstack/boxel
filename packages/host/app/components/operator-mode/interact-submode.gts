@@ -8,6 +8,7 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
+import { tracked } from '@glimmer/tracking';
 
 import get from 'lodash/get';
 
@@ -56,6 +57,11 @@ export interface StackItem {
   isLinkedCard?: boolean; // TODO: consider renaming this so its clearer that we use this for being able to tell whether the card needs to be closed after saving
 }
 
+enum SearchSheetTrigger {
+  DropCardToLeftNeighborStackButton = 'drop-card-to-left-neighbor-stack-button',
+  DropCardToRightNeighborStackButton = 'drop-card-to-right-neighbor-stack-button',
+}
+
 const cardSelections = new TrackedWeakMap<StackItem, TrackedSet<CardDef>>();
 const clearSelections = new WeakMap<StackItem, () => void>();
 const stackItemScrollers = new WeakMap<
@@ -70,17 +76,6 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     write: (card: CardDef) => Promise<CardDef | undefined>;
-    searchSheetMode: SearchSheetMode;
-    searchSheetTrigger:
-      | 'drop-card-to-left-neighbor-stack-button'
-      | 'drop-card-to-right-neighbor-stack-button'
-      | null;
-    onFocusSearchInput: () => void;
-
-    onCancelSearchSheet: any;
-    onBlurSearchInput: any;
-    onSearch: any;
-    onCardSelectFromSearch: any;
   };
 }
 
@@ -88,6 +83,9 @@ export default class InteractSubmode extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare recentFilesService: RecentFilesService;
+
+  @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
+  @tracked private searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
 
   private deleteModal: DeleteModal | undefined;
 
@@ -233,6 +231,10 @@ export default class InteractSubmode extends Component<Signature> {
     }
     return [];
   }
+
+  private constructRecentCards = restartableTask(async () => {
+    return await this.operatorModeStateService.constructRecentCards();
+  });
 
   private addCard = restartableTask(async () => {
     let type = baseCardRef;
@@ -450,6 +452,111 @@ export default class InteractSubmode extends Component<Signature> {
     return this.allStackItems.length > 0 && this.stacks.length === 1;
   }
 
+  @action private onCardSelectFromSearch(card: CardDef) {
+    let searchSheetTrigger = this.searchSheetTrigger; // Will be set by onFocusSearchInput
+
+    // In case the left button was clicked, whatever is currently in stack with index 0 will be moved to stack with index 1,
+    // and the card will be added to stack with index 0. shiftStack executes this logic.
+    if (
+      searchSheetTrigger ===
+      SearchSheetTrigger.DropCardToLeftNeighborStackButton
+    ) {
+      for (
+        let stackIndex = this.stacks.length - 1;
+        stackIndex >= 0;
+        stackIndex--
+      ) {
+        this.operatorModeStateService.shiftStack(
+          this.stacks[stackIndex],
+          stackIndex + 1,
+        );
+      }
+
+      let stackItem: StackItem = {
+        card,
+        format: 'isolated',
+        stackIndex: 0,
+      };
+      this.operatorModeStateService.addItemToStack(stackItem);
+
+      // In case the right button was clicked, the card will be added to stack with index 1.
+    } else if (
+      searchSheetTrigger ===
+      SearchSheetTrigger.DropCardToRightNeighborStackButton
+    ) {
+      this.operatorModeStateService.addItemToStack({
+        card,
+        format: 'isolated',
+        stackIndex: this.stacks.length,
+      });
+    } else {
+      // In case, that the search was accessed directly without clicking right and left buttons,
+      // the rightmost stack will be REPLACED by the selection
+      let numberOfStacks = this.operatorModeStateService.numberOfStacks();
+      let stackIndex = numberOfStacks - 1;
+      let stack: Stack | undefined;
+
+      if (
+        numberOfStacks === 0 ||
+        this.operatorModeStateService.stackIsEmpty(stackIndex)
+      ) {
+        this.operatorModeStateService.addItemToStack({
+          format: 'isolated',
+          stackIndex: 0,
+          card,
+        });
+      } else {
+        stack = this.operatorModeStateService.rightMostStack();
+        if (stack) {
+          let bottomMostItem = stack[0];
+          if (bottomMostItem) {
+            this.operatorModeStateService.clearStackAndAdd(stackIndex, {
+              card,
+              format: 'isolated',
+              stackIndex,
+            });
+          }
+        }
+      }
+    }
+
+    // Close the search sheet
+    this.onCancelSearchSheet();
+  }
+
+  @action private onCancelSearchSheet() {
+    this.searchSheetMode = SearchSheetMode.Closed;
+    this.searchSheetTrigger = null;
+  }
+
+  @action private onBlurSearchInput() {
+    this.searchSheetTrigger = null;
+    this.searchSheetMode = SearchSheetMode.Closed;
+  }
+
+  @action private onSearch(_term: string) {
+    this.searchSheetMode = SearchSheetMode.SearchResults;
+  }
+
+  @action private onFocusSearchInput(searchSheetTrigger?: SearchSheetTrigger) {
+    if (
+      searchSheetTrigger ==
+        SearchSheetTrigger.DropCardToLeftNeighborStackButton ||
+      searchSheetTrigger ==
+        SearchSheetTrigger.DropCardToRightNeighborStackButton
+    ) {
+      this.searchSheetTrigger = searchSheetTrigger;
+    }
+
+    if (this.searchSheetMode == SearchSheetMode.Closed) {
+      this.searchSheetMode = SearchSheetMode.SearchPrompt;
+    }
+
+    if (this.operatorModeStateService.recentCards.length === 0) {
+      this.constructRecentCards.perform();
+    }
+  }
+
   <template>
     <SubmodeLayout>
       <:main>
@@ -502,7 +609,7 @@ export default class InteractSubmode extends Component<Signature> {
               class='add-card-to-neighbor-stack add-card-to-neighbor-stack--left
                 {{if
                   (eq
-                    @searchSheetTrigger
+                    this.searchSheetTrigger
                     "drop-card-to-left-neighbor-stack-button"
                   )
                   "add-card-to-neighbor-stack--active"
@@ -510,7 +617,8 @@ export default class InteractSubmode extends Component<Signature> {
               {{on
                 'click'
                 (fn
-                  @onFocusSearchInput 'drop-card-to-left-neighbor-stack-button'
+                  this.onFocusSearchInput
+                  SearchSheetTrigger.DropCardToLeftNeighborStackButton
                 )
               }}
             >
@@ -521,7 +629,7 @@ export default class InteractSubmode extends Component<Signature> {
               class='add-card-to-neighbor-stack add-card-to-neighbor-stack--right
                 {{if
                   (eq
-                    @searchSheetTrigger
+                    this.searchSheetTrigger
                     "drop-card-to-right-neighbor-stack-button"
                   )
                   "add-card-to-neighbor-stack--active"
@@ -529,7 +637,8 @@ export default class InteractSubmode extends Component<Signature> {
               {{on
                 'click'
                 (fn
-                  @onFocusSearchInput 'drop-card-to-right-neighbor-stack-button'
+                  this.onFocusSearchInput
+                  SearchSheetTrigger.DropCardToRightNeighborStackButton
                 )
               }}
             >
@@ -541,12 +650,12 @@ export default class InteractSubmode extends Component<Signature> {
       </:main>
       <:search>
         <SearchSheet
-          @mode={{@searchSheetMode}}
-          @onCancel={{@onCancelSearchSheet}}
-          @onFocus={{@onFocusSearchInput}}
-          @onBlur={{@onBlurSearchInput}}
-          @onSearch={{@onSearch}}
-          @onCardSelect={{@onCardSelectFromSearch}}
+          @mode={{this.searchSheetMode}}
+          @onCancel={{this.onCancelSearchSheet}}
+          @onFocus={{this.onFocusSearchInput}}
+          @onBlur={{this.onBlurSearchInput}}
+          @onSearch={{this.onSearch}}
+          @onCardSelect={{this.onCardSelectFromSearch}}
         />
       </:search>
     </SubmodeLayout>

@@ -95,17 +95,6 @@ interface Signature {
   Args: {
     saveSourceOnClose: (url: URL, content: string) => void;
     saveCardOnClose: (card: CardDef) => void;
-
-    searchSheetMode: SearchSheetMode;
-    searchSheetTrigger:
-      | 'drop-card-to-left-neighbor-stack-button'
-      | 'drop-card-to-right-neighbor-stack-button'
-      | null;
-    onFocusSearchInput: () => void;
-    onCancelSearchSheet: any;
-    onBlurSearchInput: any;
-    onSearch: any;
-    onCardSelectFromSearch: any;
   };
 }
 const log = logger('component:code-submode');
@@ -154,10 +143,13 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private card: CardDef | undefined;
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
+  @tracked private searchSheetMode: SearchSheetMode = SearchSheetMode.Closed;
+
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
   private panelHeights: PanelHeights;
+
   // This is to cache realm info during reload after code path change so
   // that realm assets don't produce a flicker when code patch changes and
   // the realm is the same
@@ -362,6 +354,10 @@ export default class CodeSubmode extends Component<Signature> {
       }
     }
     return undefined;
+  });
+
+  private constructRecentCards = restartableTask(async () => {
+    return await this.operatorModeStateService.constructRecentCards();
   });
 
   // We are actually loading cards using a side-effect of this cached getter
@@ -719,6 +715,34 @@ export default class CodeSubmode extends Component<Signature> {
     this.deleteModal = deleteModal;
   };
 
+  @action private onCardSelectFromSearch(card: CardDef) {
+    let codePath = new URL(card.id + '.json');
+    this.operatorModeStateService.updateCodePath(codePath);
+    this.onCancelSearchSheet();
+  }
+
+  @action private onCancelSearchSheet() {
+    this.searchSheetMode = SearchSheetMode.Closed;
+  }
+
+  @action private onBlurSearchInput() {
+    this.searchSheetMode = SearchSheetMode.Closed;
+  }
+
+  @action private onSearch(_term: string) {
+    this.searchSheetMode = SearchSheetMode.SearchResults;
+  }
+
+  @action private onFocusSearchInput() {
+    if (this.searchSheetMode == SearchSheetMode.Closed) {
+      this.searchSheetMode = SearchSheetMode.SearchPrompt;
+    }
+
+    if (this.operatorModeStateService.recentCards.length === 0) {
+      this.constructRecentCards.perform();
+    }
+  }
+
   <template>
     <div class='code-mode-background' style={{this.backgroundURLStyle}}></div>
     <CardURLBar
@@ -960,12 +984,12 @@ export default class CodeSubmode extends Component<Signature> {
       </:main>
       <:search>
         <SearchSheet
-          @mode={{@searchSheetMode}}
-          @onCancel={{@onCancelSearchSheet}}
-          @onFocus={{@onFocusSearchInput}}
-          @onBlur={{@onBlurSearchInput}}
-          @onSearch={{@onSearch}}
-          @onCardSelect={{@onCardSelectFromSearch}}
+          @mode={{this.searchSheetMode}}
+          @onCancel={{this.onCancelSearchSheet}}
+          @onFocus={{this.onFocusSearchInput}}
+          @onBlur={{this.onBlurSearchInput}}
+          @onSearch={{this.onSearch}}
+          @onCardSelect={{this.onCardSelectFromSearch}}
         />
       </:search>
     </SubmodeLayout>
