@@ -52,6 +52,7 @@ import Selector from './detail-panel-selector';
 import { SelectorItem, selectorItemFunc } from './detail-panel-selector';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import { fn } from '@ember/helper';
 
 import { getCodeRef, getCardType } from '@cardstack/host/resources/card-type';
 
@@ -123,6 +124,7 @@ export default class DetailPanel extends Component<Signature> {
       this.args.cardInstance !== undefined
     );
   }
+
   get isModule() {
     return hasExecutableExtension(this.args.readyFile.url);
   }
@@ -243,7 +245,11 @@ export default class DetailPanel extends Component<Signature> {
                 @fileExtension='.JSON'
                 @infoText={{this.lastModified.value}}
                 @actions={{array
-                  (hash label='Delete' handler=@delete icon=IconTrash)
+                  (hash
+                    label='Delete'
+                    handler=(fn @delete @cardInstance)
+                    icon=IconTrash
+                  )
                 }}
               />
               <div class='chain'>
