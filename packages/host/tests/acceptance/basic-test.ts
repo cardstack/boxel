@@ -329,27 +329,29 @@ module('Acceptance | basic tests', function (hooks) {
   });
 
   test('glimmer-scoped-css smoke test', async function (assert) {
-    await visit('/code');
+    await visit('/');
 
-    const buttonElement = find('[data-test-create-new-card-button]');
+    const cardContainerElement = find('[data-test-boxel-card-container]');
 
-    assert.ok(buttonElement);
+    assert.ok(cardContainerElement);
 
-    if (!buttonElement) {
-      throw new Error('[data-test-create-new-card-button] element not found');
+    if (!cardContainerElement) {
+      throw new Error('[data-test-boxel-card-container] element not found');
     }
 
-    const buttonElementScopedCssAttribute = Array.from(buttonElement.attributes)
+    const buttonElementScopedCssAttribute = Array.from(
+      cardContainerElement.attributes,
+    )
       .map((attribute) => attribute.localName)
       .find((attributeName) => attributeName.startsWith('data-scopedcss'));
 
     if (!buttonElementScopedCssAttribute) {
       throw new Error(
-        'Scoped CSS attribute not found on [data-test-create-new-card-button]',
+        'Scoped CSS attribute not found on [data-test-boxel-card-container]',
       );
     }
 
-    assert.dom('[data-test-create-new-card-button] + style').doesNotExist();
+    assert.dom('[data-test-boxel-card-container] + style').doesNotExist();
   });
 
   skip('can create a new card', async function (assert) {
