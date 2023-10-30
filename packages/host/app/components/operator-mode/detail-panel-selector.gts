@@ -6,7 +6,7 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
-import { isCardDef } from '@cardstack/runtime-common/code-ref';
+import { isCardDef, isBaseDef } from '@cardstack/runtime-common/code-ref';
 import { DiagonalArrowLeftUp } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -86,7 +86,11 @@ export default class Selector extends Component<Signature> {
   getType(declaration: ModuleDeclaration) {
     let type = declaration.type as string;
     if (isCardOrFieldDeclaration(declaration)) {
-      type = isCardDef(declaration.cardOrField) ? 'card' : 'field';
+      type = isBaseDef(declaration.cardOrField)
+        ? 'base'
+        : isCardDef(declaration.cardOrField)
+        ? 'card'
+        : 'field';
     }
     return type;
   }
