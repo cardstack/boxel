@@ -1023,7 +1023,7 @@ module('Integration | operator-mode', function (hooks) {
       .isVisible();
   });
 
-  test('displays cards on cards-grid', async function (assert) {
+  test('displays cards on cards-grid and includes `catalog-entry` instances', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
 
     await renderComponent(
@@ -1057,6 +1057,14 @@ module('Integration | operator-mode', function (hooks) {
         `[data-test-cards-grid-item="${testRealmURL}BlogPost/1"] [data-test-cards-grid-item-display-name]`,
       )
       .hasText('Blog Post');
+    assert
+      .dom(
+        `[data-test-cards-grid-item="${testRealmURL}CatalogEntry/publishing-packet"]`,
+      )
+      .exists('publishing-packet catalog-entry is displayed on cards-grid');
+    assert
+      .dom(`[data-test-cards-grid-item="${testRealmURL}CatalogEntry/pet-room"]`)
+      .exists('pet-room catalog-entry instance is displayed on cards-grid');
   });
 
   test('can create a card using the cards-grid', async function (assert) {
