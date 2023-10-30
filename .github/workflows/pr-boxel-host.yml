@@ -30,6 +30,7 @@ jobs:
         with:
           files: |
             packages/host/**
+            packages/boxel-ui/**
 
   deploy-host-preview-staging:
     name: Deploy a boxel-host staging preview to S3
