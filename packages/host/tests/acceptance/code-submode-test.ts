@@ -121,7 +121,7 @@ const employeeCardSource = `
     return !this.isSalaried;
   }
 
-  class Isolated extends Component<typeof Employee> {
+  export class Isolated extends Component<typeof Employee> {
     <template>
       <@fields.firstName /> <@fields.lastName />
 
@@ -695,6 +695,9 @@ module('Acceptance | code submode tests', function (hooks) {
 
     await waitFor('[data-test-loading-indicator]', { count: 0 });
 
+    await waitFor(
+      '[data-test-in-this-file-selector] [data-test-boxel-selector-item-selected]',
+    );
     assert
       .dom(
         '[data-test-in-this-file-selector] [data-test-boxel-selector-item-selected]',

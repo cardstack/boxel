@@ -1,16 +1,18 @@
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
+import { IconInherit as InheritIcon } from '@cardstack/boxel-ui/icons';
+
+import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import CardSchemaEditor from '@cardstack/host/components/operator-mode/card-schema-editor';
 import { CardInheritance } from '@cardstack/host/components/operator-mode/schema-editor-column';
 
+import { Type } from '@cardstack/host/resources/card-type';
 import type { Ready } from '@cardstack/host/resources/file';
 
 import { isOwnField } from '@cardstack/host/utils/schema-editor';
-import { IconInherit as InheritIcon } from '@cardstack/boxel-ui/icons';
-import { Type } from '@cardstack/host/resources/card-type';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -18,6 +20,7 @@ interface Signature {
     file: Ready;
     cardInheritanceChain: CardInheritance[];
     moduleSyntax: ModuleSyntax;
+    openDefinition: (moduleHref: string, codeRef: ResolvedCodeRef) => void;
   };
 }
 
@@ -79,7 +82,11 @@ export default class CardAdoptionChain extends Component<Signature> {
             @moduleSyntax={{@moduleSyntax}}
             @childFields={{this.getFields index 'successors'}}
             @parentFields={{this.getFields index 'ancestors'}}
-            @allowFieldManipulation={{this.allowFieldManipulation @file data.cardType}}
+            @allowFieldManipulation={{this.allowFieldManipulation
+              @file
+              data.cardType
+            }}
+            @openDefinition={{@openDefinition}}
           />
           <div class='content-with-line'>
             <hr class='line' />

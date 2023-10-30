@@ -21,9 +21,8 @@ import {
 } from '@cardstack/boxel-ui/components';
 import type { PanelContext } from '@cardstack/boxel-ui/components';
 
-import { CheckMark, File } from '@cardstack/boxel-ui/icons';
-
 import { cn, and, not } from '@cardstack/boxel-ui/helpers';
+import { CheckMark, File } from '@cardstack/boxel-ui/icons';
 
 import {
   type RealmInfo,
@@ -35,13 +34,14 @@ import {
   hasExecutableExtension,
 } from '@cardstack/runtime-common';
 
+import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
+
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import SchemaEditorColumn from '@cardstack/host/components/operator-mode/schema-editor-column';
 import config from '@cardstack/host/config/environment';
 
 import monacoModifier from '@cardstack/host/modifiers/monaco';
 
-import { getCardType } from '@cardstack/host/resources/card-type';
 import {
   isReady,
   type Ready,
@@ -68,8 +68,6 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
-
-import { type BaseDef } from 'https://cardstack.com/base/card-api';
 
 import FileTree from '../editor/file-tree';
 
@@ -129,7 +127,6 @@ export default class CodeMode extends Component<Signature> {
   @tracked private card: CardDef | undefined;
   @tracked private cardError: Error | undefined;
   @tracked private userHasDismissedURLError = false;
-  @tracked private _selectedDeclaration: ModuleDeclaration | undefined;
   private hasUnsavedSourceChanges = false;
   private hasUnsavedCardChanges = false;
   private panelWidths: PanelWidths;
@@ -315,11 +312,7 @@ export default class CodeMode extends Component<Signature> {
     return this.operatorModeStateService.openFile.current;
   }
 
-  @use private moduleContentsResource = resource(({ on }) => {
-    on.cleanup(() => {
-      this._selectedDeclaration = undefined;
-    });
-
+  @use private moduleContentsResource = resource(() => {
     if (isReady(this.currentOpenFile) && this.importedModule?.module) {
       let f: Ready = this.currentOpenFile;
       if (hasExecutableExtension(f.url)) {
@@ -339,14 +332,6 @@ export default class CodeMode extends Component<Signature> {
       if (hasExecutableExtension(f.url)) {
         return importResource(this, () => f.url);
       }
-    }
-    return undefined;
-  });
-
-  @use private cardType = resource(() => {
-    if (this.card !== undefined) {
-      let cardDefinition = this.card.constructor as typeof BaseDef;
-      return getCardType(this, () => cardDefinition);
     }
     return undefined;
   });
@@ -429,10 +414,34 @@ export default class CodeMode extends Component<Signature> {
     return this.moduleContentsResource?.declarations || [];
   }
 
+  private get _selectedDeclaration() {
+    return this.moduleContentsResource?.declarations.find((dec) => {
+      // when refreshing module,
+      // checks localName from serialized url
+      if (
+        this.operatorModeStateService.state.codeSelection.localName ===
+        dec.localName
+      ) {
+        return true;
+      }
+
+      // when opening new definition,
+      // checks codeRef from serialized url
+      let codeRef = this.operatorModeStateService.state.codeSelection?.codeRef;
+      if (isCardOrFieldDeclaration(dec) && codeRef) {
+        return (
+          dec.exportedAs === codeRef.name || dec.localName === codeRef.name
+        );
+      }
+      return false;
+    });
+  }
+
   private get selectedDeclaration() {
     if (this._selectedDeclaration) {
       return this._selectedDeclaration;
     } else {
+      // default to 1st selection
       return this.declarations.length > 0 ? this.declarations[0] : undefined;
     }
   }
@@ -449,7 +458,13 @@ export default class CodeMode extends Component<Signature> {
 
   @action
   private selectDeclaration(dec: ModuleDeclaration) {
-    this._selectedDeclaration = dec;
+    this.operatorModeStateService.updateLocalNameSelection(dec.localName);
+  }
+
+  @action
+  openDefinition(moduleHref: string, codeRef: ResolvedCodeRef) {
+    this.operatorModeStateService.updateCodeRefSelection(codeRef);
+    this.operatorModeStateService.updateCodePath(new URL(moduleHref));
   }
 
   private onCardChange = () => {
@@ -723,13 +738,13 @@ export default class CodeMode extends Component<Signature> {
                       {{#if this.isReady}}
                         <DetailPanel
                           @cardInstance={{this.card}}
-                          @cardInstanceType={{this.cardType}}
                           @readyFile={{this.readyFile}}
                           @realmInfo={{this.realmInfo}}
                           @selectedDeclaration={{this.selectedDeclaration}}
                           @declarations={{this.declarations}}
                           @selectDeclaration={{this.selectDeclaration}}
                           @delete={{this.delete}}
+                          @openDefinition={{this.openDefinition}}
                           data-test-card-inheritance-panel
                         />
                       {{/if}}
@@ -820,6 +835,7 @@ export default class CodeMode extends Component<Signature> {
                     @file={{this.readyFile}}
                     @card={{this.selectedCardOrField.cardOrField}}
                     @cardTypeResource={{this.selectedCardOrField.cardType}}
+                    @openDefinition={{this.openDefinition}}
                   />
                 {{else if this.schemaEditorIncompatibleFile}}
                   <div
@@ -934,6 +950,7 @@ export default class CodeMode extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-xs);
       }
       .inner-container__content {
+        position: relative;
         padding: var(--boxel-sp-xxs) var(--boxel-sp-xs) var(--boxel-sp-sm);
         overflow-y: auto;
         height: 100%;

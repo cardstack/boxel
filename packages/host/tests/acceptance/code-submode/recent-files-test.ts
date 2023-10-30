@@ -428,10 +428,15 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
 
     await percySnapshot(assert);
 
-    assert.dom('[data-test-recent-file]').exists({ count: 99 });
+    assert
+      .dom('[data-test-recent-file]:nth-child(1)')
+      .containsText('file-0.txt');
+
+    assert
+      .dom('[data-test-recent-file]:nth-child(99)')
+      .containsText('file-98.txt');
 
     await click('[data-test-file="index.json"]');
-    assert.dom('[data-test-recent-file]').exists({ count: 100 });
 
     assert
       .dom('[data-test-recent-file]:nth-child(1)')

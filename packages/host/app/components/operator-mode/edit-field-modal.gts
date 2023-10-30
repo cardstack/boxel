@@ -27,9 +27,10 @@ import { makeResolvedURL } from '@cardstack/runtime-common/loader';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
-
 import RealmInfoProvider from '@cardstack/host/components/operator-mode/realm-info-provider';
+import Pill from '@cardstack/host/components/pill';
 import { FieldOfType, Type } from '@cardstack/host/resources/card-type';
+
 import { Ready } from '@cardstack/host/resources/file';
 import LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -57,6 +58,7 @@ export default class EditFieldModal extends Component<Signature> {
   @tracked cardURL: URL | undefined = undefined;
   @tracked fieldRef: CodeRef | undefined = undefined;
 
+  @tracked fieldNameErrorMessage: string | undefined;
   @service declare loaderService: LoaderService;
   @service declare operatorModeStateService: OperatorModeStateService;
 
@@ -98,6 +100,7 @@ export default class EditFieldModal extends Component<Signature> {
 
   @action onFieldNameInput(value: string) {
     this.fieldName = value;
+    this.validateFieldName();
   }
 
   @action onCardinalityChange(id: 'one' | 'many') {
@@ -205,49 +208,61 @@ export default class EditFieldModal extends Component<Signature> {
       );
     }
 
-    this.args.moduleSyntax.addField(
-      {
-        type: 'exportedName',
-        name: identifiedCard.name,
-      },
-      this.fieldName,
-      this.fieldRef as { module: string; name: string },
-      this.fieldType,
-      this.cardURL,
-      this.loaderService.loader.reverseResolution(
-        makeResolvedURL(this.operatorModeStateService.state.codePath!).href,
-      ),
-      new URL(this.args.file.realmURL),
-      addFieldAtIndex,
-    );
+    try {
+      this.args.moduleSyntax.addField(
+        {
+          type: 'exportedName',
+          name: identifiedCard.name,
+        },
+        this.fieldName,
+        this.fieldRef as { module: string; name: string },
+        this.fieldType,
+        this.cardURL,
+        this.loaderService.loader.reverseResolution(
+          makeResolvedURL(this.operatorModeStateService.state.codePath!).href,
+        ),
+        new URL(this.args.file.realmURL),
+        addFieldAtIndex,
+      );
+    } catch (error) {
+      let errorMessage = (error as Error).message;
+      if (errorMessage.includes('already exists')) {
+        // message example: "the field "firstName" already exists"
+        this.fieldNameErrorMessage = errorMessage;
+      }
+      console.log(error);
+      return;
+    }
 
     this.writeTask.perform(this.args.moduleSyntax.code());
   }
 
-  get nameErrorMessage() {
-    if (this.fieldName) {
-      if (/\s/g.test(this.fieldName)) {
-        return 'Field names cannot contain spaces';
-      }
+  validateFieldName() {
+    this.fieldNameErrorMessage = undefined;
 
-      if (this.fieldName[0] === this.fieldName[0].toUpperCase()) {
-        return 'Field names must start with a lowercase letter';
-      }
-
-      // Allow only alphanumeric characters and underscores
-      if (!/^[a-z0-9_]+$/i.test(this.fieldName)) {
-        return 'Field names can only contain letters, numbers, and underscores';
-      }
+    if (/\s/g.test(this.fieldName!)) {
+      this.fieldNameErrorMessage = 'Field names cannot contain spaces';
+      return;
     }
 
-    return undefined;
+    if (this.fieldName![0] === this.fieldName![0].toUpperCase()) {
+      this.fieldNameErrorMessage =
+        'Field names must start with a lowercase letter';
+      return;
+    }
+
+    if (!/^[a-z0-9_]+$/i.test(this.fieldName!)) {
+      this.fieldNameErrorMessage =
+        'Field names can only contain letters, numbers, and underscores';
+      return;
+    }
   }
 
   get submitDisabled(): boolean {
     return bool(
       !this.fieldName ||
         !this.fieldCard ||
-        this.nameErrorMessage ||
+        this.fieldNameErrorMessage ||
         this.writeTask.isRunning,
     );
   }
@@ -301,10 +316,9 @@ export default class EditFieldModal extends Component<Signature> {
 
       .card-chooser-area {
         display: flex;
-        min-height: 3em;
       }
 
-      .card-chooser-area button {
+      .card-chooser-area button.change {
         background-color: transparent;
         border: none;
         color: var(--boxel-highlight);
@@ -336,8 +350,8 @@ export default class EditFieldModal extends Component<Signature> {
         <FieldContainer @label='Field Type'>
           <div class='card-chooser-area'>
             {{#if this.fieldCard}}
-              <div class='pill'>
-                <div class='realm-icon' data-test-selected-field-realm-icon>
+              <Pill @inert={{true}} data-test-selected-field-realm-icon>
+                <:icon>
                   {{#if this.fieldModuleURL.href}}
                     <RealmInfoProvider @fileURL={{this.fieldModuleURL.href}}>
                       <:ready as |realmInfo|>
@@ -349,18 +363,18 @@ export default class EditFieldModal extends Component<Signature> {
                       </:ready>
                     </RealmInfoProvider>
                   {{/if}}
-                </div>
-                <div>
+                </:icon>
+                <:default>
                   <span data-test-selected-field-display-name>
                     {{this.fieldCard.displayName}}
                   </span>
-                </div>
-              </div>
+                </:default>
+              </Pill>
             {{/if}}
 
             <button
               {{on 'click' this.chooseCard}}
-              class='{{if this.fieldCard "pull-right"}}'
+              class='change {{if this.fieldCard "pull-right"}}'
               data-test-choose-card-button
             >
               {{#if this.fieldCard}}
@@ -370,15 +384,14 @@ export default class EditFieldModal extends Component<Signature> {
               {{/if}}
             </button>
           </div>
-
         </FieldContainer>
 
         <FieldContainer @label='Field Name'>
           <BoxelInput
             @value={{this.fieldName}}
             @onInput={{this.onFieldNameInput}}
-            @errorMessage={{this.nameErrorMessage}}
-            @invalid={{bool this.nameErrorMessage}}
+            @errorMessage={{this.fieldNameErrorMessage}}
+            @invalid={{bool this.fieldNameErrorMessage}}
             data-test-field-name-input
           />
         </FieldContainer>

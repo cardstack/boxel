@@ -1,6 +1,7 @@
 import { registerDestructor } from '@ember/destroyable';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 import type { WithBoundArgs } from '@glint/template';
 import didResizeModifier from 'ember-resize-modifier/modifiers/did-resize';
 import { TrackedMap } from 'tracked-built-ins';
@@ -18,6 +19,7 @@ interface Signature {
     default: [
       WithBoundArgs<
         typeof ResizablePanel,
+        | 'hideHandle'
         | 'isLastPanel'
         | 'onResizeHandlerMouseDown'
         | 'onResizeHandlerDblClick'
@@ -48,6 +50,7 @@ export default class ResizablePanelGroup extends Component<Signature> {
           onResizeHandlerMouseDown=this.onResizeHandlerMouseDown
           onResizeHandlerDblClick=this.onResizeHandlerDblClick
           reverseHandlerArrow=@reverseCollapse
+          hideHandle=this.hideHandles
         )
       }}
     </div>
@@ -103,6 +106,13 @@ export default class ResizablePanelGroup extends Component<Signature> {
   private get contentRectLengthProperty() {
     return this.isHorizontal ? 'width' : 'height';
   }
+
+  private get perpendicularLengthProperty() {
+    return this.isHorizontal ? 'clientHeight' : 'clientWidth';
+  }
+
+  @tracked hideHandles = false;
+  minimumLengthToShowHandles = 30;
 
   listPanelContext = new TrackedMap<number, PanelContext>();
   currentResizeHandler: {
@@ -297,6 +307,10 @@ export default class ResizablePanelGroup extends Component<Signature> {
   @action
   onWindowResize(entry: ResizeObserverEntry, _observer: ResizeObserver) {
     let panelGroupEl = entry.target as HTMLElement;
+
+    this.hideHandles =
+      panelGroupEl[this.perpendicularLengthProperty] <
+      this.minimumLengthToShowHandles;
 
     let panelLengths = [];
     for (let index = 1; index <= this.listPanelContext.size; index++) {

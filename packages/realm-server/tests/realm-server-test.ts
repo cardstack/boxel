@@ -151,6 +151,8 @@ module('Realm Server', function (hooks) {
         type: 'card',
         attributes: {
           firstName: 'Mango',
+          description: null,
+          thumbnailURL: null,
         },
         meta: {
           adoptsFrom: {
@@ -217,8 +219,12 @@ module('Realm Server', function (hooks) {
         card,
         {
           data: {
+            attributes: {
+              title: null,
+              description: null,
+              thumbnailURL: null,
+            },
             type: 'card',
-            attributes: {},
             meta: {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/card-api',
@@ -289,6 +295,8 @@ module('Realm Server', function (hooks) {
             type: 'card',
             attributes: {
               firstName: 'Van Gogh',
+              description: null,
+              thumbnailURL: null,
             },
             meta: {
               adoptsFrom: {
@@ -779,6 +787,8 @@ module('Realm Server', function (hooks) {
           type: 'card',
           attributes: {
             firstName: 'Mango',
+            description: null,
+            thumbnailURL: null,
           },
           meta: {
             adoptsFrom: {
