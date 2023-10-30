@@ -25,7 +25,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import {
   type Stack,
   type StackItem,
-} from '../components/operator-mode/container';
+} from '../components/operator-mode/interact-submode';
 
 import type CardService from '../services/card-service';
 
@@ -118,6 +118,29 @@ export default class OperatorModeStateService extends Service {
       }
     }
   });
+
+  async deleteCard(card: CardDef) {
+    // remove all stack items for the deleted card
+    let items: StackItem[] = [];
+    for (let stack of this.state.stacks || []) {
+      items.push(
+        ...(stack.filter((i) => i.card.id === card.id) as StackItem[]),
+      );
+    }
+    for (let item of items) {
+      this.trimItemsFromStack(item);
+    }
+    this.removeRecentCard(card.id);
+
+    let cardRealmUrl = await this.cardService.getRealmURL(card);
+
+    if (cardRealmUrl) {
+      let realmPaths = new RealmPaths(cardRealmUrl);
+      let cardPath = realmPaths.local(`${card.id}.json`);
+      this.recentFilesService.removeRecentFile(cardPath);
+    }
+    await this.cardService.deleteCard(card);
+  }
 
   trimItemsFromStack(item: StackItem) {
     let stackIndex = item.stackIndex;
